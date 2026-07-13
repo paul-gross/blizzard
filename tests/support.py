@@ -146,3 +146,22 @@ def build_hub(tmp_path: Path, *, forge: FakeForge | None = None, pm: FakePmSourc
     services = build_services(engine, forge=forge, events=events, pm_source=pm, clock=clock)
     app = create_app(config, services=services)
     return HubHarness(client=TestClient(app), services=services, forge=forge, pm=pm, clock=clock, events=events)
+
+
+def report_lease(hub: HubHarness, chunk_id: str, *, epoch: int, seq: int, runner_id: str = "r1") -> dict:
+    """Report a runner-minted ``lease.minted`` fact through POST /events (D-044/D-069).
+
+    Mirrors the real runner flow: after claiming a route, the runner mints its lease
+    locally and reports its epoch up through the store-and-forward buffer, which is the
+    fence input the completion check consumes. Component tests that submit a completion
+    call this first so the hub knows the chunk's latest epoch.
+    """
+    resp = hub.client.post(
+        "/api/events",
+        json={
+            "runner_id": runner_id,
+            "facts": [{"seq": seq, "kind": "lease.minted", "payload": {"chunk_id": chunk_id, "epoch": epoch}}],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json()

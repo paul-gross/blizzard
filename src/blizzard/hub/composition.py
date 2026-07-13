@@ -25,7 +25,7 @@ from blizzard.hub.delivery.coordinator import MergeQueueCoordinator
 from blizzard.hub.delivery.forge import IForgeDelivery
 from blizzard.hub.domain.apply import ApplyService
 from blizzard.hub.domain.claim import ClaimService
-from blizzard.hub.domain.facts import RunnerFactsService
+from blizzard.hub.domain.facts import FactIngestService, RunnerFactsService
 from blizzard.hub.domain.graph import GraphDoc, IReadGraphRepository
 from blizzard.hub.domain.graph_authoring import GraphMintService
 from blizzard.hub.domain.ingest import IngestService
@@ -46,6 +46,7 @@ class HubServices:
     ingest: IngestService
     claim: ClaimService
     apply: ApplyService
+    facts: FactIngestService
     graph_mint: GraphMintService
     runner_facts: RunnerFactsService
     events: EventBroker
@@ -74,6 +75,7 @@ def build_services(
         ingest=IngestService(chunks=chunk_store, clock=clock),
         claim=ClaimService(chunks=chunk_store, clock=clock),
         apply=ApplyService(chunks=chunk_store, coordinator=coordinator, clock=clock),
+        facts=FactIngestService(chunks=chunk_store, clock=clock),
         graph_mint=GraphMintService(graphs=graph_store, clock=clock),
         runner_facts=RunnerFactsService(chunks=chunk_store, clock=clock),
         events=events,

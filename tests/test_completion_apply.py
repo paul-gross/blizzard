@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub
+from tests.support import build_hub, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -44,12 +44,14 @@ nodes:
 
 
 def _claimed(hub) -> tuple[str, str]:  # type: ignore[no-untyped-def]
+    """Mint a build->deliver graph, claim a route, and report the runner-minted lease (epoch 1)."""
     assert hub.client.post("/api/graphs", json={"definition_yaml": _BUILD_DELIVER_YAML}).status_code == 201
     chunk_id = hub.client.post("/api/chunks", json={"pointers": [_POINTER]}).json()["chunk_id"]
     node_id = hub.client.post(
         "/api/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
     ).json()["envelope"]["node"]["node_id"]
+    report_lease(hub, chunk_id, epoch=1, seq=1)  # the fence input the completion checks against
     return chunk_id, node_id
 
 

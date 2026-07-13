@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 
 import click
+import httpx
 import uvicorn
 
 from blizzard.foundation.store.migrations import RevisionMismatchError
@@ -24,6 +25,11 @@ from blizzard.runner.runtime import ensure_current_revision, init_environment, m
 
 ENV_TICK_SECONDS = "BZ_RUNNER_TICK_SECONDS"
 DEFAULT_TICK_SECONDS = 30.0
+
+# Spawn-injected worker identity the heartbeat hook inherits (design/harness-adapters.md).
+ENV_LEASE_ID = "BLIZZARD_LEASE_ID"
+ENV_RUNNER_URL = "BLIZZARD_RUNNER_URL"
+_HEARTBEAT_TIMEOUT = 5.0
 
 
 def _stub(verb: str) -> None:
@@ -107,8 +113,29 @@ def tick_cmd(directory: str) -> None:
 
 @runner.command()
 def heartbeat() -> None:
-    """Worker hook: record a lease heartbeat (identity from the environment)."""
-    _stub("heartbeat")
+    """Worker hook: record a lease heartbeat (identity from the environment).
+
+    A pure client of the runner's local API (D-023): the ``PostToolUse`` hook runs
+    this on every tool call, and it posts to ``BLIZZARD_RUNNER_URL`` for the lease in
+    ``BLIZZARD_LEASE_ID`` — both inherited from the spawn environment, so no arguments
+    (design/harness-adapters.md). It fails **soft**: a hook must never break the
+    worker's tool call, so a missing identity or an unreachable runner is reported to
+    stderr and the command still exits 0.
+    """
+    lease_id = os.environ.get(ENV_LEASE_ID)
+    runner_url = os.environ.get(ENV_RUNNER_URL)
+    if not lease_id or not runner_url:
+        click.echo(f"heartbeat: no {ENV_LEASE_ID}/{ENV_RUNNER_URL} in the environment; skipping", err=True)
+        return
+    try:
+        resp = httpx.post(
+            f"{runner_url.rstrip('/')}/api/heartbeat",
+            json={"lease_id": lease_id},
+            timeout=_HEARTBEAT_TIMEOUT,
+        )
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:  # soft-fail — never break the worker's tool call
+        click.echo(f"heartbeat: could not reach the runner ({exc}); skipping", err=True)
 
 
 @runner.command()

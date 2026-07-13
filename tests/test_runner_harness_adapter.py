@@ -98,7 +98,11 @@ def test_spawn_launches_real_process_in_workdir(tmp_path: Path) -> None:
     workdir.mkdir()
     adapter = ClaudeCodeAdapter(binary=binary)
     envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
-    preamble = WorkerPreamble(environments=[AcquiredEnvironment(environment_id="e1", workdir=str(workdir))])
+    preamble = WorkerPreamble(
+        environments=[AcquiredEnvironment(environment_id="e1", workdir=str(workdir))],
+        lease_id="lease_1",
+        local_api_url="http://127.0.0.1:8431",
+    )
 
     handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
 

@@ -631,6 +631,82 @@ export type RouteView = {
 };
 
 /**
+ * RunnerFact
+ *
+ * One buffered runner fact: its per-runner seq, its kind, and its payload.
+ *
+ * ``payload`` is the kind-specific body — for ``lease.minted`` ``{chunk_id, epoch}``,
+ * for ``escalation.recorded`` ``{chunk_id, epoch, takeover_command}`` — kept open so a
+ * new runner fact kind bolts on without a wire change.
+ */
+export type RunnerFact = {
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Payload
+     */
+    payload?: {
+        [key: string]: unknown;
+    };
+    /**
+     * Seq
+     */
+    seq: number;
+};
+
+/**
+ * RunnerFactAck
+ *
+ * The hub's per-batch acknowledgement against its high-water mark.
+ *
+ * ``high_water`` is the runner's new mark after this batch; ``applied`` and
+ * ``already_applied`` partition the pushed seqs so the runner can ack its buffer
+ * (a semantic rejection still acks — rejection is an outcome, not a delivery
+ * failure, D-069). ``rejected`` names seqs the hub refused for a non-idempotency
+ * reason (an unknown kind), which the runner surfaces rather than silently drops.
+ */
+export type RunnerFactAck = {
+    /**
+     * Already Applied
+     */
+    already_applied?: Array<number>;
+    /**
+     * Applied
+     */
+    applied?: Array<number>;
+    /**
+     * High Water
+     */
+    high_water: number;
+    /**
+     * Rejected
+     */
+    rejected?: Array<number>;
+    /**
+     * Runner Id
+     */
+    runner_id: string;
+};
+
+/**
+ * RunnerFactBatch
+ *
+ * A runner's push of one-or-more buffered facts, ordered by seq (D-069).
+ */
+export type RunnerFactBatch = {
+    /**
+     * Facts
+     */
+    facts: Array<RunnerFact>;
+    /**
+     * Runner Id
+     */
+    runner_id: string;
+};
+
+/**
  * SessionMode
  *
  * Per-node session freshness (D-054).
@@ -924,6 +1000,31 @@ export type GetPmItemApiChunksChunkIdPmItemGetResponses = {
 };
 
 export type GetPmItemApiChunksChunkIdPmItemGetResponse = GetPmItemApiChunksChunkIdPmItemGetResponses[keyof GetPmItemApiChunksChunkIdPmItemGetResponses];
+
+export type IngestRunnerFactsApiEventsPostData = {
+    body: RunnerFactBatch;
+    path?: never;
+    query?: never;
+    url: '/api/events';
+};
+
+export type IngestRunnerFactsApiEventsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type IngestRunnerFactsApiEventsPostError = IngestRunnerFactsApiEventsPostErrors[keyof IngestRunnerFactsApiEventsPostErrors];
+
+export type IngestRunnerFactsApiEventsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: RunnerFactAck;
+};
+
+export type IngestRunnerFactsApiEventsPostResponse = IngestRunnerFactsApiEventsPostResponses[keyof IngestRunnerFactsApiEventsPostResponses];
 
 export type MintGraphApiGraphsPostData = {
     body: GraphMintRequest;

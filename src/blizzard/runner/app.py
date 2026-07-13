@@ -13,11 +13,13 @@ from fastapi import FastAPI
 
 from blizzard import __version__
 from blizzard.foundation.assets import frontend_dir
+from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.web import mount_web_app
 from blizzard.runner.api.health import router as health_router
+from blizzard.runner.api.heartbeat import router as heartbeat_router
 from blizzard.runner.api.readiness import router as readiness_router
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.readiness import ReadinessService
@@ -26,6 +28,8 @@ from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.harness.adapter import IHarnessAdapter
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.runtime import migration_runner
+from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
+from blizzard.runner.store.repository import IWriteRunnerStore
 
 
 def create_app(
@@ -34,6 +38,7 @@ def create_app(
     readiness: ReadinessService | None = None,
     workspace_provider: IWorkspaceProvider | None = None,
     harness: IHarnessAdapter | None = None,
+    runner_store: IWriteRunnerStore | None = None,
 ) -> FastAPI:
     """Build a fully wired runner app from resolved config.
 
@@ -47,15 +52,19 @@ def create_app(
     app = FastAPI(title="blizzard-runner", version=__version__)
     app.state.config = config
     app.state.readiness = readiness
-    # The runner's two execution seams (D-062/D-092), wired at the host root; the
-    # store-free app leaves them None. The reconciliation loop the P6 builder adds
-    # reads them off app.state. Both bindings are NotImplemented stubs in P6.
+    # The runner's execution seams (D-062/D-092), wired at the host root; the
+    # store-free app leaves them None. The reconciliation loop reads them off app.state.
     app.state.workspace_provider = workspace_provider
     app.state.harness = harness
+    # The runner store backs the local-API heartbeat write (D-023); the injected clock
+    # stamps the beat (``bzh:injected-clock``). Both None on the store-free app.
+    app.state.runner_store = runner_store
+    app.state.clock = SystemClock() if runner_store is not None else None
 
     # API routers first, so /api/* always wins over the web mount at /.
     app.include_router(health_router)
     app.include_router(readiness_router)
+    app.include_router(heartbeat_router)
 
     # The runner-served web app (post-MVP); the mount point is live from the
     # scaffold so the seam is exercised (D-096).
@@ -77,6 +86,7 @@ def build_hosted_app(config: RunnerConfig) -> FastAPI:
     reader = SqlAlchemyStoreStatusReader(engine)
     expected = migration_runner(config).script_head()
     readiness = ReadinessService(reader=reader, expected_revision=expected)
+    runner_store = SqlAlchemyRunnerStore(engine)
     # Bind the reference execution seams (winter workspace, Claude Code) from config
     # (D-062/D-092). The reconciliation loop drives them through its own composition
     # root (:mod:`blizzard.runner.loop.build`); these are exposed on ``app.state`` for
@@ -89,7 +99,13 @@ def build_hosted_app(config: RunnerConfig) -> FastAPI:
     harness: IHarnessAdapter = ClaudeCodeAdapter(
         binary=config.harness_binary, settings_path=config.worker_settings_path
     )
-    return create_app(config, readiness=readiness, workspace_provider=workspace_provider, harness=harness)
+    return create_app(
+        config,
+        readiness=readiness,
+        workspace_provider=workspace_provider,
+        harness=harness,
+        runner_store=runner_store,
+    )
 
 
 def create_app_for_export() -> FastAPI:

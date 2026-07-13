@@ -17,7 +17,7 @@ from blizzard.runner.loop.hub import HubClientError, IHubClient, RouteClaimOutco
 from blizzard.wire.chunk import ChunkDetail
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
-from blizzard.wire.facts import EscalationReport, LeaseMintReport
+from blizzard.wire.facts import EscalationReport, LeaseMintReport, RunnerFactAck, RunnerFactBatch
 from blizzard.wire.queue import QueuePeekResponse
 from blizzard.wire.route import RouteClaim, RouteClaimConflict, RouteClaimResponse
 
@@ -49,6 +49,10 @@ class HttpHubClient:
     def submit_completion(self, chunk_id: str, submission: CompletionSubmission) -> ApplyResponse:
         resp = self._post(f"{_API}/chunks/{chunk_id}/completions", submission.model_dump(mode="json"))
         return ApplyResponse.model_validate(resp.json())
+
+    def push_facts(self, batch: RunnerFactBatch) -> RunnerFactAck:
+        resp = self._post(f"{_API}/events", batch.model_dump(mode="json"))
+        return RunnerFactAck.model_validate(resp.json())
 
     def get_envelope(self, chunk_id: str) -> NodeEnvelope:
         resp = self._get(f"{_API}/chunks/{chunk_id}/envelope")

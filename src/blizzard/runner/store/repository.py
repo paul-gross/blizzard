@@ -83,6 +83,7 @@ class BufferedFact:
     seq: int
     kind: str
     chunk_id: str | None
+    lease_id: str | None
     payload: str
     created_at: datetime
 
@@ -96,6 +97,31 @@ class IReadRunnerStore(Protocol):
 
     def active_lease_for_chunk(self, chunk_id: str) -> LeaseRecord | None:
         """The chunk's single active lease, if any (P6: at most one — MAX_AGENTS math)."""
+        ...
+
+    def active_lease(self, lease_id: str) -> LeaseRecord | None:
+        """The lease by id iff it is still active (no closure fact), else ``None``.
+
+        The flusher drives a buffered completion's apply-response against this: an
+        already-closed lease means the completion applied on an earlier flush whose
+        ack was lost (D-090) — the re-flush is a no-op past the ack.
+        """
+        ...
+
+    def latest_heartbeat(self, lease_id: str) -> datetime | None:
+        """The lease's most recent heartbeat stamp, or ``None`` if it never beat.
+
+        REAP's stall signal: a live worker whose last beat is older than the
+        conservative staleness threshold has stopped making tool calls (design/
+        runner/loop.md). ``None`` falls back to the lease's own creation instant.
+        """
+        ...
+
+    def pending_completion_lease_ids(self) -> set[str]:
+        """Lease ids with an unacked ``completion.submitted`` fact in the buffer.
+
+        ADVANCE reads this to skip a worker whose completion is already buffered so
+        the verdict is elicited exactly once while the flush is pending (D-069)."""
         ...
 
     def held_environment_ids(self) -> list[str]:
@@ -138,6 +164,10 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         """Persist a chunk→env binding fact (written with the route claim, D-080/D-083)."""
         ...
 
+    def record_heartbeat(self, *, lease_id: str, beat_at: datetime) -> None:
+        """Append a heartbeat for a lease — a worker tool call fired its hook (D-069)."""
+        ...
+
     def record_closure(self, *, lease_id: str, chunk_id: str, node_id: str, reason: str, closed_at: datetime) -> None:
         """Close a lease — a clean transition or a failure/escalation (D-078)."""
         ...
@@ -146,7 +176,9 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         """Release a chunk's env binding at tenure end (D-083)."""
         ...
 
-    def enqueue_outbound(self, *, kind: str, chunk_id: str | None, payload: str, created_at: datetime) -> int:
+    def enqueue_outbound(
+        self, *, kind: str, chunk_id: str | None, lease_id: str | None, payload: str, created_at: datetime
+    ) -> int:
         """Append a hub-bound fact to the store-and-forward buffer; return its seq (D-069)."""
         ...
 

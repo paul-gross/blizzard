@@ -6,10 +6,10 @@ and the store-and-forward outbound buffer. Timestamps come from the injected clo
 never a ``server_default`` (``bzh:injected-clock``); portable-SQL surface only
 (``bzh:sql-portable``).
 
-Walking-skeleton (P6) subset: the loop mints a lease, binds an environment, and
-buffers each hub-bound fact for the flusher. Heartbeat / verdict / open-ask tables
-are the runner-track builder's to add as the loop grows — the seam is the same
-facts-only pattern.
+The loop mints a lease, binds an environment, buffers each hub-bound fact for the
+flusher (store-and-forward, D-069), and records a heartbeat per worker tool call
+(progress detection, design/runner/loop.md). Verdict / open-ask tables are added as
+the loop grows — the seam is the same facts-only pattern.
 """
 
 from __future__ import annotations
@@ -61,19 +61,41 @@ env_bindings = Table(
 #
 # Every hub-bound fact is written here at mint, stamped with a monotonic sequence,
 # even when the hub is reachable: one flusher drains it in FIFO order, so a lease
-# fact always precedes the transitions minted under it (D-044 made structural). A
+# fact always precedes the completion minted under it (D-044 made structural). A
 # semantic rejection still advances the ack — rejection is an outcome, not a
-# delivery failure. ``acked_at`` NULL means still pending.
+# delivery failure. ``acked_at`` NULL means still pending. ``lease_id`` correlates a
+# buffered fact back to its attempt: the flusher drives a completion's apply-response
+# (closure + next-node spawn) against the lease it names, and ADVANCE skips a lease
+# whose completion is already buffered so it is never elicited twice.
 
 outbound_buffer = Table(
     "outbound_buffer",
     metadata,
     Column("seq", Integer, primary_key=True, autoincrement=True),  # per-runner monotonic (D-069)
-    Column("kind", String, nullable=False),  # lease.minted | transition.recorded | ...
+    Column("kind", String, nullable=False),  # lease.minted | completion.submitted | escalation.recorded
     Column("chunk_id", String, nullable=True),  # the correlated chunk, when the fact has one
+    Column("lease_id", String, nullable=True),  # the correlated attempt, when the fact has one
     Column("payload", Text, nullable=False),  # the JSON body posted to the matching hub route
     Column("created_at", DateTime, nullable=False),
     Column("acked_at", DateTime, nullable=True),  # NULL = pending; set when the hub acks the seq
+)
+
+# --- Heartbeats (progress detection, machine-local — never leaves the box) ----
+#
+# A worker heartbeats as a side effect of working: every tool call fires a
+# ``PostToolUse`` hook that runs ``blizzard runner heartbeat``, which posts to the
+# runner's local API and appends a row here (design/runner/loop.md, design/
+# harness-adapters.md). Append-only (``bzh:facts-not-status``): the *last* heartbeat
+# for a lease is ``max(beat_at)``. REAP reads it to catch a stalled-but-alive worker
+# — one whose pid is live but whose heartbeat has gone stale. The heartbeat never
+# travels to the hub (domain/events.md): ``stalled`` is a runner-local derivation.
+
+heartbeats = Table(
+    "heartbeats",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("lease_id", String, nullable=False),  # the attempt the beat belongs to (BLIZZARD_LEASE_ID)
+    Column("beat_at", DateTime, nullable=False),  # injected-clock stamp of the tool call
 )
 
 # --- Lease node context (the node identity of each attempt — 0002's leases lacks it) -

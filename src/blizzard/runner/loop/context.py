@@ -34,6 +34,9 @@ class LoopConfig:
     max_agents: int = 1
     base_branch: str = "main"
     default_retries_max: int = DEFAULT_RETRIES_MAX
+    #: The runner's own local-API base URL, handed to a spawned worker as
+    #: ``BLIZZARD_RUNNER_URL`` so its heartbeat hook posts back (design/harness-adapters.md).
+    local_api_url: str = "http://127.0.0.1:8431"
 
 
 @dataclass(frozen=True)

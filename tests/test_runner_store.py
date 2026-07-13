@@ -84,9 +84,13 @@ def test_attempt_count_and_latest_epoch_track_retries(tmp_path):  # type: ignore
 @pytest.mark.unit
 def test_outbound_buffer_is_fifo_and_ackable(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
-    s1 = store.enqueue_outbound(kind="escalation.needs_human", chunk_id="ch_1", payload="{}", created_at=_NOW)
-    s2 = store.enqueue_outbound(kind="transition.recorded", chunk_id="ch_1", payload="{}", created_at=_NOW)
+    s1 = store.enqueue_outbound(kind="lease.minted", chunk_id="ch_1", lease_id="lease_1", payload="{}", created_at=_NOW)
+    s2 = store.enqueue_outbound(
+        kind="completion.submitted", chunk_id="ch_1", lease_id="lease_1", payload="{}", created_at=_NOW
+    )
     assert s1 < s2
     assert [f.seq for f in store.pending_outbound()] == [s1, s2]
+    assert store.pending_outbound()[1].lease_id == "lease_1"
+    assert store.pending_completion_lease_ids() == {"lease_1"}
     store.ack_outbound(s1, acked_at=_NOW)
     assert [f.seq for f in store.pending_outbound()] == [s2]

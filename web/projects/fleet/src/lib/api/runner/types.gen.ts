@@ -5,6 +5,44 @@ export type ClientOptions = {
 };
 
 /**
+ * HTTPValidationError
+ */
+export type HttpValidationError = {
+    /**
+     * Detail
+     */
+    detail?: Array<ValidationError>;
+};
+
+/**
+ * HeartbeatRequest
+ *
+ * A worker's heartbeat: the lease it inherited at spawn (``BLIZZARD_LEASE_ID``).
+ */
+export type HeartbeatRequest = {
+    /**
+     * Lease Id
+     */
+    lease_id: string;
+};
+
+/**
+ * HeartbeatResponse
+ *
+ * The recorded acknowledgement (openapi-ts consumes this).
+ */
+export type HeartbeatResponse = {
+    /**
+     * Lease Id
+     */
+    lease_id: string;
+    /**
+     * Recorded
+     */
+    recorded: boolean;
+};
+
+/**
  * ReadinessResponse
  *
  * The wire shape of a readiness reading (openapi-ts consumes this).
@@ -32,6 +70,34 @@ export type ReadinessResponse = {
     store_revision: string | null;
 };
 
+/**
+ * ValidationError
+ */
+export type ValidationError = {
+    /**
+     * Context
+     */
+    ctx?: {
+        [key: string]: unknown;
+    };
+    /**
+     * Input
+     */
+    input?: unknown;
+    /**
+     * Location
+     */
+    loc: Array<string | number>;
+    /**
+     * Message
+     */
+    msg: string;
+    /**
+     * Error Type
+     */
+    type: string;
+};
+
 export type HealthApiHealthGetData = {
     body?: never;
     path?: never;
@@ -51,6 +117,31 @@ export type HealthApiHealthGetResponses = {
 };
 
 export type HealthApiHealthGetResponse = HealthApiHealthGetResponses[keyof HealthApiHealthGetResponses];
+
+export type HeartbeatApiHeartbeatPostData = {
+    body: HeartbeatRequest;
+    path?: never;
+    query?: never;
+    url: '/api/heartbeat';
+};
+
+export type HeartbeatApiHeartbeatPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type HeartbeatApiHeartbeatPostError = HeartbeatApiHeartbeatPostErrors[keyof HeartbeatApiHeartbeatPostErrors];
+
+export type HeartbeatApiHeartbeatPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: HeartbeatResponse;
+};
+
+export type HeartbeatApiHeartbeatPostResponse = HeartbeatApiHeartbeatPostResponses[keyof HeartbeatApiHeartbeatPostResponses];
 
 export type ReadyApiReadyGetData = {
     body?: never;

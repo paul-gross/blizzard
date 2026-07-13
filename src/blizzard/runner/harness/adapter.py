@@ -33,12 +33,17 @@ from blizzard.wire.envelope import NodeEnvelope
 class WorkerPreamble:
     """The runner's machine-local preamble prepended to the envelope (D-063).
 
-    The held environments with their workdirs — never sent to the hub; it is
-    machine-local execution truth. ``BLIZZARD_ENV_IDS`` rides the spawn environment
-    from this (D-063).
+    The held environments with their workdirs, the minted lease id, and the runner's
+    local-API URL — never sent to the hub; all machine-local execution truth.
+    ``BLIZZARD_ENV_IDS`` rides the spawn environment from ``environments`` (D-063);
+    ``BLIZZARD_LEASE_ID`` and ``BLIZZARD_RUNNER_URL`` ride it from ``lease_id`` and
+    ``local_api_url`` so the worker's ``PostToolUse`` heartbeat hook posts to the
+    right lease with no arguments (design/harness-adapters.md).
     """
 
     environments: list[AcquiredEnvironment]
+    lease_id: str
+    local_api_url: str
 
 
 @dataclass(frozen=True)

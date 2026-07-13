@@ -13,7 +13,8 @@ from pathlib import Path
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.migrations import MigrationRunner
-from blizzard.runner.config import CONFIG_FILENAME, RunnerConfig
+from blizzard.runner.config import CONFIG_FILENAME, WORKER_SETTINGS_FILENAME, RunnerConfig
+from blizzard.runner.harness.worker_settings import worker_settings_json
 from blizzard.runner.store import MIGRATIONS_DIR, STORE_NAME
 
 MIGRATE_COMMAND = "blizzard runner migrate"
@@ -41,6 +42,11 @@ def init_environment(root: Path) -> RunnerConfig:
         _log.info("runner config scaffolded", path=str(config.config_path))
     else:
         config = RunnerConfig.load(root)
+
+    # The runner-owned worker hook file (heartbeat PostToolUse) the adapter delivers as
+    # `--settings` (design/harness-adapters.md). Written idempotently: the content is
+    # versioned with the runner, so re-running `init` refreshes it to head.
+    (root / WORKER_SETTINGS_FILENAME).write_text(worker_settings_json())
 
     migration_runner(config).upgrade("head")
     _log.info("runner store migrated to head", root=str(root), db_url=config.db_url)

@@ -16,6 +16,9 @@ from pathlib import Path
 
 CONFIG_FILENAME = "blizzard-runner.toml"
 DATA_DIRNAME = "data"
+# The runner-owned worker hook file `init` scaffolds (design/harness-adapters.md); the
+# adapter passes it to a spawned worker as `--settings` to deliver the heartbeat hook.
+WORKER_SETTINGS_FILENAME = "worker-settings.json"
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8431
@@ -100,6 +103,9 @@ class RunnerConfig:
             else DEFAULT_ENV_POOL,
             harness_binary=os.environ.get(ENV_HARNESS_BINARY, DEFAULT_HARNESS_BINARY),
             base_branch=os.environ.get(ENV_BASE_BRANCH, DEFAULT_BASE_BRANCH),
+            # The worker hook file `init` writes alongside the config; the adapter
+            # delivers it as `--settings` so a spawned worker heartbeats (D-069).
+            worker_settings_path=str(root / WORKER_SETTINGS_FILENAME),
         )
 
     def to_toml(self) -> str:

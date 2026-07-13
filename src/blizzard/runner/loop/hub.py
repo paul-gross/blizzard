@@ -16,6 +16,7 @@ from typing import Protocol
 from blizzard.wire.chunk import ChunkDetail
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
+from blizzard.wire.facts import RunnerFactAck, RunnerFactBatch
 from blizzard.wire.queue import QueuePeekResponse
 from blizzard.wire.route import RouteClaim, RouteClaimConflict, RouteClaimResponse
 
@@ -54,6 +55,10 @@ class IHubClient(Protocol):
 
     def submit_completion(self, chunk_id: str, submission: CompletionSubmission) -> ApplyResponse:
         """``POST /api/chunks/{id}/completions`` — the atomic, epoch-fenced write (D-036)."""
+        ...
+
+    def push_facts(self, batch: RunnerFactBatch) -> RunnerFactAck:
+        """``POST /api/events`` — store-and-forward fact push, seq-idempotent (D-069)."""
         ...
 
     def get_envelope(self, chunk_id: str) -> NodeEnvelope:

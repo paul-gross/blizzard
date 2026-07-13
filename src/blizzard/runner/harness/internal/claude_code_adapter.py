@@ -139,6 +139,10 @@ class ClaudeCodeAdapter:
         env["BLIZZARD_ENV_WORKDIRS"] = ",".join(e.workdir for e in preamble.environments)
         env["BLIZZARD_SESSION_ID"] = session_id
         env["BLIZZARD_CHUNK_ID"] = envelope.chunk_id
+        # Runner-minted identity the PostToolUse heartbeat hook inherits (per process
+        # tree, so a sibling worker cannot misattribute a beat — design/harness-adapters.md).
+        env["BLIZZARD_LEASE_ID"] = preamble.lease_id
+        env["BLIZZARD_RUNNER_URL"] = preamble.local_api_url
         return env
 
 

@@ -949,6 +949,96 @@
         "title": "RouteView",
         "type": "object"
       },
+      "RunnerFact": {
+        "description": "One buffered runner fact: its per-runner seq, its kind, and its payload.\n\n``payload`` is the kind-specific body \u2014 for ``lease.minted`` ``{chunk_id, epoch}``,\nfor ``escalation.recorded`` ``{chunk_id, epoch, takeover_command}`` \u2014 kept open so a\nnew runner fact kind bolts on without a wire change.",
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "default": {},
+            "title": "Payload",
+            "type": "object"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "seq",
+          "kind"
+        ],
+        "title": "RunnerFact",
+        "type": "object"
+      },
+      "RunnerFactAck": {
+        "description": "The hub's per-batch acknowledgement against its high-water mark.\n\n``high_water`` is the runner's new mark after this batch; ``applied`` and\n``already_applied`` partition the pushed seqs so the runner can ack its buffer\n(a semantic rejection still acks \u2014 rejection is an outcome, not a delivery\nfailure, D-069). ``rejected`` names seqs the hub refused for a non-idempotency\nreason (an unknown kind), which the runner surfaces rather than silently drops.",
+        "properties": {
+          "already_applied": {
+            "default": [],
+            "items": {
+              "type": "integer"
+            },
+            "title": "Already Applied",
+            "type": "array"
+          },
+          "applied": {
+            "default": [],
+            "items": {
+              "type": "integer"
+            },
+            "title": "Applied",
+            "type": "array"
+          },
+          "high_water": {
+            "title": "High Water",
+            "type": "integer"
+          },
+          "rejected": {
+            "default": [],
+            "items": {
+              "type": "integer"
+            },
+            "title": "Rejected",
+            "type": "array"
+          },
+          "runner_id": {
+            "title": "Runner Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runner_id",
+          "high_water"
+        ],
+        "title": "RunnerFactAck",
+        "type": "object"
+      },
+      "RunnerFactBatch": {
+        "description": "A runner's push of one-or-more buffered facts, ordered by seq (D-069).",
+        "properties": {
+          "facts": {
+            "items": {
+              "$ref": "#/components/schemas/RunnerFact"
+            },
+            "title": "Facts",
+            "type": "array"
+          },
+          "runner_id": {
+            "title": "Runner Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runner_id",
+          "facts"
+        ],
+        "title": "RunnerFactBatch",
+        "type": "object"
+      },
       "SessionMode": {
         "description": "Per-node session freshness (D-054).",
         "enum": [
@@ -1427,6 +1517,48 @@
         "summary": "Get Pm Item",
         "tags": [
           "chunks"
+        ]
+      }
+    },
+    "/api/events": {
+      "post": {
+        "description": "Land runner-minted facts, idempotent by per-runner seq high-water (D-069/D-044).\n\nThe store-and-forward ingest: ``lease.minted`` (the fence input) and\n``escalation.recorded`` ride the runner's outbound buffer here. A pushed seq at or\nbelow the runner's high-water mark is already-applied and re-acked; a fresh one is\napplied and advances the mark. Emits ``chunk-changed`` for each chunk a landed\nfact touched so the board refreshes.",
+        "operationId": "ingest_runner_facts_api_events_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerFactBatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerFactAck"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ingest Runner Facts",
+        "tags": [
+          "meta"
         ]
       }
     },

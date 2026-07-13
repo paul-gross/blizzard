@@ -208,3 +208,18 @@ escalations = Table(
     Column("takeover_command", Text, nullable=False, server_default=""),  # the pasteable resume command (D-035)
     Column("recorded_at", DateTime, nullable=False),
 )
+
+# --- Store-and-forward high-water mark (per-runner idempotency — D-069) ------
+#
+# The hub's dedup memory for the runner→hub fact push (POST /events): the greatest
+# per-runner sequence number it has already applied. A pushed fact with seq ≤ mark
+# is already-applied and re-acked without re-applying — the idempotent replay after
+# a lost ack or an outage backlog drain. One row per runner, advanced monotonically.
+
+runner_high_water = Table(
+    "runner_high_water",
+    metadata,
+    Column("runner_id", String, primary_key=True),
+    Column("seq", Integer, nullable=False),  # greatest applied per-runner seq (D-069)
+    Column("updated_at", DateTime, nullable=False),
+)

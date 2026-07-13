@@ -6,20 +6,23 @@ idempotent and holds no state of its own — all facts live in the runner store,
 crash mid-tick followed by a restart re-runs the tick harmlessly (D-023/D-028), and
 startup recovery is just REAP running first.
 
-P6 walking-skeleton semantics for the dead-worker split (design/runner/loop.md):
-a **session-bearing** dead worker is a *done declaration* (exit-is-done, D-055) and
-belongs to ADVANCE — its judgement reply, or its absence (D-009), tells a done from
-a crash. REAP handles only the residue ADVANCE structurally cannot judge: a lease
-whose worker never reached spawn-return (no pid/session — killed mid-FILL). Both the
-verdict-less-exit failure (ADVANCE) and the orphan (REAP) route through one
-``requeue-or-escalate`` decision keyed on the node's retry budget (D-078/D-009).
-Heartbeat-based stall detection is P7; in P6 liveness is (pid, start_time) alone.
+The dead-worker split (design/runner/loop.md): a **session-bearing** worker whose
+process has *exited* is a *done declaration* (exit-is-done, D-055) and belongs to
+ADVANCE — its judgement reply, or its absence (D-009), tells a done from a crash.
+REAP handles the residue ADVANCE structurally cannot judge: a lease whose worker
+never reached spawn-return (no pid/session — killed mid-FILL), and a **stalled-but-
+alive** worker whose heartbeat has gone stale (a live pid that stopped making tool
+calls, so it stopped beating — D-069). Both the verdict-less-exit failure (ADVANCE)
+and the reaped orphan/stall (REAP) route through one ``requeue-or-escalate`` decision
+keyed on the node's retry budget (D-078/D-009). Liveness is heartbeat-freshness for a
+live pid, plus (pid, start_time) to survive pid reuse.
 """
 
 from __future__ import annotations
 
 import json
 import uuid
+from datetime import UTC, datetime, timedelta
 
 from blizzard.foundation.ids import LEASE_PREFIX, mint
 from blizzard.foundation.logging import get_logger
@@ -28,9 +31,10 @@ from blizzard.runner.environments.provider import AcquiredEnvironment, Workspace
 from blizzard.runner.harness.adapter import WorkerPreamble
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import HubClientError
-from blizzard.runner.store.repository import EnvBindingRecord, LeaseRecord, NewLease
+from blizzard.runner.store.repository import BufferedFact, EnvBindingRecord, LeaseRecord, NewLease
 from blizzard.wire.completion import CompletionSubmission, SubmittedArtifact
-from blizzard.wire.envelope import ApplyOutcome, NodeEnvelope
+from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeEnvelope
+from blizzard.wire.facts import ESCALATION_RECORDED, LEASE_MINTED, RunnerFact, RunnerFactBatch
 from blizzard.wire.route import RouteClaim
 
 _log = get_logger("blizzard.runner.loop")
@@ -41,8 +45,20 @@ _REAPED = "reaped"
 _FAILED = "failed"
 _ESCALATED = "escalated"
 
+# Outbound-buffer fact kinds (design/runner/store.md). ``completion.submitted`` is the
+# runner-local kind whose flush drives the apply-response; the two hub-fact kinds
+# (LEASE_MINTED / ESCALATION_RECORDED) flush to POST /events (D-069/D-044).
+_COMPLETION_KIND = "completion.submitted"
+
 # The env count a solo chunk wants; batching (K>1) is parked (design/runner/environments.md).
 _SOLO_ENV_COUNT = 1
+
+#: REAP's staleness threshold (design/runner/loop.md). Deliberately **conservative**:
+#: heartbeats ride tool calls, so the threshold is bounded below by the longest tool
+#: call a healthy worker makes — one long test run must never read as a stall. A live
+#: worker whose last heartbeat is older than this has stopped making tool calls and is
+#: reaped as stalled (D-078). ~1h; the open-question constant (decisions/open-questions.md).
+HEARTBEAT_STALENESS_THRESHOLD = timedelta(hours=1)
 
 
 # --------------------------------------------------------------------------- #
@@ -51,20 +67,53 @@ _SOLO_ENV_COUNT = 1
 
 
 def reap(ctx: LoopContext) -> None:
-    """Expire leases whose worker is gone and that ADVANCE cannot judge.
+    """Expire leases whose worker is gone or **stalled** (design/runner/loop.md).
 
-    In P6 that is exactly the lease with no recorded pid: minted at FILL but never
-    spawned (a crash in the mint→spawn window). A session-bearing dead worker is a
-    done declaration ADVANCE owns; a session-bearing *live* worker is left running.
-    An orphan is a failed execution attempt (D-078) — requeue or escalate.
+    Three cases end an attempt here (each a failed execution attempt, D-078 —
+    requeue or escalate):
+
+    * **orphan** — a lease with no recorded pid/session: minted at FILL but never
+      spawned (a crash in the mint→spawn window). ADVANCE structurally cannot judge it.
+    * **stalled-but-alive** — a live worker whose last heartbeat is older than the
+      conservative :data:`HEARTBEAT_STALENESS_THRESHOLD`. Heartbeats ride tool calls
+      (D-069), so a worker that stops progressing stops beating; there is no separate
+      stall detector. REAP kills it (``_fail_attempt`` does the best-effort kill) — the
+      epoch fence, not the kill, is what guarantees the zombie cannot deliver.
+
+    A session-bearing worker whose process has **exited** is *not* reaped here: exit is
+    the done declaration (D-055), so it belongs to ADVANCE, which resumes the session
+    to tell a real completion from a crash. The conservative threshold is what keeps
+    the two apart — a worker that exited cleanly still carries a fresh final heartbeat,
+    so REAP never preempts ADVANCE's judgement of it.
     """
+    now = ctx.clock.now()
     for lease in ctx.store.list_active_leases():
         if lease.pid is None or lease.session_id is None:
             _log.info("reaping unspawned lease", lease_id=lease.lease_id, chunk_id=lease.chunk_id)
             _fail_attempt(ctx, lease, reason=_REAPED)
             continue
-        # A recorded worker that has died is ADVANCE's (exit-is-done); a live one runs on.
-        # REAP's best-effort kill of a still-alive reaped worker is P7 (stall detection).
+        if not ctx.process.is_alive(lease.pid, lease.process_start_time or ""):
+            continue  # exited — ADVANCE's (exit-is-done, D-055)
+        if _is_heartbeat_stale(ctx, lease, now):
+            _log.info("reaping stalled worker", lease_id=lease.lease_id, chunk_id=lease.chunk_id, pid=lease.pid)
+            _fail_attempt(ctx, lease, reason=_REAPED)
+        # A live, beating worker runs on.
+
+
+def _is_heartbeat_stale(ctx: LoopContext, lease: LeaseRecord, now: datetime) -> bool:
+    """True iff the lease's last activity is older than the staleness threshold.
+
+    Last activity is the newest heartbeat, or — before the worker's first tool call —
+    the lease's own creation instant, so a freshly spawned worker is never read as
+    stalled inside the threshold window.
+    """
+    last = ctx.store.latest_heartbeat(lease.lease_id) or lease.created_at
+    return now - _as_utc(last) > HEARTBEAT_STALENESS_THRESHOLD
+
+
+def _as_utc(value: datetime) -> datetime:
+    """Read a stored timestamp back as UTC-aware — sqlite drops the tzinfo the clock set."""
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
 
 
 # --------------------------------------------------------------------------- #
@@ -73,16 +122,92 @@ def reap(ctx: LoopContext) -> None:
 
 
 def pull(ctx: LoopContext) -> None:
-    """Exchange facts with the hub (outbound-only, D-012).
+    """Exchange facts with the hub (outbound-only, D-012): drain the outbound buffer.
 
-    **P6 thin slice.** The buffered-fact flush (escalations, transitions) and the
-    ``paused`` adherence are the store-and-forward channel (D-069) that lands in P7;
-    the hub exposes no fact-ingest route yet, so PULL leaves the durable buffer in
-    place. The seam is kept so the flusher bolts on without reshaping the tick.
+    Store-and-forward always (D-069): every hub-bound fact was written to the buffer
+    at mint with a per-runner monotonic seq, and this is the single flusher that
+    drains it — FIFO, so a ``lease.minted`` always precedes the completion minted under
+    it. A completion's flush is special: its apply-response carries the chunk's next
+    node envelope (D-072), so the flusher drives the continue-in-place here. A
+    transport failure stops the drain (the buffer is the only ordered path — a later
+    fact must not overtake a stuck earlier one) and the backlog flushes next tick; an
+    outage is just a bigger backlog.
     """
-    pending = ctx.store.pending_outbound()
-    if pending:
-        _log.debug("outbound facts buffered (P6: flushed in P7)", count=len(pending))
+    flush_outbound(ctx)
+
+
+def flush_outbound(ctx: LoopContext) -> None:
+    """Drain the outbound buffer in FIFO order until a fact fails to deliver (D-069)."""
+    for fact in ctx.store.pending_outbound():
+        if not _flush_one(ctx, fact):
+            break  # transport failure — stop; strict FIFO, retry the backlog next tick
+
+
+def _flush_one(ctx: LoopContext, fact: BufferedFact) -> bool:
+    """Deliver one buffered fact. Return False on a transport failure (stop the drain)."""
+    if fact.kind == _COMPLETION_KIND:
+        return _flush_completion(ctx, fact)
+    return _flush_hub_fact(ctx, fact)
+
+
+def _flush_hub_fact(ctx: LoopContext, fact: BufferedFact) -> bool:
+    """Push a ``lease.minted`` / ``escalation.recorded`` fact to POST /events (D-069)."""
+    payload = json.loads(fact.payload)
+    batch = RunnerFactBatch(
+        runner_id=ctx.config.runner_id,
+        facts=[RunnerFact(seq=fact.seq, kind=fact.kind, payload=payload)],
+    )
+    try:
+        ack = ctx.hub.push_facts(batch)
+    except HubClientError:
+        return False  # hub unreachable — the fact stays buffered, retried next tick
+    if fact.seq in ack.rejected:
+        # A contract rejection (unknown kind) is not idempotency — surface it, but do
+        # not wedge the FIFO drain on a fact the hub will never accept: ack and move on.
+        _log.error("hub rejected buffered fact", seq=fact.seq, kind=fact.kind)
+    ctx.store.ack_outbound(fact.seq, acked_at=ctx.clock.now())
+    return True
+
+
+def _flush_completion(ctx: LoopContext, fact: BufferedFact) -> bool:
+    """Submit a buffered completion and drive its apply-response (D-036/D-072/D-090).
+
+    Idempotent by construction: the hub's completion apply is epoch-idempotent (a
+    re-applied completion returns its original outcome without a second transition,
+    D-090), and the runner acts on the response only while the lease is still active —
+    a re-flush after a lost ack finds the lease closed and simply clears the buffer.
+    """
+    payload = json.loads(fact.payload)
+    submission = CompletionSubmission.model_validate(payload["submission"])
+    try:
+        response = ctx.hub.submit_completion(fact.chunk_id or "", submission)
+    except HubClientError:
+        return False  # completion stays durable in the buffer; the mid-node worker is unaffected
+
+    ctx.store.ack_outbound(fact.seq, acked_at=ctx.clock.now())
+    lease = ctx.store.active_lease(fact.lease_id or "")
+    if lease is None:
+        # Already advanced on an earlier flush whose ack was lost (D-090) — nothing to do.
+        return True
+    _consume_apply_response(ctx, lease, response)
+    return True
+
+
+def _consume_apply_response(ctx: LoopContext, lease: LeaseRecord, response: ApplyResponse) -> None:
+    """Record the closure and continue in place per the hub's apply-response (D-072)."""
+    if response.outcome == ApplyOutcome.FAILURE:
+        # A semantic rejection — a stale-epoch (zombie) or terminal completion. The
+        # attempt failed; requeue or escalate. The chunk never advanced and never
+        # entered the merge queue (the hub fenced it before any write, D-007).
+        _log.warning("completion rejected on flush", chunk_id=lease.chunk_id, detail=response.detail or "")
+        _fail_attempt(ctx, lease, reason=_FAILED)
+        return
+    now = ctx.clock.now()
+    ctx.store.record_closure(
+        lease_id=lease.lease_id, chunk_id=lease.chunk_id, node_id=lease.node_id, reason=_TRANSITIONED, closed_at=now
+    )
+    bindings = ctx.store.bindings_for_chunk(lease.chunk_id)
+    _apply_response(ctx, lease, response.outcome, response.next_envelope, bindings)
 
 
 # --------------------------------------------------------------------------- #
@@ -157,13 +282,20 @@ def advance(ctx: LoopContext) -> None:
 
     Two responsibilities: (a) a session-bearing worker whose process has exited is a
     done declaration — resume it with the judgement prompt, parse the ``<Choice>``,
-    push its artifacts, and submit the epoch-fenced completion; (b) a chunk held at a
-    hub node (envs bound, no active lease) is polled for the hub's terminal outcome —
-    a landed delivery releases its environments (D-066).
+    push its artifacts, and **buffer** the epoch-fenced completion (the flusher in
+    PULL delivers it and drives the apply-response, D-069); (b) a chunk held at a hub
+    node (envs bound, no active lease) is polled for the hub's terminal outcome — a
+    landed delivery releases its environments (D-066).
+
+    A worker whose completion is already buffered is skipped: the verdict is elicited
+    exactly once, then the chunk waits at its node boundary for the flush (D-069).
     """
+    pending_completions = ctx.store.pending_completion_lease_ids()
     for lease in ctx.store.list_active_leases():
         if lease.pid is None or lease.session_id is None:
             continue  # REAP's residue
+        if lease.lease_id in pending_completions:
+            continue  # completion elicited, awaiting flush — the node boundary (D-069)
         if ctx.process.is_alive(lease.pid, lease.process_start_time or ""):
             continue  # worker still running
         _advance_exited_worker(ctx, lease)
@@ -174,7 +306,7 @@ def advance(ctx: LoopContext) -> None:
 
 
 def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
-    """Elicit the verdict, push artifacts, and submit the node-step's completion."""
+    """Elicit the verdict, push artifacts, and buffer the node-step's completion (D-069)."""
     if lease.session_id is None:
         return  # not spawned — REAP's residue (guarded by the caller too)
     bindings = ctx.store.bindings_for_chunk(lease.chunk_id)
@@ -208,7 +340,9 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
     #     the build envelope latest-by-epoch (design/workflow-engine.md review node).
     artifacts += _collect_asset_artifacts(envelope, artifacts, ctx.harness.parse_assessment(output))
 
-    # 3. Submit the completion — one atomic, epoch-fenced write (D-036).
+    # 3. Buffer the completion — one atomic, epoch-fenced write (D-036), delivered by
+    #    the flusher (D-069). The buffer entry names the lease so the flush drives its
+    #    apply-response; ADVANCE will skip this lease until the flush closes it.
     submission = CompletionSubmission(
         choice=choice,
         epoch=lease.epoch,
@@ -217,21 +351,15 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
         check_results=[],  # in-session check assessment is P7; the model carries them (D-077)
         artifacts=artifacts,
     )
-    try:
-        response = ctx.hub.submit_completion(lease.chunk_id, submission)
-    except HubClientError:
-        return  # completion durable in the store; the worker mid-node is unaffected
-
-    if response.outcome == ApplyOutcome.FAILURE:
-        _log.warning("completion rejected", chunk_id=lease.chunk_id, detail=response.detail or "")
-        _fail_attempt(ctx, lease, reason=_FAILED)
-        return
-
-    now = ctx.clock.now()
-    ctx.store.record_closure(
-        lease_id=lease.lease_id, chunk_id=lease.chunk_id, node_id=lease.node_id, reason=_TRANSITIONED, closed_at=now
+    payload = json.dumps({"submission": submission.model_dump(mode="json")})
+    ctx.store.enqueue_outbound(
+        kind=_COMPLETION_KIND,
+        chunk_id=lease.chunk_id,
+        lease_id=lease.lease_id,
+        payload=payload,
+        created_at=ctx.clock.now(),
     )
-    _apply_response(ctx, lease, response.outcome, response.next_envelope, bindings)
+    _log.info("completion buffered", chunk_id=lease.chunk_id, lease_id=lease.lease_id, choice=choice)
 
 
 def _apply_response(
@@ -293,17 +421,20 @@ def _spawn_attempt(
             created_at=now,
         )
     )
-    # Report the mint up so the hub's epoch fence tracks the runner's (D-044): a chunk
-    # entering a second runner node (build -> review) submits under a fresh epoch the
-    # hub must already know, and a requeue's mint closes an escalation by supersession
-    # (D-067). Best-effort — the lease is durable locally; an outage's mint rides the
-    # store-and-forward buffer in P7's PULL, and completions gate on hub reachability
-    # anyway, so a mint that fails to report is retried before its completion lands.
-    try:
-        ctx.hub.report_lease(chunk_id, epoch=epoch, runner_id=ctx.config.runner_id)
-    except HubClientError:
-        _log.debug("lease mint report deferred — hub unreachable", chunk_id=chunk_id, epoch=epoch)
-    handle = ctx.harness.spawn(envelope, WorkerPreamble(environments=environments), session_hint=str(uuid.uuid4()))
+    # The lease is a hub-bound fact (D-044): buffer it so the flusher reports it up to
+    # POST /events, ahead of any completion minted under it (FIFO, D-069). It is the
+    # fence input the hub's completion check consumes — the runner's mint keeps the
+    # hub's latest epoch in lockstep across a build -> review chunk, and a requeue's mint
+    # closes an escalation by supersession (D-035/D-067).
+    ctx.store.enqueue_outbound(
+        kind=LEASE_MINTED,
+        chunk_id=chunk_id,
+        lease_id=lease_id,
+        payload=json.dumps({"chunk_id": chunk_id, "epoch": epoch}),
+        created_at=now,
+    )
+    preamble = WorkerPreamble(environments=environments, lease_id=lease_id, local_api_url=ctx.config.local_api_url)
+    handle = ctx.harness.spawn(envelope, preamble, session_hint=str(uuid.uuid4()))
     ctx.store.record_spawn(
         lease_id, pid=handle.pid, process_start_time=handle.process_start_time, session_id=handle.session_id
     )
@@ -347,35 +478,23 @@ def _requeue(ctx: LoopContext, lease: LeaseRecord) -> None:
 def _escalate(ctx: LoopContext, lease: LeaseRecord) -> None:
     """Park the chunk needs-human at the hub, envs held for takeover (D-009/D-083).
 
-    The escalation is a runner-minted fact that both records durably in the local
-    outbound buffer (D-069, the store-and-forward record) **and** reports up to the hub
-    so the chunk derives ``needs_human`` fleet-wide (D-067). It carries the pasteable
-    takeover command — ``cd <workdir> && <harness resume>`` composed from the adapter's
-    session surface (design/harness-adapters.md) — so a human resumes the parked session
-    in the agent's own warm worktrees. A requeue's later lease mint closes it by
-    supersession (D-067); the hub report is best-effort, the buffer the durable backstop.
+    The escalation rides the outbound buffer as an ``escalation.recorded`` fact,
+    flushed to the hub's POST /events (D-069), where the fleet derives ``needs_human``
+    (an open escalation with no later lease mint — domain/events.md). It carries the
+    pasteable takeover command — ``cd <workdir> && <harness resume>`` composed from the
+    adapter's session surface (design/harness-adapters.md) — so a human resumes the
+    parked session in the agent's own warm worktrees; a requeue's later lease mint
+    closes it by supersession (D-067). Environments stay bound throughout.
     """
     now = ctx.clock.now()
     bindings = ctx.store.bindings_for_chunk(lease.chunk_id)
     takeover = ""
     if lease.session_id is not None and bindings:
         takeover = ctx.harness.resume_command(bindings[0].workdir, lease.session_id)
-    payload = json.dumps(
-        {
-            "chunk_id": lease.chunk_id,
-            "node_id": lease.node_id,
-            "epoch": lease.epoch,
-            "runner_id": lease.runner_id,
-            "takeover_command": takeover,
-        }
+    payload = json.dumps({"chunk_id": lease.chunk_id, "epoch": lease.epoch, "takeover_command": takeover})
+    ctx.store.enqueue_outbound(
+        kind=ESCALATION_RECORDED, chunk_id=lease.chunk_id, lease_id=lease.lease_id, payload=payload, created_at=now
     )
-    ctx.store.enqueue_outbound(kind="escalation.needs_human", chunk_id=lease.chunk_id, payload=payload, created_at=now)
-    try:
-        ctx.hub.report_escalation(
-            lease.chunk_id, epoch=lease.epoch, runner_id=lease.runner_id, takeover_command=takeover
-        )
-    except HubClientError:
-        _log.debug("escalation report deferred — hub unreachable", chunk_id=lease.chunk_id)
     _log.info("escalated to needs-human — retries exhausted", chunk_id=lease.chunk_id, takeover=takeover)
 
 

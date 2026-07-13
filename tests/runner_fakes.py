@@ -23,7 +23,7 @@ from blizzard.runner.environments.provider import (
 )
 from blizzard.runner.harness.adapter import IHarnessAdapter, WorkerHandle, WorkerPreamble
 from blizzard.runner.loop.context import LoopConfig, LoopContext
-from blizzard.runner.loop.hub import IHubClient, RouteClaimOutcome
+from blizzard.runner.loop.hub import HubClientError, IHubClient, RouteClaimOutcome
 from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.loop.worktree import GitArtifact, IWorktreeGit
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
@@ -32,6 +32,7 @@ from blizzard.runner.store.schema import metadata as runner_metadata
 from blizzard.wire.chunk import ChunkDetail
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.envelope import ApplyResponse, NodeConfig, NodeEnvelope
+from blizzard.wire.facts import RunnerFact, RunnerFactAck, RunnerFactBatch
 from blizzard.wire.queue import QueuePeekEntry, QueuePeekResponse
 from blizzard.wire.route import RouteClaim, RouteClaimResponse
 
@@ -48,7 +49,13 @@ def _create_all(md: MetaData, engine: object) -> None:
 
 
 class FakeHub:
-    """A scriptable :class:`IHubClient`: canned queue/claim/apply/envelope/chunk."""
+    """A scriptable :class:`IHubClient`: canned queue/claim/apply/envelope/chunk.
+
+    ``down`` simulates an unreachable hub — ``submit_completion`` and ``push_facts``
+    raise :class:`HubClientError` so store-and-forward buffering can be exercised
+    (D-069). ``push_facts`` keeps a per-runner high-water mark and re-acks a replayed
+    seq without re-applying, mirroring the hub's idempotency contract.
+    """
 
     def __init__(self) -> None:
         self.queue: list[QueuePeekEntry] = []
@@ -60,6 +67,9 @@ class FakeHub:
         self.completions: list[tuple[str, CompletionSubmission]] = []
         self.leases: list[tuple[str, int, str]] = []  # (chunk_id, epoch, runner_id)
         self.escalations: list[tuple[str, int, str, str]] = []  # (chunk_id, epoch, runner_id, takeover)
+        self.pushed: list[RunnerFact] = []
+        self.high_water: dict[str, int] = {}
+        self.down = False
 
     def peek_queue(self) -> QueuePeekResponse:
         return QueuePeekResponse(entries=list(self.queue))
@@ -70,9 +80,26 @@ class FakeHub:
         return self.claim_outcome
 
     def submit_completion(self, chunk_id: str, submission: CompletionSubmission) -> ApplyResponse:
+        if self.down:
+            raise HubClientError("fake hub is down")
         self.completions.append((chunk_id, submission))
         assert self.apply_responses, "no apply response scripted"
         return self.apply_responses.pop(0)
+
+    def push_facts(self, batch: RunnerFactBatch) -> RunnerFactAck:
+        if self.down:
+            raise HubClientError("fake hub is down")
+        mark = self.high_water.get(batch.runner_id, 0)
+        applied, already = [], []
+        for fact in sorted(batch.facts, key=lambda f: f.seq):
+            if fact.seq <= mark:
+                already.append(fact.seq)
+                continue
+            self.pushed.append(fact)
+            mark = fact.seq
+            applied.append(fact.seq)
+        self.high_water[batch.runner_id] = mark
+        return RunnerFactAck(runner_id=batch.runner_id, high_water=mark, applied=applied, already_applied=already)
 
     def get_envelope(self, chunk_id: str) -> NodeEnvelope:
         return self.envelopes[chunk_id]

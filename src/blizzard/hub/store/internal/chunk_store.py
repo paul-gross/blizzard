@@ -201,6 +201,13 @@ class ChunkStore:
                 ).all()
             }
 
+    def runner_high_water(self, runner_id: str) -> int:
+        with self._engine.connect() as conn:
+            row = conn.execute(
+                select(s.runner_high_water.c.seq).where(s.runner_high_water.c.runner_id == runner_id)
+            ).one_or_none()
+            return int(row.seq) if row is not None else 0
+
     # --- writes -------------------------------------------------------------
 
     def mint(self, chunk: Chunk) -> None:
@@ -220,6 +227,20 @@ class ChunkStore:
             conn.execute(
                 insert(s.lease_facts).values(chunk_id=chunk_id, epoch=epoch, runner_id=runner_id, minted_at=at)
             )
+
+    def set_runner_high_water(self, runner_id: str, *, seq: int, at: datetime) -> None:
+        with self._engine.begin() as conn:
+            existing = conn.execute(
+                select(s.runner_high_water.c.runner_id).where(s.runner_high_water.c.runner_id == runner_id)
+            ).one_or_none()
+            if existing is None:
+                conn.execute(insert(s.runner_high_water).values(runner_id=runner_id, seq=seq, updated_at=at))
+            else:
+                conn.execute(
+                    s.runner_high_water.update()
+                    .where(s.runner_high_water.c.runner_id == runner_id)
+                    .values(seq=seq, updated_at=at)
+                )
 
     def record_route(self, route: Route, *, at: datetime) -> None:
         route_id = mint(_ROUTE_PREFIX, self._clock)

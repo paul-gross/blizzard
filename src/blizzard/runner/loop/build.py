@@ -52,6 +52,7 @@ def build_loop_context(config: RunnerConfig, hub: IHubClient) -> LoopContext:
         workspace_id=config.workspace_id,
         max_agents=config.max_agents,
         base_branch=config.base_branch,
+        local_api_url=f"http://{config.host}:{config.port}",
     )
     return LoopContext(
         store=store,

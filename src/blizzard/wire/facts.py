@@ -1,16 +1,33 @@
-"""Runner-reported fact intake bodies (D-044/D-069).
+"""Runner→hub fact intake bodies (D-044/D-069).
 
-The runner reports two fleet-visible facts up to the hub over its outbound edge:
-``lease.minted`` (every node-step attempt, so the hub's epoch fence tracks the
-runner's, D-035/D-044) and ``escalation.recorded`` (retries exhausted, carrying the
-pasteable takeover command, D-009/D-035). These are the ``POST`` bodies for the
-``/chunks/{id}/leases`` and ``/chunks/{id}/escalations`` intake routes; the domain
-rule is :class:`~blizzard.hub.domain.facts.RunnerFactsService`.
+Two shapes land the same fleet-visible runner-minted facts, and they coexist:
+
+* The **batched store-and-forward push** — :class:`RunnerFactBatch` to ``POST
+  /api/events`` — is the canonical intake (domain/events.md): every hub-bound fact
+  rides the runner's outbound buffer stamped with a **per-runner monotonic sequence
+  number**, and the hub applies it idempotently against a per-runner **high-water
+  mark** (a seq ≤ mark is already-applied and re-acked without re-applying — the
+  replay after a lost ack or an outage backlog drain, D-069). The reconciliation loop
+  reports every ``lease.minted`` / ``escalation.recorded`` this way.
+* The **per-fact typed bodies** — :class:`LeaseMintReport` / :class:`EscalationReport`
+  to ``POST /chunks/{id}/leases`` and ``/chunks/{id}/escalations`` — are the direct,
+  non-buffered intake a caller uses to land a single fact (the domain rule is
+  :class:`~blizzard.hub.domain.facts.RunnerFactsService`).
+
+Completions do **not** ride either fact route: they carry the chunk's next-node
+envelope in their reply, so they keep their own ``POST /chunks/{id}/completions`` route
+(already epoch-idempotent, D-090).
 """
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel
+
+# Fact kinds the batched /events push accepts (domain/events.md ``noun.verb`` names).
+LEASE_MINTED = "lease.minted"
+ESCALATION_RECORDED = "escalation.recorded"
 
 
 class LeaseMintReport(BaseModel):
@@ -30,3 +47,40 @@ class EscalationReport(BaseModel):
     epoch: int
     runner_id: str
     takeover_command: str = ""
+
+
+class RunnerFact(BaseModel):
+    """One buffered runner fact: its per-runner seq, its kind, and its payload.
+
+    ``payload`` is the kind-specific body — for ``lease.minted`` ``{chunk_id, epoch}``,
+    for ``escalation.recorded`` ``{chunk_id, epoch, takeover_command}`` — kept open so a
+    new runner fact kind bolts on without a wire change.
+    """
+
+    seq: int
+    kind: str
+    payload: dict[str, Any] = {}
+
+
+class RunnerFactBatch(BaseModel):
+    """A runner's push of one-or-more buffered facts, ordered by seq (D-069)."""
+
+    runner_id: str
+    facts: list[RunnerFact]
+
+
+class RunnerFactAck(BaseModel):
+    """The hub's per-batch acknowledgement against its high-water mark.
+
+    ``high_water`` is the runner's new mark after this batch; ``applied`` and
+    ``already_applied`` partition the pushed seqs so the runner can ack its buffer
+    (a semantic rejection still acks — rejection is an outcome, not a delivery
+    failure, D-069). ``rejected`` names seqs the hub refused for a non-idempotency
+    reason (an unknown kind), which the runner surfaces rather than silently drops.
+    """
+
+    runner_id: str
+    high_water: int
+    applied: list[int] = []
+    already_applied: list[int] = []
+    rejected: list[int] = []

@@ -16,15 +16,44 @@ The live per-connection fan-out is P7 (ORCHESTRATION.md).
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from typing import Annotated
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
+from blizzard.hub.api.deps import get_services
+from blizzard.hub.composition import HubServices
 from blizzard.hub.events.broker import EventBroker
+from blizzard.wire.facts import RunnerFactAck, RunnerFactBatch
 
 router = APIRouter(prefix="/api", tags=["meta"])
 
 _RESERVED_COMMENT = ": blizzard hub event stream\n\n"
+
+
+@router.post("/events", response_model=RunnerFactAck)
+def ingest_runner_facts(
+    batch: RunnerFactBatch, services: Annotated[HubServices, Depends(get_services)]
+) -> RunnerFactAck:
+    """Land runner-minted facts, idempotent by per-runner seq high-water (D-069/D-044).
+
+    The store-and-forward ingest: ``lease.minted`` (the fence input) and
+    ``escalation.recorded`` ride the runner's outbound buffer here. A pushed seq at or
+    below the runner's high-water mark is already-applied and re-acked; a fresh one is
+    applied and advances the mark. Emits ``chunk-changed`` for each chunk a landed
+    fact touched so the board refreshes.
+    """
+    ack = services.facts.ingest(batch)
+    if ack.applied:
+        from blizzard.hub.domain.work import ChunkFacts, derive_chunk_status
+
+        touched = {p.get("chunk_id") for f in batch.facts if f.seq in ack.applied for p in [f.payload]}
+        for chunk_id in touched:
+            if not isinstance(chunk_id, str):
+                continue
+            facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
+            services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
+    return ack
 
 
 async def _stream(broker: EventBroker | None) -> AsyncIterator[bytes]:

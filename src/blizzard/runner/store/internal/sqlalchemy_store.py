@@ -27,6 +27,7 @@ from blizzard.runner.store.repository import (
 from blizzard.runner.store.schema import (
     binding_releases,
     env_bindings,
+    heartbeats,
     lease_closures,
     lease_context,
     leases,
@@ -57,6 +58,31 @@ class SqlAlchemyRunnerStore:
         )
         rows = self._all(stmt)
         return self._row_to_lease(rows[0]) if rows else None
+
+    def active_lease(self, lease_id: str) -> LeaseRecord | None:
+        stmt = (
+            self._lease_select()
+            .where(leases.c.lease_id == lease_id)
+            .where(leases.c.lease_id.not_in(select(lease_closures.c.lease_id)))
+        )
+        rows = self._all(stmt)
+        return self._row_to_lease(rows[0]) if rows else None
+
+    def latest_heartbeat(self, lease_id: str) -> datetime | None:
+        stmt = select(func.max(heartbeats.c.beat_at)).where(heartbeats.c.lease_id == lease_id)
+        with self._connect() as conn:
+            value = conn.execute(stmt).scalar_one_or_none()
+        return value
+
+    def pending_completion_lease_ids(self) -> set[str]:
+        stmt = select(outbound_buffer.c.lease_id).where(
+            and_(
+                outbound_buffer.c.acked_at.is_(None),
+                outbound_buffer.c.kind == "completion.submitted",
+                outbound_buffer.c.lease_id.is_not(None),
+            )
+        )
+        return {str(r.lease_id) for r in self._all(stmt)}
 
     def held_environment_ids(self) -> list[str]:
         stmt = (
@@ -129,6 +155,7 @@ class SqlAlchemyRunnerStore:
                 seq=int(r.seq),
                 kind=str(r.kind),
                 chunk_id=str(r.chunk_id) if r.chunk_id is not None else None,
+                lease_id=str(r.lease_id) if r.lease_id is not None else None,
                 payload=str(r.payload),
                 created_at=r.created_at,
             )
@@ -181,6 +208,11 @@ class SqlAlchemyRunnerStore:
             )
         _log.info("env bound", chunk_id=chunk_id, environment_id=environment_id, workdir=workdir)
 
+    def record_heartbeat(self, *, lease_id: str, beat_at: datetime) -> None:
+        with self._begin() as conn:
+            conn.execute(heartbeats.insert().values(lease_id=lease_id, beat_at=beat_at))
+        _log.debug("heartbeat recorded", lease_id=lease_id)
+
     def record_closure(self, *, lease_id: str, chunk_id: str, node_id: str, reason: str, closed_at: datetime) -> None:
         with self._begin() as conn:
             conn.execute(
@@ -199,10 +231,14 @@ class SqlAlchemyRunnerStore:
             )
         _log.info("env released", chunk_id=chunk_id, environment_id=environment_id)
 
-    def enqueue_outbound(self, *, kind: str, chunk_id: str | None, payload: str, created_at: datetime) -> int:
+    def enqueue_outbound(
+        self, *, kind: str, chunk_id: str | None, lease_id: str | None, payload: str, created_at: datetime
+    ) -> int:
         with self._begin() as conn:
             result = conn.execute(
-                outbound_buffer.insert().values(kind=kind, chunk_id=chunk_id, payload=payload, created_at=created_at)
+                outbound_buffer.insert().values(
+                    kind=kind, chunk_id=chunk_id, lease_id=lease_id, payload=payload, created_at=created_at
+                )
             )
         key = result.inserted_primary_key
         return int(key[0]) if key is not None else 0

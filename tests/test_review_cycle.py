@@ -106,6 +106,9 @@ def _mint_and_claim(hub) -> tuple[str, dict[str, str]]:  # type: ignore[no-untyp
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
     )
     assert claim.status_code == 201, claim.text
+    # The claim is pure acquisition (D-024) — it does not mint the lease (D-044). The
+    # runner mints its build lease and reports it up, so the hub's fence starts at 1.
+    _report_lease(hub, chunk_id, epoch=1)
     return chunk_id, node_ids
 
 

@@ -31,7 +31,9 @@ def test_winning_claim_carries_the_first_node_envelope(tmp_path: Path) -> None:
     assert body["environment_ids"] == ["env-a", "env-b"]
     env = body["envelope"]
     assert env["chunk_id"] == chunk_id
-    assert env["epoch"] == 1
+    # The claim does not mint the lease (D-044): the runner reports its epoch via
+    # POST /events, so the claim envelope carries the current epoch (0, no lease yet).
+    assert env["epoch"] == 0
     assert env["node"]["node_name"] == "build"
     assert env["node"]["executor"] == "runner"
     # The envelope carries the pre-prompt, the authored judgement prose (the runner

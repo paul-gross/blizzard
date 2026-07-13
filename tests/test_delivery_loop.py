@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import FakeForge, build_hub
+from tests.support import FakeForge, build_hub, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -61,6 +61,9 @@ def _claim(hub, chunk_id: str) -> dict:  # type: ignore[no-untyped-def]
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["env-a"]},
     )
     assert resp.status_code == 201, resp.text
+    # The runner mints its lease and reports it up (D-044) — the fence input for the
+    # completion that follows.
+    report_lease(hub, chunk_id, epoch=1, seq=1)
     return resp.json()
 
 
@@ -97,7 +100,9 @@ def test_one_chunk_ingest_to_landed(tmp_path: Path) -> None:
     claim = _claim(hub, chunk_id)
     envelope = claim["envelope"]
     assert envelope["node"]["node_name"] == "build"
-    assert envelope["epoch"] == 1
+    # The claim precedes the runner's lease report, so its envelope carries epoch 0
+    # (no lease yet); the runner's own lease epoch (1) is what the completion fences on.
+    assert envelope["epoch"] == 0
     build_node_id = envelope["node"]["node_id"]
 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()

@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { HealthApiHealthGetData, HealthApiHealthGetResponses, ReadyApiReadyGetData, ReadyApiReadyGetResponses } from './types.gen';
+import type { HealthApiHealthGetData, HealthApiHealthGetResponses, HeartbeatApiHeartbeatPostData, HeartbeatApiHeartbeatPostErrors, HeartbeatApiHeartbeatPostResponses, ReadyApiReadyGetData, ReadyApiReadyGetResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -22,6 +22,20 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
  * Health
  */
 export const healthApiHealthGet = <ThrowOnError extends boolean = false>(options?: Options<HealthApiHealthGetData, ThrowOnError>): RequestResult<HealthApiHealthGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<HealthApiHealthGetResponses, unknown, ThrowOnError>({ url: '/api/health', ...options });
+
+/**
+ * Heartbeat
+ *
+ * Record a lease heartbeat, stamped with the injected clock (D-069).
+ */
+export const heartbeatApiHeartbeatPost = <ThrowOnError extends boolean = false>(options: Options<HeartbeatApiHeartbeatPostData, ThrowOnError>): RequestResult<HeartbeatApiHeartbeatPostResponses, HeartbeatApiHeartbeatPostErrors, ThrowOnError> => (options.client ?? client).post<HeartbeatApiHeartbeatPostResponses, HeartbeatApiHeartbeatPostErrors, ThrowOnError>({
+    url: '/api/heartbeat',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Ready

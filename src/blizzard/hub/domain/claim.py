@@ -7,15 +7,22 @@ and the winning claim's result carries the chunk's first node envelope so the ru
 starts working without a second round-trip.
 
 The single-claim guarantee is the hub's single-writer property (D-023): the daemon
-serializes writes, so the load-facts → check-live-route → record-route sequence here
-is effectively a compare-and-set. In the walking skeleton the claim also **mints the
-executing lease** (epoch = latest + 1, so a first claim is epoch 1) as a stand-in for
-the runner-minted lease reported via ``POST /events`` (P7) — the envelope carries that
-epoch, and the completion fence checks against it.
+is the fleet's one arbiter (D-024), so the load-facts → check-live-route →
+record-route sequence must run as an atomic compare-and-set. FastAPI serves sync
+routes from a threadpool, so two runners' claims can arrive concurrently; a
+per-service lock serializes the CAS (the hub is one process — an in-process lock is
+the whole arbitration surface, cross-machine or not). The claim does **not** mint the
+executing lease
+(D-044): the runner mints it and reports ``lease.minted`` up through its outbound
+buffer to ``POST /events`` (D-069), and the completion fence checks against that. The
+claim envelope carries the chunk's current epoch (``latest`` reported so far, or 0
+before the runner's first lease report) so the worker starts without a round-trip;
+the runner's own lease epoch — not this value — is what the fence consumes.
 """
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
@@ -48,8 +55,26 @@ class ClaimService:
     def __init__(self, *, chunks: IWriteChunkRepository, clock: IClock) -> None:
         self._chunks = chunks
         self._clock = clock
+        # Serializes the check-live-route → record-route CAS across concurrent claims
+        # on one hub daemon (D-023). One ClaimService per hub, so one lock guards every
+        # chunk's claim; contention is a claim-rate concern, not a correctness one.
+        self._claim_lock = threading.Lock()
 
     def claim(
+        self,
+        chunk: Chunk,
+        graph: Graph,
+        *,
+        runner_id: str,
+        workspace_id: str,
+        environment_ids: list[str],
+    ) -> ClaimResult:
+        with self._claim_lock:
+            return self._claim_locked(
+                chunk, graph, runner_id=runner_id, workspace_id=workspace_id, environment_ids=environment_ids
+            )
+
+    def _claim_locked(
         self,
         chunk: Chunk,
         graph: Graph,
@@ -63,9 +88,11 @@ class ClaimService:
             raise ClaimConflict(held_by_runner_id=existing.runner_id)
 
         facts = self._chunks.load_facts(chunk.chunk_id)
-        epoch = (latest_epoch(facts) or 0) + 1 if facts is not None else 1
+        # The runner mints the lease and reports its epoch via POST /events (D-044);
+        # the claim only carries the current epoch (0 before the first report) into
+        # the envelope, and does not itself write a lease fact.
+        epoch = latest_epoch(facts) or 0 if facts is not None else 0
         now = self._clock.now()
-        self._chunks.record_lease(chunk.chunk_id, epoch=epoch, runner_id=runner_id, at=now)
 
         route = Route(
             chunk_id=chunk.chunk_id,

@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { ClaimRouteApiRoutesPostData, ClaimRouteApiRoutesPostErrors, ClaimRouteApiRoutesPostResponses, GetChunkApiChunksChunkIdGetData, GetChunkApiChunksChunkIdGetErrors, GetChunkApiChunksChunkIdGetResponses, GetEnvelopeApiChunksChunkIdEnvelopeGetData, GetEnvelopeApiChunksChunkIdEnvelopeGetErrors, GetEnvelopeApiChunksChunkIdEnvelopeGetResponses, GetPmItemApiChunksChunkIdPmItemGetData, GetPmItemApiChunksChunkIdPmItemGetErrors, GetPmItemApiChunksChunkIdPmItemGetResponses, HealthApiHealthGetData, HealthApiHealthGetResponses, IngestChunkApiChunksPostData, IngestChunkApiChunksPostErrors, IngestChunkApiChunksPostResponses, ListChunksApiChunksGetData, ListChunksApiChunksGetResponses, MintGraphApiGraphsPostData, MintGraphApiGraphsPostErrors, MintGraphApiGraphsPostResponses, PeekQueueApiQueuePeekGetData, PeekQueueApiQueuePeekGetResponses, ReadyApiReadyGetData, ReadyApiReadyGetResponses, ReportEscalationApiChunksChunkIdEscalationsPostData, ReportEscalationApiChunksChunkIdEscalationsPostErrors, ReportEscalationApiChunksChunkIdEscalationsPostResponses, ReportLeaseApiChunksChunkIdLeasesPostData, ReportLeaseApiChunksChunkIdLeasesPostErrors, ReportLeaseApiChunksChunkIdLeasesPostResponses, SubmitCompletionApiChunksChunkIdCompletionsPostData, SubmitCompletionApiChunksChunkIdCompletionsPostErrors, SubmitCompletionApiChunksChunkIdCompletionsPostResponses } from './types.gen';
+import type { ClaimRouteApiRoutesPostData, ClaimRouteApiRoutesPostErrors, ClaimRouteApiRoutesPostResponses, GetChunkApiChunksChunkIdGetData, GetChunkApiChunksChunkIdGetErrors, GetChunkApiChunksChunkIdGetResponses, GetEnvelopeApiChunksChunkIdEnvelopeGetData, GetEnvelopeApiChunksChunkIdEnvelopeGetErrors, GetEnvelopeApiChunksChunkIdEnvelopeGetResponses, GetPmItemApiChunksChunkIdPmItemGetData, GetPmItemApiChunksChunkIdPmItemGetErrors, GetPmItemApiChunksChunkIdPmItemGetResponses, HealthApiHealthGetData, HealthApiHealthGetResponses, IngestChunkApiChunksPostData, IngestChunkApiChunksPostErrors, IngestChunkApiChunksPostResponses, IngestRunnerFactsApiEventsPostData, IngestRunnerFactsApiEventsPostErrors, IngestRunnerFactsApiEventsPostResponses, ListChunksApiChunksGetData, ListChunksApiChunksGetResponses, MintGraphApiGraphsPostData, MintGraphApiGraphsPostErrors, MintGraphApiGraphsPostResponses, PeekQueueApiQueuePeekGetData, PeekQueueApiQueuePeekGetResponses, ReadyApiReadyGetData, ReadyApiReadyGetResponses, ReportEscalationApiChunksChunkIdEscalationsPostData, ReportEscalationApiChunksChunkIdEscalationsPostErrors, ReportEscalationApiChunksChunkIdEscalationsPostResponses, ReportLeaseApiChunksChunkIdLeasesPostData, ReportLeaseApiChunksChunkIdLeasesPostErrors, ReportLeaseApiChunksChunkIdLeasesPostResponses, SubmitCompletionApiChunksChunkIdCompletionsPostData, SubmitCompletionApiChunksChunkIdCompletionsPostErrors, SubmitCompletionApiChunksChunkIdCompletionsPostResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -101,6 +101,26 @@ export const reportLeaseApiChunksChunkIdLeasesPost = <ThrowOnError extends boole
  * Pass-through PM item read — body + comments, contents never stored (D-047).
  */
 export const getPmItemApiChunksChunkIdPmItemGet = <ThrowOnError extends boolean = false>(options: Options<GetPmItemApiChunksChunkIdPmItemGetData, ThrowOnError>): RequestResult<GetPmItemApiChunksChunkIdPmItemGetResponses, GetPmItemApiChunksChunkIdPmItemGetErrors, ThrowOnError> => (options.client ?? client).get<GetPmItemApiChunksChunkIdPmItemGetResponses, GetPmItemApiChunksChunkIdPmItemGetErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/pm-item', ...options });
+
+/**
+ * Ingest Runner Facts
+ *
+ * Land runner-minted facts, idempotent by per-runner seq high-water (D-069/D-044).
+ *
+ * The store-and-forward ingest: ``lease.minted`` (the fence input) and
+ * ``escalation.recorded`` ride the runner's outbound buffer here. A pushed seq at or
+ * below the runner's high-water mark is already-applied and re-acked; a fresh one is
+ * applied and advances the mark. Emits ``chunk-changed`` for each chunk a landed
+ * fact touched so the board refreshes.
+ */
+export const ingestRunnerFactsApiEventsPost = <ThrowOnError extends boolean = false>(options: Options<IngestRunnerFactsApiEventsPostData, ThrowOnError>): RequestResult<IngestRunnerFactsApiEventsPostResponses, IngestRunnerFactsApiEventsPostErrors, ThrowOnError> => (options.client ?? client).post<IngestRunnerFactsApiEventsPostResponses, IngestRunnerFactsApiEventsPostErrors, ThrowOnError>({
+    url: '/api/events',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Mint Graph
