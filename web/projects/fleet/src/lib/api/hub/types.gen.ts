@@ -36,6 +36,61 @@ export type ApplyResponse = {
 export type ArtifactKind = 'git_commit' | 'asset';
 
 /**
+ * ArtifactView
+ *
+ * One entry of a chunk's inline artifact store (D-036).
+ *
+ * ``key`` is the store key ``{node}.{artifact-name}.{epoch}`` — append-only, so
+ * every re-run's entry is retained and latest-by-epoch resolution is the reader's
+ * (D-089). ``content`` carries an **asset's** text verbatim (a review's findings
+ * document); the ``repo``/``branch_name``/``commit_hash`` trio carries a
+ * ``git_commit`` artifact's pinned reference (the hub stores the reference, never the
+ * code — D-012).
+ */
+export type ArtifactView = {
+    /**
+     * Branch Name
+     */
+    branch_name?: string | null;
+    /**
+     * Commit Hash
+     */
+    commit_hash?: string | null;
+    /**
+     * Content
+     */
+    content?: string | null;
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * Key
+     */
+    key: string;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Node Id
+     */
+    node_id: string;
+    /**
+     * Node Name
+     */
+    node_name: string;
+    /**
+     * Repo
+     */
+    repo?: string | null;
+};
+
+/**
  * CheckResult
  *
  * One deterministic check's outcome, informing the verdict (D-077).
@@ -55,8 +110,17 @@ export type CheckResult = {
  * ChunkDetail
  *
  * The chunk aggregate in full (D-036) — the board's chunk view and envelope feed.
+ *
+ * Carries the chunk's **transition history** and its inline **artifact store** so the
+ * web app can render every node it visited, the review that failed once and looped
+ * back to build, and the artifacts — the branch pointers merged and the review notes
+ * (product/mvp.md, MVP criterion 9/11).
  */
 export type ChunkDetail = {
+    /**
+     * Artifacts
+     */
+    artifacts?: Array<ArtifactView>;
     /**
      * Chunk Id
      */
@@ -70,6 +134,10 @@ export type ChunkDetail = {
      * Graph Id
      */
     graph_id: string;
+    /**
+     * History
+     */
+    history?: Array<TransitionView>;
     /**
      * Latest Epoch
      */
@@ -740,6 +808,39 @@ export type SubmittedArtifact = {
      * Repo
      */
     repo?: string | null;
+};
+
+/**
+ * TransitionView
+ *
+ * One accepted transition in a chunk's history (D-027/D-036).
+ *
+ * The edge a node-step took — its origin node, the judgement choice that routed it,
+ * and its destination — oldest first on the detail. This is what makes the review-fail
+ * loop legible: a ``review -> build`` entry with ``choice_name = "fail"`` is a visible
+ * step in the timeline (MVP criterion 9/11).
+ */
+export type TransitionView = {
+    /**
+     * Choice Name
+     */
+    choice_name: string | null;
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * From Node Id
+     */
+    from_node_id: string | null;
+    /**
+     * Recorded At
+     */
+    recorded_at: string;
+    /**
+     * To Node Id
+     */
+    to_node_id: string;
 };
 
 /**

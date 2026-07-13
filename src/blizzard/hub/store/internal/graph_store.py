@@ -13,6 +13,7 @@ graph is enabled, so ``get_enabled_by_name`` returns the newest graph of that na
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 
 from sqlalchemy import Engine, insert, select
@@ -61,6 +62,8 @@ class GraphStore:
                         retries_max=node.retries_max,
                         retries_exhausted=node.retries_exhausted,
                         mode=node.mode,
+                        produces=json.dumps(list(node.produces)),
+                        checks=json.dumps(list(node.checks)),
                     )
                 )
                 for choice in node.choices:
@@ -114,8 +117,8 @@ class GraphStore:
                     name=nr.name,
                     executor=Executor(nr.executor),
                     prompt=nr.prompt,
-                    checks=[],
-                    produces=[],
+                    checks=_json_list(nr.checks),
+                    produces=_json_list(nr.produces),
                     session=SessionMode(nr.session),
                     judged_by=JudgedBy(nr.judged_by),
                     retries_max=nr.retries_max,
@@ -145,6 +148,14 @@ class GraphStore:
             nodes=nodes,
             edges=edges,
         )
+
+
+def _json_list(value: str | None) -> list[str]:
+    """Decode a JSON-encoded ``list[str]`` node column (``produces``/``checks``).
+
+    ``None`` (a pre-0005 row, or a fresh column default) reads as the empty list — the
+    same value the walking skeleton hardcoded before these were round-tripped."""
+    return [str(x) for x in json.loads(value)] if value else []
 
 
 def _conforms_graph_store(x: GraphStore) -> IWriteGraphRepository:

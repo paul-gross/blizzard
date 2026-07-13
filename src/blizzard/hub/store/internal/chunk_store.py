@@ -78,6 +78,8 @@ class ChunkStore:
                     to_node_executor=executors.get(t.to_node_id, Executor.RUNNER),
                     epoch=t.epoch,
                     recorded_at=t.recorded_at,
+                    from_node_id=t.from_node_id,
+                    choice_name=t.choice_name,
                 )
                 for t in conn.execute(select(s.transitions).where(s.transitions.c.chunk_id == chunk_id)).all()
             ]

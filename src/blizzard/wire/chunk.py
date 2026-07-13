@@ -71,8 +71,50 @@ class EscalationView(BaseModel):
     takeover_command: str
 
 
+class TransitionView(BaseModel):
+    """One accepted transition in a chunk's history (D-027/D-036).
+
+    The edge a node-step took — its origin node, the judgement choice that routed it,
+    and its destination — oldest first on the detail. This is what makes the review-fail
+    loop legible: a ``review -> build`` entry with ``choice_name = "fail"`` is a visible
+    step in the timeline (MVP criterion 9/11)."""
+
+    from_node_id: str | None
+    to_node_id: str
+    choice_name: str | None
+    epoch: int
+    recorded_at: str
+
+
+class ArtifactView(BaseModel):
+    """One entry of a chunk's inline artifact store (D-036).
+
+    ``key`` is the store key ``{node}.{artifact-name}.{epoch}`` — append-only, so
+    every re-run's entry is retained and latest-by-epoch resolution is the reader's
+    (D-089). ``content`` carries an **asset's** text verbatim (a review's findings
+    document); the ``repo``/``branch_name``/``commit_hash`` trio carries a
+    ``git_commit`` artifact's pinned reference (the hub stores the reference, never the
+    code — D-012)."""
+
+    key: str
+    kind: str
+    name: str
+    node_id: str
+    node_name: str
+    epoch: int
+    content: str | None = None
+    repo: str | None = None
+    branch_name: str | None = None
+    commit_hash: str | None = None
+
+
 class ChunkDetail(BaseModel):
-    """The chunk aggregate in full (D-036) — the board's chunk view and envelope feed."""
+    """The chunk aggregate in full (D-036) — the board's chunk view and envelope feed.
+
+    Carries the chunk's **transition history** and its inline **artifact store** so the
+    web app can render every node it visited, the review that failed once and looped
+    back to build, and the artifacts — the branch pointers merged and the review notes
+    (product/mvp.md, MVP criterion 9/11)."""
 
     chunk_id: str
     graph_id: str
@@ -82,6 +124,8 @@ class ChunkDetail(BaseModel):
     pm_pointers: list[PmPointerModel] = []
     route: RouteView | None = None
     escalation: EscalationView | None = None
+    history: list[TransitionView] = []
+    artifacts: list[ArtifactView] = []
 
 
 class PmItemView(BaseModel):

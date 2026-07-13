@@ -8,6 +8,7 @@
  */
 
 export { BoardShell } from './lib/board-shell/board-shell';
+export { ChunkDetailPanel } from './lib/chunk-detail/chunk-detail-panel';
 
 export {
   SseService,
@@ -21,7 +22,8 @@ export {
 
 export { injectHubHealthQuery } from './lib/health/health.query';
 export { injectHubChunksQuery } from './lib/chunks/chunks.query';
-export type { ChunkSummary, ChunkStatus } from './lib/api/hub';
+export { injectHubChunkDetailQuery } from './lib/chunks/chunk-detail.query';
+export type { ChunkSummary, ChunkStatus, ChunkDetail, TransitionView, ArtifactView } from './lib/api/hub';
 
 export * as hubApi from './lib/api/hub';
 export * as runnerApi from './lib/api/runner';

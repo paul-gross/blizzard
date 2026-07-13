@@ -207,6 +207,25 @@ def test_review_cycle_fails_once_then_delivers(tmp_path: Path) -> None:
         pulls = forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json()
         assert any(p.get("merged") for p in pulls), f"no PR merged at the forge: {pulls}"
 
+        # The chunk detail (GET /chunks/{id}) is the product surface the web app renders
+        # (MVP criterion 9/11): after the cycle it exposes the full transition history —
+        # including the review-fail loop back to build — and the review-findings asset
+        # content, on the real rails. This is exactly what a cold verification found
+        # missing (D-036): the loop threaded through the envelope but was invisible after.
+        detail = hub.get(f"/api/chunks/{chunk_id}").json()
+        history = detail["history"]
+        # The review judged fail once, routing review -> build: a visible step in the timeline.
+        fail_steps = [h for h in history if h["choice_name"] == "fail"]
+        assert fail_steps, f"no review-fail step in the chunk history: {history}"
+        assert any(h["choice_name"] == "pass" for h in history), f"no passing step in the history: {history}"
+        # The review's findings asset — the failing visit's assessment — is inline on the
+        # detail, keyed {node}.{name}.{epoch}, content the verdict reason the fail carried back.
+        findings = [a for a in detail["artifacts"] if a["name"] == "review-findings" and a["kind"] == "asset"]
+        assert findings, f"no review-findings asset on the chunk detail: {detail['artifacts']}"
+        assert any("BLOCKING" in (a["content"] or "") for a in findings), (
+            f"the fail visit's findings content is not exposed: {[a['content'] for a in findings]}"
+        )
+
     # The review-fail cycle ran build TWICE — two 'build pass' lines land on main.
     build_md = _git_bare(origin_bare, "show", "main:BUILD.md")
     assert build_md.count("build pass") == 2, f"expected two build passes on main, got:\n{build_md}"

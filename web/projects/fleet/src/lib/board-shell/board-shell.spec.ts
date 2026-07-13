@@ -56,4 +56,19 @@ describe('BoardShell', () => {
     expect(el.querySelectorAll('[data-col="running"] [data-testid="chunk-card"]')).toHaveLength(1);
     expect(el.querySelectorAll('[data-col="done"] [data-testid="chunk-card"]')).toHaveLength(1);
   });
+
+  it('emits the chunk id when a card is activated (opens the detail drawer)', async () => {
+    const chunks: ChunkSummary[] = [
+      { chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', status: 'running', current_node_id: 'nd_build', pm_pointers: [] },
+    ];
+    const fixture = TestBed.createComponent(BoardShell);
+    fixture.componentRef.setInput('chunks', chunks);
+    let selected: string | undefined;
+    fixture.componentInstance.selectChunk.subscribe((id) => (selected = id));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="chunk-card"]')?.click();
+    expect(selected).toBe('ch_01running000000000000000000');
+  });
 });

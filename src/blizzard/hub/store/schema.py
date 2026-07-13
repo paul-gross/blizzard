@@ -56,6 +56,8 @@ graph_nodes = Table(
     Column("retries_max", Integer, nullable=True),
     Column("retries_exhausted", String, nullable=True),  # escalate
     Column("mode", String, nullable=True),  # deliver hub node: merge-to-main | open-pr
+    Column("produces", Text, nullable=True),  # JSON list of artifact names (D-026); e.g. review's `review-findings`
+    Column("checks", Text, nullable=True),  # JSON list of check commands (D-077), worker-run in-session
 )
 
 graph_choices = Table(

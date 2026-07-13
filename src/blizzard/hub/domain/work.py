@@ -98,12 +98,20 @@ class TransitionFact:
     ``to_node_executor`` is resolved by the hydrating repository (a join to the
     pinned graph's nodes) so the derivation stays a pure function — the domain
     never re-opens a store to learn whether the target is a hub node.
+
+    ``from_node_id`` and ``choice_name`` describe the edge that was taken — the
+    step's origin node and the judgement choice that routed it. The status
+    derivations read only ``to_node_id``/``to_node_executor``/``epoch``/``recorded_at``;
+    the edge fields feed the chunk's transition-history view (D-036) and default to
+    ``None`` so a derivation unit test never has to supply them.
     """
 
     to_node_id: str
     to_node_executor: Executor
     epoch: int
     recorded_at: datetime
+    from_node_id: str | None = None
+    choice_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -205,6 +213,18 @@ def newest_transition(facts: ChunkFacts) -> TransitionFact | None:
     if not facts.transitions:
         return None
     return max(facts.transitions, key=lambda t: (t.recorded_at, t.epoch))
+
+
+def transition_history(facts: ChunkFacts) -> list[TransitionFact]:
+    """The chunk's accepted transitions in the order they were recorded (oldest first).
+
+    The chronological walk the board renders (D-036, MVP criterion 11): each entry is
+    one node-step's edge — where it came from, the choice taken, where it went — so the
+    review-fail loop back to ``build`` reads as a visible step in the timeline. Ordered
+    by ``(recorded_at, epoch)``, the same key :func:`newest_transition` selects the tail
+    of, so "the last entry is the current node" holds by construction.
+    """
+    return sorted(facts.transitions, key=lambda t: (t.recorded_at, t.epoch))
 
 
 def current_node_id(facts: ChunkFacts) -> str | None:

@@ -56,6 +56,89 @@
         "title": "ArtifactKind",
         "type": "string"
       },
+      "ArtifactView": {
+        "description": "One entry of a chunk's inline artifact store (D-036).\n\n``key`` is the store key ``{node}.{artifact-name}.{epoch}`` \u2014 append-only, so\nevery re-run's entry is retained and latest-by-epoch resolution is the reader's\n(D-089). ``content`` carries an **asset's** text verbatim (a review's findings\ndocument); the ``repo``/``branch_name``/``commit_hash`` trio carries a\n``git_commit`` artifact's pinned reference (the hub stores the reference, never the\ncode \u2014 D-012).",
+        "properties": {
+          "branch_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch Name"
+          },
+          "commit_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commit Hash"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "node_name": {
+            "title": "Node Name",
+            "type": "string"
+          },
+          "repo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repo"
+          }
+        },
+        "required": [
+          "key",
+          "kind",
+          "name",
+          "node_id",
+          "node_name",
+          "epoch"
+        ],
+        "title": "ArtifactView",
+        "type": "object"
+      },
       "CheckResult": {
         "description": "One deterministic check's outcome, informing the verdict (D-077).",
         "properties": {
@@ -76,8 +159,16 @@
         "type": "object"
       },
       "ChunkDetail": {
-        "description": "The chunk aggregate in full (D-036) \u2014 the board's chunk view and envelope feed.",
+        "description": "The chunk aggregate in full (D-036) \u2014 the board's chunk view and envelope feed.\n\nCarries the chunk's **transition history** and its inline **artifact store** so the\nweb app can render every node it visited, the review that failed once and looped\nback to build, and the artifacts \u2014 the branch pointers merged and the review notes\n(product/mvp.md, MVP criterion 9/11).",
         "properties": {
+          "artifacts": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ArtifactView"
+            },
+            "title": "Artifacts",
+            "type": "array"
+          },
           "chunk_id": {
             "title": "Chunk Id",
             "type": "string"
@@ -106,6 +197,14 @@
           "graph_id": {
             "title": "Graph Id",
             "type": "string"
+          },
+          "history": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TransitionView"
+            },
+            "title": "History",
+            "type": "array"
           },
           "latest_epoch": {
             "anyOf": [
@@ -1108,6 +1207,54 @@
           "kind"
         ],
         "title": "SubmittedArtifact",
+        "type": "object"
+      },
+      "TransitionView": {
+        "description": "One accepted transition in a chunk's history (D-027/D-036).\n\nThe edge a node-step took \u2014 its origin node, the judgement choice that routed it,\nand its destination \u2014 oldest first on the detail. This is what makes the review-fail\nloop legible: a ``review -> build`` entry with ``choice_name = \"fail\"`` is a visible\nstep in the timeline (MVP criterion 9/11).",
+        "properties": {
+          "choice_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Choice Name"
+          },
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "from_node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Node Id"
+          },
+          "recorded_at": {
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "to_node_id": {
+            "title": "To Node Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from_node_id",
+          "to_node_id",
+          "choice_name",
+          "epoch",
+          "recorded_at"
+        ],
+        "title": "TransitionView",
         "type": "object"
       },
       "ValidationError": {

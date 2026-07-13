@@ -149,6 +149,58 @@ def test_review_fail_carries_findings_and_addendum_back_into_build(tmp_path: Pat
     assert findings[0]["content"] == _FINDINGS
 
 
+def test_chunk_detail_exposes_the_review_fail_loop_and_findings_asset(tmp_path: Path) -> None:
+    """The chunk detail (``GET /chunks/{id}``) surfaces the full transition history —
+    including the review-fail loop back to build — and the review-findings asset content.
+
+    This is the product surface behind MVP criterion 9/11 ("the hub's record shows every
+    transition"; "every chunk's node history, artifacts … render"). Without it the
+    review-fail cycle threads correctly through the envelope but is invisible to any
+    reader after the fact — exactly the gap a cold verification found (D-036)."""
+    hub = build_hub(tmp_path)
+    chunk_id, nodes = _mint_and_claim(hub)
+
+    # build pass -> review, then review fail -> build (emitting the findings asset).
+    hub.client.post(
+        f"/api/chunks/{chunk_id}/completions",
+        json=_completion(nodes["build"], epoch=1, choice="pass", artifacts=[_git_artifact("c1")]),
+    )
+    _report_lease(hub, chunk_id, epoch=2)
+    hub.client.post(
+        f"/api/chunks/{chunk_id}/completions",
+        json=_completion(
+            nodes["review"],
+            epoch=2,
+            choice="fail",
+            artifacts=[{"name": "review-findings", "kind": "asset", "content": _FINDINGS}],
+        ),
+    )
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+
+    # The history reads oldest-first and shows every edge, including the fail loop.
+    steps = [(h["from_node_id"], h["to_node_id"], h["choice_name"]) for h in detail["history"]]
+    assert steps == [
+        (nodes["build"], nodes["review"], "pass"),
+        (nodes["review"], nodes["build"], "fail"),
+    ]
+    # The last history entry agrees with the derived current node (the tail is current).
+    assert detail["history"][-1]["to_node_id"] == detail["current_node_id"] == nodes["build"]
+
+    # The review-findings asset content is inline on the detail, keyed by node.name.epoch.
+    findings = [a for a in detail["artifacts"] if a["name"] == "review-findings"]
+    assert len(findings) == 1
+    assert findings[0]["kind"] == "asset"
+    assert findings[0]["content"] == _FINDINGS
+    assert findings[0]["key"] == "review.review-findings.2"
+
+    # The build's git-commit artifact carries its pinned reference, not code (D-012).
+    commit = [a for a in detail["artifacts"] if a["kind"] == "git_commit"]
+    assert len(commit) == 1
+    assert commit[0]["repo"] == "acme/widget"
+    assert commit[0]["commit_hash"] == "c1"
+
+
 def test_review_cycle_second_pass_delivers_and_lands(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id, nodes = _mint_and_claim(hub)

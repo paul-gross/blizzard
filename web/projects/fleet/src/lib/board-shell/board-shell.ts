@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
 import type { ChunkStatus, ChunkSummary } from '../api/hub';
 
@@ -77,13 +77,20 @@ export interface BoardCard {
               </div>
               <div class="b-col-body">
                 @for (card of cardsFor(col.key); track card.chunkId) {
-                  <div class="card" data-testid="chunk-card" [attr.data-status]="card.status">
+                  <button
+                    type="button"
+                    class="card"
+                    data-testid="chunk-card"
+                    [attr.data-status]="card.status"
+                    [attr.aria-label]="'Open chunk ' + card.shortId"
+                    (click)="selectChunk.emit(card.chunkId)"
+                  >
                     <div class="card-id" data-testid="chunk-id">{{ card.shortId }}</div>
                     <div class="card-meta">
                       <span class="st" data-testid="chunk-status">{{ card.status }}</span>
                       <span class="nd" data-testid="chunk-node">{{ card.node }}</span>
                     </div>
-                  </div>
+                  </button>
                 }
               </div>
             </div>
@@ -219,6 +226,18 @@ export interface BoardCard {
       display: flex;
       flex-direction: column;
       gap: 3px;
+      width: 100%;
+      text-align: left;
+      font: inherit;
+      color: inherit;
+      cursor: pointer;
+    }
+    .card:hover {
+      border-color: var(--cyan);
+    }
+    .card:focus-visible {
+      outline: 1px solid var(--cyan);
+      outline-offset: 1px;
     }
     .card-id {
       color: var(--cyan);
@@ -259,6 +278,9 @@ export class BoardShell {
 
   /** The fleet chunk list (derived status + current node); empty when the fleet is idle. */
   readonly chunks = input<readonly ChunkSummary[]>([]);
+
+  /** Emitted with a chunk id when its card is activated — opens the detail drawer. */
+  readonly selectChunk = output<string>();
 
   protected readonly columns = COLUMNS;
 

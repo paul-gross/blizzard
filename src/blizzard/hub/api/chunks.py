@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
+from blizzard.hub.domain.artifacts import ArtifactRow, GitCommitArtifact, from_row, store_key
 from blizzard.hub.domain.envelope import build_node_envelope
 from blizzard.hub.domain.ingest import IngestConflict
 from blizzard.hub.domain.work import (
@@ -27,9 +28,11 @@ from blizzard.hub.domain.work import (
     derive_chunk_status,
     latest_epoch,
     open_escalation,
+    transition_history,
 )
 from blizzard.hub.pm.source import PmSourceError
 from blizzard.wire.chunk import (
+    ArtifactView,
     ChunkDetail,
     ChunkIngestConflict,
     ChunkIngestRequest,
@@ -39,6 +42,7 @@ from blizzard.wire.chunk import (
     PmItemView,
     PmPointerModel,
     RouteView,
+    TransitionView,
 )
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
@@ -49,6 +53,49 @@ router = APIRouter(prefix="/api", tags=["chunks"])
 
 def _pointer_models(chunk: Chunk) -> list[PmPointerModel]:
     return [PmPointerModel(provider=p.provider, url=p.url) for p in chunk.pm_pointers]
+
+
+def _history_views(facts: ChunkFacts) -> list[TransitionView]:
+    """The chunk's transitions oldest-first — the board's node-history timeline (D-036)."""
+    return [
+        TransitionView(
+            from_node_id=t.from_node_id,
+            to_node_id=t.to_node_id,
+            choice_name=t.choice_name,
+            epoch=t.epoch,
+            recorded_at=t.recorded_at.isoformat(),
+        )
+        for t in transition_history(facts)
+    ]
+
+
+def _artifact_views(rows: list[ArtifactRow]) -> list[ArtifactView]:
+    """The chunk's inline artifact store — every entry, with an asset's content and a
+    git-commit's pinned reference surfaced (D-036); ordered by ``{node}.{name}.{epoch}``
+    so a re-run's later-epoch entry follows its predecessors (append-only history)."""
+    views: list[ArtifactView] = []
+    for row in sorted(rows, key=lambda r: (r.node_name, r.name, r.epoch)):
+        artifact = from_row(row)
+        common = {
+            "key": store_key(row),
+            "kind": row.kind.value,
+            "name": row.name,
+            "node_id": row.node_id,
+            "node_name": row.node_name,
+            "epoch": row.epoch,
+        }
+        if isinstance(artifact, GitCommitArtifact):
+            views.append(
+                ArtifactView(
+                    **common,
+                    repo=artifact.repo,
+                    branch_name=artifact.branch_name,
+                    commit_hash=artifact.commit_hash,
+                )
+            )
+        else:
+            views.append(ArtifactView(**common, content=artifact.content))
+    return views
 
 
 def _current_node(services: HubServices, chunk: Chunk, facts: ChunkFacts, cache: dict[str, str | None]) -> str | None:
@@ -127,6 +174,8 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
         escalation=EscalationView(epoch=escalation.epoch, takeover_command=escalation.takeover_command)
         if escalation is not None
         else None,
+        history=_history_views(facts),
+        artifacts=_artifact_views(services.chunks.load_artifacts(chunk_id)),
     )
 
 
