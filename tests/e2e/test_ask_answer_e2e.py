@@ -5,6 +5,9 @@ build worker hits an undecidable choice, runs the **real** ``blizzard runner ask
 (shelled out by the ``mock-claude-code`` façade via ``BLIZZARD_RUNNER_ASK_CMD``, wired
 through the runner's spawn env), and **exits**. The chunk parks — its forwarded
 question lands at the hub, the reap clock stops, and it derives **waiting_on_human**.
+The park is then proven **inert**: several more ticks advance with the dormant lease
+never reaped, never re-elicited, and no retry consumed (D-009) — the chunk stays
+waiting_on_human on the same single open question.
 A human answers at the hub with ``blizzard hub answer``; the runner picks the answer up
 on its next tick and **resumes the dormant session** around it — same session — and the
 resumed worker commits the change. The chunk then walks build→review→deliver to
@@ -166,6 +169,18 @@ def _tick_until(
         os.environ.update(prior)
 
 
+def _tick_n(config: RunnerConfig, fenced: dict[str, str], count: int) -> None:
+    """Drive exactly ``count`` full reconciliation ticks (REAP→PULL→FILL→ADVANCE)."""
+    prior = dict(os.environ)
+    os.environ.update(fenced)
+    try:
+        for _ in range(count):
+            run_single_tick(config)
+    finally:
+        os.environ.clear()
+        os.environ.update(prior)
+
+
 def _git_bare(bare: Path, *args: str) -> str:
     return subprocess.run(["git", "--git-dir", str(bare), *args], check=True, capture_output=True, text=True).stdout
 
@@ -235,6 +250,19 @@ def test_ask_parks_then_answer_resumes_session_to_done(tmp_path: Path) -> None:
             question_id = question["question_id"]
             session_id = question["session_id"]
             assert question["options"] == ["rest", "graphql"]
+
+            # The reap clock is stopped while parked ([ask-answer.md] / D-009): drive several
+            # more full ticks and prove the park is inert — REAP never reaps the dormant lease,
+            # ADVANCE never re-elicits, and no retry is consumed. Observable proof: the chunk
+            # stays waiting_on_human and the SAME single question stays open (a consumed retry
+            # would re-spawn the worker, which would ask a fresh question or fail the attempt).
+            _tick_n(config, fenced, 4)
+            still = hub.get(f"/api/chunks/{chunk_id}").json()
+            assert still["status"] == "waiting_on_human", f"the park was not inert (status {still['status']!r})"
+            open_qs = hub.get("/api/questions").json()
+            assert [q["question_id"] for q in open_qs] == [question_id], (
+                f"the reap clock was not stopped — the question set changed while parked: {open_qs}"
+            )
 
             # The human answers at the hub via the real `blizzard hub answer` verb.
             answered = subprocess.run(
