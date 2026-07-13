@@ -10,6 +10,7 @@ identity arguments.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import click
@@ -18,7 +19,11 @@ import uvicorn
 from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.config import ConfigError, RunnerConfig
+from blizzard.runner.loop.build import PeriodicDriver, run_single_tick
 from blizzard.runner.runtime import ensure_current_revision, init_environment, migrate, migration_runner
+
+ENV_TICK_SECONDS = "BZ_RUNNER_TICK_SECONDS"
+DEFAULT_TICK_SECONDS = 30.0
 
 
 def _stub(verb: str) -> None:
@@ -68,8 +73,36 @@ def host(directory: str, host_: str | None, port: int | None) -> None:
         ensure_current_revision(config)
     except RevisionMismatchError as exc:
         raise click.ClickException(str(exc)) from exc
-    click.echo(f"serving blizzard-runner on {config.host}:{config.port}")
-    uvicorn.run(build_hosted_app(config), host=config.host, port=config.port)
+    app = build_hosted_app(config)
+    interval = float(os.environ.get(ENV_TICK_SECONDS, DEFAULT_TICK_SECONDS))
+    driver = PeriodicDriver(config, interval_seconds=interval)
+    click.echo(f"serving blizzard-runner on {config.host}:{config.port} (loop tick {interval}s)")
+    driver.start()  # startup recovery is REAP running first inside the tick
+    try:
+        uvicorn.run(app, host=config.host, port=config.port)
+    finally:
+        driver.stop()
+
+
+@runner.command("tick")
+@click.option("--dir", "directory", default=".", help="Runner runtime directory.")
+def tick_cmd(directory: str) -> None:
+    """Run ONE synchronous reconciliation tick (REAP → PULL → FILL → ADVANCE).
+
+    The steppable-loop driver for tests and the e2e (``bzh:steppable-loop``): a
+    single pass against the live hub and workspace, then exit. Refuses on a store
+    revision mismatch, like ``host``.
+    """
+    try:
+        config = RunnerConfig.load(Path(directory))
+    except ConfigError as exc:
+        raise click.ClickException(str(exc)) from exc
+    try:
+        ensure_current_revision(config)
+    except RevisionMismatchError as exc:
+        raise click.ClickException(str(exc)) from exc
+    run_single_tick(config)
+    click.echo("tick complete")
 
 
 @runner.command()

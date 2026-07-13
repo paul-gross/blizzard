@@ -22,6 +22,18 @@ DEFAULT_PORT = 8431
 
 ENV_HOST = "BZ_RUNNER_HOST"
 ENV_PORT = "BZ_RUNNER_PORT"
+ENV_HUB_URL = "BZ_HUB_URL"
+
+# Reconciliation-loop defaults (design/runner/loop.md). The runner is machine-level
+# and single-workspace (D-019); these seam the loop to the hub, the workspace it
+# drives, and the coding harness it spawns.
+DEFAULT_HUB_URL = "http://127.0.0.1:8421"  # the hub's default bind (band +2)
+DEFAULT_RUNNER_ID = "runner-local"
+DEFAULT_WORKSPACE_ID = "workspace-local"
+DEFAULT_HARNESS_BINARY = "claude"
+DEFAULT_MAX_AGENTS = 1
+DEFAULT_BASE_BRANCH = "main"
+DEFAULT_ENV_POOL: tuple[str, ...] = ("e1",)
 
 
 class ConfigError(RuntimeError):
@@ -36,6 +48,16 @@ class RunnerConfig:
     db_url: str
     host: str = DEFAULT_HOST
     port: int = DEFAULT_PORT
+    # Reconciliation-loop seams (design/runner/loop.md).
+    hub_url: str = DEFAULT_HUB_URL
+    runner_id: str = DEFAULT_RUNNER_ID
+    workspace_id: str = DEFAULT_WORKSPACE_ID
+    workspace_root: str = ""  # the winter workspace the provider drives; required to FILL
+    workspace_envs: tuple[str, ...] = DEFAULT_ENV_POOL  # the provider's static env pool (D-062)
+    harness_binary: str = DEFAULT_HARNESS_BINARY  # mock-claude-code in tests, `claude` in prod (D-092)
+    worker_settings_path: str | None = None  # the runner-owned worker hook file (P7)
+    max_agents: int = DEFAULT_MAX_AGENTS
+    base_branch: str = DEFAULT_BASE_BRANCH
 
     @property
     def config_path(self) -> Path:
@@ -57,14 +79,27 @@ class RunnerConfig:
             db_url=cls.default_db_url(root),
             host=os.environ.get(ENV_HOST, DEFAULT_HOST),
             port=int(os.environ.get(ENV_PORT, DEFAULT_PORT)),
+            hub_url=os.environ.get(ENV_HUB_URL, DEFAULT_HUB_URL),
         )
 
     def to_toml(self) -> str:
+        envs = ", ".join(f'"{e}"' for e in self.workspace_envs)
+        settings = f'"{self.worker_settings_path}"' if self.worker_settings_path else '""'
         return (
             "# blizzard-runner runtime configuration (blizzard runner init)\n"
             f'db_url = "{self.db_url}"\n'
             f'host = "{self.host}"\n'
             f"port = {self.port}\n"
+            "\n# Reconciliation-loop seams (design/runner/loop.md).\n"
+            f'hub_url = "{self.hub_url}"\n'
+            f'runner_id = "{self.runner_id}"\n'
+            f'workspace_id = "{self.workspace_id}"\n'
+            f'workspace_root = "{self.workspace_root}"\n'
+            f"workspace_envs = [{envs}]\n"
+            f'harness_binary = "{self.harness_binary}"\n'
+            f"worker_settings_path = {settings}\n"
+            f"max_agents = {self.max_agents}\n"
+            f'base_branch = "{self.base_branch}"\n'
         )
 
     @classmethod
@@ -80,4 +115,21 @@ class RunnerConfig:
             db_url=str(raw["db_url"]),
             host=host or str(raw.get("host", DEFAULT_HOST)),
             port=port if port is not None else int(raw.get("port", DEFAULT_PORT)),
+            hub_url=str(raw.get("hub_url", DEFAULT_HUB_URL)),
+            runner_id=str(raw.get("runner_id", DEFAULT_RUNNER_ID)),
+            workspace_id=str(raw.get("workspace_id", DEFAULT_WORKSPACE_ID)),
+            workspace_root=str(raw.get("workspace_root", "")),
+            workspace_envs=_as_env_tuple(raw.get("workspace_envs", DEFAULT_ENV_POOL)),
+            harness_binary=str(raw.get("harness_binary", DEFAULT_HARNESS_BINARY)),
+            worker_settings_path=(str(raw["worker_settings_path"]) or None)
+            if raw.get("worker_settings_path")
+            else None,
+            max_agents=int(raw.get("max_agents", DEFAULT_MAX_AGENTS)),
+            base_branch=str(raw.get("base_branch", DEFAULT_BASE_BRANCH)),
         )
+
+
+def _as_env_tuple(value: object) -> tuple[str, ...]:
+    if isinstance(value, (list, tuple)):
+        return tuple(str(v) for v in value)
+    return DEFAULT_ENV_POOL

@@ -58,7 +58,24 @@ class IHarnessAdapter(Protocol):
         ...
 
     def resume_with_message(self, environment_id: str, session_id: str, message: str) -> int:
-        """Headless resume-with-message; returns the new pid (D-050). Kill first."""
+        """Headless resume-with-message; returns the new pid (D-050). Kill first.
+
+        The fire-and-forget resume behind answer delivery and the CI feedback loop
+        (P7). The two-phase judgement elicitation — which needs the reply captured
+        synchronously for :meth:`parse_verdict` — is :meth:`judge`.
+        """
+        ...
+
+    def judge(self, environment_id: str, session_id: str, judgement_prompt: str) -> str:
+        """Deliver the judgement prompt into the session and return the raw reply (D-038).
+
+        The synchronous half of the two-phase node judgement: resumes the session
+        headlessly with the engine-composed judgement prompt (base prose + the
+        ``<Choice>`` elicitation tail) and returns the harness-native output the
+        loop hands to :meth:`parse_verdict`. Separated from
+        :meth:`resume_with_message` because the verdict elicitation must capture the
+        reply, where async message delivery only needs the new pid.
+        """
         ...
 
     def resume_command(self, environment_id: str, session_id: str) -> str:

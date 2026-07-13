@@ -75,3 +75,56 @@ outbound_buffer = Table(
     Column("created_at", DateTime, nullable=False),
     Column("acked_at", DateTime, nullable=True),  # NULL = pending; set when the hub acks the seq
 )
+
+# --- Lease node context (the node identity of each attempt — 0002's leases lacks it) -
+#
+# 0002's `leases` table is frozen; the node a lease attempts (and the retry budget
+# the node carries) is the one fact the reconciliation loop needs that it does not
+# hold. Written once per lease at mint. Append-only, one row per lease (D-082 — a
+# lease is one node-step attempt).
+
+lease_context = Table(
+    "lease_context",
+    metadata,
+    Column("lease_id", String, primary_key=True),  # 1:1 with leases.lease_id
+    Column("chunk_id", String, nullable=False),
+    Column("graph_id", String, nullable=False),
+    Column("node_id", String, nullable=False),  # which node this attempt is at
+    Column("node_name", String, nullable=False),
+    Column("retries_max", Integer, nullable=False),  # the node's retry budget, from the envelope
+    Column("recorded_at", DateTime, nullable=False),
+)
+
+# --- Lease closures (a lease is closed iff a closure fact exists — facts-not-status) -
+#
+# Append-only: an active lease is one with no closure. `reason` distinguishes a
+# clean node transition (`transitioned`) from an execution-attempt failure that
+# counts against the node's retries (`reaped`, `failed`) and a retries-exhausted
+# escalation (`escalated`, D-078/D-009).
+
+lease_closures = Table(
+    "lease_closures",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("lease_id", String, nullable=False),
+    Column("chunk_id", String, nullable=False),
+    Column("node_id", String, nullable=False),
+    Column("reason", String, nullable=False),  # transitioned | reaped | failed | escalated
+    Column("closed_at", DateTime, nullable=False),
+)
+
+# --- Binding releases (a binding is released iff a release fact exists — D-062/D-083) -
+#
+# An env binding rides the chunk's tenure; it is freed only when the chunk leaves
+# the runner (terminal, stop, detach). `release()` is a no-op mark at the provider,
+# so the release truth lives here as a runner-store fact. Held env ids are
+# `env_bindings` minus `binding_releases`.
+
+binding_releases = Table(
+    "binding_releases",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("chunk_id", String, nullable=False),
+    Column("environment_id", String, nullable=False),
+    Column("released_at", DateTime, nullable=False),
+)

@@ -77,11 +77,18 @@ def build_hosted_app(config: RunnerConfig) -> FastAPI:
     reader = SqlAlchemyStoreStatusReader(engine)
     expected = migration_runner(config).script_head()
     readiness = ReadinessService(reader=reader, expected_revision=expected)
-    # Bind the reference execution seams (winter workspace, Claude Code). Both are
-    # NotImplemented stubs in P6 — the loop that invokes them lands with the walking
-    # skeleton; the workspace root is the runner's own root as a P6 placeholder.
-    workspace_provider: IWorkspaceProvider = WinterWorkspaceProvider(workspace_root=str(config.root))
-    harness: IHarnessAdapter = ClaudeCodeAdapter()
+    # Bind the reference execution seams (winter workspace, Claude Code) from config
+    # (D-062/D-092). The reconciliation loop drives them through its own composition
+    # root (:mod:`blizzard.runner.loop.build`); these are exposed on ``app.state`` for
+    # the runner's local API surface.
+    workspace_provider: IWorkspaceProvider = WinterWorkspaceProvider(
+        workspace_root=config.workspace_root or str(config.root),
+        env_pool=config.workspace_envs,
+        base_branch=config.base_branch,
+    )
+    harness: IHarnessAdapter = ClaudeCodeAdapter(
+        binary=config.harness_binary, settings_path=config.worker_settings_path
+    )
     return create_app(config, readiness=readiness, workspace_provider=workspace_provider, harness=harness)
 
 

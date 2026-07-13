@@ -1,0 +1,91 @@
+"""httpx adapter for the hub-client seam (package-private).
+
+The reference :class:`~blizzard.runner.loop.hub.IHubClient` binding. All httpx
+usage is confined here; a transport failure or unexpected status is wrapped once
+into :class:`~blizzard.runner.loop.hub.HubClientError` (``bzh:structlog-logging``).
+The injected ``httpx.Client`` is the seam tests substitute with an
+``httpx.MockTransport``-backed client, so the loop is exercised against a fake hub
+with no live daemon.
+"""
+
+from __future__ import annotations
+
+import httpx
+
+from blizzard.foundation.logging import get_logger
+from blizzard.runner.loop.hub import HubClientError, IHubClient, RouteClaimOutcome
+from blizzard.wire.chunk import ChunkDetail
+from blizzard.wire.completion import CompletionSubmission
+from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
+from blizzard.wire.queue import QueuePeekResponse
+from blizzard.wire.route import RouteClaim, RouteClaimConflict, RouteClaimResponse
+
+_log = get_logger("blizzard.runner.hub")
+
+_API = "/api"
+
+
+class HttpHubClient:
+    """The runner's hub API client over an injected ``httpx.Client``."""
+
+    def __init__(self, client: httpx.Client) -> None:
+        self._client = client
+
+    def peek_queue(self) -> QueuePeekResponse:
+        resp = self._get(f"{_API}/queue/peek")
+        return QueuePeekResponse.model_validate(resp.json())
+
+    def claim_route(self, claim: RouteClaim) -> RouteClaimOutcome:
+        try:
+            resp = self._client.post(f"{_API}/routes", json=claim.model_dump(mode="json"))
+        except httpx.HTTPError as exc:
+            raise self._wrap(exc, "POST /routes") from exc
+        if resp.status_code == httpx.codes.CONFLICT:
+            return RouteClaimOutcome(conflict=RouteClaimConflict.model_validate(resp.json()))
+        self._raise_for_status(resp, "POST /routes")
+        return RouteClaimOutcome(claimed=RouteClaimResponse.model_validate(resp.json()))
+
+    def submit_completion(self, chunk_id: str, submission: CompletionSubmission) -> ApplyResponse:
+        resp = self._post(f"{_API}/chunks/{chunk_id}/completions", submission.model_dump(mode="json"))
+        return ApplyResponse.model_validate(resp.json())
+
+    def get_envelope(self, chunk_id: str) -> NodeEnvelope:
+        resp = self._get(f"{_API}/chunks/{chunk_id}/envelope")
+        return NodeEnvelope.model_validate(resp.json())
+
+    def get_chunk(self, chunk_id: str) -> ChunkDetail:
+        resp = self._get(f"{_API}/chunks/{chunk_id}")
+        return ChunkDetail.model_validate(resp.json())
+
+    # --- plumbing -----------------------------------------------------------
+
+    def _get(self, path: str) -> httpx.Response:
+        try:
+            resp = self._client.get(path)
+        except httpx.HTTPError as exc:
+            raise self._wrap(exc, f"GET {path}") from exc
+        self._raise_for_status(resp, f"GET {path}")
+        return resp
+
+    def _post(self, path: str, body: object) -> httpx.Response:
+        try:
+            resp = self._client.post(path, json=body)
+        except httpx.HTTPError as exc:
+            raise self._wrap(exc, f"POST {path}") from exc
+        self._raise_for_status(resp, f"POST {path}")
+        return resp
+
+    def _raise_for_status(self, resp: httpx.Response, operation: str) -> None:
+        if resp.is_success:
+            return
+        _log.error("hub call failed", operation=operation, status=resp.status_code, body=resp.text[:500])
+        raise HubClientError(f"{operation} -> {resp.status_code}: {resp.text[:200]}")
+
+    @staticmethod
+    def _wrap(exc: httpx.HTTPError, operation: str) -> HubClientError:
+        _log.error("hub unreachable", operation=operation, detail=str(exc))
+        return HubClientError(f"{operation} failed: {exc}")
+
+
+def _conforms_hub_client(x: HttpHubClient) -> IHubClient:
+    return x
