@@ -1,0 +1,111 @@
+# The merge gate — the reusable check suite (implementation/build.md).
+#
+# This is the PR-to-master gate. `pr.yml` runs it on every pull request;
+# `push.yml` and `release.yml` call it too, then add their own extra tiers, so
+# the gate is defined once and never drifts between triggers.
+#
+# Every check here is seams-mocked and token-free: it installs dependencies and
+# runs, needing no real forge, no tokens, and no network beyond the package
+# installs (blizzard-harness verification/blizzard.md, tier rules).
+name: gate
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  python-quality:
+    name: ruff + pyright
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - run: uv sync
+      - name: ruff format --check
+        run: uv run ruff format --check .
+      - name: ruff check
+        run: uv run ruff check .
+      - name: pyright
+        run: uv run pyright
+
+  python-tests:
+    name: pytest (unit + component)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - run: uv sync
+      # The unit and component tiers both run under pytest against sqlite; the
+      # service and e2e tiers are Playwright and land in P6 (verification/blizzard.md).
+      - name: pytest
+        run: uv run pytest
+
+  openapi-drift:
+    name: OpenAPI spec drift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - run: uv sync
+      # Regenerate the committed specs the frontend's openapi-ts client is built
+      # from, and fail on any uncommitted difference — the Python half of the
+      # client-drift check (bzh:generated-client). The TypeScript half runs in
+      # the `frontend` job once the web workspace lands.
+      - name: export specs and fail on drift
+        run: |
+          uv run blizzard-export-openapi --out-dir openapi
+          git diff --exit-code -- openapi/ \
+            || { echo "::error::OpenAPI specs under openapi/ are stale — run 'mise run export-openapi' and commit."; exit 1; }
+
+  frontend:
+    name: eslint + vitest + client drift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Declared interface (P5 frontend builder owns the Angular workspace; the
+      # integrate step reconciles the exact path/script names): the workspace is
+      # `web/` with `npm run lint` (eslint), `npm run test` (vitest), and
+      # `npm run generate:client` (openapi-ts codegen of the committed client).
+      # Until it lands, every frontend step is a clearly-labeled no-op so the
+      # gate stays green.
+      - id: detect
+        name: detect frontend workspace
+        run: |
+          if [ -f web/package.json ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Frontend workspace (web/) not scaffolded yet (P5 frontend builder) — eslint, vitest, and generated-client drift are PENDING and skipped."
+          fi
+      - if: steps.detect.outputs.present == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - if: steps.detect.outputs.present == 'true'
+        name: npm ci
+        run: cd web && npm ci
+      - if: steps.detect.outputs.present == 'true'
+        name: eslint
+        run: cd web && npm run lint
+      - if: steps.detect.outputs.present == 'true'
+        name: vitest
+        run: cd web && npm run test
+      - if: steps.detect.outputs.present == 'true'
+        name: generated-client drift
+        run: |
+          cd web && npm run generate:client
+          cd "$GITHUB_WORKSPACE" && git diff --exit-code -- web/ \
+            || { echo "::error::generated API client is stale — regenerate and commit."; exit 1; }
