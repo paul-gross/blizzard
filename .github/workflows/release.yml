@@ -1,0 +1,77 @@
+# Tag v* — the release build (implementation/build.md, D-098).
+#
+# Pushing a `v*` tag IS cutting the milestone build: the full suite runs, the
+# wheel is built with the embedded frontend, and a GitHub Release is published
+# from the tag. Prerelease candidates are `v*-rc.*` tags.
+#
+# The full suite is the merge gate (unit + component) today. The service tier,
+# the e2e tier, and the crash sweep land in P6 (verification/blizzard.md marks
+# them Gap (P6)); they are wired here as an explicit, clearly-labeled no-op that
+# cannot fail, so a release is green today and the P6 gap is visible. When P6
+# lands, replace the no-op with the real tiers.
+#
+# The GitHub Release is published with the workflow's built-in GITHUB_TOKEN — no
+# external registry and no user-supplied secret. The wheel is attached to the
+# release; there is no package-index publish.
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  gate:
+    uses: ./.github/workflows/gate.yml
+
+  full-suite-tiers:
+    name: service + e2e + crash sweep (PENDING — P6)
+    needs: [gate]
+    runs-on: ubuntu-latest
+    steps:
+      - name: skipped — P6 gap
+        run: |
+          echo "::notice title=full-suite tiers PENDING (P6)::The service tier, the e2e tier (blizzard:e2e), and the crash sweep (blizzard:crash-sweep) land with the P6 walking skeleton (verification/blizzard.md). This step is a deliberate no-op. Replace it with the real tiers when P6 lands."
+
+  release:
+    name: build wheel and publish release
+    needs: [gate]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: derive version from tag
+        id: ver
+        run: |
+          # v0.1.0 -> 0.1.0 ; v0.1.0-rc.1 -> 0.1.0-rc.1 (hatchling normalizes the
+          # PEP 440 pre-release form). The version scheme is 0.<milestone>.<patch>.
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          case "$TAG" in
+            *-rc.*) echo "prerelease=true"  >> "$GITHUB_OUTPUT" ;;
+            *)      echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+          echo "Release version: $VERSION"
+      - name: build the release wheel (embedded frontend + node-free install proof)
+        env:
+          BLIZZARD_VERSION: ${{ steps.ver.outputs.version }}
+        run: ./scripts/build-wheel.sh
+      - name: publish GitHub Release with the wheel attached
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          FLAGS=(--generate-notes --title "${GITHUB_REF_NAME}")
+          if [ "${{ steps.ver.outputs.prerelease }}" = "true" ]; then
+            FLAGS+=(--prerelease)
+          fi
+          gh release create "${GITHUB_REF_NAME}" dist/*.whl "${FLAGS[@]}"

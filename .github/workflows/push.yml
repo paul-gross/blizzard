@@ -1,0 +1,82 @@
+# Push to master — the merge gate plus the extra tiers and a dev build
+# (implementation/build.md).
+#
+# Runs the full PR gate, then the service tier and the crash sweep, then
+# publishes a dev-build wheel as a workflow artifact for fleet dogfooding.
+#
+# The service tier and the crash sweep DO NOT EXIST until P6 (the walking
+# skeleton — verification/blizzard.md marks both as Gap (P6)). They are wired
+# here as explicit, clearly-labeled no-op jobs that cannot fail, so this
+# workflow is green today and the P6 gap is visible in the run graph rather than
+# silently omitted. When P6 lands, replace each no-op with its real invocation.
+name: push
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: push-master
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    uses: ./.github/workflows/gate.yml
+
+  service-tier:
+    name: service tier (PENDING — P6)
+    needs: [gate]
+    runs-on: ubuntu-latest
+    steps:
+      - name: skipped — P6 gap
+        run: |
+          echo "::notice title=service tier PENDING (P6)::The service tier (blizzard:service-test — a running hub/runner HTTP API exercised from outside, seams bound to the mock fleet, Playwright) does not exist until P6 (the walking skeleton). This step is a deliberate no-op. Replace it with the real service-tier run when P6 lands."
+
+  crash-sweep:
+    name: crash sweep (PENDING — P6)
+    needs: [gate]
+    runs-on: ubuntu-latest
+    steps:
+      - name: skipped — P6 gap
+        run: |
+          echo "::notice title=crash sweep PENDING (P6)::The kill-9 crash sweep (blizzard:crash-sweep — daemons as real subprocesses, invariant checker after each armed crash) depends on the steppable loop, injected clock, crash-point registry, and checker that land in P6 (architecture/crash-correctness.md). This step is a deliberate no-op. Replace it with the real sweep when P6 lands."
+
+  dev-build:
+    name: dev build wheel artifact
+    needs: [gate]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      # Node builds the embedded Angular apps once the web workspace lands; until
+      # then build-wheel.sh ships the committed placeholder assets (node-free).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: compute dev version 0.<milestone>.0.dev<run>
+        id: ver
+        run: |
+          # The version scheme is 0.<milestone>.<patch> pre-1.0. A dev build off
+          # master targets the milestone in progress at patch 0, tagged with the
+          # run number: 0.<milestone>.0.dev<run> (implementation/build.md).
+          BASE=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          MINOR=$(echo "$BASE" | cut -d. -f2)
+          DEV="0.${MINOR}.0.dev${{ github.run_number }}"
+          echo "version=$DEV" >> "$GITHUB_OUTPUT"
+          echo "Dev build version: $DEV"
+      - name: build the dev wheel (embedded frontend + node-free install proof)
+        env:
+          BLIZZARD_VERSION: ${{ steps.ver.outputs.version }}
+        run: ./scripts/build-wheel.sh
+      - name: upload dev wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: blizzard-dev-wheel-${{ steps.ver.outputs.version }}
+          path: dist/*.whl
+          if-no-files-found: error

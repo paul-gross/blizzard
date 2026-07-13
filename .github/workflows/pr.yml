@@ -1,0 +1,21 @@
+# PR to master — the merge gate (implementation/build.md).
+#
+# ruff + pyright + eslint + client-drift check + the unit and component tiers.
+# This is the whole gate: it delegates to the reusable `gate` workflow so the
+# exact same checks run on push and tag.
+name: pr
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    uses: ./.github/workflows/gate.yml
