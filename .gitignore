@@ -1,0 +1,24 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+dist/
+build/
+.venv/
+*.whl
+.pytest_cache/
+.ruff_cache/
+
+# Runtime data directories a `blizzard {hub,runner} init` scaffolds.
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# The compiled Angular apps CI embeds into the wheel. The committed placeholder
+# index.html in each dir keeps the serving seam live for local dev; a real
+# `ng build` output landing here is a CI/wheel artifact, not source.
+/src/blizzard/static/hub/*
+/src/blizzard/static/runner/*
+!/src/blizzard/static/hub/index.html
+!/src/blizzard/static/runner/index.html

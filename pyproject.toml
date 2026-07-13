@@ -1,0 +1,88 @@
+[project]
+name = "blizzard"
+version = "0.1.0"
+description = "Blizzard: the hub, the runner, and the CLI for orchestrating autonomous fleets of coding agents — one repo, one wheel (D-061)."
+requires-python = ">=3.12"
+# The full dependency superset both daemons, the CLI, and the tooling will need
+# is declared up-front so the parallel component builders (backend, frontend,
+# CI) rarely touch this file (see ORCHESTRATION.md, P5 parallel-build protocol).
+# Add a dep only when a component genuinely needs one that is missing here.
+dependencies = [
+    # HTTP surface + SSE — both daemons (hub, runner) are FastAPI apps served by
+    # uvicorn; the CLI's client verbs are pure HTTP clients of those APIs (D-023).
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    # httpx backs FastAPI's TestClient and the CLI's daemon-API client verbs.
+    "httpx>=0.27.0",
+    # Persistence — the hub store and the runner store are SQLAlchemy over
+    # sqlite (default) or postgres, held inside the portable surface
+    # (bzh:sql-portable). Alembic drives the two independent migration trees,
+    # applied manually through the CLI, never at daemon startup (bzh:manual-migrations).
+    "sqlalchemy>=2.0,<3.0",
+    "alembic>=1.13.0",
+    # CLI surface — the one `blizzard` binary, verbs namespaced by target (D-061).
+    "click>=8.1.0",
+    # Domain models and request/response schemas.
+    "pydantic>=2.0.0",
+    # Structured logging, per blizzard-harness standards/logging.md
+    # (bzh:structlog-logging).
+    "structlog>=24.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# The one wheel ships both daemons, the CLI, and the compiled frontend (D-061).
+# Everything under src/blizzard rides along, including the embedded frontend
+# assets under src/blizzard/static/{hub,runner} that the CI build fills before
+# `uv build` (see src/blizzard/static/README.md).
+packages = ["src/blizzard"]
+# The frontend build output is a wheel-embedded asset CI fills, and those built
+# files are gitignored (only the placeholder index.html is tracked). `artifacts`
+# un-ignores the whole static tree so the real bundles ship in the wheel too.
+artifacts = ["src/blizzard/static/**/*"]
+
+# One binary, verbs namespaced by target (D-061). The hyphenated aliases are the
+# systemd / `ps` entry points for the daemon `host` personalities (design/cli.md).
+[project.scripts]
+blizzard = "blizzard.cli.main:blizzard"
+blizzard-hub = "blizzard.hub.cli:hub"
+blizzard-runner = "blizzard.runner.cli:runner"
+# OpenAPI export: dumps the hub and runner specs to a stable path. The frontend's
+# openapi-ts client generation and CI's client-drift check both consume it
+# (build.md D-100, bzh:generated-client).
+blizzard-export-openapi = "blizzard.tools.openapi:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.8.0",
+    "pyright>=1.1.380",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.pyright]
+include = ["src", "tests"]
+pythonVersion = "3.12"
+typeCheckingMode = "standard"
+reportMissingTypeStubs = false
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+# Alembic migration scripts are generated from a template and follow Alembic's
+# own conventions, not ours.
+extend-exclude = ["src/blizzard/*/store/migrations/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "C4", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E501", "B008"]
+"src/blizzard/*/store/migrations/env.py" = ["E402"]
