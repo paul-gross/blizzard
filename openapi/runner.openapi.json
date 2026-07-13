@@ -1,4 +1,56 @@
 {
+  "components": {
+    "schemas": {
+      "ReadinessResponse": {
+        "description": "The wire shape of a readiness reading (openapi-ts consumes this).",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "expected_revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Revision"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          },
+          "store_reachable": {
+            "title": "Store Reachable",
+            "type": "boolean"
+          },
+          "store_revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Store Revision"
+          }
+        },
+        "required": [
+          "ready",
+          "store_reachable",
+          "store_revision",
+          "expected_revision",
+          "detail"
+        ],
+        "title": "ReadinessResponse",
+        "type": "object"
+      }
+    }
+  },
   "info": {
     "title": "blizzard-runner",
     "version": "0.1.0"
@@ -25,6 +77,27 @@
           }
         },
         "summary": "Health",
+        "tags": [
+          "meta"
+        ]
+      }
+    },
+    "/api/ready": {
+      "get": {
+        "operationId": "ready_api_ready_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Ready",
         "tags": [
           "meta"
         ]

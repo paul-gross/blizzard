@@ -16,7 +16,7 @@ import click
 import uvicorn
 
 from blizzard.foundation.store.migrations import RevisionMismatchError
-from blizzard.runner.app import create_app
+from blizzard.runner.app import build_hosted_app
 from blizzard.runner.config import ConfigError, RunnerConfig
 from blizzard.runner.runtime import ensure_current_revision, init_environment, migrate, migration_runner
 
@@ -69,7 +69,7 @@ def host(directory: str, host_: str | None, port: int | None) -> None:
     except RevisionMismatchError as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(f"serving blizzard-runner on {config.host}:{config.port}")
-    uvicorn.run(create_app(config), host=config.host, port=config.port)
+    uvicorn.run(build_hosted_app(config), host=config.host, port=config.port)
 
 
 @runner.command()
