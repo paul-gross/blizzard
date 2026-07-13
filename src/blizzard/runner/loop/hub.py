@@ -17,6 +17,7 @@ from blizzard.wire.chunk import ChunkDetail
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
 from blizzard.wire.facts import RunnerFactAck, RunnerFactBatch
+from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekResponse
 from blizzard.wire.route import RouteClaim, RouteClaimConflict, RouteClaimResponse
 
@@ -67,6 +68,13 @@ class IHubClient(Protocol):
 
     def get_chunk(self, chunk_id: str) -> ChunkDetail:
         """``GET /api/chunks/{id}`` — the chunk's derived status, polled at a hub node (D-066)."""
+        ...
+
+    def get_question(self, question_id: str) -> QuestionView:
+        """``GET /api/questions/{id}`` — the runner's answer poll ([ask-answer.md]).
+
+        A parked chunk's runner polls its forwarded question by id; once ``answered`` is
+        true the answer is delivered by resuming the dormant session around it."""
         ...
 
     def report_lease(self, chunk_id: str, *, epoch: int, runner_id: str) -> None:

@@ -5,6 +5,42 @@ export type ClientOptions = {
 };
 
 /**
+ * AskRequest
+ *
+ * A worker's ask: the question and its optional pipe-separated choices.
+ */
+export type AskRequest = {
+    /**
+     * Options
+     */
+    options?: Array<string>;
+    /**
+     * Question
+     */
+    question: string;
+};
+
+/**
+ * AskResponse
+ *
+ * The recorded ask — its minted question id (openapi-ts consumes this).
+ */
+export type AskResponse = {
+    /**
+     * Lease Id
+     */
+    lease_id: string;
+    /**
+     * Question Id
+     */
+    question_id: string;
+    /**
+     * Recorded
+     */
+    recorded: boolean;
+};
+
+/**
  * HTTPValidationError
  */
 export type HttpValidationError = {
@@ -142,6 +178,36 @@ export type HeartbeatApiHeartbeatPostResponses = {
 };
 
 export type HeartbeatApiHeartbeatPostResponse = HeartbeatApiHeartbeatPostResponses[keyof HeartbeatApiHeartbeatPostResponses];
+
+export type RecordAskApiLeasesLeaseIdAsksPostData = {
+    body: AskRequest;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+    };
+    query?: never;
+    url: '/api/leases/{lease_id}/asks';
+};
+
+export type RecordAskApiLeasesLeaseIdAsksPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RecordAskApiLeasesLeaseIdAsksPostError = RecordAskApiLeasesLeaseIdAsksPostErrors[keyof RecordAskApiLeasesLeaseIdAsksPostErrors];
+
+export type RecordAskApiLeasesLeaseIdAsksPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: AskResponse;
+};
+
+export type RecordAskApiLeasesLeaseIdAsksPostResponse = RecordAskApiLeasesLeaseIdAsksPostResponses[keyof RecordAskApiLeasesLeaseIdAsksPostResponses];
 
 export type ReadyApiReadyGetData = {
     body?: never;

@@ -13,9 +13,12 @@ rows in :mod:`blizzard.hub.store.schema`; a read repository hydrates them (the
 Precedence is **first match wins**, top to bottom, exactly as
 ``design/domain/events.md`` specifies — a chunk matching several rows has exactly
 one status. ``waiting_on_human`` (open ask / open decision) sits between
-``needs_human`` and ``delivering`` in the full design; ask/answer and gates are
-P7 (see ORCHESTRATION.md), so its branch is a shaped extension point here, not yet
-wired — the fact inputs for it are absent from :class:`ChunkFacts` until then.
+``needs_human`` and ``delivering``: a chunk parks there on an open **question**
+(``question.asked`` with no ``question.answered`` — ask/answer, MVP criterion 7) or
+an open **decision** (a gate's ``decision.submitted`` no transition references —
+gates, MVP criterion 12). Both fact inputs live on :class:`ChunkFacts`; the
+question hydration ships here, and the decision hydration is populated by the gates
+track against :class:`DecisionFact` (``design/domain/work.md``).
 """
 
 from __future__ import annotations
@@ -130,6 +133,40 @@ class EscalationFact:
 
 
 @dataclass(frozen=True)
+class QuestionFact:
+    """A ``question.asked`` row and whether it has been answered ([ask-answer.md]).
+
+    Open/answered is **derived** (D-004): a question is open exactly while no
+    ``question.answered`` row exists, and an open question is the fact the chunk's
+    ``waiting_on_human`` status derives from. ``answered`` is resolved by the
+    hydrating repository (the presence of the answer row) so the derivation stays a
+    pure function; ``question_id`` and ``asked_at`` order the asks for a chunk carrying
+    more than one.
+    """
+
+    question_id: str
+    asked_at: datetime
+    answered: bool = False
+
+
+@dataclass(frozen=True)
+class DecisionFact:
+    """A gate's ``decision.submitted`` row and whether a transition references it (D-045).
+
+    Kin to :class:`QuestionFact`: the chunk derives ``waiting_on_human`` from an
+    **open** decision — one no transition resolves — exactly the D-037 pending pattern.
+    ``resolved`` is computed by the hydrating repository (a transition carrying this
+    ``decision_id``) so the derivation reads a plain boolean. This is the input shape
+    the gates track writes decision facts against (``design/domain/work.md``); until it
+    lands, :attr:`ChunkFacts.decisions` is empty and no chunk derives a gate park.
+    """
+
+    decision_id: str
+    submitted_at: datetime
+    resolved: bool = False
+
+
+@dataclass(frozen=True)
 class ChunkFacts:
     """Every fact a chunk's status derives from (D-067), already loaded.
 
@@ -145,6 +182,8 @@ class ChunkFacts:
     transitions: list[TransitionFact] = field(default_factory=list)
     routes_created: list[RouteCreatedFact] = field(default_factory=list)
     routes_released: list[RouteReleasedFact] = field(default_factory=list)
+    questions: list[QuestionFact] = field(default_factory=list)
+    decisions: list[DecisionFact] = field(default_factory=list)
 
 
 # --- The derivation queries (D-067) -----------------------------------------
@@ -158,8 +197,10 @@ def derive_chunk_status(facts: ChunkFacts) -> ChunkStatus:
         return ChunkStatus.DONE
     if _has_open_escalation(facts):
         return ChunkStatus.NEEDS_HUMAN
-    # waiting_on_human (open ask / open decision) slots here in the full design —
-    # ask/answer and gates are P7; no fact inputs for it exist yet.
+    if _is_waiting_on_human(facts):
+        # An open question (ask-answer.md) or an open decision (gate, D-045); the
+        # reap clock is stopped and the answer/resolution flips it back.
+        return ChunkStatus.WAITING_ON_HUMAN
     if _newest_transition_enters_hub_node(facts):
         return ChunkStatus.DELIVERING
     if _has_live_route(facts):
@@ -186,6 +227,26 @@ def open_escalation(facts: ChunkFacts) -> EscalationFact | None:
     if any(lease.minted_at > newest.recorded_at for lease in facts.leases):
         return None
     return newest
+
+
+def _is_waiting_on_human(facts: ChunkFacts) -> bool:
+    """An open question or an open decision parks the chunk (ask-answer.md/D-045)."""
+    return bool(open_questions(facts)) or has_open_decision(facts)
+
+
+def open_questions(facts: ChunkFacts) -> list[QuestionFact]:
+    """The chunk's unanswered questions, oldest first ([ask-answer.md]).
+
+    A question is open exactly while no ``question.answered`` row exists (D-004); an
+    answer flips it out of ``waiting_on_human``. The list is what the chunk detail and
+    ``blizzard hub status`` surface, and its non-emptiness is the derivation's input.
+    """
+    return sorted((q for q in facts.questions if not q.answered), key=lambda q: (q.asked_at, q.question_id))
+
+
+def has_open_decision(facts: ChunkFacts) -> bool:
+    """True iff a gate's decision is unresolved — no transition references it (D-045)."""
+    return any(not d.resolved for d in facts.decisions)
 
 
 def _newest_transition_enters_hub_node(facts: ChunkFacts) -> bool:
@@ -245,6 +306,50 @@ def latest_epoch(facts: ChunkFacts) -> int | None:
     return max(lease.epoch for lease in facts.leases)
 
 
+# --- Question rows (the ask/answer rendezvous — questions.md) ----------------
+
+
+@dataclass(frozen=True)
+class QuestionRow:
+    """A durable question row with its derived answer state ([ask-answer.md]).
+
+    The full surfacing shape behind ``blizzard hub status`` and the chunk detail's
+    open-questions list. Open/answered is **derived** (D-004): a question is answered
+    exactly while its answer row exists, and ``answered_by``/``answer``/``answered_at``
+    are the winning first-write-wins CAS row (``None`` while open).
+    """
+
+    question_id: str
+    chunk_id: str
+    node_id: str | None
+    session_id: str | None
+    runner_id: str
+    epoch: int
+    question: str
+    options: list[str]
+    asked_at: datetime
+    answered: bool = False
+    answer: str | None = None
+    answered_by: str | None = None
+    answered_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class AnswerOutcome:
+    """The result of an answer write — first-write-wins CAS ([ask-answer.md]).
+
+    ``won`` is True for the write that landed the row; a later writer gets ``won=False``
+    with the **winning** row's ``answer``/``answered_by`` so the loser is told who
+    already answered (the 409 body).
+    """
+
+    won: bool
+    question_id: str
+    answer: str
+    answered_by: str
+    answered_at: datetime
+
+
 # --- Repository seams (I-prefix, read/write split — bzh:repository-split) ----
 
 
@@ -253,6 +358,18 @@ class IReadChunkRepository(Protocol):
 
     def get(self, chunk_id: str) -> Chunk | None: ...
     def load_facts(self, chunk_id: str) -> ChunkFacts | None: ...
+    def get_question(self, question_id: str) -> QuestionRow | None:
+        """One question row with its derived answer state, or None ([ask-answer.md])."""
+        ...
+
+    def list_open_questions(self) -> list[QuestionRow]:
+        """Every unanswered question across the fleet — the ``hub status`` surface."""
+        ...
+
+    def load_questions(self, chunk_id: str) -> list[QuestionRow]:
+        """A chunk's questions, open and answered — the chunk-detail surface (D-004)."""
+        ...
+
     def load_artifacts(self, chunk_id: str) -> list[ArtifactRow]:
         """Every artifact row of a chunk; the caller resolves latest-by-epoch (D-089)."""
         ...
@@ -316,4 +433,39 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         Retries exhausted (or a dead worker past the cap): the chunk derives
         ``needs_human`` until a later lease mint supersedes it. The runner-composed
         takeover command rides along so the parked session is resumable (D-035)."""
+        ...
+
+    def record_question(
+        self,
+        *,
+        question_id: str,
+        chunk_id: str,
+        node_id: str | None,
+        session_id: str | None,
+        runner_id: str,
+        epoch: int,
+        question: str,
+        options: list[str],
+        asked_at: datetime,
+    ) -> None:
+        """Land a ``question.asked`` row — the chunk derives ``waiting_on_human`` ([ask-answer.md]).
+
+        Runner-authored, forwarded up the outbound buffer; the row is the durable
+        rendezvous the answer keys off. Idempotent by ``question_id`` (a store-and-forward
+        replay re-lands the same id harmlessly)."""
+        ...
+
+    def answer_question(self, question_id: str, *, answer: str, answered_by: str, at: datetime) -> AnswerOutcome:
+        """First-write-wins CAS on the answer row ([ask-answer.md]).
+
+        Exactly one answer row ever exists: the first write wins (``won=True``); a
+        racing second write loses (``won=False``) and is handed the winning row. This
+        row alone flips the chunk out of ``waiting_on_human`` (D-004)."""
+        ...
+
+    def record_answer_delivered(self, *, question_id: str, chunk_id: str, at: datetime) -> None:
+        """Record an ``answer.delivered`` fact — the resume-with-answer ran ([ask-answer.md]).
+
+        Board detail (the session was reconstituted around the answer); the status
+        already flipped at ``question.answered``, so no status derives from this."""
         ...

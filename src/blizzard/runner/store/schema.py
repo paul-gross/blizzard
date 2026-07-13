@@ -7,9 +7,10 @@ never a ``server_default`` (``bzh:injected-clock``); portable-SQL surface only
 (``bzh:sql-portable``).
 
 The loop mints a lease, binds an environment, buffers each hub-bound fact for the
-flusher (store-and-forward, D-069), and records a heartbeat per worker tool call
-(progress detection, design/runner/loop.md). Verdict / open-ask tables are added as
-the loop grows — the seam is the same facts-only pattern.
+flusher (store-and-forward, D-069), records a heartbeat per worker tool call
+(progress detection, design/runner/loop.md), and — for the ask/answer protocol
+([ask-answer.md]) — records the local open-ask fact and the chunk's park/resume
+around it. All the same facts-only pattern.
 """
 
 from __future__ import annotations
@@ -149,4 +150,52 @@ binding_releases = Table(
     Column("chunk_id", String, nullable=False),
     Column("environment_id", String, nullable=False),
     Column("released_at", DateTime, nullable=False),
+)
+
+# --- Asks (the worker's local open-ask fact — [ask-answer.md]) ---------------
+#
+# ``blizzard runner ask`` hits the runner's local API before the worker exits, so
+# the ask is durable by the time the process ends — that is how ADVANCE tells "parked
+# on a question" apart from "died without a verdict" (D-009). The runner mints the
+# ``question_id`` here so it can poll the hub for the answer by it. An ask is
+# *unforwarded* (awaiting park) until a park_fact references its question_id.
+
+asks = Table(
+    "asks",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("lease_id", String, nullable=False),  # BLIZZARD_LEASE_ID the worker inherited
+    Column("chunk_id", String, nullable=False),
+    Column("question_id", String, nullable=False),  # qn_<ulid>, runner-minted (D-075)
+    Column("question", Text, nullable=False),
+    Column("options", Text, nullable=False),  # JSON list[str] (may be empty)
+    Column("session_id", String, nullable=True),  # the session to resume around the answer
+    Column("asked_at", DateTime, nullable=False),
+)
+
+# --- Park / resume (the chunk's dormancy on a question — [ask-answer.md]) ----
+#
+# A lease is *parked* while a park_fact references it with no later park_resume: the
+# worker asked and exited (ask-and-exit), so there is no live worker — REAP must not
+# count the park as a stall, and ADVANCE must not elicit a verdict. The answer's
+# arrival records a park_resume, the dormant session is resumed, and the lease is live
+# again (a fresh pid recorded via record_spawn).
+
+park_facts = Table(
+    "park_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("lease_id", String, nullable=False),
+    Column("chunk_id", String, nullable=False),
+    Column("question_id", String, nullable=False),  # the ask this park is on
+    Column("parked_at", DateTime, nullable=False),
+)
+
+park_resumes = Table(
+    "park_resumes",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("lease_id", String, nullable=False),
+    Column("question_id", String, nullable=False),
+    Column("resumed_at", DateTime, nullable=False),
 )

@@ -15,9 +15,11 @@ except to source the ULID instant of a surrogate route id.
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 
 from sqlalchemy import Engine, insert, select
+from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import mint
@@ -25,6 +27,7 @@ from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import Executor
 from blizzard.hub.domain.work import (
+    AnswerOutcome,
     Chunk,
     ChunkFacts,
     ChunkStatus,
@@ -32,6 +35,8 @@ from blizzard.hub.domain.work import (
     IWriteChunkRepository,
     LeaseFact,
     PmPointer,
+    QuestionFact,
+    QuestionRow,
     RouteCreatedFact,
     RouteReleasedFact,
     TransitionFact,
@@ -99,6 +104,18 @@ class ChunkStore:
                 RouteReleasedFact(released_at=r.released_at)
                 for r in conn.execute(select(s.route_released).where(s.route_released.c.chunk_id == chunk_id)).all()
             ]
+            answered = {
+                a.question_id
+                for a in conn.execute(
+                    select(s.question_answers.c.question_id).join(
+                        s.questions, s.questions.c.question_id == s.question_answers.c.question_id
+                    )
+                ).all()
+            }
+            questions = [
+                QuestionFact(question_id=q.question_id, asked_at=q.asked_at, answered=q.question_id in answered)
+                for q in conn.execute(select(s.questions).where(s.questions.c.chunk_id == chunk_id)).all()
+            ]
             return ChunkFacts(
                 minted=True,
                 stopped=self._exists(conn, s.chunk_stopped, chunk_id),
@@ -108,6 +125,7 @@ class ChunkStore:
                 transitions=transitions,
                 routes_created=routes_created,
                 routes_released=routes_released,
+                questions=questions,
             )
 
     def load_artifacts(self, chunk_id: str) -> list[ArtifactRow]:
@@ -209,6 +227,38 @@ class ChunkStore:
                 select(s.runner_high_water.c.seq).where(s.runner_high_water.c.runner_id == runner_id)
             ).one_or_none()
             return int(row.seq) if row is not None else 0
+
+    def get_question(self, question_id: str) -> QuestionRow | None:
+        with self._engine.connect() as conn:
+            q = conn.execute(select(s.questions).where(s.questions.c.question_id == question_id)).one_or_none()
+            if q is None:
+                return None
+            answer = conn.execute(
+                select(s.question_answers).where(s.question_answers.c.question_id == question_id)
+            ).one_or_none()
+            return self._question_row(q, answer)
+
+    def list_open_questions(self) -> list[QuestionRow]:
+        with self._engine.connect() as conn:
+            rows = conn.execute(
+                select(s.questions)
+                .where(s.questions.c.question_id.not_in(select(s.question_answers.c.question_id)))
+                .order_by(s.questions.c.asked_at)
+            ).all()
+            return [self._question_row(q, None) for q in rows]
+
+    def load_questions(self, chunk_id: str) -> list[QuestionRow]:
+        with self._engine.connect() as conn:
+            rows = conn.execute(
+                select(s.questions).where(s.questions.c.chunk_id == chunk_id).order_by(s.questions.c.asked_at)
+            ).all()
+            out: list[QuestionRow] = []
+            for q in rows:
+                answer = conn.execute(
+                    select(s.question_answers).where(s.question_answers.c.question_id == q.question_id)
+                ).one_or_none()
+                out.append(self._question_row(q, answer))
+            return out
 
     # --- writes -------------------------------------------------------------
 
@@ -326,7 +376,91 @@ class ChunkStore:
                 )
             )
 
+    def record_question(
+        self,
+        *,
+        question_id: str,
+        chunk_id: str,
+        node_id: str | None,
+        session_id: str | None,
+        runner_id: str,
+        epoch: int,
+        question: str,
+        options: list[str],
+        asked_at: datetime,
+    ) -> None:
+        # Idempotent by question_id: a store-and-forward replay re-lands the same row.
+        with self._engine.begin() as conn:
+            exists = conn.execute(
+                select(s.questions.c.question_id).where(s.questions.c.question_id == question_id)
+            ).first()
+            if exists is not None:
+                return
+            conn.execute(
+                insert(s.questions).values(
+                    question_id=question_id,
+                    chunk_id=chunk_id,
+                    node_id=node_id,
+                    session_id=session_id,
+                    runner_id=runner_id,
+                    epoch=epoch,
+                    question=question,
+                    options=json.dumps(options),
+                    asked_at=asked_at,
+                )
+            )
+
+    def answer_question(self, question_id: str, *, answer: str, answered_by: str, at: datetime) -> AnswerOutcome:
+        # First-write-wins CAS: the answer row's PK is the question id, so a racing
+        # second insert raises IntegrityError and the loser reads back the winner.
+        try:
+            with self._engine.begin() as conn:
+                conn.execute(
+                    insert(s.question_answers).values(
+                        question_id=question_id, answer=answer, answered_by=answered_by, answered_at=at
+                    )
+                )
+            return AnswerOutcome(
+                won=True, question_id=question_id, answer=answer, answered_by=answered_by, answered_at=at
+            )
+        except IntegrityError:
+            with self._engine.connect() as conn:
+                winner = conn.execute(
+                    select(s.question_answers).where(s.question_answers.c.question_id == question_id)
+                ).one()
+            return AnswerOutcome(
+                won=False,
+                question_id=question_id,
+                answer=winner.answer,
+                answered_by=winner.answered_by,
+                answered_at=winner.answered_at,
+            )
+
+    def record_answer_delivered(self, *, question_id: str, chunk_id: str, at: datetime) -> None:
+        with self._engine.begin() as conn:
+            conn.execute(
+                insert(s.answer_deliveries).values(question_id=question_id, chunk_id=chunk_id, delivered_at=at)
+            )
+
     # --- helpers ------------------------------------------------------------
+
+    @staticmethod
+    def _question_row(q, answer) -> QuestionRow:  # type: ignore[no-untyped-def]
+        return QuestionRow(
+            question_id=q.question_id,
+            chunk_id=q.chunk_id,
+            node_id=q.node_id,
+            session_id=q.session_id,
+            runner_id=q.runner_id,
+            epoch=q.epoch,
+            question=q.question,
+            options=json.loads(q.options) if q.options else [],
+            asked_at=q.asked_at,
+            answered=answer is not None,
+            answer=answer.answer if answer is not None else None,
+            answered_by=answer.answered_by if answer is not None else None,
+            answered_at=answer.answered_at if answer is not None else None,
+        )
 
     def _chunk(self, conn, row) -> Chunk:  # type: ignore[no-untyped-def]
         pointers = [

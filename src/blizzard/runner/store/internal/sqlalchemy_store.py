@@ -10,6 +10,7 @@ active = no closure, held = no release (``bzh:facts-not-status``).
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 
 from sqlalchemy import Engine, and_, func, select
@@ -17,14 +18,17 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.store.repository import (
+    AskRecord,
     BufferedFact,
     EnvBindingRecord,
     IWriteRunnerStore,
     LeaseRecord,
     NewLease,
+    ParkRecord,
     RunnerStoreError,
 )
 from blizzard.runner.store.schema import (
+    asks,
     binding_releases,
     env_bindings,
     heartbeats,
@@ -32,6 +36,8 @@ from blizzard.runner.store.schema import (
     lease_context,
     leases,
     outbound_buffer,
+    park_facts,
+    park_resumes,
 )
 
 _log = get_logger("blizzard.runner.store")
@@ -162,6 +168,38 @@ class SqlAlchemyRunnerStore:
             for r in self._all(stmt)
         ]
 
+    def unforwarded_ask(self, lease_id: str) -> AskRecord | None:
+        stmt = (
+            select(asks)
+            .where(asks.c.lease_id == lease_id)
+            .where(asks.c.question_id.not_in(select(park_facts.c.question_id)))
+            .order_by(asks.c.id.desc())
+        )
+        rows = self._all(stmt)
+        return self._row_to_ask(rows[0]) if rows else None
+
+    def parked_lease_ids(self) -> set[str]:
+        stmt = select(park_facts.c.lease_id).where(park_facts.c.question_id.not_in(select(park_resumes.c.question_id)))
+        return {str(r.lease_id) for r in self._all(stmt)}
+
+    def open_park(self, lease_id: str) -> ParkRecord | None:
+        stmt = (
+            select(park_facts)
+            .where(park_facts.c.lease_id == lease_id)
+            .where(park_facts.c.question_id.not_in(select(park_resumes.c.question_id)))
+            .order_by(park_facts.c.id.desc())
+        )
+        rows = self._all(stmt)
+        if not rows:
+            return None
+        r = rows[0]
+        return ParkRecord(
+            lease_id=str(r.lease_id),
+            chunk_id=str(r.chunk_id),
+            question_id=str(r.question_id),
+            parked_at=r.parked_at,
+        )
+
     # --- writes -------------------------------------------------------------
 
     def record_lease(self, lease: NewLease) -> None:
@@ -247,7 +285,60 @@ class SqlAlchemyRunnerStore:
         with self._begin() as conn:
             conn.execute(outbound_buffer.update().where(outbound_buffer.c.seq == seq).values(acked_at=acked_at))
 
+    def record_ask(
+        self,
+        *,
+        lease_id: str,
+        chunk_id: str,
+        question_id: str,
+        question: str,
+        options: list[str],
+        session_id: str | None,
+        asked_at: datetime,
+    ) -> None:
+        with self._begin() as conn:
+            conn.execute(
+                asks.insert().values(
+                    lease_id=lease_id,
+                    chunk_id=chunk_id,
+                    question_id=question_id,
+                    question=question,
+                    options=json.dumps(options),
+                    session_id=session_id,
+                    asked_at=asked_at,
+                )
+            )
+        _log.info("ask recorded", lease_id=lease_id, chunk_id=chunk_id, question_id=question_id)
+
+    def record_park(self, *, lease_id: str, chunk_id: str, question_id: str, parked_at: datetime) -> None:
+        with self._begin() as conn:
+            conn.execute(
+                park_facts.insert().values(
+                    lease_id=lease_id, chunk_id=chunk_id, question_id=question_id, parked_at=parked_at
+                )
+            )
+        _log.info("chunk parked on question", lease_id=lease_id, chunk_id=chunk_id, question_id=question_id)
+
+    def record_park_resume(self, *, lease_id: str, question_id: str, resumed_at: datetime) -> None:
+        with self._begin() as conn:
+            conn.execute(
+                park_resumes.insert().values(lease_id=lease_id, question_id=question_id, resumed_at=resumed_at)
+            )
+        _log.info("park resumed with answer", lease_id=lease_id, question_id=question_id)
+
     # --- plumbing -----------------------------------------------------------
+
+    @staticmethod
+    def _row_to_ask(r) -> AskRecord:  # type: ignore[no-untyped-def]
+        return AskRecord(
+            lease_id=str(r.lease_id),
+            chunk_id=str(r.chunk_id),
+            question_id=str(r.question_id),
+            question=str(r.question),
+            options=json.loads(r.options) if r.options else [],
+            session_id=str(r.session_id) if r.session_id is not None else None,
+            asked_at=r.asked_at,
+        )
 
     @staticmethod
     def _lease_select():  # type: ignore[no-untyped-def]

@@ -18,6 +18,7 @@ from blizzard.wire.chunk import ChunkDetail
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
 from blizzard.wire.facts import EscalationReport, LeaseMintReport, RunnerFactAck, RunnerFactBatch
+from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekResponse
 from blizzard.wire.route import RouteClaim, RouteClaimConflict, RouteClaimResponse
 
@@ -61,6 +62,10 @@ class HttpHubClient:
     def get_chunk(self, chunk_id: str) -> ChunkDetail:
         resp = self._get(f"{_API}/chunks/{chunk_id}")
         return ChunkDetail.model_validate(resp.json())
+
+    def get_question(self, question_id: str) -> QuestionView:
+        resp = self._get(f"{_API}/questions/{question_id}")
+        return QuestionView.model_validate(resp.json())
 
     def report_lease(self, chunk_id: str, *, epoch: int, runner_id: str) -> None:
         self._post(

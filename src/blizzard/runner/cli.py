@@ -142,8 +142,31 @@ def heartbeat() -> None:
 @click.argument("prompt")
 @click.option("--options", default=None, help="Pipe-separated answer options.")
 def ask(prompt: str, options: str | None) -> None:
-    """Worker: ask-and-exit; the ask fact is durable before the worker exits."""
-    _stub("ask")
+    """Worker: ask-and-exit; the ask fact is durable before the worker exits.
+
+    A pure client of the runner's local API (D-023): the worker runs this on an
+    undecidable choice, and it posts the question for the lease in ``BLIZZARD_LEASE_ID``
+    to ``BLIZZARD_RUNNER_URL`` — both inherited from the spawn environment, so no
+    identity arguments (design/harness-adapters.md, [ask-answer.md]). The ask is a
+    durable runner-store fact before this returns and the worker ends its turn.
+    """
+    lease_id = os.environ.get(ENV_LEASE_ID)
+    runner_url = os.environ.get(ENV_RUNNER_URL)
+    if not lease_id or not runner_url:
+        raise click.ClickException(f"ask: no {ENV_LEASE_ID}/{ENV_RUNNER_URL} in the environment")
+    body: dict[str, object] = {"question": prompt}
+    if options:
+        body["options"] = [o for o in options.split("|") if o]
+    try:
+        resp = httpx.post(
+            f"{runner_url.rstrip('/')}/api/leases/{lease_id}/asks",
+            json=body,
+            timeout=_HEARTBEAT_TIMEOUT,
+        )
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise click.ClickException(f"ask: could not record the question ({exc})") from exc
+    click.echo(resp.json().get("question_id", ""))
 
 
 @runner.command("pm-items")

@@ -33,6 +33,7 @@ from blizzard.wire.chunk import ChunkDetail
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.envelope import ApplyResponse, NodeConfig, NodeEnvelope
 from blizzard.wire.facts import RunnerFact, RunnerFactAck, RunnerFactBatch
+from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekEntry, QueuePeekResponse
 from blizzard.wire.route import RouteClaim, RouteClaimResponse
 
@@ -69,6 +70,8 @@ class FakeHub:
         self.escalations: list[tuple[str, int, str, str]] = []  # (chunk_id, epoch, runner_id, takeover)
         self.pushed: list[RunnerFact] = []
         self.high_water: dict[str, int] = {}
+        self.questions: dict[str, QuestionView] = {}
+        self.delivered: list[tuple[str, QuestionView]] = []
         self.down = False
 
     def peek_queue(self) -> QueuePeekResponse:
@@ -117,6 +120,9 @@ class FakeHub:
             latest_epoch=1,
         )
 
+    def get_question(self, question_id: str) -> QuestionView:
+        return self.questions[question_id]
+
     def report_lease(self, chunk_id: str, *, epoch: int, runner_id: str) -> None:
         self.leases.append((chunk_id, epoch, runner_id))
 
@@ -153,6 +159,8 @@ class FakeHarness:
         self.assessment = assessment
         self.spawns: list[tuple[NodeEnvelope, WorkerPreamble]] = []
         self.judged: list[tuple[str, str, str]] = []
+        self.resumed: list[tuple[str, str, str]] = []  # (workdir, session_id, message)
+        self.resume_pid = 4321
 
     def spawn(self, envelope: NodeEnvelope, preamble: WorkerPreamble, session_hint: str | None) -> WorkerHandle:
         self.spawns.append((envelope, preamble))
@@ -167,7 +175,8 @@ class FakeHarness:
         return "<judged output>"
 
     def resume_with_message(self, environment_id: str, session_id: str, message: str) -> int:
-        return 4321
+        self.resumed.append((environment_id, session_id, message))
+        return self.resume_pid
 
     def resume_command(self, environment_id: str, session_id: str) -> str:
         return f"cd {environment_id} && claude --resume {session_id}"

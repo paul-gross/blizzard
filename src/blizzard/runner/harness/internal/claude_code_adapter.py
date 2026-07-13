@@ -143,6 +143,12 @@ class ClaudeCodeAdapter:
         # tree, so a sibling worker cannot misattribute a beat — design/harness-adapters.md).
         env["BLIZZARD_LEASE_ID"] = preamble.lease_id
         env["BLIZZARD_RUNNER_URL"] = preamble.local_api_url
+        # The ask channel ([ask-answer.md]): the worker records an undecidable choice by
+        # running ``blizzard runner ask`` against the local API above, then exits. Real
+        # Claude Code invokes it per the node-prompt convention; the blizzard-mock façade
+        # shells out to whatever ``BLIZZARD_RUNNER_ASK_CMD`` names, so wiring the real
+        # command here is what lets the mock exercise the true ask path (verified e2e).
+        env.setdefault("BLIZZARD_RUNNER_ASK_CMD", "blizzard runner ask")
         return env
 
 

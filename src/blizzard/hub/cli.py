@@ -10,15 +10,27 @@ structlog inside the runtime and app.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import click
+import httpx
 import uvicorn
 
 from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.hub.app import build_hosted_app
 from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.hub.runtime import ensure_current_revision, init_environment, migrate, migration_runner
+
+# The hub the client verbs talk to (design/cli.md): ``BZ_HUB_URL`` overrides the
+# colocated default (band +2). Client verbs are pure API clients (D-023/D-061).
+ENV_HUB_URL = "BZ_HUB_URL"
+DEFAULT_HUB_URL = "http://127.0.0.1:8421"
+_CLIENT_TIMEOUT = 15.0
+
+
+def _hub_url(override: str | None) -> str:
+    return override or os.environ.get(ENV_HUB_URL) or DEFAULT_HUB_URL
 
 
 def _stub(verb: str) -> None:
@@ -73,17 +85,65 @@ def host(directory: str, host_: str | None, port: int | None) -> None:
 
 
 @hub.command()
-def status() -> None:
-    """The fleet view: every chunk, open question, and registered runner."""
-    _stub("status")
+@click.option("--url", "url", default=None, help="Hub base URL (overrides $BZ_HUB_URL).")
+def status(url: str | None) -> None:
+    """The fleet view: every chunk with its derived status, and open questions.
+
+    A pure client of the hub API (design/cli.md): ``GET /chunks`` + ``GET /questions``,
+    the same facts the board renders, in the terminal (D-004)."""
+    base = _hub_url(url)
+    try:
+        with httpx.Client(base_url=base, timeout=_CLIENT_TIMEOUT) as client:
+            chunks = client.get("/api/chunks")
+            chunks.raise_for_status()
+            questions = client.get("/api/questions")
+            questions.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise click.ClickException(f"hub status: could not reach the hub at {base} ({exc})") from exc
+
+    rows = chunks.json()
+    click.echo(f"chunks ({len(rows)}):")
+    for chunk in rows:
+        node = chunk.get("current_node_id") or "-"
+        click.echo(f"  {chunk['chunk_id']}  {chunk['status']:<16} @ {node}")
+    open_qs = questions.json()
+    click.echo(f"\nopen questions ({len(open_qs)}):")
+    for q in open_qs:
+        opts = f"  [{'|'.join(q.get('options') or [])}]" if q.get("options") else ""
+        click.echo(f"  {q['question_id']}  (chunk {q['chunk_id']}): {q['question']}{opts}")
 
 
 @hub.command()
 @click.argument("question_id")
-@click.argument("answer")
-def answer(question_id: str, answer: str) -> None:
-    """Answer an open question (first-write-wins CAS at the hub)."""
-    _stub("answer")
+@click.argument("answer_text")
+@click.option("--by", "answered_by", default="operator", help="Who is answering (recorded on the row).")
+@click.option("--url", "url", default=None, help="Hub base URL (overrides $BZ_HUB_URL).")
+def answer(question_id: str, answer_text: str, answered_by: str, url: str | None) -> None:
+    """Answer an open question (first-write-wins CAS at the hub).
+
+    Writes the answer where the question row lives ([ask-answer.md]); the runner picks
+    it up and resumes the dormant session. A racing second answer loses and is told who
+    already answered."""
+    base = _hub_url(url)
+    try:
+        with httpx.Client(base_url=base, timeout=_CLIENT_TIMEOUT) as client:
+            resp = client.post(
+                f"/api/questions/{question_id}/answer",
+                json={"answer": answer_text, "answered_by": answered_by},
+            )
+    except httpx.HTTPError as exc:
+        raise click.ClickException(f"hub answer: could not reach the hub at {base} ({exc})") from exc
+
+    if resp.status_code == httpx.codes.CONFLICT:
+        winner = resp.json()
+        raise click.ClickException(f"already answered by {winner.get('answered_by')}: {winner.get('answer')!r}")
+    if resp.status_code == httpx.codes.NOT_FOUND:
+        raise click.ClickException(f"unknown question {question_id}")
+    try:
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise click.ClickException(f"hub answer: {exc}") from exc
+    click.echo(f"answered {question_id}: {answer_text!r} (the runner will resume the session)")
 
 
 @hub.command()

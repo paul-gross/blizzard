@@ -28,12 +28,16 @@ mint, landing after the escalation, flips ``needs_human`` off with no resolution
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.hub.domain.work import IWriteChunkRepository
 from blizzard.wire.facts import (
+    ANSWER_DELIVERED,
     ESCALATION_RECORDED,
     LEASE_MINTED,
+    QUESTION_ASKED,
     RunnerFactAck,
     RunnerFactBatch,
 )
@@ -118,5 +122,39 @@ class FactIngestService:
                 at=now,
             )
             return True
+        if kind == QUESTION_ASKED:
+            # The chunk derives waiting_on_human from the landed row (D-004); the runner
+            # authored the question_id so it can poll the answer back ([ask-answer.md]).
+            self._chunks.record_question(
+                question_id=str(payload["question_id"]),
+                chunk_id=str(payload["chunk_id"]),
+                node_id=_opt(payload.get("node_id")),
+                session_id=_opt(payload.get("session_id")),
+                runner_id=runner_id,
+                epoch=int(payload["epoch"]),  # type: ignore[arg-type]
+                question=str(payload["question"]),
+                options=[str(o) for o in payload.get("options", [])],  # type: ignore[union-attr]
+                asked_at=_parse_at(payload.get("asked_at"), now),
+            )
+            return True
+        if kind == ANSWER_DELIVERED:
+            # Board detail: the resume-with-answer ran; status flipped at question.answered.
+            self._chunks.record_answer_delivered(
+                question_id=str(payload["question_id"]), chunk_id=str(payload["chunk_id"]), at=now
+            )
+            return True
         _log.warning("unknown runner fact kind", kind=kind)
         return False
+
+
+def _opt(value: object) -> str | None:
+    return str(value) if value is not None else None
+
+
+def _parse_at(value: object, fallback: datetime) -> datetime:
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value)
+        except ValueError:
+            return fallback
+    return fallback

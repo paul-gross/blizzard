@@ -29,6 +29,7 @@ from blizzard.hub.domain.facts import FactIngestService, RunnerFactsService
 from blizzard.hub.domain.graph import GraphDoc, IReadGraphRepository
 from blizzard.hub.domain.graph_authoring import GraphMintService
 from blizzard.hub.domain.ingest import IngestService
+from blizzard.hub.domain.questions import QuestionService
 from blizzard.hub.domain.work import IReadChunkRepository
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.graphs import default_graph_yaml, load_default_graph_doc
@@ -49,6 +50,7 @@ class HubServices:
     facts: FactIngestService
     graph_mint: GraphMintService
     runner_facts: RunnerFactsService
+    questions: QuestionService
     events: EventBroker
     clock: IClock
     default_graph_doc: GraphDoc
@@ -78,6 +80,7 @@ def build_services(
         facts=FactIngestService(chunks=chunk_store, clock=clock),
         graph_mint=GraphMintService(graphs=graph_store, clock=clock),
         runner_facts=RunnerFactsService(chunks=chunk_store, clock=clock),
+        questions=QuestionService(chunks=chunk_store, clock=clock),
         events=events,
         clock=clock,
         default_graph_doc=load_default_graph_doc(),

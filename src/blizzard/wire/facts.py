@@ -28,6 +28,11 @@ from pydantic import BaseModel
 # Fact kinds the batched /events push accepts (domain/events.md ``noun.verb`` names).
 LEASE_MINTED = "lease.minted"
 ESCALATION_RECORDED = "escalation.recorded"
+# The ask/answer pair the runner forwards up ([ask-answer.md]): question.asked lands
+# the durable question row (the chunk derives waiting_on_human), answer.delivered
+# records that the resume-with-answer ran (board detail, status already flipped).
+QUESTION_ASKED = "question.asked"
+ANSWER_DELIVERED = "answer.delivered"
 
 
 class LeaseMintReport(BaseModel):

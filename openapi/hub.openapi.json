@@ -1,6 +1,59 @@
 {
   "components": {
     "schemas": {
+      "AnswerRequest": {
+        "description": "The body of ``POST /questions/{id}/answer`` \u2014 the human's answer ([ask-answer.md]).",
+        "properties": {
+          "answer": {
+            "title": "Answer",
+            "type": "string"
+          },
+          "answered_by": {
+            "default": "operator",
+            "title": "Answered By",
+            "type": "string"
+          }
+        },
+        "required": [
+          "answer"
+        ],
+        "title": "AnswerRequest",
+        "type": "object"
+      },
+      "AnswerResult": {
+        "description": "The answer write's outcome \u2014 first-write-wins CAS ([ask-answer.md]).\n\n``won`` is True for the write that landed the row; the loser gets ``won=False`` with\nthe **winning** row so it can be told who already answered (the 409 body).",
+        "properties": {
+          "answer": {
+            "title": "Answer",
+            "type": "string"
+          },
+          "answered_at": {
+            "title": "Answered At",
+            "type": "string"
+          },
+          "answered_by": {
+            "title": "Answered By",
+            "type": "string"
+          },
+          "question_id": {
+            "title": "Question Id",
+            "type": "string"
+          },
+          "won": {
+            "title": "Won",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "won",
+          "question_id",
+          "answer",
+          "answered_by",
+          "answered_at"
+        ],
+        "title": "AnswerResult",
+        "type": "object"
+      },
       "ApplyOutcome": {
         "description": "What a completion's apply produced (D-072).",
         "enum": [
@@ -223,6 +276,14 @@
               "$ref": "#/components/schemas/PmPointerModel"
             },
             "title": "Pm Pointers",
+            "type": "array"
+          },
+          "questions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/QuestionView"
+            },
+            "title": "Questions",
             "type": "array"
           },
           "route": {
@@ -856,6 +917,182 @@
           "url"
         ],
         "title": "PmPointerModel",
+        "type": "object"
+      },
+      "QuestionAsked": {
+        "description": "A ``question.asked`` fact the runner forwards to the hub ([ask-answer.md]).\n\n``question_id`` is runner-minted (``qn_<ulid>``) so the runner can poll the answer\nback by it; ``epoch`` is the parked lease's fence, ``session_id`` the dormant\nsession to resume around the answer, and ``options`` the choices the board renders.",
+        "properties": {
+          "asked_at": {
+            "title": "Asked At",
+            "type": "string"
+          },
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id"
+          },
+          "options": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "question_id": {
+            "title": "Question Id",
+            "type": "string"
+          },
+          "runner_id": {
+            "title": "Runner Id",
+            "type": "string"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          }
+        },
+        "required": [
+          "question_id",
+          "chunk_id",
+          "runner_id",
+          "epoch",
+          "question",
+          "asked_at"
+        ],
+        "title": "QuestionAsked",
+        "type": "object"
+      },
+      "QuestionView": {
+        "description": "A question row with its derived answer state \u2014 the surfacing shape (D-004).\n\nBehind ``GET /questions`` (open only), ``GET /questions/{id}`` (the runner's answer\npoll), and the chunk detail's open-questions list. ``answered`` and the answer\nfields derive from the presence of the answer row.",
+        "properties": {
+          "answer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer"
+          },
+          "answered": {
+            "default": false,
+            "title": "Answered",
+            "type": "boolean"
+          },
+          "answered_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answered At"
+          },
+          "answered_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answered By"
+          },
+          "asked_at": {
+            "title": "Asked At",
+            "type": "string"
+          },
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id"
+          },
+          "options": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "question_id": {
+            "title": "Question Id",
+            "type": "string"
+          },
+          "runner_id": {
+            "title": "Runner Id",
+            "type": "string"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          }
+        },
+        "required": [
+          "question_id",
+          "chunk_id",
+          "runner_id",
+          "epoch",
+          "question",
+          "asked_at"
+        ],
+        "title": "QuestionView",
         "type": "object"
       },
       "QueuePeekEntry": {
@@ -1773,6 +2010,172 @@
         "summary": "Health",
         "tags": [
           "meta"
+        ]
+      }
+    },
+    "/api/questions": {
+      "get": {
+        "description": "Every open (unanswered) question across the fleet \u2014 the ``hub status`` surface.",
+        "operationId": "list_open_questions_api_questions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/QuestionView"
+                  },
+                  "title": "Response List Open Questions Api Questions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Open Questions",
+        "tags": [
+          "questions"
+        ]
+      },
+      "post": {
+        "description": "Land a ``question.asked`` row \u2014 the chunk parks ``waiting_on_human`` ([ask-answer.md]).",
+        "operationId": "ask_question_api_questions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuestionAsked"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Ask Question Api Questions Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ask Question",
+        "tags": [
+          "questions"
+        ]
+      }
+    },
+    "/api/questions/{question_id}": {
+      "get": {
+        "description": "One question with its derived answer state \u2014 the runner's answer poll (D-004).",
+        "operationId": "get_question_api_questions__question_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "title": "Question Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuestionView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Question",
+        "tags": [
+          "questions"
+        ]
+      }
+    },
+    "/api/questions/{question_id}/answer": {
+      "post": {
+        "description": "Answer a question first-write-wins; 409 carries the winning answer ([ask-answer.md]).",
+        "operationId": "answer_question_api_questions__question_id__answer_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "title": "Question Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnswerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnswerResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Answer Question",
+        "tags": [
+          "questions"
         ]
       }
     },

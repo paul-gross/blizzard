@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { ClaimRouteApiRoutesPostData, ClaimRouteApiRoutesPostErrors, ClaimRouteApiRoutesPostResponses, GetChunkApiChunksChunkIdGetData, GetChunkApiChunksChunkIdGetErrors, GetChunkApiChunksChunkIdGetResponses, GetEnvelopeApiChunksChunkIdEnvelopeGetData, GetEnvelopeApiChunksChunkIdEnvelopeGetErrors, GetEnvelopeApiChunksChunkIdEnvelopeGetResponses, GetPmItemApiChunksChunkIdPmItemGetData, GetPmItemApiChunksChunkIdPmItemGetErrors, GetPmItemApiChunksChunkIdPmItemGetResponses, HealthApiHealthGetData, HealthApiHealthGetResponses, IngestChunkApiChunksPostData, IngestChunkApiChunksPostErrors, IngestChunkApiChunksPostResponses, IngestRunnerFactsApiEventsPostData, IngestRunnerFactsApiEventsPostErrors, IngestRunnerFactsApiEventsPostResponses, ListChunksApiChunksGetData, ListChunksApiChunksGetResponses, MintGraphApiGraphsPostData, MintGraphApiGraphsPostErrors, MintGraphApiGraphsPostResponses, PeekQueueApiQueuePeekGetData, PeekQueueApiQueuePeekGetResponses, ReadyApiReadyGetData, ReadyApiReadyGetResponses, ReportEscalationApiChunksChunkIdEscalationsPostData, ReportEscalationApiChunksChunkIdEscalationsPostErrors, ReportEscalationApiChunksChunkIdEscalationsPostResponses, ReportLeaseApiChunksChunkIdLeasesPostData, ReportLeaseApiChunksChunkIdLeasesPostErrors, ReportLeaseApiChunksChunkIdLeasesPostResponses, SubmitCompletionApiChunksChunkIdCompletionsPostData, SubmitCompletionApiChunksChunkIdCompletionsPostErrors, SubmitCompletionApiChunksChunkIdCompletionsPostResponses } from './types.gen';
+import type { AnswerQuestionApiQuestionsQuestionIdAnswerPostData, AnswerQuestionApiQuestionsQuestionIdAnswerPostErrors, AnswerQuestionApiQuestionsQuestionIdAnswerPostResponses, AskQuestionApiQuestionsPostData, AskQuestionApiQuestionsPostErrors, AskQuestionApiQuestionsPostResponses, ClaimRouteApiRoutesPostData, ClaimRouteApiRoutesPostErrors, ClaimRouteApiRoutesPostResponses, GetChunkApiChunksChunkIdGetData, GetChunkApiChunksChunkIdGetErrors, GetChunkApiChunksChunkIdGetResponses, GetEnvelopeApiChunksChunkIdEnvelopeGetData, GetEnvelopeApiChunksChunkIdEnvelopeGetErrors, GetEnvelopeApiChunksChunkIdEnvelopeGetResponses, GetPmItemApiChunksChunkIdPmItemGetData, GetPmItemApiChunksChunkIdPmItemGetErrors, GetPmItemApiChunksChunkIdPmItemGetResponses, GetQuestionApiQuestionsQuestionIdGetData, GetQuestionApiQuestionsQuestionIdGetErrors, GetQuestionApiQuestionsQuestionIdGetResponses, HealthApiHealthGetData, HealthApiHealthGetResponses, IngestChunkApiChunksPostData, IngestChunkApiChunksPostErrors, IngestChunkApiChunksPostResponses, IngestRunnerFactsApiEventsPostData, IngestRunnerFactsApiEventsPostErrors, IngestRunnerFactsApiEventsPostResponses, ListChunksApiChunksGetData, ListChunksApiChunksGetResponses, ListOpenQuestionsApiQuestionsGetData, ListOpenQuestionsApiQuestionsGetResponses, MintGraphApiGraphsPostData, MintGraphApiGraphsPostErrors, MintGraphApiGraphsPostResponses, PeekQueueApiQueuePeekGetData, PeekQueueApiQueuePeekGetResponses, ReadyApiReadyGetData, ReadyApiReadyGetResponses, ReportEscalationApiChunksChunkIdEscalationsPostData, ReportEscalationApiChunksChunkIdEscalationsPostErrors, ReportEscalationApiChunksChunkIdEscalationsPostResponses, ReportLeaseApiChunksChunkIdLeasesPostData, ReportLeaseApiChunksChunkIdLeasesPostErrors, ReportLeaseApiChunksChunkIdLeasesPostResponses, SubmitCompletionApiChunksChunkIdCompletionsPostData, SubmitCompletionApiChunksChunkIdCompletionsPostErrors, SubmitCompletionApiChunksChunkIdCompletionsPostResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -140,6 +140,48 @@ export const mintGraphApiGraphsPost = <ThrowOnError extends boolean = false>(opt
  * Health
  */
 export const healthApiHealthGet = <ThrowOnError extends boolean = false>(options?: Options<HealthApiHealthGetData, ThrowOnError>): RequestResult<HealthApiHealthGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<HealthApiHealthGetResponses, unknown, ThrowOnError>({ url: '/api/health', ...options });
+
+/**
+ * List Open Questions
+ *
+ * Every open (unanswered) question across the fleet — the ``hub status`` surface.
+ */
+export const listOpenQuestionsApiQuestionsGet = <ThrowOnError extends boolean = false>(options?: Options<ListOpenQuestionsApiQuestionsGetData, ThrowOnError>): RequestResult<ListOpenQuestionsApiQuestionsGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListOpenQuestionsApiQuestionsGetResponses, unknown, ThrowOnError>({ url: '/api/questions', ...options });
+
+/**
+ * Ask Question
+ *
+ * Land a ``question.asked`` row — the chunk parks ``waiting_on_human`` ([ask-answer.md]).
+ */
+export const askQuestionApiQuestionsPost = <ThrowOnError extends boolean = false>(options: Options<AskQuestionApiQuestionsPostData, ThrowOnError>): RequestResult<AskQuestionApiQuestionsPostResponses, AskQuestionApiQuestionsPostErrors, ThrowOnError> => (options.client ?? client).post<AskQuestionApiQuestionsPostResponses, AskQuestionApiQuestionsPostErrors, ThrowOnError>({
+    url: '/api/questions',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Get Question
+ *
+ * One question with its derived answer state — the runner's answer poll (D-004).
+ */
+export const getQuestionApiQuestionsQuestionIdGet = <ThrowOnError extends boolean = false>(options: Options<GetQuestionApiQuestionsQuestionIdGetData, ThrowOnError>): RequestResult<GetQuestionApiQuestionsQuestionIdGetResponses, GetQuestionApiQuestionsQuestionIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetQuestionApiQuestionsQuestionIdGetResponses, GetQuestionApiQuestionsQuestionIdGetErrors, ThrowOnError>({ url: '/api/questions/{question_id}', ...options });
+
+/**
+ * Answer Question
+ *
+ * Answer a question first-write-wins; 409 carries the winning answer ([ask-answer.md]).
+ */
+export const answerQuestionApiQuestionsQuestionIdAnswerPost = <ThrowOnError extends boolean = false>(options: Options<AnswerQuestionApiQuestionsQuestionIdAnswerPostData, ThrowOnError>): RequestResult<AnswerQuestionApiQuestionsQuestionIdAnswerPostResponses, AnswerQuestionApiQuestionsQuestionIdAnswerPostErrors, ThrowOnError> => (options.client ?? client).post<AnswerQuestionApiQuestionsQuestionIdAnswerPostResponses, AnswerQuestionApiQuestionsQuestionIdAnswerPostErrors, ThrowOnError>({
+    url: '/api/questions/{question_id}/answer',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Peek Queue

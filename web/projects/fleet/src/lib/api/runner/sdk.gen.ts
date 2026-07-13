@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { HealthApiHealthGetData, HealthApiHealthGetResponses, HeartbeatApiHeartbeatPostData, HeartbeatApiHeartbeatPostErrors, HeartbeatApiHeartbeatPostResponses, ReadyApiReadyGetData, ReadyApiReadyGetResponses } from './types.gen';
+import type { HealthApiHealthGetData, HealthApiHealthGetResponses, HeartbeatApiHeartbeatPostData, HeartbeatApiHeartbeatPostErrors, HeartbeatApiHeartbeatPostResponses, ReadyApiReadyGetData, ReadyApiReadyGetResponses, RecordAskApiLeasesLeaseIdAsksPostData, RecordAskApiLeasesLeaseIdAsksPostErrors, RecordAskApiLeasesLeaseIdAsksPostResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -30,6 +30,20 @@ export const healthApiHealthGet = <ThrowOnError extends boolean = false>(options
  */
 export const heartbeatApiHeartbeatPost = <ThrowOnError extends boolean = false>(options: Options<HeartbeatApiHeartbeatPostData, ThrowOnError>): RequestResult<HeartbeatApiHeartbeatPostResponses, HeartbeatApiHeartbeatPostErrors, ThrowOnError> => (options.client ?? client).post<HeartbeatApiHeartbeatPostResponses, HeartbeatApiHeartbeatPostErrors, ThrowOnError>({
     url: '/api/heartbeat',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Record Ask
+ *
+ * Record a worker's ask against its lease, minting the question id ([ask-answer.md]).
+ */
+export const recordAskApiLeasesLeaseIdAsksPost = <ThrowOnError extends boolean = false>(options: Options<RecordAskApiLeasesLeaseIdAsksPostData, ThrowOnError>): RequestResult<RecordAskApiLeasesLeaseIdAsksPostResponses, RecordAskApiLeasesLeaseIdAsksPostErrors, ThrowOnError> => (options.client ?? client).post<RecordAskApiLeasesLeaseIdAsksPostResponses, RecordAskApiLeasesLeaseIdAsksPostErrors, ThrowOnError>({
+    url: '/api/leases/{lease_id}/asks',
     ...options,
     headers: {
         'Content-Type': 'application/json',

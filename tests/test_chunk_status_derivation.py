@@ -17,14 +17,17 @@ from blizzard.hub.domain.graph import Executor
 from blizzard.hub.domain.work import (
     ChunkFacts,
     ChunkStatus,
+    DecisionFact,
     EscalationFact,
     LeaseFact,
+    QuestionFact,
     RouteCreatedFact,
     RouteReleasedFact,
     TransitionFact,
     current_node_id,
     derive_chunk_status,
     latest_epoch,
+    open_questions,
 )
 
 pytestmark = pytest.mark.unit
@@ -116,6 +119,72 @@ def test_escalation_closed_by_later_lease_is_no_longer_needs_human() -> None:
         leases=[LeaseFact(epoch=2, minted_at=_at(6))],  # requeue + re-lease supersedes (D-067)
     )
     assert derive_chunk_status(facts) is ChunkStatus.RUNNING
+
+
+def test_open_question_is_waiting_on_human_over_a_live_route() -> None:
+    # An open ask parks the chunk (ask-answer.md): a live route would derive running,
+    # but the unanswered question wins the higher-precedence waiting_on_human slot.
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        questions=[QuestionFact(question_id="qn_1", asked_at=_at(3), answered=False)],
+    )
+    assert derive_chunk_status(facts) is ChunkStatus.WAITING_ON_HUMAN
+    assert [q.question_id for q in open_questions(facts)] == ["qn_1"]
+
+
+def test_answered_question_flips_back_to_running() -> None:
+    # The answer row alone flips the chunk out of waiting_on_human (D-004).
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        questions=[QuestionFact(question_id="qn_1", asked_at=_at(3), answered=True)],
+    )
+    assert derive_chunk_status(facts) is ChunkStatus.RUNNING
+    assert open_questions(facts) == []
+
+
+def test_open_decision_is_waiting_on_human() -> None:
+    # The gate track writes DecisionFacts against this shape; an unresolved one parks.
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        decisions=[DecisionFact(decision_id="dec_1", submitted_at=_at(3), resolved=False)],
+    )
+    assert derive_chunk_status(facts) is ChunkStatus.WAITING_ON_HUMAN
+
+
+def test_resolved_decision_no_longer_waits() -> None:
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        decisions=[DecisionFact(decision_id="dec_1", submitted_at=_at(3), resolved=True)],
+    )
+    assert derive_chunk_status(facts) is ChunkStatus.RUNNING
+
+
+def test_needs_human_wins_over_an_open_question() -> None:
+    # Precedence (events.md): needs_human sits above waiting_on_human.
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        escalations=[EscalationFact(epoch=1, recorded_at=_at(4))],
+        questions=[QuestionFact(question_id="qn_1", asked_at=_at(5), answered=False)],
+    )
+    assert derive_chunk_status(facts) is ChunkStatus.NEEDS_HUMAN
+
+
+def test_open_question_wins_over_a_hub_node_transition() -> None:
+    # waiting_on_human sits above delivering: a chunk that asked at a hub node still parks.
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        transitions=[
+            TransitionFact(to_node_id="nd_deliver", to_node_executor=Executor.HUB, epoch=1, recorded_at=_at(5)),
+        ],
+        questions=[QuestionFact(question_id="qn_1", asked_at=_at(6), answered=False)],
+    )
+    assert derive_chunk_status(facts) is ChunkStatus.WAITING_ON_HUMAN
 
 
 def test_current_node_and_latest_epoch_derive_from_facts() -> None:

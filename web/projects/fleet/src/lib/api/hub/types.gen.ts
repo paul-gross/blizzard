@@ -5,6 +5,53 @@ export type ClientOptions = {
 };
 
 /**
+ * AnswerRequest
+ *
+ * The body of ``POST /questions/{id}/answer`` — the human's answer ([ask-answer.md]).
+ */
+export type AnswerRequest = {
+    /**
+     * Answer
+     */
+    answer: string;
+    /**
+     * Answered By
+     */
+    answered_by?: string;
+};
+
+/**
+ * AnswerResult
+ *
+ * The answer write's outcome — first-write-wins CAS ([ask-answer.md]).
+ *
+ * ``won`` is True for the write that landed the row; the loser gets ``won=False`` with
+ * the **winning** row so it can be told who already answered (the 409 body).
+ */
+export type AnswerResult = {
+    /**
+     * Answer
+     */
+    answer: string;
+    /**
+     * Answered At
+     */
+    answered_at: string;
+    /**
+     * Answered By
+     */
+    answered_by: string;
+    /**
+     * Question Id
+     */
+    question_id: string;
+    /**
+     * Won
+     */
+    won: boolean;
+};
+
+/**
  * ApplyOutcome
  *
  * What a completion's apply produced (D-072).
@@ -146,6 +193,10 @@ export type ChunkDetail = {
      * Pm Pointers
      */
     pm_pointers?: Array<PmPointerModel>;
+    /**
+     * Questions
+     */
+    questions?: Array<QuestionView>;
     route?: RouteView | null;
     status: ChunkStatus;
 };
@@ -563,6 +614,118 @@ export type PmPointerModel = {
      * Url
      */
     url: string;
+};
+
+/**
+ * QuestionAsked
+ *
+ * A ``question.asked`` fact the runner forwards to the hub ([ask-answer.md]).
+ *
+ * ``question_id`` is runner-minted (``qn_<ulid>``) so the runner can poll the answer
+ * back by it; ``epoch`` is the parked lease's fence, ``session_id`` the dormant
+ * session to resume around the answer, and ``options`` the choices the board renders.
+ */
+export type QuestionAsked = {
+    /**
+     * Asked At
+     */
+    asked_at: string;
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * Node Id
+     */
+    node_id?: string | null;
+    /**
+     * Options
+     */
+    options?: Array<string>;
+    /**
+     * Question
+     */
+    question: string;
+    /**
+     * Question Id
+     */
+    question_id: string;
+    /**
+     * Runner Id
+     */
+    runner_id: string;
+    /**
+     * Session Id
+     */
+    session_id?: string | null;
+};
+
+/**
+ * QuestionView
+ *
+ * A question row with its derived answer state — the surfacing shape (D-004).
+ *
+ * Behind ``GET /questions`` (open only), ``GET /questions/{id}`` (the runner's answer
+ * poll), and the chunk detail's open-questions list. ``answered`` and the answer
+ * fields derive from the presence of the answer row.
+ */
+export type QuestionView = {
+    /**
+     * Answer
+     */
+    answer?: string | null;
+    /**
+     * Answered
+     */
+    answered?: boolean;
+    /**
+     * Answered At
+     */
+    answered_at?: string | null;
+    /**
+     * Answered By
+     */
+    answered_by?: string | null;
+    /**
+     * Asked At
+     */
+    asked_at: string;
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * Node Id
+     */
+    node_id?: string | null;
+    /**
+     * Options
+     */
+    options?: Array<string>;
+    /**
+     * Question
+     */
+    question: string;
+    /**
+     * Question Id
+     */
+    question_id: string;
+    /**
+     * Runner Id
+     */
+    runner_id: string;
+    /**
+     * Session Id
+     */
+    session_id?: string | null;
 };
 
 /**
@@ -1171,6 +1334,113 @@ export type HealthApiHealthGetResponses = {
 };
 
 export type HealthApiHealthGetResponse = HealthApiHealthGetResponses[keyof HealthApiHealthGetResponses];
+
+export type ListOpenQuestionsApiQuestionsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/questions';
+};
+
+export type ListOpenQuestionsApiQuestionsGetResponses = {
+    /**
+     * Response List Open Questions Api Questions Get
+     *
+     * Successful Response
+     */
+    200: Array<QuestionView>;
+};
+
+export type ListOpenQuestionsApiQuestionsGetResponse = ListOpenQuestionsApiQuestionsGetResponses[keyof ListOpenQuestionsApiQuestionsGetResponses];
+
+export type AskQuestionApiQuestionsPostData = {
+    body: QuestionAsked;
+    path?: never;
+    query?: never;
+    url: '/api/questions';
+};
+
+export type AskQuestionApiQuestionsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AskQuestionApiQuestionsPostError = AskQuestionApiQuestionsPostErrors[keyof AskQuestionApiQuestionsPostErrors];
+
+export type AskQuestionApiQuestionsPostResponses = {
+    /**
+     * Response Ask Question Api Questions Post
+     *
+     * Successful Response
+     */
+    201: {
+        [key: string]: string;
+    };
+};
+
+export type AskQuestionApiQuestionsPostResponse = AskQuestionApiQuestionsPostResponses[keyof AskQuestionApiQuestionsPostResponses];
+
+export type GetQuestionApiQuestionsQuestionIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Question Id
+         */
+        question_id: string;
+    };
+    query?: never;
+    url: '/api/questions/{question_id}';
+};
+
+export type GetQuestionApiQuestionsQuestionIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetQuestionApiQuestionsQuestionIdGetError = GetQuestionApiQuestionsQuestionIdGetErrors[keyof GetQuestionApiQuestionsQuestionIdGetErrors];
+
+export type GetQuestionApiQuestionsQuestionIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: QuestionView;
+};
+
+export type GetQuestionApiQuestionsQuestionIdGetResponse = GetQuestionApiQuestionsQuestionIdGetResponses[keyof GetQuestionApiQuestionsQuestionIdGetResponses];
+
+export type AnswerQuestionApiQuestionsQuestionIdAnswerPostData = {
+    body: AnswerRequest;
+    path: {
+        /**
+         * Question Id
+         */
+        question_id: string;
+    };
+    query?: never;
+    url: '/api/questions/{question_id}/answer';
+};
+
+export type AnswerQuestionApiQuestionsQuestionIdAnswerPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AnswerQuestionApiQuestionsQuestionIdAnswerPostError = AnswerQuestionApiQuestionsQuestionIdAnswerPostErrors[keyof AnswerQuestionApiQuestionsQuestionIdAnswerPostErrors];
+
+export type AnswerQuestionApiQuestionsQuestionIdAnswerPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: AnswerResult;
+};
+
+export type AnswerQuestionApiQuestionsQuestionIdAnswerPostResponse = AnswerQuestionApiQuestionsQuestionIdAnswerPostResponses[keyof AnswerQuestionApiQuestionsQuestionIdAnswerPostResponses];
 
 export type PeekQueueApiQueuePeekGetData = {
     body?: never;

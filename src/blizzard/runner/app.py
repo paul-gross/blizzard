@@ -18,6 +18,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.web import mount_web_app
+from blizzard.runner.api.asks import router as asks_router
 from blizzard.runner.api.health import router as health_router
 from blizzard.runner.api.heartbeat import router as heartbeat_router
 from blizzard.runner.api.readiness import router as readiness_router
@@ -65,6 +66,7 @@ def create_app(
     app.include_router(health_router)
     app.include_router(readiness_router)
     app.include_router(heartbeat_router)
+    app.include_router(asks_router)
 
     # The runner-served web app (post-MVP); the mount point is live from the
     # scaffold so the seam is exercised (D-096).

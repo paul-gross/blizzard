@@ -10,9 +10,11 @@ Timestamps are stamped by application code from the injected clock, never a
 The walking-skeleton tables (P6) carry ONE chunk ingest -> claim -> commit ->
 deliver -> land end to end. Tables the thin slice does not yet exercise
 (``chunk_stopped``, ``escalations``) are present because the status-derivation
-*precedence* is only correct with them — a seam shaped, not dead weight. Ask/answer
-and gate/decision tables are P7 (ORCHESTRATION.md); ``transitions.decision_id`` is
-already carried, un-constrained, so they bolt on without reshaping.
+*precedence* is only correct with them — a seam shaped, not dead weight. The
+``questions``/``question_answers`` tables land the ask/answer rendezvous (MVP
+criterion 7); the gate/decision tables are the gates track's, and
+``transitions.decision_id`` is already carried, un-constrained, so they bolt on
+without reshaping.
 """
 
 from __future__ import annotations
@@ -209,6 +211,51 @@ escalations = Table(
     Column("epoch", Integer, nullable=False),  # closed by a later lease mint, not a resolution (D-067)
     Column("takeover_command", Text, nullable=False, server_default=""),  # the pasteable resume command (D-035)
     Column("recorded_at", DateTime, nullable=False),
+)
+
+# --- Questions and answers (the ask/answer rendezvous — questions.md) --------
+#
+# A worker facing an undecidable choice runs ``blizzard runner ask`` and exits; the
+# runner forwards the question here, where it becomes a durable row (question.asked).
+# Open/answered is derived (D-004): a question is open exactly while no answer row
+# exists. The answer is first-write-wins CAS — the ``question_answers`` primary key
+# IS the question id, so the second concurrent writer's insert fails and the loser is
+# told the winning answer ([ask-answer.md]).
+
+questions = Table(
+    "questions",
+    metadata,
+    Column("question_id", String, primary_key=True),  # qn_<ulid> (runner-minted, D-075)
+    Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),  # the parked chunk
+    Column("node_id", String, nullable=True),  # the node the worker parked at
+    Column("session_id", String, nullable=True),  # the dormant session to resume around the answer
+    Column("runner_id", String, nullable=False),  # the runner holding the session
+    Column("epoch", Integer, nullable=False),  # the parked lease's fencing epoch (D-007)
+    Column("question", Text, nullable=False),
+    Column("options", Text, nullable=False),  # JSON list[str] of offered choices (may be empty)
+    Column("asked_at", DateTime, nullable=False),  # reap clock stops for the chunk from here
+)
+
+question_answers = Table(
+    "question_answers",
+    metadata,
+    # The primary key IS the question id: the CAS that makes answers first-write-wins —
+    # a racing second insert collides and the loser reads back the winning row.
+    Column("question_id", String, ForeignKey("questions.question_id"), primary_key=True),
+    Column("answer", Text, nullable=False),  # the chosen option or free text, carried into the resume prompt
+    Column("answered_by", String, nullable=False),  # who won the CAS
+    Column("answered_at", DateTime, nullable=False),
+)
+
+answer_deliveries = Table(
+    "answer_deliveries",
+    metadata,
+    # answer.delivered (runner-minted): the resume-with-answer executed. Board detail
+    # only — the chunk's status already flipped to running at question.answered.
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("question_id", String, ForeignKey("questions.question_id"), nullable=False),
+    Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
+    Column("delivered_at", DateTime, nullable=False),
 )
 
 # --- Store-and-forward high-water mark (per-runner idempotency — D-069) ------

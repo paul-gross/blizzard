@@ -12,6 +12,7 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 from blizzard.hub.domain.work import ChunkStatus
+from blizzard.wire.question import QuestionView
 
 
 class PmPointerModel(BaseModel):
@@ -126,6 +127,9 @@ class ChunkDetail(BaseModel):
     escalation: EscalationView | None = None
     history: list[TransitionView] = []
     artifacts: list[ArtifactView] = []
+    # The chunk's open questions ([ask-answer.md], MVP criterion 7): a ``waiting_on_human``
+    # chunk carries the ask a human answers with ``blizzard hub answer``.
+    questions: list[QuestionView] = []
 
 
 class PmItemView(BaseModel):

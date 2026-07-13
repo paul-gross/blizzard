@@ -31,10 +31,17 @@ from blizzard.runner.environments.provider import AcquiredEnvironment, Workspace
 from blizzard.runner.harness.adapter import WorkerPreamble
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import HubClientError
-from blizzard.runner.store.repository import BufferedFact, EnvBindingRecord, LeaseRecord, NewLease
+from blizzard.runner.store.repository import AskRecord, BufferedFact, EnvBindingRecord, LeaseRecord, NewLease
 from blizzard.wire.completion import CompletionSubmission, SubmittedArtifact
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeEnvelope
-from blizzard.wire.facts import ESCALATION_RECORDED, LEASE_MINTED, RunnerFact, RunnerFactBatch
+from blizzard.wire.facts import (
+    ANSWER_DELIVERED,
+    ESCALATION_RECORDED,
+    LEASE_MINTED,
+    QUESTION_ASKED,
+    RunnerFact,
+    RunnerFactBatch,
+)
 from blizzard.wire.route import RouteClaim
 
 _log = get_logger("blizzard.runner.loop")
@@ -87,7 +94,13 @@ def reap(ctx: LoopContext) -> None:
     so REAP never preempts ADVANCE's judgement of it.
     """
     now = ctx.clock.now()
+    parked = ctx.store.parked_lease_ids()
     for lease in ctx.store.list_active_leases():
+        if lease.lease_id in parked:
+            # Dormant on a question (ask-and-exit): no live worker to stall, so the
+            # reap clock is stopped — a parked chunk is never reaped for inactivity
+            # ([ask-answer.md]). The answer's arrival resumes it (ADVANCE).
+            continue
         if lease.pid is None or lease.session_id is None:
             _log.info("reaping unspawned lease", lease_id=lease.lease_id, chunk_id=lease.chunk_id)
             _fail_attempt(ctx, lease, reason=_REAPED)
@@ -291,11 +304,15 @@ def advance(ctx: LoopContext) -> None:
     exactly once, then the chunk waits at its node boundary for the flush (D-069).
     """
     pending_completions = ctx.store.pending_completion_lease_ids()
+    parked = ctx.store.parked_lease_ids()
     for lease in ctx.store.list_active_leases():
         if lease.pid is None or lease.session_id is None:
             continue  # REAP's residue
         if lease.lease_id in pending_completions:
             continue  # completion elicited, awaiting flush — the node boundary (D-069)
+        if lease.lease_id in parked:
+            _resume_if_answered(ctx, lease)  # dormant on a question — resume on the answer
+            continue
         if ctx.process.is_alive(lease.pid, lease.process_start_time or ""):
             continue  # worker still running
         _advance_exited_worker(ctx, lease)
@@ -306,9 +323,19 @@ def advance(ctx: LoopContext) -> None:
 
 
 def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
-    """Elicit the verdict, push artifacts, and buffer the node-step's completion (D-069)."""
+    """Park on an open ask, else elicit the verdict and buffer the completion (D-069/D-009)."""
     if lease.session_id is None:
         return  # not spawned — REAP's residue (guarded by the caller too)
+
+    # Ask-and-exit ([ask-answer.md]): a worker that exited holding an unforwarded ask
+    # parked on a question — forward it and park, no verdict, no retry consumed. This is
+    # what D-009 turns on: an exit with an open ask is a park; an exit with neither is a
+    # failure. The park fact stops REAP's clock and makes the chunk derive waiting_on_human.
+    ask = ctx.store.unforwarded_ask(lease.lease_id)
+    if ask is not None:
+        _park_on_ask(ctx, lease, ask)
+        return
+
     bindings = ctx.store.bindings_for_chunk(lease.chunk_id)
     if not bindings:
         _log.warning("exited worker with no bound env — skipping", chunk_id=lease.chunk_id)
@@ -496,6 +523,88 @@ def _escalate(ctx: LoopContext, lease: LeaseRecord) -> None:
         kind=ESCALATION_RECORDED, chunk_id=lease.chunk_id, lease_id=lease.lease_id, payload=payload, created_at=now
     )
     _log.info("escalated to needs-human — retries exhausted", chunk_id=lease.chunk_id, takeover=takeover)
+
+
+def _park_on_ask(ctx: LoopContext, lease: LeaseRecord, ask: AskRecord) -> None:
+    """Park the chunk on a question: forward it to the hub and stop the reap clock.
+
+    The worker asked and exited, so there is no live worker to judge or reap ([ask-
+    answer.md]): the question rides the outbound buffer up to the hub (store-and-forward,
+    D-069), where it becomes the durable row the chunk derives ``waiting_on_human`` from,
+    and the local park fact keeps REAP off the dormant lease and ADVANCE from re-parking
+    or eliciting a verdict. The env bindings stay held (D-083) so the session is warm for
+    the resume. No retry is consumed — a park is not a failed attempt (D-009).
+    """
+    now = ctx.clock.now()
+    payload = json.dumps(
+        {
+            "question_id": ask.question_id,
+            "chunk_id": lease.chunk_id,
+            "node_id": lease.node_id,
+            "session_id": ask.session_id or lease.session_id,
+            "epoch": lease.epoch,
+            "question": ask.question,
+            "options": ask.options,
+            "asked_at": ask.asked_at.isoformat(),
+        }
+    )
+    ctx.store.enqueue_outbound(
+        kind=QUESTION_ASKED, chunk_id=lease.chunk_id, lease_id=lease.lease_id, payload=payload, created_at=now
+    )
+    ctx.store.record_park(lease_id=lease.lease_id, chunk_id=lease.chunk_id, question_id=ask.question_id, parked_at=now)
+    _log.info("chunk parked on question", chunk_id=lease.chunk_id, question_id=ask.question_id)
+
+
+def _resume_if_answered(ctx: LoopContext, lease: LeaseRecord) -> None:
+    """Poll a parked lease's question; on an answer, resume the dormant session (D-050).
+
+    The answer is a durable row at the hub, so this is crash-safe and re-runnable: while
+    the question is unanswered the poll is a no-op and the reap clock stays stopped. Once
+    answered, the agent is **reconstituted around the answer** — the same session, same
+    lease, same node-step (D-082) — via the adapter's resume-with-message. The lease's
+    new pid is recorded so it reads live again, the park is closed, and ``answer.delivered``
+    is buffered up to the hub (board detail; the status already flipped at question.answered).
+    """
+    park = ctx.store.open_park(lease.lease_id)
+    if park is None:
+        return  # not actually parked (raced with a resume)
+    try:
+        question = ctx.hub.get_question(park.question_id)
+    except HubClientError:
+        return  # hub unreachable — the park is durable; retry next tick
+    if not question.answered or question.answer is None:
+        return  # still waiting — reap clock stays stopped
+    bindings = ctx.store.bindings_for_chunk(lease.chunk_id)
+    if not bindings:
+        _log.warning("answered park with no bound env — cannot resume", chunk_id=lease.chunk_id)
+        return
+
+    # The resume prompt reconstitutes the agent around the answer ([ask-answer.md]). The
+    # human framing rides a leading comment line and the answer itself is the payload, so
+    # the agent reads "who answered" as context and acts on the answer body — a shape the
+    # blizzard-mock façade (prompt-is-program) executes directly, and a real harness reads
+    # as ordinary resume text (the exact prose is unpinned, D-061).
+    who = question.answered_by or "operator"
+    message = f"# Answer from {who}. Continue.\n{question.answer}"
+    pid = ctx.harness.resume_with_message(bindings[0].workdir, lease.session_id or "", message)
+    now = ctx.clock.now()
+    # The resumed worker runs under the same lease and session; record its new pid so the
+    # lease reads live again (REAP/ADVANCE treat it as any running worker from here).
+    ctx.store.record_spawn(
+        lease.lease_id,
+        pid=pid,
+        process_start_time=ctx.process.start_time(pid) or "",
+        session_id=lease.session_id or "",
+    )
+    ctx.store.record_park_resume(lease_id=lease.lease_id, question_id=park.question_id, resumed_at=now)
+    ctx.store.enqueue_outbound(
+        kind=ANSWER_DELIVERED,
+        chunk_id=lease.chunk_id,
+        lease_id=lease.lease_id,
+        payload=json.dumps({"chunk_id": lease.chunk_id, "question_id": park.question_id}),
+        created_at=now,
+    )
+    _log.info("resumed dormant session with answer", chunk_id=lease.chunk_id, question_id=park.question_id, pid=pid)
 
 
 def _collect_asset_artifacts(

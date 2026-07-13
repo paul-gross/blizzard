@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
 from blizzard.hub.api.deps import get_services
+from blizzard.hub.api.questions import question_view
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.artifacts import ArtifactRow, GitCommitArtifact, from_row, store_key
 from blizzard.hub.domain.envelope import build_node_envelope
@@ -176,6 +177,7 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
         else None,
         history=_history_views(facts),
         artifacts=_artifact_views(services.chunks.load_artifacts(chunk_id)),
+        questions=[question_view(q) for q in services.chunks.load_questions(chunk_id) if not q.answered],
     )
 
 

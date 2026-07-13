@@ -88,6 +88,34 @@ class BufferedFact:
     created_at: datetime
 
 
+@dataclass(frozen=True)
+class AskRecord:
+    """The worker's local open-ask fact ([ask-answer.md]).
+
+    Recorded by the runner's local API when ``blizzard runner ask`` fires, before the
+    worker exits. ``question_id`` is runner-minted so the answer can be polled back by
+    it; ``session_id`` is the dormant session the resume-with-answer targets.
+    """
+
+    lease_id: str
+    chunk_id: str
+    question_id: str
+    question: str
+    options: list[str]
+    session_id: str | None
+    asked_at: datetime
+
+
+@dataclass(frozen=True)
+class ParkRecord:
+    """A lease's park on a question — dormant, no live worker ([ask-answer.md])."""
+
+    lease_id: str
+    chunk_id: str
+    question_id: str
+    parked_at: datetime
+
+
 class IReadRunnerStore(Protocol):
     """Read-only runner-store queries (held by read-path edges)."""
 
@@ -148,6 +176,26 @@ class IReadRunnerStore(Protocol):
         """The unacked outbound buffer, FIFO by seq (D-069)."""
         ...
 
+    def unforwarded_ask(self, lease_id: str) -> AskRecord | None:
+        """The lease's newest ask not yet parked — its question_id has no park fact.
+
+        ADVANCE parks on this: an exited worker with an unforwarded ask asked and quit
+        (ask-and-exit), so the chunk parks rather than being judged (D-009). Once parked
+        the park fact references the question_id, so the same ask is not re-parked; a
+        resumed worker that asks *again* mints a fresh question_id, returned anew."""
+        ...
+
+    def parked_lease_ids(self) -> set[str]:
+        """Leases dormant on a question — a park fact with no later resume ([ask-answer.md]).
+
+        REAP skips these (the reap clock is stopped — no live worker to stall) and
+        ADVANCE polls them for an answer rather than eliciting a verdict."""
+        ...
+
+    def open_park(self, lease_id: str) -> ParkRecord | None:
+        """The lease's open park (park fact, no resume), or None — its question_id."""
+        ...
+
 
 class IWriteRunnerStore(IReadRunnerStore, Protocol):
     """Read-write runner store — held only by the domain (the loop steps)."""
@@ -184,4 +232,26 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
 
     def ack_outbound(self, seq: int, *, acked_at: datetime) -> None:
         """Mark a buffered fact delivered — a semantic rejection acks too (D-069)."""
+        ...
+
+    def record_ask(
+        self,
+        *,
+        lease_id: str,
+        chunk_id: str,
+        question_id: str,
+        question: str,
+        options: list[str],
+        session_id: str | None,
+        asked_at: datetime,
+    ) -> None:
+        """Persist the worker's local open-ask fact ([ask-answer.md])."""
+        ...
+
+    def record_park(self, *, lease_id: str, chunk_id: str, question_id: str, parked_at: datetime) -> None:
+        """Park a lease on a question — dormant, its env bindings held ([ask-answer.md])."""
+        ...
+
+    def record_park_resume(self, *, lease_id: str, question_id: str, resumed_at: datetime) -> None:
+        """End a lease's park — the answer arrived and the session was resumed ([ask-answer.md])."""
         ...
