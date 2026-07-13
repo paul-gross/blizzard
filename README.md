@@ -34,3 +34,14 @@ blizzard-export-openapi --out-dir openapi   # dump hub + runner OpenAPI specs
 ```
 
 The same `init` / `migrate` / `host` verbs exist under `blizzard runner`. A daemon **refuses to start on a store-revision mismatch**, naming the exact `migrate` command (D-099, `bzh:manual-migrations`).
+
+## CI, build, and release
+
+```bash
+mise run gate    # the local equivalent of the PR-to-master merge gate
+mise run build   # the one build entrypoint: Angular apps -> embed -> wheel -> verify install (node-free)
+```
+
+The GitHub Actions workflows (PR gate, push-to-master dev build, tag-`v*`
+release) and the exact local commands equal to the gate are documented in
+[docs/ci.md](./docs/ci.md).
