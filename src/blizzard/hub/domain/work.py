@@ -25,6 +25,8 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
+from blizzard.hub.domain.artifacts import ArtifactRow
+from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import Executor
 
 
@@ -173,10 +175,16 @@ def _has_live_route(facts: ChunkFacts) -> bool:
 
 
 def newest_transition(facts: ChunkFacts) -> TransitionFact | None:
-    """The chunk's newest accepted transition — its current node derives from this."""
+    """The chunk's newest accepted transition — its current node derives from this.
+
+    Ordered by ``(recorded_at, epoch)``: the timestamp is the primary key, and the
+    fencing epoch (monotonic per chunk) breaks a tie between two transitions stamped
+    at the same instant — a coordinator that authors a follow-on transition under a
+    higher epoch in the same tick, or any virtual-clock test.
+    """
     if not facts.transitions:
         return None
-    return max(facts.transitions, key=lambda t: t.recorded_at)
+    return max(facts.transitions, key=lambda t: (t.recorded_at, t.epoch))
 
 
 def current_node_id(facts: ChunkFacts) -> str | None:
@@ -205,10 +213,27 @@ class IReadChunkRepository(Protocol):
 
     def get(self, chunk_id: str) -> Chunk | None: ...
     def load_facts(self, chunk_id: str) -> ChunkFacts | None: ...
+    def load_artifacts(self, chunk_id: str) -> list[ArtifactRow]:
+        """Every artifact row of a chunk; the caller resolves latest-by-epoch (D-089)."""
+        ...
+
+    def route_of(self, chunk_id: str) -> Route | None:
+        """The chunk's live route (runner/workspace/envs), or None if unclaimed/released."""
+        ...
+
     def list_ready(self) -> list[Chunk]: ...
     def list_all(self) -> list[Chunk]: ...
     def find_live_holder(self, pointer: PmPointer) -> str | None:
         """The chunk_id of a live (non-terminal) chunk holding ``pointer`` (D-093), or None."""
+        ...
+
+    def accepted_transition_target(self, chunk_id: str, *, from_node_id: str, epoch: int) -> str | None:
+        """The ``to_node_id`` of an already-accepted transition out of ``from_node_id`` at
+        ``epoch`` — the idempotency probe for a re-applied completion (D-090), or None."""
+        ...
+
+    def landed_repos(self, chunk_id: str) -> set[str]:
+        """The repos already landed for a chunk — the delivery reconciliation skip-set (D-091)."""
         ...
 
 
@@ -216,6 +241,24 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
     """Read-write chunk access. Only the domain layer depends on this variant."""
 
     def mint(self, chunk: Chunk) -> None: ...
-    def record_route_created(self, chunk_id: str, fact: RouteCreatedFact) -> None: ...
-    def record_transition(self, chunk_id: str, fact: TransitionFact) -> None: ...
-    def record_lease(self, chunk_id: str, fact: LeaseFact) -> None: ...
+    def record_lease(self, chunk_id: str, *, epoch: int, runner_id: str, at: datetime) -> None: ...
+    def record_route(self, route: Route, *, at: datetime) -> None: ...
+    def record_route_released(self, chunk_id: str, *, at: datetime) -> None: ...
+    def record_transition(
+        self,
+        *,
+        transition_id: str,
+        chunk_id: str,
+        from_node_id: str | None,
+        to_node_id: str,
+        choice_name: str | None,
+        epoch: int,
+        runner_id: str,
+        at: datetime,
+        artifacts: list[ArtifactRow],
+    ) -> None:
+        """One node-step's transition and its artifacts, written atomically (D-036)."""
+        ...
+
+    def record_delivery_repo_landed(self, chunk_id: str, *, repo: str, commit_hash: str, at: datetime) -> None: ...
+    def record_delivery_landed(self, chunk_id: str, *, at: datetime) -> None: ...

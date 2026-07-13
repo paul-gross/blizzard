@@ -50,6 +50,7 @@ graph_nodes = Table(
     Column("name", String, nullable=False),
     Column("executor", String, nullable=False),  # runner | hub
     Column("prompt", Text, nullable=True),  # inlined text, never a path (D-033)
+    Column("judgement_prompt", Text, nullable=True),  # the verdict-elicitation prompt (D-038); null at a gate/hub node
     Column("session", String, nullable=False),  # resume | fresh
     Column("judged_by", String, nullable=False),  # worker | human
     Column("retries_max", Integer, nullable=True),

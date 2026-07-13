@@ -18,7 +18,9 @@ validator run — the domain sees only already-loaded data.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import StrEnum
+from typing import Protocol
 
 # The reserved terminal a choice may point at instead of a node name (D-071).
 RESERVED_TERMINAL = "done"
@@ -247,6 +249,7 @@ class Node:
     retries_max: int | None
     retries_exhausted: str | None
     mode: str | None
+    judgement_prompt: str | None = None
     choices: list[Choice] = field(default_factory=list)
 
 
@@ -265,3 +268,35 @@ class Graph:
 
     def node_by_id(self, node_id: str) -> Node | None:
         return next((n for n in self.nodes if n.node_id == node_id), None)
+
+    def edges_from(self, node_id: str) -> list[Edge]:
+        return [e for e in self.edges if e.from_node_id == node_id]
+
+    def edge_for_choice(self, node_id: str, choice_name: str) -> Edge | None:
+        """The edge a node's judgement choice keys, matched by choice *name* (D-042)."""
+        choice_ids = {
+            c.choice_id for n in self.nodes if n.node_id == node_id for c in n.choices if c.name == choice_name
+        }
+        return next((e for e in self.edges if e.from_node_id == node_id and e.choice_id in choice_ids), None)
+
+
+# --- Repository seams (I-prefix, read/write split — bzh:repository-split) ----
+
+
+class IReadGraphRepository(Protocol):
+    """Read-only graph access. Controllers at the edges depend on this variant."""
+
+    def get(self, graph_id: str) -> Graph | None: ...
+    def get_enabled_by_name(self, name: str) -> Graph | None:
+        """The newest enabled graph with ``name`` — the default-graph pin lookup (D-081)."""
+        ...
+
+    def list_all(self) -> list[Graph]: ...
+
+
+class IWriteGraphRepository(IReadGraphRepository, Protocol):
+    """Read-write graph access. Only the domain layer depends on this variant."""
+
+    def mint(self, graph: Graph, *, definition_yaml: str, at: datetime) -> None:
+        """Persist a reified, immutable graph and its source YAML (D-033)."""
+        ...
