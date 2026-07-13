@@ -1,11 +1,16 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import type { ArtifactView, ChunkDetail, TransitionView } from '../api/hub';
+import type { ArtifactView, ChunkDetail, DecisionView, QuestionView, TransitionView } from '../api/hub';
 
 /**
  * The chunk detail drawer — a chunk's node history and its artifact store (D-036,
  * MVP criterion 9/11). Slides over the board when a card is selected and renders:
  *
+ * - the **awaiting-human** state, when the chunk is parked (`waiting_on_human`): its
+ *   open **question** (the ask a human answers with `blizzard hub answer`, MVP
+ *   criterion 7) and/or its open gate **decision** (node + choice set a human resolves
+ *   with `blizzard hub decide`, MVP criterion 12). This is the minimal wave-2 surfacing
+ *   — read-only; wiring the answer/decide buttons is wave 3;
  * - the **transition history**, oldest-first: every edge the chunk took, so the
  *   review-fail loop back to build reads as a visible `review → build (fail)` step;
  * - the **artifact store**: each entry keyed `{node}.{artifact-name}.{epoch}`, with an
@@ -33,6 +38,37 @@ import type { ArtifactView, ChunkDetail, TransitionView } from '../api/hub';
           ✕
         </button>
       </header>
+
+      @if (openQuestions().length > 0 || openDecision()) {
+        <section class="d-section awaiting" aria-label="Awaiting human" data-testid="awaiting-human">
+          <div class="s-head"><span class="lbl">Awaiting human</span></div>
+          @for (q of openQuestions(); track q.question_id) {
+            <div class="ask" data-testid="open-question">
+              <p class="ask-q" data-testid="question-text">{{ q.question }}</p>
+              @if (q.options && q.options.length > 0) {
+                <div class="chips">
+                  @for (opt of q.options; track opt) {
+                    <span class="chip" data-testid="question-option">{{ opt }}</span>
+                  }
+                </div>
+              }
+            </div>
+          }
+          @if (openDecision(); as d) {
+            <div class="gate" data-testid="open-decision">
+              <div class="gate-head">
+                <span class="lbl">Gate</span>
+                <span class="gate-node" data-testid="decision-node">{{ d.node_name }}</span>
+              </div>
+              <div class="chips">
+                @for (c of d.choices ?? []; track c.name) {
+                  <span class="chip" data-testid="decision-choice" [title]="c.description">{{ c.name }}</span>
+                }
+              </div>
+            </div>
+          }
+        </section>
+      }
 
       <section class="d-section" aria-label="Node history">
         <div class="s-head"><span class="lbl">Node history</span></div>
@@ -161,6 +197,46 @@ import type { ArtifactView, ChunkDetail, TransitionView } from '../api/hub';
       color: var(--label-dim);
       font-size: 10px;
     }
+    .awaiting {
+      border-left: 2px solid var(--amber-hi);
+    }
+    .ask,
+    .gate {
+      border: 1px solid var(--line);
+      background: rgba(0, 0, 0, 0.2);
+      padding: 4px 6px;
+    }
+    .gate {
+      margin-top: 4px;
+    }
+    .ask-q {
+      margin: 0 0 4px;
+      color: var(--text);
+      font-size: 11px;
+    }
+    .gate-head {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+    .gate-node {
+      color: var(--cyan);
+      font-size: 11px;
+    }
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+    .chip {
+      border: 1px solid var(--line);
+      color: var(--amber-hi);
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 1px 5px;
+    }
     .timeline {
       list-style: none;
       margin: 0;
@@ -251,4 +327,15 @@ export class ChunkDetailPanel {
 
   protected readonly history = computed<readonly TransitionView[]>(() => this.detail().history ?? []);
   protected readonly artifacts = computed<readonly ArtifactView[]>(() => this.detail().artifacts ?? []);
+
+  /** The chunk's open (unanswered) questions — the ask a parked chunk waits on (D-004). */
+  protected readonly openQuestions = computed<readonly QuestionView[]>(() =>
+    (this.detail().questions ?? []).filter((q) => !q.answered),
+  );
+
+  /** The chunk's live gate decision while it still awaits the resolving transition (D-045). */
+  protected readonly openDecision = computed<DecisionView | null>(() => {
+    const decision = this.detail().decision;
+    return decision && !decision.transitioned ? decision : null;
+  });
 }

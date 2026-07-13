@@ -39,6 +39,54 @@ const REVIEW_FAIL_DETAIL: ChunkDetail = {
   ],
 };
 
+const WAITING_QUESTION_DETAIL: ChunkDetail = {
+  chunk_id: 'ch_01ask00000000000000000000000',
+  graph_id: 'gr_1',
+  status: 'waiting_on_human',
+  current_node_id: 'nd_build',
+  latest_epoch: 1,
+  pm_pointers: [],
+  history: [],
+  artifacts: [],
+  questions: [
+    {
+      question_id: 'qn_01',
+      chunk_id: 'ch_01ask00000000000000000000000',
+      question: 'Which API style should the endpoint use?',
+      options: ['rest', 'graphql'],
+      epoch: 1,
+      runner_id: 'rn_01',
+      session_id: 'se_01',
+      asked_at: '2026-07-13T00:00:01Z',
+      answered: false,
+    },
+  ],
+};
+
+const WAITING_DECISION_DETAIL: ChunkDetail = {
+  chunk_id: 'ch_01gate0000000000000000000000',
+  graph_id: 'gr_1',
+  status: 'waiting_on_human',
+  current_node_id: 'nd_gate',
+  latest_epoch: 1,
+  pm_pointers: [],
+  history: [],
+  artifacts: [],
+  decision: {
+    decision_id: 'de_01',
+    chunk_id: 'ch_01gate0000000000000000000000',
+    node_id: 'nd_gate',
+    node_name: 'approve-gate',
+    epoch: 1,
+    submitted_at: '2026-07-13T00:00:01Z',
+    choices: [
+      { name: 'approve', description: 'Ship it.' },
+      { name: 'reject', description: 'Send it back.' },
+    ],
+    transitioned: false,
+  },
+};
+
 describe('ChunkDetailPanel', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -70,6 +118,44 @@ describe('ChunkDetailPanel', () => {
     const commitRef = el.querySelector('[data-kind="git_commit"] [data-testid="artifact-ref"]');
     expect(commitRef?.textContent).toContain('acme/widget');
     expect(commitRef?.textContent).toContain('c1');
+  });
+
+  it('surfaces a waiting_on_human chunk’s open question and its options (MVP criterion 7)', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', WAITING_QUESTION_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const awaiting = el.querySelector('[data-testid="awaiting-human"]');
+    expect(awaiting).not.toBeNull();
+    expect(el.querySelector('[data-testid="question-text"]')?.textContent).toContain(
+      'Which API style should the endpoint use?',
+    );
+    const options = [...el.querySelectorAll('[data-testid="question-option"]')].map((o) => o.textContent?.trim());
+    expect(options).toEqual(['rest', 'graphql']);
+    // No gate on a question-only park.
+    expect(el.querySelector('[data-testid="open-decision"]')).toBeNull();
+  });
+
+  it('surfaces a waiting_on_human chunk’s open gate decision and its choices (MVP criterion 12)', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', WAITING_DECISION_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="awaiting-human"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="decision-node"]')?.textContent).toContain('approve-gate');
+    const choices = [...el.querySelectorAll('[data-testid="decision-choice"]')].map((c) => c.textContent?.trim());
+    expect(choices).toEqual(['approve', 'reject']);
+    expect(el.querySelector('[data-testid="open-question"]')).toBeNull();
+  });
+
+  it('shows no awaiting-human section when the chunk is not parked', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', REVIEW_FAIL_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="awaiting-human"]')).toBeNull();
   });
 
   it('emits dismiss when the close button is activated', async () => {
