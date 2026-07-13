@@ -1,13 +1,19 @@
-"""The review-fail cycle end to end (e2e tier) — MVP criterion 9.
+"""The review-fail cycle end to end — scenario 2 of the standing e2e smoke — MVP criterion 9.
 
-The full-stack companion to the ``build -> deliver`` standing smoke
-(test_acceptance_loop): one chunk travels the ``build -> review -> deliver`` default
-shape through the real forge + hub + runner + ``mock-claude-code`` façade, where a
-**scripted review fails once and then passes**. It proves the P7 engine additions on
-the real rails, not just at the hub API:
+The full-stack companion to the ``build -> review -> deliver`` happy-path scenario
+(test_acceptance_loop): one chunk travels the same default shape through the real
+forge + hub + runner + ``mock-claude-code`` façade, but here a **scripted review fails
+once and then passes**. It proves the P7 engine additions on the real rails, not just
+at the hub API:
 
 * the review node routes the work back into build on ``fail`` and forward to deliver
   on the second ``pass`` (design/workflow-engine.md);
+* the review node ``produces`` a ``review-findings`` asset, and the fail edge carries
+  that finding plus its **prompt_addendum** back into build's re-entry envelope
+  (D-026/D-071/D-089) — the addendum is executable and lands an observable
+  ``REVIEW_ADDRESSED.md`` commit *only* on the re-entry, so bare-``main`` reachability
+  is the git-truth proof the envelope carried it (the hub-API view of the same asset +
+  addendum is the component tier, test_review_cycle);
 * the runner-reported ``lease.minted`` facts keep the hub's epoch fence in lockstep
   across the multiple runner node-steps, so no completion is rejected as stale (D-044);
 * build runs **twice** — the observable proof the cycle happened — and the delivery
@@ -66,6 +72,23 @@ _BUILD_SCRIPT = (
 )
 _BUILD_JUDGEMENT = "verdict('pass', 'checks are green')\n"
 
+# The fail -> build prompt_addendum (D-071): inlined onto build's re-entry prompt, so it
+# arrives as code the mock exec's *after* the base build turn (same namespace: `repo`,
+# `subprocess`, `pathlib` are already bound). It commits a distinctive marker file, so
+# REVIEW_ADDRESSED.md reaches bare `main` ONLY if the addendum threaded into the
+# re-entry envelope — git truth that the fail edge carried the findings back (D-089).
+_REVIEW_ADDENDUM = (
+    "# re-entry after a failed review — address the findings\n"
+    'pathlib.Path(repo, "REVIEW_ADDRESSED.md").write_text("addressed the review findings\\n")\n'
+    'subprocess.run(["git", "-C", repo, "add", "-A"], check=True)\n'
+    "subprocess.run(\n"
+    '    ["git", "-C", repo,\n'
+    '     "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
+    '     "commit", "-m", "fix: address review findings"],\n'
+    "    check=True,\n"
+    ")\n"
+)
+
 # review base prompt: a no-op turn — the verdict is elicited on the judgement resume.
 _REVIEW_SCRIPT = "pass\n"
 # review judgement: fail the FIRST visit (a marker file in the held env dir persists
@@ -117,7 +140,7 @@ def _graph_yaml() -> str:
                         "fail": {
                             "description": "Blocking issues found.",
                             "to": "build",
-                            "prompt_addendum": "# re-entry after failed review\n",
+                            "prompt_addendum": _REVIEW_ADDENDUM,
                         },
                     },
                 },
@@ -187,3 +210,9 @@ def test_review_cycle_fails_once_then_delivers(tmp_path: Path) -> None:
     # The review-fail cycle ran build TWICE — two 'build pass' lines land on main.
     build_md = _git_bare(origin_bare, "show", "main:BUILD.md")
     assert build_md.count("build pass") == 2, f"expected two build passes on main, got:\n{build_md}"
+
+    # The fail edge's prompt_addendum threaded into build's re-entry envelope on the real
+    # rails: its committed marker is reachable from bare main. Present only because the
+    # addendum arrived as code the re-entry build ran — git truth the findings came back.
+    tree = _git_bare(origin_bare, "ls-tree", "-r", "--name-only", "main")
+    assert "REVIEW_ADDRESSED.md" in tree.split(), f"re-entry addendum did not land on main:\n{tree}"

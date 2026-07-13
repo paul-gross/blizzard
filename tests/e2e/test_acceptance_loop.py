@@ -1,11 +1,16 @@
-"""The acceptance loop — the standing e2e smoke test (verification.md, P6 exit).
+"""The acceptance loop — scenario 1 of the standing e2e smoke (verification.md).
 
-ONE chunk travels the whole lifecycle — ingest -> acquire -> mock-scripted commit ->
-deliver -> landed in the bare origin — and the assertion holds at **both ends**: the
-commit is reachable from the bare origin's ``main`` (git truth) *and* the hub's facts
-derive the chunk ``done`` (fleet truth). This is the P6 exit criterion of
-``blizzard-discovery:/implementation/verification.md`` turned into a committed,
-repeatable artifact.
+ONE chunk travels the whole default lifecycle — ingest -> acquire -> mock-scripted
+commit -> **review (scripted PASS)** -> deliver -> landed in the bare origin — and the
+assertion holds at **both ends**: the commit is reachable from the bare origin's
+``main`` (git truth) *and* the hub's facts derive the chunk ``done`` (fleet truth).
+This is the P6 exit criterion of ``blizzard-discovery:/implementation/verification.md``,
+extended in P7 (wave 1) to travel the full ``build -> review -> deliver`` default
+shape (design/workflow-engine.md) — the review node is the new stop, and here it
+passes on the first cold-eyes look, so the chunk lands without a re-build. The two
+sibling e2e scenarios cover the review **fail** cycle (test_review_cycle_e2e) and the
+retries-exhausted **escalation** to ``needs_human`` (test_escalation_e2e); the three
+run together as ``mise run e2e``.
 
 **Self-managed, zero-token, no-network.** The test mints its own disposable fixture
 world and drives the real seams end to end, with no in-process shortcuts:
@@ -97,13 +102,23 @@ _BUILD_SCRIPT = (
 # ``<Choice>pass</Choice>`` the runner's adapter parses into the completion choice.
 _JUDGEMENT_SCRIPT = "verdict('pass', 'the mock harness committed the change; checks are green')\n"
 
+# The review node (design/workflow-engine.md): a fresh-session cold-eyes read that
+# produces a ``review-findings`` asset and, here, PASSES on the first look — so the
+# build commit travels straight to deliver with no re-build. The review base turn is a
+# no-op (``pass``); the verdict is elicited on the judgement resume, whose assessment
+# (the text after ``</Choice>``) becomes the produced asset's content (D-026/D-077).
+_REVIEW_SCRIPT = "pass\n"
+_REVIEW_JUDGEMENT = "verdict('pass', 'cold-eyes review: the committed change is clean; ready to deliver')\n"
+
 
 def _graph_yaml() -> str:
-    """The minimal ``default-delivery`` graph, scripted so the mock harness can run it.
+    """The scripted ``default-delivery`` graph — ``build -> review -> deliver``.
 
     Named ``default-delivery`` so the hub's lazy ``ensure_default`` (POST /chunks)
     reuses this pre-minted graph by name (D-081) instead of minting the packaged
-    prose graph — the packaged prompts are LLM prose the mock cannot ``exec``.
+    prose graph — the packaged prompts are LLM prose the mock cannot ``exec``. Mirrors
+    the packaged default's shape (design/hub/graph-schema.md): a runner build, a
+    fresh-session runner review that ``produces`` findings, and a hub deliver node.
     """
     import yaml
 
@@ -119,8 +134,26 @@ def _graph_yaml() -> str:
                     "choices": {
                         "pass": {
                             "description": "The change is committed and the node's checks are green.",
-                            "to": "deliver",
+                            "to": "review",
                         }
+                    },
+                },
+                "retries": {"max": 1, "exhausted": "escalate"},
+            },
+            "review": {
+                "executor": "runner",
+                "prompt": _REVIEW_SCRIPT,
+                "session": "fresh",
+                "produces": ["review-findings"],
+                "judgement": {
+                    "prompt": _REVIEW_JUDGEMENT,
+                    "choices": {
+                        "pass": {"description": "The change passes cold-eyes review.", "to": "deliver"},
+                        "fail": {
+                            "description": "Blocking issues found.",
+                            "to": "build",
+                            "prompt_addendum": "# address the review findings\n",
+                        },
                     },
                 },
                 "retries": {"max": 1, "exhausted": "escalate"},

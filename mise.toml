@@ -10,8 +10,8 @@ description = "Run tests"
 run = "uv run pytest"
 
 [tasks.e2e]
-description = "Run the acceptance-loop e2e smoke test (verification.md, P6 exit) — self-managed forge+hub+runner over a minted blizzard-mock fixture; needs the sibling blizzard-mock worktree provisioned (winter provision <env>)"
-run = "BLIZZARD_E2E=1 uv run pytest tests/e2e/test_acceptance_loop.py"
+description = "Run the standing e2e smoke suite (verification.md) — the three full-stack scenarios (happy-path build→review→deliver, review-fail cycle, retries-exhausted escalation) self-managed over forge+hub+runner + a minted blizzard-mock fixture; needs the sibling blizzard-mock worktree provisioned (winter provision <env>)"
+run = "BLIZZARD_E2E=1 uv run pytest tests/e2e/"
 
 [tasks.lint]
 description = "Lint with ruff"
