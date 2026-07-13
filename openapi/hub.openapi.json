@@ -1,6 +1,739 @@
 {
   "components": {
     "schemas": {
+      "ApplyOutcome": {
+        "description": "What a completion's apply produced (D-072).",
+        "enum": [
+          "next",
+          "hub_node_taken",
+          "parked_at_gate",
+          "done",
+          "failure"
+        ],
+        "title": "ApplyOutcome",
+        "type": "string"
+      },
+      "ApplyResponse": {
+        "description": "The response to a completion submission (D-072).\n\nExactly one of ``next_envelope`` (when ``outcome == next``) or ``detail`` (on a\nnon-advancing outcome) is meaningful; the ``outcome`` discriminates.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "next_envelope": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NodeEnvelope"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/ApplyOutcome"
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "title": "ApplyResponse",
+        "type": "object"
+      },
+      "ArtifactKind": {
+        "description": "The union discriminator (D-036).",
+        "enum": [
+          "git_commit",
+          "asset"
+        ],
+        "title": "ArtifactKind",
+        "type": "string"
+      },
+      "CheckResult": {
+        "description": "One deterministic check's outcome, informing the verdict (D-077).",
+        "properties": {
+          "command": {
+            "title": "Command",
+            "type": "string"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "command",
+          "passed"
+        ],
+        "title": "CheckResult",
+        "type": "object"
+      },
+      "ChunkDetail": {
+        "description": "The chunk aggregate in full (D-036) \u2014 the board's chunk view and envelope feed.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "current_node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Node Id"
+          },
+          "graph_id": {
+            "title": "Graph Id",
+            "type": "string"
+          },
+          "latest_epoch": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Epoch"
+          },
+          "pm_pointers": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PmPointerModel"
+            },
+            "title": "Pm Pointers",
+            "type": "array"
+          },
+          "route": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RouteView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/ChunkStatus"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "graph_id",
+          "status",
+          "current_node_id",
+          "latest_epoch"
+        ],
+        "title": "ChunkDetail",
+        "type": "object"
+      },
+      "ChunkIngestRequest": {
+        "description": "Ingest by pointer \u2014 specific items always, batch fine (D-047).",
+        "properties": {
+          "pointers": {
+            "items": {
+              "$ref": "#/components/schemas/PmPointerModel"
+            },
+            "title": "Pointers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "pointers"
+        ],
+        "title": "ChunkIngestRequest",
+        "type": "object"
+      },
+      "ChunkIngestResponse": {
+        "description": "The minted chunk id.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunk_id"
+        ],
+        "title": "ChunkIngestResponse",
+        "type": "object"
+      },
+      "ChunkStatus": {
+        "description": "The derived chunk statuses (D-067). Never stored \u2014 always a query result.",
+        "enum": [
+          "ready",
+          "running",
+          "delivering",
+          "waiting_on_human",
+          "needs_human",
+          "stopped",
+          "done"
+        ],
+        "title": "ChunkStatus",
+        "type": "string"
+      },
+      "ChunkSummary": {
+        "description": "One row of the fleet chunk list \u2014 derived status + current node (D-004).",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "current_node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Node Id"
+          },
+          "graph_id": {
+            "title": "Graph Id",
+            "type": "string"
+          },
+          "pm_pointers": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PmPointerModel"
+            },
+            "title": "Pm Pointers",
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ChunkStatus"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "graph_id",
+          "status",
+          "current_node_id"
+        ],
+        "title": "ChunkSummary",
+        "type": "object"
+      },
+      "CompletionSubmission": {
+        "description": "A node-step's completion \u2014 judgement choice + checks + artifacts + epoch.",
+        "properties": {
+          "artifacts": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SubmittedArtifact"
+            },
+            "title": "Artifacts",
+            "type": "array"
+          },
+          "check_results": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CheckResult"
+            },
+            "title": "Check Results",
+            "type": "array"
+          },
+          "choice": {
+            "title": "Choice",
+            "type": "string"
+          },
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "from_node_id": {
+            "title": "From Node Id",
+            "type": "string"
+          },
+          "runner_id": {
+            "title": "Runner Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "choice",
+          "epoch",
+          "runner_id",
+          "from_node_id"
+        ],
+        "title": "CompletionSubmission",
+        "type": "object"
+      },
+      "EnvelopeArtifact": {
+        "description": "One artifact carried into a node-step, resolved latest-by-epoch (D-036).",
+        "properties": {
+          "branch_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch Name"
+          },
+          "commit_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commit Hash"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ArtifactKind"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "node_name": {
+            "title": "Node Name",
+            "type": "string"
+          },
+          "repo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repo"
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "node_name",
+          "epoch"
+        ],
+        "title": "EnvelopeArtifact",
+        "type": "object"
+      },
+      "EnvelopeChoice": {
+        "description": "A selectable outcome the worker's judgement may emit (D-042).",
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description"
+        ],
+        "title": "EnvelopeChoice",
+        "type": "object"
+      },
+      "Executor": {
+        "description": "Where a node's step runs (D-030).",
+        "enum": [
+          "runner",
+          "hub"
+        ],
+        "title": "Executor",
+        "type": "string"
+      },
+      "GraphMintRequest": {
+        "description": "A graph definition to mint \u2014 the raw YAML body (D-071).",
+        "properties": {
+          "definition_yaml": {
+            "title": "Definition Yaml",
+            "type": "string"
+          }
+        },
+        "required": [
+          "definition_yaml"
+        ],
+        "title": "GraphMintRequest",
+        "type": "object"
+      },
+      "GraphNodeView": {
+        "description": "A reified node in a minted graph.",
+        "properties": {
+          "executor": {
+            "title": "Executor",
+            "type": "string"
+          },
+          "judged_by": {
+            "title": "Judged By",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "node_id",
+          "name",
+          "executor",
+          "judged_by"
+        ],
+        "title": "GraphNodeView",
+        "type": "object"
+      },
+      "GraphView": {
+        "description": "A minted graph as served by ``GET /graphs`` and the mint response.",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "entry_node_id": {
+            "title": "Entry Node Id",
+            "type": "string"
+          },
+          "graph_id": {
+            "title": "Graph Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "nodes": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GraphNodeView"
+            },
+            "title": "Nodes",
+            "type": "array"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "graph_id",
+          "name",
+          "entry_node_id",
+          "enabled"
+        ],
+        "title": "GraphView",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "JudgedBy": {
+        "description": "Who renders a node's exit judgement \u2014 the structural gate marker (D-041).",
+        "enum": [
+          "worker",
+          "human"
+        ],
+        "title": "JudgedBy",
+        "type": "string"
+      },
+      "NodeConfig": {
+        "description": "The node's invariant identity for this step (D-025/D-038).",
+        "properties": {
+          "checks": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Checks",
+            "type": "array"
+          },
+          "choices": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/EnvelopeChoice"
+            },
+            "title": "Choices",
+            "type": "array"
+          },
+          "executor": {
+            "$ref": "#/components/schemas/Executor"
+          },
+          "judged_by": {
+            "$ref": "#/components/schemas/JudgedBy"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "node_name": {
+            "title": "Node Name",
+            "type": "string"
+          },
+          "produces": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Produces",
+            "type": "array"
+          },
+          "retries_max": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retries Max"
+          },
+          "session": {
+            "$ref": "#/components/schemas/SessionMode"
+          }
+        },
+        "required": [
+          "node_id",
+          "node_name",
+          "executor",
+          "session",
+          "judged_by"
+        ],
+        "title": "NodeConfig",
+        "type": "object"
+      },
+      "NodeEnvelope": {
+        "description": "Everything a runner needs to work one node-step (D-089).",
+        "properties": {
+          "artifacts": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/EnvelopeArtifact"
+            },
+            "title": "Artifacts",
+            "type": "array"
+          },
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "graph_id": {
+            "title": "Graph Id",
+            "type": "string"
+          },
+          "judgement_prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Judgement Prompt"
+          },
+          "node": {
+            "$ref": "#/components/schemas/NodeConfig"
+          },
+          "pm_pointers": {
+            "default": [],
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Pm Pointers",
+            "type": "array"
+          },
+          "prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "graph_id",
+          "epoch",
+          "node",
+          "prompt",
+          "judgement_prompt"
+        ],
+        "title": "NodeEnvelope",
+        "type": "object"
+      },
+      "PmItemView": {
+        "description": "A pass-through PM item read (D-047) \u2014 body + comments, vendor-native.",
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "comments": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Comments",
+            "type": "array"
+          },
+          "fetched_at": {
+            "title": "Fetched At",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "url",
+          "fetched_at",
+          "body"
+        ],
+        "title": "PmItemView",
+        "type": "object"
+      },
+      "PmPointerModel": {
+        "description": "One ``{provider, url}`` PM pointer (D-075).",
+        "properties": {
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "url"
+        ],
+        "title": "PmPointerModel",
+        "type": "object"
+      },
+      "QueuePeekEntry": {
+        "description": "One ready chunk, in queue order.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "graph_id": {
+            "title": "Graph Id",
+            "type": "string"
+          },
+          "pm_pointers": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PmPointerModel"
+            },
+            "title": "Pm Pointers",
+            "type": "array"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "graph_id",
+          "position"
+        ],
+        "title": "QueuePeekEntry",
+        "type": "object"
+      },
+      "QueuePeekResponse": {
+        "description": "The ready queue as peeked by FILL.",
+        "properties": {
+          "entries": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/QueuePeekEntry"
+            },
+            "title": "Entries",
+            "type": "array"
+          }
+        },
+        "title": "QueuePeekResponse",
+        "type": "object"
+      },
       "ReadinessResponse": {
         "description": "The wire shape of a readiness reading (openapi-ts consumes this).",
         "properties": {
@@ -48,6 +781,212 @@
         ],
         "title": "ReadinessResponse",
         "type": "object"
+      },
+      "RouteClaim": {
+        "description": "A complete route fact posted by the claiming runner (D-080).",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "environment_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Environment Ids",
+            "type": "array"
+          },
+          "runner_id": {
+            "title": "Runner Id",
+            "type": "string"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "runner_id",
+          "workspace_id",
+          "environment_ids"
+        ],
+        "title": "RouteClaim",
+        "type": "object"
+      },
+      "RouteClaimResponse": {
+        "description": "The winning claim's reply \u2014 the route plus the first node envelope.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "envelope": {
+            "$ref": "#/components/schemas/NodeEnvelope"
+          },
+          "environment_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Environment Ids",
+            "type": "array"
+          },
+          "runner_id": {
+            "title": "Runner Id",
+            "type": "string"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "runner_id",
+          "workspace_id",
+          "environment_ids",
+          "envelope"
+        ],
+        "title": "RouteClaimResponse",
+        "type": "object"
+      },
+      "RouteView": {
+        "description": "A chunk's route \u2014 where it is being worked (D-021).",
+        "properties": {
+          "environment_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Environment Ids",
+            "type": "array"
+          },
+          "runner_id": {
+            "title": "Runner Id",
+            "type": "string"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runner_id",
+          "workspace_id"
+        ],
+        "title": "RouteView",
+        "type": "object"
+      },
+      "SessionMode": {
+        "description": "Per-node session freshness (D-054).",
+        "enum": [
+          "resume",
+          "fresh"
+        ],
+        "title": "SessionMode",
+        "type": "string"
+      },
+      "SubmittedArtifact": {
+        "description": "An artifact committed atomically with the completion (D-036).",
+        "properties": {
+          "branch_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch Name"
+          },
+          "commit_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commit Hash"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ArtifactKind"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "repo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repo"
+          }
+        },
+        "required": [
+          "name",
+          "kind"
+        ],
+        "title": "SubmittedArtifact",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
       }
     }
   },
@@ -57,6 +996,296 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/chunks": {
+      "get": {
+        "description": "The fleet chunk list \u2014 derived status per chunk (D-004).",
+        "operationId": "list_chunks_api_chunks_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ChunkSummary"
+                  },
+                  "title": "Response List Chunks Api Chunks Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Chunks",
+        "tags": [
+          "chunks"
+        ]
+      },
+      "post": {
+        "description": "Ingest by pointer (D-047); 409 on a pointer held by a live chunk (D-093).",
+        "operationId": "ingest_chunk_api_chunks_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChunkIngestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChunkIngestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ingest Chunk",
+        "tags": [
+          "chunks"
+        ]
+      }
+    },
+    "/api/chunks/{chunk_id}": {
+      "get": {
+        "description": "One chunk aggregate in full \u2014 derived status, current node, route (D-036).",
+        "operationId": "get_chunk_api_chunks__chunk_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChunkDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Chunk",
+        "tags": [
+          "chunks"
+        ]
+      }
+    },
+    "/api/chunks/{chunk_id}/completions": {
+      "post": {
+        "description": "Apply a node-step's completion atomically; reply carries the next envelope (D-072).",
+        "operationId": "submit_completion_api_chunks__chunk_id__completions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompletionSubmission"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Submit Completion",
+        "tags": [
+          "chunks"
+        ]
+      }
+    },
+    "/api/chunks/{chunk_id}/envelope": {
+      "get": {
+        "description": "The chunk's current node envelope, idempotent \u2014 the lost-apply re-read (D-090).",
+        "operationId": "get_envelope_api_chunks__chunk_id__envelope_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Envelope",
+        "tags": [
+          "chunks"
+        ]
+      }
+    },
+    "/api/chunks/{chunk_id}/pm-item": {
+      "get": {
+        "description": "Pass-through PM item read \u2014 body + comments, contents never stored (D-047).",
+        "operationId": "get_pm_item_api_chunks__chunk_id__pm_item_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PmItemView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Pm Item",
+        "tags": [
+          "chunks"
+        ]
+      }
+    },
+    "/api/graphs": {
+      "post": {
+        "description": "Validate and mint an immutable graph; 422 on validation errors (D-071).",
+        "operationId": "mint_graph_api_graphs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GraphMintRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Mint Graph",
+        "tags": [
+          "graphs"
+        ]
+      }
+    },
     "/api/health": {
       "get": {
         "operationId": "health_api_health_get",
@@ -82,6 +1311,28 @@
         ]
       }
     },
+    "/api/queue/peek": {
+      "get": {
+        "description": "The hub-ordered ready queue, read-only (D-080).",
+        "operationId": "peek_queue_api_queue_peek_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueuePeekResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Peek Queue",
+        "tags": [
+          "queue"
+        ]
+      }
+    },
     "/api/ready": {
       "get": {
         "operationId": "ready_api_ready_get",
@@ -100,6 +1351,48 @@
         "summary": "Ready",
         "tags": [
           "meta"
+        ]
+      }
+    },
+    "/api/routes": {
+      "post": {
+        "description": "Claim a chunk; 409 if already claimed, else the first node envelope (D-080).",
+        "operationId": "claim_route_api_routes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RouteClaim"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RouteClaimResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Claim Route",
+        "tags": [
+          "routes"
         ]
       }
     }

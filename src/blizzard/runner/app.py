@@ -21,10 +21,20 @@ from blizzard.runner.api.health import router as health_router
 from blizzard.runner.api.readiness import router as readiness_router
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.readiness import ReadinessService
+from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
+from blizzard.runner.environments.provider import IWorkspaceProvider
+from blizzard.runner.harness.adapter import IHarnessAdapter
+from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.runtime import migration_runner
 
 
-def create_app(config: RunnerConfig, *, readiness: ReadinessService | None = None) -> FastAPI:
+def create_app(
+    config: RunnerConfig,
+    *,
+    readiness: ReadinessService | None = None,
+    workspace_provider: IWorkspaceProvider | None = None,
+    harness: IHarnessAdapter | None = None,
+) -> FastAPI:
     """Build a fully wired runner app from resolved config.
 
     ``readiness`` is the store-backed readiness evaluator wired by the ``host``
@@ -37,6 +47,11 @@ def create_app(config: RunnerConfig, *, readiness: ReadinessService | None = Non
     app = FastAPI(title="blizzard-runner", version=__version__)
     app.state.config = config
     app.state.readiness = readiness
+    # The runner's two execution seams (D-062/D-092), wired at the host root; the
+    # store-free app leaves them None. The reconciliation loop the P6 builder adds
+    # reads them off app.state. Both bindings are NotImplemented stubs in P6.
+    app.state.workspace_provider = workspace_provider
+    app.state.harness = harness
 
     # API routers first, so /api/* always wins over the web mount at /.
     app.include_router(health_router)
@@ -62,7 +77,12 @@ def build_hosted_app(config: RunnerConfig) -> FastAPI:
     reader = SqlAlchemyStoreStatusReader(engine)
     expected = migration_runner(config).script_head()
     readiness = ReadinessService(reader=reader, expected_revision=expected)
-    return create_app(config, readiness=readiness)
+    # Bind the reference execution seams (winter workspace, Claude Code). Both are
+    # NotImplemented stubs in P6 — the loop that invokes them lands with the walking
+    # skeleton; the workspace root is the runner's own root as a P6 placeholder.
+    workspace_provider: IWorkspaceProvider = WinterWorkspaceProvider(workspace_root=str(config.root))
+    harness: IHarnessAdapter = ClaudeCodeAdapter()
+    return create_app(config, readiness=readiness, workspace_provider=workspace_provider, harness=harness)
 
 
 def create_app_for_export() -> FastAPI:

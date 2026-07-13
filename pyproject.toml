@@ -27,6 +27,9 @@ dependencies = [
     # Structured logging, per blizzard-harness standards/logging.md
     # (bzh:structlog-logging).
     "structlog>=24.0.0",
+    # Workflow-graph definitions are authored in YAML (design/hub/graph-schema.md,
+    # D-071); the hub parses the POST /graphs body and the packaged default graph.
+    "pyyaml>=6.0",
 ]
 
 [build-system]
@@ -41,8 +44,10 @@ build-backend = "hatchling.build"
 packages = ["src/blizzard"]
 # The frontend build output is a wheel-embedded asset CI fills, and those built
 # files are gitignored (only the placeholder index.html is tracked). `artifacts`
-# un-ignores the whole static tree so the real bundles ship in the wheel too.
-artifacts = ["src/blizzard/static/**/*"]
+# un-ignores the whole static tree so the real bundles ship in the wheel too. The
+# packaged default workflow graph (YAML + prompt files, D-081) rides along too, so
+# a fresh hub mints it with no authoring.
+artifacts = ["src/blizzard/static/**/*", "src/blizzard/hub/graphs/**/*"]
 
 # One binary, verbs namespaced by target (D-061). The hyphenated aliases are the
 # systemd / `ps` entry points for the daemon `host` personalities (design/cli.md).
@@ -71,6 +76,7 @@ asyncio_mode = "auto"
 markers = [
     "unit: one class or function in isolation",
     "component: a domain slice wired with real internal collaborators, doubles only at the seams",
+    "e2e: the full acceptance loop against the live stack; skipped when services are absent",
 ]
 
 [tool.pyright]

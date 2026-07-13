@@ -5,6 +5,474 @@ export type ClientOptions = {
 };
 
 /**
+ * ApplyOutcome
+ *
+ * What a completion's apply produced (D-072).
+ */
+export type ApplyOutcome = 'next' | 'hub_node_taken' | 'parked_at_gate' | 'done' | 'failure';
+
+/**
+ * ApplyResponse
+ *
+ * The response to a completion submission (D-072).
+ *
+ * Exactly one of ``next_envelope`` (when ``outcome == next``) or ``detail`` (on a
+ * non-advancing outcome) is meaningful; the ``outcome`` discriminates.
+ */
+export type ApplyResponse = {
+    /**
+     * Detail
+     */
+    detail?: string | null;
+    next_envelope?: NodeEnvelope | null;
+    outcome: ApplyOutcome;
+};
+
+/**
+ * ArtifactKind
+ *
+ * The union discriminator (D-036).
+ */
+export type ArtifactKind = 'git_commit' | 'asset';
+
+/**
+ * CheckResult
+ *
+ * One deterministic check's outcome, informing the verdict (D-077).
+ */
+export type CheckResult = {
+    /**
+     * Command
+     */
+    command: string;
+    /**
+     * Passed
+     */
+    passed: boolean;
+};
+
+/**
+ * ChunkDetail
+ *
+ * The chunk aggregate in full (D-036) — the board's chunk view and envelope feed.
+ */
+export type ChunkDetail = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Current Node Id
+     */
+    current_node_id: string | null;
+    /**
+     * Graph Id
+     */
+    graph_id: string;
+    /**
+     * Latest Epoch
+     */
+    latest_epoch: number | null;
+    /**
+     * Pm Pointers
+     */
+    pm_pointers?: Array<PmPointerModel>;
+    route?: RouteView | null;
+    status: ChunkStatus;
+};
+
+/**
+ * ChunkIngestRequest
+ *
+ * Ingest by pointer — specific items always, batch fine (D-047).
+ */
+export type ChunkIngestRequest = {
+    /**
+     * Pointers
+     */
+    pointers: Array<PmPointerModel>;
+};
+
+/**
+ * ChunkIngestResponse
+ *
+ * The minted chunk id.
+ */
+export type ChunkIngestResponse = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+};
+
+/**
+ * ChunkStatus
+ *
+ * The derived chunk statuses (D-067). Never stored — always a query result.
+ */
+export type ChunkStatus = 'ready' | 'running' | 'delivering' | 'waiting_on_human' | 'needs_human' | 'stopped' | 'done';
+
+/**
+ * ChunkSummary
+ *
+ * One row of the fleet chunk list — derived status + current node (D-004).
+ */
+export type ChunkSummary = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Current Node Id
+     */
+    current_node_id: string | null;
+    /**
+     * Graph Id
+     */
+    graph_id: string;
+    /**
+     * Pm Pointers
+     */
+    pm_pointers?: Array<PmPointerModel>;
+    status: ChunkStatus;
+};
+
+/**
+ * CompletionSubmission
+ *
+ * A node-step's completion — judgement choice + checks + artifacts + epoch.
+ */
+export type CompletionSubmission = {
+    /**
+     * Artifacts
+     */
+    artifacts?: Array<SubmittedArtifact>;
+    /**
+     * Check Results
+     */
+    check_results?: Array<CheckResult>;
+    /**
+     * Choice
+     */
+    choice: string;
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * From Node Id
+     */
+    from_node_id: string;
+    /**
+     * Runner Id
+     */
+    runner_id: string;
+};
+
+/**
+ * EnvelopeArtifact
+ *
+ * One artifact carried into a node-step, resolved latest-by-epoch (D-036).
+ */
+export type EnvelopeArtifact = {
+    /**
+     * Branch Name
+     */
+    branch_name?: string | null;
+    /**
+     * Commit Hash
+     */
+    commit_hash?: string | null;
+    /**
+     * Content
+     */
+    content?: string | null;
+    /**
+     * Epoch
+     */
+    epoch: number;
+    kind: ArtifactKind;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Node Name
+     */
+    node_name: string;
+    /**
+     * Repo
+     */
+    repo?: string | null;
+};
+
+/**
+ * EnvelopeChoice
+ *
+ * A selectable outcome the worker's judgement may emit (D-042).
+ */
+export type EnvelopeChoice = {
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
+ * Executor
+ *
+ * Where a node's step runs (D-030).
+ */
+export type Executor = 'runner' | 'hub';
+
+/**
+ * GraphMintRequest
+ *
+ * A graph definition to mint — the raw YAML body (D-071).
+ */
+export type GraphMintRequest = {
+    /**
+     * Definition Yaml
+     */
+    definition_yaml: string;
+};
+
+/**
+ * GraphNodeView
+ *
+ * A reified node in a minted graph.
+ */
+export type GraphNodeView = {
+    /**
+     * Executor
+     */
+    executor: string;
+    /**
+     * Judged By
+     */
+    judged_by: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Node Id
+     */
+    node_id: string;
+};
+
+/**
+ * GraphView
+ *
+ * A minted graph as served by ``GET /graphs`` and the mint response.
+ */
+export type GraphView = {
+    /**
+     * Enabled
+     */
+    enabled: boolean;
+    /**
+     * Entry Node Id
+     */
+    entry_node_id: string;
+    /**
+     * Graph Id
+     */
+    graph_id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Nodes
+     */
+    nodes?: Array<GraphNodeView>;
+    /**
+     * Warnings
+     */
+    warnings?: Array<string>;
+};
+
+/**
+ * HTTPValidationError
+ */
+export type HttpValidationError = {
+    /**
+     * Detail
+     */
+    detail?: Array<ValidationError>;
+};
+
+/**
+ * JudgedBy
+ *
+ * Who renders a node's exit judgement — the structural gate marker (D-041).
+ */
+export type JudgedBy = 'worker' | 'human';
+
+/**
+ * NodeConfig
+ *
+ * The node's invariant identity for this step (D-025/D-038).
+ */
+export type NodeConfig = {
+    /**
+     * Checks
+     */
+    checks?: Array<string>;
+    /**
+     * Choices
+     */
+    choices?: Array<EnvelopeChoice>;
+    executor: Executor;
+    judged_by: JudgedBy;
+    /**
+     * Mode
+     */
+    mode?: string | null;
+    /**
+     * Node Id
+     */
+    node_id: string;
+    /**
+     * Node Name
+     */
+    node_name: string;
+    /**
+     * Produces
+     */
+    produces?: Array<string>;
+    /**
+     * Retries Max
+     */
+    retries_max?: number | null;
+    session: SessionMode;
+};
+
+/**
+ * NodeEnvelope
+ *
+ * Everything a runner needs to work one node-step (D-089).
+ */
+export type NodeEnvelope = {
+    /**
+     * Artifacts
+     */
+    artifacts?: Array<EnvelopeArtifact>;
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * Graph Id
+     */
+    graph_id: string;
+    /**
+     * Judgement Prompt
+     */
+    judgement_prompt: string | null;
+    node: NodeConfig;
+    /**
+     * Pm Pointers
+     */
+    pm_pointers?: Array<{
+        [key: string]: string;
+    }>;
+    /**
+     * Prompt
+     */
+    prompt: string | null;
+};
+
+/**
+ * PmItemView
+ *
+ * A pass-through PM item read (D-047) — body + comments, vendor-native.
+ */
+export type PmItemView = {
+    /**
+     * Body
+     */
+    body: string;
+    /**
+     * Comments
+     */
+    comments?: Array<string>;
+    /**
+     * Fetched At
+     */
+    fetched_at: string;
+    /**
+     * Provider
+     */
+    provider: string;
+    /**
+     * Url
+     */
+    url: string;
+};
+
+/**
+ * PmPointerModel
+ *
+ * One ``{provider, url}`` PM pointer (D-075).
+ */
+export type PmPointerModel = {
+    /**
+     * Provider
+     */
+    provider: string;
+    /**
+     * Url
+     */
+    url: string;
+};
+
+/**
+ * QueuePeekEntry
+ *
+ * One ready chunk, in queue order.
+ */
+export type QueuePeekEntry = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Graph Id
+     */
+    graph_id: string;
+    /**
+     * Pm Pointers
+     */
+    pm_pointers?: Array<PmPointerModel>;
+    /**
+     * Position
+     */
+    position: number;
+};
+
+/**
+ * QueuePeekResponse
+ *
+ * The ready queue as peeked by FILL.
+ */
+export type QueuePeekResponse = {
+    /**
+     * Entries
+     */
+    entries?: Array<QueuePeekEntry>;
+};
+
+/**
  * ReadinessResponse
  *
  * The wire shape of a readiness reading (openapi-ts consumes this).
@@ -32,6 +500,327 @@ export type ReadinessResponse = {
     store_revision: string | null;
 };
 
+/**
+ * RouteClaim
+ *
+ * A complete route fact posted by the claiming runner (D-080).
+ */
+export type RouteClaim = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Environment Ids
+     */
+    environment_ids: Array<string>;
+    /**
+     * Runner Id
+     */
+    runner_id: string;
+    /**
+     * Workspace Id
+     */
+    workspace_id: string;
+};
+
+/**
+ * RouteClaimResponse
+ *
+ * The winning claim's reply — the route plus the first node envelope.
+ */
+export type RouteClaimResponse = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    envelope: NodeEnvelope;
+    /**
+     * Environment Ids
+     */
+    environment_ids: Array<string>;
+    /**
+     * Runner Id
+     */
+    runner_id: string;
+    /**
+     * Workspace Id
+     */
+    workspace_id: string;
+};
+
+/**
+ * RouteView
+ *
+ * A chunk's route — where it is being worked (D-021).
+ */
+export type RouteView = {
+    /**
+     * Environment Ids
+     */
+    environment_ids?: Array<string>;
+    /**
+     * Runner Id
+     */
+    runner_id: string;
+    /**
+     * Workspace Id
+     */
+    workspace_id: string;
+};
+
+/**
+ * SessionMode
+ *
+ * Per-node session freshness (D-054).
+ */
+export type SessionMode = 'resume' | 'fresh';
+
+/**
+ * SubmittedArtifact
+ *
+ * An artifact committed atomically with the completion (D-036).
+ */
+export type SubmittedArtifact = {
+    /**
+     * Branch Name
+     */
+    branch_name?: string | null;
+    /**
+     * Commit Hash
+     */
+    commit_hash?: string | null;
+    /**
+     * Content
+     */
+    content?: string | null;
+    kind: ArtifactKind;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Repo
+     */
+    repo?: string | null;
+};
+
+/**
+ * ValidationError
+ */
+export type ValidationError = {
+    /**
+     * Context
+     */
+    ctx?: {
+        [key: string]: unknown;
+    };
+    /**
+     * Input
+     */
+    input?: unknown;
+    /**
+     * Location
+     */
+    loc: Array<string | number>;
+    /**
+     * Message
+     */
+    msg: string;
+    /**
+     * Error Type
+     */
+    type: string;
+};
+
+export type ListChunksApiChunksGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chunks';
+};
+
+export type ListChunksApiChunksGetResponses = {
+    /**
+     * Response List Chunks Api Chunks Get
+     *
+     * Successful Response
+     */
+    200: Array<ChunkSummary>;
+};
+
+export type ListChunksApiChunksGetResponse = ListChunksApiChunksGetResponses[keyof ListChunksApiChunksGetResponses];
+
+export type IngestChunkApiChunksPostData = {
+    body: ChunkIngestRequest;
+    path?: never;
+    query?: never;
+    url: '/api/chunks';
+};
+
+export type IngestChunkApiChunksPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type IngestChunkApiChunksPostError = IngestChunkApiChunksPostErrors[keyof IngestChunkApiChunksPostErrors];
+
+export type IngestChunkApiChunksPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: ChunkIngestResponse;
+};
+
+export type IngestChunkApiChunksPostResponse = IngestChunkApiChunksPostResponses[keyof IngestChunkApiChunksPostResponses];
+
+export type GetChunkApiChunksChunkIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}';
+};
+
+export type GetChunkApiChunksChunkIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetChunkApiChunksChunkIdGetError = GetChunkApiChunksChunkIdGetErrors[keyof GetChunkApiChunksChunkIdGetErrors];
+
+export type GetChunkApiChunksChunkIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ChunkDetail;
+};
+
+export type GetChunkApiChunksChunkIdGetResponse = GetChunkApiChunksChunkIdGetResponses[keyof GetChunkApiChunksChunkIdGetResponses];
+
+export type SubmitCompletionApiChunksChunkIdCompletionsPostData = {
+    body: CompletionSubmission;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/completions';
+};
+
+export type SubmitCompletionApiChunksChunkIdCompletionsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SubmitCompletionApiChunksChunkIdCompletionsPostError = SubmitCompletionApiChunksChunkIdCompletionsPostErrors[keyof SubmitCompletionApiChunksChunkIdCompletionsPostErrors];
+
+export type SubmitCompletionApiChunksChunkIdCompletionsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ApplyResponse;
+};
+
+export type SubmitCompletionApiChunksChunkIdCompletionsPostResponse = SubmitCompletionApiChunksChunkIdCompletionsPostResponses[keyof SubmitCompletionApiChunksChunkIdCompletionsPostResponses];
+
+export type GetEnvelopeApiChunksChunkIdEnvelopeGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/envelope';
+};
+
+export type GetEnvelopeApiChunksChunkIdEnvelopeGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetEnvelopeApiChunksChunkIdEnvelopeGetError = GetEnvelopeApiChunksChunkIdEnvelopeGetErrors[keyof GetEnvelopeApiChunksChunkIdEnvelopeGetErrors];
+
+export type GetEnvelopeApiChunksChunkIdEnvelopeGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: NodeEnvelope;
+};
+
+export type GetEnvelopeApiChunksChunkIdEnvelopeGetResponse = GetEnvelopeApiChunksChunkIdEnvelopeGetResponses[keyof GetEnvelopeApiChunksChunkIdEnvelopeGetResponses];
+
+export type GetPmItemApiChunksChunkIdPmItemGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/pm-item';
+};
+
+export type GetPmItemApiChunksChunkIdPmItemGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetPmItemApiChunksChunkIdPmItemGetError = GetPmItemApiChunksChunkIdPmItemGetErrors[keyof GetPmItemApiChunksChunkIdPmItemGetErrors];
+
+export type GetPmItemApiChunksChunkIdPmItemGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PmItemView;
+};
+
+export type GetPmItemApiChunksChunkIdPmItemGetResponse = GetPmItemApiChunksChunkIdPmItemGetResponses[keyof GetPmItemApiChunksChunkIdPmItemGetResponses];
+
+export type MintGraphApiGraphsPostData = {
+    body: GraphMintRequest;
+    path?: never;
+    query?: never;
+    url: '/api/graphs';
+};
+
+export type MintGraphApiGraphsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type MintGraphApiGraphsPostError = MintGraphApiGraphsPostErrors[keyof MintGraphApiGraphsPostErrors];
+
+export type MintGraphApiGraphsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: GraphView;
+};
+
+export type MintGraphApiGraphsPostResponse = MintGraphApiGraphsPostResponses[keyof MintGraphApiGraphsPostResponses];
+
 export type HealthApiHealthGetData = {
     body?: never;
     path?: never;
@@ -52,6 +841,22 @@ export type HealthApiHealthGetResponses = {
 
 export type HealthApiHealthGetResponse = HealthApiHealthGetResponses[keyof HealthApiHealthGetResponses];
 
+export type PeekQueueApiQueuePeekGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/queue/peek';
+};
+
+export type PeekQueueApiQueuePeekGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: QueuePeekResponse;
+};
+
+export type PeekQueueApiQueuePeekGetResponse = PeekQueueApiQueuePeekGetResponses[keyof PeekQueueApiQueuePeekGetResponses];
+
 export type ReadyApiReadyGetData = {
     body?: never;
     path?: never;
@@ -67,3 +872,28 @@ export type ReadyApiReadyGetResponses = {
 };
 
 export type ReadyApiReadyGetResponse = ReadyApiReadyGetResponses[keyof ReadyApiReadyGetResponses];
+
+export type ClaimRouteApiRoutesPostData = {
+    body: RouteClaim;
+    path?: never;
+    query?: never;
+    url: '/api/routes';
+};
+
+export type ClaimRouteApiRoutesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ClaimRouteApiRoutesPostError = ClaimRouteApiRoutesPostErrors[keyof ClaimRouteApiRoutesPostErrors];
+
+export type ClaimRouteApiRoutesPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: RouteClaimResponse;
+};
+
+export type ClaimRouteApiRoutesPostResponse = ClaimRouteApiRoutesPostResponses[keyof ClaimRouteApiRoutesPostResponses];

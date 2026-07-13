@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { HealthApiHealthGetData, HealthApiHealthGetResponses, ReadyApiReadyGetData, ReadyApiReadyGetResponses } from './types.gen';
+import type { ClaimRouteApiRoutesPostData, ClaimRouteApiRoutesPostErrors, ClaimRouteApiRoutesPostResponses, GetChunkApiChunksChunkIdGetData, GetChunkApiChunksChunkIdGetErrors, GetChunkApiChunksChunkIdGetResponses, GetEnvelopeApiChunksChunkIdEnvelopeGetData, GetEnvelopeApiChunksChunkIdEnvelopeGetErrors, GetEnvelopeApiChunksChunkIdEnvelopeGetResponses, GetPmItemApiChunksChunkIdPmItemGetData, GetPmItemApiChunksChunkIdPmItemGetErrors, GetPmItemApiChunksChunkIdPmItemGetResponses, HealthApiHealthGetData, HealthApiHealthGetResponses, IngestChunkApiChunksPostData, IngestChunkApiChunksPostErrors, IngestChunkApiChunksPostResponses, ListChunksApiChunksGetData, ListChunksApiChunksGetResponses, MintGraphApiGraphsPostData, MintGraphApiGraphsPostErrors, MintGraphApiGraphsPostResponses, PeekQueueApiQueuePeekGetData, PeekQueueApiQueuePeekGetResponses, ReadyApiReadyGetData, ReadyApiReadyGetResponses, SubmitCompletionApiChunksChunkIdCompletionsPostData, SubmitCompletionApiChunksChunkIdCompletionsPostErrors, SubmitCompletionApiChunksChunkIdCompletionsPostResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -19,11 +19,102 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
 };
 
 /**
+ * List Chunks
+ *
+ * The fleet chunk list — derived status per chunk (D-004).
+ */
+export const listChunksApiChunksGet = <ThrowOnError extends boolean = false>(options?: Options<ListChunksApiChunksGetData, ThrowOnError>): RequestResult<ListChunksApiChunksGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListChunksApiChunksGetResponses, unknown, ThrowOnError>({ url: '/api/chunks', ...options });
+
+/**
+ * Ingest Chunk
+ *
+ * Ingest by pointer (D-047); 409 on a pointer held by a live chunk (D-093).
+ */
+export const ingestChunkApiChunksPost = <ThrowOnError extends boolean = false>(options: Options<IngestChunkApiChunksPostData, ThrowOnError>): RequestResult<IngestChunkApiChunksPostResponses, IngestChunkApiChunksPostErrors, ThrowOnError> => (options.client ?? client).post<IngestChunkApiChunksPostResponses, IngestChunkApiChunksPostErrors, ThrowOnError>({
+    url: '/api/chunks',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Get Chunk
+ *
+ * One chunk aggregate in full — derived status, current node, route (D-036).
+ */
+export const getChunkApiChunksChunkIdGet = <ThrowOnError extends boolean = false>(options: Options<GetChunkApiChunksChunkIdGetData, ThrowOnError>): RequestResult<GetChunkApiChunksChunkIdGetResponses, GetChunkApiChunksChunkIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetChunkApiChunksChunkIdGetResponses, GetChunkApiChunksChunkIdGetErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}', ...options });
+
+/**
+ * Submit Completion
+ *
+ * Apply a node-step's completion atomically; reply carries the next envelope (D-072).
+ */
+export const submitCompletionApiChunksChunkIdCompletionsPost = <ThrowOnError extends boolean = false>(options: Options<SubmitCompletionApiChunksChunkIdCompletionsPostData, ThrowOnError>): RequestResult<SubmitCompletionApiChunksChunkIdCompletionsPostResponses, SubmitCompletionApiChunksChunkIdCompletionsPostErrors, ThrowOnError> => (options.client ?? client).post<SubmitCompletionApiChunksChunkIdCompletionsPostResponses, SubmitCompletionApiChunksChunkIdCompletionsPostErrors, ThrowOnError>({
+    url: '/api/chunks/{chunk_id}/completions',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Get Envelope
+ *
+ * The chunk's current node envelope, idempotent — the lost-apply re-read (D-090).
+ */
+export const getEnvelopeApiChunksChunkIdEnvelopeGet = <ThrowOnError extends boolean = false>(options: Options<GetEnvelopeApiChunksChunkIdEnvelopeGetData, ThrowOnError>): RequestResult<GetEnvelopeApiChunksChunkIdEnvelopeGetResponses, GetEnvelopeApiChunksChunkIdEnvelopeGetErrors, ThrowOnError> => (options.client ?? client).get<GetEnvelopeApiChunksChunkIdEnvelopeGetResponses, GetEnvelopeApiChunksChunkIdEnvelopeGetErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/envelope', ...options });
+
+/**
+ * Get Pm Item
+ *
+ * Pass-through PM item read — body + comments, contents never stored (D-047).
+ */
+export const getPmItemApiChunksChunkIdPmItemGet = <ThrowOnError extends boolean = false>(options: Options<GetPmItemApiChunksChunkIdPmItemGetData, ThrowOnError>): RequestResult<GetPmItemApiChunksChunkIdPmItemGetResponses, GetPmItemApiChunksChunkIdPmItemGetErrors, ThrowOnError> => (options.client ?? client).get<GetPmItemApiChunksChunkIdPmItemGetResponses, GetPmItemApiChunksChunkIdPmItemGetErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/pm-item', ...options });
+
+/**
+ * Mint Graph
+ *
+ * Validate and mint an immutable graph; 422 on validation errors (D-071).
+ */
+export const mintGraphApiGraphsPost = <ThrowOnError extends boolean = false>(options: Options<MintGraphApiGraphsPostData, ThrowOnError>): RequestResult<MintGraphApiGraphsPostResponses, MintGraphApiGraphsPostErrors, ThrowOnError> => (options.client ?? client).post<MintGraphApiGraphsPostResponses, MintGraphApiGraphsPostErrors, ThrowOnError>({
+    url: '/api/graphs',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
  * Health
  */
 export const healthApiHealthGet = <ThrowOnError extends boolean = false>(options?: Options<HealthApiHealthGetData, ThrowOnError>): RequestResult<HealthApiHealthGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<HealthApiHealthGetResponses, unknown, ThrowOnError>({ url: '/api/health', ...options });
 
 /**
+ * Peek Queue
+ *
+ * The hub-ordered ready queue, read-only (D-080).
+ */
+export const peekQueueApiQueuePeekGet = <ThrowOnError extends boolean = false>(options?: Options<PeekQueueApiQueuePeekGetData, ThrowOnError>): RequestResult<PeekQueueApiQueuePeekGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<PeekQueueApiQueuePeekGetResponses, unknown, ThrowOnError>({ url: '/api/queue/peek', ...options });
+
+/**
  * Ready
  */
 export const readyApiReadyGet = <ThrowOnError extends boolean = false>(options?: Options<ReadyApiReadyGetData, ThrowOnError>): RequestResult<ReadyApiReadyGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ReadyApiReadyGetResponses, unknown, ThrowOnError>({ url: '/api/ready', ...options });
+
+/**
+ * Claim Route
+ *
+ * Claim a chunk; 409 if already claimed, else the first node envelope (D-080).
+ */
+export const claimRouteApiRoutesPost = <ThrowOnError extends boolean = false>(options: Options<ClaimRouteApiRoutesPostData, ThrowOnError>): RequestResult<ClaimRouteApiRoutesPostResponses, ClaimRouteApiRoutesPostErrors, ThrowOnError> => (options.client ?? client).post<ClaimRouteApiRoutesPostResponses, ClaimRouteApiRoutesPostErrors, ThrowOnError>({
+    url: '/api/routes',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});

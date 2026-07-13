@@ -1,0 +1,45 @@
+# The minimal default workflow graph — the P6 walking-skeleton graph.
+#
+# Thinned from design/hub/sample-graph.yaml per the ORCHESTRATION.md P6 scope:
+# build -> deliver only. The review node, the human gate, and the review-fail
+# cycle are deliberately OUT until P7 — the seam is unchanged, so they bolt on by
+# re-minting a richer definition (graphs are immutable; every edit mints a new
+# one, D-033/D-040).
+#
+# Conforms to the canonical authoring schema (design/hub/graph-schema.md, D-071):
+# fused choice/edge entries, prompts as file references inlined at mint (D-033),
+# retries escaping to escalation (D-009), and delivery as a hub-executed node whose
+# machinery outcomes (landed -> done, conflict -> entry) are accepted by default
+# (D-030/D-086). Operational metadata (enabled, auto_migrate, migration_target) is
+# NOT authored here — it is set after mint via PATCH /graphs/{id}.
+
+name: default-delivery
+entry: build
+
+nodes:
+  build:
+    executor: runner
+    prompt: ./prompts/build.md
+    checks:
+      - mise run lint
+      - mise run test
+    judgement:
+      prompt: ./prompts/build.judgement.md
+      choices:
+        pass:
+          description: The work meets this node's criteria and the checks are green.
+          to: deliver
+        fail:
+          description: The work does not meet the criteria; the failure output is attached.
+          to: build
+          prompt_addendum: ./prompts/build.from-build.md
+    retries:
+      max: 2
+      exhausted: escalate
+
+  deliver:
+    executor: hub
+    mode: merge-to-main
+    # No judgement: accept the deliver machinery defaults — landed -> done (the
+    # reserved terminal) and conflict -> entry (build) in the MVP (D-086). The
+    # conventional cross-graph `merge` graph arrives with epic:migration (D-058).
