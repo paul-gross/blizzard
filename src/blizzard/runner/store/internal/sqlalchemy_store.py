@@ -59,10 +59,16 @@ class SqlAlchemyRunnerStore:
         return self._row_to_lease(rows[0]) if rows else None
 
     def held_environment_ids(self) -> list[str]:
-        stmt = select(env_bindings.c.environment_id).where(
-            env_bindings.c.environment_id.not_in(
-                select(binding_releases.c.environment_id).where(binding_releases.c.chunk_id == env_bindings.c.chunk_id)
+        stmt = (
+            select(env_bindings.c.environment_id)
+            .where(
+                env_bindings.c.environment_id.not_in(
+                    select(binding_releases.c.environment_id).where(
+                        binding_releases.c.chunk_id == env_bindings.c.chunk_id
+                    )
+                )
             )
+            .distinct()
         )
         return [str(r.environment_id) for r in self._all(stmt)]
 

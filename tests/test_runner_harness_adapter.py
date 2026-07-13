@@ -1,0 +1,105 @@
+"""The Claude Code adapter — verdict parsing (unit) and a real subprocess (component).
+
+``parse_verdict`` is exercised in isolation over the harness-native JSON envelope and
+its failure modes (``bzh:`` unit tier). The component test drives the adapter against
+a real fake-harness binary that mimics ``mock-claude-code``'s CLI surface — spawn
+launches a real process (its pid + start time stamped, D-092) in the acquired
+workdir, and the judgement resume's output is parsed into a choice. The real
+``mock-claude-code`` façade is bound in the e2e (``blizzard:e2e``).
+"""
+
+from __future__ import annotations
+
+import os
+import stat
+from pathlib import Path
+
+import pytest
+
+from blizzard.runner.environments.provider import AcquiredEnvironment
+from blizzard.runner.harness.adapter import WorkerPreamble
+from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
+from tests.runner_fakes import make_envelope
+
+_JSON_PASS = '{"type":"result","subtype":"success","is_error":false,"result":"Looks good. <Choice>pass</Choice>","session_id":"s1"}'
+
+
+@pytest.mark.unit
+def test_parse_verdict_extracts_choice_from_json_envelope() -> None:
+    assert ClaudeCodeAdapter().parse_verdict(_JSON_PASS) == "pass"
+
+
+@pytest.mark.unit
+def test_parse_verdict_reads_plain_text_reply() -> None:
+    assert ClaudeCodeAdapter().parse_verdict("verdict: <Choice>fail</Choice>") == "fail"
+
+
+@pytest.mark.unit
+def test_parse_verdict_missing_choice_is_none() -> None:
+    assert ClaudeCodeAdapter().parse_verdict('{"type":"result","result":"no verdict here","session_id":"s1"}') is None
+    assert ClaudeCodeAdapter().parse_verdict("<Choice>") is None
+
+
+@pytest.mark.unit
+def test_resume_command_is_the_literal_takeover() -> None:
+    cmd = ClaudeCodeAdapter(binary="claude").resume_command("/ws/e1", "sess-x")
+    assert cmd == "cd /ws/e1 && claude --resume sess-x"
+
+
+_FAKE_HARNESS = """#!/usr/bin/env python3
+import sys, json
+args = sys.argv[1:]
+session = resume = prompt = None
+i = 0
+while i < len(args):
+    a = args[i]
+    if a == "--session-id": session = args[i + 1]; i += 2
+    elif a == "--resume": resume = args[i + 1]; i += 2
+    elif a == "--output-format": i += 2
+    elif a == "--settings": i += 2
+    elif a in ("-p", "--print"): i += 1
+    else: prompt = a; i += 1
+sid = resume or session or "auto"
+if resume is None:
+    open("spawned-here.txt", "w").write(prompt or "")
+    result = ""
+else:
+    result = "Assessed. <Choice>pass</Choice>"
+print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": result, "session_id": sid}))
+"""
+
+
+def _fake_binary(tmp_path: Path) -> str:
+    script = tmp_path / "fake-claude"
+    script.write_text(_FAKE_HARNESS)
+    script.chmod(script.stat().st_mode | stat.S_IEXEC | stat.S_IRUSR)
+    return str(script)
+
+
+@pytest.mark.component
+def test_spawn_launches_real_process_in_workdir(tmp_path: Path) -> None:
+    binary = _fake_binary(tmp_path)
+    workdir = tmp_path / "e1"
+    workdir.mkdir()
+    adapter = ClaudeCodeAdapter(binary=binary)
+    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
+    preamble = WorkerPreamble(environments=[AcquiredEnvironment(environment_id="e1", workdir=str(workdir))])
+
+    handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
+
+    assert handle.session_id == "sess-123"  # Claude honors the pre-assigned id
+    assert handle.pid > 0
+    assert handle.process_start_time  # stamped from /proc for pid-reuse-proof liveness
+    os.waitpid(handle.pid, 0)  # let the fire-and-forget child finish
+    assert (workdir / "spawned-here.txt").read_text() == (envelope.prompt or "")  # ran in the acquired workdir
+
+
+@pytest.mark.component
+def test_judge_resume_output_parses_to_choice(tmp_path: Path) -> None:
+    binary = _fake_binary(tmp_path)
+    workdir = tmp_path / "e1"
+    workdir.mkdir()
+    adapter = ClaudeCodeAdapter(binary=binary)
+
+    output = adapter.judge(str(workdir), "sess-123", "Assess the build. Reply <Choice>name</Choice>.")
+    assert adapter.parse_verdict(output) == "pass"

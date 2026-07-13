@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Protocol
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.environments.internal.git import SubprocessEnvGit
@@ -31,6 +32,19 @@ from blizzard.runner.environments.provider import (
 _log = get_logger("blizzard.runner.env")
 
 
+class _WinterCli(Protocol):
+    """The winter-CLI sub-seam the provider drives (the real CLI, or a test fake)."""
+
+    def ensure_ready(self, workspace_root: Path) -> None: ...
+    def run(self, workspace_root: Path, args: Sequence[str]) -> None: ...
+
+
+class _EnvGit(Protocol):
+    """The git reset-on-acquire sub-seam the provider drives."""
+
+    def reset_environment(self, env_workdir: Path, base_branch: str) -> None: ...
+
+
 class WinterWorkspaceProvider:
     """The winter binding — real ``winter ws init`` + reset-on-acquire over a fixture."""
 
@@ -40,8 +54,8 @@ class WinterWorkspaceProvider:
         *,
         env_pool: Sequence[str],
         base_branch: str = "main",
-        winter: SubprocessWinterCli | None = None,
-        git: SubprocessEnvGit | None = None,
+        winter: _WinterCli | None = None,
+        git: _EnvGit | None = None,
     ) -> None:
         self._workspace_root = Path(workspace_root)
         self._pool = tuple(env_pool)
