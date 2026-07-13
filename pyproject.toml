@@ -66,6 +66,12 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+# The verification tiers (blizzard-harness verification/blizzard.md): the default
+# run is unit + component; `-m component` selects the component tier alone.
+markers = [
+    "unit: one class or function in isolation",
+    "component: a domain slice wired with real internal collaborators, doubles only at the seams",
+]
 
 [tool.pyright]
 include = ["src", "tests"]
