@@ -1,14 +1,22 @@
 """Composition root — wire the hub and build its FastAPI app (``bzh:dependency-injection``).
 
 The single place collaborators are constructed and injected. ``create_app`` builds
-the app from resolved config and does **not** open the store — the startup
-revision guard (``blizzard hub host``) and the offline ``migrate`` verb own that.
-Keeping ``create_app`` store-free lets the OpenAPI exporter and unit tests build
-the app without a migrated database.
+the app from resolved config and does **not** open the store — the startup revision
+guard (``blizzard hub host``) and the offline ``migrate`` verb own that. Keeping
+``create_app`` store-free lets the OpenAPI exporter and unit tests build the app
+without a migrated database; the fleet routes then report the store is unwired.
+
+``build_hosted_app`` is the ``host`` composition root: it opens the store, wires the
+readiness seam, constructs the forge-delivery and PM read seams over a single
+GitHub-shaped HTTP client (base URL + token from the environment), and assembles the
+fleet services (:func:`blizzard.hub.composition.build_services`).
 """
 
 from __future__ import annotations
 
+import os
+
+import httpx
 from fastapi import FastAPI
 
 from blizzard import __version__
@@ -24,42 +32,67 @@ from blizzard.hub.api.health import router as health_router
 from blizzard.hub.api.queue import router as queue_router
 from blizzard.hub.api.readiness import router as readiness_router
 from blizzard.hub.api.routes import router as routes_router
+from blizzard.hub.composition import HubServices, build_services
 from blizzard.hub.config import HubConfig
-from blizzard.hub.delivery.forge import IForgeDelivery
+from blizzard.hub.delivery.forge import IForgeDelivery, LandingRequest, LandingResult, PrHandle, PrState
 from blizzard.hub.delivery.internal.github_forge import GitHubForgeDelivery
 from blizzard.hub.domain.readiness import ReadinessService
+from blizzard.hub.events.broker import EventBroker
+from blizzard.hub.pm.internal.github_pm_source import GitHubPmSource
+from blizzard.hub.pm.source import IPmSource
 from blizzard.hub.runtime import migration_runner
+
+ENV_FORGE_URL = "BZ_FORGE_URL"
+ENV_FORGE_HOST = "BZ_FORGE_HOST"
+ENV_FORGE_PORT = "BZ_FORGE_PORT"
+ENV_FORGE_TOKEN = "BZ_FORGE_TOKEN"
+
+
+class _UnconfiguredForge:
+    """The forge binding when no forge URL is configured — deliver fails loudly.
+
+    Most of the hub serves without a forge; only the deliver hub node and the PM
+    pass-through need one. Rather than refuse to start, the daemon binds this stub so
+    ingest/claim/completion still work and a delivery attempt names the missing config.
+    """
+
+    def land(self, request: LandingRequest) -> LandingResult:
+        raise RuntimeError(f"no forge configured (set {ENV_FORGE_URL}); cannot land {request.repo}")
+
+    def open_pr(self, request: LandingRequest) -> PrHandle:
+        raise RuntimeError(f"no forge configured (set {ENV_FORGE_URL})")
+
+    def check_pr(self, handle: PrHandle) -> PrState:
+        raise RuntimeError(f"no forge configured (set {ENV_FORGE_URL})")
 
 
 def create_app(
     config: HubConfig,
     *,
     readiness: ReadinessService | None = None,
-    forge: IForgeDelivery | None = None,
+    services: HubServices | None = None,
 ) -> FastAPI:
     """Build a fully wired hub app from resolved config.
 
-    ``readiness`` is the store-backed readiness evaluator wired by the ``host``
-    composition root (:func:`build_hosted_app`). It is optional so the store-free
-    paths — the OpenAPI export and unit tests — build the app without opening a
-    database; the ``/api/ready`` probe then reports ``ready=false`` honestly.
+    ``readiness`` is the store-backed readiness evaluator; ``services`` is the wired
+    fleet-service bundle. Both are optional so the store-free paths — the OpenAPI
+    export and unit tests — build the app without opening a database; the ``/api/ready``
+    probe then reports ``ready=false`` and the fleet routes report the store is unwired.
     """
     log = get_logger("blizzard.hub")
 
     app = FastAPI(title="blizzard-hub", version=__version__)
     app.state.config = config
     app.state.readiness = readiness
-    # The delivery seam (D-030) — the deliver node's merge-queue landing binding.
-    # Wired at the host composition root; the store-free app leaves it None. The
-    # deliver-node coordinator the P6 builder adds reads it off app.state.
-    app.state.forge = forge
+    app.state.services = services
+    # The event broker is always present (cheap, in-memory) so the SSE stream opens
+    # cleanly even on the store-free app; mutating routes publish through it.
+    app.state.events = services.events if services is not None else EventBroker()
 
     # API routers first, so /api/* always wins over the web mount at /.
     app.include_router(health_router)
     app.include_router(readiness_router)
     app.include_router(events_router)
-    # The fleet surface (draft — hub/api.md): graphs, chunks, routes, queue.
-    # 501-stubbed bodies; the P6 walking skeleton fills them in.
     app.include_router(graphs_router)
     app.include_router(chunks_router)
     app.include_router(routes_router)
@@ -68,26 +101,45 @@ def create_app(
     # The embedded frontend, served from the same process and origin (D-096).
     mount_web_app(app, frontend_dir("hub"), app_name="blizzard-hub")
 
-    log.info("hub app created", db_url=config.db_url, readiness_wired=readiness is not None)
+    log.info("hub app created", db_url=config.db_url, services_wired=services is not None)
     return app
 
 
 def build_hosted_app(config: HubConfig) -> FastAPI:
-    """The ``host`` composition root: open the store and wire the readiness seam.
-
-    Constructs the engine and the store-status reader once here (``bzh:dependency-injection``)
-    and injects them through the domain :class:`ReadinessService`. Engine creation
-    is connection-free, so this stays cheap; the connection is opened lazily on the
-    first ``/api/ready`` read.
-    """
+    """The ``host`` composition root: open the store and wire every fleet seam."""
     engine = create_engine_from_url(config.db_url)
     reader = SqlAlchemyStoreStatusReader(engine)
     expected = migration_runner(config).script_head()
     readiness = ReadinessService(reader=reader, expected_revision=expected)
-    # Bind the reference delivery seam (GitHub forge). The binding is a NotImplemented
-    # stub in P6 — the deliver-node coordinator that invokes it lands with the loop.
-    forge: IForgeDelivery = GitHubForgeDelivery()
-    return create_app(config, readiness=readiness, forge=forge)
+
+    client = _forge_client()
+    forge: IForgeDelivery = GitHubForgeDelivery(client) if client is not None else _UnconfiguredForge()
+    pm_source: IPmSource | None = GitHubPmSource(client) if client is not None else None
+
+    services = build_services(engine, forge=forge, events=EventBroker(), pm_source=pm_source)
+    return create_app(config, readiness=readiness, services=services)
+
+
+def _forge_client() -> httpx.Client | None:
+    """A GitHub-shaped HTTP client for the forge, from the environment, or None.
+
+    The hub holds the forge base URL and token (D-047): ``BZ_FORGE_URL`` (or
+    ``BZ_FORGE_HOST``/``BZ_FORGE_PORT``) plus an optional ``BZ_FORGE_TOKEN``. When no
+    forge is configured, the delivery and PM seams stay unwired.
+    """
+    base_url = os.environ.get(ENV_FORGE_URL)
+    if not base_url:
+        host = os.environ.get(ENV_FORGE_HOST)
+        port = os.environ.get(ENV_FORGE_PORT)
+        if port:
+            base_url = f"http://{host or '127.0.0.1'}:{port}"
+    if not base_url:
+        return None
+    headers = {}
+    token = os.environ.get(ENV_FORGE_TOKEN)
+    if token:
+        headers["Authorization"] = f"token {token}"
+    return httpx.Client(base_url=base_url, headers=headers, timeout=30.0)
 
 
 def create_app_for_export() -> FastAPI:

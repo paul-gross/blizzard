@@ -1,0 +1,81 @@
+"""The hub's fleet-service composition (``bzh:dependency-injection``).
+
+One place the store-backed collaborators are constructed and injected: the chunk and
+graph stores, the four domain services (ingest, claim, apply, graph-mint) and the
+deliver coordinator, the PM read seam, and the event broker. :func:`build_services`
+is called by the ``host`` composition root (:func:`blizzard.hub.app.build_hosted_app`)
+and by tests, which swap the forge and PM seams for fakes by type. The store-free
+export/unit app builds no services — the fleet routes report the store is unwired
+rather than serving on a missing database.
+
+Controllers read the stores through their **read** Protocols and mutate only through
+the services (``bzh:controller-read-only``); both variants are the one
+:class:`~blizzard.hub.store.internal.chunk_store.ChunkStore` instance, so a request
+sees a consistent view.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from sqlalchemy import Engine
+
+from blizzard.foundation.clock import IClock, SystemClock
+from blizzard.hub.delivery.coordinator import MergeQueueCoordinator
+from blizzard.hub.delivery.forge import IForgeDelivery
+from blizzard.hub.domain.apply import ApplyService
+from blizzard.hub.domain.claim import ClaimService
+from blizzard.hub.domain.graph import GraphDoc, IReadGraphRepository
+from blizzard.hub.domain.graph_authoring import GraphMintService
+from blizzard.hub.domain.ingest import IngestService
+from blizzard.hub.domain.work import IReadChunkRepository
+from blizzard.hub.events.broker import EventBroker
+from blizzard.hub.graphs import default_graph_yaml, load_default_graph_doc
+from blizzard.hub.pm.source import IPmSource
+from blizzard.hub.store.internal.chunk_store import ChunkStore
+from blizzard.hub.store.internal.graph_store import GraphStore
+
+
+@dataclass(frozen=True)
+class HubServices:
+    """The wired fleet collaborators, stashed on ``app.state.services``."""
+
+    chunks: IReadChunkRepository
+    graphs: IReadGraphRepository
+    ingest: IngestService
+    claim: ClaimService
+    apply: ApplyService
+    graph_mint: GraphMintService
+    events: EventBroker
+    clock: IClock
+    default_graph_doc: GraphDoc
+    default_graph_yaml: str
+    pm_source: IPmSource | None = None
+
+
+def build_services(
+    engine: Engine,
+    *,
+    forge: IForgeDelivery,
+    events: EventBroker,
+    pm_source: IPmSource | None = None,
+    clock: IClock | None = None,
+) -> HubServices:
+    """Construct and wire every fleet service over a migrated store engine."""
+    clock = clock or SystemClock()
+    chunk_store = ChunkStore(engine, clock)
+    graph_store = GraphStore(engine)
+    coordinator = MergeQueueCoordinator(chunks=chunk_store, forge=forge, clock=clock)
+    return HubServices(
+        chunks=chunk_store,
+        graphs=graph_store,
+        ingest=IngestService(chunks=chunk_store, clock=clock),
+        claim=ClaimService(chunks=chunk_store, clock=clock),
+        apply=ApplyService(chunks=chunk_store, coordinator=coordinator, clock=clock),
+        graph_mint=GraphMintService(graphs=graph_store, clock=clock),
+        events=events,
+        clock=clock,
+        default_graph_doc=load_default_graph_doc(),
+        default_graph_yaml=default_graph_yaml(),
+        pm_source=pm_source,
+    )
