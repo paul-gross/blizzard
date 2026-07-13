@@ -6,9 +6,13 @@ serves the embedded frontend placeholder at ``/`` through the SPA mount seam.
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
 from tests.conftest import Daemon
+
+# The app boots with real internal collaborators, doubles only at the (absent) seams.
+pytestmark = pytest.mark.component
 
 
 def test_health_endpoint(daemon: Daemon) -> None:

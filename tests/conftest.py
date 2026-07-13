@@ -25,12 +25,17 @@ class Daemon:
 
     name: str
     runtime: ModuleType
+    app: ModuleType
     build_app: Any
+
+    def build_hosted_app(self, config: Any) -> Any:
+        """The store-wired ``host`` composition root for this daemon."""
+        return self.app.build_hosted_app(config)
 
 
 DAEMONS = [
-    Daemon("hub", hub_runtime, hub_app.create_app_for_export),
-    Daemon("runner", runner_runtime, runner_app.create_app_for_export),
+    Daemon("hub", hub_runtime, hub_app, hub_app.create_app_for_export),
+    Daemon("runner", runner_runtime, runner_app, runner_app.create_app_for_export),
 ]
 
 
