@@ -10,7 +10,7 @@
     "build": "npm run build:hub && npm run build:runner",
     "build:hub": "ng build hub",
     "build:runner": "ng build runner",
-    "generate-client": "openapi-ts -f openapi-ts.hub.config.ts && openapi-ts -f openapi-ts.runner.config.ts"
+    "generate:client": "openapi-ts -f openapi-ts.hub.config.ts && openapi-ts -f openapi-ts.runner.config.ts"
   },
   "private": true,
   "packageManager": "npm@10.9.4",
