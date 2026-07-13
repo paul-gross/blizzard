@@ -50,26 +50,33 @@ def test_live_pointer_reingest_is_409(tmp_path: Path) -> None:
     assert body["url"] == _P1["url"]
 
 
-def test_terminal_pointer_reingest_mints_a_fresh_chunk(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path)
-    chunk_id = hub.client.post("/api/chunks", json={"pointers": [_P1]}).json()["chunk_id"]
-    # Drive the chunk terminal by claiming + delivering.
-    node_id = hub.client.post(
-        "/api/routes",
-        json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
-    ).json()["envelope"]["node"]["node_id"]
-    hub.client.post(
+def _pass(hub, chunk_id: str, node_id: str, epoch: int, *, artifacts: list[dict]) -> dict:  # type: ignore[no-untyped-def]
+    return hub.client.post(
         f"/api/chunks/{chunk_id}/completions",
         json={
             "choice": "pass",
-            "epoch": 1,
+            "epoch": epoch,
             "runner_id": "r1",
             "from_node_id": node_id,
-            "artifacts": [
-                {"name": "w", "kind": "git_commit", "repo": "acme/widget", "branch_name": "b", "commit_hash": "c"}
-            ],
+            "artifacts": artifacts,
         },
-    )
+    ).json()
+
+
+def test_terminal_pointer_reingest_mints_a_fresh_chunk(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = hub.client.post("/api/chunks", json={"pointers": [_P1]}).json()["chunk_id"]
+    # Drive the chunk terminal through the default build -> review -> deliver graph.
+    build_id = hub.client.post(
+        "/api/routes",
+        json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
+    ).json()["envelope"]["node"]["node_id"]
+    commit = [{"name": "w", "kind": "git_commit", "repo": "acme/widget", "branch_name": "b", "commit_hash": "c"}]
+    to_review = _pass(hub, chunk_id, build_id, 1, artifacts=commit)
+    review_id = to_review["next_envelope"]["node"]["node_id"]
+    # Report the review node-step's fresh lease so the hub's fence tracks it (D-044).
+    assert hub.client.post(f"/api/chunks/{chunk_id}/leases", json={"epoch": 2, "runner_id": "r1"}).status_code == 202
+    _pass(hub, chunk_id, review_id, 2, artifacts=[])
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
 
     # Re-ingesting the same pointer once every prior holder is terminal is legal (D-093).

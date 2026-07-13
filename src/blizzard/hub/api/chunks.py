@@ -26,6 +26,7 @@ from blizzard.hub.domain.work import (
     current_node_id,
     derive_chunk_status,
     latest_epoch,
+    open_escalation,
 )
 from blizzard.hub.pm.source import PmSourceError
 from blizzard.wire.chunk import (
@@ -34,12 +35,14 @@ from blizzard.wire.chunk import (
     ChunkIngestRequest,
     ChunkIngestResponse,
     ChunkSummary,
+    EscalationView,
     PmItemView,
     PmPointerModel,
     RouteView,
 )
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
+from blizzard.wire.facts import EscalationReport, LeaseMintReport
 
 router = APIRouter(prefix="/api", tags=["chunks"])
 
@@ -106,6 +109,7 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     route = services.chunks.route_of(chunk_id)
+    escalation = open_escalation(facts)
     return ChunkDetail(
         chunk_id=chunk.chunk_id,
         graph_id=chunk.graph_id,
@@ -119,6 +123,9 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
             environment_ids=route.environment_ids,
         )
         if route is not None
+        else None,
+        escalation=EscalationView(epoch=escalation.epoch, takeover_command=escalation.takeover_command)
+        if escalation is not None
         else None,
     )
 
@@ -162,6 +169,34 @@ def submit_completion(
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
     return response
+
+
+@router.post("/chunks/{chunk_id}/leases", status_code=status.HTTP_202_ACCEPTED)
+def report_lease(
+    chunk_id: str,
+    report: LeaseMintReport,
+    services: Annotated[HubServices, Depends(get_services)],
+) -> dict[str, str]:
+    """Land a runner's ``lease.minted`` — keeps the epoch fence in lockstep (D-044)."""
+    if services.chunks.get(chunk_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+    services.runner_facts.record_lease_minted(chunk_id, epoch=report.epoch, runner_id=report.runner_id)
+    return {"chunk_id": chunk_id}
+
+
+@router.post("/chunks/{chunk_id}/escalations", status_code=status.HTTP_202_ACCEPTED)
+def report_escalation(
+    chunk_id: str,
+    report: EscalationReport,
+    services: Annotated[HubServices, Depends(get_services)],
+) -> dict[str, str]:
+    """Land a runner's ``escalation.recorded`` — the chunk derives ``needs_human`` (D-009)."""
+    if services.chunks.get(chunk_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+    services.runner_facts.record_escalation(chunk_id, epoch=report.epoch, takeover_command=report.takeover_command)
+    facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
+    services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
+    return {"chunk_id": chunk_id}
 
 
 @router.get("/chunks/{chunk_id}/pm-item", response_model=PmItemView)

@@ -63,3 +63,19 @@ class IHubClient(Protocol):
     def get_chunk(self, chunk_id: str) -> ChunkDetail:
         """``GET /api/chunks/{id}`` — the chunk's derived status, polled at a hub node (D-066)."""
         ...
+
+    def report_lease(self, chunk_id: str, *, epoch: int, runner_id: str) -> None:
+        """``POST /api/chunks/{id}/leases`` — a ``lease.minted`` fact (D-044).
+
+        Reported at every node-step spawn so the hub's epoch fence tracks the runner's:
+        a chunk that visits a second runner node (review) submits its completion under a
+        fresh epoch the hub must already know, and a requeue's mint is what closes an
+        escalation by supersession (D-035/D-067)."""
+        ...
+
+    def report_escalation(self, chunk_id: str, *, epoch: int, runner_id: str, takeover_command: str) -> None:
+        """``POST /api/chunks/{id}/escalations`` — retries exhausted (D-009).
+
+        Lands the escalation at the hub so the chunk derives ``needs_human`` fleet-wide,
+        carrying the pasteable takeover command (design/harness-adapters.md)."""
+        ...

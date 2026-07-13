@@ -58,6 +58,8 @@ class FakeHub:
         self.chunks: dict[str, ChunkDetail] = {}
         self.claims: list[RouteClaim] = []
         self.completions: list[tuple[str, CompletionSubmission]] = []
+        self.leases: list[tuple[str, int, str]] = []  # (chunk_id, epoch, runner_id)
+        self.escalations: list[tuple[str, int, str, str]] = []  # (chunk_id, epoch, runner_id, takeover)
 
     def peek_queue(self) -> QueuePeekResponse:
         return QueuePeekResponse(entries=list(self.queue))
@@ -88,6 +90,12 @@ class FakeHub:
             latest_epoch=1,
         )
 
+    def report_lease(self, chunk_id: str, *, epoch: int, runner_id: str) -> None:
+        self.leases.append((chunk_id, epoch, runner_id))
+
+    def report_escalation(self, chunk_id: str, *, epoch: int, runner_id: str, takeover_command: str) -> None:
+        self.escalations.append((chunk_id, epoch, runner_id, takeover_command))
+
 
 class FakeProvider:
     """A scriptable :class:`IWorkspaceProvider` over a fixed pool of workdirs."""
@@ -112,9 +120,10 @@ class FakeProvider:
 class FakeHarness:
     """A scriptable :class:`IHarnessAdapter`: canned spawn handle + verdict."""
 
-    def __init__(self, *, handle: WorkerHandle, verdict: str | None) -> None:
+    def __init__(self, *, handle: WorkerHandle, verdict: str | None, assessment: str = "") -> None:
         self._handle = handle
         self.verdict = verdict
+        self.assessment = assessment
         self.spawns: list[tuple[NodeEnvelope, WorkerPreamble]] = []
         self.judged: list[tuple[str, str, str]] = []
 
@@ -138,6 +147,9 @@ class FakeHarness:
 
     def parse_verdict(self, output: str) -> str | None:
         return self.verdict
+
+    def parse_assessment(self, output: str) -> str:
+        return self.assessment
 
 
 class FakeProbe:
@@ -204,7 +216,14 @@ def make_context(
     )
 
 
-def make_envelope(chunk_id: str, node_name: str, *, node_id: str, choices: list[tuple[str, str]]) -> NodeEnvelope:
+def make_envelope(
+    chunk_id: str,
+    node_name: str,
+    *,
+    node_id: str,
+    choices: list[tuple[str, str]],
+    produces: list[str] | None = None,
+) -> NodeEnvelope:
     """A minimal runner-node envelope for a step test."""
     from blizzard.hub.domain.graph import Executor, JudgedBy, SessionMode
     from blizzard.wire.envelope import EnvelopeChoice
@@ -216,6 +235,7 @@ def make_envelope(chunk_id: str, node_name: str, *, node_id: str, choices: list[
         session=SessionMode.FRESH,
         judged_by=JudgedBy.WORKER,
         retries_max=2,
+        produces=produces or [],
         choices=[EnvelopeChoice(name=n, description=d) for n, d in choices],
     )
     return NodeEnvelope(

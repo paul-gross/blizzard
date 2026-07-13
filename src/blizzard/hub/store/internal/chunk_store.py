@@ -86,7 +86,7 @@ class ChunkStore:
                 for lease in conn.execute(select(s.lease_facts).where(s.lease_facts.c.chunk_id == chunk_id)).all()
             ]
             escalations = [
-                EscalationFact(epoch=e.epoch, recorded_at=e.recorded_at)
+                EscalationFact(epoch=e.epoch, recorded_at=e.recorded_at, takeover_command=e.takeover_command or "")
                 for e in conn.execute(select(s.escalations).where(s.escalations.c.chunk_id == chunk_id)).all()
             ]
             routes_created = [
@@ -294,6 +294,14 @@ class ChunkStore:
     def record_delivery_landed(self, chunk_id: str, *, at: datetime) -> None:
         with self._engine.begin() as conn:
             conn.execute(insert(s.delivery_landed).values(chunk_id=chunk_id, landed_at=at))
+
+    def record_escalation(self, chunk_id: str, *, epoch: int, takeover_command: str, at: datetime) -> None:
+        with self._engine.begin() as conn:
+            conn.execute(
+                insert(s.escalations).values(
+                    chunk_id=chunk_id, epoch=epoch, takeover_command=takeover_command, recorded_at=at
+                )
+            )
 
     # --- helpers ------------------------------------------------------------
 

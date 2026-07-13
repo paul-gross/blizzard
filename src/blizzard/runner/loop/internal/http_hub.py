@@ -17,6 +17,7 @@ from blizzard.runner.loop.hub import HubClientError, IHubClient, RouteClaimOutco
 from blizzard.wire.chunk import ChunkDetail
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
+from blizzard.wire.facts import EscalationReport, LeaseMintReport
 from blizzard.wire.queue import QueuePeekResponse
 from blizzard.wire.route import RouteClaim, RouteClaimConflict, RouteClaimResponse
 
@@ -56,6 +57,20 @@ class HttpHubClient:
     def get_chunk(self, chunk_id: str) -> ChunkDetail:
         resp = self._get(f"{_API}/chunks/{chunk_id}")
         return ChunkDetail.model_validate(resp.json())
+
+    def report_lease(self, chunk_id: str, *, epoch: int, runner_id: str) -> None:
+        self._post(
+            f"{_API}/chunks/{chunk_id}/leases",
+            LeaseMintReport(epoch=epoch, runner_id=runner_id).model_dump(mode="json"),
+        )
+
+    def report_escalation(self, chunk_id: str, *, epoch: int, runner_id: str, takeover_command: str) -> None:
+        self._post(
+            f"{_API}/chunks/{chunk_id}/escalations",
+            EscalationReport(epoch=epoch, runner_id=runner_id, takeover_command=takeover_command).model_dump(
+                mode="json"
+            ),
+        )
 
     # --- plumbing -----------------------------------------------------------
 

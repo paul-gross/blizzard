@@ -93,6 +93,16 @@
             ],
             "title": "Current Node Id"
           },
+          "escalation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EscalationView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "graph_id": {
             "title": "Graph Id",
             "type": "string"
@@ -364,6 +374,49 @@
         "title": "EnvelopeChoice",
         "type": "object"
       },
+      "EscalationReport": {
+        "description": "A runner's ``escalation.recorded`` \u2014 retries exhausted for the node (D-009).\n\n``takeover_command`` is the literal ``cd <workdir> && <harness resume>`` a human\npastes to enter the parked session (design/harness-adapters.md); ``epoch`` is the\nexhausted attempt's fence, closed by a later lease mint (D-067).",
+        "properties": {
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "runner_id": {
+            "title": "Runner Id",
+            "type": "string"
+          },
+          "takeover_command": {
+            "default": "",
+            "title": "Takeover Command",
+            "type": "string"
+          }
+        },
+        "required": [
+          "epoch",
+          "runner_id"
+        ],
+        "title": "EscalationReport",
+        "type": "object"
+      },
+      "EscalationView": {
+        "description": "An open escalation on a ``needs_human`` chunk (D-009/D-067).\n\nSurfaces the runner-composed takeover command so a human can resume the parked\nsession (design/harness-adapters.md). Present only while the escalation is open \u2014\na later lease mint (requeue/takeover) supersedes it and this drops away (D-067).",
+        "properties": {
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "takeover_command": {
+            "title": "Takeover Command",
+            "type": "string"
+          }
+        },
+        "required": [
+          "epoch",
+          "takeover_command"
+        ],
+        "title": "EscalationView",
+        "type": "object"
+      },
       "Executor": {
         "description": "Where a node's step runs (D-030).",
         "enum": [
@@ -482,6 +535,25 @@
         ],
         "title": "JudgedBy",
         "type": "string"
+      },
+      "LeaseMintReport": {
+        "description": "A runner's ``lease.minted`` \u2014 one node-step attempt's fencing epoch (D-044).",
+        "properties": {
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "runner_id": {
+            "title": "Runner Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "epoch",
+          "runner_id"
+        ],
+        "title": "LeaseMintReport",
+        "type": "object"
       },
       "NodeConfig": {
         "description": "The node's invariant identity for this step (D-025/D-038).",
@@ -1196,6 +1268,120 @@
           }
         },
         "summary": "Get Envelope",
+        "tags": [
+          "chunks"
+        ]
+      }
+    },
+    "/api/chunks/{chunk_id}/escalations": {
+      "post": {
+        "description": "Land a runner's ``escalation.recorded`` \u2014 the chunk derives ``needs_human`` (D-009).",
+        "operationId": "report_escalation_api_chunks__chunk_id__escalations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EscalationReport"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Report Escalation Api Chunks  Chunk Id  Escalations Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Report Escalation",
+        "tags": [
+          "chunks"
+        ]
+      }
+    },
+    "/api/chunks/{chunk_id}/leases": {
+      "post": {
+        "description": "Land a runner's ``lease.minted`` \u2014 keeps the epoch fence in lockstep (D-044).",
+        "operationId": "report_lease_api_chunks__chunk_id__leases_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LeaseMintReport"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Report Lease Api Chunks  Chunk Id  Leases Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Report Lease",
         "tags": [
           "chunks"
         ]

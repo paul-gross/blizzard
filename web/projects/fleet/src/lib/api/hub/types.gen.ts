@@ -65,6 +65,7 @@ export type ChunkDetail = {
      * Current Node Id
      */
     current_node_id: string | null;
+    escalation?: EscalationView | null;
     /**
      * Graph Id
      */
@@ -223,6 +224,50 @@ export type EnvelopeChoice = {
 };
 
 /**
+ * EscalationReport
+ *
+ * A runner's ``escalation.recorded`` — retries exhausted for the node (D-009).
+ *
+ * ``takeover_command`` is the literal ``cd <workdir> && <harness resume>`` a human
+ * pastes to enter the parked session (design/harness-adapters.md); ``epoch`` is the
+ * exhausted attempt's fence, closed by a later lease mint (D-067).
+ */
+export type EscalationReport = {
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * Runner Id
+     */
+    runner_id: string;
+    /**
+     * Takeover Command
+     */
+    takeover_command?: string;
+};
+
+/**
+ * EscalationView
+ *
+ * An open escalation on a ``needs_human`` chunk (D-009/D-067).
+ *
+ * Surfaces the runner-composed takeover command so a human can resume the parked
+ * session (design/harness-adapters.md). Present only while the escalation is open —
+ * a later lease mint (requeue/takeover) supersedes it and this drops away (D-067).
+ */
+export type EscalationView = {
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * Takeover Command
+     */
+    takeover_command: string;
+};
+
+/**
  * Executor
  *
  * Where a node's step runs (D-030).
@@ -313,6 +358,22 @@ export type HttpValidationError = {
  * Who renders a node's exit judgement — the structural gate marker (D-041).
  */
 export type JudgedBy = 'worker' | 'human';
+
+/**
+ * LeaseMintReport
+ *
+ * A runner's ``lease.minted`` — one node-step attempt's fencing epoch (D-044).
+ */
+export type LeaseMintReport = {
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * Runner Id
+     */
+    runner_id: string;
+};
 
 /**
  * NodeConfig
@@ -765,6 +826,74 @@ export type GetEnvelopeApiChunksChunkIdEnvelopeGetResponses = {
 };
 
 export type GetEnvelopeApiChunksChunkIdEnvelopeGetResponse = GetEnvelopeApiChunksChunkIdEnvelopeGetResponses[keyof GetEnvelopeApiChunksChunkIdEnvelopeGetResponses];
+
+export type ReportEscalationApiChunksChunkIdEscalationsPostData = {
+    body: EscalationReport;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/escalations';
+};
+
+export type ReportEscalationApiChunksChunkIdEscalationsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReportEscalationApiChunksChunkIdEscalationsPostError = ReportEscalationApiChunksChunkIdEscalationsPostErrors[keyof ReportEscalationApiChunksChunkIdEscalationsPostErrors];
+
+export type ReportEscalationApiChunksChunkIdEscalationsPostResponses = {
+    /**
+     * Response Report Escalation Api Chunks  Chunk Id  Escalations Post
+     *
+     * Successful Response
+     */
+    202: {
+        [key: string]: string;
+    };
+};
+
+export type ReportEscalationApiChunksChunkIdEscalationsPostResponse = ReportEscalationApiChunksChunkIdEscalationsPostResponses[keyof ReportEscalationApiChunksChunkIdEscalationsPostResponses];
+
+export type ReportLeaseApiChunksChunkIdLeasesPostData = {
+    body: LeaseMintReport;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/leases';
+};
+
+export type ReportLeaseApiChunksChunkIdLeasesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReportLeaseApiChunksChunkIdLeasesPostError = ReportLeaseApiChunksChunkIdLeasesPostErrors[keyof ReportLeaseApiChunksChunkIdLeasesPostErrors];
+
+export type ReportLeaseApiChunksChunkIdLeasesPostResponses = {
+    /**
+     * Response Report Lease Api Chunks  Chunk Id  Leases Post
+     *
+     * Successful Response
+     */
+    202: {
+        [key: string]: string;
+    };
+};
+
+export type ReportLeaseApiChunksChunkIdLeasesPostResponse = ReportLeaseApiChunksChunkIdLeasesPostResponses[keyof ReportLeaseApiChunksChunkIdLeasesPostResponses];
 
 export type GetPmItemApiChunksChunkIdPmItemGetData = {
     body?: never;

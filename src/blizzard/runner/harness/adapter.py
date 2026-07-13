@@ -85,3 +85,13 @@ class IHarnessAdapter(Protocol):
     def parse_verdict(self, output: str) -> str | None:
         """Parse the ``<Choice>{name}</Choice>`` reply into a choice name, else ``None`` (D-009)."""
         ...
+
+    def parse_assessment(self, output: str) -> str:
+        """Parse the judgement reply's free-text assessment — the payload after the Choice (D-077).
+
+        The verdict reply is ``<Choice>{name}</Choice>`` plus the worker's prose
+        assessment of the node's checks (design/runner/loop.md). A node that
+        ``produces`` an **asset** (the review node's findings) carries that assessment
+        as the asset's content; the core harvests it into the completion. Empty string
+        when the reply carries no assessment."""
+        ...

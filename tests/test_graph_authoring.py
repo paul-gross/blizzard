@@ -31,11 +31,12 @@ def test_reify_mints_ids_and_splits_choices_into_edges() -> None:
     assert deliver.executor is Executor.HUB
     assert build.judged_by is JudgedBy.WORKER
 
-    # build's two fused choices reify into two choices and two edges.
+    # build's two fused choices reify into two choices and two edges (pass -> review,
+    # fail -> build) in the P7 build -> review -> deliver default graph.
     assert {c.name for c in build.choices} == {"pass", "fail"}
     assert all(c.choice_id.startswith("cho_") for c in build.choices)
     targets = {e.to_node_name for e in graph.edges_from(build.node_id)}
-    assert targets == {"deliver", "build"}
+    assert targets == {"review", "build"}
 
     # The deliver hub node authors no judgement, so it carries no edges — its
     # machinery outcomes (landed/conflict) are applied by the coordinator (D-086).
@@ -58,6 +59,6 @@ def test_edge_for_choice_resolves_by_name() -> None:
     build = graph.node_by_name("build")
     assert build is not None
     edge = graph.edge_for_choice(build.node_id, "pass")
-    assert edge is not None and edge.to_node_name == "deliver"
+    assert edge is not None and edge.to_node_name == "review"
     assert graph.edge_for_choice(build.node_id, "nonexistent") is None
     assert RESERVED_TERMINAL not in {n.name for n in graph.nodes}

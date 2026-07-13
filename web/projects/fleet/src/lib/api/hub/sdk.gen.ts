@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { ClaimRouteApiRoutesPostData, ClaimRouteApiRoutesPostErrors, ClaimRouteApiRoutesPostResponses, GetChunkApiChunksChunkIdGetData, GetChunkApiChunksChunkIdGetErrors, GetChunkApiChunksChunkIdGetResponses, GetEnvelopeApiChunksChunkIdEnvelopeGetData, GetEnvelopeApiChunksChunkIdEnvelopeGetErrors, GetEnvelopeApiChunksChunkIdEnvelopeGetResponses, GetPmItemApiChunksChunkIdPmItemGetData, GetPmItemApiChunksChunkIdPmItemGetErrors, GetPmItemApiChunksChunkIdPmItemGetResponses, HealthApiHealthGetData, HealthApiHealthGetResponses, IngestChunkApiChunksPostData, IngestChunkApiChunksPostErrors, IngestChunkApiChunksPostResponses, ListChunksApiChunksGetData, ListChunksApiChunksGetResponses, MintGraphApiGraphsPostData, MintGraphApiGraphsPostErrors, MintGraphApiGraphsPostResponses, PeekQueueApiQueuePeekGetData, PeekQueueApiQueuePeekGetResponses, ReadyApiReadyGetData, ReadyApiReadyGetResponses, SubmitCompletionApiChunksChunkIdCompletionsPostData, SubmitCompletionApiChunksChunkIdCompletionsPostErrors, SubmitCompletionApiChunksChunkIdCompletionsPostResponses } from './types.gen';
+import type { ClaimRouteApiRoutesPostData, ClaimRouteApiRoutesPostErrors, ClaimRouteApiRoutesPostResponses, GetChunkApiChunksChunkIdGetData, GetChunkApiChunksChunkIdGetErrors, GetChunkApiChunksChunkIdGetResponses, GetEnvelopeApiChunksChunkIdEnvelopeGetData, GetEnvelopeApiChunksChunkIdEnvelopeGetErrors, GetEnvelopeApiChunksChunkIdEnvelopeGetResponses, GetPmItemApiChunksChunkIdPmItemGetData, GetPmItemApiChunksChunkIdPmItemGetErrors, GetPmItemApiChunksChunkIdPmItemGetResponses, HealthApiHealthGetData, HealthApiHealthGetResponses, IngestChunkApiChunksPostData, IngestChunkApiChunksPostErrors, IngestChunkApiChunksPostResponses, ListChunksApiChunksGetData, ListChunksApiChunksGetResponses, MintGraphApiGraphsPostData, MintGraphApiGraphsPostErrors, MintGraphApiGraphsPostResponses, PeekQueueApiQueuePeekGetData, PeekQueueApiQueuePeekGetResponses, ReadyApiReadyGetData, ReadyApiReadyGetResponses, ReportEscalationApiChunksChunkIdEscalationsPostData, ReportEscalationApiChunksChunkIdEscalationsPostErrors, ReportEscalationApiChunksChunkIdEscalationsPostResponses, ReportLeaseApiChunksChunkIdLeasesPostData, ReportLeaseApiChunksChunkIdLeasesPostErrors, ReportLeaseApiChunksChunkIdLeasesPostResponses, SubmitCompletionApiChunksChunkIdCompletionsPostData, SubmitCompletionApiChunksChunkIdCompletionsPostErrors, SubmitCompletionApiChunksChunkIdCompletionsPostResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -66,6 +66,34 @@ export const submitCompletionApiChunksChunkIdCompletionsPost = <ThrowOnError ext
  * The chunk's current node envelope, idempotent — the lost-apply re-read (D-090).
  */
 export const getEnvelopeApiChunksChunkIdEnvelopeGet = <ThrowOnError extends boolean = false>(options: Options<GetEnvelopeApiChunksChunkIdEnvelopeGetData, ThrowOnError>): RequestResult<GetEnvelopeApiChunksChunkIdEnvelopeGetResponses, GetEnvelopeApiChunksChunkIdEnvelopeGetErrors, ThrowOnError> => (options.client ?? client).get<GetEnvelopeApiChunksChunkIdEnvelopeGetResponses, GetEnvelopeApiChunksChunkIdEnvelopeGetErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/envelope', ...options });
+
+/**
+ * Report Escalation
+ *
+ * Land a runner's ``escalation.recorded`` — the chunk derives ``needs_human`` (D-009).
+ */
+export const reportEscalationApiChunksChunkIdEscalationsPost = <ThrowOnError extends boolean = false>(options: Options<ReportEscalationApiChunksChunkIdEscalationsPostData, ThrowOnError>): RequestResult<ReportEscalationApiChunksChunkIdEscalationsPostResponses, ReportEscalationApiChunksChunkIdEscalationsPostErrors, ThrowOnError> => (options.client ?? client).post<ReportEscalationApiChunksChunkIdEscalationsPostResponses, ReportEscalationApiChunksChunkIdEscalationsPostErrors, ThrowOnError>({
+    url: '/api/chunks/{chunk_id}/escalations',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Report Lease
+ *
+ * Land a runner's ``lease.minted`` — keeps the epoch fence in lockstep (D-044).
+ */
+export const reportLeaseApiChunksChunkIdLeasesPost = <ThrowOnError extends boolean = false>(options: Options<ReportLeaseApiChunksChunkIdLeasesPostData, ThrowOnError>): RequestResult<ReportLeaseApiChunksChunkIdLeasesPostResponses, ReportLeaseApiChunksChunkIdLeasesPostErrors, ThrowOnError> => (options.client ?? client).post<ReportLeaseApiChunksChunkIdLeasesPostResponses, ReportLeaseApiChunksChunkIdLeasesPostErrors, ThrowOnError>({
+    url: '/api/chunks/{chunk_id}/leases',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Get Pm Item

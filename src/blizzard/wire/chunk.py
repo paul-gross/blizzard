@@ -60,6 +60,17 @@ class RouteView(BaseModel):
     environment_ids: list[str] = []
 
 
+class EscalationView(BaseModel):
+    """An open escalation on a ``needs_human`` chunk (D-009/D-067).
+
+    Surfaces the runner-composed takeover command so a human can resume the parked
+    session (design/harness-adapters.md). Present only while the escalation is open —
+    a later lease mint (requeue/takeover) supersedes it and this drops away (D-067)."""
+
+    epoch: int
+    takeover_command: str
+
+
 class ChunkDetail(BaseModel):
     """The chunk aggregate in full (D-036) — the board's chunk view and envelope feed."""
 
@@ -70,6 +81,7 @@ class ChunkDetail(BaseModel):
     latest_epoch: int | None
     pm_pointers: list[PmPointerModel] = []
     route: RouteView | None = None
+    escalation: EscalationView | None = None
 
 
 class PmItemView(BaseModel):

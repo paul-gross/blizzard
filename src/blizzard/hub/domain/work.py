@@ -108,10 +108,17 @@ class TransitionFact:
 
 @dataclass(frozen=True)
 class EscalationFact:
-    """An ``escalation.recorded`` fact — retries exhausted / dead worker (D-009)."""
+    """An ``escalation.recorded`` fact — retries exhausted / dead worker (D-009).
+
+    Carries the runner-composed **takeover command** (D-035/harness-adapters.md): the
+    literal ``cd <workdir> && <harness resume>`` a human pastes to enter the parked
+    session. It is surfaced on the chunk detail so ``needs_human`` is actionable; the
+    status derivation itself keys only on ``(epoch, recorded_at)`` supersession (D-067).
+    """
 
     epoch: int
     recorded_at: datetime
+    takeover_command: str = ""
 
 
 @dataclass(frozen=True)
@@ -154,10 +161,23 @@ def derive_chunk_status(facts: ChunkFacts) -> ChunkStatus:
 
 def _has_open_escalation(facts: ChunkFacts) -> bool:
     """An escalation with no later lease mint — supersession, not resolution (D-067)."""
+    return open_escalation(facts) is not None
+
+
+def open_escalation(facts: ChunkFacts) -> EscalationFact | None:
+    """The newest escalation not yet closed by a later lease mint (D-067), or ``None``.
+
+    Requeue/takeover close an escalation by **supersession** — the next lease mint,
+    not a resolution fact — so an escalation stays open exactly while no lease was
+    minted after it. When open, its ``takeover_command`` is the resume command a human
+    pastes (harness-adapters.md); the board surfaces it on the ``needs_human`` chunk.
+    """
     if not facts.escalations:
-        return False
-    newest_escalation = max(facts.escalations, key=lambda e: e.recorded_at)
-    return not any(lease.minted_at > newest_escalation.recorded_at for lease in facts.leases)
+        return None
+    newest = max(facts.escalations, key=lambda e: e.recorded_at)
+    if any(lease.minted_at > newest.recorded_at for lease in facts.leases):
+        return None
+    return newest
 
 
 def _newest_transition_enters_hub_node(facts: ChunkFacts) -> bool:
@@ -262,3 +282,10 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
 
     def record_delivery_repo_landed(self, chunk_id: str, *, repo: str, commit_hash: str, at: datetime) -> None: ...
     def record_delivery_landed(self, chunk_id: str, *, at: datetime) -> None: ...
+    def record_escalation(self, chunk_id: str, *, epoch: int, takeover_command: str, at: datetime) -> None:
+        """Record an ``escalation.recorded`` fact reported up by a runner (D-009/D-067).
+
+        Retries exhausted (or a dead worker past the cap): the chunk derives
+        ``needs_human`` until a later lease mint supersedes it. The runner-composed
+        takeover command rides along so the parked session is resumable (D-035)."""
+        ...

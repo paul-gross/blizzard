@@ -202,6 +202,12 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
         _fail_attempt(ctx, lease, reason=_FAILED)
         return
 
+    # 2b. Harvest the node's asset artifacts (D-026): a node that `produces` a name no
+    #     pushed git commit covers (the review node's `findings`) emits the worker's
+    #     assessment as that asset's content, which a fail judgement carries back into
+    #     the build envelope latest-by-epoch (design/workflow-engine.md review node).
+    artifacts += _collect_asset_artifacts(envelope, artifacts, ctx.harness.parse_assessment(output))
+
     # 3. Submit the completion — one atomic, epoch-fenced write (D-036).
     submission = CompletionSubmission(
         choice=choice,
@@ -287,6 +293,16 @@ def _spawn_attempt(
             created_at=now,
         )
     )
+    # Report the mint up so the hub's epoch fence tracks the runner's (D-044): a chunk
+    # entering a second runner node (build -> review) submits under a fresh epoch the
+    # hub must already know, and a requeue's mint closes an escalation by supersession
+    # (D-067). Best-effort — the lease is durable locally; an outage's mint rides the
+    # store-and-forward buffer in P7's PULL, and completions gate on hub reachability
+    # anyway, so a mint that fails to report is retried before its completion lands.
+    try:
+        ctx.hub.report_lease(chunk_id, epoch=epoch, runner_id=ctx.config.runner_id)
+    except HubClientError:
+        _log.debug("lease mint report deferred — hub unreachable", chunk_id=chunk_id, epoch=epoch)
     handle = ctx.harness.spawn(envelope, WorkerPreamble(environments=environments), session_hint=str(uuid.uuid4()))
     ctx.store.record_spawn(
         lease_id, pid=handle.pid, process_start_time=handle.process_start_time, session_id=handle.session_id
@@ -329,12 +345,15 @@ def _requeue(ctx: LoopContext, lease: LeaseRecord) -> None:
 
 
 def _escalate(ctx: LoopContext, lease: LeaseRecord) -> None:
-    """Park the chunk needs-human, envs held for takeover (D-083); buffer the fact (D-069).
+    """Park the chunk needs-human at the hub, envs held for takeover (D-009/D-083).
 
-    **P6 thin slice.** The hub exposes no needs-human route yet, so the escalation is
-    recorded as a durable local buffer fact (flushed to the hub in P7's PULL) and the
-    chunk derives ``needs_human`` from it locally. Environments stay bound — takeover
-    lands in the agent's own worktrees.
+    The escalation is a runner-minted fact that both records durably in the local
+    outbound buffer (D-069, the store-and-forward record) **and** reports up to the hub
+    so the chunk derives ``needs_human`` fleet-wide (D-067). It carries the pasteable
+    takeover command — ``cd <workdir> && <harness resume>`` composed from the adapter's
+    session surface (design/harness-adapters.md) — so a human resumes the parked session
+    in the agent's own warm worktrees. A requeue's later lease mint closes it by
+    supersession (D-067); the hub report is best-effort, the buffer the durable backstop.
     """
     now = ctx.clock.now()
     bindings = ctx.store.bindings_for_chunk(lease.chunk_id)
@@ -351,7 +370,34 @@ def _escalate(ctx: LoopContext, lease: LeaseRecord) -> None:
         }
     )
     ctx.store.enqueue_outbound(kind="escalation.needs_human", chunk_id=lease.chunk_id, payload=payload, created_at=now)
+    try:
+        ctx.hub.report_escalation(
+            lease.chunk_id, epoch=lease.epoch, runner_id=lease.runner_id, takeover_command=takeover
+        )
+    except HubClientError:
+        _log.debug("escalation report deferred — hub unreachable", chunk_id=lease.chunk_id)
     _log.info("escalated to needs-human — retries exhausted", chunk_id=lease.chunk_id, takeover=takeover)
+
+
+def _collect_asset_artifacts(
+    envelope: NodeEnvelope, git_artifacts: list[SubmittedArtifact], assessment: str
+) -> list[SubmittedArtifact]:
+    """Emit an asset artifact per produced name no git commit covers (D-026).
+
+    The engine has no file convention for assets (D-056): a node that declares it
+    ``produces`` a name — the review node's ``findings`` — but pushes no git commit of
+    that name emits the worker's judgement assessment as the asset's content. Git-commit
+    artifacts are named by repo, so a build node producing repo commits yields no
+    assets; a read-only review node yields its findings. Content may be empty (a clean
+    pass) — the asset still lands, and only a fail routes it back into build (latest-by-epoch)."""
+    from blizzard.hub.domain.artifacts import ArtifactKind
+
+    covered = {a.name for a in git_artifacts}
+    return [
+        SubmittedArtifact(name=name, kind=ArtifactKind.ASSET, content=assessment)
+        for name in envelope.node.produces
+        if name not in covered
+    ]
 
 
 def _push_and_collect_artifacts(ctx: LoopContext, bindings: list[EnvBindingRecord]) -> list[SubmittedArtifact]:

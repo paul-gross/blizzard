@@ -96,6 +96,26 @@ def test_fill_claims_acquires_binds_and_spawns(tmp_path):  # type: ignore[no-unt
 
 
 @pytest.mark.unit
+def test_fill_reports_lease_mint_to_hub(tmp_path):  # type: ignore[no-untyped-def]
+    """Every node-step spawn reports its lease.minted so the hub's fence tracks it (D-044)."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.claim_outcome = claimed_outcome("ch_1", _build_envelope())
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
+        probe=FakeProbe(),
+    )
+
+    fill(ctx)
+
+    assert hub.leases == [("ch_1", 1, "r1")]  # the first node-step's epoch reported up
+
+
+@pytest.mark.unit
 def test_fill_conflict_releases_and_does_not_bind(tmp_path):  # type: ignore[no-untyped-def]
     from blizzard.runner.loop.hub import RouteClaimOutcome
     from blizzard.wire.route import RouteClaimConflict
@@ -204,6 +224,57 @@ def test_advance_next_spawns_next_node_in_place(tmp_path):  # type: ignore[no-un
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None and lease.node_name == "review" and lease.epoch == 2  # fresh epoch, same env
     assert store.held_environment_ids() == ["e1"]
+    # The review node-step's fresh epoch is reported up so the hub's fence advances (D-044).
+    assert ("ch_1", 2, "r1") in hub.leases
+
+
+@pytest.mark.unit
+def test_advance_review_harvests_findings_asset_from_assessment(tmp_path):  # type: ignore[no-untyped-def]
+    """A node that `produces` a name no git commit covers emits the assessment as an asset (D-026)."""
+    from blizzard.hub.domain.artifacts import ArtifactKind
+    from tests.runner_fakes import make_envelope
+
+    store = _store(tmp_path)
+    # Seed a review lease (produces review-findings) already spawned into e1.
+    store.record_lease(
+        NewLease(
+            lease_id="lease_r",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_review",
+            node_name="review",
+            epoch=1,
+            runner_id="r1",
+            retries_max=2,
+            created_at=_NOW,
+        )
+    )
+    store.record_spawn("lease_r", pid=100, process_start_time="start-100", session_id="sess-a")
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = make_envelope(
+        "ch_1", "review", node_id="nd_review", choices=_CHOICES, produces=["review-findings"]
+    )
+    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=_build_envelope())]
+    # Review is read-only: no git commit produced, but the judgement carries findings.
+    harness = FakeHarness(handle=_HANDLE, verdict="fail", assessment="BLOCKING: guard the empty input")
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        worktree_git=FakeWorktreeGit([]),
+    )
+
+    advance(ctx)
+
+    _, submission = hub.completions[0]
+    findings = [a for a in submission.artifacts if a.name == "review-findings"]
+    assert len(findings) == 1
+    assert findings[0].kind is ArtifactKind.ASSET
+    assert findings[0].content == "BLOCKING: guard the empty input"
 
 
 @pytest.mark.unit
@@ -365,6 +436,11 @@ def test_retries_exhausted_escalates_and_holds_envs(tmp_path):  # type: ignore[n
     assert len(pending) == 1 and pending[0].kind == "escalation.needs_human"
     assert store.held_environment_ids() == ["e1"]  # envs held for takeover
     assert provider.released == []
+    # The escalation is reported up to the hub with a pasteable takeover command (D-009/D-035).
+    assert len(hub.escalations) == 1
+    esc_chunk, _esc_epoch, esc_runner, takeover = hub.escalations[0]
+    assert esc_chunk == "ch_1" and esc_runner == "r1"
+    assert takeover.startswith("cd /ws/e1 &&") and "--resume" in takeover
 
 
 # --------------------------------------------------------------------------- #

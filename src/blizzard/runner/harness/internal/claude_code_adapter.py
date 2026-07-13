@@ -108,6 +108,14 @@ class ClaudeCodeAdapter:
         name = text[start + len(_CHOICE_OPEN) : end].strip()
         return name or None
 
+    def parse_assessment(self, output: str) -> str:
+        """The reply text following ``</Choice>`` — the worker's prose assessment (D-077)."""
+        text = self._result_text(output)
+        close = text.find(_CHOICE_CLOSE)
+        if close == -1:
+            return ""
+        return text[close + len(_CHOICE_CLOSE) :].strip()
+
     # --- plumbing -----------------------------------------------------------
 
     @staticmethod

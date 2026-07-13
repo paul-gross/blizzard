@@ -205,5 +205,6 @@ escalations = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("epoch", Integer, nullable=False),  # closed by a later lease mint, not a resolution (D-067)
+    Column("takeover_command", Text, nullable=False, server_default=""),  # the pasteable resume command (D-035)
     Column("recorded_at", DateTime, nullable=False),
 )

@@ -19,8 +19,37 @@ pytestmark = pytest.mark.component
 
 _POINTER = {"provider": "github", "url": "http://forge.local/repos/acme/widget/issues/12"}
 
+# A minimal build -> deliver graph named `default-delivery`, pre-minted so the hub's
+# lazy `ensure_default` (POST /chunks) reuses it by name (D-081) instead of minting
+# the packaged prose graph. This keeps these hub-delivery mechanics tests focused on
+# the deliver hub node, decoupled from the packaged default graph's shape (P7 promoted
+# that to build -> review -> deliver; the review cycle is test_review_cycle's subject).
+_BUILD_DELIVER_YAML = """
+name: default-delivery
+entry: build
+nodes:
+  build:
+    executor: runner
+    prompt: |
+      Build the change.
+    judgement:
+      prompt: |
+        Assess the build.
+      choices:
+        pass:
+          description: Complete and green.
+          to: deliver
+        fail:
+          description: Incomplete.
+          to: build
+  deliver:
+    executor: hub
+    mode: merge-to-main
+"""
+
 
 def _ingest(hub) -> str:  # type: ignore[no-untyped-def]
+    assert hub.client.post("/api/graphs", json={"definition_yaml": _BUILD_DELIVER_YAML}).status_code == 201
     resp = hub.client.post("/api/chunks", json={"pointers": [_POINTER]})
     assert resp.status_code == 201, resp.text
     return resp.json()["chunk_id"]

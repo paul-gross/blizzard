@@ -37,7 +37,22 @@ def test_parse_verdict_reads_plain_text_reply() -> None:
 @pytest.mark.unit
 def test_parse_verdict_missing_choice_is_none() -> None:
     assert ClaudeCodeAdapter().parse_verdict('{"type":"result","result":"no verdict here","session_id":"s1"}') is None
+    # A delivered judgement whose reply has no parseable <Choice> is a failure (D-009):
+    # an unclosed tag, whitespace-only name, and a bare open tag all read as None.
     assert ClaudeCodeAdapter().parse_verdict("<Choice>") is None
+    assert ClaudeCodeAdapter().parse_verdict("<Choice></Choice>") is None
+    assert ClaudeCodeAdapter().parse_verdict("<Choice>   </Choice>") is None
+
+
+@pytest.mark.unit
+def test_parse_assessment_returns_text_after_the_choice() -> None:
+    output = '{"type":"result","result":"<Choice>fail</Choice>\\nBLOCKING: guard empty input","session_id":"s1"}'
+    assert ClaudeCodeAdapter().parse_assessment(output) == "BLOCKING: guard empty input"
+
+
+@pytest.mark.unit
+def test_parse_assessment_is_empty_without_a_choice() -> None:
+    assert ClaudeCodeAdapter().parse_assessment("no verdict at all") == ""
 
 
 @pytest.mark.unit

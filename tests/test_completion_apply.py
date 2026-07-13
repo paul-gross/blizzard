@@ -16,8 +16,35 @@ pytestmark = pytest.mark.component
 
 _POINTER = {"provider": "github", "url": "http://forge.local/repos/acme/widget/issues/9"}
 
+# A build -> deliver graph named `default-delivery`, reused by name on ingest (D-081),
+# so these apply-mechanics tests reach a terminal chunk in one build pass — decoupled
+# from the packaged default graph's P7 build -> review -> deliver shape.
+_BUILD_DELIVER_YAML = """
+name: default-delivery
+entry: build
+nodes:
+  build:
+    executor: runner
+    prompt: |
+      Build the change.
+    judgement:
+      prompt: |
+        Assess the build.
+      choices:
+        pass:
+          description: Complete and green.
+          to: deliver
+        fail:
+          description: Incomplete.
+          to: build
+  deliver:
+    executor: hub
+    mode: merge-to-main
+"""
+
 
 def _claimed(hub) -> tuple[str, str]:  # type: ignore[no-untyped-def]
+    assert hub.client.post("/api/graphs", json={"definition_yaml": _BUILD_DELIVER_YAML}).status_code == 201
     chunk_id = hub.client.post("/api/chunks", json={"pointers": [_POINTER]}).json()["chunk_id"]
     node_id = hub.client.post(
         "/api/routes",
