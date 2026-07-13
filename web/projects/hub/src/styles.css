@@ -1,0 +1,12 @@
+/* Global styles: full-viewport dark shell. Design tokens come from the
+ * fleet library (design/tokens.css), listed ahead of this file in the build. */
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+}

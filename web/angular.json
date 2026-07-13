@@ -1,0 +1,238 @@
+{
+  "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
+  "version": 1,
+  "cli": {
+    "packageManager": "npm"
+  },
+  "newProjectRoot": "projects",
+  "projects": {
+    "hub": {
+      "projectType": "application",
+      "schematics": {},
+      "root": "projects/hub",
+      "sourceRoot": "projects/hub/src",
+      "prefix": "app",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {
+            "outputPath": {
+              "base": "../src/blizzard/static/hub",
+              "browser": ""
+            },
+            "browser": "projects/hub/src/main.ts",
+            "tsConfig": "projects/hub/tsconfig.app.json",
+            "assets": [
+              {
+                "glob": "**/*",
+                "input": "projects/hub/public"
+              }
+            ],
+            "styles": [
+              "projects/fleet/src/lib/design/tokens.css",
+              "projects/hub/src/styles.css"
+            ]
+          },
+          "configurations": {
+            "production": {
+              "budgets": [
+                {
+                  "type": "initial",
+                  "maximumWarning": "500kB",
+                  "maximumError": "1MB"
+                },
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "4kB",
+                  "maximumError": "8kB"
+                }
+              ],
+              "outputHashing": "all"
+            },
+            "development": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "serve": {
+          "builder": "@angular/build:dev-server",
+          "configurations": {
+            "production": {
+              "buildTarget": "hub:build:production"
+            },
+            "development": {
+              "buildTarget": "hub:build:development"
+            }
+          },
+          "defaultConfiguration": "development"
+        },
+        "test": {
+          "builder": "@angular/build:unit-test"
+        },
+        "lint": {
+          "builder": "@angular-eslint/builder:lint",
+          "options": {
+            "lintFilePatterns": [
+              "projects/hub/**/*.ts",
+              "projects/hub/**/*.html"
+            ],
+            "eslintConfig": "projects/hub/eslint.config.js"
+          }
+        }
+      }
+    },
+    "runner": {
+      "projectType": "application",
+      "schematics": {},
+      "root": "projects/runner",
+      "sourceRoot": "projects/runner/src",
+      "prefix": "app",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {
+            "outputPath": {
+              "base": "../src/blizzard/static/runner",
+              "browser": ""
+            },
+            "browser": "projects/runner/src/main.ts",
+            "tsConfig": "projects/runner/tsconfig.app.json",
+            "assets": [
+              {
+                "glob": "**/*",
+                "input": "projects/runner/public"
+              }
+            ],
+            "styles": [
+              "projects/fleet/src/lib/design/tokens.css",
+              "projects/runner/src/styles.css"
+            ]
+          },
+          "configurations": {
+            "production": {
+              "budgets": [
+                {
+                  "type": "initial",
+                  "maximumWarning": "500kB",
+                  "maximumError": "1MB"
+                },
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "4kB",
+                  "maximumError": "8kB"
+                }
+              ],
+              "outputHashing": "all"
+            },
+            "development": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "serve": {
+          "builder": "@angular/build:dev-server",
+          "configurations": {
+            "production": {
+              "buildTarget": "runner:build:production"
+            },
+            "development": {
+              "buildTarget": "runner:build:development"
+            }
+          },
+          "defaultConfiguration": "development"
+        },
+        "test": {
+          "builder": "@angular/build:unit-test"
+        },
+        "lint": {
+          "builder": "@angular-eslint/builder:lint",
+          "options": {
+            "lintFilePatterns": [
+              "projects/runner/**/*.ts",
+              "projects/runner/**/*.html"
+            ],
+            "eslintConfig": "projects/runner/eslint.config.js"
+          }
+        }
+      }
+    },
+    "fleet": {
+      "projectType": "library",
+      "root": "projects/fleet",
+      "sourceRoot": "projects/fleet/src",
+      "prefix": "lib",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:ng-packagr",
+          "configurations": {
+            "production": {
+              "tsConfig": "projects/fleet/tsconfig.lib.prod.json"
+            },
+            "development": {
+              "tsConfig": "projects/fleet/tsconfig.lib.json"
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "test": {
+          "builder": "@angular/build:unit-test",
+          "options": {
+            "tsConfig": "projects/fleet/tsconfig.spec.json"
+          }
+        },
+        "lint": {
+          "builder": "@angular-eslint/builder:lint",
+          "options": {
+            "lintFilePatterns": [
+              "projects/fleet/**/*.ts",
+              "projects/fleet/**/*.html"
+            ],
+            "eslintConfig": "projects/fleet/eslint.config.js"
+          }
+        }
+      }
+    },
+    "local-panel": {
+      "projectType": "library",
+      "root": "projects/local-panel",
+      "sourceRoot": "projects/local-panel/src",
+      "prefix": "lib",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:ng-packagr",
+          "configurations": {
+            "production": {
+              "tsConfig": "projects/local-panel/tsconfig.lib.prod.json"
+            },
+            "development": {
+              "tsConfig": "projects/local-panel/tsconfig.lib.json"
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "test": {
+          "builder": "@angular/build:unit-test",
+          "options": {
+            "tsConfig": "projects/local-panel/tsconfig.spec.json"
+          }
+        },
+        "lint": {
+          "builder": "@angular-eslint/builder:lint",
+          "options": {
+            "lintFilePatterns": [
+              "projects/local-panel/**/*.ts",
+              "projects/local-panel/**/*.html"
+            ],
+            "eslintConfig": "projects/local-panel/eslint.config.js"
+          }
+        }
+      }
+    }
+  }
+}

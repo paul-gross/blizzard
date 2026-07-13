@@ -1,0 +1,44 @@
+{
+  "name": "web",
+  "version": "0.0.0",
+  "scripts": {
+    "ng": "ng",
+    "start": "ng serve hub",
+    "start:runner": "ng serve runner",
+    "lint": "ng lint",
+    "test": "ng test hub && ng test runner && ng test fleet && ng test local-panel",
+    "build": "npm run build:hub && npm run build:runner",
+    "build:hub": "ng build hub",
+    "build:runner": "ng build runner",
+    "generate-client": "openapi-ts -f openapi-ts.hub.config.ts && openapi-ts -f openapi-ts.runner.config.ts"
+  },
+  "private": true,
+  "packageManager": "npm@10.9.4",
+  "dependencies": {
+    "@angular/cdk": "^21.2.14",
+    "@angular/common": "^21.2.0",
+    "@angular/compiler": "^21.2.0",
+    "@angular/core": "^21.2.0",
+    "@angular/forms": "^21.2.0",
+    "@angular/platform-browser": "^21.2.0",
+    "@angular/router": "^21.2.0",
+    "@tanstack/angular-query-experimental": "^5.101.2",
+    "rxjs": "~7.8.0",
+    "tslib": "^2.3.0"
+  },
+  "devDependencies": {
+    "@angular/build": "^21.2.19",
+    "@angular/cli": "^21.2.19",
+    "@angular/compiler-cli": "^21.2.0",
+    "@eslint/js": "^10.0.1",
+    "@hey-api/openapi-ts": "^0.99.0",
+    "@types/node": "^22.20.1",
+    "angular-eslint": "21.4.0",
+    "eslint": "^10.3.0",
+    "jsdom": "^28.0.0",
+    "ng-packagr": "^21.2.0",
+    "typescript": "~5.9.2",
+    "typescript-eslint": "8.59.2",
+    "vitest": "^4.0.8"
+  }
+}
