@@ -24,3 +24,11 @@ run = "uv run pyright"
 [tasks.export-openapi]
 description = "Export the hub and runner OpenAPI specs to ./openapi (frontend codegen + CI drift baseline)"
 run = "uv run blizzard-export-openapi --out-dir openapi"
+
+[tasks.gate]
+description = "Run the local equivalent of the PR-to-master merge gate (ruff, pyright, pytest, spec/client drift, eslint, vitest)"
+run = "./scripts/ci-gate.sh"
+
+[tasks.build]
+description = "The one build entrypoint: build both Angular apps into the embed dir, build the wheel, and verify it embeds the assets and installs+runs node-free"
+run = "./scripts/build-wheel.sh"
