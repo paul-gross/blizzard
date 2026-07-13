@@ -29,12 +29,16 @@ DEFAULT_HUB_URL = "http://127.0.0.1:8421"
 _CLIENT_TIMEOUT = 15.0
 
 
-def _hub_url(override: str | None) -> str:
-    return override or os.environ.get(ENV_HUB_URL) or DEFAULT_HUB_URL
-
-
 def _stub(verb: str) -> None:
     raise click.ClickException(f"`blizzard hub {verb}` is not yet implemented (scaffold stub).")
+
+
+def _hub_url(override: str | None) -> str:
+    return override or os.environ.get(ENV_HUB_URL, DEFAULT_HUB_URL)
+
+
+def _api_error(operation: str, exc: Exception) -> click.ClickException:
+    return click.ClickException(f"{operation} failed: {exc}")
 
 
 @click.group(invoke_without_command=True)
@@ -147,23 +151,75 @@ def answer(question_id: str, answer_text: str, answered_by: str, url: str | None
 
 
 @hub.command()
-def decisions() -> None:
-    """List open decisions (gate surfacing)."""
-    _stub("decisions")
+@click.option("--hub-url", default=None, help=f"Hub API base URL (default ${ENV_HUB_URL} or {DEFAULT_HUB_URL}).")
+def decisions(hub_url: str | None) -> None:
+    """List open decisions awaiting a human (gate surfacing, D-052)."""
+    try:
+        resp = httpx.get(f"{_hub_url(hub_url).rstrip('/')}/api/decisions", timeout=_CLIENT_TIMEOUT)
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise _api_error("GET /decisions", exc) from exc
+    rows = resp.json().get("decisions", [])
+    if not rows:
+        click.echo("no open decisions")
+        return
+    for d in rows:
+        choices = ", ".join(c["name"] for c in d.get("choices", []))
+        click.echo(f"{d['decision_id']}  chunk={d['chunk_id']}  node={d['node_name']}  choices=[{choices}]")
 
 
 @hub.command()
 @click.argument("decision_id")
 @click.argument("choice")
-def decide(decision_id: str, choice: str) -> None:
-    """Resolve an open decision (first-write-wins)."""
-    _stub("decide")
+@click.option("--by", "resolved_by", default="operator", help="Who is resolving (recorded on the resolution).")
+@click.option("--hub-url", default=None, help=f"Hub API base URL (default ${ENV_HUB_URL} or {DEFAULT_HUB_URL}).")
+def decide(decision_id: str, choice: str, resolved_by: str, hub_url: str | None) -> None:
+    """Resolve an open decision by picking CHOICE (first-write-wins, D-045)."""
+    url = f"{_hub_url(hub_url).rstrip('/')}/api/decisions/{decision_id}/resolution"
+    try:
+        resp = httpx.post(url, json={"choice": choice, "resolved_by": resolved_by}, timeout=_CLIENT_TIMEOUT)
+    except httpx.HTTPError as exc:
+        raise _api_error("POST /decisions/{id}/resolution", exc) from exc
+    if resp.status_code == httpx.codes.CONFLICT:
+        body = resp.json()
+        raise click.ClickException(f"already resolved by {body.get('already_resolved_by')}")
+    if resp.status_code == httpx.codes.NOT_FOUND:
+        raise click.ClickException(f"no such decision {decision_id}")
+    if resp.status_code == httpx.codes.BAD_REQUEST:
+        raise click.ClickException(resp.json().get("detail", "invalid choice"))
+    try:
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise _api_error("POST /decisions/{id}/resolution", exc) from exc
+    body = resp.json()
+    click.echo(f"decision {decision_id} resolved: {body['choice']} (by {body['resolved_by']})")
 
 
 @hub.command()
 def ingest() -> None:
     """Ingest PM items by pointer, minting chunks."""
     _stub("ingest")
+
+
+@hub.command()
+@click.argument("chunk_id")
+@click.option("--hub-url", default=None, help=f"Hub API base URL (default ${ENV_HUB_URL} or {DEFAULT_HUB_URL}).")
+def requeue(chunk_id: str, hub_url: str | None) -> None:
+    """Close an escalation by supersession: requeue CHUNK at its current node (D-067)."""
+    url = f"{_hub_url(hub_url).rstrip('/')}/api/chunks/{chunk_id}/requeues"
+    try:
+        resp = httpx.post(url, timeout=_CLIENT_TIMEOUT)
+    except httpx.HTTPError as exc:
+        raise _api_error("POST /chunks/{id}/requeues", exc) from exc
+    if resp.status_code == httpx.codes.CONFLICT:
+        raise click.ClickException(resp.json().get("detail", "chunk is not escalated"))
+    if resp.status_code == httpx.codes.NOT_FOUND:
+        raise click.ClickException(f"no such chunk {chunk_id}")
+    try:
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise _api_error("POST /chunks/{id}/requeues", exc) from exc
+    click.echo(f"requeued {chunk_id} — re-leasable at its current node")
 
 
 @hub.command()

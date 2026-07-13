@@ -91,6 +91,6 @@ def test_outbound_buffer_is_fifo_and_ackable(tmp_path):  # type: ignore[no-untyp
     assert s1 < s2
     assert [f.seq for f in store.pending_outbound()] == [s1, s2]
     assert store.pending_outbound()[1].lease_id == "lease_1"
-    assert store.pending_completion_lease_ids() == {"lease_1"}
+    assert store.pending_submission_lease_ids() == {"lease_1"}
     store.ack_outbound(s1, acked_at=_NOW)
     assert [f.seq for f in store.pending_outbound()] == [s2]

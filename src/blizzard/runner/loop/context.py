@@ -37,6 +37,11 @@ class LoopConfig:
     #: The runner's own local-API base URL, handed to a spawned worker as
     #: ``BLIZZARD_RUNNER_URL`` so its heartbeat hook posts back (design/harness-adapters.md).
     local_api_url: str = "http://127.0.0.1:8431"
+    #: Node NAMES this runner imposes a human gate on (D-032/D-041/D-073): for a gated
+    #: node the runner submits a Decision instead of a transition, so an operator dials
+    #: their own HITL level without forking the fleet's graph. Matched by name across all
+    #: graphs, read fresh from config each tick (a new tick rebuilds the context).
+    gates: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

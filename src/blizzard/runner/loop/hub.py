@@ -15,6 +15,7 @@ from typing import Protocol
 
 from blizzard.wire.chunk import ChunkDetail
 from blizzard.wire.completion import CompletionSubmission
+from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
 from blizzard.wire.facts import RunnerFactAck, RunnerFactBatch
 from blizzard.wire.question import QuestionView
@@ -56,6 +57,10 @@ class IHubClient(Protocol):
 
     def submit_completion(self, chunk_id: str, submission: CompletionSubmission) -> ApplyResponse:
         """``POST /api/chunks/{id}/completions`` — the atomic, epoch-fenced write (D-036)."""
+        ...
+
+    def submit_decision(self, chunk_id: str, submission: DecisionSubmission) -> ApplyResponse:
+        """``POST /api/chunks/{id}/decisions`` — a runner-config gate parks the chunk (D-032)."""
         ...
 
     def push_facts(self, batch: RunnerFactBatch) -> RunnerFactAck:

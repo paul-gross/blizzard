@@ -80,11 +80,11 @@ class SqlAlchemyRunnerStore:
             value = conn.execute(stmt).scalar_one_or_none()
         return value
 
-    def pending_completion_lease_ids(self) -> set[str]:
+    def pending_submission_lease_ids(self) -> set[str]:
         stmt = select(outbound_buffer.c.lease_id).where(
             and_(
                 outbound_buffer.c.acked_at.is_(None),
-                outbound_buffer.c.kind == "completion.submitted",
+                outbound_buffer.c.kind.in_(("completion.submitted", "decision.submitted")),
                 outbound_buffer.c.lease_id.is_not(None),
             )
         )

@@ -16,6 +16,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.runner.loop.hub import HubClientError, IHubClient, RouteClaimOutcome
 from blizzard.wire.chunk import ChunkDetail
 from blizzard.wire.completion import CompletionSubmission
+from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
 from blizzard.wire.facts import EscalationReport, LeaseMintReport, RunnerFactAck, RunnerFactBatch
 from blizzard.wire.question import QuestionView
@@ -49,6 +50,10 @@ class HttpHubClient:
 
     def submit_completion(self, chunk_id: str, submission: CompletionSubmission) -> ApplyResponse:
         resp = self._post(f"{_API}/chunks/{chunk_id}/completions", submission.model_dump(mode="json"))
+        return ApplyResponse.model_validate(resp.json())
+
+    def submit_decision(self, chunk_id: str, submission: DecisionSubmission) -> ApplyResponse:
+        resp = self._post(f"{_API}/chunks/{chunk_id}/decisions", submission.model_dump(mode="json"))
         return ApplyResponse.model_validate(resp.json())
 
     def push_facts(self, batch: RunnerFactBatch) -> RunnerFactAck:

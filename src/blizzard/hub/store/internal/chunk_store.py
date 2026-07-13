@@ -31,12 +31,16 @@ from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
     ChunkStatus,
+    DecisionChoice,
+    DecisionFact,
+    DecisionRow,
     EscalationFact,
     IWriteChunkRepository,
     LeaseFact,
     PmPointer,
     QuestionFact,
     QuestionRow,
+    RequeueFact,
     RouteCreatedFact,
     RouteReleasedFact,
     TransitionFact,
@@ -116,6 +120,18 @@ class ChunkStore:
                 QuestionFact(question_id=q.question_id, asked_at=q.asked_at, answered=q.question_id in answered)
                 for q in conn.execute(select(s.questions).where(s.questions.c.chunk_id == chunk_id)).all()
             ]
+            decision_rows = conn.execute(select(s.decisions).where(s.decisions.c.chunk_id == chunk_id)).all()
+            resolved_ids = self._resolved_ids(conn, [d.decision_id for d in decision_rows])
+            decisions = [
+                DecisionFact(
+                    decision_id=d.decision_id, submitted_at=d.submitted_at, resolved=d.decision_id in resolved_ids
+                )
+                for d in decision_rows
+            ]
+            requeues = [
+                RequeueFact(requeued_at=r.requeued_at)
+                for r in conn.execute(select(s.requeues).where(s.requeues.c.chunk_id == chunk_id)).all()
+            ]
             return ChunkFacts(
                 minted=True,
                 stopped=self._exists(conn, s.chunk_stopped, chunk_id),
@@ -126,6 +142,8 @@ class ChunkStore:
                 routes_created=routes_created,
                 routes_released=routes_released,
                 questions=questions,
+                decisions=decisions,
+                requeues=requeues,
             )
 
     def load_artifacts(self, chunk_id: str) -> list[ArtifactRow]:
@@ -260,6 +278,41 @@ class ChunkStore:
                 out.append(self._question_row(q, answer))
             return out
 
+    def get_decision(self, decision_id: str) -> DecisionRow | None:
+        with self._engine.connect() as conn:
+            row = conn.execute(select(s.decisions).where(s.decisions.c.decision_id == decision_id)).one_or_none()
+            return self._decision_row(conn, row) if row is not None else None
+
+    def find_decision(self, chunk_id: str, *, node_id: str, epoch: int) -> DecisionRow | None:
+        with self._engine.connect() as conn:
+            row = conn.execute(
+                select(s.decisions).where(
+                    (s.decisions.c.chunk_id == chunk_id)
+                    & (s.decisions.c.node_id == node_id)
+                    & (s.decisions.c.epoch == epoch)
+                )
+            ).one_or_none()
+            return self._decision_row(conn, row) if row is not None else None
+
+    def decision_for_chunk(self, chunk_id: str) -> DecisionRow | None:
+        with self._engine.connect() as conn:
+            rows = conn.execute(
+                select(s.decisions)
+                .where(s.decisions.c.chunk_id == chunk_id)
+                .order_by(s.decisions.c.submitted_at.desc())
+            ).all()
+            for row in rows:  # newest-first; the newest not-yet-transitioned decision is live
+                decision = self._decision_row(conn, row)
+                if not decision.transitioned:
+                    return decision
+            return None
+
+    def list_open_decisions(self) -> list[DecisionRow]:
+        with self._engine.connect() as conn:
+            rows = conn.execute(select(s.decisions).order_by(s.decisions.c.submitted_at)).all()
+            decisions = [self._decision_row(conn, row) for row in rows]
+            return [d for d in decisions if not d.resolved]
+
     # --- writes -------------------------------------------------------------
 
     def mint(self, chunk: Chunk) -> None:
@@ -325,6 +378,7 @@ class ChunkStore:
         runner_id: str,
         at: datetime,
         artifacts: list[ArtifactRow],
+        decision_id: str | None = None,
     ) -> None:
         with self._engine.begin() as conn:
             conn.execute(
@@ -334,7 +388,7 @@ class ChunkStore:
                     from_node_id=from_node_id,
                     to_node_id=to_node_id,
                     choice_name=choice_name,
-                    decision_id=None,
+                    decision_id=decision_id,
                     epoch=epoch,
                     runner_id=runner_id,
                     recorded_at=at,
@@ -442,6 +496,65 @@ class ChunkStore:
                 insert(s.answer_deliveries).values(question_id=question_id, chunk_id=chunk_id, delivered_at=at)
             )
 
+    def record_decision(
+        self,
+        *,
+        decision_id: str,
+        chunk_id: str,
+        node_id: str,
+        node_name: str,
+        epoch: int,
+        choices: list[DecisionChoice],
+        at: datetime,
+        artifacts: list[ArtifactRow],
+    ) -> None:
+        payload = json.dumps([{"name": c.name, "description": c.description} for c in choices])
+        with self._engine.begin() as conn:
+            conn.execute(
+                insert(s.decisions).values(
+                    decision_id=decision_id,
+                    chunk_id=chunk_id,
+                    node_id=node_id,
+                    node_name=node_name,
+                    epoch=epoch,
+                    choices=payload,
+                    submitted_at=at,
+                )
+            )
+            for row in artifacts:
+                conn.execute(
+                    insert(s.artifacts).values(
+                        artifact_id=row.artifact_id,
+                        chunk_id=row.chunk_id,
+                        node_id=row.node_id,
+                        node_name=row.node_name,
+                        epoch=row.epoch,
+                        name=row.name,
+                        kind=row.kind.value,
+                        data=row.data,
+                        repo=row.repo,
+                        produced_at=at,
+                    )
+                )
+
+    def record_decision_resolution(self, decision_id: str, *, choice: str, resolved_by: str, at: datetime) -> bool:
+        with self._engine.begin() as conn:
+            existing = conn.execute(
+                select(s.decision_resolutions.c.decision_id).where(s.decision_resolutions.c.decision_id == decision_id)
+            ).one_or_none()
+            if existing is not None:
+                return False  # first-write-wins: the loser is told who won (D-045)
+            conn.execute(
+                insert(s.decision_resolutions).values(
+                    decision_id=decision_id, choice=choice, resolved_by=resolved_by, resolved_at=at
+                )
+            )
+            return True
+
+    def record_requeue(self, chunk_id: str, *, at: datetime) -> None:
+        with self._engine.begin() as conn:
+            conn.execute(insert(s.requeues).values(chunk_id=chunk_id, requeued_at=at))
+
     # --- helpers ------------------------------------------------------------
 
     @staticmethod
@@ -474,6 +587,44 @@ class ChunkStore:
     def _status(self, chunk_id: str) -> ChunkStatus:
         facts = self.load_facts(chunk_id)
         return derive_chunk_status(facts) if facts is not None else ChunkStatus.READY
+
+    @staticmethod
+    def _resolved_ids(conn, decision_ids: list[str]) -> set[str]:  # type: ignore[no-untyped-def]
+        if not decision_ids:
+            return set()
+        return {
+            r.decision_id
+            for r in conn.execute(
+                select(s.decision_resolutions.c.decision_id).where(
+                    s.decision_resolutions.c.decision_id.in_(decision_ids)
+                )
+            ).all()
+        }
+
+    def _decision_row(self, conn, row) -> DecisionRow:  # type: ignore[no-untyped-def]
+        resolution = conn.execute(
+            select(s.decision_resolutions).where(s.decision_resolutions.c.decision_id == row.decision_id)
+        ).one_or_none()
+        transitioned = (
+            conn.execute(
+                select(s.transitions.c.transition_id).where(s.transitions.c.decision_id == row.decision_id).limit(1)
+            ).first()
+            is not None
+        )
+        choices = [DecisionChoice(name=c["name"], description=c["description"]) for c in json.loads(row.choices)]
+        return DecisionRow(
+            decision_id=row.decision_id,
+            chunk_id=row.chunk_id,
+            node_id=row.node_id,
+            node_name=row.node_name,
+            epoch=row.epoch,
+            choices=choices,
+            submitted_at=row.submitted_at,
+            resolved_choice=resolution.choice if resolution is not None else None,
+            resolved_by=resolution.resolved_by if resolution is not None else None,
+            resolved_at=resolution.resolved_at if resolution is not None else None,
+            transitioned=transitioned,
+        )
 
     @staticmethod
     def _exists(conn, table, chunk_id: str) -> bool:  # type: ignore[no-untyped-def]

@@ -10,15 +10,21 @@ the same outcome without a second transition).
 The apply-response is what lets the runner continue in place (D-072): a runner node
 returns the next envelope; a hub node (deliver) is taken over by the coordinator and
 returns ``hub_node_taken``; the reserved terminal returns ``done``; a human gate
-parks (shaped, P7). Ordering matters — the idempotency probe runs **before** the
-terminal check, so replaying the very completion that delivered the chunk still
-returns its original outcome rather than a spurious ``failure``.
+parks the chunk on an open **Decision** (``parked_at_gate``, D-045). Ordering matters
+— the idempotency probe runs **before** the terminal check, so replaying the very
+completion that delivered the chunk still returns its original outcome rather than a
+spurious ``failure``.
+
+Human gates cut two ways here (D-045). A transition **into** a human-judged node opens
+a decision and parks (the graph gate). A transition **out of** one is only legal as
+the **resolving transition** — a completion carrying the resolved decision's id
+(D-027); a plain worker transition out of a gate is rejected (human signoff required).
 """
 
 from __future__ import annotations
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.ids import ARTIFACT_PREFIX, TRANSITION_PREFIX, mint
+from blizzard.foundation.ids import ARTIFACT_PREFIX, DECISION_PREFIX, TRANSITION_PREFIX, mint
 from blizzard.hub.delivery.coordinator import MergeQueueCoordinator
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.envelope import build_node_envelope
@@ -26,6 +32,7 @@ from blizzard.hub.domain.graph import RESERVED_TERMINAL, Edge, Executor, Graph, 
 from blizzard.hub.domain.work import (
     Chunk,
     ChunkStatus,
+    DecisionChoice,
     IWriteChunkRepository,
     derive_chunk_status,
     latest_epoch,
@@ -61,11 +68,22 @@ class ApplyService:
 
         # Idempotent replay first (D-090): a completion already applied at this
         # (node, epoch) returns its original outcome — even once the chunk is terminal.
+        # This covers both an ordinary transition and a gate-resolving one (same key).
         replayed = self._chunks.accepted_transition_target(
             chunk.chunk_id, from_node_id=submission.from_node_id, epoch=submission.epoch
         )
         if replayed is not None:
             return self._respond(chunk, graph, from_node, submission, to_node_id=replayed, run_coordinator=False)
+
+        # A completion carrying a decision id is a gate-resolving transition (D-045) —
+        # graph gate (human node) or runner-config gate (worker node): validate and
+        # record it against the resolved decision, marking that decision transitioned.
+        if submission.decision_id is not None:
+            return self._apply_gate_resolution(chunk, graph, from_node, submission)
+        # A plain transition OUT of a human-judged node is rejected — human signoff
+        # required; only the resolving transition above may leave a gate node.
+        if from_node.judged_by is JudgedBy.HUMAN:
+            return _failure(f"human signoff required: node `{from_node.name}` is a gate — resolve its decision")
 
         facts = self._chunks.load_facts(chunk.chunk_id)
         if facts is None:
@@ -98,6 +116,56 @@ class ApplyService:
             chunk, graph, from_node, submission, to_node_id=to_node_id, run_coordinator=True, edge=edge
         )
 
+    def _apply_gate_resolution(
+        self, chunk: Chunk, graph: Graph, gate_node: Node, submission: CompletionSubmission
+    ) -> ApplyResponse:
+        """Advance a chunk past a resolved gate — the resolving transition (D-027/D-045).
+
+        The runner picks the resolution up on PULL and submits this to record the
+        transition along the chosen edge, referencing the decision (which marks it
+        transitioned). Works for both a graph gate (human node) and a runner-config gate
+        (worker node); the decision's artifacts already landed, so this carries none."""
+        assert submission.decision_id is not None  # the caller dispatches only when set
+        decision = self._chunks.get_decision(submission.decision_id)
+        if decision is None or decision.chunk_id != chunk.chunk_id or decision.node_id != gate_node.node_id:
+            return _failure(f"decision {submission.decision_id} does not match node `{gate_node.name}`")
+        if decision.resolved_choice is None:
+            return _failure(f"decision {submission.decision_id} is not yet resolved")
+        if submission.choice != decision.resolved_choice:
+            return _failure(f"choice `{submission.choice}` is not the resolved choice `{decision.resolved_choice}`")
+
+        facts = self._chunks.load_facts(chunk.chunk_id)
+        if facts is None:
+            return _failure(f"unknown chunk {chunk.chunk_id}")
+        if derive_chunk_status(facts) in _TERMINAL_STATUSES:
+            return _failure("chunk is terminal")
+        latest = latest_epoch(facts)
+        if latest is not None and submission.epoch != latest:
+            return _failure(f"stale epoch {submission.epoch}; chunk is at {latest}")
+
+        edge = graph.edge_for_choice(gate_node.node_id, submission.choice)
+        if edge is None:
+            return _failure(f"gate `{gate_node.name}` has no choice `{submission.choice}`")
+        to_node_id = RESERVED_TERMINAL if edge.to_node_name == RESERVED_TERMINAL else _resolve(graph, edge.to_node_name)
+        if to_node_id is None:
+            return _failure(f"choice `{submission.choice}` routes to unknown node {edge.to_node_name}")
+
+        self._chunks.record_transition(
+            transition_id=mint(TRANSITION_PREFIX, self._clock),
+            chunk_id=chunk.chunk_id,
+            from_node_id=gate_node.node_id,
+            to_node_id=to_node_id,
+            choice_name=submission.choice,
+            epoch=submission.epoch,
+            runner_id=submission.runner_id,
+            at=self._clock.now(),
+            artifacts=[],  # the decision's artifacts already landed (D-045)
+            decision_id=submission.decision_id,
+        )
+        return self._respond(
+            chunk, graph, gate_node, submission, to_node_id=to_node_id, run_coordinator=True, edge=edge
+        )
+
     def _respond(
         self,
         chunk: Chunk,
@@ -123,6 +191,10 @@ class ApplyService:
                 detail=f"hub node `{to_node.name}` took over; poll the chunk for the outcome",
             )
         if to_node.judged_by is JudgedBy.HUMAN:
+            # A transition INTO a human-judged node opens a graph gate: park on a decision
+            # carrying the node's choice set (D-045). Only on the real apply, never a replay.
+            if run_coordinator:
+                self._open_graph_gate_decision(chunk, to_node, epoch=submission.epoch)
             return ApplyResponse(outcome=ApplyOutcome.PARKED_AT_GATE, detail=f"parked at gate `{to_node.name}`")
 
         addendum = edge.prompt_addendum if edge is not None else _addendum(graph, from_node, submission.choice)
@@ -134,6 +206,26 @@ class ApplyService:
             arrival_addendum=addendum,
         )
         return ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=envelope)
+
+    def _open_graph_gate_decision(self, chunk: Chunk, gate_node: Node, *, epoch: int) -> None:
+        """Open the graph gate's decision on arrival — idempotent per (chunk, node, epoch).
+
+        The node's own choices become the decision's; no artifacts are attached (they
+        arrived with the transition into the gate). A replay of the arriving transition
+        never reaches here (run_coordinator=False), and the natural-key probe guards a
+        double-open in any other path (D-045)."""
+        if self._chunks.find_decision(chunk.chunk_id, node_id=gate_node.node_id, epoch=epoch) is not None:
+            return
+        self._chunks.record_decision(
+            decision_id=mint(DECISION_PREFIX, self._clock),
+            chunk_id=chunk.chunk_id,
+            node_id=gate_node.node_id,
+            node_name=gate_node.name,
+            epoch=epoch,
+            choices=[DecisionChoice(name=c.name, description=c.description) for c in gate_node.choices],
+            at=self._clock.now(),
+            artifacts=[],
+        )
 
     def _row(self, chunk: Chunk, from_node: Node, epoch: int, artifact: SubmittedArtifact) -> ArtifactRow:
         is_commit = artifact.kind is ArtifactKind.GIT_COMMIT

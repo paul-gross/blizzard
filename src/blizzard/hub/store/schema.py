@@ -12,9 +12,10 @@ deliver -> land end to end. Tables the thin slice does not yet exercise
 (``chunk_stopped``, ``escalations``) are present because the status-derivation
 *precedence* is only correct with them — a seam shaped, not dead weight. The
 ``questions``/``question_answers`` tables land the ask/answer rendezvous (MVP
-criterion 7); the gate/decision tables are the gates track's, and
-``transitions.decision_id`` is already carried, un-constrained, so they bolt on
-without reshaping.
+criterion 7); the gate tables (``decisions``, ``decision_resolutions``, ``requeues``)
+land the human-gate loop (MVP criterion 12) and feed the ``waiting_on_human``
+derivation; ``transitions.decision_id`` (carried since P6) is what the resolving
+transition points back at (D-045).
 """
 
 from __future__ import annotations
@@ -256,6 +257,55 @@ answer_deliveries = Table(
     Column("question_id", String, ForeignKey("questions.question_id"), nullable=False),
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("delivered_at", DateTime, nullable=False),
+)
+
+# --- Human gates: decisions and their resolutions (D-045/D-032) -------------
+#
+# A gate parks a chunk on an open Decision — a durable multiple-choice row a person
+# resolves (design/domain/work.md). The decision is written either by the hub when a
+# transition lands on a human-judged node (a *graph* gate) or by the runner in place
+# of a transition for a node it was configured to gate (a *runner-config* gate,
+# D-032). Resolved-ness is DERIVED (bzh:facts-not-status): a decision with a row in
+# ``decision_resolutions`` is resolved; the resolving Transition the holding runner
+# records later carries the same ``decision_id`` (transitions.decision_id, D-027).
+
+decisions = Table(
+    "decisions",
+    metadata,
+    Column("decision_id", String, primary_key=True),  # dec_<ulid>
+    Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
+    Column("node_id", String, nullable=False),  # the gate node awaiting the decision
+    Column("node_name", String, nullable=False),  # the node's name — what runner gate-config matches (D-041)
+    Column("epoch", Integer, nullable=False),  # the parked step's fence; stale decisions rejected (D-007)
+    Column("choices", Text, nullable=False),  # JSON list of {name, description} — the buttons (D-042)
+    Column("submitted_at", DateTime, nullable=False),
+)
+
+decision_resolutions = Table(
+    "decision_resolutions",
+    metadata,
+    # decision_id is the PK — the first write wins the CAS; a second resolution is
+    # rejected and told who already resolved (D-045, like an answer).
+    Column("decision_id", String, ForeignKey("decisions.decision_id"), primary_key=True),
+    Column("choice", String, nullable=False),  # the picked choice name — routes the resolving transition
+    Column("resolved_by", String, nullable=False),
+    Column("resolved_at", DateTime, nullable=False),
+)
+
+# --- Requeue facts (close needs_human by supersession — D-067) --------------
+#
+# ``blizzard hub requeue <chunk>`` appends this fact to close an open escalation by
+# supersession (never a resolution fact): an escalation stays open only while no later
+# lease mint AND no later requeue supersedes it (domain/work.md open_escalation). The
+# requeue also releases the route so the chunk re-derives ``ready`` and re-enters FILL
+# at its current node — a fresh attempt (design/cli.md).
+
+requeues = Table(
+    "requeues",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
+    Column("requeued_at", DateTime, nullable=False),  # supersedes an earlier escalation (D-067)
 )
 
 # --- Store-and-forward high-water mark (per-runner idempotency — D-069) ------

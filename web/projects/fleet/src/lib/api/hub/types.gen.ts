@@ -176,6 +176,7 @@ export type ChunkDetail = {
      * Current Node Id
      */
     current_node_id: string | null;
+    decision?: DecisionView | null;
     escalation?: EscalationView | null;
     /**
      * Graph Id
@@ -276,6 +277,10 @@ export type CompletionSubmission = {
      */
     choice: string;
     /**
+     * Decision Id
+     */
+    decision_id?: string | null;
+    /**
      * Epoch
      */
     epoch: number;
@@ -287,6 +292,146 @@ export type CompletionSubmission = {
      * Runner Id
      */
     runner_id: string;
+};
+
+/**
+ * DecisionChoiceModel
+ *
+ * One selectable gate outcome — a button on the board/bot (D-042).
+ */
+export type DecisionChoiceModel = {
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
+ * DecisionResolutionRequest
+ *
+ * A person's choice for an open decision — first-write-wins CAS (D-045).
+ */
+export type DecisionResolutionRequest = {
+    /**
+     * Choice
+     */
+    choice: string;
+    /**
+     * Resolved By
+     */
+    resolved_by?: string;
+};
+
+/**
+ * DecisionResolutionResponse
+ *
+ * The winning resolution — the choice, who, and when.
+ */
+export type DecisionResolutionResponse = {
+    /**
+     * Choice
+     */
+    choice: string;
+    /**
+     * Decision Id
+     */
+    decision_id: string;
+    /**
+     * Resolved At
+     */
+    resolved_at: string;
+    /**
+     * Resolved By
+     */
+    resolved_by: string;
+};
+
+/**
+ * DecisionSubmission
+ *
+ * A runner-config gate: submit a decision in place of a transition (D-032/D-036).
+ *
+ * Carries the gated step's artifacts and its fencing epoch — one atomic, epoch-fenced
+ * write, exactly where a worker-judged node would have submitted its transition. The
+ * node's choice set is supplied by the hub from the pinned graph, not sent here.
+ */
+export type DecisionSubmission = {
+    /**
+     * Artifacts
+     */
+    artifacts?: Array<SubmittedArtifact>;
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * From Node Id
+     */
+    from_node_id: string;
+    /**
+     * Runner Id
+     */
+    runner_id: string;
+};
+
+/**
+ * DecisionView
+ *
+ * A gate decision in full — the board's card and the runner's pickup (D-045).
+ *
+ * ``resolved_choice`` is set once a person has decided; ``transitioned`` is true once
+ * the holding runner has recorded the resolving transition. The runner acts on a
+ * decision that is resolved but not yet transitioned.
+ */
+export type DecisionView = {
+    /**
+     * Choices
+     */
+    choices?: Array<DecisionChoiceModel>;
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Decision Id
+     */
+    decision_id: string;
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * Node Id
+     */
+    node_id: string;
+    /**
+     * Node Name
+     */
+    node_name: string;
+    /**
+     * Resolved At
+     */
+    resolved_at?: string | null;
+    /**
+     * Resolved By
+     */
+    resolved_by?: string | null;
+    /**
+     * Resolved Choice
+     */
+    resolved_choice?: string | null;
+    /**
+     * Submitted At
+     */
+    submitted_at: string;
+    /**
+     * Transitioned
+     */
+    transitioned?: boolean;
 };
 
 /**
@@ -570,6 +715,18 @@ export type NodeEnvelope = {
      * Prompt
      */
     prompt: string | null;
+};
+
+/**
+ * OpenDecisionsResponse
+ *
+ * The fleet's open (unresolved) decisions — ``blizzard hub decisions`` (D-052).
+ */
+export type OpenDecisionsResponse = {
+    /**
+     * Decisions
+     */
+    decisions?: Array<DecisionView>;
 };
 
 /**
@@ -1137,6 +1294,36 @@ export type SubmitCompletionApiChunksChunkIdCompletionsPostResponses = {
 
 export type SubmitCompletionApiChunksChunkIdCompletionsPostResponse = SubmitCompletionApiChunksChunkIdCompletionsPostResponses[keyof SubmitCompletionApiChunksChunkIdCompletionsPostResponses];
 
+export type SubmitDecisionApiChunksChunkIdDecisionsPostData = {
+    body: DecisionSubmission;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/decisions';
+};
+
+export type SubmitDecisionApiChunksChunkIdDecisionsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SubmitDecisionApiChunksChunkIdDecisionsPostError = SubmitDecisionApiChunksChunkIdDecisionsPostErrors[keyof SubmitDecisionApiChunksChunkIdDecisionsPostErrors];
+
+export type SubmitDecisionApiChunksChunkIdDecisionsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ApplyResponse;
+};
+
+export type SubmitDecisionApiChunksChunkIdDecisionsPostResponse = SubmitDecisionApiChunksChunkIdDecisionsPostResponses[keyof SubmitDecisionApiChunksChunkIdDecisionsPostResponses];
+
 export type GetEnvelopeApiChunksChunkIdEnvelopeGetData = {
     body?: never;
     path: {
@@ -1264,6 +1451,86 @@ export type GetPmItemApiChunksChunkIdPmItemGetResponses = {
 };
 
 export type GetPmItemApiChunksChunkIdPmItemGetResponse = GetPmItemApiChunksChunkIdPmItemGetResponses[keyof GetPmItemApiChunksChunkIdPmItemGetResponses];
+
+export type RequeueChunkApiChunksChunkIdRequeuesPostData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/requeues';
+};
+
+export type RequeueChunkApiChunksChunkIdRequeuesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RequeueChunkApiChunksChunkIdRequeuesPostError = RequeueChunkApiChunksChunkIdRequeuesPostErrors[keyof RequeueChunkApiChunksChunkIdRequeuesPostErrors];
+
+export type RequeueChunkApiChunksChunkIdRequeuesPostResponses = {
+    /**
+     * Response Requeue Chunk Api Chunks  Chunk Id  Requeues Post
+     *
+     * Successful Response
+     */
+    202: {
+        [key: string]: string;
+    };
+};
+
+export type RequeueChunkApiChunksChunkIdRequeuesPostResponse = RequeueChunkApiChunksChunkIdRequeuesPostResponses[keyof RequeueChunkApiChunksChunkIdRequeuesPostResponses];
+
+export type ListDecisionsApiDecisionsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/decisions';
+};
+
+export type ListDecisionsApiDecisionsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: OpenDecisionsResponse;
+};
+
+export type ListDecisionsApiDecisionsGetResponse = ListDecisionsApiDecisionsGetResponses[keyof ListDecisionsApiDecisionsGetResponses];
+
+export type ResolveDecisionApiDecisionsDecisionIdResolutionPostData = {
+    body: DecisionResolutionRequest;
+    path: {
+        /**
+         * Decision Id
+         */
+        decision_id: string;
+    };
+    query?: never;
+    url: '/api/decisions/{decision_id}/resolution';
+};
+
+export type ResolveDecisionApiDecisionsDecisionIdResolutionPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ResolveDecisionApiDecisionsDecisionIdResolutionPostError = ResolveDecisionApiDecisionsDecisionIdResolutionPostErrors[keyof ResolveDecisionApiDecisionsDecisionIdResolutionPostErrors];
+
+export type ResolveDecisionApiDecisionsDecisionIdResolutionPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: DecisionResolutionResponse;
+};
+
+export type ResolveDecisionApiDecisionsDecisionIdResolutionPostResponse = ResolveDecisionApiDecisionsDecisionIdResolutionPostResponses[keyof ResolveDecisionApiDecisionsDecisionIdResolutionPostResponses];
 
 export type IngestRunnerFactsApiEventsPostData = {
     body: RunnerFactBatch;

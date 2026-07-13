@@ -33,6 +33,7 @@ ENV_WORKSPACE_ROOT = "BZ_WORKSPACE_ROOT"
 ENV_WORKSPACE_ENVS = "BZ_WORKSPACE_ENVS"  # comma-separated env-id pool
 ENV_HARNESS_BINARY = "BZ_HARNESS_BINARY"
 ENV_BASE_BRANCH = "BZ_BASE_BRANCH"
+ENV_GATES = "BZ_RUNNER_GATES"  # comma-separated node names this runner gates (D-032/D-073)
 
 # Reconciliation-loop defaults (design/runner/loop.md). The runner is machine-level
 # and single-workspace (D-019); these seam the loop to the hub, the workspace it
@@ -68,6 +69,9 @@ class RunnerConfig:
     worker_settings_path: str | None = None  # the runner-owned worker hook file (P7)
     max_agents: int = DEFAULT_MAX_AGENTS
     base_branch: str = DEFAULT_BASE_BRANCH
+    #: Node NAMES this runner imposes a human gate on (D-032/D-041/D-073). Reloaded each
+    #: tick — the loop rebuilds its context from this config on every pass.
+    gates: tuple[str, ...] = ()
 
     @property
     def config_path(self) -> Path:
@@ -91,6 +95,7 @@ class RunnerConfig:
         dataclass default otherwise.
         """
         envs = os.environ.get(ENV_WORKSPACE_ENVS)
+        gates = os.environ.get(ENV_GATES)
         return cls(
             root=root,
             db_url=cls.default_db_url(root),
@@ -103,6 +108,7 @@ class RunnerConfig:
             else DEFAULT_ENV_POOL,
             harness_binary=os.environ.get(ENV_HARNESS_BINARY, DEFAULT_HARNESS_BINARY),
             base_branch=os.environ.get(ENV_BASE_BRANCH, DEFAULT_BASE_BRANCH),
+            gates=tuple(g.strip() for g in gates.split(",") if g.strip()) if gates else (),
             # The worker hook file `init` writes alongside the config; the adapter
             # delivers it as `--settings` so a spawned worker heartbeats (D-069).
             worker_settings_path=str(root / WORKER_SETTINGS_FILENAME),
@@ -110,6 +116,7 @@ class RunnerConfig:
 
     def to_toml(self) -> str:
         envs = ", ".join(f'"{e}"' for e in self.workspace_envs)
+        gates = ", ".join(f'"{g}"' for g in self.gates)
         settings = f'"{self.worker_settings_path}"' if self.worker_settings_path else '""'
         return (
             "# blizzard-runner runtime configuration (blizzard runner init)\n"
@@ -126,6 +133,8 @@ class RunnerConfig:
             f"worker_settings_path = {settings}\n"
             f"max_agents = {self.max_agents}\n"
             f'base_branch = "{self.base_branch}"\n'
+            "\n# Human gates this runner imposes by node name (D-032/D-073); empty = none.\n"
+            f"gates = [{gates}]\n"
         )
 
     @classmethod
@@ -152,6 +161,7 @@ class RunnerConfig:
             else None,
             max_agents=int(raw.get("max_agents", DEFAULT_MAX_AGENTS)),
             base_branch=str(raw.get("base_branch", DEFAULT_BASE_BRANCH)),
+            gates=tuple(str(g) for g in raw.get("gates", ())),
         )
 
 

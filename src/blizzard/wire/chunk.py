@@ -12,6 +12,7 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 from blizzard.hub.domain.work import ChunkStatus
+from blizzard.wire.decision import DecisionView
 from blizzard.wire.question import QuestionView
 
 
@@ -125,6 +126,10 @@ class ChunkDetail(BaseModel):
     pm_pointers: list[PmPointerModel] = []
     route: RouteView | None = None
     escalation: EscalationView | None = None
+    # The chunk's live gate decision — the open (waiting_on_human) or resolved-but-not-
+    # yet-transitioned one (D-045). The board renders its buttons + artifacts; the
+    # holding runner picks up a resolved decision and records the resolving transition.
+    decision: DecisionView | None = None
     history: list[TransitionView] = []
     artifacts: list[ArtifactView] = []
     # The chunk's open questions ([ask-answer.md], MVP criterion 7): a ``waiting_on_human``

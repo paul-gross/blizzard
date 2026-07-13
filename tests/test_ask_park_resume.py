@@ -118,7 +118,7 @@ def test_exited_worker_with_open_ask_parks_without_a_verdict(tmp_path):  # type:
     assert '"question_id": "qn_1"' in buffered[0].payload
     # No verdict elicited and no completion buffered — a park is not a judgement.
     assert harness.judged == []
-    assert store.pending_completion_lease_ids() == set()
+    assert store.pending_submission_lease_ids() == set()
 
 
 def test_park_is_not_repeated_and_never_elicits_a_verdict(tmp_path):  # type: ignore[no-untyped-def]

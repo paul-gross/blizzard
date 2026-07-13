@@ -33,6 +33,7 @@ from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import HubClientError
 from blizzard.runner.store.repository import AskRecord, BufferedFact, EnvBindingRecord, LeaseRecord, NewLease
 from blizzard.wire.completion import CompletionSubmission, SubmittedArtifact
+from blizzard.wire.decision import DecisionSubmission, DecisionView
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeEnvelope
 from blizzard.wire.facts import (
     ANSWER_DELIVERED,
@@ -51,11 +52,14 @@ _TRANSITIONED = "transitioned"
 _REAPED = "reaped"
 _FAILED = "failed"
 _ESCALATED = "escalated"
+_PARKED = "parked"  # a runner-config gate: the node-step completed, the chunk parks on a decision
 
 # Outbound-buffer fact kinds (design/runner/store.md). ``completion.submitted`` is the
-# runner-local kind whose flush drives the apply-response; the two hub-fact kinds
-# (LEASE_MINTED / ESCALATION_RECORDED) flush to POST /events (D-069/D-044).
+# runner-local kind whose flush drives the apply-response; ``decision.submitted`` is the
+# runner-config gate's kind (D-032), which parks the chunk instead of advancing it; the
+# two hub-fact kinds (LEASE_MINTED / ESCALATION_RECORDED) flush to POST /events (D-069/D-044).
 _COMPLETION_KIND = "completion.submitted"
+_DECISION_KIND = "decision.submitted"
 
 # The env count a solo chunk wants; batching (K>1) is parked (design/runner/environments.md).
 _SOLO_ENV_COUNT = 1
@@ -160,6 +164,8 @@ def _flush_one(ctx: LoopContext, fact: BufferedFact) -> bool:
     """Deliver one buffered fact. Return False on a transport failure (stop the drain)."""
     if fact.kind == _COMPLETION_KIND:
         return _flush_completion(ctx, fact)
+    if fact.kind == _DECISION_KIND:
+        return _flush_decision(ctx, fact)
     return _flush_hub_fact(ctx, fact)
 
 
@@ -206,6 +212,42 @@ def _flush_completion(ctx: LoopContext, fact: BufferedFact) -> bool:
     return True
 
 
+def _flush_decision(ctx: LoopContext, fact: BufferedFact) -> bool:
+    """Submit a buffered runner-config gate decision and park the chunk (D-032/D-045).
+
+    A gated node's decision parks the chunk ``waiting_on_human`` — there is no next
+    envelope to continue into, so the flush just closes the lease (the node-step is
+    done) and holds the environments. Idempotent by construction: the hub's decision
+    apply is natural-key idempotent (a re-submitted decision at the same (node, epoch)
+    returns the parked outcome without a second row, D-045), and a re-flush past a lost
+    ack finds the lease closed and clears the buffer.
+    """
+    payload = json.loads(fact.payload)
+    submission = DecisionSubmission.model_validate(payload["submission"])
+    try:
+        response = ctx.hub.submit_decision(fact.chunk_id or "", submission)
+    except HubClientError:
+        return False  # decision stays durable in the buffer; retried next tick
+
+    ctx.store.ack_outbound(fact.seq, acked_at=ctx.clock.now())
+    lease = ctx.store.active_lease(fact.lease_id or "")
+    if lease is None:
+        return True  # already parked on an earlier flush whose ack was lost (D-045)
+    if response.outcome == ApplyOutcome.FAILURE:
+        _log.warning("decision rejected on flush", chunk_id=lease.chunk_id, detail=response.detail or "")
+        _fail_attempt(ctx, lease, reason=_FAILED)
+        return True
+    ctx.store.record_closure(
+        lease_id=lease.lease_id,
+        chunk_id=lease.chunk_id,
+        node_id=lease.node_id,
+        reason=_PARKED,
+        closed_at=ctx.clock.now(),
+    )
+    _log.info("chunk parked at runner-config gate", chunk_id=lease.chunk_id, node=lease.node_name)
+    return True
+
+
 def _consume_apply_response(ctx: LoopContext, lease: LeaseRecord, response: ApplyResponse) -> None:
     """Record the closure and continue in place per the hub's apply-response (D-072)."""
     if response.outcome == ApplyOutcome.FAILURE:
@@ -220,7 +262,7 @@ def _consume_apply_response(ctx: LoopContext, lease: LeaseRecord, response: Appl
         lease_id=lease.lease_id, chunk_id=lease.chunk_id, node_id=lease.node_id, reason=_TRANSITIONED, closed_at=now
     )
     bindings = ctx.store.bindings_for_chunk(lease.chunk_id)
-    _apply_response(ctx, lease, response.outcome, response.next_envelope, bindings)
+    _apply_response(ctx, lease.chunk_id, response.outcome, response.next_envelope, bindings)
 
 
 # --------------------------------------------------------------------------- #
@@ -296,20 +338,22 @@ def advance(ctx: LoopContext) -> None:
     Two responsibilities: (a) a session-bearing worker whose process has exited is a
     done declaration — resume it with the judgement prompt, parse the ``<Choice>``,
     push its artifacts, and **buffer** the epoch-fenced completion (the flusher in
-    PULL delivers it and drives the apply-response, D-069); (b) a chunk held at a hub
-    node (envs bound, no active lease) is polled for the hub's terminal outcome — a
-    landed delivery releases its environments (D-066).
+    PULL delivers it and drives the apply-response, D-069) — unless this operator gates
+    the node by name, in which case it buffers a **decision** instead (D-032); (b) a
+    chunk the runner holds with no active lease is driven by :func:`_advance_held_chunk`
+    — a hub node polled for its terminal outcome (D-066), or a gate whose decision the
+    human has resolved advanced by the resolving transition (D-045).
 
-    A worker whose completion is already buffered is skipped: the verdict is elicited
-    exactly once, then the chunk waits at its node boundary for the flush (D-069).
+    A worker whose completion or decision is already buffered is skipped: the outcome is
+    elicited exactly once, then the chunk waits at its node boundary for the flush (D-069).
     """
-    pending_completions = ctx.store.pending_completion_lease_ids()
+    pending = ctx.store.pending_submission_lease_ids()
     parked = ctx.store.parked_lease_ids()
     for lease in ctx.store.list_active_leases():
         if lease.pid is None or lease.session_id is None:
             continue  # REAP's residue
-        if lease.lease_id in pending_completions:
-            continue  # completion elicited, awaiting flush — the node boundary (D-069)
+        if lease.lease_id in pending:
+            continue  # outcome elicited, awaiting flush — the node boundary (D-069)
         if lease.lease_id in parked:
             _resume_if_answered(ctx, lease)  # dormant on a question — resume on the answer
             continue
@@ -319,7 +363,7 @@ def advance(ctx: LoopContext) -> None:
 
     for chunk_id in ctx.store.live_tenure_chunk_ids():
         if ctx.store.active_lease_for_chunk(chunk_id) is None:
-            _poll_hub_node(ctx, chunk_id)
+            _advance_held_chunk(ctx, chunk_id)
 
 
 def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
@@ -348,6 +392,13 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
 
     # 1. Push produced branches to their forge origins BEFORE submitting (D-026).
     artifacts = _push_and_collect_artifacts(ctx, bindings)
+
+    # 1b. Runner-config gate (D-032/D-073): this operator gates this node by name, so the
+    #     node-step's outcome is a human's, not the worker's. Submit a Decision carrying
+    #     the step's artifacts instead of eliciting a verdict — the human judges (D-045).
+    if lease.node_name in ctx.config.gates:
+        _buffer_decision(ctx, lease, artifacts)
+        return
 
     # 2. Elicit the verdict via the judgement resume (D-038). A dead worker whose
     #    session cannot answer a parseable <Choice> is a failure (D-009).
@@ -389,9 +440,34 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
     _log.info("completion buffered", chunk_id=lease.chunk_id, lease_id=lease.lease_id, choice=choice)
 
 
+def _buffer_decision(ctx: LoopContext, lease: LeaseRecord, artifacts: list[SubmittedArtifact]) -> None:
+    """Buffer a runner-config gate decision — the gated node-step's outcome (D-032/D-036).
+
+    The node's choice set is the hub's (it owns the graph), so the submission carries
+    only the step's artifacts and its fence. The flusher (:func:`_flush_decision`)
+    delivers it and parks the chunk; ADVANCE skips this lease until the flush closes it
+    (:meth:`pending_submission_lease_ids`).
+    """
+    submission = DecisionSubmission(
+        from_node_id=lease.node_id,
+        epoch=lease.epoch,
+        runner_id=ctx.config.runner_id,
+        artifacts=artifacts,
+    )
+    payload = json.dumps({"submission": submission.model_dump(mode="json")})
+    ctx.store.enqueue_outbound(
+        kind=_DECISION_KIND,
+        chunk_id=lease.chunk_id,
+        lease_id=lease.lease_id,
+        payload=payload,
+        created_at=ctx.clock.now(),
+    )
+    _log.info("runner-config gate: decision buffered", chunk_id=lease.chunk_id, node=lease.node_name)
+
+
 def _apply_response(
     ctx: LoopContext,
-    lease: LeaseRecord,
+    chunk_id: str,
     outcome: ApplyOutcome,
     next_envelope: NodeEnvelope | None,
     bindings: list[EnvBindingRecord],
@@ -399,17 +475,24 @@ def _apply_response(
     """Act on the apply-response: continue in place, hold at a hub node, or finish (D-072)."""
     if outcome == ApplyOutcome.NEXT and next_envelope is not None:
         envs = _bindings_as_environments(bindings)
-        _spawn_attempt(ctx, lease.chunk_id, next_envelope, envs)
+        _spawn_attempt(ctx, chunk_id, next_envelope, envs)
     elif outcome == ApplyOutcome.HUB_NODE_TAKEN:
-        _log.info("hub node took over — holding envs until terminal", chunk_id=lease.chunk_id)
+        _log.info("hub node took over — holding envs until terminal", chunk_id=chunk_id)
     elif outcome == ApplyOutcome.DONE:
-        _release_all(ctx, lease.chunk_id)
+        _release_all(ctx, chunk_id)
     elif outcome == ApplyOutcome.PARKED_AT_GATE:
-        _log.info("chunk parked at human gate", chunk_id=lease.chunk_id)  # waiting_on_human (P7)
+        _log.info("chunk parked at human gate", chunk_id=chunk_id)  # waiting_on_human (D-045)
 
 
-def _poll_hub_node(ctx: LoopContext, chunk_id: str) -> None:
-    """Poll a hub-node-held chunk for its terminal outcome; release on landed (D-066)."""
+def _advance_held_chunk(ctx: LoopContext, chunk_id: str) -> None:
+    """Drive a chunk the runner holds with no active lease: a hub node or a parked gate.
+
+    Two parked shapes share this poll (both hold environments, no live lease): a chunk at
+    a **hub node** (deliver) is polled for its terminal outcome and released on landed
+    (D-066); a chunk **parked on a resolved gate decision** is advanced by recording the
+    resolving transition along the chosen edge (D-027/D-045), then continued in place from
+    the returned envelope — the human's choice moves the chunk.
+    """
     try:
         detail = ctx.hub.get_chunk(chunk_id)
     except HubClientError:
@@ -417,8 +500,40 @@ def _poll_hub_node(ctx: LoopContext, chunk_id: str) -> None:
     if detail.status == ChunkStatus.DONE:
         _log.info("delivery landed — releasing envs", chunk_id=chunk_id)
         _release_all(ctx, chunk_id)
+        return
+    decision = detail.decision
+    if decision is not None and decision.resolved_choice is not None and not decision.transitioned:
+        _resolve_gate(ctx, chunk_id, decision)
     # A conflict routing back to a runner node (D-058) reappears as a fresh envelope
-    # the next claim/advance picks up; that recovery cycle is P7.
+    # the next claim/advance picks up; that recovery cycle is P7. An unresolved decision
+    # keeps waiting; the human's resolution is picked up on a later tick.
+
+
+def _resolve_gate(ctx: LoopContext, chunk_id: str, decision: DecisionView) -> None:
+    """Record the resolving transition for a decided gate and continue in place (D-027/D-045).
+
+    The runner authors the transition the human's choice implies — reusing the parked
+    step's epoch (no new lease was minted while parked) and referencing the decision id,
+    which is what makes a transition out of a human-judged node legal at the hub. The
+    apply-response then continues the chunk in its warm environments (spawn the next
+    node, hold at a hub node, or finish)."""
+    submission = CompletionSubmission(
+        choice=decision.resolved_choice or "",
+        epoch=decision.epoch,
+        runner_id=ctx.config.runner_id,
+        from_node_id=decision.node_id,
+        artifacts=[],  # the decision's artifacts already landed (D-045)
+        decision_id=decision.decision_id,
+    )
+    try:
+        response = ctx.hub.submit_completion(chunk_id, submission)
+    except HubClientError:
+        return  # the resolution is durable at the hub; retry next tick
+    if response.outcome == ApplyOutcome.FAILURE:
+        _log.warning("resolving transition rejected", chunk_id=chunk_id, detail=response.detail or "")
+        return
+    _log.info("gate resolved — advancing chunk", chunk_id=chunk_id, choice=decision.resolved_choice)
+    _apply_response(ctx, chunk_id, response.outcome, response.next_envelope, ctx.store.bindings_for_chunk(chunk_id))
 
 
 # --------------------------------------------------------------------------- #

@@ -31,7 +31,8 @@ from blizzard.runner.store.repository import IWriteRunnerStore
 from blizzard.runner.store.schema import metadata as runner_metadata
 from blizzard.wire.chunk import ChunkDetail
 from blizzard.wire.completion import CompletionSubmission
-from blizzard.wire.envelope import ApplyResponse, NodeConfig, NodeEnvelope
+from blizzard.wire.decision import DecisionSubmission
+from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeConfig, NodeEnvelope
 from blizzard.wire.facts import RunnerFact, RunnerFactAck, RunnerFactBatch
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekEntry, QueuePeekResponse
@@ -66,6 +67,8 @@ class FakeHub:
         self.chunks: dict[str, ChunkDetail] = {}
         self.claims: list[RouteClaim] = []
         self.completions: list[tuple[str, CompletionSubmission]] = []
+        self.decisions_submitted: list[tuple[str, DecisionSubmission]] = []
+        self.decision_responses: list[ApplyResponse] = []
         self.leases: list[tuple[str, int, str]] = []  # (chunk_id, epoch, runner_id)
         self.escalations: list[tuple[str, int, str, str]] = []  # (chunk_id, epoch, runner_id, takeover)
         self.pushed: list[RunnerFact] = []
@@ -88,6 +91,14 @@ class FakeHub:
         self.completions.append((chunk_id, submission))
         assert self.apply_responses, "no apply response scripted"
         return self.apply_responses.pop(0)
+
+    def submit_decision(self, chunk_id: str, submission: DecisionSubmission) -> ApplyResponse:
+        if self.down:
+            raise HubClientError("fake hub is down")
+        self.decisions_submitted.append((chunk_id, submission))
+        if self.decision_responses:
+            return self.decision_responses.pop(0)
+        return ApplyResponse(outcome=ApplyOutcome.PARKED_AT_GATE, detail="parked at gate")
 
     def push_facts(self, batch: RunnerFactBatch) -> RunnerFactAck:
         if self.down:

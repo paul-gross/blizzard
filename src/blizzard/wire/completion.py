@@ -6,10 +6,11 @@ atomic, epoch-fenced write** (D-036). Git-commit artifacts name branches already
 pushed to the forge (D-026). A stale epoch is rejected and the artifacts never
 enter the store (D-007). The reply is the :class:`~blizzard.wire.envelope.ApplyResponse`.
 
-At a human-judged node the hub rejects a transition-style completion (human signoff
-required) — the gate counterpart posts a decision instead (P7); the submission
-model already carries everything a decision needs, so that route bolts on without
-reshaping this contract.
+At a human-judged node the hub rejects a plain transition-style completion (human
+signoff required) — a runner-config gate posts a decision instead
+(:mod:`blizzard.wire.decision`). The one exception is the **resolving transition**:
+a completion whose ``decision_id`` points at a resolved decision is how the holding
+runner advances a chunk past a gate once a person has decided (D-027/D-045).
 """
 
 from __future__ import annotations
@@ -48,3 +49,7 @@ class CompletionSubmission(BaseModel):
     from_node_id: str
     check_results: list[CheckResult] = []
     artifacts: list[SubmittedArtifact] = []
+    # Set only on a gate-resolving transition (D-045): the decision this transition
+    # resolves. Its presence is what makes a transition out of a human-judged node
+    # legal — a worker transition there (no decision_id) is rejected (human signoff).
+    decision_id: str | None = None

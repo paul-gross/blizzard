@@ -237,6 +237,16 @@
             ],
             "title": "Current Node Id"
           },
+          "decision": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DecisionView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "escalation": {
             "anyOf": [
               {
@@ -421,6 +431,17 @@
             "title": "Choice",
             "type": "string"
           },
+          "decision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Id"
+          },
           "epoch": {
             "title": "Epoch",
             "type": "integer"
@@ -441,6 +462,190 @@
           "from_node_id"
         ],
         "title": "CompletionSubmission",
+        "type": "object"
+      },
+      "DecisionChoiceModel": {
+        "description": "One selectable gate outcome \u2014 a button on the board/bot (D-042).",
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description"
+        ],
+        "title": "DecisionChoiceModel",
+        "type": "object"
+      },
+      "DecisionResolutionRequest": {
+        "description": "A person's choice for an open decision \u2014 first-write-wins CAS (D-045).",
+        "properties": {
+          "choice": {
+            "title": "Choice",
+            "type": "string"
+          },
+          "resolved_by": {
+            "default": "operator",
+            "title": "Resolved By",
+            "type": "string"
+          }
+        },
+        "required": [
+          "choice"
+        ],
+        "title": "DecisionResolutionRequest",
+        "type": "object"
+      },
+      "DecisionResolutionResponse": {
+        "description": "The winning resolution \u2014 the choice, who, and when.",
+        "properties": {
+          "choice": {
+            "title": "Choice",
+            "type": "string"
+          },
+          "decision_id": {
+            "title": "Decision Id",
+            "type": "string"
+          },
+          "resolved_at": {
+            "title": "Resolved At",
+            "type": "string"
+          },
+          "resolved_by": {
+            "title": "Resolved By",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision_id",
+          "choice",
+          "resolved_by",
+          "resolved_at"
+        ],
+        "title": "DecisionResolutionResponse",
+        "type": "object"
+      },
+      "DecisionSubmission": {
+        "description": "A runner-config gate: submit a decision in place of a transition (D-032/D-036).\n\nCarries the gated step's artifacts and its fencing epoch \u2014 one atomic, epoch-fenced\nwrite, exactly where a worker-judged node would have submitted its transition. The\nnode's choice set is supplied by the hub from the pinned graph, not sent here.",
+        "properties": {
+          "artifacts": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SubmittedArtifact"
+            },
+            "title": "Artifacts",
+            "type": "array"
+          },
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "from_node_id": {
+            "title": "From Node Id",
+            "type": "string"
+          },
+          "runner_id": {
+            "title": "Runner Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from_node_id",
+          "epoch",
+          "runner_id"
+        ],
+        "title": "DecisionSubmission",
+        "type": "object"
+      },
+      "DecisionView": {
+        "description": "A gate decision in full \u2014 the board's card and the runner's pickup (D-045).\n\n``resolved_choice`` is set once a person has decided; ``transitioned`` is true once\nthe holding runner has recorded the resolving transition. The runner acts on a\ndecision that is resolved but not yet transitioned.",
+        "properties": {
+          "choices": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/DecisionChoiceModel"
+            },
+            "title": "Choices",
+            "type": "array"
+          },
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "decision_id": {
+            "title": "Decision Id",
+            "type": "string"
+          },
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "node_name": {
+            "title": "Node Name",
+            "type": "string"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "resolved_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved By"
+          },
+          "resolved_choice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved Choice"
+          },
+          "submitted_at": {
+            "title": "Submitted At",
+            "type": "string"
+          },
+          "transitioned": {
+            "default": false,
+            "title": "Transitioned",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "decision_id",
+          "chunk_id",
+          "node_id",
+          "node_name",
+          "epoch",
+          "submitted_at"
+        ],
+        "title": "DecisionView",
         "type": "object"
       },
       "EnvelopeArtifact": {
@@ -861,6 +1066,21 @@
           "judgement_prompt"
         ],
         "title": "NodeEnvelope",
+        "type": "object"
+      },
+      "OpenDecisionsResponse": {
+        "description": "The fleet's open (unresolved) decisions \u2014 ``blizzard hub decisions`` (D-052).",
+        "properties": {
+          "decisions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/DecisionView"
+            },
+            "title": "Decisions",
+            "type": "array"
+          }
+        },
+        "title": "OpenDecisionsResponse",
         "type": "object"
       },
       "PmItemView": {
@@ -1704,6 +1924,59 @@
         ]
       }
     },
+    "/api/chunks/{chunk_id}/decisions": {
+      "post": {
+        "description": "Runner-config gate: park the chunk on a decision in place of a transition (D-032/D-045).",
+        "operationId": "submit_decision_api_chunks__chunk_id__decisions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecisionSubmission"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Submit Decision",
+        "tags": [
+          "chunks"
+        ]
+      }
+    },
     "/api/chunks/{chunk_id}/envelope": {
       "get": {
         "description": "The chunk's current node envelope, idempotent \u2014 the lost-apply re-read (D-090).",
@@ -1901,6 +2174,128 @@
         "summary": "Get Pm Item",
         "tags": [
           "chunks"
+        ]
+      }
+    },
+    "/api/chunks/{chunk_id}/requeues": {
+      "post": {
+        "description": "Close an escalation by supersession: requeue at the current node (D-067).",
+        "operationId": "requeue_chunk_api_chunks__chunk_id__requeues_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Requeue Chunk Api Chunks  Chunk Id  Requeues Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Requeue Chunk",
+        "tags": [
+          "chunks"
+        ]
+      }
+    },
+    "/api/decisions": {
+      "get": {
+        "description": "The fleet's open (unresolved) decisions \u2014 gate surfacing (D-052).",
+        "operationId": "list_decisions_api_decisions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenDecisionsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Decisions",
+        "tags": [
+          "decisions"
+        ]
+      }
+    },
+    "/api/decisions/{decision_id}/resolution": {
+      "post": {
+        "description": "Resolve an open decision, first-write-wins CAS (D-045).",
+        "operationId": "resolve_decision_api_decisions__decision_id__resolution_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "decision_id",
+            "required": true,
+            "schema": {
+              "title": "Decision Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecisionResolutionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionResolutionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resolve Decision",
+        "tags": [
+          "decisions"
         ]
       }
     },

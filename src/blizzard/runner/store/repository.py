@@ -145,11 +145,13 @@ class IReadRunnerStore(Protocol):
         """
         ...
 
-    def pending_completion_lease_ids(self) -> set[str]:
-        """Lease ids with an unacked ``completion.submitted`` fact in the buffer.
+    def pending_submission_lease_ids(self) -> set[str]:
+        """Lease ids with an unacked ``completion.submitted`` or ``decision.submitted``
+        fact in the buffer.
 
-        ADVANCE reads this to skip a worker whose completion is already buffered so
-        the verdict is elicited exactly once while the flush is pending (D-069)."""
+        ADVANCE reads this to skip a worker whose completion (or runner-config gate
+        decision) is already buffered, so the node-step's outcome is elicited exactly
+        once while the flush is pending (D-069/D-032)."""
         ...
 
     def held_environment_ids(self) -> list[str]:

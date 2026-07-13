@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { AnswerQuestionApiQuestionsQuestionIdAnswerPostData, AnswerQuestionApiQuestionsQuestionIdAnswerPostErrors, AnswerQuestionApiQuestionsQuestionIdAnswerPostResponses, AskQuestionApiQuestionsPostData, AskQuestionApiQuestionsPostErrors, AskQuestionApiQuestionsPostResponses, ClaimRouteApiRoutesPostData, ClaimRouteApiRoutesPostErrors, ClaimRouteApiRoutesPostResponses, GetChunkApiChunksChunkIdGetData, GetChunkApiChunksChunkIdGetErrors, GetChunkApiChunksChunkIdGetResponses, GetEnvelopeApiChunksChunkIdEnvelopeGetData, GetEnvelopeApiChunksChunkIdEnvelopeGetErrors, GetEnvelopeApiChunksChunkIdEnvelopeGetResponses, GetPmItemApiChunksChunkIdPmItemGetData, GetPmItemApiChunksChunkIdPmItemGetErrors, GetPmItemApiChunksChunkIdPmItemGetResponses, GetQuestionApiQuestionsQuestionIdGetData, GetQuestionApiQuestionsQuestionIdGetErrors, GetQuestionApiQuestionsQuestionIdGetResponses, HealthApiHealthGetData, HealthApiHealthGetResponses, IngestChunkApiChunksPostData, IngestChunkApiChunksPostErrors, IngestChunkApiChunksPostResponses, IngestRunnerFactsApiEventsPostData, IngestRunnerFactsApiEventsPostErrors, IngestRunnerFactsApiEventsPostResponses, ListChunksApiChunksGetData, ListChunksApiChunksGetResponses, ListOpenQuestionsApiQuestionsGetData, ListOpenQuestionsApiQuestionsGetResponses, MintGraphApiGraphsPostData, MintGraphApiGraphsPostErrors, MintGraphApiGraphsPostResponses, PeekQueueApiQueuePeekGetData, PeekQueueApiQueuePeekGetResponses, ReadyApiReadyGetData, ReadyApiReadyGetResponses, ReportEscalationApiChunksChunkIdEscalationsPostData, ReportEscalationApiChunksChunkIdEscalationsPostErrors, ReportEscalationApiChunksChunkIdEscalationsPostResponses, ReportLeaseApiChunksChunkIdLeasesPostData, ReportLeaseApiChunksChunkIdLeasesPostErrors, ReportLeaseApiChunksChunkIdLeasesPostResponses, SubmitCompletionApiChunksChunkIdCompletionsPostData, SubmitCompletionApiChunksChunkIdCompletionsPostErrors, SubmitCompletionApiChunksChunkIdCompletionsPostResponses } from './types.gen';
+import type { AnswerQuestionApiQuestionsQuestionIdAnswerPostData, AnswerQuestionApiQuestionsQuestionIdAnswerPostErrors, AnswerQuestionApiQuestionsQuestionIdAnswerPostResponses, AskQuestionApiQuestionsPostData, AskQuestionApiQuestionsPostErrors, AskQuestionApiQuestionsPostResponses, ClaimRouteApiRoutesPostData, ClaimRouteApiRoutesPostErrors, ClaimRouteApiRoutesPostResponses, GetChunkApiChunksChunkIdGetData, GetChunkApiChunksChunkIdGetErrors, GetChunkApiChunksChunkIdGetResponses, GetEnvelopeApiChunksChunkIdEnvelopeGetData, GetEnvelopeApiChunksChunkIdEnvelopeGetErrors, GetEnvelopeApiChunksChunkIdEnvelopeGetResponses, GetPmItemApiChunksChunkIdPmItemGetData, GetPmItemApiChunksChunkIdPmItemGetErrors, GetPmItemApiChunksChunkIdPmItemGetResponses, GetQuestionApiQuestionsQuestionIdGetData, GetQuestionApiQuestionsQuestionIdGetErrors, GetQuestionApiQuestionsQuestionIdGetResponses, HealthApiHealthGetData, HealthApiHealthGetResponses, IngestChunkApiChunksPostData, IngestChunkApiChunksPostErrors, IngestChunkApiChunksPostResponses, IngestRunnerFactsApiEventsPostData, IngestRunnerFactsApiEventsPostErrors, IngestRunnerFactsApiEventsPostResponses, ListChunksApiChunksGetData, ListChunksApiChunksGetResponses, ListDecisionsApiDecisionsGetData, ListDecisionsApiDecisionsGetResponses, ListOpenQuestionsApiQuestionsGetData, ListOpenQuestionsApiQuestionsGetResponses, MintGraphApiGraphsPostData, MintGraphApiGraphsPostErrors, MintGraphApiGraphsPostResponses, PeekQueueApiQueuePeekGetData, PeekQueueApiQueuePeekGetResponses, ReadyApiReadyGetData, ReadyApiReadyGetResponses, ReportEscalationApiChunksChunkIdEscalationsPostData, ReportEscalationApiChunksChunkIdEscalationsPostErrors, ReportEscalationApiChunksChunkIdEscalationsPostResponses, ReportLeaseApiChunksChunkIdLeasesPostData, ReportLeaseApiChunksChunkIdLeasesPostErrors, ReportLeaseApiChunksChunkIdLeasesPostResponses, RequeueChunkApiChunksChunkIdRequeuesPostData, RequeueChunkApiChunksChunkIdRequeuesPostErrors, RequeueChunkApiChunksChunkIdRequeuesPostResponses, ResolveDecisionApiDecisionsDecisionIdResolutionPostData, ResolveDecisionApiDecisionsDecisionIdResolutionPostErrors, ResolveDecisionApiDecisionsDecisionIdResolutionPostResponses, SubmitCompletionApiChunksChunkIdCompletionsPostData, SubmitCompletionApiChunksChunkIdCompletionsPostErrors, SubmitCompletionApiChunksChunkIdCompletionsPostResponses, SubmitDecisionApiChunksChunkIdDecisionsPostData, SubmitDecisionApiChunksChunkIdDecisionsPostErrors, SubmitDecisionApiChunksChunkIdDecisionsPostResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -61,6 +61,20 @@ export const submitCompletionApiChunksChunkIdCompletionsPost = <ThrowOnError ext
 });
 
 /**
+ * Submit Decision
+ *
+ * Runner-config gate: park the chunk on a decision in place of a transition (D-032/D-045).
+ */
+export const submitDecisionApiChunksChunkIdDecisionsPost = <ThrowOnError extends boolean = false>(options: Options<SubmitDecisionApiChunksChunkIdDecisionsPostData, ThrowOnError>): RequestResult<SubmitDecisionApiChunksChunkIdDecisionsPostResponses, SubmitDecisionApiChunksChunkIdDecisionsPostErrors, ThrowOnError> => (options.client ?? client).post<SubmitDecisionApiChunksChunkIdDecisionsPostResponses, SubmitDecisionApiChunksChunkIdDecisionsPostErrors, ThrowOnError>({
+    url: '/api/chunks/{chunk_id}/decisions',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
  * Get Envelope
  *
  * The chunk's current node envelope, idempotent — the lost-apply re-read (D-090).
@@ -101,6 +115,34 @@ export const reportLeaseApiChunksChunkIdLeasesPost = <ThrowOnError extends boole
  * Pass-through PM item read — body + comments, contents never stored (D-047).
  */
 export const getPmItemApiChunksChunkIdPmItemGet = <ThrowOnError extends boolean = false>(options: Options<GetPmItemApiChunksChunkIdPmItemGetData, ThrowOnError>): RequestResult<GetPmItemApiChunksChunkIdPmItemGetResponses, GetPmItemApiChunksChunkIdPmItemGetErrors, ThrowOnError> => (options.client ?? client).get<GetPmItemApiChunksChunkIdPmItemGetResponses, GetPmItemApiChunksChunkIdPmItemGetErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/pm-item', ...options });
+
+/**
+ * Requeue Chunk
+ *
+ * Close an escalation by supersession: requeue at the current node (D-067).
+ */
+export const requeueChunkApiChunksChunkIdRequeuesPost = <ThrowOnError extends boolean = false>(options: Options<RequeueChunkApiChunksChunkIdRequeuesPostData, ThrowOnError>): RequestResult<RequeueChunkApiChunksChunkIdRequeuesPostResponses, RequeueChunkApiChunksChunkIdRequeuesPostErrors, ThrowOnError> => (options.client ?? client).post<RequeueChunkApiChunksChunkIdRequeuesPostResponses, RequeueChunkApiChunksChunkIdRequeuesPostErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/requeues', ...options });
+
+/**
+ * List Decisions
+ *
+ * The fleet's open (unresolved) decisions — gate surfacing (D-052).
+ */
+export const listDecisionsApiDecisionsGet = <ThrowOnError extends boolean = false>(options?: Options<ListDecisionsApiDecisionsGetData, ThrowOnError>): RequestResult<ListDecisionsApiDecisionsGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListDecisionsApiDecisionsGetResponses, unknown, ThrowOnError>({ url: '/api/decisions', ...options });
+
+/**
+ * Resolve Decision
+ *
+ * Resolve an open decision, first-write-wins CAS (D-045).
+ */
+export const resolveDecisionApiDecisionsDecisionIdResolutionPost = <ThrowOnError extends boolean = false>(options: Options<ResolveDecisionApiDecisionsDecisionIdResolutionPostData, ThrowOnError>): RequestResult<ResolveDecisionApiDecisionsDecisionIdResolutionPostResponses, ResolveDecisionApiDecisionsDecisionIdResolutionPostErrors, ThrowOnError> => (options.client ?? client).post<ResolveDecisionApiDecisionsDecisionIdResolutionPostResponses, ResolveDecisionApiDecisionsDecisionIdResolutionPostErrors, ThrowOnError>({
+    url: '/api/decisions/{decision_id}/resolution',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Ingest Runner Facts

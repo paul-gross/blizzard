@@ -15,10 +15,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
+from blizzard.hub.api.decisions import to_decision_view
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.api.questions import question_view
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.artifacts import ArtifactRow, GitCommitArtifact, from_row, store_key
+from blizzard.hub.domain.decisions import NotEscalated
 from blizzard.hub.domain.envelope import build_node_envelope
 from blizzard.hub.domain.ingest import IngestConflict
 from blizzard.hub.domain.work import (
@@ -46,6 +48,7 @@ from blizzard.wire.chunk import (
     TransitionView,
 )
 from blizzard.wire.completion import CompletionSubmission
+from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
 from blizzard.wire.facts import EscalationReport, LeaseMintReport
 
@@ -158,6 +161,7 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     route = services.chunks.route_of(chunk_id)
     escalation = open_escalation(facts)
+    decision = services.chunks.decision_for_chunk(chunk_id)
     return ChunkDetail(
         chunk_id=chunk.chunk_id,
         graph_id=chunk.graph_id,
@@ -175,6 +179,7 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
         escalation=EscalationView(epoch=escalation.epoch, takeover_command=escalation.takeover_command)
         if escalation is not None
         else None,
+        decision=to_decision_view(decision) if decision is not None else None,
         history=_history_views(facts),
         artifacts=_artifact_views(services.chunks.load_artifacts(chunk_id)),
         questions=[question_view(q) for q in services.chunks.load_questions(chunk_id) if not q.answered],
@@ -220,6 +225,39 @@ def submit_completion(
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
     return response
+
+
+@router.post("/chunks/{chunk_id}/decisions", response_model=ApplyResponse)
+def submit_decision(
+    chunk_id: str,
+    submission: DecisionSubmission,
+    services: Annotated[HubServices, Depends(get_services)],
+) -> ApplyResponse:
+    """Runner-config gate: park the chunk on a decision in place of a transition (D-032/D-045)."""
+    chunk = services.chunks.get(chunk_id)
+    if chunk is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+    graph = services.graphs.get(chunk.graph_id)
+    if graph is None:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
+    response = services.decisions.submit(chunk, graph, submission)
+    facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
+    services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
+    return response
+
+
+@router.post("/chunks/{chunk_id}/requeues", status_code=status.HTTP_202_ACCEPTED)
+def requeue_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> dict[str, str]:
+    """Close an escalation by supersession: requeue at the current node (D-067)."""
+    if services.chunks.get(chunk_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+    try:
+        services.requeue.requeue(chunk_id)
+    except NotEscalated as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
+    services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
+    return {"chunk_id": chunk_id}
 
 
 @router.post("/chunks/{chunk_id}/leases", status_code=status.HTTP_202_ACCEPTED)

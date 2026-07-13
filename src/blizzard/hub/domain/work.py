@@ -15,10 +15,9 @@ Precedence is **first match wins**, top to bottom, exactly as
 one status. ``waiting_on_human`` (open ask / open decision) sits between
 ``needs_human`` and ``delivering``: a chunk parks there on an open **question**
 (``question.asked`` with no ``question.answered`` — ask/answer, MVP criterion 7) or
-an open **decision** (a gate's ``decision.submitted`` no transition references —
-gates, MVP criterion 12). Both fact inputs live on :class:`ChunkFacts`; the
-question hydration ships here, and the decision hydration is populated by the gates
-track against :class:`DecisionFact` (``design/domain/work.md``).
+an open **decision** (a gate's ``decision.submitted`` no resolution flips off —
+gates, MVP criterion 12). Both fact inputs live on :class:`ChunkFacts` and OR into
+the one ``waiting_on_human`` branch (see :func:`derive_chunk_status`).
 """
 
 from __future__ import annotations
@@ -167,6 +166,48 @@ class DecisionFact:
 
 
 @dataclass(frozen=True)
+class RequeueFact:
+    """A ``requeue.recorded`` fact — closes an open escalation by supersession (D-067)."""
+
+    requeued_at: datetime
+
+
+@dataclass(frozen=True)
+class DecisionChoice:
+    """One selectable gate outcome — a button on the board/bot (D-042)."""
+
+    name: str
+    description: str
+
+
+@dataclass(frozen=True)
+class DecisionRow:
+    """A gate decision in full — the surfacing/read model (D-045).
+
+    Resolution and resolving-transition state are **derived**: ``resolved_choice`` is
+    set once a resolution row exists, and ``transitioned`` is true once a transition
+    references this decision (the runner has advanced the chunk, D-027). The holding
+    runner acts on a decision that is resolved but not yet transitioned.
+    """
+
+    decision_id: str
+    chunk_id: str
+    node_id: str
+    node_name: str
+    epoch: int
+    choices: list[DecisionChoice]
+    submitted_at: datetime
+    resolved_choice: str | None = None
+    resolved_by: str | None = None
+    resolved_at: datetime | None = None
+    transitioned: bool = False
+
+    @property
+    def resolved(self) -> bool:
+        return self.resolved_choice is not None
+
+
+@dataclass(frozen=True)
 class ChunkFacts:
     """Every fact a chunk's status derives from (D-067), already loaded.
 
@@ -184,6 +225,7 @@ class ChunkFacts:
     routes_released: list[RouteReleasedFact] = field(default_factory=list)
     questions: list[QuestionFact] = field(default_factory=list)
     decisions: list[DecisionFact] = field(default_factory=list)
+    requeues: list[RequeueFact] = field(default_factory=list)
 
 
 # --- The derivation queries (D-067) -----------------------------------------
@@ -216,15 +258,18 @@ def _has_open_escalation(facts: ChunkFacts) -> bool:
 def open_escalation(facts: ChunkFacts) -> EscalationFact | None:
     """The newest escalation not yet closed by a later lease mint (D-067), or ``None``.
 
-    Requeue/takeover close an escalation by **supersession** — the next lease mint,
-    not a resolution fact — so an escalation stays open exactly while no lease was
-    minted after it. When open, its ``takeover_command`` is the resume command a human
-    pastes (harness-adapters.md); the board surfaces it on the ``needs_human`` chunk.
+    Requeue/takeover close an escalation by **supersession** — a later lease mint or a
+    later ``requeue.recorded`` fact, never a resolution fact (D-067) — so an escalation
+    stays open exactly while nothing was recorded after it. When open, its
+    ``takeover_command`` is the resume command a human pastes (harness-adapters.md); the
+    board surfaces it on the ``needs_human`` chunk.
     """
     if not facts.escalations:
         return None
     newest = max(facts.escalations, key=lambda e: e.recorded_at)
     if any(lease.minted_at > newest.recorded_at for lease in facts.leases):
+        return None
+    if any(rq.requeued_at > newest.recorded_at for rq in facts.requeues):
         return None
     return newest
 
@@ -245,8 +290,22 @@ def open_questions(facts: ChunkFacts) -> list[QuestionFact]:
 
 
 def has_open_decision(facts: ChunkFacts) -> bool:
-    """True iff a gate's decision is unresolved — no transition references it (D-045)."""
-    return any(not d.resolved for d in facts.decisions)
+    """True iff a gate's decision is unresolved — no resolution flips it off (D-045)."""
+    return open_decision(facts) is not None
+
+
+def open_decision(facts: ChunkFacts) -> DecisionFact | None:
+    """The newest gate decision no resolution has flipped off (D-045), or ``None``.
+
+    A decision is open while it carries no resolution row — the person has not yet
+    picked a choice. Once resolved, ``waiting_on_human`` drops away (the chunk's route
+    is still live, so it derives ``running`` until the holding runner records the
+    resolving transition, D-027). Pending-ness is thus derived, never stored.
+    """
+    unresolved = [d for d in facts.decisions if not d.resolved]
+    if not unresolved:
+        return None
+    return max(unresolved, key=lambda d: d.submitted_at)
 
 
 def _newest_transition_enters_hub_node(facts: ChunkFacts) -> bool:
@@ -397,6 +456,23 @@ class IReadChunkRepository(Protocol):
         """The greatest per-runner seq the hub has already applied, or 0 (D-069)."""
         ...
 
+    def get_decision(self, decision_id: str) -> DecisionRow | None:
+        """One gate decision in full, with derived resolution/transition state (D-045)."""
+        ...
+
+    def find_decision(self, chunk_id: str, *, node_id: str, epoch: int) -> DecisionRow | None:
+        """The decision already open for a (chunk, node, epoch) — the idempotency probe
+        for a re-submitted runner-config gate decision (a lost-ack replay, D-045)."""
+        ...
+
+    def decision_for_chunk(self, chunk_id: str) -> DecisionRow | None:
+        """The chunk's newest not-yet-transitioned decision — what the board/runner act on."""
+        ...
+
+    def list_open_decisions(self) -> list[DecisionRow]:
+        """Every unresolved decision across the fleet — the ``blizzard hub decisions`` view."""
+        ...
+
 
 class IWriteChunkRepository(IReadChunkRepository, Protocol):
     """Read-write chunk access. Only the domain layer depends on this variant."""
@@ -421,8 +497,12 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         runner_id: str,
         at: datetime,
         artifacts: list[ArtifactRow],
+        decision_id: str | None = None,
     ) -> None:
-        """One node-step's transition and its artifacts, written atomically (D-036)."""
+        """One node-step's transition and its artifacts, written atomically (D-036).
+
+        ``decision_id`` is set only on a gate-resolving transition — the Decision this
+        transition resolves (D-045); ordinary transitions leave it ``None``."""
         ...
 
     def record_delivery_repo_landed(self, chunk_id: str, *, repo: str, commit_hash: str, at: datetime) -> None: ...
@@ -468,4 +548,32 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
 
         Board detail (the session was reconstituted around the answer); the status
         already flipped at ``question.answered``, so no status derives from this."""
+        ...
+
+    def record_decision(
+        self,
+        *,
+        decision_id: str,
+        chunk_id: str,
+        node_id: str,
+        node_name: str,
+        epoch: int,
+        choices: list[DecisionChoice],
+        at: datetime,
+        artifacts: list[ArtifactRow],
+    ) -> None:
+        """Open a gate decision, committing any step artifacts atomically (D-045/D-036).
+
+        A graph gate passes no artifacts (they landed with the arriving transition); a
+        runner-config gate carries the gated step's artifacts here, exactly where the
+        step's transition would have written them."""
+        ...
+
+    def record_decision_resolution(self, decision_id: str, *, choice: str, resolved_by: str, at: datetime) -> bool:
+        """First-write-wins CAS: record the person's choice, or return ``False`` if
+        the decision was already resolved (the loser is told who won, D-045)."""
+        ...
+
+    def record_requeue(self, chunk_id: str, *, at: datetime) -> None:
+        """Record a ``requeue.recorded`` fact — supersedes an open escalation (D-067)."""
         ...

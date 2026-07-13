@@ -26,6 +26,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.web import mount_web_app
 from blizzard.hub.api.chunks import router as chunks_router
+from blizzard.hub.api.decisions import router as decisions_router
 from blizzard.hub.api.events import router as events_router
 from blizzard.hub.api.graphs import router as graphs_router
 from blizzard.hub.api.health import router as health_router
@@ -102,6 +103,7 @@ def create_app(
     app.include_router(events_router)
     app.include_router(graphs_router)
     app.include_router(chunks_router)
+    app.include_router(decisions_router)
     app.include_router(routes_router)
     app.include_router(queue_router)
     app.include_router(questions_router)
