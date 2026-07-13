@@ -4,6 +4,34 @@ export type ClientOptions = {
     baseUrl: `${string}://${string}` | (string & {});
 };
 
+/**
+ * ReadinessResponse
+ *
+ * The wire shape of a readiness reading (openapi-ts consumes this).
+ */
+export type ReadinessResponse = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Expected Revision
+     */
+    expected_revision: string | null;
+    /**
+     * Ready
+     */
+    ready: boolean;
+    /**
+     * Store Reachable
+     */
+    store_reachable: boolean;
+    /**
+     * Store Revision
+     */
+    store_revision: string | null;
+};
+
 export type HealthApiHealthGetData = {
     body?: never;
     path?: never;
@@ -23,3 +51,19 @@ export type HealthApiHealthGetResponses = {
 };
 
 export type HealthApiHealthGetResponse = HealthApiHealthGetResponses[keyof HealthApiHealthGetResponses];
+
+export type ReadyApiReadyGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/ready';
+};
+
+export type ReadyApiReadyGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ReadinessResponse;
+};
+
+export type ReadyApiReadyGetResponse = ReadyApiReadyGetResponses[keyof ReadyApiReadyGetResponses];

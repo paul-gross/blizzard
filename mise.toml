@@ -58,4 +58,4 @@ run = "npm run build"
 [tasks.web-generate-client]
 description = "Regenerate the openapi-ts clients from ./openapi (CI drift check baseline)"
 dir = "web"
-run = "npm run generate-client"
+run = "npm run generate:client"
