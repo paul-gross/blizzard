@@ -62,18 +62,19 @@ def test_latest_artifacts_by_name_keeps_the_highest_epoch() -> None:
     assert latest == {("build", "findings"): 3, ("build", "other"): 1}
 
 
-def test_envelope_carries_config_pointers_and_elicitation_tail() -> None:
+def test_envelope_carries_authored_judgement_prose_and_choice_set() -> None:
+    # The author writes only the prose; the runner appends the (harness-inert)
+    # elicitation tail from node.choices when it delivers the judgement into the
+    # session (D-042). The envelope must therefore carry the prose verbatim and the
+    # choice set — never a baked-in tail (which would duplicate it and break the mock).
     env = build_node_envelope(chunk=_chunk(), node=_node(), artifacts=[_row("f", 1)], epoch=1)
     assert env.epoch == 1
     assert env.node.node_name == "build"
     assert env.node.checks == ["mise run test"]
     assert {c.name for c in env.node.choices} == {"pass", "fail"}
     assert env.prompt == "do the work"
-    judgement = env.judgement_prompt
-    assert judgement is not None
-    assert "render your verdict" in judgement
-    assert "<Choice>{name}</Choice>" in judgement
-    assert "`pass`: it works" in judgement
+    assert env.judgement_prompt == "render your verdict"
+    assert "<Choice>" not in (env.judgement_prompt or "")  # the tail is the runner's to render
     assert env.pm_pointers == [{"provider": "github", "url": "http://f/issues/1"}]
     assert [a.name for a in env.artifacts] == ["f"]
 

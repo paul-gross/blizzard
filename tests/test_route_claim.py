@@ -34,10 +34,12 @@ def test_winning_claim_carries_the_first_node_envelope(tmp_path: Path) -> None:
     assert env["epoch"] == 1
     assert env["node"]["node_name"] == "build"
     assert env["node"]["executor"] == "runner"
-    # The envelope carries the pre-prompt, the judgement prompt with its elicitation
-    # tail, the choice set, and the chunk's PM pointers.
+    # The envelope carries the pre-prompt, the authored judgement prose (the runner
+    # appends the elicitation tail from the choice set), the choice set, and the
+    # chunk's PM pointers.
     assert env["prompt"]
-    assert "<Choice>{name}</Choice>" in env["judgement_prompt"]
+    assert env["judgement_prompt"]
+    assert "<Choice>" not in env["judgement_prompt"]  # the tail is the runner's to render
     assert {c["name"] for c in env["node"]["choices"]} == {"pass", "fail"}
     assert env["pm_pointers"] == [_POINTER]
 

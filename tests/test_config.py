@@ -50,3 +50,28 @@ def test_service_band_port_env_overrides_default(tmp_path: Path, monkeypatch: py
     monkeypatch.setenv(RUNNER_ENV_PORT, "4423")
     assert HubConfig.scaffold(tmp_path).port == 4422
     assert RunnerConfig.scaffold(tmp_path).port == 4423
+
+
+@pytest.mark.unit
+def test_runner_loop_seams_scaffold_from_the_winter_injected_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The winter-service runner slot injects the loop seams so `blizzard runner init`
+    # scaffolds a runnable config without hand-editing the toml.
+    monkeypatch.setenv("BZ_WORKSPACE_ROOT", "/tmp/fixture/workspace")
+    monkeypatch.setenv("BZ_WORKSPACE_ENVS", "e1, e2 ,e3")
+    monkeypatch.setenv("BZ_HARNESS_BINARY", "/opt/mock-claude-code")
+    monkeypatch.setenv("BZ_BASE_BRANCH", "main")
+    config = RunnerConfig.scaffold(tmp_path)
+    assert config.workspace_root == "/tmp/fixture/workspace"
+    assert config.workspace_envs == ("e1", "e2", "e3")
+    assert config.harness_binary == "/opt/mock-claude-code"
+    assert config.base_branch == "main"
+
+
+@pytest.mark.unit
+def test_runner_loop_seams_fall_back_to_defaults_without_env(tmp_path: Path) -> None:
+    config = RunnerConfig.scaffold(tmp_path)
+    assert config.workspace_root == ""
+    assert config.workspace_envs == ("e1",)
+    assert config.harness_binary == "claude"

@@ -24,7 +24,8 @@ uv sync                        # install (bzh:python-toolchain)
 uv run ruff check .            # lint
 uv run ruff format --check .   # format
 uv run pyright                 # typecheck
-uv run pytest                  # unit tier
+uv run pytest                  # unit + component tiers (hermetic, token-free)
+mise run e2e                   # the acceptance-loop e2e smoke test (see below)
 
 blizzard hub init ./hub-data   # scaffold config + data dir + migrated DB (idempotent)
 blizzard hub migrate           # apply pending store migrations (--down <rev> reverses)
@@ -34,6 +35,12 @@ blizzard-export-openapi --out-dir openapi   # dump hub + runner OpenAPI specs
 ```
 
 The same `init` / `migrate` / `host` verbs exist under `blizzard runner`. A daemon **refuses to start on a store-revision mismatch**, naming the exact `migrate` command (D-099, `bzh:manual-migrations`).
+
+## The acceptance-loop e2e (`mise run e2e`)
+
+`mise run e2e` (`BLIZZARD_E2E=1 uv run pytest tests/e2e/test_acceptance_loop.py`) is the standing end-to-end smoke test — the P6 exit criterion of `blizzard-discovery`'s `implementation/verification.md`. One chunk travels the whole lifecycle — ingest → acquire → mock-scripted commit → deliver → landed in the bare origin — and the assertion holds at **both ends**: the commit is reachable from the bare origin's `main` (git truth) and the hub's facts derive `done` (fleet truth).
+
+It is **self-managed and token-free**: the test mints its own disposable `blizzard-mock` fixture workspace, starts the real forge + hub + runner, and drives the reconciliation loop one synchronous tick at a time — every seam real (git over `file://`, the forge over HTTP, the `mock-claude-code` façade over its CLI). It needs the sibling **`blizzard-mock`** worktree provisioned (`winter provision <env>`) and a local winter source; it **skips** when either is absent (e.g. a single-repo CI checkout), so the default `uv run pytest` gate stays hermetic. To drive the same loop against the live tmux services instead, `winter service up <env> --wait` brings up forge + hub + runner (see the workspace's service manifest).
 
 ## CI, build, and release
 

@@ -30,3 +30,12 @@ def test_land_maps_an_unmergeable_branch_to_conflict() -> None:
     assert result.disposition is LandingDisposition.CONFLICT
     assert result.landed_commit is None
     assert "mergeable" in result.detail
+
+
+def test_land_qualifies_a_bare_repo_with_the_default_owner() -> None:
+    # A produced git_commit artifact names its repo by worktree dir alone (``toy-api``);
+    # the forge routes on ``owner/name``, so the binding qualifies it (github_forge._repo_path).
+    forge = GitHubForgeDelivery(github_double(), default_owner="blizzard")
+    result = forge.land(LandingRequest(repo="toy-api", branch_name="e1", commit_hash="abc"))
+    assert result.disposition is LandingDisposition.LANDED
+    assert result.landed_commit == "merged-abc"

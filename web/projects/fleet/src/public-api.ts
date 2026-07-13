@@ -20,6 +20,8 @@ export {
 } from './lib/sse/sse.service';
 
 export { injectHubHealthQuery } from './lib/health/health.query';
+export { injectHubChunksQuery } from './lib/chunks/chunks.query';
+export type { ChunkSummary, ChunkStatus } from './lib/api/hub';
 
 export * as hubApi from './lib/api/hub';
 export * as runnerApi from './lib/api/runner';

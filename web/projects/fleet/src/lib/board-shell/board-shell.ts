@@ -1,4 +1,6 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+
+import type { ChunkStatus, ChunkSummary } from '../api/hub';
 
 /** The five board columns, in dispatch → done order (workflow build → review → deliver). */
 interface BoardColumn {
@@ -13,6 +15,29 @@ const COLUMNS: readonly BoardColumn[] = [
   { key: 'needs', label: 'NEEDS HUMAN' },
   { key: 'done', label: 'DONE' },
 ];
+
+/**
+ * Map a chunk's derived status (D-004) onto its board column. The walking-skeleton
+ * board has one column per resting state; the transient `delivering` shows under
+ * RUNNING, and terminal `stopped` shows under DONE.
+ */
+const STATUS_COLUMN: Record<ChunkStatus, string> = {
+  ready: 'ready',
+  running: 'running',
+  delivering: 'running',
+  waiting_on_human: 'waiting',
+  needs_human: 'needs',
+  stopped: 'done',
+  done: 'done',
+};
+
+/** One rendered board card — the derived-status view of a chunk. */
+export interface BoardCard {
+  readonly chunkId: string;
+  readonly shortId: string;
+  readonly status: ChunkStatus;
+  readonly node: string;
+}
 
 /**
  * The mission-control board shell — header, the empty five-column board grid,
@@ -48,13 +73,25 @@ const COLUMNS: readonly BoardColumn[] = [
             <div class="b-col" [attr.data-col]="col.key">
               <div class="b-col-head">
                 <span class="lbl">{{ col.label }}</span>
-                <span class="n">0</span>
+                <span class="n">{{ cardsFor(col.key).length }}</span>
               </div>
-              <div class="b-col-body"></div>
+              <div class="b-col-body">
+                @for (card of cardsFor(col.key); track card.chunkId) {
+                  <div class="card" data-testid="chunk-card" [attr.data-status]="card.status">
+                    <div class="card-id" data-testid="chunk-id">{{ card.shortId }}</div>
+                    <div class="card-meta">
+                      <span class="st" data-testid="chunk-status">{{ card.status }}</span>
+                      <span class="nd" data-testid="chunk-node">{{ card.node }}</span>
+                    </div>
+                  </div>
+                }
+              </div>
             </div>
           }
         </div>
-        <p class="empty" data-testid="empty-state">NO CHUNKS — FLEET IDLE</p>
+        @if (total() === 0) {
+          <p class="empty" data-testid="empty-state">NO CHUNKS — FLEET IDLE</p>
+        }
       </section>
     </div>
   `,
@@ -171,6 +208,38 @@ const COLUMNS: readonly BoardColumn[] = [
       overflow-y: auto;
       flex: 1;
       padding: 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .card {
+      border: 1px solid var(--line);
+      background: rgba(0, 0, 0, 0.25);
+      padding: 4px 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .card-id {
+      color: var(--cyan);
+      font-size: 11px;
+      letter-spacing: 0.04em;
+    }
+    .card-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 6px;
+    }
+    .card-meta .st {
+      color: var(--amber-hi);
+      font-size: 9px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+    .card-meta .nd {
+      color: var(--label-dim);
+      font-size: 9px;
+      letter-spacing: 0.1em;
     }
     .empty {
       position: absolute;
@@ -188,5 +257,29 @@ export class BoardShell {
   /** A short connection/health status shown in the header (e.g. `ok`, `offline`). */
   readonly connection = input('—');
 
+  /** The fleet chunk list (derived status + current node); empty when the fleet is idle. */
+  readonly chunks = input<readonly ChunkSummary[]>([]);
+
   protected readonly columns = COLUMNS;
+
+  /** Every chunk rendered as a board card, grouped into its status column. */
+  private readonly cards = computed<Map<string, BoardCard[]>>(() => {
+    const grouped = new Map<string, BoardCard[]>(COLUMNS.map((c) => [c.key, []]));
+    for (const chunk of this.chunks()) {
+      const column = STATUS_COLUMN[chunk.status] ?? 'ready';
+      grouped.get(column)?.push({
+        chunkId: chunk.chunk_id,
+        shortId: chunk.chunk_id.slice(0, 12),
+        status: chunk.status,
+        node: chunk.current_node_id ?? '—',
+      });
+    }
+    return grouped;
+  });
+
+  protected readonly total = computed(() => this.chunks().length);
+
+  protected cardsFor(columnKey: string): readonly BoardCard[] {
+    return this.cards().get(columnKey) ?? [];
+  }
 }

@@ -25,10 +25,38 @@ def read_process_start_time(pid: int) -> str | None:
             stat = fh.read()
     except (FileNotFoundError, ProcessLookupError, PermissionError):
         return None
+    rest = _stat_fields_after_comm(stat)
+    if rest is None or len(rest) < 20:
+        return None
+    return rest[19]
+
+
+def is_zombie(pid: int) -> bool:
+    """True iff ``pid`` names a defunct (exited-but-unreaped) process.
+
+    A fire-and-forget worker the runner never ``wait()``s becomes a **zombie** the
+    instant it exits: ``/proc/<pid>/stat`` still exists and its start time is
+    unchanged, so a bare start-time match would read it as alive forever and ADVANCE
+    would never judge the finished worker. The kernel marks such a process state
+    ``Z`` (field 3), which is the exited-but-unreaped signal the liveness probe needs
+    until P7's REAP reaps children explicitly.
+    """
+    try:
+        with open(f"/proc/{pid}/stat", encoding="utf-8") as fh:
+            stat = fh.read()
+    except (FileNotFoundError, ProcessLookupError, PermissionError):
+        return False
+    rest = _stat_fields_after_comm(stat)
+    return rest is not None and len(rest) >= 1 and rest[0] == "Z"
+
+
+def _stat_fields_after_comm(stat: str) -> list[str] | None:
+    """The ``/proc/<pid>/stat`` fields after ``comm`` — ``state`` is index 0, ``starttime`` 19.
+
+    The ``comm`` field (2) is paren-wrapped and may contain spaces and parens, so we
+    split after the *last* ``)``; the remainder begins at field 3 (``state``).
+    """
     close = stat.rfind(")")
     if close == -1:
         return None
-    rest = stat[close + 1 :].split()
-    if len(rest) < 20:
-        return None
-    return rest[19]
+    return stat[close + 1 :].split()

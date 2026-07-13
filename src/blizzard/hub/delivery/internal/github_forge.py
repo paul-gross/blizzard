@@ -40,8 +40,20 @@ _log = get_logger("blizzard.hub.delivery")
 class GitHubForgeDelivery:
     """The reference forge binding — real PR-create + merge over a GitHub surface."""
 
-    def __init__(self, client: httpx.Client) -> None:
+    def __init__(self, client: httpx.Client, *, default_owner: str = "") -> None:
         self._client = client
+        # A produced ``git_commit`` artifact names its repo by the worktree directory
+        # name alone (design/runner/environments.md — e.g. ``toy-api``), but a forge
+        # addresses a repo as ``owner/name``. When a bare (owner-less) repo arrives,
+        # qualify it with the configured forge owner so the two-segment ``/repos/{o}/{r}``
+        # route resolves; an already-qualified ``owner/name`` passes through untouched.
+        self._default_owner = default_owner
+
+    def _repo_path(self, repo: str) -> str:
+        """The ``owner/name`` the forge routes on — qualifying a bare repo (D-060)."""
+        if "/" in repo or not self._default_owner:
+            return repo
+        return f"{self._default_owner}/{repo}"
 
     def land(self, request: LandingRequest) -> LandingResult:
         number = self._open_or_reuse(request)
@@ -50,7 +62,7 @@ class GitHubForgeDelivery:
                 disposition=LandingDisposition.CONFLICT, landed_commit=None, detail="could not open PR"
             )
         merged = self._client.put(
-            f"/repos/{request.repo}/pulls/{number}/merge",
+            f"/repos/{self._repo_path(request.repo)}/pulls/{number}/merge",
             json={
                 "commit_message": f"blizzard: land {request.branch_name}",
                 "sha": request.commit_hash,
@@ -67,7 +79,7 @@ class GitHubForgeDelivery:
         return LandingResult(disposition=LandingDisposition.CONFLICT, landed_commit=None, detail=_detail(merged))
 
     def open_pr(self, request: LandingRequest) -> PrHandle:
-        created = self._client.post(f"/repos/{request.repo}/pulls", json=_pull_body(request))
+        created = self._client.post(f"/repos/{self._repo_path(request.repo)}/pulls", json=_pull_body(request))
         created.raise_for_status()
         data = created.json()
         return PrHandle(
@@ -75,7 +87,7 @@ class GitHubForgeDelivery:
         )
 
     def check_pr(self, handle: PrHandle) -> PrState:
-        response = self._client.get(f"/repos/{handle.repo}/pulls/{handle.number}")
+        response = self._client.get(f"/repos/{self._repo_path(handle.repo)}/pulls/{handle.number}")
         response.raise_for_status()
         data = response.json()
         if data.get("merged"):
@@ -85,7 +97,7 @@ class GitHubForgeDelivery:
         return PrState(disposition=PrDisposition.OPEN)
 
     def _open_or_reuse(self, request: LandingRequest) -> int | None:
-        created = self._client.post(f"/repos/{request.repo}/pulls", json=_pull_body(request))
+        created = self._client.post(f"/repos/{self._repo_path(request.repo)}/pulls", json=_pull_body(request))
         if created.status_code == httpx.codes.CREATED:
             return int(created.json()["number"])
         if created.status_code in _CONFLICT_STATUSES:
@@ -99,7 +111,7 @@ class GitHubForgeDelivery:
         return None
 
     def _existing_pr(self, request: LandingRequest) -> int | None:
-        listed = self._client.get(f"/repos/{request.repo}/pulls", params={"state": "open"})
+        listed = self._client.get(f"/repos/{self._repo_path(request.repo)}/pulls", params={"state": "open"})
         listed.raise_for_status()
         for pull in listed.json():
             if pull.get("head", {}).get("ref") == request.branch_name:

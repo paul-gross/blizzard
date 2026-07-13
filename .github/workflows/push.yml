@@ -4,11 +4,14 @@
 # Runs the full PR gate, then the service tier and the crash sweep, then
 # publishes a dev-build wheel as a workflow artifact for fleet dogfooding.
 #
-# The service tier and the crash sweep DO NOT EXIST until P6 (the walking
-# skeleton — verification/blizzard.md marks both as Gap (P6)). They are wired
-# here as explicit, clearly-labeled no-op jobs that cannot fail, so this
-# workflow is green today and the P6 gap is visible in the run graph rather than
-# silently omitted. When P6 lands, replace each no-op with its real invocation.
+# The e2e acceptance-loop smoke test EXISTS as of P6 (`mise run e2e` — the standing
+# proof of the verification.md loop), but it is a LOCAL command: it self-manages the
+# forge+hub+runner and drives a minted blizzard-mock fixture, so it needs the sibling
+# `blizzard-mock` worktree and a local winter source that a single-repo CI checkout
+# does not have. Wiring it headless in CI needs a multi-repo checkout (blizzard +
+# blizzard-mock + a winter source) — that remains a gap. The crash sweep depends on
+# the P7 crash-correctness machinery. Both stay explicit no-op jobs here so this
+# workflow is green and the remaining gaps are visible rather than silently omitted.
 name: push
 
 on:
@@ -26,14 +29,14 @@ jobs:
   gate:
     uses: ./.github/workflows/gate.yml
 
-  service-tier:
-    name: service tier (PENDING — P6)
+  e2e-service-tier:
+    name: e2e / service tier (LOCAL — `mise run e2e`)
     needs: [gate]
     runs-on: ubuntu-latest
     steps:
-      - name: skipped — P6 gap
+      - name: skipped — needs a multi-repo checkout
         run: |
-          echo "::notice title=service tier PENDING (P6)::The service tier (blizzard:service-test — a running hub/runner HTTP API exercised from outside, seams bound to the mock fleet, Playwright) does not exist until P6 (the walking skeleton). This step is a deliberate no-op. Replace it with the real service-tier run when P6 lands."
+          echo "::notice title=e2e acceptance loop is LOCAL (mise run e2e)::The P6 acceptance-loop e2e (tests/e2e/test_acceptance_loop.py — ingest→acquire→mock commit→deliver→landed, asserting bare-main reachability + derived done) EXISTS and is the standing smoke test, run locally with 'mise run e2e' (BLIZZARD_E2E=1). It self-manages forge+hub+runner over a minted blizzard-mock fixture, so headless CI needs a multi-repo checkout (blizzard + blizzard-mock + a winter source) this single-repo workflow does not provide — that wiring is the remaining gap. A running-daemon service tier exercised from outside (Playwright) is P7."
 
   crash-sweep:
     name: crash sweep (PENDING — P6)

@@ -11,10 +11,11 @@ Two engine rules live here, both D-038:
 * the **pre-prompt** is the node's base prompt plus the inlined arrival addendum of
   the edge the chunk took to reach the node (the ``fail -> build`` addendum carries
   the review findings back);
-* the **judgement prompt** is the node's authored judgement prose plus a generated
-  elicitation tail naming the choice set — ``select exactly one and output it as
-  <Choice>{name}</Choice>`` — so edges key off a verdict the worker is told how to
-  render (D-042).
+* the **judgement prompt** is the node's authored judgement prose *only* (D-042); the
+  generated elicitation tail naming the choice set — ``select exactly one and output
+  <Choice>{name}</Choice>`` — is appended by the runner from the envelope's carried
+  choice set when it delivers the judgement into the session, rendered harness-inert
+  so a mock behavior script still ``exec``s (runner ``steps._elicitation_tail``).
 
 Artifacts are resolved **latest-by-epoch per name** (D-089): a node re-run under a
 higher epoch supersedes its own earlier output, and the envelope carries one entry
@@ -56,17 +57,20 @@ def _to_envelope_artifact(row: ArtifactRow) -> EnvelopeArtifact:
 
 
 def _judgement_prompt(node: Node) -> str | None:
-    """The node's judgement prose plus the generated elicitation tail (D-042).
+    """The node's **authored** judgement prose (D-042); ``None`` at a node with no verdict.
 
-    ``None`` at a node with no worker judgement (a hub node or a human gate carries
-    no verdict elicitation).
+    The author writes only the prose (design/workflow-engine.md); the engine-generated
+    elicitation tail (``select exactly one and output <Choice>{name}</Choice>``) is
+    appended by the runner from ``node.choices`` (carried on the envelope config) when
+    it delivers the judgement into the session — the runner renders it harness-inert
+    (``#``-prefixed) so a mock behavior *script* still ``exec``s cleanly (D-042,
+    runner ``steps._elicitation_tail``). Baking a prose tail here too would both
+    duplicate it and break the mock's ``exec``. ``None`` at a node with no worker
+    judgement (a hub node or a human gate carries no verdict elicitation).
     """
     if not node.choices:
         return None
-    tail_lines = ["", "Select exactly one and output it as `<Choice>{name}</Choice>`:"]
-    tail_lines += [f"- `{c.name}`: {c.description}" for c in node.choices]
-    base = node.judgement_prompt or ""
-    return (base + "\n" if base else "") + "\n".join(tail_lines)
+    return node.judgement_prompt
 
 
 def build_node_envelope(

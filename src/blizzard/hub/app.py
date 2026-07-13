@@ -46,6 +46,12 @@ ENV_FORGE_URL = "BZ_FORGE_URL"
 ENV_FORGE_HOST = "BZ_FORGE_HOST"
 ENV_FORGE_PORT = "BZ_FORGE_PORT"
 ENV_FORGE_TOKEN = "BZ_FORGE_TOKEN"
+# The owner segment used to qualify a bare (worktree-name-only) delivery repo into
+# the forge's ``owner/name`` coordinate (github_forge._repo_path). GitHub in
+# production names the owner explicitly; the verification forge fronts flat bare
+# origins that resolve under any owner, so a workspace-configured default is enough.
+ENV_FORGE_OWNER = "BZ_FORGE_OWNER"
+DEFAULT_FORGE_OWNER = "blizzard"
 
 
 class _UnconfiguredForge:
@@ -113,7 +119,10 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
     readiness = ReadinessService(reader=reader, expected_revision=expected)
 
     client = _forge_client()
-    forge: IForgeDelivery = GitHubForgeDelivery(client) if client is not None else _UnconfiguredForge()
+    owner = os.environ.get(ENV_FORGE_OWNER, DEFAULT_FORGE_OWNER)
+    forge: IForgeDelivery = (
+        GitHubForgeDelivery(client, default_owner=owner) if client is not None else _UnconfiguredForge()
+    )
     pm_source: IPmSource | None = GitHubPmSource(client) if client is not None else None
 
     services = build_services(engine, forge=forge, events=EventBroker(), pm_source=pm_source)

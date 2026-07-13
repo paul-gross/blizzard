@@ -17,7 +17,7 @@ import os
 import signal
 from typing import Protocol
 
-from blizzard.foundation.process import read_process_start_time
+from blizzard.foundation.process import is_zombie, read_process_start_time
 
 
 class IProcessProbe(Protocol):
@@ -43,6 +43,11 @@ class LinuxProcessProbe:
         return read_process_start_time(pid)
 
     def is_alive(self, pid: int, process_start_time: str) -> bool:
+        # A worker the runner spawned fire-and-forget becomes a zombie the instant it
+        # exits (nothing wait()s it until P7's REAP); its /proc entry lingers with the
+        # same start time, so it must read as dead here or ADVANCE never judges it.
+        if is_zombie(pid):
+            return False
         current = self.start_time(pid)
         return current is not None and current == process_start_time
 

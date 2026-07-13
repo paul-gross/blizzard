@@ -34,7 +34,7 @@ jobs:
     steps:
       - name: skipped — P6 gap
         run: |
-          echo "::notice title=full-suite tiers PENDING (P6)::The service tier, the e2e tier (blizzard:e2e), and the crash sweep (blizzard:crash-sweep) land with the P6 walking skeleton (verification/blizzard.md). This step is a deliberate no-op. Replace it with the real tiers when P6 lands."
+          echo "::notice title=full-suite tiers (e2e is LOCAL: mise run e2e)::The P6 e2e acceptance loop (blizzard:e2e) EXISTS and runs locally with 'mise run e2e' (BLIZZARD_E2E=1); headless CI needs a multi-repo checkout (blizzard + blizzard-mock + a winter source) not wired here. A running-daemon service tier (Playwright) and the crash sweep (blizzard:crash-sweep) are P7. This step is a deliberate no-op."
 
   release:
     name: build wheel and publish release

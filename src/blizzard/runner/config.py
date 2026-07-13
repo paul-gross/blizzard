@@ -23,6 +23,13 @@ DEFAULT_PORT = 8431
 ENV_HOST = "BZ_RUNNER_HOST"
 ENV_PORT = "BZ_RUNNER_PORT"
 ENV_HUB_URL = "BZ_HUB_URL"
+# The reconciliation-loop seams the winter service injects per feature env so a fresh
+# `blizzard runner init` scaffolds a runnable config without hand-editing the toml
+# (the winter-service-tmux runner slot sets these from the env band + fixture paths).
+ENV_WORKSPACE_ROOT = "BZ_WORKSPACE_ROOT"
+ENV_WORKSPACE_ENVS = "BZ_WORKSPACE_ENVS"  # comma-separated env-id pool
+ENV_HARNESS_BINARY = "BZ_HARNESS_BINARY"
+ENV_BASE_BRANCH = "BZ_BASE_BRANCH"
 
 # Reconciliation-loop defaults (design/runner/loop.md). The runner is machine-level
 # and single-workspace (D-019); these seam the loop to the hub, the workspace it
@@ -73,13 +80,26 @@ class RunnerConfig:
 
     @classmethod
     def scaffold(cls, root: Path) -> RunnerConfig:
-        """The default config for a fresh runtime root (used by ``init``)."""
+        """The default config for a fresh runtime root (used by ``init``).
+
+        The loop seams (workspace root, env pool, harness binary, base branch) are read
+        from the winter-injected environment when present so the service's
+        ``blizzard runner init`` produces a runnable config; each falls back to its
+        dataclass default otherwise.
+        """
+        envs = os.environ.get(ENV_WORKSPACE_ENVS)
         return cls(
             root=root,
             db_url=cls.default_db_url(root),
             host=os.environ.get(ENV_HOST, DEFAULT_HOST),
             port=int(os.environ.get(ENV_PORT, DEFAULT_PORT)),
             hub_url=os.environ.get(ENV_HUB_URL, DEFAULT_HUB_URL),
+            workspace_root=os.environ.get(ENV_WORKSPACE_ROOT, ""),
+            workspace_envs=_as_env_tuple([e.strip() for e in envs.split(",") if e.strip()])
+            if envs
+            else DEFAULT_ENV_POOL,
+            harness_binary=os.environ.get(ENV_HARNESS_BINARY, DEFAULT_HARNESS_BINARY),
+            base_branch=os.environ.get(ENV_BASE_BRANCH, DEFAULT_BASE_BRANCH),
         )
 
     def to_toml(self) -> str:
