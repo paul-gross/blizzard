@@ -32,3 +32,30 @@ run = "./scripts/ci-gate.sh"
 [tasks.build]
 description = "The one build entrypoint: build both Angular apps into the embed dir, build the wheel, and verify it embeds the assets and installs+runs node-free"
 run = "./scripts/build-wheel.sh"
+
+# Frontend (Angular workspace under web/). Mirror of the web/package.json scripts
+# CI invokes; namespaced `web-*` so they don't collide with the Python tasks.
+[tasks.web-install]
+description = "Install frontend dependencies (npm ci in web/)"
+dir = "web"
+run = "npm ci"
+
+[tasks.web-lint]
+description = "Lint the Angular workspace (eslint, no prettier)"
+dir = "web"
+run = "npm run lint"
+
+[tasks.web-test]
+description = "Run the frontend unit/component tier (vitest)"
+dir = "web"
+run = "npm run test"
+
+[tasks.web-build]
+description = "Build both apps into src/blizzard/static/{hub,runner} for the wheel embed"
+dir = "web"
+run = "npm run build"
+
+[tasks.web-generate-client]
+description = "Regenerate the openapi-ts clients from ./openapi (CI drift check baseline)"
+dir = "web"
+run = "npm run generate-client"
