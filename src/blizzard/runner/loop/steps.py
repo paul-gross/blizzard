@@ -393,8 +393,14 @@ def _bindings_as_environments(bindings: list[EnvBindingRecord]) -> list[Acquired
 
 
 def _elicitation_tail(envelope: NodeEnvelope) -> str:
-    """The engine-generated ``<Choice>`` elicitation appended to the judgement prose (D-042)."""
-    lines = ["", "", "Select exactly one outcome and reply with `<Choice>name</Choice>`:"]
+    """The engine-generated ``<Choice>`` elicitation appended to the judgement prompt (D-042).
+
+    Emitted as ``#``-prefixed lines so the tail is harness-agnostic: inert whether
+    the judgement prompt is LLM prose (a comment block a real coding harness still
+    reads) or a mock behavior *script* (the mock ``exec``s the prompt, and a bare
+    prose tail would be a ``SyntaxError``).
+    """
+    lines = ["", "", "# Select exactly one outcome and reply with <Choice>name</Choice>:"]
     for choice in envelope.node.choices:
-        lines.append(f"- `{choice.name}`: {choice.description}")
+        lines.append(f"#   - {choice.name}: {choice.description}")
     return "\n".join(lines)
