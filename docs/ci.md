@@ -82,3 +82,5 @@ gh run watch --repo paul-gross/blizzard <run-id>       # live-tail a run
 gh run view  --repo paul-gross/blizzard <run-id> --log-failed  # failed-step logs
 gh run download --repo paul-gross/blizzard <run-id>    # fetch the dev-build wheel artifact
 ```
+
+<!-- ci: pr-gate exercised 2026-07-13T16:43:53Z -->
