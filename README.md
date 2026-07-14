@@ -4,6 +4,16 @@ The main application — the **hub**, the **runner**, the **CLI**, and the web b
 
 One repo, one wheel (D-061): the single distributable ships both daemons, the CLI, and the compiled frontend as embedded assets — no Node at install or runtime ([blizzard-discovery `implementation/build.md`](https://github.com/paul-gross/blizzard-discovery)).
 
+## Install
+
+Milestone builds are published as [GitHub Releases](https://github.com/paul-gross/blizzard/releases) with the wheel attached — no package index. Prerelease candidates are tagged `v0.1.0-rc.N`. Grab the wheel and install it into any Python ≥ 3.12 environment (no Node needed at install or runtime):
+
+```bash
+gh release download v0.1.0-rc.1 --repo paul-gross/blizzard --pattern '*.whl'
+pip install ./blizzard-*.whl        # installs `blizzard`, `blizzard-hub`, `blizzard-runner`
+blizzard --version
+```
+
 ## Layout (screaming architecture — `bzh:screaming-architecture`)
 
 The top-level packages announce what blizzard *is*: two daemons and the client that speaks to them.
