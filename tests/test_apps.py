@@ -29,8 +29,16 @@ def test_health_endpoint(daemon: Daemon) -> None:
     assert body["service"] == f"blizzard-{daemon.name}"
 
 
-def test_frontend_mount_serves_placeholder(daemon: Daemon) -> None:
-    app = daemon.build_app()
+def test_frontend_mount_serves_placeholder(daemon: Daemon, tmp_path: Path) -> None:
+    # The no-build fallback at the mount seam: with no index.html present the mount
+    # serves the runtime placeholder naming the app. Mount an EMPTY static dir here so
+    # the test is hermetic — it exercises the absent-index path regardless of whether a
+    # real build has filled the package's (fully gitignored) static dirs (a local build,
+    # e.g. for the browser e2e, must not turn this red — mirrors the SPA-fallback test).
+    static_dir = tmp_path / "static"
+    static_dir.mkdir()
+    app = FastAPI()
+    mount_web_app(app, static_dir, app_name=f"blizzard-{daemon.name}")
     with TestClient(app) as client:
         response = client.get("/")
     assert response.status_code == 200

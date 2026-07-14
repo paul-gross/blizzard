@@ -66,6 +66,11 @@ dev = [
     "pytest-asyncio>=0.23.0",
     "ruff>=0.8.0",
     "pyright>=1.1.380",
+    # The e2e browser tier (blizzard-harness verification/blizzard.md): scenario 6
+    # drives the served mission-control board through a real Chromium via Playwright.
+    # The browser binary itself is installed out of band (`uv run playwright install
+    # chromium`); the e2e test skips cleanly when it is absent (see tests/e2e/conftest.py).
+    "playwright>=1.49.0",
 ]
 
 [tool.pytest.ini_options]
