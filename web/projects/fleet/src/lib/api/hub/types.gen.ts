@@ -138,6 +138,31 @@ export type ArtifactView = {
 };
 
 /**
+ * CheckDeliveryResponse
+ *
+ * The result of an on-demand ``POST /chunks/{id}/check-delivery`` (D-065).
+ */
+export type CheckDeliveryResponse = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Finalized
+     */
+    finalized: boolean;
+    /**
+     * Open Prs
+     */
+    open_prs: number;
+    status: ChunkStatus;
+};
+
+/**
  * CheckResult
  *
  * One deterministic check's outcome, informing the verdict (D-077).
@@ -169,6 +194,10 @@ export type ChunkDetail = {
      */
     artifacts?: Array<ArtifactView>;
     /**
+     * Awaiting External Merge
+     */
+    awaiting_external_merge?: boolean;
+    /**
      * Chunk Id
      */
     chunk_id: string;
@@ -190,6 +219,10 @@ export type ChunkDetail = {
      * Latest Epoch
      */
     latest_epoch: number | null;
+    /**
+     * Open Prs
+     */
+    open_prs?: Array<PrView>;
     /**
      * Pm Pointers
      */
@@ -811,6 +844,26 @@ export type PmPointerModel = {
 };
 
 /**
+ * PrView
+ *
+ * An open PR a chunk is parked on in open-pr delivery mode (D-059/D-065).
+ */
+export type PrView = {
+    /**
+     * Number
+     */
+    number: number;
+    /**
+     * Repo
+     */
+    repo: string;
+    /**
+     * Url
+     */
+    url: string;
+};
+
+/**
  * QuestionAsked
  *
  * A ``question.asked`` fact the runner forwards to the hub ([ask-answer.md]).
@@ -1420,6 +1473,36 @@ export type GetChunkApiChunksChunkIdGetResponses = {
 };
 
 export type GetChunkApiChunksChunkIdGetResponse = GetChunkApiChunksChunkIdGetResponses[keyof GetChunkApiChunksChunkIdGetResponses];
+
+export type CheckDeliveryApiChunksChunkIdCheckDeliveryPostData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/check-delivery';
+};
+
+export type CheckDeliveryApiChunksChunkIdCheckDeliveryPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CheckDeliveryApiChunksChunkIdCheckDeliveryPostError = CheckDeliveryApiChunksChunkIdCheckDeliveryPostErrors[keyof CheckDeliveryApiChunksChunkIdCheckDeliveryPostErrors];
+
+export type CheckDeliveryApiChunksChunkIdCheckDeliveryPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: CheckDeliveryResponse;
+};
+
+export type CheckDeliveryApiChunksChunkIdCheckDeliveryPostResponse = CheckDeliveryApiChunksChunkIdCheckDeliveryPostResponses[keyof CheckDeliveryApiChunksChunkIdCheckDeliveryPostResponses];
 
 export type SubmitCompletionApiChunksChunkIdCompletionsPostData = {
     body: CompletionSubmission;
