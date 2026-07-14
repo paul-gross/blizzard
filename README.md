@@ -25,6 +25,7 @@ uv run ruff check .            # lint
 uv run ruff format --check .   # format
 uv run pyright                 # typecheck
 uv run pytest                  # unit + component tiers (hermetic, token-free)
+mise run service-test          # the service tier — a running daemon vs. its mocked counterpart (see below)
 mise run e2e                   # the standing e2e smoke suite — six full-stack scenarios (see below)
 
 blizzard hub init ./hub-data   # scaffold config + data dir + migrated DB (idempotent)
@@ -48,6 +49,34 @@ The same `init` / `migrate` / `host` verbs exist under `blizzard runner`. A daem
 6. `test_board_browser_e2e` — the **browser tier**: a real Chromium (Playwright) drives the served mission-control board — a live status chip that flips over SSE with no reload, the detail drawer's history + artifacts, queue grouping + reorder that the next FILL honors (the grouped plural-pointer survivor claimed first), answering a question from the board, and the runner pause/resume brake.
 
 Each holds at **both ends** — git truth on the bare origin and the hub's derived facts. The suite is **self-managed and token-free**: it mints its own disposable `blizzard-mock` fixture workspace, starts the real forge + hub + runner, and drives the reconciliation loop one synchronous tick at a time — every seam real (git over `file://`, the forge over HTTP, the `mock-claude-code` façade over its CLI). It needs the sibling **`blizzard-mock`** worktree provisioned (`winter provision <env>`) and a local winter source; scenario 6 also needs a Chromium (`uv run playwright install chromium`). Any scenario **skips cleanly** when its prerequisites are absent (e.g. a single-repo CI checkout, or no browser installed), so the default `uv run pytest` gate stays hermetic. To drive the same loop against the live tmux services instead, `winter service up <env> --wait` brings up forge + hub + runner (see the workspace's service manifest).
+
+## The service tier (`mise run service-test`)
+
+`mise run service-test` (`BLIZZARD_SERVICE=1 uv run pytest tests/service/`) is the
+**service tier** (`blizzard-harness` `verification/blizzard.md`): one **running daemon's
+HTTP API exercised from outside the process** with its counterpart bound to the mock
+fleet — distinct from the e2e tier, which drives the whole loop with every seam real. It
+lives in its own `tests/service/` package and, like e2e, is **skipped unless
+`BLIZZARD_SERVICE=1`** and the sibling `blizzard-mock` worktree is provisioned, so the
+default `uv run pytest` gate stays hermetic.
+
+- **Runner service tests** (`test_runner_service.py`) drive the **real runner** loop
+  (one synchronous tick at a time) against the **mock hub** (`blizzard-mock-hub`, run as
+  its own subprocess), pulling its levers to manufacture states a real hub could only be
+  contrived into: an **unreachable hub** proves the completion is store-and-forward
+  buffered and lands on recovery (D-069); a **dropped ack** proves the re-flush re-applies
+  idempotently through to done (D-090); a **stale envelope** is tolerated because the
+  runner fences on its own lease epoch (D-007).
+- **Hub service tests** (`test_hub_service.py`) drive the **real hub** with the **mock
+  runner** (`blizzard-mock-runner`, a levered driver) and the **mock forge** as its
+  counterparts, asserting over the wire: a claim + completion advances the chunk; the
+  runner's `stale_epoch` lever gets the completion **rejected** (D-007); queue **grouping +
+  reorder** are reflected in `peek` (D-048); and `GET /api/events/stream` serves the
+  **SSE contract** an `EventSource` subscribes to (D-067).
+
+The counterpart mocks and their lever surfaces live in the `blizzard-mock` repo
+(`blizzard_mock.mock_hub` / `blizzard_mock.mock_runner`). sqlite only, no tokens, no
+network.
 
 ## CI, build, and release
 
