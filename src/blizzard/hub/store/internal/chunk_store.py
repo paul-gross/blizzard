@@ -38,6 +38,8 @@ from blizzard.hub.domain.work import (
     IWriteChunkRepository,
     LeaseFact,
     PmPointer,
+    PrClosedFact,
+    PrOpenedFact,
     QuestionFact,
     QuestionRow,
     RequeueFact,
@@ -132,10 +134,19 @@ class ChunkStore:
                 RequeueFact(requeued_at=r.requeued_at)
                 for r in conn.execute(select(s.requeues).where(s.requeues.c.chunk_id == chunk_id)).all()
             ]
+            pr_opened = [
+                PrOpenedFact(
+                    repo=p.repo, number=p.pr_number, url=p.pr_url, commit_hash=p.commit_hash, opened_at=p.opened_at
+                )
+                for p in conn.execute(
+                    select(s.delivery_pr_opened).where(s.delivery_pr_opened.c.chunk_id == chunk_id)
+                ).all()
+            ]
             return ChunkFacts(
                 minted=True,
                 stopped=self._exists(conn, s.chunk_stopped, chunk_id),
                 delivery_landed=self._exists(conn, s.delivery_landed, chunk_id),
+                pr_closed=self._exists(conn, s.delivery_pr_closed, chunk_id),
                 escalations=escalations,
                 leases=leases,
                 transitions=transitions,
@@ -144,6 +155,7 @@ class ChunkStore:
                 questions=questions,
                 decisions=decisions,
                 requeues=requeues,
+                pr_opened=pr_opened,
             )
 
     def load_artifacts(self, chunk_id: str) -> list[ArtifactRow]:
@@ -254,6 +266,17 @@ class ChunkStore:
                     select(s.delivery_repo_landed.c.repo).where(s.delivery_repo_landed.c.chunk_id == chunk_id)
                 ).all()
             }
+
+    def open_prs(self, chunk_id: str) -> list[PrOpenedFact]:
+        with self._engine.connect() as conn:
+            return [
+                PrOpenedFact(
+                    repo=p.repo, number=p.pr_number, url=p.pr_url, commit_hash=p.commit_hash, opened_at=p.opened_at
+                )
+                for p in conn.execute(
+                    select(s.delivery_pr_opened).where(s.delivery_pr_opened.c.chunk_id == chunk_id)
+                ).all()
+            ]
 
     def runner_high_water(self, runner_id: str) -> int:
         with self._engine.connect() as conn:
@@ -470,6 +493,74 @@ class ChunkStore:
                 insert(s.lease_facts).values(chunk_id=chunk_id, epoch=epoch, runner_id=runner_id, minted_at=at)
             )
             conn.execute(insert(s.delivery_landed).values(chunk_id=chunk_id, landed_at=at))
+            conn.execute(
+                insert(s.transitions).values(
+                    transition_id=transition_id,
+                    chunk_id=chunk_id,
+                    from_node_id=from_node_id,
+                    to_node_id=to_node_id,
+                    choice_name=choice_name,
+                    decision_id=None,
+                    epoch=epoch,
+                    runner_id=runner_id,
+                    recorded_at=at,
+                )
+            )
+            conn.execute(insert(s.route_released).values(chunk_id=chunk_id, released_at=at))
+            return True
+
+    def record_pr_opened(
+        self, chunk_id: str, *, repo: str, number: int, url: str, commit_hash: str, at: datetime
+    ) -> None:
+        with self._engine.begin() as conn:
+            conn.execute(
+                insert(s.delivery_pr_opened).values(
+                    chunk_id=chunk_id, repo=repo, pr_number=number, pr_url=url, commit_hash=commit_hash, opened_at=at
+                )
+            )
+
+    def finalize_pr_delivery(
+        self,
+        chunk_id: str,
+        *,
+        closed: list[PrClosedFact],
+        from_node_id: str,
+        to_node_id: str,
+        choice_name: str,
+        epoch: int,
+        runner_id: str,
+        transition_id: str,
+        at: datetime,
+    ) -> bool:
+        """Terminate an open-pr delivery **atomically and idempotently** (D-065).
+
+        The open-pr counterpart to :meth:`finalize_delivery`: the per-repo ``pr.closed``
+        facts, the hub lease, the terminal transition, and the route release are written
+        in **one transaction**, so a mid-finalize ``kill -9`` cannot leave a chunk
+        closed-but-not-terminal. Guarded by the ``pr.closed`` existence check: a re-checked
+        or replayed finalize re-enters harmlessly. Returns True when it wrote, False when
+        the chunk was already finalized.
+        """
+        with self._engine.begin() as conn:
+            already = conn.execute(
+                select(s.delivery_pr_closed.c.id).where(s.delivery_pr_closed.c.chunk_id == chunk_id)
+            ).first()
+            if already is not None:
+                return False
+            for pr in closed:
+                conn.execute(
+                    insert(s.delivery_pr_closed).values(
+                        chunk_id=chunk_id,
+                        repo=pr.repo,
+                        pr_number=pr.number,
+                        merged=pr.merged,
+                        landed_commit=pr.landed_commit,
+                        closed_at=at,
+                    )
+                )
+            conn.execute(
+                insert(s.lease_facts).values(chunk_id=chunk_id, epoch=epoch, runner_id=runner_id, minted_at=at)
+            )
             conn.execute(
                 insert(s.transitions).values(
                     transition_id=transition_id,

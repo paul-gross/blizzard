@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from sqlalchemy import Engine
 
 from blizzard.foundation.clock import IClock, SystemClock
+from blizzard.hub.delivery.check import DeliveryCheckService
 from blizzard.hub.delivery.coordinator import MergeQueueCoordinator
 from blizzard.hub.delivery.forge import IForgeDelivery
 from blizzard.hub.domain.apply import ApplyService
@@ -60,6 +61,7 @@ class HubServices:
     queue: QueueService
     group: GroupService
     fleet: FleetService
+    delivery_check: DeliveryCheckService
     events: EventBroker
     clock: IClock
     default_graph_doc: GraphDoc
@@ -74,13 +76,19 @@ def build_services(
     events: EventBroker,
     pm_source: IPmSource | None = None,
     clock: IClock | None = None,
+    base_branch: str = "main",
 ) -> HubServices:
-    """Construct and wire every fleet service over a migrated store engine."""
+    """Construct and wire every fleet service over a migrated store engine.
+
+    ``base_branch`` is the branch every PR/merge targets (D-060) — ``main`` for the
+    verification forge's bare origins, set to a real repo's default (e.g. ``master``) at
+    the ``host`` composition root from ``BZ_FORGE_BASE_BRANCH``.
+    """
     clock = clock or SystemClock()
     chunk_store = ChunkStore(engine, clock)
     graph_store = GraphStore(engine)
     registry_store = RunnerRegistryStore(engine)
-    coordinator = MergeQueueCoordinator(chunks=chunk_store, forge=forge, clock=clock)
+    coordinator = MergeQueueCoordinator(chunks=chunk_store, forge=forge, clock=clock, base_branch=base_branch)
     return HubServices(
         chunks=chunk_store,
         graphs=graph_store,
@@ -96,6 +104,7 @@ def build_services(
         queue=QueueService(chunks=chunk_store, clock=clock),
         group=GroupService(chunks=chunk_store, clock=clock),
         fleet=FleetService(registry=registry_store, clock=clock),
+        delivery_check=DeliveryCheckService(chunks=chunk_store, forge=forge, clock=clock),
         events=events,
         clock=clock,
         default_graph_doc=load_default_graph_doc(),

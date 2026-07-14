@@ -86,6 +86,40 @@ class RouteReleasedFact:
 
 
 @dataclass(frozen=True)
+class PrOpenedFact:
+    """A ``pr.opened`` fact — the open-pr deliver mode's park record (D-059).
+
+    One per repo whose branch the coordinator opened a PR for instead of merging. It
+    carries no terminal weight: while a chunk has ``pr.opened`` facts and no ``pr.closed``,
+    it derives ``delivering`` (awaiting an external merge) with environments held (D-066).
+    ``number``/``url`` are the forge handle a later ``check_pr`` polls (D-065); ``repo`` is
+    also the reconciliation skip-set that keeps a redelivery from opening a duplicate PR.
+    """
+
+    repo: str
+    number: int
+    url: str
+    commit_hash: str
+    opened_at: datetime
+
+
+@dataclass(frozen=True)
+class PrClosedFact:
+    """A ``pr.closed`` fact — the terminal outcome of an open-pr delivery (D-065).
+
+    Written when a poll or the on-demand check detects the PR reached a terminal state;
+    ``merged`` distinguishes merged from closed-without-merge (both terminal), and
+    ``landed_commit`` carries the merge commit where one exists. Its presence flips the
+    chunk to ``done`` and the route is released.
+    """
+
+    repo: str
+    number: int
+    merged: bool
+    landed_commit: str | None = None
+
+
+@dataclass(frozen=True)
 class LeaseFact:
     """A ``lease.minted`` fact reported up from a runner (D-044)."""
 
@@ -218,6 +252,7 @@ class ChunkFacts:
     minted: bool
     stopped: bool = False
     delivery_landed: bool = False
+    pr_closed: bool = False
     escalations: list[EscalationFact] = field(default_factory=list)
     leases: list[LeaseFact] = field(default_factory=list)
     transitions: list[TransitionFact] = field(default_factory=list)
@@ -226,6 +261,7 @@ class ChunkFacts:
     questions: list[QuestionFact] = field(default_factory=list)
     decisions: list[DecisionFact] = field(default_factory=list)
     requeues: list[RequeueFact] = field(default_factory=list)
+    pr_opened: list[PrOpenedFact] = field(default_factory=list)
 
 
 # --- The derivation queries (D-067) -----------------------------------------
@@ -235,7 +271,9 @@ def derive_chunk_status(facts: ChunkFacts) -> ChunkStatus:
     """Derive a chunk's single status from its facts, first match wins (D-067)."""
     if facts.stopped:
         return ChunkStatus.STOPPED
-    if facts.delivery_landed:
+    if facts.delivery_landed or facts.pr_closed:
+        # ``pr.closed`` is the open-pr mode's terminal fact (merged or closed-without-merge,
+        # both terminal — D-065), the counterpart to ``delivery.landed`` for merge-to-main.
         return ChunkStatus.DONE
     if _has_open_escalation(facts):
         return ChunkStatus.NEEDS_HUMAN
@@ -306,6 +344,21 @@ def open_decision(facts: ChunkFacts) -> DecisionFact | None:
     if not unresolved:
         return None
     return max(unresolved, key=lambda d: d.submitted_at)
+
+
+def awaiting_external_merge(facts: ChunkFacts) -> bool:
+    """A ``delivering`` chunk parked on an open PR — ``pr.opened`` without ``pr.closed`` (D-065).
+
+    Not a distinct status: the chunk derives ``delivering`` (its newest transition still
+    enters the deliver hub node, environments held — D-066). This is the board **detail**
+    that distinguishes an open-pr park from an in-flight merge (design/domain/events.md).
+    """
+    return bool(facts.pr_opened) and not facts.pr_closed
+
+
+def open_pr_handles(facts: ChunkFacts) -> list[PrOpenedFact]:
+    """The chunk's open PRs — the handles a poll or the on-demand check reads (D-065)."""
+    return list(facts.pr_opened)
 
 
 def _newest_transition_enters_hub_node(facts: ChunkFacts) -> bool:
@@ -456,6 +509,10 @@ class IReadChunkRepository(Protocol):
         """The repos already landed for a chunk — the delivery reconciliation skip-set (D-091)."""
         ...
 
+    def open_prs(self, chunk_id: str) -> list[PrOpenedFact]:
+        """The chunk's ``pr.opened`` facts — the open-pr reconcile skip-set and check handles (D-059/D-065)."""
+        ...
+
     def runner_high_water(self, runner_id: str) -> int:
         """The greatest per-runner seq the hub has already applied, or 0 (D-069)."""
         ...
@@ -525,6 +582,34 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
     ) -> bool:
         """Land the terminal delivery atomically and idempotently — one transaction, a
         no-op if already landed (D-030/crash recovery). Returns True iff it wrote."""
+        ...
+
+    def record_pr_opened(
+        self, chunk_id: str, *, repo: str, number: int, url: str, commit_hash: str, at: datetime
+    ) -> None:
+        """Record a ``pr.opened`` park fact (open-pr mode, D-059) — no terminal, envs held (D-066)."""
+        ...
+
+    def finalize_pr_delivery(
+        self,
+        chunk_id: str,
+        *,
+        closed: list[PrClosedFact],
+        from_node_id: str,
+        to_node_id: str,
+        choice_name: str,
+        epoch: int,
+        runner_id: str,
+        transition_id: str,
+        at: datetime,
+    ) -> bool:
+        """Terminate an open-pr delivery atomically and idempotently (D-065).
+
+        Called once every open PR has reached a terminal state: writes the per-repo
+        ``pr.closed`` facts, the hub lease, the terminal transition, and the route release
+        in one transaction — the open-pr counterpart to :meth:`finalize_delivery`. Guarded
+        by the ``pr.closed`` existence check so a re-checked/replayed finalize is a no-op.
+        Returns True iff it wrote."""
         ...
 
     def record_escalation(self, chunk_id: str, *, epoch: int, takeover_command: str, at: datetime) -> None:

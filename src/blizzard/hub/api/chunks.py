@@ -27,6 +27,7 @@ from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
     PmPointer,
+    awaiting_external_merge,
     current_node_id,
     derive_chunk_status,
     latest_epoch,
@@ -36,6 +37,7 @@ from blizzard.hub.domain.work import (
 from blizzard.hub.pm.source import PmSourceError
 from blizzard.wire.chunk import (
     ArtifactView,
+    CheckDeliveryResponse,
     ChunkDetail,
     ChunkIngestConflict,
     ChunkIngestRequest,
@@ -44,6 +46,7 @@ from blizzard.wire.chunk import (
     EscalationView,
     PmItemView,
     PmPointerModel,
+    PrView,
     RouteView,
     TransitionView,
 )
@@ -191,6 +194,8 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
         history=_history_views(facts),
         artifacts=_artifact_views(services.chunks.load_artifacts(chunk_id)),
         questions=[question_view(q) for q in services.chunks.load_questions(chunk_id) if not q.answered],
+        awaiting_external_merge=awaiting_external_merge(facts),
+        open_prs=[PrView(repo=pr.repo, number=pr.number, url=pr.url) for pr in facts.pr_opened],
     )
 
 
@@ -235,6 +240,37 @@ def submit_completion(
     # A completion landing on a human-judged node opens a graph gate (D-045): surface it.
     _publish_open_decision(services, chunk_id)
     return response
+
+
+@router.post("/chunks/{chunk_id}/check-delivery", response_model=CheckDeliveryResponse)
+def check_delivery(
+    chunk_id: str,
+    services: Annotated[HubServices, Depends(get_services)],
+) -> CheckDeliveryResponse:
+    """Poll a parked open-pr chunk's PRs; finalize the delivery once all are terminal (D-065).
+
+    The on-demand external-merge detection (the impatient path): for a chunk parked in
+    ``open-pr`` mode, check every open PR through the forge and, when all have merged or
+    closed, write the terminal facts so the chunk flips to ``done`` and its environments
+    release. A no-op when the chunk has no open PR or is already finalized.
+    """
+    chunk = services.chunks.get(chunk_id)
+    if chunk is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+    graph = services.graphs.get(chunk.graph_id)
+    if graph is None:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
+    result = services.delivery_check.check(chunk, graph)
+    facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
+    derived = derive_chunk_status(facts)
+    services.events.publish_chunk_changed(chunk_id, derived.value)
+    return CheckDeliveryResponse(
+        chunk_id=chunk_id,
+        status=derived,
+        finalized=result.finalized,
+        open_prs=result.open_prs,
+        detail=result.detail,
+    )
 
 
 @router.post("/chunks/{chunk_id}/decisions", response_model=ApplyResponse)

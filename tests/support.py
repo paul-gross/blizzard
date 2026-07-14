@@ -21,7 +21,15 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.app import create_app
 from blizzard.hub.composition import HubServices, build_services
 from blizzard.hub.config import HubConfig
-from blizzard.hub.delivery.forge import IForgeDelivery, LandingDisposition, LandingRequest, LandingResult
+from blizzard.hub.delivery.forge import (
+    IForgeDelivery,
+    LandingDisposition,
+    LandingRequest,
+    LandingResult,
+    PrDisposition,
+    PrHandle,
+    PrState,
+)
 from blizzard.hub.domain.work import PmPointer
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.pm.source import IPmSource, PmItem
@@ -29,11 +37,21 @@ from blizzard.hub.runtime import migration_runner
 
 
 class FakeForge:
-    """An in-process :class:`IForgeDelivery` — records lands, arms conflicts by repo."""
+    """An in-process :class:`IForgeDelivery` — records lands/opens, arms conflicts by repo.
+
+    For the open-pr mode (D-059): ``open_pr`` mints an incrementing PR number and records
+    the request; a test drives a PR's fate with :meth:`mark_merged`/:meth:`mark_closed`,
+    and ``check_pr`` reports the disposition the way a poll would (D-065). A repo already
+    opened (same branch) reuses its handle, mirroring the real adapter's crash-safe reuse.
+    """
 
     def __init__(self) -> None:
         self.landed: list[LandingRequest] = []
         self.conflict_repos: set[str] = set()
+        self.opened: list[LandingRequest] = []
+        self._next_pr = 1
+        self._handles: dict[tuple[str, str], PrHandle] = {}
+        self._state: dict[tuple[str, int], PrState] = {}
 
     def land(self, request: LandingRequest) -> LandingResult:
         if request.repo in self.conflict_repos:
@@ -41,11 +59,26 @@ class FakeForge:
         self.landed.append(request)
         return LandingResult(disposition=LandingDisposition.LANDED, landed_commit=f"merged-{request.commit_hash}")
 
-    def open_pr(self, request: LandingRequest):  # type: ignore[no-untyped-def]
-        raise NotImplementedError
+    def open_pr(self, request: LandingRequest) -> PrHandle:
+        key = (request.repo, request.branch_name)
+        if key in self._handles:
+            return self._handles[key]  # reuse — the redelivery/crash-window path
+        number = self._next_pr
+        self._next_pr += 1
+        handle = PrHandle(repo=request.repo, number=number, url=f"http://forge/{request.repo}/pull/{number}")
+        self._handles[key] = handle
+        self._state[(request.repo, number)] = PrState(disposition=PrDisposition.OPEN)
+        self.opened.append(request)
+        return handle
 
-    def check_pr(self, handle):  # type: ignore[no-untyped-def]
-        raise NotImplementedError
+    def check_pr(self, handle: PrHandle) -> PrState:
+        return self._state.get((handle.repo, handle.number), PrState(disposition=PrDisposition.OPEN))
+
+    def mark_merged(self, repo: str, number: int, *, landed_commit: str = "merged-sha") -> None:
+        self._state[(repo, number)] = PrState(disposition=PrDisposition.MERGED, landed_commit=landed_commit)
+
+    def mark_closed(self, repo: str, number: int) -> None:
+        self._state[(repo, number)] = PrState(disposition=PrDisposition.CLOSED)
 
 
 def _conforms_fake_forge(x: FakeForge) -> IForgeDelivery:
@@ -97,27 +130,67 @@ def github_double(*, conflict_branches: set[str] | None = None, issues: dict[str
         data = issue_store.get(key, {"body": "", "comments": []})
         return [{"body": c} for c in data["comments"]]
 
-    @app.post("/repos/{owner}/{repo}/pulls", status_code=201)
-    def create_pull(owner: str, repo: str, body: dict) -> dict:
+    @app.post("/repos/{owner}/{repo}/pulls")
+    def create_pull(owner: str, repo: str, body: dict) -> JSONResponse:
+        pulls = state["pulls"]  # type: ignore[index]
+        if any(p["state"] == "open" and p["head"] == body["head"] for p in pulls.values()):  # type: ignore[union-attr]
+            # GitHub 422s a second PR for the same head — the redelivery reuse path.
+            return JSONResponse(status_code=422, content={"message": "A pull request already exists"})
         number = int(state["next_pull"])  # type: ignore[arg-type]
         state["next_pull"] = number + 1
-        state["pulls"][number] = {"head": body["head"], "base": body["base"]}  # type: ignore[index]
+        state["pulls"][number] = {  # type: ignore[index]
+            "head": body["head"],
+            "base": body["base"],
+            "merged": False,
+            "state": "open",
+            "merge_commit_sha": None,
+        }
+        return JSONResponse(
+            status_code=201,
+            content={
+                "number": number,
+                "html_url": f"http://forge/{owner}/{repo}/pull/{number}",
+                "head": {"ref": body["head"]},
+            },
+        )
+
+    @app.get("/repos/{owner}/{repo}/pulls")
+    def list_pulls(owner: str, repo: str, state_: str = "open") -> list[dict]:
+        pulls = state["pulls"]  # type: ignore[index]
+        return [
+            {
+                "number": n,
+                "head": {"ref": p["head"]},
+                "state": p["state"],
+                "html_url": f"http://forge/{owner}/{repo}/pull/{n}",
+            }
+            for n, p in pulls.items()  # type: ignore[union-attr]
+            if p["state"] == state_
+        ]
+
+    @app.get("/repos/{owner}/{repo}/pulls/{number}")
+    def get_pull(owner: str, repo: str, number: int) -> dict:
+        p = state["pulls"].get(number, {})  # type: ignore[union-attr]
         return {
             "number": number,
-            "html_url": f"http://forge/{owner}/{repo}/pull/{number}",
-            "head": {"ref": body["head"]},
+            "head": {"ref": p.get("head")},
+            "merged": p.get("merged", False),
+            "state": p.get("state", "open"),
+            "merge_commit_sha": p.get("merge_commit_sha"),
         }
 
     @app.put("/repos/{owner}/{repo}/pulls/{number}/merge")
     def merge_pull(owner: str, repo: str, number: int, body: dict) -> JSONResponse:
-        head = state["pulls"].get(number, {}).get("head")  # type: ignore[union-attr]
-        if head in conflict:
+        pull = state["pulls"].get(number, {})  # type: ignore[union-attr]
+        if pull.get("head") in conflict:
             return JSONResponse(status_code=409, content={"message": "not mergeable"})
-        return JSONResponse(
-            status_code=200, content={"sha": f"merged-{body.get('sha')}", "merged": True, "message": "ok"}
-        )
+        merge_sha = f"merged-{body.get('sha')}"
+        pull.update({"merged": True, "state": "closed", "merge_commit_sha": merge_sha})
+        return JSONResponse(status_code=200, content={"sha": merge_sha, "merged": True, "message": "ok"})
 
-    return TestClient(app)
+    client = TestClient(app)
+    client.forge_state = state  # type: ignore[attr-defined]  # tests flip PR fate (e.g. close-without-merge)
+    return client
 
 
 @dataclass
@@ -132,7 +205,13 @@ class HubHarness:
     events: EventBroker = field(default_factory=EventBroker)
 
 
-def build_hub(tmp_path: Path, *, forge: FakeForge | None = None, pm: FakePmSource | None = None) -> HubHarness:
+def build_hub(
+    tmp_path: Path,
+    *,
+    forge: FakeForge | None = None,
+    pm: FakePmSource | None = None,
+    base_branch: str = "main",
+) -> HubHarness:
     """A migrated, fully-wired hub over ``tmp_path`` with fake external seams."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     config = HubConfig(root=tmp_path, db_url=db_url)
@@ -143,7 +222,7 @@ def build_hub(tmp_path: Path, *, forge: FakeForge | None = None, pm: FakePmSourc
     clock = FixedClock(datetime(2026, 7, 13, tzinfo=UTC))
     events = EventBroker()
     engine = create_engine_from_url(db_url)
-    services = build_services(engine, forge=forge, events=events, pm_source=pm, clock=clock)
+    services = build_services(engine, forge=forge, events=events, pm_source=pm, clock=clock, base_branch=base_branch)
     app = create_app(config, services=services)
     return HubHarness(client=TestClient(app), services=services, forge=forge, pm=pm, clock=clock, events=events)
 

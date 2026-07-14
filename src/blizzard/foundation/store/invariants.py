@@ -191,14 +191,19 @@ def _check_derivation_and_delivery(engine: Engine) -> list[Violation]:
                 Violation("hub:derived-status-total", f"chunk {chunk.chunk_id} derivation raised {exc!r}")
             )
             continue
-        if facts.delivery_landed:
+        # Both terminal delivery facts require the terminal transition: merge-to-main's
+        # ``delivery.landed`` and open-pr's ``pr.closed`` (D-065). An *open* PR
+        # (``pr_opened`` without ``pr_closed``) is deliberately parked — no terminal
+        # transition, environments held (D-066) — so it is never flagged here.
+        if facts.delivery_landed or facts.pr_closed:
             newest = max(facts.transitions, key=lambda t: (t.recorded_at, t.epoch), default=None)
             if newest is None or newest.to_node_id != RESERVED_TERMINAL:
                 target = None if newest is None else newest.to_node_id
+                fact = "delivery.landed" if facts.delivery_landed else "pr.closed"
                 violations.append(
                     Violation(
                         "hub:merge-queue-single-state",
-                        f"chunk {chunk.chunk_id} is delivery.landed but newest transition targets {target}",
+                        f"chunk {chunk.chunk_id} is {fact} but newest transition targets {target}",
                     )
                 )
     return violations

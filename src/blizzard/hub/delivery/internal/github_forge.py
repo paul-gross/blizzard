@@ -16,6 +16,8 @@ forge base URL and auth; tests inject a client bound to a fake GitHub-shaped app
 
 from __future__ import annotations
 
+from typing import Any
+
 import httpx
 
 from blizzard.foundation.logging import get_logger
@@ -80,11 +82,17 @@ class GitHubForgeDelivery:
 
     def open_pr(self, request: LandingRequest) -> PrHandle:
         created = self._client.post(f"/repos/{self._repo_path(request.repo)}/pulls", json=_pull_body(request))
+        if created.status_code == httpx.codes.CREATED:
+            return _handle(request.repo, created.json())
+        if created.status_code in _CONFLICT_STATUSES:
+            # A PR for this head may already exist (a redelivery after a crash between the
+            # forge create and the ``pr.opened`` fact write) — find and reuse it so open-pr
+            # mode stays idempotent, mirroring ``_open_or_reuse`` on the merge path.
+            existing = self._existing_pull(request)
+            if existing is not None:
+                return _handle(request.repo, existing)
         created.raise_for_status()
-        data = created.json()
-        return PrHandle(
-            repo=request.repo, number=int(data["number"]), url=str(data.get("html_url") or data.get("url") or "")
-        )
+        raise RuntimeError(f"could not open or reuse a PR for {request.repo}:{request.branch_name}")
 
     def check_pr(self, handle: PrHandle) -> PrState:
         response = self._client.get(f"/repos/{self._repo_path(handle.repo)}/pulls/{handle.number}")
@@ -111,12 +119,20 @@ class GitHubForgeDelivery:
         return None
 
     def _existing_pr(self, request: LandingRequest) -> int | None:
+        pull = self._existing_pull(request)
+        return int(pull["number"]) if pull is not None else None
+
+    def _existing_pull(self, request: LandingRequest) -> dict[str, Any] | None:
         listed = self._client.get(f"/repos/{self._repo_path(request.repo)}/pulls", params={"state": "open"})
         listed.raise_for_status()
         for pull in listed.json():
             if pull.get("head", {}).get("ref") == request.branch_name:
-                return int(pull["number"])
+                return pull
         return None
+
+
+def _handle(repo: str, data: dict[str, Any]) -> PrHandle:
+    return PrHandle(repo=repo, number=int(data["number"]), url=str(data.get("html_url") or data.get("url") or ""))
 
 
 def _pull_body(request: LandingRequest) -> dict[str, str]:
