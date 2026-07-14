@@ -14,6 +14,22 @@ pip install ./blizzard-*.whl        # installs `blizzard`, `blizzard-hub`, `bliz
 blizzard --version
 ```
 
+## Quickstart from a release
+
+Install the wheel and bring the hub up — sqlite store, embedded board, no Node:
+
+```bash
+pip install https://github.com/paul-gross/blizzard/releases/download/v0.1.0-rc.1/blizzard-0.1.0rc1-py3-none-any.whl
+blizzard hub init .          # scaffold config + data dir + migrated sqlite store
+blizzard hub host --dir .    # serve the API + embedded mission-control board
+```
+
+Then open <http://127.0.0.1:8421/> — the default port from the `blizzard-hub.toml` that `blizzard hub init` scaffolds.
+
+- **sqlite is the default store** — postgres is configuration (the `db_url` knob), not a requirement.
+- **The mission-control frontend is embedded in the wheel** — no Node install or runtime.
+- The same `init` / `migrate` / `host` verbs exist under `blizzard runner`.
+
 ## Layout (screaming architecture — `bzh:screaming-architecture`)
 
 The top-level packages announce what blizzard *is*: two daemons and the client that speaks to them.
