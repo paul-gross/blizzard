@@ -90,6 +90,18 @@ _SOLO_ENV_COUNT = 1
 _CP_REAP_BEFORE = crashpoint("reap.before-expire", "entered REAP; no lease expired yet")
 _CP_REAP_AFTER = crashpoint("reap.after-expire", "REAP done; stale leases expired")
 
+# RESUME — the graceful-restart re-attach, second in the tick (only ever non-empty on the
+# first tick after a graceful restart). These bracket the re-attach the way SPAWN brackets
+# its spawn: the kill→re-attach→record window's *un-recordable* middle (the harness
+# resume-with-message call whose pid is not yet durable) is the same by-construction gap
+# SPAWN leaves between spawn and record_spawn — see ``_resume_in_place``. Armed at either
+# bracket, recovery re-runs RESUME idempotently and the chunk still lands exactly once.
+_CP_RESUME_BEFORE = crashpoint("resume.before-reattach", "entered RESUME with marked intents; none re-attached yet")
+_CP_RESUME_AFTER_KILL = crashpoint(
+    "resume.after-kill.before-reattach", "survivor killed; session not yet re-attached"
+)
+_CP_RESUME_AFTER = crashpoint("resume.after-reattach", "session re-attached under the same lease; intent cleared")
+
 # PULL — the single outbound flusher (store-and-forward drain).
 _CP_PULL_BEFORE = crashpoint("pull.before-flush", "entered PULL; registry synced, buffer not drained")
 _CP_PULL_AFTER = crashpoint("pull.after-flush", "PULL done; buffer drained as far as it could")
@@ -214,6 +226,12 @@ def mark_resume_intents(store: IWriteRunnerStore, *, now: datetime) -> int:
     lease with no pid/session never reached spawn-return (REAP's residue — nothing to resume).
     Returns the number marked. Store-only — no hub, no process probe — so shutdown stays cheap
     and reachable even when the hub is down.
+
+    Each ``record_resume_intent`` is one durable row, so marking is atomic per lease: a crash
+    mid-marking (a ``kill -9`` racing the graceful shutdown) leaves each lease either fully
+    marked or not at all. An unmarked in-flight lease simply falls back to the ungraceful path —
+    REAP requeues it fresh on the next startup — so this hook degrades to the crash-recovery
+    contract rather than to a corrupt half-state; there is no intra-lease window to guard.
     """
     parked = store.parked_lease_ids()
     pending = store.pending_submission_lease_ids()
@@ -247,6 +265,7 @@ def resume(ctx: LoopContext) -> None:
     intents = ctx.store.resume_intent_lease_ids()
     if not intents:
         return
+    _CP_RESUME_BEFORE.reached()  # marked intents present; a crash here re-runs RESUME unchanged
     active = {lease.lease_id: lease for lease in ctx.store.list_active_leases()}
     for lease_id in intents:
         lease = active.get(lease_id)
@@ -283,10 +302,23 @@ def _resume_in_place(ctx: LoopContext, lease: LeaseRecord) -> None:
 
     A missing/corrupt session self-heals via the existing failure path: the resumed process
     cannot find its session, exits, and ADVANCE's verdict-less-exit failure requeues it fresh
-    (D-009) — no explicit detection needed here."""
+    (D-009) — no explicit detection needed here.
+
+    Crash windows (``bzh:crash-point-registry``). Kill-first closes the *original* worker's
+    survivor window: a crash after ``_CP_RESUME_AFTER_KILL`` re-runs RESUME, whose kill of the
+    (now-dead) recorded pid is a no-op before it re-attaches — one process. The one window
+    kill-first cannot guard is the sub-millisecond gap between ``resume_with_message`` returning
+    a pid and ``record_spawn`` making it durable: a crash there leaves a live re-attached worker
+    whose pid was never recorded, so the re-run kills the stale recorded pid (not the survivor)
+    and re-attaches a *second* process to the same session. This is the **same by-construction
+    spawn-record gap** the fresh spawn (``_spawn_attempt``) and the answer-resume
+    (``_resume_if_answered``) already carry — no crash point can arm a window whose recovery
+    input (the new pid) does not yet exist — so it is left un-armed here too rather than asserted
+    away. It is bounded to that one call-return→store-write gap (design/runner/loop.md)."""
     now = ctx.clock.now()
     if lease.pid is not None:
         ctx.process.kill(lease.pid)  # kill-first — never two processes on one session (D-049)
+    _CP_RESUME_AFTER_KILL.reached()  # survivor killed; re-run kills the dead pid (no-op) then re-attaches
     bindings = ctx.store.bindings_for_chunk(lease.chunk_id)
     if not bindings or lease.session_id is None:
         _log.warning(
@@ -294,6 +326,8 @@ def _resume_in_place(ctx: LoopContext, lease: LeaseRecord) -> None:
         )
         _abandon_reassigned(ctx, lease, killed=True)
         return
+    # The resume-with-message → record_spawn gap is the un-armable spawn-record window (see the
+    # docstring): the same one SPAWN and answer-resume carry, not a new one this step introduces.
     pid = ctx.harness.resume_with_message(bindings[0].workdir, lease.session_id, _RESTART_RESUME_MESSAGE)
     ctx.store.record_spawn(
         lease.lease_id,
@@ -302,6 +336,7 @@ def _resume_in_place(ctx: LoopContext, lease: LeaseRecord) -> None:
         session_id=lease.session_id,  # unchanged — same session under the same lease (D-082)
     )
     ctx.store.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
+    _CP_RESUME_AFTER.reached()  # pid recorded, intent cleared — a crash here re-runs RESUME as a no-op
     _log.info(
         "resumed in-flight session after restart",
         chunk_id=lease.chunk_id,

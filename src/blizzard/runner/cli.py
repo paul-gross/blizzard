@@ -89,27 +89,35 @@ def host(directory: str, host_: str | None, port: int | None) -> None:
     driver = PeriodicDriver(config, interval_seconds=interval)
     click.echo(f"serving blizzard-runner on {config.host}:{config.port} (loop tick {interval}s)")
 
-    # Own the shutdown signals ourselves rather than letting uvicorn install a handler that
-    # terminates the process on its own signal — the graceful-restart resume marker (D-082)
-    # must run *after* the server returns, and uvicorn's default handling exits before this
-    # frame's `finally` can. Our handler only asks the server to drain, so the process exits
-    # normally and the marking below is reached. A `kill -9` still skips all of this — exactly
-    # the ungraceful-crash boundary (design/runner/loop.md).
+    # The graceful-restart resume marker (D-082) lives in this frame's `finally`, so it must run
+    # *after* `server.run()` returns — which means SIGTERM must drain the server, not hard-exit
+    # the process. Both handlers that can be in force do exactly that by setting `should_exit`:
+    #   * ours (`_drain`) below, and
+    #   * uvicorn's own `handle_exit`, which its `run()` installs around serving.
+    # So whichever is active, `run()` returns and the marking is reached. We register ours first,
+    # then suppress uvicorn's installer *only on versions that expose it* (older uvicorn's
+    # `install_signal_handlers`) so ours stays in force; on versions that renamed it to the
+    # `capture_signals` context manager (uvicorn ≥ 0.29) there is nothing to suppress and we lean
+    # on uvicorn's own graceful `handle_exit` — equivalent for our purpose. Guarding the monkey-
+    # patch with `hasattr` keeps a uvicorn upgrade from crashing startup on a missing attribute.
+    # A `kill -9` skips all of this — the ungraceful-crash boundary (design/runner/loop.md).
     server = uvicorn.Server(uvicorn.Config(app, host=config.host, port=config.port))
-    server.install_signal_handlers = lambda: None  # type: ignore[method-assign]
 
     def _drain(_signum: int, _frame: types.FrameType | None) -> None:
         server.should_exit = True
 
     signal.signal(signal.SIGTERM, _drain)
     signal.signal(signal.SIGINT, _drain)
+    if hasattr(server, "install_signal_handlers"):
+        server.install_signal_handlers = lambda: None  # type: ignore[method-assign]
 
     driver.start()  # startup recovery is REAP running first inside the tick
     try:
         server.run()
     finally:
-        # Stop the loop first so no in-flight tick races the marking, then mark every in-flight
-        # lease for the next startup's RESUME to re-attach it in place (D-082).
+        # Stop the loop first so no in-flight tick races the marking: `stop()` blocks on the
+        # tick thread (an unbounded join — see PeriodicDriver.stop) so the loop is quiescent
+        # before we mark every in-flight lease for the next startup's RESUME (D-082).
         driver.stop()
         marked = mark_resume_intents_on_shutdown(config)
         if marked:

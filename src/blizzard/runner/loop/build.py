@@ -114,8 +114,18 @@ class PeriodicDriver:
         self._thread.start()
 
     def stop(self) -> None:
+        """Signal the loop to stop and wait for any in-flight tick to finish before returning.
+
+        The join is **unbounded** on purpose: the graceful-shutdown resume marking (D-082) runs
+        right after this returns and must not race a live tick writing the same store. A tick
+        cannot run forever — every seam it touches is timeout-bounded (the hub client's
+        ``_HTTP_TIMEOUT``), so the in-flight tick drains in at most about one tick's work and the
+        thread then exits on the ``_stop`` check. systemd's ``TimeoutStopSec`` is the ultimate
+        backstop: a wedged tick is SIGKILLed, which is simply the ungraceful-crash path (the
+        unmarked workers fall back to REAP). A fixed timeout here, by contrast, could return while
+        a slow tick was still running and let the marking race it."""
         self._stop.set()
-        self._thread.join(timeout=self._interval + 5.0)
+        self._thread.join()
 
     def _run(self) -> None:
         self._client = httpx.Client(base_url=self._config.hub_url, timeout=_HTTP_TIMEOUT)

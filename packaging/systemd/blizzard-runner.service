@@ -39,7 +39,10 @@ WorkingDirectory=/var/lib/blizzard/runner
 # session in place — same lease/epoch/session, only the pid rewritten, no retry consumed —
 # so adopting a newly-merged runner build no longer discards in-flight agent context. The
 # default KillMode (control-group) SIGTERMs the workers alongside the daemon; RESUME kills
-# any survivor first before resuming (design/runner/loop.md).
+# the marked worker first so it never runs two processes on one session (D-049). A `kill -9`
+# during the re-attach itself still degrades to the ordinary crash contract above (REAP
+# requeues) — the recovery boundaries are the crash-point sweep's, not a stronger claim than
+# it arms; see design/runner/loop.md and steps.py `_resume_in_place`.
 Restart=always
 RestartSec=2
 

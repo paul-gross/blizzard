@@ -13,6 +13,11 @@ For **every** crash point in the registry (``bzh:crash-point-registry``), this s
 5. asserts the chunk still lands **exactly once** — one ``delivery.landed`` fact, the
    file reachable from bare ``main`` exactly once — and the invariants are green again.
 
+RESUME's boundaries are the exception: they fire only on the first tick after a
+*graceful* restart, which the ``build -> deliver`` scenario never performs, so they are
+swept by the dedicated graceful-restart scenario (``test_kill9_at_resume_crash_point``)
+which arms each on the restart process. The registry is partitioned accordingly.
+
 Two whole-process cases round it out: an external ``kill -9`` of the runner daemon
 mid-flight, and a kill of the hub mid-delivery.
 
@@ -61,12 +66,19 @@ pytestmark = pytest.mark.crash_sweep
 # Enumerated from the registry at collection — no hand-maintained point list (bzh:crash-point-registry).
 _ALL_POINTS = [p.name for p in discover_crash_points()]
 
+# RESUME's crash points fire only on the FIRST tick after a *graceful* restart, so the generic
+# `build -> deliver` scenario below — which never restarts gracefully — can never reach them.
+# Partition the registry: the generic sweep drives every non-resume boundary; the resume points
+# are swept by the graceful-restart scenario further down (`test_kill9_at_resume_crash_point`).
+_RESUME_POINTS = [p for p in _ALL_POINTS if p.startswith("resume.")]
+_GENERIC_POINTS = [p for p in _ALL_POINTS if not p.startswith("resume.")]
+
 # A representative CI subset — one crash point per boundary family, biased toward the
 # recovery-critical windows the sweep's two real bugs lived in: the FILL bind→claim window
 # (chunk-strand recovery), the lost-ack replay (`flush.after-submit.before-ack`, hub
 # idempotency), the per-repo land (delivery idempotency), and the mid-delivery hub crash
 # (`deliver.before-terminal`, the `delivering`-strand recovery). Running the whole 22-point
-# registry as real subprocesses is ~130s locally and multiples of that on a 2-core GitHub
+# generic sweep as real subprocesses is ~130s locally and multiples of that on a 2-core GitHub
 # runner; the master `push` workflow sets BLIZZARD_CRASH_SWEEP_CI=1 to run this subset so the
 # named gap is a REAL gate at bounded runtime, while the FULL sweep stays the documented
 # local command (`mise run crash-sweep`) and the tag `release` workflow. The two whole-process
@@ -82,20 +94,26 @@ _CI_SUBSET = (
     "deliver.before-terminal",
 )
 
+# The resume CI subset: the recovery-critical kill-first window. The full graceful-restart
+# sweep exercises all three resume boundaries; CI runs just this one to bound the added
+# real-subprocess wall time (each resume case restarts the runner twice).
+_RESUME_CI_SUBSET = ("resume.after-kill.before-reattach",)
 
-def _sweep_points() -> list[str]:
-    """The crash points to parametrize: the full registry, or the CI subset under CI profile."""
+
+def _select(points: list[str], ci_subset: tuple[str, ...]) -> list[str]:
+    """The points to parametrize: all of ``points``, or its CI subset under the CI profile."""
     if os.environ.get("BLIZZARD_CRASH_SWEEP_CI") != "1":
-        return _ALL_POINTS
-    missing = [p for p in _CI_SUBSET if p not in _ALL_POINTS]
+        return points
+    missing = [p for p in ci_subset if p not in points]
     # A subset point that no longer exists means the registry was renamed without updating the
     # CI selection — fail loudly rather than silently shrinking coverage (bzh:crash-point-registry).
     assert not missing, f"CI-subset crash points absent from the registry (renamed?): {missing}"
-    chosen = set(_CI_SUBSET)
-    return [p for p in _ALL_POINTS if p in chosen]
+    chosen = set(ci_subset)
+    return [p for p in points if p in chosen]
 
 
-_POINTS = _sweep_points()
+_POINTS = _select(_GENERIC_POINTS, _CI_SUBSET)
+_RESUME_SWEEP = _select(_RESUME_POINTS, _RESUME_CI_SUBSET)
 
 
 def _is_hub_point(point: str) -> bool:
@@ -354,6 +372,67 @@ def test_graceful_restart_resumes_in_flight_session(crash_env: CrashEnv, tmp_pat
         assert _open_resume_intents(runner_dir) == set()
 
         _assert_invariants(runner_dir, hub_dir, when="after graceful restart-resume")
+        tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
+        commits = [line for line in tree.splitlines() if line.strip()]
+        assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
+    finally:
+        hub.close()
+        terminate(runner_proc)
+        terminate(hub_proc)
+
+
+@pytest.mark.parametrize("point", _RESUME_SWEEP)
+def test_kill9_at_resume_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
+    """A ``kill -9`` at a RESUME boundary (armed on the restart) still re-attaches exactly once.
+
+    The graceful-restart scenario, crashed mid-recovery: the worker commits then hangs, a graceful
+    stop marks the lease, and the restart RESUMEs it — but this restart is ARMED at ``point`` so the
+    runner SIGKILLs itself the instant RESUME reaches that boundary. A second, unarmed restart must
+    still converge to ``done`` under the *same* lease/epoch/session, with the chunk landing exactly
+    once and the invariant checker green. This is what closes the gap the plain
+    ``test_graceful_restart_resumes_in_flight_session`` left: it proved the happy path, this proves
+    every RESUME boundary the registry enumerates *recovers* from a crash, not just the clean case."""
+    landed_file = f"LANDED-resume-{point.replace('.', '_')}.md"
+    hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
+    hub_port, runner_port = free_port(), free_port()
+
+    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+    runner_proc = None
+    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    try:
+        await_http(hub, "/api/health", proc=hub_proc)
+        chunk_id = _ingest_hanging_chunk(hub, crash_env.forge, landed_file)
+        write_runner_config(
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+        )
+        runner_proc = start_runner(runner_dir, crash_point=None)
+
+        # Let the worker reach its commit and hang mid-flight, then gracefully stop to mark the lease.
+        assert wait_status(hub, chunk_id, {"running"}) == "running"
+        _await_committed(runner_dir, chunk_id, landed_file)
+        terminate(runner_proc)
+        before = _leases_for_chunk(runner_dir, chunk_id)
+        assert len(before) == 1, f"expected one lease before restart, got {before}"
+        lease_id, epoch, session_id, _pid_before = before[0]
+        assert _open_resume_intents(runner_dir) == {lease_id}, "graceful shutdown did not mark a resume-intent"
+
+        # Restart ARMED at the resume boundary: the first tick's RESUME reaches it and self-SIGKILLs.
+        runner_proc = start_runner(runner_dir, crash_point=point)
+        code = wait_death(runner_proc)
+        assert code == -9, f"armed runner at {point} exited {code}, not SIGKILL (-9); point never reached?"
+        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}")
+
+        # Restart UNARMED: RESUME recovers and the chunk converges — exactly once, still one lease.
+        runner_proc = start_runner(runner_dir, crash_point=None)
+        assert wait_status(hub, chunk_id, {"done"}) == "done", f"chunk did not converge after kill at {point}"
+
+        after = _leases_for_chunk(runner_dir, chunk_id)
+        # Same-lease resume across the crash: no extra lease minted (that would be a retry), and the
+        # lease/epoch/session are the ones marked before the restart — the pid is the only rewrite.
+        assert len(after) == 1, f"resume across a crash at {point} minted an extra lease (retry): {after}"
+        assert (after[0][0], after[0][1], after[0][2]) == (lease_id, epoch, session_id)
+        assert _open_resume_intents(runner_dir) == set(), "the resume-intent was not cleared after recovery"
+        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}")
         tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
         commits = [line for line in tree.splitlines() if line.strip()]
         assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
