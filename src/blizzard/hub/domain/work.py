@@ -511,6 +511,22 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
 
     def record_delivery_repo_landed(self, chunk_id: str, *, repo: str, commit_hash: str, at: datetime) -> None: ...
     def record_delivery_landed(self, chunk_id: str, *, at: datetime) -> None: ...
+    def finalize_delivery(
+        self,
+        chunk_id: str,
+        *,
+        from_node_id: str,
+        to_node_id: str,
+        choice_name: str,
+        epoch: int,
+        runner_id: str,
+        transition_id: str,
+        at: datetime,
+    ) -> bool:
+        """Land the terminal delivery atomically and idempotently — one transaction, a
+        no-op if already landed (D-030/crash recovery). Returns True iff it wrote."""
+        ...
+
     def record_escalation(self, chunk_id: str, *, epoch: int, takeover_command: str, at: datetime) -> None:
         """Record an ``escalation.recorded`` fact reported up by a runner (D-009/D-067).
 

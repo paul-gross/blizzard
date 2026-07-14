@@ -11,6 +11,7 @@ from __future__ import annotations
 import click
 
 from blizzard import __version__
+from blizzard.cli.dev import dev
 from blizzard.hub.cli import hub
 from blizzard.runner.cli import runner
 
@@ -23,6 +24,7 @@ def blizzard() -> None:
 
 blizzard.add_command(hub)
 blizzard.add_command(runner)
+blizzard.add_command(dev)
 
 
 if __name__ == "__main__":

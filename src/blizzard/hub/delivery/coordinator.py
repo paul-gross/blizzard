@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.ids import TRANSITION_PREFIX, mint
 from blizzard.hub.delivery.forge import IForgeDelivery, LandingDisposition, LandingRequest
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
@@ -33,6 +34,16 @@ from blizzard.hub.domain.graph import RESERVED_TERMINAL, Graph, Node
 from blizzard.hub.domain.work import Chunk, IWriteChunkRepository
 
 _HUB_RUNNER_ID = "hub"
+
+# Crash points (``bzh:crash-point-registry``) — the hub coordinator's deliver windows.
+# Delivery runs synchronously inside the completion-apply request, so an armed point
+# SIGKILLs the hub daemon mid-delivery; the runner's completion stays buffered (the POST
+# failed) and re-flushes idempotently after the hub restarts, while the per-repo lands
+# reconcile (D-091). These bracket each per-repo land and the terminal fact.
+_CP_DELIVER_BEFORE_REPO = crashpoint("deliver.before-repo-land", "about to land a repo; not yet merged/recorded")
+_CP_DELIVER_AFTER_REPO = crashpoint("deliver.after-repo-land", "repo landed and recorded; remainder pending")
+_CP_DELIVER_BEFORE_TERMINAL = crashpoint("deliver.before-terminal", "all repos landed; terminal fact not written")
+_CP_DELIVER_AFTER_TERMINAL = crashpoint("deliver.after-terminal", "terminal fact + release written; delivery done")
 
 
 class DeliverOutcome(StrEnum):
@@ -70,6 +81,7 @@ class MergeQueueCoordinator:
             repo = row.repo or ""
             if repo in already_landed:
                 continue  # reconciliation — a prior partial land, skipped (D-091)
+            _CP_DELIVER_BEFORE_REPO.reached()
             result = self._forge.land(_landing_request(row))
             if result.disposition is LandingDisposition.CONFLICT:
                 return self._conflict(chunk, graph, deliver_node, epoch=epoch, detail=result.detail)
@@ -77,6 +89,7 @@ class MergeQueueCoordinator:
             self._chunks.record_delivery_repo_landed(
                 chunk.chunk_id, repo=repo, commit_hash=landed_commit, at=self._clock.now()
             )
+            _CP_DELIVER_AFTER_REPO.reached()
             already_landed = already_landed | {repo}
 
         return self._landed(chunk, deliver_node, epoch=epoch, landed=sorted(already_landed))
@@ -84,21 +97,22 @@ class MergeQueueCoordinator:
     def _landed(self, chunk: Chunk, deliver_node: Node, *, epoch: int, landed: list[str]) -> DeliverResult:
         hub_epoch = epoch + 1
         now = self._clock.now()
-        self._chunks.record_lease(chunk.chunk_id, epoch=hub_epoch, runner_id=_HUB_RUNNER_ID, at=now)
-        self._chunks.record_delivery_landed(chunk.chunk_id, at=now)
-        self._chunks.record_transition(
-            transition_id=mint(TRANSITION_PREFIX, self._clock),
-            chunk_id=chunk.chunk_id,
+        _CP_DELIVER_BEFORE_TERMINAL.reached()
+        # One atomic, idempotent write: the hub lease, delivery.landed, the terminal
+        # transition, and the route release land together (D-036), so a mid-delivery
+        # ``kill -9`` never leaves the chunk landed-but-not-terminal, and a redelivery
+        # after a crash re-enters harmlessly (finalize is a no-op once landed).
+        self._chunks.finalize_delivery(
+            chunk.chunk_id,
             from_node_id=deliver_node.node_id,
             to_node_id=RESERVED_TERMINAL,
             choice_name=DeliverOutcome.LANDED.value,
             epoch=hub_epoch,
             runner_id=_HUB_RUNNER_ID,
+            transition_id=mint(TRANSITION_PREFIX, self._clock),
             at=now,
-            artifacts=[],
         )
-        # Terminal outcome reported — the holding runner's environments are freed (D-066).
-        self._chunks.record_route_released(chunk.chunk_id, at=now)
+        _CP_DELIVER_AFTER_TERMINAL.reached()
         return DeliverResult(outcome=DeliverOutcome.LANDED, landed_repos=landed)
 
     def _conflict(self, chunk: Chunk, graph: Graph, deliver_node: Node, *, epoch: int, detail: str) -> DeliverResult:

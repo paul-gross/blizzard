@@ -24,6 +24,7 @@ import json
 import uuid
 from datetime import UTC, datetime, timedelta
 
+from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.ids import LEASE_PREFIX, mint
 from blizzard.foundation.logging import get_logger
 from blizzard.hub.domain.work import ChunkStatus
@@ -64,6 +65,50 @@ _DECISION_KIND = "decision.submitted"
 # The env count a solo chunk wants; batching (K>1) is parked (design/runner/environments.md).
 _SOLO_ENV_COUNT = 1
 
+# --------------------------------------------------------------------------- #
+# Crash points (``bzh:crash-point-registry``) — the runner tick's dangerous windows.
+# Each is declared beside the boundary it guards and reached exactly there; armed, it
+# SIGKILLs the tick subprocess so the kill-9 sweep exercises recovery from that instant.
+# Unarmed, each is a no-op (a module-global string compare).
+# --------------------------------------------------------------------------- #
+
+# REAP — startup recovery runs this first, so these bracket the recovery pass itself.
+_CP_REAP_BEFORE = crashpoint("reap.before-expire", "entered REAP; no lease expired yet")
+_CP_REAP_AFTER = crashpoint("reap.after-expire", "REAP done; stale leases expired")
+
+# PULL — the single outbound flusher (store-and-forward drain).
+_CP_PULL_BEFORE = crashpoint("pull.before-flush", "entered PULL; registry synced, buffer not drained")
+_CP_PULL_AFTER = crashpoint("pull.after-flush", "PULL done; buffer drained as far as it could")
+
+# FILL — peek -> acquire -> BIND -> claim -> spawn (D-080/D-083). The local binding is
+# written *before* the hub claim so it is the runner's durable anchor for a chunk it holds:
+# a crash anywhere in the bind->claim->spawn window is reconciled next tick (adopt if the
+# hub confirms the route is ours, else release the orphaned binding) — never a strand.
+_CP_FILL_BEFORE_ACQUIRE = crashpoint("fill.before-env-acquire", "peeked a ready chunk; envs not acquired")
+_CP_FILL_AFTER_ACQUIRE = crashpoint("fill.after-env-acquire.before-bind", "envs acquired; binding not recorded")
+_CP_FILL_AFTER_BIND = crashpoint("fill.after-bind.before-claim", "binding recorded; route not claimed at the hub")
+_CP_FILL_AFTER_CLAIM = crashpoint("fill.after-claim.before-spawn", "hub holds the route; lease not minted")
+
+# SPAWN (shared by FILL's first spawn, ADVANCE's continue-in-place, and requeue): the
+# lease-mint -> spawn -> record window is the orphan-lease window REAP must absorb.
+_CP_SPAWN_AFTER_MINT = crashpoint("spawn.after-lease-mint.before-spawn", "lease minted; worker not spawned")
+_CP_SPAWN_AFTER_SPAWN = crashpoint("spawn.after-spawn", "worker spawned; pid recorded")
+
+# ADVANCE — judge an exited worker: push artifacts -> elicit verdict -> buffer completion.
+_CP_ADV_BEFORE_PUSH = crashpoint("advance.before-artifact-push", "exited worker; artifacts not pushed")
+_CP_ADV_AFTER_PUSH = crashpoint(
+    "advance.after-artifact-push.before-judgement", "artifacts pushed; verdict not elicited"
+)
+_CP_ADV_AFTER_JUDGE = crashpoint("advance.after-judgement.before-buffer", "verdict parsed; completion not buffered")
+_CP_ADV_AFTER_BUFFER = crashpoint("advance.after-buffer.before-flush", "completion buffered; not yet flushed")
+
+# FLUSH (of the buffered completion, inside PULL) — submit -> ack -> apply-response. The
+# after-submit.before-ack window is the lost-ack replay the hub's idempotency must absorb.
+_CP_FLUSH_BEFORE_SUBMIT = crashpoint("flush.before-submit", "completion at head of buffer; not submitted")
+_CP_FLUSH_AFTER_SUBMIT = crashpoint("flush.after-submit.before-ack", "hub applied the completion; ack not recorded")
+_CP_FLUSH_AFTER_ACK = crashpoint("flush.after-ack.before-apply-response", "ack recorded; apply-response not consumed")
+_CP_FLUSH_AFTER_APPLY = crashpoint("flush.after-apply-response", "apply-response consumed; chunk continued in place")
+
 #: REAP's staleness threshold (design/runner/loop.md). Deliberately **conservative**:
 #: heartbeats ride tool calls, so the threshold is bounded below by the longest tool
 #: call a healthy worker makes — one long test run must never read as a stall. A live
@@ -97,6 +142,7 @@ def reap(ctx: LoopContext) -> None:
     the two apart — a worker that exited cleanly still carries a fresh final heartbeat,
     so REAP never preempts ADVANCE's judgement of it.
     """
+    _CP_REAP_BEFORE.reached()
     now = ctx.clock.now()
     parked = ctx.store.parked_lease_ids()
     for lease in ctx.store.list_active_leases():
@@ -115,6 +161,7 @@ def reap(ctx: LoopContext) -> None:
             _log.info("reaping stalled worker", lease_id=lease.lease_id, chunk_id=lease.chunk_id, pid=lease.pid)
             _fail_attempt(ctx, lease, reason=_REAPED)
         # A live, beating worker runs on.
+    _CP_REAP_AFTER.reached()
 
 
 def _is_heartbeat_stale(ctx: LoopContext, lease: LeaseRecord, now: datetime) -> bool:
@@ -155,7 +202,9 @@ def pull(ctx: LoopContext) -> None:
     flushes next tick; an outage is just a bigger backlog.
     """
     _sync_registry(ctx)
+    _CP_PULL_BEFORE.reached()
     flush_outbound(ctx)
+    _CP_PULL_AFTER.reached()
 
 
 def _sync_registry(ctx: LoopContext) -> None:
@@ -220,17 +269,21 @@ def _flush_completion(ctx: LoopContext, fact: BufferedFact) -> bool:
     """
     payload = json.loads(fact.payload)
     submission = CompletionSubmission.model_validate(payload["submission"])
+    _CP_FLUSH_BEFORE_SUBMIT.reached()
     try:
         response = ctx.hub.submit_completion(fact.chunk_id or "", submission)
     except HubClientError:
         return False  # completion stays durable in the buffer; the mid-node worker is unaffected
 
+    _CP_FLUSH_AFTER_SUBMIT.reached()  # hub applied it; a crash here is the lost-ack replay (D-090)
     ctx.store.ack_outbound(fact.seq, acked_at=ctx.clock.now())
+    _CP_FLUSH_AFTER_ACK.reached()
     lease = ctx.store.active_lease(fact.lease_id or "")
     if lease is None:
         # Already advanced on an earlier flush whose ack was lost (D-090) — nothing to do.
         return True
     _consume_apply_response(ctx, lease, response)
+    _CP_FLUSH_AFTER_APPLY.reached()
     return True
 
 
@@ -304,7 +357,14 @@ def fill(ctx: LoopContext) -> None:
     The pause brake (D-043): while the runner is paused at the hub — mirrored locally by
     PULL — FILL claims nothing. In-flight chunks are untouched (REAP/ADVANCE still run),
     so pausing drains the fleet rather than killing it ([loop.md]).
+
+    Recovery runs first: :func:`_reconcile_interrupted_claims` reconciles any binding
+    left by a crash in FILL's own bind→claim→spawn window **before** new work is peeked,
+    so a released orphan frees its environment for this same tick and an adopted claim is
+    never double-claimed off the ready queue. It runs even while paused — it recovers
+    in-flight work, it does not start new work.
     """
+    _reconcile_interrupted_claims(ctx)
     if ctx.store.hub_paused(ctx.config.runner_id):
         _log.info("paused — no new claims this tick", runner_id=ctx.config.runner_id)
         return
@@ -312,6 +372,42 @@ def fill(ctx: LoopContext) -> None:
     for _ in range(max(slots, 0)):
         if not _fill_one(ctx):
             break
+
+
+def _reconcile_interrupted_claims(ctx: LoopContext) -> None:
+    """Reconcile bindings left by a crash in FILL's bind→claim→spawn window (D-083).
+
+    Because the binding is written locally *before* the hub claim, a crash anywhere in
+    that window leaves the runner holding a binding for a chunk with no active lease.
+    This runs before FILL peeks new work and, per the hub's view of each such chunk —
+
+      * route ours, still ``running`` → **adopt**: spawn the current node into the warm
+        environment, finishing the interrupted claim (the lease never minted);
+      * no live route (``ready``), or a route held by another runner → **release** the
+        orphaned binding (the claim never landed, or we lost the race before retracting
+        it) so the environment frees this tick and the chunk re-derives ``ready``.
+
+    A chunk at a hub node (``delivering``) or awaiting a human keeps its binding and is
+    left to ADVANCE — only a chunk the runner should be actively working, but isn't, is
+    reconciled here."""
+    for chunk_id in ctx.store.live_tenure_chunk_ids():
+        if ctx.store.active_lease_for_chunk(chunk_id) is not None:
+            continue  # a live worker holds it — REAP/ADVANCE own it
+        try:
+            detail = ctx.hub.get_chunk(chunk_id)
+        except HubClientError:
+            continue  # hub unreachable — the binding is durable; retry next tick
+        bindings = ctx.store.bindings_for_chunk(chunk_id)
+        if not bindings:
+            continue
+        ours = detail.route is not None and detail.route.runner_id == ctx.config.runner_id
+        if detail.status == ChunkStatus.RUNNING and ours:
+            _adopt_interrupted_claim(ctx, chunk_id)  # route ours — just spawn the current node
+        elif detail.status == ChunkStatus.READY:
+            _reclaim_interrupted(ctx, chunk_id, bindings)  # claim never landed — claim now, reuse the binding
+        elif detail.route is not None and not ours:
+            _log.info("releasing binding — another runner won the chunk", chunk_id=chunk_id)
+            _release_all(ctx, chunk_id)
 
 
 def _fill_one(ctx: LoopContext) -> bool:
@@ -325,11 +421,25 @@ def _fill_one(ctx: LoopContext) -> bool:
 
     entry = peek.entries[0]
     held = ctx.store.held_environment_ids()
+    _CP_FILL_BEFORE_ACQUIRE.reached()
     try:
         acquired = ctx.provider.acquire(entry.chunk_id, _SOLO_ENV_COUNT, held)
     except WorkspaceAcquisitionError:
         _log.info("acquire refused — env-bound this tick", chunk_id=entry.chunk_id)
         return False  # env capacity exhausted; the chunk waits
+
+    # Record the chunk→env binding locally BEFORE claiming at the hub (D-083): the binding
+    # is the runner's durable anchor for a chunk it holds, so a crash in the bind→claim→spawn
+    # window leaves a local trace :func:`_reconcile_interrupted_claims` recovers next tick —
+    # without it, a crash after a won claim but before any local write would strand the chunk
+    # (the hub shows it claimed, the runner has nothing to drive or reap).
+    _CP_FILL_AFTER_ACQUIRE.reached()
+    now = ctx.clock.now()
+    for a in acquired:
+        ctx.store.record_binding(
+            chunk_id=entry.chunk_id, environment_id=a.environment_id, workdir=a.workdir, bound_at=now
+        )
+    _CP_FILL_AFTER_BIND.reached()
 
     claim = RouteClaim(
         chunk_id=entry.chunk_id,
@@ -340,18 +450,14 @@ def _fill_one(ctx: LoopContext) -> bool:
     try:
         outcome = ctx.hub.claim_route(claim)
     except HubClientError:
-        _release_acquired(ctx, acquired)
+        _release_binding(ctx, entry.chunk_id, acquired)  # claim not sent — undo the local binding
         return False
     if outcome.conflict is not None or outcome.claimed is None:
         _log.info("route claim lost the race", chunk_id=entry.chunk_id)
-        _release_acquired(ctx, acquired)
-        return True  # someone else took it; peek fresh next iteration
+        _release_binding(ctx, entry.chunk_id, acquired)  # someone else won — undo our binding
+        return True  # peek fresh next iteration
 
-    now = ctx.clock.now()
-    for a in acquired:
-        ctx.store.record_binding(
-            chunk_id=entry.chunk_id, environment_id=a.environment_id, workdir=a.workdir, bound_at=now
-        )
+    _CP_FILL_AFTER_CLAIM.reached()
     _spawn_attempt(ctx, entry.chunk_id, outcome.claimed.envelope, acquired)
     return True
 
@@ -420,7 +526,9 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
         return  # hub unreachable — the worker's exit is durable; retry next tick
 
     # 1. Push produced branches to their forge origins BEFORE submitting (D-026).
+    _CP_ADV_BEFORE_PUSH.reached()
     artifacts = _push_and_collect_artifacts(ctx, bindings)
+    _CP_ADV_AFTER_PUSH.reached()
 
     # 1b. Runner-config gate (D-032/D-073): this operator gates this node by name, so the
     #     node-step's outcome is a human's, not the worker's. Submit a Decision carrying
@@ -440,6 +548,7 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
         _log.warning("verdict-less judgement — failing attempt", chunk_id=lease.chunk_id, lease_id=lease.lease_id)
         _fail_attempt(ctx, lease, reason=_FAILED)
         return
+    _CP_ADV_AFTER_JUDGE.reached()
 
     # 2b. Harvest the node's asset artifacts (D-026): a node that `produces` a name no
     #     pushed git commit covers (the review node's `findings`) emits the worker's
@@ -466,6 +575,7 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
         payload=payload,
         created_at=ctx.clock.now(),
     )
+    _CP_ADV_AFTER_BUFFER.reached()
     _log.info("completion buffered", chunk_id=lease.chunk_id, lease_id=lease.lease_id, choice=choice)
 
 
@@ -604,11 +714,13 @@ def _spawn_attempt(
         payload=json.dumps({"chunk_id": chunk_id, "epoch": epoch}),
         created_at=now,
     )
+    _CP_SPAWN_AFTER_MINT.reached()  # lease minted, worker not spawned — the orphan-lease window REAP absorbs
     preamble = WorkerPreamble(environments=environments, lease_id=lease_id, local_api_url=ctx.config.local_api_url)
     handle = ctx.harness.spawn(envelope, preamble, session_hint=str(uuid.uuid4()))
     ctx.store.record_spawn(
         lease_id, pid=handle.pid, process_start_time=handle.process_start_time, session_id=handle.session_id
     )
+    _CP_SPAWN_AFTER_SPAWN.reached()
 
 
 def _fail_attempt(ctx: LoopContext, lease: LeaseRecord, *, reason: str) -> None:
@@ -630,6 +742,52 @@ def _fail_attempt(ctx: LoopContext, lease: LeaseRecord, *, reason: str) -> None:
             lease_id=lease.lease_id, chunk_id=lease.chunk_id, node_id=lease.node_id, reason=_ESCALATED, closed_at=now
         )
         _escalate(ctx, lease)
+
+
+def _adopt_interrupted_claim(ctx: LoopContext, chunk_id: str) -> None:
+    """Spawn the current node for a claimed chunk whose FILL crashed before the lease minted.
+
+    The hub confirms this runner holds the route (D-080) and the runner holds the binding,
+    but no lease was ever minted (the crash landed in FILL's claim→spawn window). Recovery
+    is a spawn of the chunk's current node from its idempotent envelope (D-090) into the
+    already-bound environment — the same work FILL's tail would have done."""
+    bindings = ctx.store.bindings_for_chunk(chunk_id)
+    if not bindings:
+        _log.warning("adopt with no bound env — cannot spawn", chunk_id=chunk_id)
+        return
+    try:
+        envelope = ctx.hub.get_envelope(chunk_id)
+    except HubClientError:
+        return  # hub unreachable — the binding is durable; retry next tick
+    _log.info("adopting interrupted claim — spawning current node", chunk_id=chunk_id)
+    _spawn_attempt(ctx, chunk_id, envelope, _bindings_as_environments(bindings))
+
+
+def _reclaim_interrupted(ctx: LoopContext, chunk_id: str, bindings: list[EnvBindingRecord]) -> None:
+    """Complete a claim whose hub POST never landed — claim now, reusing the held binding.
+
+    The runner bound the chunk's environment but crashed before (or during) the claim, so
+    the hub still shows the chunk ``ready``. Rather than release and re-acquire (which would
+    churn the environment and re-bind the same id), the runner claims the route with the
+    environment it already holds and spawns on success; a 409 means another runner took the
+    chunk while this one was down, so the binding is released (D-080)."""
+    envs = _bindings_as_environments(bindings)
+    claim = RouteClaim(
+        chunk_id=chunk_id,
+        runner_id=ctx.config.runner_id,
+        workspace_id=ctx.config.workspace_id,
+        environment_ids=[b.environment_id for b in bindings],
+    )
+    try:
+        outcome = ctx.hub.claim_route(claim)
+    except HubClientError:
+        return  # hub unreachable — the binding is durable; retry next tick
+    if outcome.conflict is not None or outcome.claimed is None:
+        _log.info("interrupted claim lost the race — releasing binding", chunk_id=chunk_id)
+        _release_all(ctx, chunk_id)
+        return
+    _log.info("re-claimed interrupted chunk — spawning current node", chunk_id=chunk_id)
+    _spawn_attempt(ctx, chunk_id, outcome.claimed.envelope, envs)
 
 
 def _requeue(ctx: LoopContext, lease: LeaseRecord) -> None:
@@ -803,6 +961,18 @@ def _release_all(ctx: LoopContext, chunk_id: str) -> None:
 def _release_acquired(ctx: LoopContext, acquired: list[AcquiredEnvironment]) -> None:
     """Release just-acquired (unbound) environments after a lost claim (D-080)."""
     for a in acquired:
+        ctx.provider.release(a.environment_id)
+
+
+def _release_binding(ctx: LoopContext, chunk_id: str, acquired: list[AcquiredEnvironment]) -> None:
+    """Undo a just-recorded binding whose claim never landed — release the fact and the env.
+
+    The binding is written before the hub claim (D-083), so a claim that fails to send or
+    loses the race must retract both the local binding fact and the provider allocation,
+    leaving the chunk exactly as if it had never been touched (it stays ``ready``)."""
+    now = ctx.clock.now()
+    for a in acquired:
+        ctx.store.record_release(chunk_id=chunk_id, environment_id=a.environment_id, released_at=now)
         ctx.provider.release(a.environment_id)
 
 

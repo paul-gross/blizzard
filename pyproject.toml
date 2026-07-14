@@ -82,6 +82,7 @@ markers = [
     "unit: one class or function in isolation",
     "component: a domain slice wired with real internal collaborators, doubles only at the seams",
     "e2e: the full acceptance loop against the live stack; skipped when services are absent",
+    "crash_sweep: the kill-9 crash sweep — real subprocesses SIGKILLed at each registry point; skipped without BLIZZARD_CRASH_SWEEP=1",
 ]
 
 [tool.pyright]

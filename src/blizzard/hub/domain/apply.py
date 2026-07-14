@@ -184,8 +184,12 @@ class ApplyService:
             return _failure(f"transition target {to_node_id} is not a node")
 
         if to_node.executor is Executor.HUB:
-            if run_coordinator:
-                self._coordinator.deliver(chunk, graph, to_node, epoch=submission.epoch)
+            # Run the coordinator on BOTH the fresh apply and the idempotent replay
+            # (``run_coordinator`` is ignored here): delivery is itself idempotent and
+            # resumable (``finalize_delivery`` + the per-repo skip, D-091), so a completion
+            # re-flushed after a mid-delivery hub crash RESUMES the interrupted delivery
+            # rather than wedging the chunk at ``delivering`` — the deliver-crash recovery.
+            self._coordinator.deliver(chunk, graph, to_node, epoch=submission.epoch)
             return ApplyResponse(
                 outcome=ApplyOutcome.HUB_NODE_TAKEN,
                 detail=f"hub node `{to_node.name}` took over; poll the chunk for the outcome",

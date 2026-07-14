@@ -438,6 +438,54 @@ class ChunkStore:
         with self._engine.begin() as conn:
             conn.execute(insert(s.delivery_landed).values(chunk_id=chunk_id, landed_at=at))
 
+    def finalize_delivery(
+        self,
+        chunk_id: str,
+        *,
+        from_node_id: str,
+        to_node_id: str,
+        choice_name: str,
+        epoch: int,
+        runner_id: str,
+        transition_id: str,
+        at: datetime,
+    ) -> bool:
+        """Land the terminal delivery **atomically and idempotently** (D-030/crash recovery).
+
+        The hub lease, the ``delivery.landed`` fact, the terminal transition, and the
+        route release are written in **one transaction**, so a ``kill -9`` mid-delivery
+        can never leave a chunk landed-but-not-terminal (the ``merge-queue-single-state``
+        invariant). Guarded by the ``delivery.landed`` existence check: a redelivery — a
+        completion re-flushed after a mid-delivery hub crash — re-enters harmlessly and
+        writes nothing a second time. Returns True when it wrote the terminal facts,
+        False when the chunk was already landed.
+        """
+        with self._engine.begin() as conn:
+            already = conn.execute(
+                select(s.delivery_landed.c.id).where(s.delivery_landed.c.chunk_id == chunk_id)
+            ).first()
+            if already is not None:
+                return False
+            conn.execute(
+                insert(s.lease_facts).values(chunk_id=chunk_id, epoch=epoch, runner_id=runner_id, minted_at=at)
+            )
+            conn.execute(insert(s.delivery_landed).values(chunk_id=chunk_id, landed_at=at))
+            conn.execute(
+                insert(s.transitions).values(
+                    transition_id=transition_id,
+                    chunk_id=chunk_id,
+                    from_node_id=from_node_id,
+                    to_node_id=to_node_id,
+                    choice_name=choice_name,
+                    decision_id=None,
+                    epoch=epoch,
+                    runner_id=runner_id,
+                    recorded_at=at,
+                )
+            )
+            conn.execute(insert(s.route_released).values(chunk_id=chunk_id, released_at=at))
+            return True
+
     def record_escalation(self, chunk_id: str, *, epoch: int, takeover_command: str, at: datetime) -> None:
         with self._engine.begin() as conn:
             conn.execute(

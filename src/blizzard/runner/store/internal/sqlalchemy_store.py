@@ -44,6 +44,28 @@ from blizzard.runner.store.schema import (
 _log = get_logger("blizzard.runner.store")
 
 
+def _binding_is_held():  # type: ignore[no-untyped-def]
+    """A binding is **held** iff no release for its ``(chunk, env)`` is at or after it.
+
+    Timestamp-aware: a plain ``env_id NOT IN releases`` set-difference would mask a
+    **re-bind** — the same ``(chunk, env)`` bound again after a release (interrupted-claim
+    recovery) — leaving a valid new binding invisible forever. Comparing against the
+    release instant un-masks it: a fresh binding re-taken *after* an earlier release has no
+    release at-or-after it, so it reads as held; the original binding does, so it does not
+    (``bzh:facts-not-status``). ``>=`` keeps a same-instant release winning (a release
+    stamped with its binding's own instant is a release), while a genuine re-bind is always
+    stamped strictly later, so it is never spuriously masked."""
+    return ~(
+        select(binding_releases.c.id)
+        .where(
+            (binding_releases.c.chunk_id == env_bindings.c.chunk_id)
+            & (binding_releases.c.environment_id == env_bindings.c.environment_id)
+            & (binding_releases.c.released_at >= env_bindings.c.bound_at)
+        )
+        .exists()
+    )
+
+
 class SqlAlchemyRunnerStore:
     """Read-write runner store over a SQLAlchemy engine."""
 
@@ -92,28 +114,14 @@ class SqlAlchemyRunnerStore:
         return {str(r.lease_id) for r in self._all(stmt)}
 
     def held_environment_ids(self) -> list[str]:
-        stmt = (
-            select(env_bindings.c.environment_id)
-            .where(
-                env_bindings.c.environment_id.not_in(
-                    select(binding_releases.c.environment_id).where(
-                        binding_releases.c.chunk_id == env_bindings.c.chunk_id
-                    )
-                )
-            )
-            .distinct()
-        )
+        stmt = select(env_bindings.c.environment_id).where(_binding_is_held()).distinct()
         return [str(r.environment_id) for r in self._all(stmt)]
 
     def bindings_for_chunk(self, chunk_id: str) -> list[EnvBindingRecord]:
         stmt = (
             select(env_bindings)
             .where(env_bindings.c.chunk_id == chunk_id)
-            .where(
-                env_bindings.c.environment_id.not_in(
-                    select(binding_releases.c.environment_id).where(binding_releases.c.chunk_id == chunk_id)
-                )
-            )
+            .where(_binding_is_held())
             .order_by(env_bindings.c.bound_at)
         )
         return [
@@ -127,17 +135,7 @@ class SqlAlchemyRunnerStore:
         ]
 
     def live_tenure_chunk_ids(self) -> list[str]:
-        stmt = (
-            select(env_bindings.c.chunk_id)
-            .where(
-                env_bindings.c.environment_id.not_in(
-                    select(binding_releases.c.environment_id).where(
-                        binding_releases.c.chunk_id == env_bindings.c.chunk_id
-                    )
-                )
-            )
-            .distinct()
-        )
+        stmt = select(env_bindings.c.chunk_id).where(_binding_is_held()).distinct()
         return [str(r.chunk_id) for r in self._all(stmt)]
 
     def attempt_count(self, chunk_id: str, node_id: str) -> int:

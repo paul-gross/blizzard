@@ -13,6 +13,10 @@ run = "uv run pytest"
 description = "Run the standing e2e smoke suite (verification.md) — six full-stack scenarios (happy-path build→review→deliver, review-fail cycle, retries-exhausted escalation, ask/answer, human gate, and the browser-driven board) self-managed over forge+hub+runner + a minted blizzard-mock fixture; needs the sibling blizzard-mock worktree provisioned (winter provision <env>), and the browser scenario also needs Chromium (uv run playwright install chromium) — it skips cleanly without it"
 run = "BLIZZARD_E2E=1 uv run pytest tests/e2e/"
 
+[tasks.crash-sweep]
+description = "Run the kill-9 crash sweep (blizzard:crash-sweep) — arms every crash-point-registry point in turn, SIGKILLs the owning daemon there, and asserts the invariant checker + exactly-once delivery after recovery; needs the sibling blizzard-mock worktree provisioned (winter provision <env>)"
+run = "BLIZZARD_CRASH_SWEEP=1 uv run pytest -m crash_sweep tests/crash/"
+
 [tasks.lint]
 description = "Lint with ruff"
 run = "uv run ruff check ."
