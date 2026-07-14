@@ -1,0 +1,64 @@
+"""The runner-local PM-item pass-through proxy — ``GET /api/chunks/{id}/pm-items`` (D-047/D-084).
+
+A build worker reads its chunk's PM item — the issue body and comment thread — through
+this proxy while it works the build node (``graphs/prompts/build.md``): the runner
+**forwards** the read to the hub's pass-through route, and the hub calls the vendor with
+its own credentials. The layering is the point (D-084): a worker never talks to the hub
+or the PM system directly, and PM credentials never reach the runner. Contents are never
+stored anywhere on the path — the pointer is the durable referent, the item is fetched
+fresh each call (D-047).
+
+Read-only over its wiring (``bzh:controller-read-only``): it forwards to the hub URL the
+``host`` composition root resolved onto ``app.state.config``. ``httpx`` is used only to
+reach the hub — the same outbound-only edge the reconciliation loop's hub client rides
+(D-012); a transport failure is a ``502`` and the hub's own status (``404`` unknown chunk,
+``502``/``503`` vendor) passes through verbatim so the worker sees the real reason.
+"""
+
+from __future__ import annotations
+
+import httpx
+from fastapi import APIRouter, Request, status
+from fastapi.exceptions import HTTPException
+
+from blizzard.foundation.logging import get_logger
+from blizzard.runner.config import RunnerConfig
+from blizzard.wire.chunk import PmItemView
+
+router = APIRouter(prefix="/api", tags=["runner"])
+
+_log = get_logger("blizzard.runner.api.pm")
+_HUB_TIMEOUT = 15.0
+
+
+@router.get("/chunks/{chunk_id}/pm-items", response_model=PmItemView)
+def get_pm_items(chunk_id: str, request: Request) -> PmItemView:
+    """Forward a chunk's PM-item read to the hub — the layered pass-through (D-084)."""
+    config: RunnerConfig | None = getattr(request.app.state, "config", None)
+    if config is None or not config.hub_url:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="runner not wired to a hub — start via `blizzard runner host`",
+        )
+    url = f"{config.hub_url.rstrip('/')}/api/chunks/{chunk_id}/pm-item"
+    try:
+        upstream = httpx.get(url, timeout=_HUB_TIMEOUT)
+    except httpx.HTTPError as exc:
+        _log.error("pm-item proxy could not reach the hub", chunk_id=chunk_id, error=str(exc))
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"hub unreachable: {exc}") from exc
+    if upstream.status_code != status.HTTP_200_OK:
+        # Surface the hub's status verbatim — 404 (unknown chunk / no pointer) or the
+        # vendor's own failure (502/503) — so the worker reads the real reason.
+        raise HTTPException(status_code=upstream.status_code, detail=_upstream_detail(upstream))
+    return PmItemView.model_validate(upstream.json())
+
+
+def _upstream_detail(response: httpx.Response) -> str:
+    """The hub's error detail, unwrapped from its JSON body when present."""
+    try:
+        payload = response.json()
+    except ValueError:
+        return response.text
+    if isinstance(payload, dict) and "detail" in payload:
+        return str(payload["detail"])
+    return response.text

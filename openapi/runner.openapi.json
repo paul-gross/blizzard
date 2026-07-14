@@ -93,6 +93,43 @@
         "title": "HeartbeatResponse",
         "type": "object"
       },
+      "PmItemView": {
+        "description": "A pass-through PM item read (D-047) \u2014 body + comments, vendor-native.",
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "comments": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Comments",
+            "type": "array"
+          },
+          "fetched_at": {
+            "title": "Fetched At",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "url",
+          "fetched_at",
+          "body"
+        ],
+        "title": "PmItemView",
+        "type": "object"
+      },
       "ReadinessResponse": {
         "description": "The wire shape of a readiness reading (openapi-ts consumes this).",
         "properties": {
@@ -189,6 +226,49 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/chunks/{chunk_id}/pm-items": {
+      "get": {
+        "description": "Forward a chunk's PM-item read to the hub \u2014 the layered pass-through (D-084).",
+        "operationId": "get_pm_items_api_chunks__chunk_id__pm_items_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PmItemView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Pm Items",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
     "/api/health": {
       "get": {
         "operationId": "health_api_health_get",

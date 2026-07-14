@@ -30,6 +30,9 @@ DEFAULT_TICK_SECONDS = 30.0
 ENV_LEASE_ID = "BLIZZARD_LEASE_ID"
 ENV_RUNNER_URL = "BLIZZARD_RUNNER_URL"
 _HEARTBEAT_TIMEOUT = 5.0
+# A PM-item read fans out runner -> hub -> vendor, so it is given a longer budget
+# than the millisecond-cheap hook posts (design/runner/api.md).
+_PM_ITEMS_TIMEOUT = 20.0
 
 
 def _stub(verb: str) -> None:
@@ -172,8 +175,27 @@ def ask(prompt: str, options: str | None) -> None:
 @runner.command("pm-items")
 @click.argument("chunk_id")
 def pm_items(chunk_id: str) -> None:
-    """Worker: pass-through read of a chunk's PM items (runner -> hub -> vendor)."""
-    _stub("pm-items")
+    """Worker: pass-through read of a chunk's PM item (runner -> hub -> vendor).
+
+    A pure client of the runner's local API (D-023/D-084): the build node reads its
+    chunk's issue body + comment thread through the runner's proxy route
+    (``graphs/prompts/build.md``), which forwards to the hub — the worker never talks
+    to the hub or the PM system directly. The runner URL is inherited from the spawn
+    environment (``BLIZZARD_RUNNER_URL``), so no identity argument; the item prints as
+    JSON (``{provider, url, fetched_at, body, comments}``) for the worker to consume.
+    """
+    runner_url = os.environ.get(ENV_RUNNER_URL)
+    if not runner_url:
+        raise click.ClickException(f"pm-items: no {ENV_RUNNER_URL} in the environment")
+    try:
+        resp = httpx.get(
+            f"{runner_url.rstrip('/')}/api/chunks/{chunk_id}/pm-items",
+            timeout=_PM_ITEMS_TIMEOUT,
+        )
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise click.ClickException(f"pm-items: could not read the PM item ({exc})") from exc
+    click.echo(resp.text)
 
 
 @runner.command()

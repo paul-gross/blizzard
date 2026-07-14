@@ -79,6 +79,34 @@ export type HeartbeatResponse = {
 };
 
 /**
+ * PmItemView
+ *
+ * A pass-through PM item read (D-047) — body + comments, vendor-native.
+ */
+export type PmItemView = {
+    /**
+     * Body
+     */
+    body: string;
+    /**
+     * Comments
+     */
+    comments?: Array<string>;
+    /**
+     * Fetched At
+     */
+    fetched_at: string;
+    /**
+     * Provider
+     */
+    provider: string;
+    /**
+     * Url
+     */
+    url: string;
+};
+
+/**
  * ReadinessResponse
  *
  * The wire shape of a readiness reading (openapi-ts consumes this).
@@ -133,6 +161,36 @@ export type ValidationError = {
      */
     type: string;
 };
+
+export type GetPmItemsApiChunksChunkIdPmItemsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/pm-items';
+};
+
+export type GetPmItemsApiChunksChunkIdPmItemsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetPmItemsApiChunksChunkIdPmItemsGetError = GetPmItemsApiChunksChunkIdPmItemsGetErrors[keyof GetPmItemsApiChunksChunkIdPmItemsGetErrors];
+
+export type GetPmItemsApiChunksChunkIdPmItemsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PmItemView;
+};
+
+export type GetPmItemsApiChunksChunkIdPmItemsGetResponse = GetPmItemsApiChunksChunkIdPmItemsGetResponses[keyof GetPmItemsApiChunksChunkIdPmItemsGetResponses];
 
 export type HealthApiHealthGetData = {
     body?: never;
