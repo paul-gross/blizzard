@@ -5,9 +5,10 @@ as ``/api`` and the SSE streams: the build output is mounted with an SPA fallbac
 so a deep client-side route (``/board/123``) resolves to ``index.html`` rather
 than 404. Registered **after** the API routers, so ``/api/*`` always wins.
 
-Until the real assets exist, each daemon ships a placeholder ``index.html`` (see
-``blizzard/static/README.md``); the mount serves it unchanged, and CI overwrites
-it with the compiled app before the wheel is built.
+Until a build fills the assets dir, ``index.html`` is absent and the mount serves
+a runtime placeholder (see :func:`mount_web_app` and ``blizzard/static/README.md``);
+a build — CI before the wheel, or ``npm run build`` locally — writes the compiled
+app there and the mount serves that instead.
 """
 
 from __future__ import annotations
@@ -49,9 +50,9 @@ class SpaStaticFiles(StaticFiles):
 def mount_web_app(app: FastAPI, static_dir: Path, *, app_name: str) -> None:
     """Mount the embedded frontend for ``app_name`` at ``/`` with an SPA fallback.
 
-    When ``static_dir/index.html`` exists (the committed placeholder or a real
-    build) it is served via :class:`SpaStaticFiles`; otherwise a placeholder page
-    is served so the mount point is always live. Call **after** the API routers.
+    When ``static_dir/index.html`` exists (a real build landed) it is served via
+    :class:`SpaStaticFiles`; otherwise a runtime placeholder page is served so the
+    mount point is always live. Call **after** the API routers.
     """
     index = static_dir / "index.html"
     if index.exists():

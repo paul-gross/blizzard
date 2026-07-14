@@ -2,8 +2,10 @@
 
 The compiled Angular apps live under ``blizzard/static/<app>`` inside the
 package, so they ship in the one wheel and are found the same way whether the
-package is installed or run from a source checkout. CI fills these directories
-with the real build output; committed placeholders keep the seam live locally.
+package is installed or run from a source checkout. CI (or a local
+``npm run build``) fills these directories with the real build output; when no
+build has run, ``index.html`` is absent and the daemon serves a runtime
+placeholder (``blizzard.foundation.web.mount_web_app``), keeping the seam live.
 """
 
 from __future__ import annotations

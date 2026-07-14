@@ -15,10 +15,11 @@ data/
 *.db-wal
 *.db-shm
 
-# The compiled Angular apps CI embeds into the wheel. The committed placeholder
-# index.html in each dir keeps the serving seam live for local dev; a real
-# `ng build` output landing here is a CI/wheel artifact, not source.
+# The compiled Angular apps CI (or a local `npm run build`) embeds into the wheel.
+# Nothing here is source: the whole build output — index.html included — is a
+# wheel artifact, never tracked, so a clean worktree can never restore a stale
+# placeholder over a real build. When no build has run, index.html is simply
+# absent and the daemon serves a runtime placeholder (foundation/web.py). The
+# wheel still ships these files via pyproject's `artifacts` glob.
 /src/blizzard/static/hub/*
 /src/blizzard/static/runner/*
-!/src/blizzard/static/hub/index.html
-!/src/blizzard/static/runner/index.html
