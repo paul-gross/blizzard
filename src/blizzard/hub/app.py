@@ -55,6 +55,11 @@ ENV_FORGE_TOKEN = "BZ_FORGE_TOKEN"
 # origins that resolve under any owner, so a workspace-configured default is enough.
 ENV_FORGE_OWNER = "BZ_FORGE_OWNER"
 DEFAULT_FORGE_OWNER = "blizzard"
+# The branch every PR/merge targets (D-060). ``main`` matches the verification forge's
+# bare origins; a real repo whose default branch differs (e.g. ``master`` on
+# ``paul-gross/blizzard``) sets this so a PR's ``base`` resolves instead of 422-ing.
+ENV_FORGE_BASE_BRANCH = "BZ_FORGE_BASE_BRANCH"
+DEFAULT_FORGE_BASE_BRANCH = "main"
 
 
 class _UnconfiguredForge:
@@ -130,8 +135,9 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
         GitHubForgeDelivery(client, default_owner=owner) if client is not None else _UnconfiguredForge()
     )
     pm_source: IPmSource | None = GitHubPmSource(client) if client is not None else None
+    base_branch = os.environ.get(ENV_FORGE_BASE_BRANCH, DEFAULT_FORGE_BASE_BRANCH)
 
-    services = build_services(engine, forge=forge, events=EventBroker(), pm_source=pm_source)
+    services = build_services(engine, forge=forge, events=EventBroker(), pm_source=pm_source, base_branch=base_branch)
     return create_app(config, readiness=readiness, services=services)
 
 

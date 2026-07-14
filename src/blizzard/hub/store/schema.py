@@ -196,6 +196,40 @@ delivery_landed = Table(
     Column("landed_at", DateTime, nullable=False),  # terminal: all repos landed (D-030)
 )
 
+# --- Open-PR delivery facts (pr.opened / pr.closed — D-059/D-065) -----------
+#
+# The ``open-pr`` deliver mode (D-059): instead of merging, the coordinator opens a PR
+# per repo and PARKS the chunk — it records ``pr.opened`` here but writes NO terminal
+# transition and NO ``route_released``, so the chunk derives ``delivering`` (awaiting an
+# external merge) with its environments held (D-066). A later poll or the on-demand
+# ``POST /chunks/{id}/check-delivery`` route detects the PR's terminal state (D-065) and
+# records ``pr.closed`` — the terminal fact that flips the chunk to ``done`` (either
+# disposition), carrying ``merged`` and the actually-landed commit where one exists.
+
+delivery_pr_opened = Table(
+    "delivery_pr_opened",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
+    Column("repo", String, nullable=False),  # the forge repo coordinate the PR was opened on
+    Column("pr_number", Integer, nullable=False),
+    Column("pr_url", String, nullable=False),  # the PR's html url — surfaced on the board
+    Column("commit_hash", String, nullable=False),  # the authoritative head the PR carries (D-060)
+    Column("opened_at", DateTime, nullable=False),
+)
+
+delivery_pr_closed = Table(
+    "delivery_pr_closed",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
+    Column("repo", String, nullable=False),
+    Column("pr_number", Integer, nullable=False),
+    Column("merged", Boolean, nullable=False),  # merged vs closed-without-merge — both terminal (D-065)
+    Column("landed_commit", String, nullable=True),  # the merge commit where one exists
+    Column("closed_at", DateTime, nullable=False),
+)
+
 # --- Facts that make the derivation precedence correct (shaped) -------------
 
 chunk_stopped = Table(

@@ -192,6 +192,39 @@
         "title": "ArtifactView",
         "type": "object"
       },
+      "CheckDeliveryResponse": {
+        "description": "The result of an on-demand ``POST /chunks/{id}/check-delivery`` (D-065).",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "finalized": {
+            "title": "Finalized",
+            "type": "boolean"
+          },
+          "open_prs": {
+            "title": "Open Prs",
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ChunkStatus"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "status",
+          "finalized",
+          "open_prs",
+          "detail"
+        ],
+        "title": "CheckDeliveryResponse",
+        "type": "object"
+      },
       "CheckResult": {
         "description": "One deterministic check's outcome, informing the verdict (D-077).",
         "properties": {
@@ -221,6 +254,11 @@
             },
             "title": "Artifacts",
             "type": "array"
+          },
+          "awaiting_external_merge": {
+            "default": false,
+            "title": "Awaiting External Merge",
+            "type": "boolean"
           },
           "chunk_id": {
             "title": "Chunk Id",
@@ -279,6 +317,14 @@
               }
             ],
             "title": "Latest Epoch"
+          },
+          "open_prs": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PrView"
+            },
+            "title": "Open Prs",
+            "type": "array"
           },
           "pm_pointers": {
             "default": [],
@@ -1186,6 +1232,30 @@
         "title": "PmPointerModel",
         "type": "object"
       },
+      "PrView": {
+        "description": "An open PR a chunk is parked on in open-pr delivery mode (D-059/D-065).",
+        "properties": {
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "repo": {
+            "title": "Repo",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repo",
+          "number",
+          "url"
+        ],
+        "title": "PrView",
+        "type": "object"
+      },
       "QuestionAsked": {
         "description": "A ``question.asked`` fact the runner forwards to the hub ([ask-answer.md]).\n\n``question_id`` is runner-minted (``qn_<ulid>``) so the runner can poll the answer\nback by it; ``epoch`` is the parked lease's fence, ``session_id`` the dormant\nsession to resume around the answer, and ``options`` the choices the board renders.",
         "properties": {
@@ -2051,6 +2121,49 @@
           }
         },
         "summary": "Get Chunk",
+        "tags": [
+          "chunks"
+        ]
+      }
+    },
+    "/api/chunks/{chunk_id}/check-delivery": {
+      "post": {
+        "description": "Poll a parked open-pr chunk's PRs; finalize the delivery once all are terminal (D-065).\n\nThe on-demand external-merge detection (the impatient path): for a chunk parked in\n``open-pr`` mode, check every open PR through the forge and, when all have merged or\nclosed, write the terminal facts so the chunk flips to ``done`` and its environments\nrelease. A no-op when the chunk has no open PR or is already finalized.",
+        "operationId": "check_delivery_api_chunks__chunk_id__check_delivery_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckDeliveryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Check Delivery",
         "tags": [
           "chunks"
         ]

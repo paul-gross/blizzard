@@ -110,6 +110,24 @@ class ArtifactView(BaseModel):
     commit_hash: str | None = None
 
 
+class PrView(BaseModel):
+    """An open PR a chunk is parked on in open-pr delivery mode (D-059/D-065)."""
+
+    repo: str
+    number: int
+    url: str
+
+
+class CheckDeliveryResponse(BaseModel):
+    """The result of an on-demand ``POST /chunks/{id}/check-delivery`` (D-065)."""
+
+    chunk_id: str
+    status: ChunkStatus
+    finalized: bool  # True iff this check terminated the delivery
+    open_prs: int  # PRs still awaiting an external merge
+    detail: str
+
+
 class ChunkDetail(BaseModel):
     """The chunk aggregate in full (D-036) — the board's chunk view and envelope feed.
 
@@ -135,6 +153,11 @@ class ChunkDetail(BaseModel):
     # The chunk's open questions ([ask-answer.md], MVP criterion 7): a ``waiting_on_human``
     # chunk carries the ask a human answers with ``blizzard hub answer``.
     questions: list[QuestionView] = []
+    # Open-pr delivery (D-059/D-065): a ``delivering`` chunk whose deliver node opened a
+    # PR instead of merging is parked awaiting an external merge. ``open_prs`` are the PRs
+    # a human reviews and merges; ``check-delivery`` then drives the chunk to ``done``.
+    awaiting_external_merge: bool = False
+    open_prs: list[PrView] = []
 
 
 class PmItemView(BaseModel):

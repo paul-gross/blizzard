@@ -30,7 +30,7 @@ from blizzard.foundation.ids import TRANSITION_PREFIX, mint
 from blizzard.hub.delivery.forge import IForgeDelivery, LandingDisposition, LandingRequest
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.envelope import latest_artifacts_by_name
-from blizzard.hub.domain.graph import RESERVED_TERMINAL, Graph, Node
+from blizzard.hub.domain.graph import RESERVED_TERMINAL, DeliverMode, Graph, Node
 from blizzard.hub.domain.work import Chunk, IWriteChunkRepository
 
 _HUB_RUNNER_ID = "hub"
@@ -51,6 +51,7 @@ class DeliverOutcome(StrEnum):
 
     LANDED = "landed"
     CONFLICT = "conflict"
+    PR_OPENED = "pr-opened"  # open-pr mode: PRs opened, chunk parked awaiting external merge (D-059)
 
 
 @dataclass(frozen=True)
@@ -63,10 +64,16 @@ class DeliverResult:
 class MergeQueueCoordinator:
     """Executes the deliver hub node for one chunk (D-030/D-091)."""
 
-    def __init__(self, *, chunks: IWriteChunkRepository, forge: IForgeDelivery, clock: IClock) -> None:
+    def __init__(
+        self, *, chunks: IWriteChunkRepository, forge: IForgeDelivery, clock: IClock, base_branch: str = "main"
+    ) -> None:
         self._chunks = chunks
         self._forge = forge
         self._clock = clock
+        # The branch every PR/merge targets (D-060). ``main`` matches the verification forge's
+        # bare origins; a real GitHub forge whose default branch differs (e.g. ``master``) sets
+        # this at the composition root from ``BZ_FORGE_BASE_BRANCH``.
+        self._base_branch = base_branch
 
     def deliver(self, chunk: Chunk, graph: Graph, deliver_node: Node, *, epoch: int) -> DeliverResult:
         """Land the chunk's branch artifacts, per-repo serially, reconciling retries."""
@@ -75,6 +82,8 @@ class MergeQueueCoordinator:
             for row in latest_artifacts_by_name(self._chunks.load_artifacts(chunk.chunk_id))
             if row.kind is ArtifactKind.GIT_COMMIT
         ]
+        if deliver_node.mode == DeliverMode.OPEN_PR:
+            return self._open_prs(chunk, deliver_node, epoch=epoch, pointers=pointers)
         already_landed = self._chunks.landed_repos(chunk.chunk_id)
 
         for row in pointers:
@@ -82,7 +91,7 @@ class MergeQueueCoordinator:
             if repo in already_landed:
                 continue  # reconciliation — a prior partial land, skipped (D-091)
             _CP_DELIVER_BEFORE_REPO.reached()
-            result = self._forge.land(_landing_request(row))
+            result = self._forge.land(_landing_request(row, self._base_branch))
             if result.disposition is LandingDisposition.CONFLICT:
                 return self._conflict(chunk, graph, deliver_node, epoch=epoch, detail=result.detail)
             landed_commit = result.landed_commit or _commit_of(row)
@@ -115,6 +124,38 @@ class MergeQueueCoordinator:
         _CP_DELIVER_AFTER_TERMINAL.reached()
         return DeliverResult(outcome=DeliverOutcome.LANDED, landed_repos=landed)
 
+    def _open_prs(self, chunk: Chunk, deliver_node: Node, *, epoch: int, pointers: list[ArtifactRow]) -> DeliverResult:
+        """Open a PR per repo and **park** the chunk (open-pr mode — D-059).
+
+        The counterpart to the merge path: instead of landing, the coordinator opens a PR
+        for each repo's branch and records a ``pr.opened`` fact — writing **no** terminal
+        transition and **no** route release, so the chunk derives ``delivering`` (awaiting an
+        external merge) with its environments held (D-066). A redelivery skips repos that
+        already have a ``pr.opened`` fact (reconciliation, mirroring ``landed_repos``); the
+        forge's ``open_pr`` additionally reuses an existing PR for the head, closing the
+        crash window between the forge create and the fact write. A poll or the on-demand
+        ``check-delivery`` route later detects the merge and terminates the chunk (D-065).
+        """
+        already_open = {pr.repo for pr in self._chunks.open_prs(chunk.chunk_id)}
+        opened: list[str] = []
+        for row in pointers:
+            repo = row.repo or ""
+            if repo in already_open:
+                continue  # reconciliation — a PR was already opened for this repo (D-059)
+            handle = self._forge.open_pr(_landing_request(row, self._base_branch))
+            self._chunks.record_pr_opened(
+                chunk.chunk_id,
+                repo=repo,
+                number=handle.number,
+                url=handle.url,
+                commit_hash=_commit_of(row),
+                at=self._clock.now(),
+            )
+            opened.append(repo)
+        return DeliverResult(
+            outcome=DeliverOutcome.PR_OPENED, landed_repos=[], detail=f"opened {len(opened)} PR(s), awaiting merge"
+        )
+
     def _conflict(self, chunk: Chunk, graph: Graph, deliver_node: Node, *, epoch: int, detail: str) -> DeliverResult:
         hub_epoch = epoch + 1
         now = self._clock.now()
@@ -138,9 +179,11 @@ class MergeQueueCoordinator:
         )
 
 
-def _landing_request(row: ArtifactRow) -> LandingRequest:
+def _landing_request(row: ArtifactRow, base_branch: str) -> LandingRequest:
     branch_name, _, commit_hash = row.data.partition(":")
-    return LandingRequest(repo=row.repo or "", branch_name=branch_name, commit_hash=commit_hash)
+    return LandingRequest(
+        repo=row.repo or "", branch_name=branch_name, commit_hash=commit_hash, base_branch=base_branch
+    )
 
 
 def _commit_of(row: ArtifactRow) -> str:

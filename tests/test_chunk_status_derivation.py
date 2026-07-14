@@ -20,10 +20,12 @@ from blizzard.hub.domain.work import (
     DecisionFact,
     EscalationFact,
     LeaseFact,
+    PrOpenedFact,
     QuestionFact,
     RouteCreatedFact,
     RouteReleasedFact,
     TransitionFact,
+    awaiting_external_merge,
     current_node_id,
     derive_chunk_status,
     latest_epoch,
@@ -95,6 +97,38 @@ def test_delivery_landed_is_done_over_a_live_route() -> None:
         routes_created=[RouteCreatedFact(created_at=_at(1))],
     )
     assert derive_chunk_status(facts) is ChunkStatus.DONE
+
+
+def _parked_on_open_pr(**extra: object) -> ChunkFacts:
+    """A chunk in open-pr mode: its newest transition entered the deliver hub node, a PR
+    was opened, and no ``pr.closed`` yet — the environments still held (D-059/D-066)."""
+    return ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        transitions=[
+            TransitionFact(to_node_id="nd_deliver", to_node_executor=Executor.HUB, epoch=1, recorded_at=_at(5))
+        ],
+        pr_opened=[
+            PrOpenedFact(repo="acme/widget", number=7, url="http://forge/pr/7", commit_hash="abc", opened_at=_at(5))
+        ],
+        **extra,  # type: ignore[arg-type]
+    )
+
+
+def test_open_pr_park_is_delivering_awaiting_external_merge() -> None:
+    facts = _parked_on_open_pr()
+    # Still ``delivering`` (the newest transition entered the deliver hub node), with the
+    # awaiting-external-merge detail set — not a distinct status (design/domain/events.md).
+    assert derive_chunk_status(facts) is ChunkStatus.DELIVERING
+    assert awaiting_external_merge(facts) is True
+
+
+def test_pr_closed_is_done() -> None:
+    # The terminal ``pr.closed`` fact flips the chunk to done, the open-pr counterpart of
+    # ``delivery.landed`` (D-065), and clears the awaiting-external-merge detail.
+    facts = _parked_on_open_pr(pr_closed=True)
+    assert derive_chunk_status(facts) is ChunkStatus.DONE
+    assert awaiting_external_merge(facts) is False
 
 
 def test_stopped_wins_over_everything() -> None:
