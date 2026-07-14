@@ -88,3 +88,11 @@ mise run build   # the one build entrypoint: Angular apps -> embed -> wheel -> v
 The GitHub Actions workflows (PR gate, push-to-master dev build, tag-`v*`
 release) and the exact local commands equal to the gate are documented in
 [docs/ci.md](./docs/ci.md).
+
+## Deployment (colocated, under systemd)
+
+A single machine runs both daemons — the hub and the supervisor (runner) side by
+side. The systemd units live in [`packaging/systemd/`](./packaging/systemd/); the
+install steps and the boot/crash recovery contract (how a reboot or a `kill -9`
+comes back under systemd, reaps stale leases, and resumes each chunk at its
+last-recorded node) are in [docs/deployment.md](./docs/deployment.md).

@@ -1,0 +1,41 @@
+# The blizzard-hub daemon — the fleet's HTTP API + SSE + embedded web app, one
+# binary is the whole hub deployment (design/cli.md, D-061). Installed as the
+# hub half of the colocated single-machine pair (product/mvp.md journey); the
+# runner half is blizzard-runner.service. Setup + the reboot-recovery contract
+# this unit implements: docs/deployment.md.
+[Unit]
+Description=Blizzard hub — fleet API, SSE, and mission-control board (blizzard-hub, D-061)
+Documentation=https://github.com/paul-gross/blizzard/blob/master/docs/deployment.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+# Offline schema reconcile before the daemon opens the store (D-099,
+# bzh:manual-migrations): the daemon refuses to start on a revision mismatch, so
+# reconciling here first makes a wheel upgrade + reboot self-healing rather than a
+# crash loop. A no-op when the store is already at head.
+ExecStartPre=/opt/blizzard/venv/bin/blizzard-hub migrate --dir /var/lib/blizzard/hub
+ExecStart=/opt/blizzard/venv/bin/blizzard-hub host --dir /var/lib/blizzard/hub
+# The forge base URL/token and PM credentials live ONLY at the hub (D-047/D-084,
+# criterion 1) — never on a runner. `-` makes the file optional so an unconfigured
+# host still boots and names the gap.
+EnvironmentFile=-/etc/blizzard/hub.env
+User=blizzard
+Group=blizzard
+# Creates + owns /var/lib/blizzard (shared with the runner unit); hub state lives
+# under its hub/ subdir, seeded once by `blizzard hub init /var/lib/blizzard/hub`.
+StateDirectory=blizzard
+WorkingDirectory=/var/lib/blizzard/hub
+# The reboot/crash-recovery mechanism (docs/deployment.md): after a kill -9, an
+# OOM, or a machine reboot, systemd brings the daemon back and its startup pass
+# re-reads the store and resumes from the last recorded fact — nothing lands twice
+# (proven by tests/crash/test_kill9_sweep.py::test_kill9_hub_mid_delivery). A clean
+# `systemctl stop` is exempt; every other exit restarts.
+Restart=always
+RestartSec=2
+
+[Install]
+# Enabling the unit (`systemctl enable`) is what makes it start at boot — the
+# "came back under systemd" half of the journey.
+WantedBy=multi-user.target
