@@ -4,11 +4,12 @@
 # wheel is built with the embedded frontend, and a GitHub Release is published
 # from the tag. Prerelease candidates are `v*-rc.*` tags.
 #
-# The full suite is the merge gate (unit + component) today. The service tier,
-# the e2e tier, and the crash sweep land in P6 (verification/blizzard.md marks
-# them Gap (P6)); they are wired here as an explicit, clearly-labeled no-op that
-# cannot fail, so a release is green today and the P6 gap is visible. When P6
-# lands, replace the no-op with the real tiers.
+# The full suite at a tag is the merge gate (unit + component) PLUS the three upper
+# tiers — the service tier, the FULL kill-9 crash sweep (every registry point, not the
+# bounded CI subset the master `push` gate runs), and the e2e acceptance loop including
+# the Playwright browser scenario. All three need the multi-repo checkout (blizzard +
+# blizzard-mock + the public blizzard-workspace as the winter source) laid out as the
+# siblings their discovery expects — the same setup the `push` workflow proves green.
 #
 # The GitHub Release is published with the workflow's built-in GITHUB_TOKEN — no
 # external registry and no user-supplied secret. The wheel is attached to the
@@ -28,13 +29,57 @@ jobs:
     uses: ./.github/workflows/gate.yml
 
   full-suite-tiers:
-    name: service + e2e + crash sweep (PENDING — P6)
+    name: service + FULL crash sweep + e2e
     needs: [gate]
     runs-on: ubuntu-latest
     steps:
-      - name: skipped — P6 gap
+      - name: checkout blizzard
+        uses: actions/checkout@v4
+        with:
+          path: blizzard
+      - name: checkout blizzard-mock (the mock fleet + fixture scaffold)
+        uses: actions/checkout@v4
+        with:
+          repository: paul-gross/blizzard-mock
+          path: blizzard-mock
+      - name: checkout blizzard-workspace (the winter source)
+        uses: actions/checkout@v4
+        with:
+          repository: paul-gross/blizzard-workspace
+          path: blizzard-workspace
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - name: install mise (the fixture drives the winter CLI via `mise exec -- uv run`)
+        uses: jdx/mise-action@v2
+        with:
+          install: false
+      - name: git identity for fixture/forge git operations
         run: |
-          echo "::notice title=full-suite tiers (e2e is LOCAL: mise run e2e)::The P6 e2e acceptance loop (blizzard:e2e) EXISTS and runs locally with 'mise run e2e' (BLIZZARD_E2E=1); headless CI needs a multi-repo checkout (blizzard + blizzard-mock + a winter source) not wired here. A running-daemon service tier (Playwright) and the crash sweep (blizzard:crash-sweep) are P7. This step is a deliberate no-op."
+          git config --global user.email "ci@blizzard.local"
+          git config --global user.name "blizzard CI"
+      - name: provision blizzard (hub + runner daemons)
+        run: cd blizzard && uv sync
+      - name: provision blizzard-mock (mock fleet + fixture + mock-claude-code)
+        run: cd blizzard-mock && uv sync
+      - name: install Chromium for the e2e browser scenario (Playwright)
+        run: cd blizzard && uv run playwright install --with-deps chromium
+      - name: service tier (blizzard:service-test)
+        env:
+          BLIZZARD_SERVICE: "1"
+          BLIZZARD_MOCK_WINTER_SOURCE: ${{ github.workspace }}/blizzard-workspace
+        run: cd blizzard && uv run pytest tests/service/ -v
+      - name: FULL kill-9 crash sweep (every registry point) — `mise run crash-sweep`
+        env:
+          BLIZZARD_CRASH_SWEEP: "1"
+          BLIZZARD_MOCK_WINTER_SOURCE: ${{ github.workspace }}/blizzard-workspace
+        run: cd blizzard && uv run pytest -m crash_sweep tests/crash/ -v
+      - name: e2e acceptance loop incl. the browser scenario — `mise run e2e`
+        env:
+          BLIZZARD_E2E: "1"
+          BLIZZARD_MOCK_WINTER_SOURCE: ${{ github.workspace }}/blizzard-workspace
+        run: cd blizzard && uv run pytest tests/e2e/ -v
 
   release:
     name: build wheel and publish release
