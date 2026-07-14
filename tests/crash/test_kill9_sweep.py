@@ -25,19 +25,26 @@ source, and ``BLIZZARD_CRASH_SWEEP=1``; skipped otherwise (see ``conftest.py``).
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 
 import httpx
 import pytest
+from sqlalchemy import Engine, select
 
 from blizzard.foundation.crash import discover_crash_points
+from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.invariants import check_invariants
 from blizzard.hub.config import HubConfig
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.store import schema as runner_schema
+from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 from tests.crash.support import (
     REPO,
+    REPO_NAME,
     CrashEnv,
     await_http,
+    build_script,
     free_port,
     git_bare,
     graph_yaml,
@@ -196,6 +203,160 @@ def test_kill9_runner_daemon_mid_flight(crash_env: CrashEnv, tmp_path: Path) -> 
         _assert_invariants(runner_dir, hub_dir, when="after runner-daemon recovery")
         tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
         assert len([ln for ln in tree.splitlines() if ln.strip()]) == 1
+    finally:
+        hub.close()
+        terminate(runner_proc)
+        terminate(hub_proc)
+
+
+# --------------------------------------------------------------------------- #
+# Graceful restart-resume (issue #12) — re-attach to an in-flight session in place
+# --------------------------------------------------------------------------- #
+
+
+def _hanging_graph_yaml(landed_file: str) -> str:
+    """A ``build -> deliver`` graph whose build commits, then ``hang()``s mid-flight.
+
+    The commit lands before the worker blocks, so a graceful restart while it hangs has
+    real in-flight work to resume; the build's judgement is a scripted ``pass`` the
+    judgement resume emits after the session continues."""
+    import yaml
+
+    graph = {
+        "name": "default-delivery",
+        "entry": "build",
+        "nodes": {
+            "build": {
+                "executor": "runner",
+                "prompt": build_script(landed_file) + "hang()\n",
+                "judgement": {
+                    "prompt": "verdict('pass', 'committed before the restart; checks are green')\n",
+                    "choices": {
+                        "pass": {
+                            "description": "The change is committed and the node's checks are green.",
+                            "to": "deliver",
+                        }
+                    },
+                },
+                "retries": {"max": 1, "exhausted": "escalate"},
+            },
+            "deliver": {"executor": "hub", "mode": "merge-to-main"},
+        },
+    }
+    return yaml.safe_dump(graph, sort_keys=False)
+
+
+def _ingest_hanging_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str) -> str:
+    """Mint the hanging graph and ingest a fresh issue against it to a ready chunk."""
+    minted = hub.post("/api/graphs", json={"definition_yaml": _hanging_graph_yaml(landed_file)})
+    assert minted.status_code == 201, minted.text
+    issue = forge.post(f"/repos/{REPO}/issues", json={"title": landed_file, "body": "a restart-resume chunk"})
+    assert issue.status_code == 201, issue.text
+    number = issue.json()["number"]
+    ingested = hub.post("/api/chunks", json={"pointers": [{"provider": "github", "url": f"{REPO}/issues/{number}"}]})
+    assert ingested.status_code == 201, ingested.text
+    return ingested.json()["chunk_id"]
+
+
+def _runner_store(runner_dir: Path) -> tuple[SqlAlchemyRunnerStore, Engine]:
+    """A read store over the runner's sqlite plus its engine (dispose after use)."""
+    engine = create_engine_from_url(RunnerConfig.load(runner_dir).db_url)
+    return SqlAlchemyRunnerStore(engine), engine
+
+
+def _leases_for_chunk(runner_dir: Path, chunk_id: str) -> list[tuple[str, int, str | None, int | None]]:
+    """Every lease row (active or closed) for a chunk: (lease_id, epoch, session_id, pid)."""
+    engine = create_engine_from_url(RunnerConfig.load(runner_dir).db_url)
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(
+                select(
+                    runner_schema.leases.c.lease_id,
+                    runner_schema.leases.c.epoch,
+                    runner_schema.leases.c.session_id,
+                    runner_schema.leases.c.pid,
+                ).where(runner_schema.leases.c.chunk_id == chunk_id)
+            ).all()
+        return [(str(r[0]), int(r[1]), r[2], r[3]) for r in rows]
+    finally:
+        engine.dispose()
+
+
+def _open_resume_intents(runner_dir: Path) -> set[str]:
+    store, engine = _runner_store(runner_dir)
+    try:
+        return store.resume_intent_lease_ids()
+    finally:
+        engine.dispose()
+
+
+def _await_committed(runner_dir: Path, chunk_id: str, landed_file: str, *, timeout: float = 30.0) -> None:
+    """Block until the mid-flight build worker has made its commit in the bound worktree."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        store, engine = _runner_store(runner_dir)
+        try:
+            for binding in store.bindings_for_chunk(chunk_id):
+                if (Path(binding.workdir) / REPO_NAME / landed_file).exists():
+                    return
+        finally:
+            engine.dispose()
+        time.sleep(0.2)
+    raise AssertionError(f"build worker never committed {landed_file} before the graceful stop")
+
+
+def test_graceful_restart_resumes_in_flight_session(crash_env: CrashEnv, tmp_path: Path) -> None:
+    """A graceful runner restart re-attaches to its in-flight session in place (issue #12, D-082).
+
+    The build worker commits and then hangs; a graceful stop (SIGTERM) marks its lease with a
+    resume-intent, and the restart RESUMEs the *same* session — same lease/epoch/session, only
+    the pid rewritten, no retry consumed — so the chunk lands **exactly once** rather than being
+    redone under a fresh lease."""
+    landed_file = "LANDED-restart-resume.md"
+    hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
+    hub_port, runner_port = free_port(), free_port()
+
+    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+    runner_proc = None
+    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    try:
+        await_http(hub, "/api/health", proc=hub_proc)
+        chunk_id = _ingest_hanging_chunk(hub, crash_env.forge, landed_file)
+        write_runner_config(
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+        )
+        runner_proc = start_runner(runner_dir, crash_point=None)
+
+        # Let the chunk get claimed and the worker reach its commit, then hang mid-flight.
+        assert wait_status(hub, chunk_id, {"running"}) == "running"
+        _await_committed(runner_dir, chunk_id, landed_file)
+
+        # Gracefully stop the runner (SIGTERM): the shutdown hook marks the in-flight lease.
+        terminate(runner_proc)
+        before = _leases_for_chunk(runner_dir, chunk_id)
+        assert len(before) == 1, f"expected one lease before restart, got {before}"
+        lease_id, epoch, session_id, pid_before = before[0]
+        assert session_id and pid_before is not None
+        assert _open_resume_intents(runner_dir) == {lease_id}, "graceful shutdown did not mark a resume-intent"
+
+        # Restart the runner: its first tick RESUMEs the marked session in place.
+        runner_proc = start_runner(runner_dir, crash_point=None)
+        assert wait_status(hub, chunk_id, {"done"}) == "done", "chunk did not converge after graceful restart"
+
+        after = _leases_for_chunk(runner_dir, chunk_id)
+        # Nothing worked twice: still exactly one lease, same lease/epoch/session — a same-lease
+        # resume, not a retry (which would mint a new lease + epoch + session).
+        assert len(after) == 1, f"restart-resume minted an extra lease (retry, not resume): {after}"
+        r_lease_id, r_epoch, r_session_id, pid_after = after[0]
+        assert (r_lease_id, r_epoch, r_session_id) == (lease_id, epoch, session_id)
+        assert pid_after != pid_before, "the resumed process pid was not rewritten"
+        # The intent was consumed by RESUME.
+        assert _open_resume_intents(runner_dir) == set()
+
+        _assert_invariants(runner_dir, hub_dir, when="after graceful restart-resume")
+        tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
+        commits = [line for line in tree.splitlines() if line.strip()]
+        assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
     finally:
         hub.close()
         terminate(runner_proc)

@@ -11,6 +11,8 @@ identity arguments.
 from __future__ import annotations
 
 import os
+import signal
+import types
 from pathlib import Path
 
 import click
@@ -20,7 +22,7 @@ import uvicorn
 from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.config import ConfigError, RunnerConfig
-from blizzard.runner.loop.build import PeriodicDriver, run_single_tick
+from blizzard.runner.loop.build import PeriodicDriver, mark_resume_intents_on_shutdown, run_single_tick
 from blizzard.runner.runtime import ensure_current_revision, init_environment, migrate, migration_runner
 
 ENV_TICK_SECONDS = "BZ_RUNNER_TICK_SECONDS"
@@ -86,11 +88,32 @@ def host(directory: str, host_: str | None, port: int | None) -> None:
     interval = float(os.environ.get(ENV_TICK_SECONDS, DEFAULT_TICK_SECONDS))
     driver = PeriodicDriver(config, interval_seconds=interval)
     click.echo(f"serving blizzard-runner on {config.host}:{config.port} (loop tick {interval}s)")
+
+    # Own the shutdown signals ourselves rather than letting uvicorn install a handler that
+    # terminates the process on its own signal — the graceful-restart resume marker (D-082)
+    # must run *after* the server returns, and uvicorn's default handling exits before this
+    # frame's `finally` can. Our handler only asks the server to drain, so the process exits
+    # normally and the marking below is reached. A `kill -9` still skips all of this — exactly
+    # the ungraceful-crash boundary (design/runner/loop.md).
+    server = uvicorn.Server(uvicorn.Config(app, host=config.host, port=config.port))
+    server.install_signal_handlers = lambda: None  # type: ignore[method-assign]
+
+    def _drain(_signum: int, _frame: types.FrameType | None) -> None:
+        server.should_exit = True
+
+    signal.signal(signal.SIGTERM, _drain)
+    signal.signal(signal.SIGINT, _drain)
+
     driver.start()  # startup recovery is REAP running first inside the tick
     try:
-        uvicorn.run(app, host=config.host, port=config.port)
+        server.run()
     finally:
+        # Stop the loop first so no in-flight tick races the marking, then mark every in-flight
+        # lease for the next startup's RESUME to re-attach it in place (D-082).
         driver.stop()
+        marked = mark_resume_intents_on_shutdown(config)
+        if marked:
+            click.echo(f"marked {marked} in-flight lease(s) for restart-resume")
 
 
 @runner.command("tick")

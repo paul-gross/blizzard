@@ -39,6 +39,8 @@ from blizzard.runner.store.schema import (
     outbound_buffer,
     park_facts,
     park_resumes,
+    resume_clears,
+    resume_intents,
 )
 
 _log = get_logger("blizzard.runner.store")
@@ -61,6 +63,25 @@ def _binding_is_held():  # type: ignore[no-untyped-def]
             (binding_releases.c.chunk_id == env_bindings.c.chunk_id)
             & (binding_releases.c.environment_id == env_bindings.c.environment_id)
             & (binding_releases.c.released_at >= env_bindings.c.bound_at)
+        )
+        .exists()
+    )
+
+
+def _intent_is_open():  # type: ignore[no-untyped-def]
+    """A resume-intent is **open** iff no clear for its lease is at or after the mark.
+
+    Timestamp-aware, exactly like :func:`_binding_is_held`: a plain ``lease_id NOT IN
+    clears`` would mask a **re-mark** — a still-in-flight lease marked again on a second
+    graceful restart above an earlier clear — leaving the new intent invisible. Comparing
+    against the clear instant un-masks it: a fresh mark stamped strictly later than its
+    clear reads as open; the consumed one does not. ``>=`` keeps a same-instant clear
+    winning (a clear stamped with its mark's own instant is a clear)."""
+    return ~(
+        select(resume_clears.c.id)
+        .where(
+            (resume_clears.c.lease_id == resume_intents.c.lease_id)
+            & (resume_clears.c.cleared_at >= resume_intents.c.marked_at)
         )
         .exists()
     )
@@ -203,6 +224,10 @@ class SqlAlchemyRunnerStore:
         rows = self._all(select(hub_control.c.paused).where(hub_control.c.runner_id == runner_id))
         return bool(rows[0].paused) if rows else False
 
+    def resume_intent_lease_ids(self) -> set[str]:
+        stmt = select(resume_intents.c.lease_id).where(_intent_is_open()).distinct()
+        return {str(r.lease_id) for r in self._all(stmt)}
+
     # --- writes -------------------------------------------------------------
 
     def record_lease(self, lease: NewLease) -> None:
@@ -342,6 +367,16 @@ class SqlAlchemyRunnerStore:
                     .where(hub_control.c.runner_id == runner_id)
                     .values(paused=paused, updated_at=at)
                 )
+
+    def record_resume_intent(self, *, lease_id: str, marked_at: datetime) -> None:
+        with self._begin() as conn:
+            conn.execute(resume_intents.insert().values(lease_id=lease_id, marked_at=marked_at))
+        _log.info("resume intent marked", lease_id=lease_id)
+
+    def record_resume_clear(self, *, lease_id: str, cleared_at: datetime) -> None:
+        with self._begin() as conn:
+            conn.execute(resume_clears.insert().values(lease_id=lease_id, cleared_at=cleared_at))
+        _log.info("resume intent cleared", lease_id=lease_id)
 
     # --- plumbing -----------------------------------------------------------
 

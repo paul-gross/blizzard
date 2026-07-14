@@ -399,6 +399,10 @@ def _runner_config(runner_dir: Path, workspace: Path, bin_dir: Path, hub_port: i
         workspace_root=str(workspace),
         workspace_envs=(RUNNER_ENV,),
         harness_binary=str(bin_dir / "mock-claude-code"),
+        # The mock façade has no permission gate and rejects an unknown ``--permission-mode``
+        # flag, so it must be omitted (``None``) — the real adapter default's own contract
+        # (``bypassPermissions``, D-092): None omits the flag so the mock is unaffected.
+        harness_permission_mode=None,
         base_branch="main",
     )
 

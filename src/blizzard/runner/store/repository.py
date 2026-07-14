@@ -205,6 +205,14 @@ class IReadRunnerStore(Protocol):
         first hears otherwise)."""
         ...
 
+    def resume_intent_lease_ids(self) -> set[str]:
+        """Leases carrying an **open** graceful-restart resume-intent (D-082).
+
+        A ``resume_intents`` mark with no ``resume_clears`` for the same lease at or
+        after it — set by a graceful shutdown, consumed by the startup RESUME step. Empty
+        on any normal tick; non-empty only on the first tick after a graceful restart."""
+        ...
+
 
 class IWriteRunnerStore(IReadRunnerStore, Protocol):
     """Read-write runner store — held only by the domain (the loop steps)."""
@@ -267,4 +275,12 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
 
     def set_hub_paused(self, runner_id: str, *, paused: bool, at: datetime) -> None:
         """Mirror the hub's pause brake locally (upsert) — read back by FILL (D-043/D-012)."""
+        ...
+
+    def record_resume_intent(self, *, lease_id: str, marked_at: datetime) -> None:
+        """Mark a lease for same-lease restart-resume at graceful shutdown (D-082)."""
+        ...
+
+    def record_resume_clear(self, *, lease_id: str, cleared_at: datetime) -> None:
+        """Clear a lease's resume-intent — the RESUME step resumed or abandoned it (D-082)."""
         ...

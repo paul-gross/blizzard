@@ -32,6 +32,14 @@ WorkingDirectory=/var/lib/blizzard/runner
 # it reaps the leases stranded by the crash, re-reads its environment bindings from
 # the store, and continues each chunk at the node the hub last recorded; nothing is
 # worked twice (proven by tests/crash/test_kill9_sweep.py::test_kill9_runner_daemon_mid_flight).
+#
+# A GRACEFUL restart (`systemctl restart`, or stop→start on a wheel upgrade) is stronger:
+# the SIGTERM lets the daemon run its shutdown path, which marks every in-flight lease
+# with a durable resume-intent (D-082). Its first startup tick then RESUMEs each marked
+# session in place — same lease/epoch/session, only the pid rewritten, no retry consumed —
+# so adopting a newly-merged runner build no longer discards in-flight agent context. The
+# default KillMode (control-group) SIGTERMs the workers alongside the daemon; RESUME kills
+# any survivor first before resuming (design/runner/loop.md).
 Restart=always
 RestartSec=2
 

@@ -27,6 +27,7 @@ from blizzard.runner.loop.hub import IHubClient
 from blizzard.runner.loop.internal.http_hub import HttpHubClient
 from blizzard.runner.loop.internal.subprocess_worktree_git import SubprocessWorktreeGit
 from blizzard.runner.loop.process import LinuxProcessProbe
+from blizzard.runner.loop.steps import mark_resume_intents
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 
@@ -76,6 +77,22 @@ def run_single_tick(config: RunnerConfig) -> None:
     with httpx.Client(base_url=config.hub_url, timeout=_HTTP_TIMEOUT) as client:
         ctx = build_loop_context(config, HttpHubClient(client))
         tick(ctx)
+
+
+def mark_resume_intents_on_shutdown(config: RunnerConfig) -> int:
+    """Mark in-flight leases for restart-resume as the daemon exits gracefully (D-082).
+
+    Store-only — it needs neither the hub nor the workspace provider — so it opens just
+    the runner store and delegates the which-leases decision to :func:`mark_resume_intents`.
+    Called from the ``host`` command's shutdown path (a graceful SIGTERM lets uvicorn return
+    and this run); an ungraceful ``kill -9`` never reaches it, which is the intended scope
+    boundary (design/runner/loop.md)."""
+    engine = create_engine_from_url(config.db_url)
+    store = SqlAlchemyRunnerStore(engine)
+    try:
+        return mark_resume_intents(store, now=SystemClock().now())
+    finally:
+        engine.dispose()
 
 
 class PeriodicDriver:

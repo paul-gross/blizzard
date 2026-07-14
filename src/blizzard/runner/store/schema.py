@@ -201,6 +201,40 @@ park_resumes = Table(
     Column("resumed_at", DateTime, nullable=False),
 )
 
+# --- Resume intent (the graceful-restart resume marker — D-082) --------------
+#
+# A graceful ``blizzard-runner`` shutdown (SIGTERM: ``systemctl restart``/stop) marks
+# every active, non-parked, session-bearing lease with a resume-intent *before* the
+# daemon exits, then the startup RESUME step routes each marked lease to a same-lease
+# resume — kill any survivor, then resume the session in place under the **unchanged**
+# ``lease_id``/``epoch``/``session_id`` (only ``pid``/``process_start_time`` are
+# rewritten). This is the fourth sibling of the resume family (spawn / judgement /
+# answer, D-082): it is explicitly not a retry (new lease/epoch/session), so it consumes
+# no retry budget (D-078). An ungraceful ``kill -9`` writes no intent, so a crashed
+# worker still routes to today's reap/requeue-fresh — the scope boundary is exactly
+# "did the daemon get to run shutdown code".
+#
+# Facts-only (``bzh:facts-not-status``), mirroring park/park_resume: an intent is *open*
+# while a ``resume_intents`` row has no ``resume_clears`` for the same lease at or after
+# it — the RESUME step records a clear once it resumes (or abandons) the lease, and a
+# later graceful restart of a still-in-flight lease marks it afresh above that clear.
+
+resume_intents = Table(
+    "resume_intents",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("lease_id", String, nullable=False),
+    Column("marked_at", DateTime, nullable=False),
+)
+
+resume_clears = Table(
+    "resume_clears",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("lease_id", String, nullable=False),
+    Column("cleared_at", DateTime, nullable=False),
+)
+
 # --- Hub control mirror (the declarative pause brake read on PULL — D-043/D-012) --
 #
 # The fleet operator's pause brake lives at the hub (registry ``paused``, D-043); the

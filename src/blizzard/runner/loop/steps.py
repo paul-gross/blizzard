@@ -32,7 +32,14 @@ from blizzard.runner.environments.provider import AcquiredEnvironment, Workspace
 from blizzard.runner.harness.adapter import WorkerPreamble
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import HubClientError
-from blizzard.runner.store.repository import AskRecord, BufferedFact, EnvBindingRecord, LeaseRecord, NewLease
+from blizzard.runner.store.repository import (
+    AskRecord,
+    BufferedFact,
+    EnvBindingRecord,
+    IWriteRunnerStore,
+    LeaseRecord,
+    NewLease,
+)
 from blizzard.wire.completion import CompletionSubmission, SubmittedArtifact
 from blizzard.wire.decision import DecisionSubmission, DecisionView
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeEnvelope
@@ -54,6 +61,13 @@ _REAPED = "reaped"
 _FAILED = "failed"
 _ESCALATED = "escalated"
 _PARKED = "parked"  # a runner-config gate: the node-step completed, the chunk parks on a decision
+_RELEASED = "released"  # restart-resume found the chunk reassigned/detached — abandon, no requeue (D-088)
+
+#: The message RESUME delivers into a marked session on a graceful restart (D-082). Framed
+#: as a ``#``-prefixed comment so it is inert whether the session is real-harness prose or a
+#: blizzard-mock behavior *script* it ``exec``s (the same convention as the elicitation tail
+#: and the answer-resume framing). The exact prose is unpinned (D-061).
+_RESTART_RESUME_MESSAGE = "# The supervisor restarted; continue your task where you left off."
 
 # Outbound-buffer fact kinds (design/runner/store.md). ``completion.submitted`` is the
 # runner-local kind whose flush drives the apply-response; ``decision.submitted`` is the
@@ -178,6 +192,142 @@ def _is_heartbeat_stale(ctx: LoopContext, lease: LeaseRecord, now: datetime) -> 
 def _as_utc(value: datetime) -> datetime:
     """Read a stored timestamp back as UTC-aware — sqlite drops the tzinfo the clock set."""
     return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
+# --------------------------------------------------------------------------- #
+# RESUME — the graceful-restart re-attach (D-082)
+# --------------------------------------------------------------------------- #
+
+
+def mark_resume_intents(store: IWriteRunnerStore, *, now: datetime) -> int:
+    """Mark every in-flight lease for same-lease restart-resume — the graceful-shutdown hook (D-082).
+
+    Called once as the daemon exits gracefully (SIGTERM: ``systemctl restart``/stop), *before*
+    the workers die, so the next startup's :func:`resume` re-attaches each in-flight session in
+    place instead of retrying it fresh. An ungraceful ``kill -9`` never runs this, so a crashed
+    worker still routes to today's reap/requeue-fresh — the scope boundary is exactly "did the
+    daemon get to run shutdown code" (design/runner/loop.md).
+
+    Marks an **active, non-parked, session-bearing** lease: a parked lease is dormant on a
+    question (its own resume is the answer, [ask-answer.md]); a lease with a pending completion/
+    decision has its verdict already elicited (its node-step is done, awaiting flush, D-069); a
+    lease with no pid/session never reached spawn-return (REAP's residue — nothing to resume).
+    Returns the number marked. Store-only — no hub, no process probe — so shutdown stays cheap
+    and reachable even when the hub is down.
+    """
+    parked = store.parked_lease_ids()
+    pending = store.pending_submission_lease_ids()
+    marked = 0
+    for lease in store.list_active_leases():
+        if lease.pid is None or lease.session_id is None:
+            continue
+        if lease.lease_id in parked or lease.lease_id in pending:
+            continue
+        store.record_resume_intent(lease_id=lease.lease_id, marked_at=now)
+        marked += 1
+    if marked:
+        _log.info("marked in-flight leases for restart-resume", count=marked)
+    return marked
+
+
+def resume(ctx: LoopContext) -> None:
+    """Re-attach to in-flight sessions a graceful restart marked (D-082) — startup recovery.
+
+    A no-op on every normal tick (nothing is marked); non-empty only on the first tick after a
+    graceful restart. Each marked lease is either **resumed in place** — under the unchanged
+    ``lease_id``/``epoch``/``session_id``, only ``pid``/``process_start_time`` rewritten, no retry
+    consumed (D-078) — or, if the hub reassigned/detached the chunk while the runner was down
+    (D-088), **abandoned**: released with no epoch bump, so the runner never re-asserts authority
+    over work that is now another runner's.
+
+    Runs before ADVANCE so a resumed lease reads live again by the time ADVANCE iterates — its
+    fresh pid keeps ADVANCE from mistaking the killed-mid-work worker for a done declaration and
+    eliciting a verdict-less failure. A lease marked but no longer active (closed while the runner
+    was down) just has its intent cleared so it does not linger."""
+    intents = ctx.store.resume_intent_lease_ids()
+    if not intents:
+        return
+    active = {lease.lease_id: lease for lease in ctx.store.list_active_leases()}
+    for lease_id in intents:
+        lease = active.get(lease_id)
+        if lease is None:
+            ctx.store.record_resume_clear(lease_id=lease_id, cleared_at=ctx.clock.now())
+            continue
+        _resume_marked_lease(ctx, lease)
+
+
+def _resume_marked_lease(ctx: LoopContext, lease: LeaseRecord) -> None:
+    """Resume a marked lease in place, or abandon it if the hub reassigned its chunk (D-082/D-088)."""
+    try:
+        detail = ctx.hub.get_chunk(lease.chunk_id)
+    except HubClientError:
+        # Hub unreachable — the intent is durable and the environments stay held (D-083), so
+        # leave it open and retry next tick. Resuming blind would risk re-asserting authority
+        # over a chunk that may have been reassigned; the ownership check is worth the wait.
+        return
+    ours = detail.route is not None and detail.route.runner_id == ctx.config.runner_id
+    if detail.status == ChunkStatus.RUNNING and ours:
+        _resume_in_place(ctx, lease)
+    else:
+        _abandon_reassigned(ctx, lease)
+
+
+def _resume_in_place(ctx: LoopContext, lease: LeaseRecord) -> None:
+    """Kill any survivor, then resume the session under the same lease/epoch/session (D-082/D-049).
+
+    The fourth sibling of the resume family (spawn / judgement / answer): kill-first is what
+    prevents two processes on one session — the epoch is not (D-049) — and the session id, lease
+    id, and epoch are all preserved, so the resumed worker's eventual completion carries the
+    original epoch and the hub accepts it in place. Only ``pid``/``process_start_time`` are
+    rewritten; no lease is minted and no closure is recorded, so no retry is consumed (D-078).
+
+    A missing/corrupt session self-heals via the existing failure path: the resumed process
+    cannot find its session, exits, and ADVANCE's verdict-less-exit failure requeues it fresh
+    (D-009) — no explicit detection needed here."""
+    now = ctx.clock.now()
+    if lease.pid is not None:
+        ctx.process.kill(lease.pid)  # kill-first — never two processes on one session (D-049)
+    bindings = ctx.store.bindings_for_chunk(lease.chunk_id)
+    if not bindings or lease.session_id is None:
+        _log.warning(
+            "marked lease has no warm env/session — abandoning", chunk_id=lease.chunk_id, lease_id=lease.lease_id
+        )
+        _abandon_reassigned(ctx, lease, killed=True)
+        return
+    pid = ctx.harness.resume_with_message(bindings[0].workdir, lease.session_id, _RESTART_RESUME_MESSAGE)
+    ctx.store.record_spawn(
+        lease.lease_id,
+        pid=pid,
+        process_start_time=ctx.process.start_time(pid) or "",
+        session_id=lease.session_id,  # unchanged — same session under the same lease (D-082)
+    )
+    ctx.store.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
+    _log.info(
+        "resumed in-flight session after restart",
+        chunk_id=lease.chunk_id,
+        lease_id=lease.lease_id,
+        epoch=lease.epoch,
+        pid=pid,
+    )
+
+
+def _abandon_reassigned(ctx: LoopContext, lease: LeaseRecord, *, killed: bool = False) -> None:
+    """Release a chunk the hub reassigned or detached while the runner was down (D-088).
+
+    No epoch bump and no requeue: the chunk is another runner's now (or detached to ``ready``),
+    so re-asserting authority over it would be wrong — the runner learns of the detach over its
+    own restart and does exactly what D-088 asks: kill the worker, release the environments. The
+    lease is closed ``released`` (not a failed attempt — it never gets to run) and the intent is
+    cleared."""
+    now = ctx.clock.now()
+    if lease.pid is not None and not killed:
+        ctx.process.kill(lease.pid)
+    _release_all(ctx, lease.chunk_id)
+    ctx.store.record_closure(
+        lease_id=lease.lease_id, chunk_id=lease.chunk_id, node_id=lease.node_id, reason=_RELEASED, closed_at=now
+    )
+    ctx.store.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
+    _log.info("abandoned reassigned/detached chunk on restart", chunk_id=lease.chunk_id, lease_id=lease.lease_id)
 
 
 # --------------------------------------------------------------------------- #

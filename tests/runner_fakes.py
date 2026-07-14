@@ -121,6 +121,8 @@ class FakeHub:
         return self.envelopes[chunk_id]
 
     def get_chunk(self, chunk_id: str) -> ChunkDetail:
+        if self.down:
+            raise HubClientError("fake hub is down")
         # Default a hub-node-held chunk to `delivering` (the merge queue is still
         # working) unless a test scripts a terminal state.
         if chunk_id in self.chunks:
