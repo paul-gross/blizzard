@@ -24,6 +24,7 @@ source, and ``BLIZZARD_CRASH_SWEEP=1``; skipped otherwise (see ``conftest.py``).
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import httpx
@@ -51,7 +52,43 @@ from tests.crash.support import (
 pytestmark = pytest.mark.crash_sweep
 
 # Enumerated from the registry at collection — no hand-maintained point list (bzh:crash-point-registry).
-_POINTS = [p.name for p in discover_crash_points()]
+_ALL_POINTS = [p.name for p in discover_crash_points()]
+
+# A representative CI subset — one crash point per boundary family, biased toward the
+# recovery-critical windows the sweep's two real bugs lived in: the FILL bind→claim window
+# (chunk-strand recovery), the lost-ack replay (`flush.after-submit.before-ack`, hub
+# idempotency), the per-repo land (delivery idempotency), and the mid-delivery hub crash
+# (`deliver.before-terminal`, the `delivering`-strand recovery). Running the whole 22-point
+# registry as real subprocesses is ~130s locally and multiples of that on a 2-core GitHub
+# runner; the master `push` workflow sets BLIZZARD_CRASH_SWEEP_CI=1 to run this subset so the
+# named gap is a REAL gate at bounded runtime, while the FULL sweep stays the documented
+# local command (`mise run crash-sweep`) and the tag `release` workflow. The two whole-process
+# cases below are never parametrized, so they run in both profiles.
+_CI_SUBSET = (
+    "reap.after-expire",
+    "pull.after-flush",
+    "fill.after-bind.before-claim",
+    "spawn.after-lease-mint.before-spawn",
+    "advance.after-buffer.before-flush",
+    "flush.after-submit.before-ack",
+    "deliver.after-repo-land",
+    "deliver.before-terminal",
+)
+
+
+def _sweep_points() -> list[str]:
+    """The crash points to parametrize: the full registry, or the CI subset under CI profile."""
+    if os.environ.get("BLIZZARD_CRASH_SWEEP_CI") != "1":
+        return _ALL_POINTS
+    missing = [p for p in _CI_SUBSET if p not in _ALL_POINTS]
+    # A subset point that no longer exists means the registry was renamed without updating the
+    # CI selection — fail loudly rather than silently shrinking coverage (bzh:crash-point-registry).
+    assert not missing, f"CI-subset crash points absent from the registry (renamed?): {missing}"
+    chosen = set(_CI_SUBSET)
+    return [p for p in _ALL_POINTS if p in chosen]
+
+
+_POINTS = _sweep_points()
 
 
 def _is_hub_point(point: str) -> bool:

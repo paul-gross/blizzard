@@ -1,17 +1,28 @@
 # Push to master — the merge gate plus the extra tiers and a dev build
 # (implementation/build.md).
 #
-# Runs the full PR gate, then the service tier and the crash sweep, then
-# publishes a dev-build wheel as a workflow artifact for fleet dogfooding.
+# Runs the full PR gate, then the SERVICE tier and the kill-9 CRASH SWEEP as REAL
+# gates (blizzard-harness verification/blizzard.md: blizzard:service-test,
+# blizzard:crash-sweep), then publishes a dev-build wheel as a workflow artifact for
+# fleet dogfooding.
 #
-# The e2e acceptance-loop smoke test EXISTS as of P6 (`mise run e2e` — the standing
-# proof of the verification.md loop), but it is a LOCAL command: it self-manages the
-# forge+hub+runner and drives a minted blizzard-mock fixture, so it needs the sibling
-# `blizzard-mock` worktree and a local winter source that a single-repo CI checkout
-# does not have. Wiring it headless in CI needs a multi-repo checkout (blizzard +
-# blizzard-mock + a winter source) — that remains a gap. The crash sweep depends on
-# the P7 crash-correctness machinery. Both stay explicit no-op jobs here so this
-# workflow is green and the remaining gaps are visible rather than silently omitted.
+# Both upper tiers need what a single-repo checkout does not carry: the sibling
+# `blizzard-mock` worktree (the mock fleet + fixture scaffold) and a local winter
+# source (its committed `tools/winter-cli`, which the fixture clones to mint a real
+# disposable winter workspace over `file://` origins — no tokens, no forge, no network
+# beyond package installs). This workflow provides them with a multi-repo checkout:
+# `blizzard`, `blizzard-mock`, and the public `blizzard-workspace` (the winter source)
+# laid out as SIBLINGS under $GITHUB_WORKSPACE — exactly the on-disk layout the tiers'
+# discovery expects (`tests/service/support.py`, `tests/crash/support.py`:
+# `blizzard_root().parent / "blizzard-mock"`, `BLIZZARD_MOCK_WINTER_SOURCE`).
+#
+# The FULL 22-point kill-9 sweep runs ~130s locally and multiples of that on a 2-core
+# GitHub runner, so this workflow runs the sweep's bounded CI profile
+# (BLIZZARD_CRASH_SWEEP_CI=1 — a representative crash point per boundary family plus the
+# two whole-process cases and the recovery-critical windows); the FULL sweep stays the
+# documented local command (`mise run crash-sweep`) and runs in the tag `release`
+# workflow. The e2e acceptance loop (`mise run e2e`, incl. the Playwright board scenario)
+# remains a local + tag-only tier, not a `push` gate (build.md).
 name: push
 
 on:
@@ -29,23 +40,92 @@ jobs:
   gate:
     uses: ./.github/workflows/gate.yml
 
-  e2e-service-tier:
-    name: e2e / service tier (LOCAL — `mise run e2e`)
+  service-tier:
+    name: service tier (blizzard:service-test)
     needs: [gate]
     runs-on: ubuntu-latest
     steps:
-      - name: skipped — needs a multi-repo checkout
+      - name: checkout blizzard
+        uses: actions/checkout@v4
+        with:
+          path: blizzard
+      - name: checkout blizzard-mock (the mock fleet + fixture scaffold)
+        uses: actions/checkout@v4
+        with:
+          repository: paul-gross/blizzard-mock
+          path: blizzard-mock
+      - name: checkout blizzard-workspace (the winter source)
+        uses: actions/checkout@v4
+        with:
+          repository: paul-gross/blizzard-workspace
+          path: blizzard-workspace
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - name: install mise (the fixture drives the winter CLI via `mise exec -- uv run`)
+        uses: jdx/mise-action@v2
+        with:
+          install: false
+      - name: git identity for fixture/forge git operations
         run: |
-          echo "::notice title=e2e acceptance loop is LOCAL (mise run e2e)::The P6 acceptance-loop e2e (tests/e2e/test_acceptance_loop.py — ingest→acquire→mock commit→deliver→landed, asserting bare-main reachability + derived done) EXISTS and is the standing smoke test, run locally with 'mise run e2e' (BLIZZARD_E2E=1). It self-manages forge+hub+runner over a minted blizzard-mock fixture, so headless CI needs a multi-repo checkout (blizzard + blizzard-mock + a winter source) this single-repo workflow does not provide — that wiring is the remaining gap. A running-daemon service tier exercised from outside (Playwright) is P7."
+          git config --global user.email "ci@blizzard.local"
+          git config --global user.name "blizzard CI"
+      - name: provision blizzard (hub + runner daemons)
+        run: cd blizzard && uv sync
+      - name: provision blizzard-mock (mock hub/runner/forge + fixture + mock-claude-code)
+        run: cd blizzard-mock && uv sync
+      - name: service tier — a running daemon's HTTP API vs. its mocked counterpart
+        # `mise run service-test` == `BLIZZARD_SERVICE=1 uv run pytest tests/service/`.
+        env:
+          BLIZZARD_SERVICE: "1"
+          BLIZZARD_MOCK_WINTER_SOURCE: ${{ github.workspace }}/blizzard-workspace
+        run: cd blizzard && uv run pytest tests/service/ -v
 
   crash-sweep:
-    name: crash sweep (PENDING — P6)
+    name: kill-9 crash sweep — CI profile (blizzard:crash-sweep)
     needs: [gate]
     runs-on: ubuntu-latest
     steps:
-      - name: skipped — P6 gap
+      - name: checkout blizzard
+        uses: actions/checkout@v4
+        with:
+          path: blizzard
+      - name: checkout blizzard-mock (the mock fleet + fixture scaffold)
+        uses: actions/checkout@v4
+        with:
+          repository: paul-gross/blizzard-mock
+          path: blizzard-mock
+      - name: checkout blizzard-workspace (the winter source)
+        uses: actions/checkout@v4
+        with:
+          repository: paul-gross/blizzard-workspace
+          path: blizzard-workspace
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version: "3.12"
+      - name: install mise (the fixture drives the winter CLI via `mise exec -- uv run`)
+        uses: jdx/mise-action@v2
+        with:
+          install: false
+      - name: git identity for fixture/forge git operations
         run: |
-          echo "::notice title=crash sweep PENDING (P6)::The kill-9 crash sweep (blizzard:crash-sweep — daemons as real subprocesses, invariant checker after each armed crash) depends on the steppable loop, injected clock, crash-point registry, and checker that land in P6 (architecture/crash-correctness.md). This step is a deliberate no-op. Replace it with the real sweep when P6 lands."
+          git config --global user.email "ci@blizzard.local"
+          git config --global user.name "blizzard CI"
+      - name: provision blizzard (hub + runner daemons)
+        run: cd blizzard && uv sync
+      - name: provision blizzard-mock (mock fleet + fixture + mock-claude-code)
+        run: cd blizzard-mock && uv sync
+      - name: kill-9 sweep (CI profile) — arm each subset crash point, SIGKILL, assert recovery
+        # `mise run crash-sweep-ci` == the FULL sweep gated to the representative CI subset:
+        # `BLIZZARD_CRASH_SWEEP=1 BLIZZARD_CRASH_SWEEP_CI=1 uv run pytest -m crash_sweep`.
+        # The FULL 22-point sweep is `mise run crash-sweep` (local + tag release).
+        env:
+          BLIZZARD_CRASH_SWEEP: "1"
+          BLIZZARD_CRASH_SWEEP_CI: "1"
+          BLIZZARD_MOCK_WINTER_SOURCE: ${{ github.workspace }}/blizzard-workspace
+        run: cd blizzard && uv run pytest -m crash_sweep tests/crash/ -v
 
   dev-build:
     name: dev build wheel artifact

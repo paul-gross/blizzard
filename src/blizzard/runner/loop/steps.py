@@ -397,6 +397,15 @@ def _reconcile_interrupted_claims(ctx: LoopContext) -> None:
             detail = ctx.hub.get_chunk(chunk_id)
         except HubClientError:
             continue  # hub unreachable — the binding is durable; retry next tick
+        if detail.decision is not None:
+            # A chunk carrying a live gate decision — open (``waiting_on_human``) or
+            # resolved-but-not-transitioned — is owned by ADVANCE's :func:`_advance_held_chunk`,
+            # which records the resolving transition (D-045). A *resolved* gate keeps its route
+            # live so it derives ``running`` with no active lease (D-027) — the same shape as an
+            # interrupted claim — so without this guard the adopt branch below would spawn a
+            # worker on the human-judged node, bumping the epoch out from under the human's
+            # resolving transition. This is the "awaiting a human … left to ADVANCE" case.
+            continue
         bindings = ctx.store.bindings_for_chunk(chunk_id)
         if not bindings:
             continue

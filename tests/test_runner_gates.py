@@ -16,10 +16,10 @@ import pytest
 from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.context import LoopConfig
-from blizzard.runner.loop.steps import advance, pull
+from blizzard.runner.loop.steps import advance, fill, pull
 from blizzard.runner.loop.worktree import GitArtifact
 from blizzard.runner.store.repository import NewLease
-from blizzard.wire.chunk import ChunkDetail
+from blizzard.wire.chunk import ChunkDetail, RouteView
 from blizzard.wire.decision import DecisionChoiceModel, DecisionView
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from tests.runner_fakes import (
@@ -217,3 +217,63 @@ def test_unresolved_gate_keeps_waiting(tmp_path):  # type: ignore[no-untyped-def
     assert hub.completions == []  # nothing to resolve yet
     assert store.active_lease_for_chunk("ch_1") is None
     assert store.held_environment_ids() == ["e1"]  # still parked, envs held
+
+
+@pytest.mark.unit
+def test_fill_leaves_a_resolved_gate_to_advance(tmp_path):  # type: ignore[no-untyped-def]
+    """FILL's interrupted-claim reconciler must not adopt a chunk parked on a resolved gate.
+
+    A resolved-but-not-transitioned gate keeps its route live, so it derives ``running``
+    with a bound env and no active lease — the *same* shape FILL's crash reconciler
+    (``_reconcile_interrupted_claims``) recovers. Without the gate guard, FILL would
+    "adopt" it by spawning a worker on the human-judged node, minting a fresh-epoch lease
+    that strands the human's resolving transition as stale (D-045/D-027). FILL must skip
+    it and leave the resolving transition to ADVANCE.
+    """
+    store = _store(tmp_path)
+    # A chunk parked at a gate the human just resolved: env bound, no active lease, RUNNING.
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = ChunkDetail(
+        chunk_id="ch_1",
+        graph_id="gr_1",
+        status=ChunkStatus.RUNNING,  # resolved, awaiting the resolving transition
+        current_node_id="nd_gate",
+        latest_epoch=1,
+        # The route is still live and held by THIS runner — the fact that makes a resolved
+        # gate look exactly like an interrupted claim to the reconciler (route ours, RUNNING).
+        route=RouteView(runner_id="r1", workspace_id="ws1", environment_ids=["e1"]),
+        decision=DecisionView(
+            decision_id="dec_1",
+            chunk_id="ch_1",
+            node_id="nd_gate",
+            node_name="approve-gate",
+            epoch=1,
+            choices=[DecisionChoiceModel(name="approve", description="ship")],
+            submitted_at=_NOW.isoformat(),
+            resolved_choice="approve",
+            resolved_by="ada",
+            transitioned=False,
+        ),
+    )
+    # An envelope for the gate node exists — so an (incorrect) adopt would have something to
+    # spawn; the guard must skip before ever reaching it.
+    hub.envelopes["ch_1"] = make_envelope("ch_1", "approve-gate", node_id="nd_gate", choices=_CHOICES)
+    hub.queue = []  # nothing new to fill — the reconciler is the only path that could act
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
+
+    fill(ctx)  # the reconciler runs first; it must leave the resolved gate untouched
+
+    assert harness.spawns == []  # no worker spawned on the human-judged node
+    assert store.active_lease_for_chunk("ch_1") is None  # no fresh-epoch lease minted
+    assert hub.claims == []  # the route was not re-claimed
+    assert store.held_environment_ids() == ["e1"]  # env still held for the resolution
+
+    # ADVANCE owns it: the resolving transition is recorded at the parked epoch.
+    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.HUB_NODE_TAKEN, detail="deliver took over")]
+    advance(ctx)
+
+    assert len(hub.completions) == 1
+    _, submission = hub.completions[0]
+    assert submission.decision_id == "dec_1" and submission.choice == "approve" and submission.epoch == 1

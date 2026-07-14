@@ -14,8 +14,12 @@ description = "Run the standing e2e smoke suite (verification.md) — six full-s
 run = "BLIZZARD_E2E=1 uv run pytest tests/e2e/"
 
 [tasks.crash-sweep]
-description = "Run the kill-9 crash sweep (blizzard:crash-sweep) — arms every crash-point-registry point in turn, SIGKILLs the owning daemon there, and asserts the invariant checker + exactly-once delivery after recovery; needs the sibling blizzard-mock worktree provisioned (winter provision <env>)"
+description = "Run the FULL kill-9 crash sweep (blizzard:crash-sweep) — arms EVERY crash-point-registry point in turn, SIGKILLs the owning daemon there, and asserts the invariant checker + exactly-once delivery after recovery; needs the sibling blizzard-mock worktree provisioned (winter provision <env>)"
 run = "BLIZZARD_CRASH_SWEEP=1 uv run pytest -m crash_sweep tests/crash/"
+
+[tasks.crash-sweep-ci]
+description = "Run the kill-9 crash sweep's bounded CI profile (BLIZZARD_CRASH_SWEEP_CI=1) — a representative crash-point subset (one per boundary family + the recovery-critical windows) plus the two whole-process cases, so the master `push` gate stays real at bounded GitHub-runner runtime. The FULL sweep is `mise run crash-sweep`."
+run = "BLIZZARD_CRASH_SWEEP=1 BLIZZARD_CRASH_SWEEP_CI=1 uv run pytest -m crash_sweep tests/crash/"
 
 [tasks.service-test]
 description = "Run the service tier (verification.md) — a running daemon's HTTP API exercised from outside with the counterpart mocked: the runner against the mock hub (unreachable→buffered, dropped-ack→idempotent, stale-envelope), and the hub against the mock runner + mock forge (claim/completion, stale-epoch rejection, queue shaping, SSE). sqlite only, no tokens/network; needs the sibling blizzard-mock worktree provisioned (winter provision <env>) — skips cleanly without it"
