@@ -1,6 +1,7 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import { getChunkApiChunksChunkIdGet, type ChunkDetail } from '../api/hub';
+import { hubChunkKey } from '../query-keys';
 
 /**
  * Hub `GET /api/chunks/{chunk_id}` read — one chunk's full aggregate: its derived
@@ -19,7 +20,7 @@ export function injectHubChunkDetailQuery(chunkId: () => string | null) {
   return injectQuery(() => {
     const id = chunkId();
     return {
-      queryKey: ['hub', 'chunk', id],
+      queryKey: hubChunkKey(id),
       enabled: id !== null,
       queryFn: async (): Promise<ChunkDetail> => {
         const { data, error } = await getChunkApiChunksChunkIdGet({

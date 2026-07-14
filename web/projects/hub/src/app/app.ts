@@ -1,33 +1,41 @@
-import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import {
   BoardShell,
-  ChunkDetailPanel,
-  injectHubChunkDetailQuery,
+  ChunkDetail,
+  FleetLiveUpdates,
+  QueuePanel,
+  RunnerStrip,
   injectHubChunksQuery,
   injectHubHealthQuery,
 } from 'fleet';
 
 /**
- * The hub board app — renders the shared mission-control board shell over live reads
- * from the generated client (TanStack Query): the hub health query drives the header
- * connection status, and the chunk-list query feeds the board its chunks (derived
- * status + current node, D-004).
+ * The hub board app — the mission-control fleet surface (D-048). It composes the
+ * shared fleet library over live reads from the generated client (TanStack Query)
+ * and the hub's SSE stream:
  *
- * Selecting a card opens the chunk detail drawer — one chunk's full aggregate (node
- * history + artifact store, D-036): the review that failed once and looped back to
- * build, and the artifacts it carried (product/mvp.md, MVP criterion 9/11). The
- * selected id drives a reactive detail query; dismissing the drawer clears it.
+ * - the {@link FleetLiveUpdates} spine subscribes to `GET /api/events/stream` and
+ *   invalidates the reads on every hub fact, so the board streams live (D-097);
+ * - {@link BoardShell} renders every chunk in its derived-status column (D-004);
+ *   selecting a card opens the {@link ChunkDetail} drawer — node history, artifacts,
+ *   and the human-loop actions (answer a question, resolve a gate, copy a takeover);
+ * - {@link QueuePanel} shapes the ready queue (prioritize + group); {@link RunnerStrip}
+ *   shows the registry with pause/resume — the two operator controls (MVP criterion 11).
  */
 @Component({
   selector: 'app-root',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BoardShell, ChunkDetailPanel],
+  imports: [BoardShell, ChunkDetail, QueuePanel, RunnerStrip],
   template: `
-    <div class="layout" [class.has-detail]="detail() !== undefined">
-      <fleet-board-shell [connection]="connection()" [chunks]="chunks()" (selectChunk)="selected.set($event)" />
-      @if (detail(); as d) {
-        <fleet-chunk-detail-panel [detail]="d" (dismiss)="selected.set(null)" />
-      }
+    <div class="layout">
+      <div class="workspace" [class.has-detail]="selected() !== null">
+        <fleet-board-shell class="board" [connection]="connection()" [chunks]="chunks()" (selectChunk)="selected.set($event)" />
+        <fleet-queue-panel class="rail" />
+        @if (selected() !== null) {
+          <fleet-chunk-detail class="detail" [chunkId]="selected()" (dismiss)="selected.set(null)" />
+        }
+      </div>
+      <fleet-runner-strip class="runners" />
     </div>
   `,
   styles: `
@@ -37,24 +45,48 @@ import {
     }
     .layout {
       display: grid;
-      grid-template-columns: 1fr;
+      grid-template-rows: 1fr auto;
       height: 100%;
+      min-height: 0;
     }
-    .layout.has-detail {
-      grid-template-columns: 1fr minmax(280px, 360px);
+    .workspace {
+      display: grid;
+      grid-template-columns: 1fr minmax(240px, 300px);
+      min-height: 0;
+    }
+    .workspace.has-detail {
+      grid-template-columns: 1fr minmax(240px, 300px) minmax(280px, 360px);
+    }
+    .board {
+      min-width: 0;
+    }
+    .rail {
+      min-width: 0;
+      overflow-y: auto;
+      border-left: 1px solid var(--bezel);
+    }
+    .detail {
+      min-width: 0;
     }
   `,
 })
 export class App {
   private readonly health = injectHubHealthQuery();
   private readonly chunksQuery = injectHubChunksQuery();
+  private readonly live = inject(FleetLiveUpdates);
+
+  constructor() {
+    // Open the SSE stream and wire it to the query cache for the app's lifetime.
+    this.live.start();
+  }
 
   /** The board card the operator opened, or `null` when the drawer is dismissed. */
   protected readonly selected = signal<string | null>(null);
-  private readonly detailQuery = injectHubChunkDetailQuery(() => this.selected());
 
-  /** Header status derived from the live health query state. */
+  /** Header status: the live stream's connection state, falling back to the health read. */
   protected readonly connection = computed(() => {
+    const streamState = this.live.status();
+    if (streamState === 'reconnecting') return 'reconnecting…';
     if (this.health.isPending()) return 'connecting…';
     if (this.health.isError()) return 'offline';
     return this.health.data()?.['status'] ?? 'ok';
@@ -62,7 +94,4 @@ export class App {
 
   /** The live fleet chunk list; empty until the first read resolves. */
   protected readonly chunks = computed(() => this.chunksQuery.data() ?? []);
-
-  /** The selected chunk's detail, or `undefined` while nothing is open / still loading. */
-  protected readonly detail = computed(() => (this.selected() === null ? undefined : this.detailQuery.data()));
 }

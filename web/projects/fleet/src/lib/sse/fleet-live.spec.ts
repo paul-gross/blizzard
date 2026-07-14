@@ -1,0 +1,107 @@
+import { provideZonelessChangeDetection } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import { vi } from 'vitest';
+
+import { EVENT_SOURCE_FACTORY, type EventSourceFactory } from './sse.service';
+import { FleetLiveUpdates } from './fleet-live';
+
+/** EventSource stand-in with named-listener support — jsdom ships none. */
+class FakeEventSource {
+  static readonly instances: FakeEventSource[] = [];
+  readyState = 0;
+  onopen: (() => void) | null = null;
+  onmessage: ((event: MessageEvent) => void) | null = null;
+  onerror: (() => void) | null = null;
+  private readonly listeners = new Map<string, (event: MessageEvent) => void>();
+
+  constructor(readonly url: string) {
+    FakeEventSource.instances.push(this);
+  }
+
+  addEventListener(type: string, handler: (event: MessageEvent) => void): void {
+    this.listeners.set(type, handler);
+  }
+
+  open(): void {
+    this.readyState = 1;
+    this.onopen?.();
+  }
+
+  emitNamed(type: string, data: string, lastEventId = ''): void {
+    this.listeners.get(type)?.({ data, lastEventId } as MessageEvent);
+  }
+
+  hardError(): void {
+    this.readyState = 2;
+    this.onerror?.();
+  }
+
+  close(): void {
+    this.readyState = 2;
+  }
+}
+
+describe('FleetLiveUpdates', () => {
+  let queryClient: QueryClient;
+
+  beforeEach(() => {
+    FakeEventSource.instances.length = 0;
+    queryClient = new QueryClient();
+    const factory: EventSourceFactory = (url) => new FakeEventSource(url) as unknown as EventSource;
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTanStackQuery(queryClient),
+        { provide: EVENT_SOURCE_FACTORY, useValue: factory },
+      ],
+    });
+  });
+
+  it('invalidates the fleet list, the chunk detail, and the queue on a chunk-changed event', () => {
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+
+    const source = FakeEventSource.instances[0];
+    source.open();
+    source.emitNamed('chunk-changed', JSON.stringify({ chunk_id: 'ch_live', status: 'running' }), '1');
+
+    const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
+    expect(keys).toContainEqual(['hub', 'chunks']);
+    expect(keys).toContainEqual(['hub', 'queue']);
+    expect(keys).toContainEqual(['hub', 'chunk', 'ch_live']);
+  });
+
+  it('re-reads the registry on a runner-changed event and the queue on queue-changed', () => {
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+
+    const source = FakeEventSource.instances[0];
+    source.open();
+    source.emitNamed('runner-changed', JSON.stringify({ runner_id: 'rn_1' }));
+    source.emitNamed('queue-changed', JSON.stringify({}));
+
+    const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
+    expect(keys).toContainEqual(['hub', 'runners']);
+    expect(keys).toContainEqual(['hub', 'queue']);
+  });
+
+  it('re-GETs the whole tree after a reconnect to close the gap', () => {
+    vi.useFakeTimers();
+    try {
+      const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+      TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+
+      const source = FakeEventSource.instances[0];
+      source.open();
+      source.hardError();
+      vi.advanceTimersByTime(2000);
+      TestBed.flushEffects();
+
+      // A blanket invalidation (no filter) fires after the reconnect.
+      expect(invalidate.mock.calls.some((call) => call[0] === undefined)).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

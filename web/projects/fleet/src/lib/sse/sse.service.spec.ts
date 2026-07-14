@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { vi } from 'vitest';
 
-import { EVENT_SOURCE_FACTORY, type EventSourceFactory, SseService, backoffDelay } from './sse.service';
+import { EVENT_SOURCE_FACTORY, type EventSourceFactory, SseService, backoffDelay, withLastEventId } from './sse.service';
 
 /** Minimal EventSource stand-in — jsdom ships none, and reconnect must be driven deterministically. */
 class FakeEventSource {
@@ -12,9 +12,14 @@ class FakeEventSource {
   onmessage: ((event: MessageEvent) => void) | null = null;
   onerror: (() => void) | null = null;
   closed = false;
+  private readonly listeners = new Map<string, (event: MessageEvent) => void>();
 
   constructor(readonly url: string) {
     FakeEventSource.instances.push(this);
+  }
+
+  addEventListener(type: string, handler: (event: MessageEvent) => void): void {
+    this.listeners.set(type, handler);
   }
 
   open(): void {
@@ -22,8 +27,12 @@ class FakeEventSource {
     this.onopen?.();
   }
 
-  emit(data: string): void {
-    this.onmessage?.({ data } as MessageEvent);
+  emit(data: string, lastEventId = ''): void {
+    this.onmessage?.({ data, lastEventId } as MessageEvent);
+  }
+
+  emitNamed(type: string, data: string, lastEventId = ''): void {
+    this.listeners.get(type)?.({ data, lastEventId } as MessageEvent);
   }
 
   hardError(): void {
@@ -57,7 +66,7 @@ describe('SseService', () => {
   it('reconnects with backoff after a hard drop', () => {
     vi.useFakeTimers();
     try {
-      const handle = TestBed.inject(SseService).connect('/events', { baseMs: 10, capMs: 100 });
+      const handle = TestBed.inject(SseService).connect('/events', { backoff: { baseMs: 10, capMs: 100 } });
 
       const first = FakeEventSource.instances[0];
       first.open();
@@ -92,5 +101,49 @@ describe('SseService', () => {
 
     expect(received).toEqual([{ n: 7 }]);
     handle.close();
+  });
+
+  it('delivers named events off the events channel', () => {
+    const handle = TestBed.inject(SseService).connect<{ chunk_id: string }>('/events', {
+      events: ['chunk-changed'],
+    });
+    const received: { type: string; data: { chunk_id: string } }[] = [];
+    handle.events.subscribe((event) => received.push(event));
+
+    const source = FakeEventSource.instances[0];
+    source.open();
+    source.emitNamed('chunk-changed', JSON.stringify({ chunk_id: 'ch_1' }), '5');
+
+    expect(received).toEqual([{ type: 'chunk-changed', data: { chunk_id: 'ch_1' } }]);
+    handle.close();
+  });
+
+  it('resumes with last_event_id after a manual reconnect', () => {
+    vi.useFakeTimers();
+    try {
+      const handle = TestBed.inject(SseService).connect('/api/events/stream', {
+        backoff: { baseMs: 10, capMs: 100 },
+        events: ['chunk-changed'],
+      });
+
+      const first = FakeEventSource.instances[0];
+      first.open();
+      first.emitNamed('chunk-changed', JSON.stringify({ chunk_id: 'ch_1' }), '42');
+      first.hardError();
+      vi.advanceTimersByTime(10);
+
+      // The re-opened source carries the cursor so the hub replays the gap.
+      const second = FakeEventSource.instances[1];
+      expect(second.url).toContain('last_event_id=42');
+
+      handle.close();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('builds a resume URL that overwrites an existing cursor', () => {
+    expect(withLastEventId('/api/events/stream', '9')).toBe('/api/events/stream?last_event_id=9');
+    expect(withLastEventId('/api/events/stream?last_event_id=1', '9')).toBe('/api/events/stream?last_event_id=9');
   });
 });

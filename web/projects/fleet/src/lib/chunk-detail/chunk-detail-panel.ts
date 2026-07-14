@@ -1,24 +1,40 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 
-import type { ArtifactView, ChunkDetail, DecisionView, QuestionView, TransitionView } from '../api/hub';
+import type { ArtifactView, ChunkDetail, DecisionView, EscalationView, QuestionView, TransitionView } from '../api/hub';
+
+/** Emitted when the operator answers a chunk's open question from the drawer. */
+export interface AnswerQuestionEvent {
+  readonly questionId: string;
+  readonly answer: string;
+  readonly chunkId: string;
+}
+
+/** Emitted when the operator resolves a chunk's open gate decision from the drawer. */
+export interface ResolveDecisionEvent {
+  readonly decisionId: string;
+  readonly choice: string;
+  readonly chunkId: string;
+}
 
 /**
  * The chunk detail drawer — a chunk's node history and its artifact store (D-036,
  * MVP criterion 9/11). Slides over the board when a card is selected and renders:
  *
  * - the **awaiting-human** state, when the chunk is parked (`waiting_on_human`): its
- *   open **question** (the ask a human answers with `blizzard hub answer`, MVP
- *   criterion 7) and/or its open gate **decision** (node + choice set a human resolves
- *   with `blizzard hub decide`, MVP criterion 12). This is the minimal wave-2 surfacing
- *   — read-only; wiring the answer/decide buttons is wave 3;
+ *   open **question** with an inline **Answer** action (MVP criterion 7, D-052) and/or
+ *   its open gate **decision** rendered as **choice buttons** the operator resolves
+ *   from the board (D-042, MVP criterion 12);
+ * - the **escalation** state, when the chunk `needs_human`: the copyable **takeover
+ *   command** the operator runs to enter the parked worker's session (D-009);
  * - the **transition history**, oldest-first: every edge the chunk took, so the
  *   review-fail loop back to build reads as a visible `review → build (fail)` step;
  * - the **artifact store**: each entry keyed `{node}.{artifact-name}.{epoch}`, with an
  *   **asset's** findings text shown inline (the review notes a fail carried back) and a
  *   **git_commit's** pinned `repo @ commit` reference (the branch pointers merged).
  *
- * Presentational only: it holds the detail input and emits `dismiss`; the data client
- * lives in the query. All color comes from the design-token layer, never hard-coded.
+ * Presentational only: it holds the detail input and emits `dismiss`, `answerQuestion`,
+ * and `resolveDecision`; the data client (the mutations those events drive) lives in the
+ * container. All color comes from the design-token layer, never hard-coded.
  */
 @Component({
   selector: 'fleet-chunk-detail-panel',
@@ -48,10 +64,35 @@ import type { ArtifactView, ChunkDetail, DecisionView, QuestionView, TransitionV
               @if (q.options && q.options.length > 0) {
                 <div class="chips">
                   @for (opt of q.options; track opt) {
-                    <span class="chip" data-testid="question-option">{{ opt }}</span>
+                    <button
+                      type="button"
+                      class="chip act"
+                      data-testid="question-option"
+                      (click)="submitAnswer(q.question_id, opt)"
+                    >
+                      {{ opt }}
+                    </button>
                   }
                 </div>
               }
+              <div class="answer-row">
+                <input
+                  #answerInput
+                  class="answer-input"
+                  type="text"
+                  data-testid="answer-input"
+                  placeholder="Type an answer…"
+                  [attr.aria-label]="'Answer question ' + q.question_id"
+                />
+                <button
+                  type="button"
+                  class="act primary"
+                  data-testid="answer-submit"
+                  (click)="submitAnswer(q.question_id, answerInput.value); answerInput.value = ''"
+                >
+                  Answer
+                </button>
+              </div>
             </div>
           }
           @if (openDecision(); as d) {
@@ -62,11 +103,32 @@ import type { ArtifactView, ChunkDetail, DecisionView, QuestionView, TransitionV
               </div>
               <div class="chips">
                 @for (c of d.choices ?? []; track c.name) {
-                  <span class="chip" data-testid="decision-choice" [title]="c.description">{{ c.name }}</span>
+                  <button
+                    type="button"
+                    class="chip act primary"
+                    data-testid="decision-choice"
+                    [title]="c.description"
+                    (click)="resolve(d.decision_id, c.name)"
+                  >
+                    {{ c.name }}
+                  </button>
                 }
               </div>
             </div>
           }
+        </section>
+      }
+
+      @if (escalation(); as esc) {
+        <section class="d-section escalation" aria-label="Escalation" data-testid="escalation">
+          <div class="s-head"><span class="lbl">Needs human · takeover</span></div>
+          <p class="esc-hint">The worker escalated (epoch {{ esc.epoch }}). Run the takeover command to enter its session:</p>
+          <div class="takeover">
+            <code class="cmd" data-testid="takeover-command">{{ esc.takeover_command }}</code>
+            <button type="button" class="act" data-testid="copy-takeover" (click)="copyTakeover(esc.takeover_command)">
+              {{ copied() ? 'Copied' : 'Copy' }}
+            </button>
+          </div>
         </section>
       }
 
@@ -237,6 +299,71 @@ import type { ArtifactView, ChunkDetail, DecisionView, QuestionView, TransitionV
       text-transform: uppercase;
       padding: 1px 5px;
     }
+    .act {
+      font-family: inherit;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--line);
+      color: var(--text);
+      cursor: pointer;
+      padding: 3px 8px;
+      font-size: 10px;
+    }
+    .act:hover {
+      border-color: var(--cyan);
+    }
+    .act:focus-visible {
+      outline: 1px solid var(--cyan);
+      outline-offset: 1px;
+    }
+    button.chip.act {
+      cursor: pointer;
+    }
+    .act.primary {
+      color: var(--cyan);
+    }
+    .answer-row {
+      display: flex;
+      gap: 4px;
+      margin-top: 6px;
+    }
+    .answer-input {
+      flex: 1;
+      min-width: 0;
+      font-family: inherit;
+      font-size: 11px;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid var(--line);
+      color: var(--text);
+      padding: 3px 6px;
+    }
+    .answer-input:focus-visible {
+      outline: 1px solid var(--cyan);
+      outline-offset: 0;
+    }
+    .escalation {
+      border-left: 2px solid var(--danger, #e06c75);
+    }
+    .esc-hint {
+      margin: 0 0 6px;
+      color: var(--label-dim);
+      font-size: 10px;
+    }
+    .takeover {
+      display: flex;
+      gap: 4px;
+      align-items: stretch;
+    }
+    .takeover .cmd {
+      flex: 1;
+      min-width: 0;
+      overflow-x: auto;
+      white-space: pre;
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid var(--line);
+      color: var(--amber-hi);
+      padding: 4px 6px;
+      font-size: 11px;
+    }
     .timeline {
       list-style: none;
       margin: 0;
@@ -325,6 +452,15 @@ export class ChunkDetailPanel {
   /** Emitted when the operator dismisses the drawer. */
   readonly dismiss = output<void>();
 
+  /** Emitted when the operator answers an open question (MVP criterion 7). */
+  readonly answerQuestion = output<AnswerQuestionEvent>();
+
+  /** Emitted when the operator resolves an open gate decision (D-042). */
+  readonly resolveDecision = output<ResolveDecisionEvent>();
+
+  /** Transient "Copied" state for the takeover-command copy button. */
+  protected readonly copied = signal(false);
+
   protected readonly history = computed<readonly TransitionView[]>(() => this.detail().history ?? []);
   protected readonly artifacts = computed<readonly ArtifactView[]>(() => this.detail().artifacts ?? []);
 
@@ -338,4 +474,29 @@ export class ChunkDetailPanel {
     const decision = this.detail().decision;
     return decision && !decision.transitioned ? decision : null;
   });
+
+  /** The chunk's open escalation, if it currently needs a human takeover (D-009). */
+  protected readonly escalation = computed<EscalationView | null>(() => this.detail().escalation ?? null);
+
+  /** Emit an answer for a question — no-op on an empty answer. */
+  protected submitAnswer(questionId: string, answer: string): void {
+    const trimmed = answer.trim();
+    if (!trimmed) return;
+    this.answerQuestion.emit({ questionId, answer: trimmed, chunkId: this.detail().chunk_id });
+  }
+
+  /** Emit a resolution for the open gate decision. */
+  protected resolve(decisionId: string, choice: string): void {
+    this.resolveDecision.emit({ decisionId, choice, chunkId: this.detail().chunk_id });
+  }
+
+  /** Copy the takeover command to the clipboard, flashing "Copied" when it lands. */
+  protected copyTakeover(command: string): void {
+    const clipboard = globalThis.navigator?.clipboard;
+    if (!clipboard) return;
+    void clipboard.writeText(command).then(() => {
+      this.copied.set(true);
+      setTimeout(() => this.copied.set(false), 1500);
+    });
+  }
 }

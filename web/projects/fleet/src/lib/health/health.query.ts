@@ -1,6 +1,7 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import { healthApiHealthGet } from '../api/hub';
+import { hubHealthKey } from '../query-keys';
 
 /**
  * Hub `/api/health` read, through TanStack Query and the generated hub client
@@ -11,7 +12,7 @@ import { healthApiHealthGet } from '../api/hub';
  */
 export function injectHubHealthQuery() {
   return injectQuery(() => ({
-    queryKey: ['hub', 'health'],
+    queryKey: hubHealthKey,
     queryFn: async () => {
       const { data, error } = await healthApiHealthGet({ throwOnError: false });
       if (error) throw error;

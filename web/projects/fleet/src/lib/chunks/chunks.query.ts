@@ -1,6 +1,7 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
 import { listChunksApiChunksGet, type ChunkSummary } from '../api/hub';
+import { hubChunksKey } from '../query-keys';
 
 /**
  * Hub `GET /api/chunks` read — the fleet chunk list (derived status + current
@@ -12,7 +13,7 @@ import { listChunksApiChunksGet, type ChunkSummary } from '../api/hub';
  */
 export function injectHubChunksQuery() {
   return injectQuery(() => ({
-    queryKey: ['hub', 'chunks'],
+    queryKey: hubChunksKey,
     queryFn: async (): Promise<ChunkSummary[]> => {
       const { data, error } = await listChunksApiChunksGet({ throwOnError: false });
       if (error) throw error;
