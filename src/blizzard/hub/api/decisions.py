@@ -71,6 +71,7 @@ def resolve_decision(
         conflict = DecisionResolutionConflict(decision_id=decision_id, already_resolved_by=result.resolved_by)
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=conflict.model_dump())
     if decision is not None:
+        services.events.publish_decision_resolved(decision.chunk_id, decision_id)
         services.events.publish_chunk_changed(decision.chunk_id, "running")
     assert result.resolved and result.resolved_by
     return DecisionResolutionResponse(

@@ -34,6 +34,7 @@ from blizzard.hub.api.questions import router as questions_router
 from blizzard.hub.api.queue import router as queue_router
 from blizzard.hub.api.readiness import router as readiness_router
 from blizzard.hub.api.routes import router as routes_router
+from blizzard.hub.api.runners import router as runners_router
 from blizzard.hub.composition import HubServices, build_services
 from blizzard.hub.config import HubConfig
 from blizzard.hub.delivery.forge import IForgeDelivery, LandingRequest, LandingResult, PrHandle, PrState
@@ -107,6 +108,7 @@ def create_app(
     app.include_router(routes_router)
     app.include_router(queue_router)
     app.include_router(questions_router)
+    app.include_router(runners_router)
 
     # The embedded frontend, served from the same process and origin (D-096).
     mount_web_app(app, frontend_dir("hub"), app_name="blizzard-hub")

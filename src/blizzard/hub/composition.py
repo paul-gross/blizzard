@@ -31,12 +31,15 @@ from blizzard.hub.domain.graph import GraphDoc, IReadGraphRepository
 from blizzard.hub.domain.graph_authoring import GraphMintService
 from blizzard.hub.domain.ingest import IngestService
 from blizzard.hub.domain.questions import QuestionService
+from blizzard.hub.domain.queue import GroupService, QueueService
+from blizzard.hub.domain.registry import FleetService
 from blizzard.hub.domain.work import IReadChunkRepository
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.graphs import default_graph_yaml, load_default_graph_doc
 from blizzard.hub.pm.source import IPmSource
 from blizzard.hub.store.internal.chunk_store import ChunkStore
 from blizzard.hub.store.internal.graph_store import GraphStore
+from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
 
 
 @dataclass(frozen=True)
@@ -54,6 +57,9 @@ class HubServices:
     graph_mint: GraphMintService
     runner_facts: RunnerFactsService
     questions: QuestionService
+    queue: QueueService
+    group: GroupService
+    fleet: FleetService
     events: EventBroker
     clock: IClock
     default_graph_doc: GraphDoc
@@ -73,6 +79,7 @@ def build_services(
     clock = clock or SystemClock()
     chunk_store = ChunkStore(engine, clock)
     graph_store = GraphStore(engine)
+    registry_store = RunnerRegistryStore(engine)
     coordinator = MergeQueueCoordinator(chunks=chunk_store, forge=forge, clock=clock)
     return HubServices(
         chunks=chunk_store,
@@ -86,6 +93,9 @@ def build_services(
         graph_mint=GraphMintService(graphs=graph_store, clock=clock),
         runner_facts=RunnerFactsService(chunks=chunk_store, clock=clock),
         questions=QuestionService(chunks=chunk_store, clock=clock),
+        queue=QueueService(chunks=chunk_store, clock=clock),
+        group=GroupService(chunks=chunk_store, clock=clock),
+        fleet=FleetService(registry=registry_store, clock=clock),
         events=events,
         clock=clock,
         default_graph_doc=load_default_graph_doc(),

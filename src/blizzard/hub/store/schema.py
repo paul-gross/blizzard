@@ -21,8 +21,10 @@ transition points back at (D-045).
 from __future__ import annotations
 
 from sqlalchemy import (
+    Boolean,
     Column,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     MetaData,
@@ -321,4 +323,70 @@ runner_high_water = Table(
     Column("runner_id", String, primary_key=True),
     Column("seq", Integer, nullable=False),  # greatest applied per-runner seq (D-069)
     Column("updated_at", DateTime, nullable=False),
+)
+
+# --- Queue shaping: ready-queue ordering (D-048/D-004) ----------------------
+#
+# Ready-queue ordering is an explicit hub-side property (design/hub/web-app.md
+# Prioritize): the operator moves a ready chunk to a position, and GET /queue/peek
+# honours it. Facts append, order derives (D-004): each reorder appends ONE row —
+# the moved chunk's new float ``position``, computed between its target neighbours —
+# and a chunk's effective position is its newest such fact, or its ``minted_at``
+# instant (as a unix timestamp) before it was ever moved. Ready chunks sort ascending
+# by effective position, so "move to top" is simply a position below the current least.
+
+queue_positions = Table(
+    "queue_positions",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
+    Column("position", Float, nullable=False),  # lower sorts earlier; newest fact per chunk wins
+    Column("set_at", DateTime, nullable=False),
+)
+
+# --- Queue shaping: grouping (chunk.grouped — D-048/D-076/D-047) -------------
+#
+# Group N unacquired (ready) chunks into one surviving chunk: the survivor absorbs the
+# union of their PM pointers (plural pointers per D-076, appended to chunk_pm_pointers),
+# and each merged-away chunk records a ``chunk.grouped`` fact naming the survivor. A
+# grouped chunk is EPHEMERAL (D-047): it is removed from every listing rather than
+# deriving a status (domain/events.md), exactly like a discard — the PM item lives on
+# as a pointer on the survivor.
+
+chunk_grouped = Table(
+    "chunk_grouped",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),  # the merged-away chunk
+    Column("grouped_into", String, ForeignKey("chunks.chunk_id"), nullable=False),  # the survivor
+    Column("grouped_at", DateTime, nullable=False),
+)
+
+# --- The fleet registry (runner.registered / paused / resumed — D-019/D-070/D-043) --
+#
+# Runners register on startup (runner_id + workspace_id) and appear on the board. The
+# registration row is an upsert: ``last_seen_at`` is a refreshed timestamp (not a fact),
+# bumped by the register call and the dedicated heartbeat (D-070); liveness derives from
+# it against a staleness threshold (never a stored column, D-004). Operational state is
+# declarative and append-only: pause/resume facts land in ``runner_pause_facts`` and
+# ``paused`` derives from the newest one (D-043, the D-039 pattern) — the runner reads it
+# back on its outbound pull and adheres (paused = no new claims; in-flight runs on).
+
+runner_registrations = Table(
+    "runner_registrations",
+    metadata,
+    Column("runner_id", String, primary_key=True),
+    Column("workspace_id", String, nullable=False),  # the per-runner workspace binding (D-019)
+    Column("registered_at", DateTime, nullable=False),
+    Column("last_seen_at", DateTime, nullable=False),  # liveness derives from this (D-070)
+)
+
+runner_pause_facts = Table(
+    "runner_pause_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("runner_id", String, ForeignKey("runner_registrations.runner_id"), nullable=False),
+    Column("paused", Boolean, nullable=False),  # paused derives from the newest fact (D-043)
+    Column("set_at", DateTime, nullable=False),
+    Column("set_by", String, nullable=False),  # who flipped it — recorded on the fact
 )

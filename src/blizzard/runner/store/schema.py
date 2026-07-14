@@ -16,6 +16,7 @@ around it. All the same facts-only pattern.
 from __future__ import annotations
 
 from sqlalchemy import (
+    Boolean,
     Column,
     DateTime,
     Integer,
@@ -198,4 +199,21 @@ park_resumes = Table(
     Column("lease_id", String, nullable=False),
     Column("question_id", String, nullable=False),
     Column("resumed_at", DateTime, nullable=False),
+)
+
+# --- Hub control mirror (the declarative pause brake read on PULL — D-043/D-012) --
+#
+# The fleet operator's pause brake lives at the hub (registry ``paused``, D-043); the
+# runner reads it on its outbound PULL and mirrors it here, then FILL adheres — paused
+# stops new claims, in-flight chunks run on ([loop.md]). Mirroring it in the store keeps
+# the read a machine-local, crash-safe fact: FILL never calls the hub itself, and the
+# last-known directive holds while the hub is unreachable (D-012). One upserted row per
+# runner; ``paused`` is the value, ``updated_at`` when PULL last refreshed it.
+
+hub_control = Table(
+    "hub_control",
+    metadata,
+    Column("runner_id", String, primary_key=True),
+    Column("paused", Boolean, nullable=False),
+    Column("updated_at", DateTime, nullable=False),
 )

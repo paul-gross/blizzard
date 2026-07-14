@@ -139,18 +139,40 @@ def _as_utc(value: datetime) -> datetime:
 
 
 def pull(ctx: LoopContext) -> None:
-    """Exchange facts with the hub (outbound-only, D-012): drain the outbound buffer.
+    """Exchange facts with the hub (outbound-only, D-012): sync the registry, drain the buffer.
 
-    Store-and-forward always (D-069): every hub-bound fact was written to the buffer
-    at mint with a per-runner monotonic seq, and this is the single flusher that
-    drains it — FIFO, so a ``lease.minted`` always precedes the completion minted under
-    it. A completion's flush is special: its apply-response carries the chunk's next
-    node envelope (D-072), so the flusher drives the continue-in-place here. A
-    transport failure stops the drain (the buffer is the only ordered path — a later
-    fact must not overtake a stuck earlier one) and the backlog flushes next tick; an
-    outage is just a bigger backlog.
+    Two outbound exchanges happen here. First :func:`_sync_registry` registers the runner
+    (idempotent — refreshing its ``last_seen_at`` liveness, D-070) and reads its declarative
+    pause brake back, mirroring it locally so FILL adheres (D-043). Then the outbound buffer
+    drains.
+
+    Store-and-forward always (D-069): every hub-bound fact was written to the buffer at mint
+    with a per-runner monotonic seq, and this is the single flusher that drains it — FIFO, so
+    a ``lease.minted`` always precedes the completion minted under it. A completion's flush is
+    special: its apply-response carries the chunk's next node envelope (D-072), so the flusher
+    drives the continue-in-place here. A transport failure stops the drain (the buffer is the
+    only ordered path — a later fact must not overtake a stuck earlier one) and the backlog
+    flushes next tick; an outage is just a bigger backlog.
     """
+    _sync_registry(ctx)
     flush_outbound(ctx)
+
+
+def _sync_registry(ctx: LoopContext) -> None:
+    """Register + heartbeat (D-070) and mirror the hub's pause brake locally (D-043/D-012).
+
+    Registration is idempotent and doubles as the runner-level liveness heartbeat — a
+    per-pull refresh of ``last_seen_at``, much slower than the machine-local worker
+    heartbeat (D-070). The declarative pause brake is then read back and mirrored to the
+    runner store so FILL adheres without a hub call; when the hub is unreachable the last
+    mirrored value holds, so the runner keeps obeying its last-known directive (D-012).
+    """
+    try:
+        ctx.hub.register_runner(ctx.config.runner_id, ctx.config.workspace_id)
+        paused = ctx.hub.fetch_runner_paused(ctx.config.runner_id)
+    except HubClientError:
+        return  # hub unreachable — keep the last-mirrored brake (D-012)
+    ctx.store.set_hub_paused(ctx.config.runner_id, paused=paused, at=ctx.clock.now())
 
 
 def flush_outbound(ctx: LoopContext) -> None:
@@ -278,7 +300,14 @@ def fill(ctx: LoopContext) -> None:
     chunk's environments (all-or-nothing), and POST the complete route. A 409 is
     race-second-place — release the bindings and move on. The winning claim carries
     the first node envelope, so the worker starts without a second round-trip.
+
+    The pause brake (D-043): while the runner is paused at the hub — mirrored locally by
+    PULL — FILL claims nothing. In-flight chunks are untouched (REAP/ADVANCE still run),
+    so pausing drains the fleet rather than killing it ([loop.md]).
     """
+    if ctx.store.hub_paused(ctx.config.runner_id):
+        _log.info("paused — no new claims this tick", runner_id=ctx.config.runner_id)
+        return
     slots = ctx.config.max_agents - len(ctx.store.list_active_leases())
     for _ in range(max(slots, 0)):
         if not _fill_one(ctx):

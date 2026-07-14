@@ -198,6 +198,13 @@ class IReadRunnerStore(Protocol):
         """The lease's open park (park fact, no resume), or None — its question_id."""
         ...
 
+    def hub_paused(self, runner_id: str) -> bool:
+        """The last hub pause brake PULL mirrored locally — FILL adheres (D-043/D-012).
+
+        Defaults False when PULL has never synced (a fresh runner claims freely until it
+        first hears otherwise)."""
+        ...
+
 
 class IWriteRunnerStore(IReadRunnerStore, Protocol):
     """Read-write runner store — held only by the domain (the loop steps)."""
@@ -256,4 +263,8 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
 
     def record_park_resume(self, *, lease_id: str, question_id: str, resumed_at: datetime) -> None:
         """End a lease's park — the answer arrived and the session was resumed ([ask-answer.md])."""
+        ...
+
+    def set_hub_paused(self, runner_id: str, *, paused: bool, at: datetime) -> None:
+        """Mirror the hub's pause brake locally (upsert) — read back by FILL (D-043/D-012)."""
         ...

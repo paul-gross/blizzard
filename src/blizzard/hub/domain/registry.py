@@ -1,0 +1,141 @@
+"""Fleet-registry domain — runner registration, liveness, and the pause brake.
+
+The registry is the fleet's view of its runners (design/domain/fleet.md, D-019): a
+runner registers on startup (runner_id + workspace_id) and appears on the board, its
+``last_seen_at`` refreshed by registration and the dedicated liveness heartbeat (D-070).
+Two things derive over the registry, never stored as columns (D-004):
+
+* **liveness** — ``last_seen_at`` against a staleness threshold yields online/offline;
+  it is time-relative, so it is computed with the injected clock at read time, not on
+  the row.
+* **paused** — the operator's brake (D-043): pause/resume facts append and ``paused``
+  derives from the newest one, exactly as a graph's enabled-ness does (D-039). The runner
+  reads it back on its outbound pull and adheres — pausing stops new leases, in-flight
+  chunks run on ([loop.md]).
+
+:class:`FleetService` is the domain service the routes delegate to
+(``bzh:controller-read-only``); it holds the write registry repository and the injected
+clock. The :class:`RunnerRegistration` it returns already carries the **derived**
+``paused`` (resolved in the store adapter, like a decision's resolved-ness); liveness is
+returned alongside it by the service because it needs the clock.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from typing import Protocol
+
+from blizzard.foundation.clock import IClock
+from blizzard.foundation.logging import get_logger
+
+_log = get_logger("blizzard.hub.registry")
+
+#: Liveness staleness threshold (D-070 open-question constant, decisions/open-questions.md).
+#: The runner-level heartbeat is deliberately much slower than the machine-local worker
+#: heartbeat; a runner unheard-from for longer than this reads offline on the board. The
+#: runner's reconciliation tick (~30s) refreshes it many times over inside this window.
+STALE_AFTER = timedelta(minutes=5)
+
+
+@dataclass(frozen=True)
+class RunnerRegistration:
+    """A fleet-registry row with its **derived** paused state (D-019/D-043)."""
+
+    runner_id: str
+    workspace_id: str
+    registered_at: datetime
+    last_seen_at: datetime
+    paused: bool
+
+
+@dataclass(frozen=True)
+class RunnerLiveness:
+    """A registration paired with its clock-relative liveness (D-070)."""
+
+    registration: RunnerRegistration
+    online: bool
+
+
+def derive_online(last_seen_at: datetime, now: datetime, *, threshold: timedelta) -> bool:
+    """True iff the runner was seen within ``threshold`` of ``now`` (D-004/D-070).
+
+    Both operands are coerced to UTC-aware first: the injected clock stamps aware
+    instants, but sqlite reads a stored timestamp back naive (it drops the tzinfo), so a
+    raw subtraction would raise. Reading a naive value as UTC is exact — that is the tz
+    the clock wrote it in.
+    """
+    return (_as_utc(now) - _as_utc(last_seen_at)) <= threshold
+
+
+def _as_utc(value: datetime) -> datetime:
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
+class IReadRunnerRegistry(Protocol):
+    """Read-only registry access — the ``GET /runners`` surface."""
+
+    def get_runner(self, runner_id: str) -> RunnerRegistration | None: ...
+    def list_runners(self) -> list[RunnerRegistration]: ...
+
+
+class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
+    """Read-write registry access — only the domain layer depends on this variant."""
+
+    def upsert_registration(self, runner_id: str, *, workspace_id: str, at: datetime) -> bool:
+        """Register a runner (idempotent upsert), refreshing ``last_seen_at``.
+
+        Returns True if the row was newly created (a first registration), False if it
+        already existed and was refreshed — so the caller can emit the right event."""
+        ...
+
+    def touch_last_seen(self, runner_id: str, *, at: datetime) -> bool:
+        """Refresh a registered runner's ``last_seen_at`` (the heartbeat, D-070).
+
+        Returns False if the runner is unknown — a heartbeat before registration."""
+        ...
+
+    def record_pause(self, runner_id: str, *, paused: bool, at: datetime, by: str) -> None:
+        """Append a pause/resume fact; ``paused`` derives from the newest one (D-043)."""
+        ...
+
+
+class FleetService:
+    """Register runners, refresh liveness, and set the declarative pause brake (D-043)."""
+
+    def __init__(self, *, registry: IWriteRunnerRegistry, clock: IClock, stale_after: timedelta = STALE_AFTER) -> None:
+        self._registry = registry
+        self._clock = clock
+        self._stale_after = stale_after
+
+    def register(self, runner_id: str, workspace_id: str) -> bool:
+        """Register (or refresh) a runner; returns True on a first registration (D-019)."""
+        created = self._registry.upsert_registration(runner_id, workspace_id=workspace_id, at=self._clock.now())
+        _log.info("runner registered", runner_id=runner_id, workspace_id=workspace_id, first_time=created)
+        return created
+
+    def heartbeat(self, runner_id: str) -> bool:
+        """Refresh a runner's liveness (D-070); returns False if it is unregistered."""
+        return self._registry.touch_last_seen(runner_id, at=self._clock.now())
+
+    def set_paused(self, runner_id: str, *, paused: bool, by: str) -> bool:
+        """Flip the pause brake for a registered runner; returns False if unknown (D-043)."""
+        if self._registry.get_runner(runner_id) is None:
+            return False
+        self._registry.record_pause(runner_id, paused=paused, at=self._clock.now(), by=by)
+        _log.info("runner pause set", runner_id=runner_id, paused=paused, by=by)
+        return True
+
+    def get_liveness(self, runner_id: str) -> RunnerLiveness | None:
+        """One runner with its derived liveness — the runner's own pull read (D-043/D-070)."""
+        registration = self._registry.get_runner(runner_id)
+        if registration is None:
+            return None
+        return RunnerLiveness(registration=registration, online=self._online(registration))
+
+    def list_with_liveness(self) -> list[RunnerLiveness]:
+        """Every registered runner with its derived liveness — the ``GET /runners`` view."""
+        return [RunnerLiveness(registration=r, online=self._online(r)) for r in self._registry.list_runners()]
+
+    def _online(self, registration: RunnerRegistration) -> bool:
+        return derive_online(registration.last_seen_at, self._clock.now(), threshold=self._stale_after)

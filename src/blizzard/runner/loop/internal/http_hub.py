@@ -22,6 +22,7 @@ from blizzard.wire.facts import EscalationReport, LeaseMintReport, RunnerFactAck
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekResponse
 from blizzard.wire.route import RouteClaim, RouteClaimConflict, RouteClaimResponse
+from blizzard.wire.runner import RunnerRegistrationRequest, RunnerView
 
 _log = get_logger("blizzard.runner.hub")
 
@@ -71,6 +72,16 @@ class HttpHubClient:
     def get_question(self, question_id: str) -> QuestionView:
         resp = self._get(f"{_API}/questions/{question_id}")
         return QuestionView.model_validate(resp.json())
+
+    def register_runner(self, runner_id: str, workspace_id: str) -> None:
+        self._post(
+            f"{_API}/runners",
+            RunnerRegistrationRequest(runner_id=runner_id, workspace_id=workspace_id).model_dump(mode="json"),
+        )
+
+    def fetch_runner_paused(self, runner_id: str) -> bool:
+        resp = self._get(f"{_API}/runners/{runner_id}")
+        return bool(RunnerView.model_validate(resp.json()).paused)
 
     def report_lease(self, chunk_id: str, *, epoch: int, runner_id: str) -> None:
         self._post(

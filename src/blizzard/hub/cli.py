@@ -91,15 +91,17 @@ def host(directory: str, host_: str | None, port: int | None) -> None:
 @hub.command()
 @click.option("--url", "url", default=None, help="Hub base URL (overrides $BZ_HUB_URL).")
 def status(url: str | None) -> None:
-    """The fleet view: every chunk with its derived status, and open questions.
+    """The fleet view: every chunk with its derived status, the runners, and open questions.
 
-    A pure client of the hub API (design/cli.md): ``GET /chunks`` + ``GET /questions``,
-    the same facts the board renders, in the terminal (D-004)."""
+    A pure client of the hub API (design/cli.md): ``GET /chunks`` + ``GET /runners`` +
+    ``GET /questions``, the same facts the board renders, in the terminal (D-004)."""
     base = _hub_url(url)
     try:
         with httpx.Client(base_url=base, timeout=_CLIENT_TIMEOUT) as client:
             chunks = client.get("/api/chunks")
             chunks.raise_for_status()
+            runners = client.get("/api/runners")
+            runners.raise_for_status()
             questions = client.get("/api/questions")
             questions.raise_for_status()
     except httpx.HTTPError as exc:
@@ -110,6 +112,12 @@ def status(url: str | None) -> None:
     for chunk in rows:
         node = chunk.get("current_node_id") or "-"
         click.echo(f"  {chunk['chunk_id']}  {chunk['status']:<16} @ {node}")
+    fleet = runners.json().get("runners", [])
+    click.echo(f"\nrunners ({len(fleet)}):")
+    for r in fleet:
+        liveness = "online" if r.get("online") else "offline"
+        brake = " [paused]" if r.get("paused") else ""
+        click.echo(f"  {r['runner_id']:<16} {liveness:<8} ws={r.get('workspace_id', '-')}{brake}")
     open_qs = questions.json()
     click.echo(f"\nopen questions ({len(open_qs)}):")
     for q in open_qs:
@@ -227,3 +235,38 @@ def requeue(chunk_id: str, hub_url: str | None) -> None:
 def detach(chunk_id: str) -> None:
     """Forcibly release a chunk from its runner (D-088)."""
     _stub("detach")
+
+
+@hub.command()
+@click.argument("runner_id")
+@click.option("--by", "by", default="operator", help="Who is pausing (recorded on the fact).")
+@click.option("--hub-url", default=None, help=f"Hub API base URL (default ${ENV_HUB_URL} or {DEFAULT_HUB_URL}).")
+def pause(runner_id: str, by: str, hub_url: str | None) -> None:
+    """Pause a runner — it stops claiming new work; in-flight chunks run on (D-043)."""
+    _set_runner_pause(runner_id, verb="pause", by=by, hub_url=hub_url)
+
+
+@hub.command()
+@click.argument("runner_id")
+@click.option("--by", "by", default="operator", help="Who is resuming (recorded on the fact).")
+@click.option("--hub-url", default=None, help=f"Hub API base URL (default ${ENV_HUB_URL} or {DEFAULT_HUB_URL}).")
+def resume(runner_id: str, by: str, hub_url: str | None) -> None:
+    """Resume a paused runner — it claims work again on its next pull (D-043)."""
+    _set_runner_pause(runner_id, verb="resume", by=by, hub_url=hub_url)
+
+
+def _set_runner_pause(runner_id: str, *, verb: str, by: str, hub_url: str | None) -> None:
+    url = f"{_hub_url(hub_url).rstrip('/')}/api/runners/{runner_id}/{verb}"
+    try:
+        resp = httpx.post(url, json={"by": by}, timeout=_CLIENT_TIMEOUT)
+    except httpx.HTTPError as exc:
+        raise _api_error(f"POST /runners/{{id}}/{verb}", exc) from exc
+    if resp.status_code == httpx.codes.NOT_FOUND:
+        raise click.ClickException(f"unknown runner {runner_id}")
+    try:
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise _api_error(f"POST /runners/{{id}}/{verb}", exc) from exc
+    body = resp.json()
+    state = "paused" if body.get("paused") else "running"
+    click.echo(f"runner {runner_id} is now {state}")

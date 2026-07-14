@@ -64,14 +64,14 @@ class ChunkStore:
     def get(self, chunk_id: str) -> Chunk | None:
         with self._engine.connect() as conn:
             row = conn.execute(select(s.chunks).where(s.chunks.c.chunk_id == chunk_id)).one_or_none()
-            if row is None:
-                return None
+            if row is None or chunk_id in self._grouped_ids(conn):
+                return None  # a grouped-away chunk is ephemeral — gone from every read (D-047)
             return self._chunk(conn, row)
 
     def load_facts(self, chunk_id: str) -> ChunkFacts | None:
         with self._engine.connect() as conn:
             chunk = conn.execute(select(s.chunks).where(s.chunks.c.chunk_id == chunk_id)).one_or_none()
-            if chunk is None:
+            if chunk is None or chunk_id in self._grouped_ids(conn):
                 return None
             executors = {
                 r.node_id: Executor(r.executor)
@@ -197,14 +197,28 @@ class ChunkStore:
 
     def list_all(self) -> list[Chunk]:
         with self._engine.connect() as conn:
+            grouped = self._grouped_ids(conn)
             rows = conn.execute(select(s.chunks).order_by(s.chunks.c.minted_at.desc())).all()
-            return [self._chunk(conn, row) for row in rows]
+            # A grouped-away chunk is ephemeral: removed from every listing (D-047/D-048).
+            return [self._chunk(conn, row) for row in rows if row.chunk_id not in grouped]
 
     def list_ready(self) -> list[Chunk]:
         return [c for c in self.list_all() if self._status(c.chunk_id) is ChunkStatus.READY]
 
+    def queue_positions(self) -> dict[str, float]:
+        """The newest explicit queue position per chunk — the ordering the peek honours."""
+        with self._engine.connect() as conn:
+            rows = conn.execute(
+                select(s.queue_positions.c.chunk_id, s.queue_positions.c.position, s.queue_positions.c.id).order_by(
+                    s.queue_positions.c.id
+                )
+            ).all()
+        # id is monotonic per insert, so the last row seen for a chunk is its newest fact.
+        return {r.chunk_id: float(r.position) for r in rows}
+
     def find_live_holder(self, pointer: PmPointer) -> str | None:
         with self._engine.connect() as conn:
+            grouped = self._grouped_ids(conn)
             chunk_ids = [
                 p.chunk_id
                 for p in conn.execute(
@@ -215,6 +229,8 @@ class ChunkStore:
                 ).all()
             ]
         for chunk_id in chunk_ids:
+            if chunk_id in grouped:
+                continue  # the pointer moved to the survivor; the grouped chunk is gone (D-047)
             if self._status(chunk_id) not in _TERMINAL:
                 return chunk_id
         return None
@@ -555,7 +571,40 @@ class ChunkStore:
         with self._engine.begin() as conn:
             conn.execute(insert(s.requeues).values(chunk_id=chunk_id, requeued_at=at))
 
+    def record_queue_position(self, chunk_id: str, *, position: float, at: datetime) -> None:
+        """Append the moved chunk's new ready-queue position; order derives (D-048/D-004)."""
+        with self._engine.begin() as conn:
+            conn.execute(insert(s.queue_positions).values(chunk_id=chunk_id, position=position, set_at=at))
+
+    def add_pm_pointers(self, chunk_id: str, pointers: list[PmPointer], *, at: datetime) -> None:
+        """Fold pointers into the survivor of a group, de-duped by (provider, url) (D-076)."""
+        with self._engine.begin() as conn:
+            existing = {
+                (p.provider, p.url)
+                for p in conn.execute(
+                    select(s.chunk_pm_pointers.c.provider, s.chunk_pm_pointers.c.url).where(
+                        s.chunk_pm_pointers.c.chunk_id == chunk_id
+                    )
+                ).all()
+            }
+            for pointer in pointers:
+                if (pointer.provider, pointer.url) in existing:
+                    continue
+                conn.execute(
+                    insert(s.chunk_pm_pointers).values(chunk_id=chunk_id, provider=pointer.provider, url=pointer.url)
+                )
+                existing.add((pointer.provider, pointer.url))
+
+    def record_grouped(self, chunk_id: str, *, grouped_into: str, at: datetime) -> None:
+        """Record ``chunk.grouped`` — the merged-away chunk is ephemeral now (D-048/D-047)."""
+        with self._engine.begin() as conn:
+            conn.execute(insert(s.chunk_grouped).values(chunk_id=chunk_id, grouped_into=grouped_into, grouped_at=at))
+
     # --- helpers ------------------------------------------------------------
+
+    @staticmethod
+    def _grouped_ids(conn) -> set[str]:  # type: ignore[no-untyped-def]
+        return {r.chunk_id for r in conn.execute(select(s.chunk_grouped.c.chunk_id)).all()}
 
     @staticmethod
     def _question_row(q, answer) -> QuestionRow:  # type: ignore[no-untyped-def]

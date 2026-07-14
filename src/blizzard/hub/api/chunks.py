@@ -59,6 +59,13 @@ def _pointer_models(chunk: Chunk) -> list[PmPointerModel]:
     return [PmPointerModel(provider=p.provider, url=p.url) for p in chunk.pm_pointers]
 
 
+def _publish_open_decision(services: HubServices, chunk_id: str) -> None:
+    """Emit ``decision-opened`` if the chunk now carries a live, unresolved gate (D-045)."""
+    decision = services.chunks.decision_for_chunk(chunk_id)
+    if decision is not None and not decision.resolved and not decision.transitioned:
+        services.events.publish_decision_opened(chunk_id, decision.decision_id)
+
+
 def _history_views(facts: ChunkFacts) -> list[TransitionView]:
     """The chunk's transitions oldest-first — the board's node-history timeline (D-036)."""
     return [
@@ -130,6 +137,7 @@ def ingest_chunk(request: ChunkIngestRequest, services: Annotated[HubServices, D
         )
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=conflict.model_dump())
     services.events.publish_chunk_changed(chunk_id, "ready")
+    services.events.publish_queue_changed()  # a fresh ready chunk changed the queue (D-048)
     return ChunkIngestResponse(chunk_id=chunk_id)
 
 
@@ -224,6 +232,8 @@ def submit_completion(
     response = services.apply.apply(chunk, graph, submission)
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
+    # A completion landing on a human-judged node opens a graph gate (D-045): surface it.
+    _publish_open_decision(services, chunk_id)
     return response
 
 
@@ -243,6 +253,8 @@ def submit_decision(
     response = services.decisions.submit(chunk, graph, submission)
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
+    # The runner-config gate parked the chunk on an open decision (D-032): surface it.
+    _publish_open_decision(services, chunk_id)
     return response
 
 
@@ -257,6 +269,7 @@ def requeue_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_se
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
+    services.events.publish_queue_changed()  # requeue can re-admit the chunk to the queue (D-067)
     return {"chunk_id": chunk_id}
 
 

@@ -148,6 +148,64 @@ def build_hub(tmp_path: Path, *, forge: FakeForge | None = None, pm: FakePmSourc
     return HubHarness(client=TestClient(app), services=services, forge=forge, pm=pm, clock=clock, events=events)
 
 
+def parse_sse_frames(text: str) -> list[dict[str, str]]:
+    """Parse an ``text/event-stream`` payload into ``[{id, event, data}]`` dicts.
+
+    Reserved comment lines (``:``-prefixed) and keepalives are skipped; a blank line
+    terminates one frame. Shared by the broker-buffer read and the direct stream-generator
+    drain so both assert the exact wire bytes an ``EventSource`` would parse.
+    """
+    events: list[dict[str, str]] = []
+    current: dict[str, str] = {}
+    for line in text.splitlines():
+        if line.startswith(":"):
+            continue  # a comment (reserved / keepalive)
+        if line.startswith("id:"):
+            current["id"] = line[3:].strip()
+        elif line.startswith("event:"):
+            current["event"] = line[6:].strip()
+        elif line.startswith("data:"):
+            current["data"] = line[5:].strip()
+        elif line == "" and "event" in current:
+            events.append(current)
+            current = {}
+    if "event" in current:
+        events.append(current)
+    return events
+
+
+async def drain_stream(broker: EventBroker, *, last_event_id: int = 0) -> list[dict[str, str]]:
+    """Read the SSE endpoint's own generator to the end of its replay tail (a real stream read).
+
+    Starlette's ``TestClient`` (httpx ``ASGITransport``) buffers a whole response body, so it
+    cannot consume the hub's *infinite* live stream incrementally. Instead this drives the
+    route's async generator directly with a request that reports itself disconnected, so the
+    generator emits the reserved comment plus the buffered replay tail (newer than
+    ``last_event_id``) and then returns at the first liveness check — exactly the bytes a
+    reconnecting ``EventSource`` receives before live events begin.
+    """
+    from blizzard.hub.api.events import _stream
+
+    class _DisconnectedRequest:
+        async def is_disconnected(self) -> bool:
+            return True
+
+    chunks: list[bytes] = []
+    async for chunk in _stream(broker, _DisconnectedRequest(), last_event_id=last_event_id):  # type: ignore[arg-type]
+        chunks.append(chunk)
+    return parse_sse_frames(b"".join(chunks).decode())
+
+
+def emitted_events(hub: HubHarness, *, since: int = 0) -> list[dict[str, str]]:
+    """The typed events the hub published after ``since`` — the broker's replay tail.
+
+    This is exactly what a subscriber connecting with ``Last-Event-ID: since`` replays off
+    the stream (``EventBroker.replay_since``), so asserting on it asserts SSE emission
+    without the buffering-transport limitation. Each dict carries ``id``, ``event``, ``data``.
+    """
+    return [{"id": str(e.id), "event": e.type, "data": e.data} for e in hub.events.replay_since(since)]
+
+
 def report_lease(hub: HubHarness, chunk_id: str, *, epoch: int, seq: int, runner_id: str = "r1") -> dict:
     """Report a runner-minted ``lease.minted`` fact through POST /events (D-044/D-069).
 

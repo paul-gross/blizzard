@@ -203,6 +203,43 @@ export type ChunkDetail = {
 };
 
 /**
+ * ChunkGroupRequest
+ *
+ * Merge unacquired chunks into one — the board's Group control (D-048/D-076).
+ *
+ * ``merge_chunk_ids`` are the ready chunks folded into the path's survivor chunk; the
+ * survivor absorbs the union of their PM pointers and the merged chunks are discarded as
+ * ephemeral (D-047). Self-references and duplicates are ignored; a non-ready member is
+ * rejected ``409``.
+ */
+export type ChunkGroupRequest = {
+    /**
+     * Merge Chunk Ids
+     */
+    merge_chunk_ids: Array<string>;
+};
+
+/**
+ * ChunkGroupResponse
+ *
+ * The survivor chunk after a group — its id and the union of PM pointers it carries.
+ */
+export type ChunkGroupResponse = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Merged Chunk Ids
+     */
+    merged_chunk_ids?: Array<string>;
+    /**
+     * Pm Pointers
+     */
+    pm_pointers?: Array<PmPointerModel>;
+};
+
+/**
  * ChunkIngestRequest
  *
  * Ingest by pointer — specific items always, batch fine (D-047).
@@ -912,9 +949,41 @@ export type QueuePeekEntry = {
 /**
  * QueuePeekResponse
  *
- * The ready queue as peeked by FILL.
+ * The ready queue as peeked by FILL, in the hub's explicit order (D-048).
  */
 export type QueuePeekResponse = {
+    /**
+     * Entries
+     */
+    entries?: Array<QueuePeekEntry>;
+};
+
+/**
+ * QueueReorderRequest
+ *
+ * Move a ready chunk to a queue position — the board's Prioritize control (D-048).
+ *
+ * ``position`` is the target index in the ready queue, ``0`` being the top; it is
+ * clamped into range, so ``0`` always means "to the front". Ordering is a hub-side
+ * property: the move appends one position fact and the order re-derives (D-004).
+ */
+export type QueueReorderRequest = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Position
+     */
+    position?: number;
+};
+
+/**
+ * QueueReorderResponse
+ *
+ * The ready queue after a reorder, in its new order — the board re-renders from it.
+ */
+export type QueueReorderResponse = {
     /**
      * Entries
      */
@@ -1092,6 +1161,94 @@ export type RunnerFactBatch = {
      * Runner Id
      */
     runner_id: string;
+};
+
+/**
+ * RunnerListResponse
+ *
+ * The fleet registry — every registered runner with its liveness (D-070).
+ */
+export type RunnerListResponse = {
+    /**
+     * Runners
+     */
+    runners?: Array<RunnerView>;
+};
+
+/**
+ * RunnerPauseRequest
+ *
+ * Set a runner's pause brake — records who flipped it (D-043).
+ */
+export type RunnerPauseRequest = {
+    /**
+     * By
+     */
+    by?: string;
+};
+
+/**
+ * RunnerRegistrationRequest
+ *
+ * Register a runner into the fleet — runner id + workspace binding (D-019).
+ */
+export type RunnerRegistrationRequest = {
+    /**
+     * Runner Id
+     */
+    runner_id: string;
+    /**
+     * Workspace Id
+     */
+    workspace_id: string;
+};
+
+/**
+ * RunnerRegistrationResponse
+ *
+ * The registered runner's id, and whether this call first created its row.
+ */
+export type RunnerRegistrationResponse = {
+    /**
+     * First Registration
+     */
+    first_registration: boolean;
+    /**
+     * Runner Id
+     */
+    runner_id: string;
+};
+
+/**
+ * RunnerView
+ *
+ * One fleet-registry row — derived liveness and paused state (D-004/D-070/D-043).
+ */
+export type RunnerView = {
+    /**
+     * Last Seen At
+     */
+    last_seen_at: string;
+    /**
+     * Online
+     */
+    online: boolean;
+    /**
+     * Paused
+     */
+    paused: boolean;
+    /**
+     * Registered At
+     */
+    registered_at: string;
+    /**
+     * Runner Id
+     */
+    runner_id: string;
+    /**
+     * Workspace Id
+     */
+    workspace_id: string;
 };
 
 /**
@@ -1387,6 +1544,36 @@ export type ReportEscalationApiChunksChunkIdEscalationsPostResponses = {
 };
 
 export type ReportEscalationApiChunksChunkIdEscalationsPostResponse = ReportEscalationApiChunksChunkIdEscalationsPostResponses[keyof ReportEscalationApiChunksChunkIdEscalationsPostResponses];
+
+export type GroupChunksApiChunksChunkIdGroupPostData = {
+    body: ChunkGroupRequest;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/group';
+};
+
+export type GroupChunksApiChunksChunkIdGroupPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GroupChunksApiChunksChunkIdGroupPostError = GroupChunksApiChunksChunkIdGroupPostErrors[keyof GroupChunksApiChunksChunkIdGroupPostErrors];
+
+export type GroupChunksApiChunksChunkIdGroupPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ChunkGroupResponse;
+};
+
+export type GroupChunksApiChunksChunkIdGroupPostResponse = GroupChunksApiChunksChunkIdGroupPostResponses[keyof GroupChunksApiChunksChunkIdGroupPostResponses];
 
 export type ReportLeaseApiChunksChunkIdLeasesPostData = {
     body: LeaseMintReport;
@@ -1725,6 +1912,31 @@ export type PeekQueueApiQueuePeekGetResponses = {
 
 export type PeekQueueApiQueuePeekGetResponse = PeekQueueApiQueuePeekGetResponses[keyof PeekQueueApiQueuePeekGetResponses];
 
+export type ReorderQueueApiQueueReorderPostData = {
+    body: QueueReorderRequest;
+    path?: never;
+    query?: never;
+    url: '/api/queue/reorder';
+};
+
+export type ReorderQueueApiQueueReorderPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReorderQueueApiQueueReorderPostError = ReorderQueueApiQueueReorderPostErrors[keyof ReorderQueueApiQueueReorderPostErrors];
+
+export type ReorderQueueApiQueueReorderPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: QueueReorderResponse;
+};
+
+export type ReorderQueueApiQueueReorderPostResponse = ReorderQueueApiQueueReorderPostResponses[keyof ReorderQueueApiQueueReorderPostResponses];
+
 export type ReadyApiReadyGetData = {
     body?: never;
     path?: never;
@@ -1765,3 +1977,164 @@ export type ClaimRouteApiRoutesPostResponses = {
 };
 
 export type ClaimRouteApiRoutesPostResponse = ClaimRouteApiRoutesPostResponses[keyof ClaimRouteApiRoutesPostResponses];
+
+export type ListRunnersApiRunnersGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/runners';
+};
+
+export type ListRunnersApiRunnersGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: RunnerListResponse;
+};
+
+export type ListRunnersApiRunnersGetResponse = ListRunnersApiRunnersGetResponses[keyof ListRunnersApiRunnersGetResponses];
+
+export type RegisterRunnerApiRunnersPostData = {
+    body: RunnerRegistrationRequest;
+    path?: never;
+    query?: never;
+    url: '/api/runners';
+};
+
+export type RegisterRunnerApiRunnersPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RegisterRunnerApiRunnersPostError = RegisterRunnerApiRunnersPostErrors[keyof RegisterRunnerApiRunnersPostErrors];
+
+export type RegisterRunnerApiRunnersPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: RunnerRegistrationResponse;
+};
+
+export type RegisterRunnerApiRunnersPostResponse = RegisterRunnerApiRunnersPostResponses[keyof RegisterRunnerApiRunnersPostResponses];
+
+export type GetRunnerApiRunnersRunnerIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Runner Id
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/api/runners/{runner_id}';
+};
+
+export type GetRunnerApiRunnersRunnerIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetRunnerApiRunnersRunnerIdGetError = GetRunnerApiRunnersRunnerIdGetErrors[keyof GetRunnerApiRunnersRunnerIdGetErrors];
+
+export type GetRunnerApiRunnersRunnerIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: RunnerView;
+};
+
+export type GetRunnerApiRunnersRunnerIdGetResponse = GetRunnerApiRunnersRunnerIdGetResponses[keyof GetRunnerApiRunnersRunnerIdGetResponses];
+
+export type HeartbeatRunnerApiRunnersRunnerIdHeartbeatsPostData = {
+    body?: never;
+    path: {
+        /**
+         * Runner Id
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/api/runners/{runner_id}/heartbeats';
+};
+
+export type HeartbeatRunnerApiRunnersRunnerIdHeartbeatsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type HeartbeatRunnerApiRunnersRunnerIdHeartbeatsPostError = HeartbeatRunnerApiRunnersRunnerIdHeartbeatsPostErrors[keyof HeartbeatRunnerApiRunnersRunnerIdHeartbeatsPostErrors];
+
+export type HeartbeatRunnerApiRunnersRunnerIdHeartbeatsPostResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type HeartbeatRunnerApiRunnersRunnerIdHeartbeatsPostResponse = HeartbeatRunnerApiRunnersRunnerIdHeartbeatsPostResponses[keyof HeartbeatRunnerApiRunnersRunnerIdHeartbeatsPostResponses];
+
+export type PauseRunnerApiRunnersRunnerIdPausePostData = {
+    body: RunnerPauseRequest;
+    path: {
+        /**
+         * Runner Id
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/api/runners/{runner_id}/pause';
+};
+
+export type PauseRunnerApiRunnersRunnerIdPausePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PauseRunnerApiRunnersRunnerIdPausePostError = PauseRunnerApiRunnersRunnerIdPausePostErrors[keyof PauseRunnerApiRunnersRunnerIdPausePostErrors];
+
+export type PauseRunnerApiRunnersRunnerIdPausePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: RunnerView;
+};
+
+export type PauseRunnerApiRunnersRunnerIdPausePostResponse = PauseRunnerApiRunnersRunnerIdPausePostResponses[keyof PauseRunnerApiRunnersRunnerIdPausePostResponses];
+
+export type ResumeRunnerApiRunnersRunnerIdResumePostData = {
+    body: RunnerPauseRequest;
+    path: {
+        /**
+         * Runner Id
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/api/runners/{runner_id}/resume';
+};
+
+export type ResumeRunnerApiRunnersRunnerIdResumePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ResumeRunnerApiRunnersRunnerIdResumePostError = ResumeRunnerApiRunnersRunnerIdResumePostErrors[keyof ResumeRunnerApiRunnersRunnerIdResumePostErrors];
+
+export type ResumeRunnerApiRunnersRunnerIdResumePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: RunnerView;
+};
+
+export type ResumeRunnerApiRunnersRunnerIdResumePostResponse = ResumeRunnerApiRunnersRunnerIdResumePostResponses[keyof ResumeRunnerApiRunnersRunnerIdResumePostResponses];

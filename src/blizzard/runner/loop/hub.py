@@ -82,6 +82,22 @@ class IHubClient(Protocol):
         true the answer is delivered by resuming the dormant session around it."""
         ...
 
+    def register_runner(self, runner_id: str, workspace_id: str) -> None:
+        """``POST /api/runners`` — register into the fleet registry (D-019/D-070).
+
+        Idempotent upsert: the runner registers on startup and re-registers each pull,
+        which refreshes its ``last_seen_at`` — the runner-level liveness heartbeat the
+        board's fleet column derives online/offline from (D-070). Called before the paused
+        read so the runner is registered by the time it reads its state back."""
+        ...
+
+    def fetch_runner_paused(self, runner_id: str) -> bool:
+        """``GET /api/runners/{id}`` — the runner's declarative pause brake (D-043).
+
+        Read on the outbound pull and adhered to by FILL (paused = no new claims;
+        in-flight chunks run on). Never a push into the box (D-012)."""
+        ...
+
     def report_lease(self, chunk_id: str, *, epoch: int, runner_id: str) -> None:
         """``POST /api/chunks/{id}/leases`` — a ``lease.minted`` fact (D-044).
 

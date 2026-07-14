@@ -75,6 +75,8 @@ class FakeHub:
         self.high_water: dict[str, int] = {}
         self.questions: dict[str, QuestionView] = {}
         self.delivered: list[tuple[str, QuestionView]] = []
+        self.registered: list[tuple[str, str]] = []  # (runner_id, workspace_id)
+        self.paused = False  # the hub-side pause brake this fake reports back (D-043)
         self.down = False
 
     def peek_queue(self) -> QueuePeekResponse:
@@ -133,6 +135,16 @@ class FakeHub:
 
     def get_question(self, question_id: str) -> QuestionView:
         return self.questions[question_id]
+
+    def register_runner(self, runner_id: str, workspace_id: str) -> None:
+        if self.down:
+            raise HubClientError("fake hub is down")
+        self.registered.append((runner_id, workspace_id))
+
+    def fetch_runner_paused(self, runner_id: str) -> bool:
+        if self.down:
+            raise HubClientError("fake hub is down")
+        return self.paused
 
     def report_lease(self, chunk_id: str, *, epoch: int, runner_id: str) -> None:
         self.leases.append((chunk_id, epoch, runner_id))

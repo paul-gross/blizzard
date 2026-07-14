@@ -44,6 +44,7 @@ def claim_route(claim: RouteClaim, services: Annotated[HubServices, Depends(get_
         conflict = RouteClaimConflict(chunk_id=claim.chunk_id, held_by_runner_id=exc.held_by_runner_id)
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=conflict.model_dump())
     services.events.publish_chunk_changed(chunk.chunk_id, "running")
+    services.events.publish_queue_changed()  # the claim removed the chunk from the ready queue (D-080)
     return RouteClaimResponse(
         chunk_id=result.route.chunk_id,
         runner_id=result.route.runner_id,

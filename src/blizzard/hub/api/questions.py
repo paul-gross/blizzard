@@ -49,6 +49,7 @@ def ask_question(fact: QuestionAsked, services: Annotated[HubServices, Depends(g
     if services.chunks.get(fact.chunk_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {fact.chunk_id}")
     services.questions.record_asked(fact)
+    services.events.publish_question_asked(fact.chunk_id, fact.question_id)
     _publish(services, fact.chunk_id)
     return {"question_id": fact.question_id}
 
@@ -74,6 +75,7 @@ def answer_question(
     # The winning answer row alone flips the chunk out of waiting_on_human.
     winner = services.chunks.get_question(question_id)
     if winner is not None:
+        services.events.publish_question_answered(winner.chunk_id, question_id)
         _publish(services, winner.chunk_id)
     return result
 

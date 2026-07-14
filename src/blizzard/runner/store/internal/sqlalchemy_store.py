@@ -32,6 +32,7 @@ from blizzard.runner.store.schema import (
     binding_releases,
     env_bindings,
     heartbeats,
+    hub_control,
     lease_closures,
     lease_context,
     leases,
@@ -200,6 +201,10 @@ class SqlAlchemyRunnerStore:
             parked_at=r.parked_at,
         )
 
+    def hub_paused(self, runner_id: str) -> bool:
+        rows = self._all(select(hub_control.c.paused).where(hub_control.c.runner_id == runner_id))
+        return bool(rows[0].paused) if rows else False
+
     # --- writes -------------------------------------------------------------
 
     def record_lease(self, lease: NewLease) -> None:
@@ -325,6 +330,20 @@ class SqlAlchemyRunnerStore:
                 park_resumes.insert().values(lease_id=lease_id, question_id=question_id, resumed_at=resumed_at)
             )
         _log.info("park resumed with answer", lease_id=lease_id, question_id=question_id)
+
+    def set_hub_paused(self, runner_id: str, *, paused: bool, at: datetime) -> None:
+        with self._begin() as conn:
+            existing = conn.execute(
+                select(hub_control.c.runner_id).where(hub_control.c.runner_id == runner_id)
+            ).one_or_none()
+            if existing is None:
+                conn.execute(hub_control.insert().values(runner_id=runner_id, paused=paused, updated_at=at))
+            else:
+                conn.execute(
+                    hub_control.update()
+                    .where(hub_control.c.runner_id == runner_id)
+                    .values(paused=paused, updated_at=at)
+                )
 
     # --- plumbing -----------------------------------------------------------
 

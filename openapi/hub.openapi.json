@@ -320,6 +320,53 @@
         "title": "ChunkDetail",
         "type": "object"
       },
+      "ChunkGroupRequest": {
+        "description": "Merge unacquired chunks into one \u2014 the board's Group control (D-048/D-076).\n\n``merge_chunk_ids`` are the ready chunks folded into the path's survivor chunk; the\nsurvivor absorbs the union of their PM pointers and the merged chunks are discarded as\nephemeral (D-047). Self-references and duplicates are ignored; a non-ready member is\nrejected ``409``.",
+        "properties": {
+          "merge_chunk_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Merge Chunk Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "merge_chunk_ids"
+        ],
+        "title": "ChunkGroupRequest",
+        "type": "object"
+      },
+      "ChunkGroupResponse": {
+        "description": "The survivor chunk after a group \u2014 its id and the union of PM pointers it carries.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "merged_chunk_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Merged Chunk Ids",
+            "type": "array"
+          },
+          "pm_pointers": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PmPointerModel"
+            },
+            "title": "Pm Pointers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "chunk_id"
+        ],
+        "title": "ChunkGroupResponse",
+        "type": "object"
+      },
       "ChunkIngestRequest": {
         "description": "Ingest by pointer \u2014 specific items always, batch fine (D-047).",
         "properties": {
@@ -1348,7 +1395,7 @@
         "type": "object"
       },
       "QueuePeekResponse": {
-        "description": "The ready queue as peeked by FILL.",
+        "description": "The ready queue as peeked by FILL, in the hub's explicit order (D-048).",
         "properties": {
           "entries": {
             "default": [],
@@ -1360,6 +1407,40 @@
           }
         },
         "title": "QueuePeekResponse",
+        "type": "object"
+      },
+      "QueueReorderRequest": {
+        "description": "Move a ready chunk to a queue position \u2014 the board's Prioritize control (D-048).\n\n``position`` is the target index in the ready queue, ``0`` being the top; it is\nclamped into range, so ``0`` always means \"to the front\". Ordering is a hub-side\nproperty: the move appends one position fact and the order re-derives (D-004).",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "position": {
+            "default": 0,
+            "title": "Position",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "chunk_id"
+        ],
+        "title": "QueueReorderRequest",
+        "type": "object"
+      },
+      "QueueReorderResponse": {
+        "description": "The ready queue after a reorder, in its new order \u2014 the board re-renders from it.",
+        "properties": {
+          "entries": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/QueuePeekEntry"
+            },
+            "title": "Entries",
+            "type": "array"
+          }
+        },
+        "title": "QueueReorderResponse",
         "type": "object"
       },
       "ReadinessResponse": {
@@ -1593,6 +1674,110 @@
           "facts"
         ],
         "title": "RunnerFactBatch",
+        "type": "object"
+      },
+      "RunnerListResponse": {
+        "description": "The fleet registry \u2014 every registered runner with its liveness (D-070).",
+        "properties": {
+          "runners": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RunnerView"
+            },
+            "title": "Runners",
+            "type": "array"
+          }
+        },
+        "title": "RunnerListResponse",
+        "type": "object"
+      },
+      "RunnerPauseRequest": {
+        "description": "Set a runner's pause brake \u2014 records who flipped it (D-043).",
+        "properties": {
+          "by": {
+            "default": "operator",
+            "title": "By",
+            "type": "string"
+          }
+        },
+        "title": "RunnerPauseRequest",
+        "type": "object"
+      },
+      "RunnerRegistrationRequest": {
+        "description": "Register a runner into the fleet \u2014 runner id + workspace binding (D-019).",
+        "properties": {
+          "runner_id": {
+            "title": "Runner Id",
+            "type": "string"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runner_id",
+          "workspace_id"
+        ],
+        "title": "RunnerRegistrationRequest",
+        "type": "object"
+      },
+      "RunnerRegistrationResponse": {
+        "description": "The registered runner's id, and whether this call first created its row.",
+        "properties": {
+          "first_registration": {
+            "title": "First Registration",
+            "type": "boolean"
+          },
+          "runner_id": {
+            "title": "Runner Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runner_id",
+          "first_registration"
+        ],
+        "title": "RunnerRegistrationResponse",
+        "type": "object"
+      },
+      "RunnerView": {
+        "description": "One fleet-registry row \u2014 derived liveness and paused state (D-004/D-070/D-043).",
+        "properties": {
+          "last_seen_at": {
+            "title": "Last Seen At",
+            "type": "string"
+          },
+          "online": {
+            "title": "Online",
+            "type": "boolean"
+          },
+          "paused": {
+            "title": "Paused",
+            "type": "boolean"
+          },
+          "registered_at": {
+            "title": "Registered At",
+            "type": "string"
+          },
+          "runner_id": {
+            "title": "Runner Id",
+            "type": "string"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runner_id",
+          "workspace_id",
+          "registered_at",
+          "last_seen_at",
+          "online",
+          "paused"
+        ],
+        "title": "RunnerView",
         "type": "object"
       },
       "SessionMode": {
@@ -2077,6 +2262,59 @@
         ]
       }
     },
+    "/api/chunks/{chunk_id}/group": {
+      "post": {
+        "description": "Merge unacquired chunks into ``chunk_id`` \u2014 the board's Group control (D-048/D-076).",
+        "operationId": "group_chunks_api_chunks__chunk_id__group_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChunkGroupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChunkGroupResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Group Chunks",
+        "tags": [
+          "queue"
+        ]
+      }
+    },
     "/api/chunks/{chunk_id}/leases": {
       "post": {
         "description": "Land a runner's ``lease.minted`` \u2014 keeps the epoch fence in lockstep (D-044).",
@@ -2301,7 +2539,7 @@
     },
     "/api/events": {
       "post": {
-        "description": "Land runner-minted facts, idempotent by per-runner seq high-water (D-069/D-044).\n\nThe store-and-forward ingest: ``lease.minted`` (the fence input) and\n``escalation.recorded`` ride the runner's outbound buffer here. A pushed seq at or\nbelow the runner's high-water mark is already-applied and re-acked; a fresh one is\napplied and advances the mark. Emits ``chunk-changed`` for each chunk a landed\nfact touched so the board refreshes.",
+        "description": "Land runner-minted facts, idempotent by per-runner seq high-water (D-069/D-044).\n\nThe store-and-forward ingest: ``lease.minted`` (the fence input), ``escalation.recorded``,\n``question.asked``, and ``answer.delivered`` ride the runner's outbound buffer here. A\npushed seq at or below the runner's high-water mark is already-applied and re-acked; a\nfresh one is applied and advances the mark. Each freshly-applied fact re-broadcasts on\nthe SSE stream so the board refreshes \u2014 ``chunk-changed`` for every touched chunk, and\n``question-asked`` for a forwarded ask.",
         "operationId": "ingest_runner_facts_api_events_post",
         "requestBody": {
           "content": {
@@ -2576,7 +2814,7 @@
     },
     "/api/queue/peek": {
       "get": {
-        "description": "The hub-ordered ready queue, read-only (D-080).",
+        "description": "The hub-ordered ready queue, read-only (D-080) \u2014 honours reorder + grouping (D-048).",
         "operationId": "peek_queue_api_queue_peek_get",
         "responses": {
           "200": {
@@ -2591,6 +2829,48 @@
           }
         },
         "summary": "Peek Queue",
+        "tags": [
+          "queue"
+        ]
+      }
+    },
+    "/api/queue/reorder": {
+      "post": {
+        "description": "Move a ready chunk to a queue position \u2014 the board's Prioritize control (D-048).",
+        "operationId": "reorder_queue_api_queue_reorder_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QueueReorderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueueReorderResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reorder Queue",
         "tags": [
           "queue"
         ]
@@ -2656,6 +2936,253 @@
         "summary": "Claim Route",
         "tags": [
           "routes"
+        ]
+      }
+    },
+    "/api/runners": {
+      "get": {
+        "description": "The fleet registry \u2014 every runner with derived liveness + paused state (D-070).",
+        "operationId": "list_runners_api_runners_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Runners",
+        "tags": [
+          "runners"
+        ]
+      },
+      "post": {
+        "description": "Register a runner \u2014 runner id + workspace binding (D-019); idempotent upsert.",
+        "operationId": "register_runner_api_runners_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerRegistrationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerRegistrationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Register Runner",
+        "tags": [
+          "runners"
+        ]
+      }
+    },
+    "/api/runners/{runner_id}": {
+      "get": {
+        "description": "One runner's declarative state \u2014 the runner's own pull read (D-043/D-070).",
+        "operationId": "get_runner_api_runners__runner_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "title": "Runner Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Runner",
+        "tags": [
+          "runners"
+        ]
+      }
+    },
+    "/api/runners/{runner_id}/heartbeats": {
+      "post": {
+        "description": "Refresh a runner's liveness (D-070) \u2014 the slow runner-level heartbeat. Returns 204.",
+        "operationId": "heartbeat_runner_api_runners__runner_id__heartbeats_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "title": "Runner Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Heartbeat Runner",
+        "tags": [
+          "runners"
+        ]
+      }
+    },
+    "/api/runners/{runner_id}/pause": {
+      "post": {
+        "description": "Set a runner's pause brake \u2014 no new claims; in-flight chunks run on (D-043).",
+        "operationId": "pause_runner_api_runners__runner_id__pause_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "title": "Runner Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerPauseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pause Runner",
+        "tags": [
+          "runners"
+        ]
+      }
+    },
+    "/api/runners/{runner_id}/resume": {
+      "post": {
+        "description": "Clear a runner's pause brake \u2014 it resumes claiming on its next pull (D-043).",
+        "operationId": "resume_runner_api_runners__runner_id__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "title": "Runner Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerPauseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resume Runner",
+        "tags": [
+          "runners"
         ]
       }
     }

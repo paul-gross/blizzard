@@ -109,6 +109,40 @@ def test_get_chunk_parses_status() -> None:
 
 
 @pytest.mark.unit
+def test_register_runner_posts_registration() -> None:
+    seen: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/runners"
+        import json
+
+        seen.update(json.loads(request.content))
+        return httpx.Response(201, json={"runner_id": "r1", "first_registration": True})
+
+    _client(handler).register_runner("r1", "ws1")
+    assert seen == {"runner_id": "r1", "workspace_id": "ws1"}
+
+
+@pytest.mark.unit
+def test_fetch_runner_paused_reads_the_derived_brake() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/runners/r1"
+        return httpx.Response(
+            200,
+            json={
+                "runner_id": "r1",
+                "workspace_id": "ws1",
+                "registered_at": "2026-07-13T00:00:00+00:00",
+                "last_seen_at": "2026-07-13T00:00:00+00:00",
+                "online": True,
+                "paused": True,
+            },
+        )
+
+    assert _client(handler).fetch_runner_paused("r1") is True
+
+
+@pytest.mark.unit
 def test_transport_failure_raises_hub_client_error() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(500, text="boom")

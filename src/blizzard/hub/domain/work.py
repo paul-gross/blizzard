@@ -439,6 +439,10 @@ class IReadChunkRepository(Protocol):
 
     def list_ready(self) -> list[Chunk]: ...
     def list_all(self) -> list[Chunk]: ...
+    def queue_positions(self) -> dict[str, float]:
+        """The newest explicit ready-queue position per chunk — the order peek honours (D-048)."""
+        ...
+
     def find_live_holder(self, pointer: PmPointer) -> str | None:
         """The chunk_id of a live (non-terminal) chunk holding ``pointer`` (D-093), or None."""
         ...
@@ -576,4 +580,16 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
 
     def record_requeue(self, chunk_id: str, *, at: datetime) -> None:
         """Record a ``requeue.recorded`` fact — supersedes an open escalation (D-067)."""
+        ...
+
+    def record_queue_position(self, chunk_id: str, *, position: float, at: datetime) -> None:
+        """Append a ready chunk's new queue position; order derives (D-048/D-004)."""
+        ...
+
+    def add_pm_pointers(self, chunk_id: str, pointers: list[PmPointer], *, at: datetime) -> None:
+        """Fold PM pointers into a group survivor, de-duped by (provider, url) (D-076)."""
+        ...
+
+    def record_grouped(self, chunk_id: str, *, grouped_into: str, at: datetime) -> None:
+        """Record ``chunk.grouped`` — the merged-away chunk becomes ephemeral (D-048/D-047)."""
         ...
