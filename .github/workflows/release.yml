@@ -51,6 +51,9 @@ jobs:
         with:
           enable-cache: true
           python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
       - name: install mise (the fixture drives the winter CLI via `mise exec -- uv run`)
         uses: jdx/mise-action@v2
         with:
@@ -65,6 +68,14 @@ jobs:
         run: cd blizzard-mock && uv sync
       - name: install Chromium for the e2e browser scenario (Playwright)
         run: cd blizzard && uv run playwright install --with-deps chromium
+      - name: build the mission-control frontend into the wheel-embed dir (the browser e2e serves the real board)
+        # The e2e browser scenario drives the *served* Angular board — the hub mounts
+        # src/blizzard/static/{hub,runner} at / and falls back to the runtime placeholder
+        # when index.html is absent (foundation/web.py). The source checkout ships only
+        # the placeholder, so without this build the board scenario hits the placeholder
+        # and board-shell never appears. This mirrors the local `npm run build` step
+        # that fills these dirs before `mise run e2e` (src/blizzard/static/README.md).
+        run: cd blizzard/web && npm ci && npm run build
       - name: service tier (blizzard:service-test)
         env:
           BLIZZARD_SERVICE: "1"
