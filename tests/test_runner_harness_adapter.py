@@ -72,9 +72,11 @@ while i < len(args):
     elif a == "--resume": resume = args[i + 1]; i += 2
     elif a == "--output-format": i += 2
     elif a == "--settings": i += 2
+    elif a == "--permission-mode": i += 2
     elif a in ("-p", "--print"): i += 1
     else: prompt = a; i += 1
 sid = resume or session or "auto"
+open("argv.txt", "w").write(" ".join(args))
 if resume is None:
     open("spawned-here.txt", "w").write(prompt or "")
     result = ""
@@ -111,6 +113,28 @@ def test_spawn_launches_real_process_in_workdir(tmp_path: Path) -> None:
     assert handle.process_start_time  # stamped from /proc for pid-reuse-proof liveness
     os.waitpid(handle.pid, 0)  # let the fire-and-forget child finish
     assert (workdir / "spawned-here.txt").read_text() == (envelope.prompt or "")  # ran in the acquired workdir
+    assert "--permission-mode" not in (workdir / "argv.txt").read_text()  # omitted when unset
+
+
+@pytest.mark.component
+def test_spawn_passes_the_permission_mode_flag_when_configured(tmp_path: Path) -> None:
+    # A headless worker has no one to approve tool use; the configured permission mode is
+    # what lets it edit/commit in its sandboxed worktree (D-092).
+    binary = _fake_binary(tmp_path)
+    workdir = tmp_path / "e1"
+    workdir.mkdir()
+    adapter = ClaudeCodeAdapter(binary=binary, permission_mode="bypassPermissions")
+    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
+    preamble = WorkerPreamble(
+        environments=[AcquiredEnvironment(environment_id="e1", workdir=str(workdir))],
+        lease_id="lease_1",
+        local_api_url="http://127.0.0.1:8431",
+    )
+
+    handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
+    os.waitpid(handle.pid, 0)
+
+    assert "--permission-mode bypassPermissions" in (workdir / "argv.txt").read_text()
 
 
 @pytest.mark.component

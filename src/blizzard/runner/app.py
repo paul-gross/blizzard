@@ -103,7 +103,9 @@ def build_hosted_app(config: RunnerConfig) -> FastAPI:
         base_branch=config.base_branch,
     )
     harness: IHarnessAdapter = ClaudeCodeAdapter(
-        binary=config.harness_binary, settings_path=config.worker_settings_path
+        binary=config.harness_binary,
+        settings_path=config.worker_settings_path,
+        permission_mode=config.harness_permission_mode,
     )
     return create_app(
         config,

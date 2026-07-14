@@ -32,6 +32,7 @@ ENV_HUB_URL = "BZ_HUB_URL"
 ENV_WORKSPACE_ROOT = "BZ_WORKSPACE_ROOT"
 ENV_WORKSPACE_ENVS = "BZ_WORKSPACE_ENVS"  # comma-separated env-id pool
 ENV_HARNESS_BINARY = "BZ_HARNESS_BINARY"
+ENV_HARNESS_PERMISSION_MODE = "BZ_HARNESS_PERMISSION_MODE"
 ENV_BASE_BRANCH = "BZ_BASE_BRANCH"
 ENV_GATES = "BZ_RUNNER_GATES"  # comma-separated node names this runner gates (D-032/D-073)
 
@@ -42,6 +43,11 @@ DEFAULT_HUB_URL = "http://127.0.0.1:8421"  # the hub's default bind (band +2)
 DEFAULT_RUNNER_ID = "runner-local"
 DEFAULT_WORKSPACE_ID = "workspace-local"
 DEFAULT_HARNESS_BINARY = "claude"
+# A workspace-isolated worker runs headless with no one to approve tool use, so real
+# Claude Code needs a non-interactive permission mode to edit/commit in its sandboxed
+# worktree (design/harness-adapters.md, D-092); ``bypassPermissions`` is the fresh-init
+# default. The ``mock-claude-code`` façade ignores it; a config may set it empty to omit.
+DEFAULT_HARNESS_PERMISSION_MODE = "bypassPermissions"
 DEFAULT_MAX_AGENTS = 1
 DEFAULT_BASE_BRANCH = "main"
 DEFAULT_ENV_POOL: tuple[str, ...] = ("e1",)
@@ -66,6 +72,7 @@ class RunnerConfig:
     workspace_root: str = ""  # the winter workspace the provider drives; required to FILL
     workspace_envs: tuple[str, ...] = DEFAULT_ENV_POOL  # the provider's static env pool (D-062)
     harness_binary: str = DEFAULT_HARNESS_BINARY  # mock-claude-code in tests, `claude` in prod (D-092)
+    harness_permission_mode: str | None = None  # `claude -p --permission-mode` (headless); None omits it
     worker_settings_path: str | None = None  # the runner-owned worker hook file (P7)
     max_agents: int = DEFAULT_MAX_AGENTS
     base_branch: str = DEFAULT_BASE_BRANCH
@@ -107,6 +114,8 @@ class RunnerConfig:
             if envs
             else DEFAULT_ENV_POOL,
             harness_binary=os.environ.get(ENV_HARNESS_BINARY, DEFAULT_HARNESS_BINARY),
+            harness_permission_mode=os.environ.get(ENV_HARNESS_PERMISSION_MODE, DEFAULT_HARNESS_PERMISSION_MODE)
+            or None,
             base_branch=os.environ.get(ENV_BASE_BRANCH, DEFAULT_BASE_BRANCH),
             gates=tuple(g.strip() for g in gates.split(",") if g.strip()) if gates else (),
             # The worker hook file `init` writes alongside the config; the adapter
@@ -130,6 +139,7 @@ class RunnerConfig:
             f'workspace_root = "{self.workspace_root}"\n'
             f"workspace_envs = [{envs}]\n"
             f'harness_binary = "{self.harness_binary}"\n'
+            f'harness_permission_mode = "{self.harness_permission_mode or ""}"\n'
             f"worker_settings_path = {settings}\n"
             f"max_agents = {self.max_agents}\n"
             f'base_branch = "{self.base_branch}"\n'
@@ -156,6 +166,9 @@ class RunnerConfig:
             workspace_root=str(raw.get("workspace_root", "")),
             workspace_envs=_as_env_tuple(raw.get("workspace_envs", DEFAULT_ENV_POOL)),
             harness_binary=str(raw.get("harness_binary", DEFAULT_HARNESS_BINARY)),
+            harness_permission_mode=(str(raw["harness_permission_mode"]) or None)
+            if raw.get("harness_permission_mode")
+            else None,
             worker_settings_path=(str(raw["worker_settings_path"]) or None)
             if raw.get("worker_settings_path")
             else None,

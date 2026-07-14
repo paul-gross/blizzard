@@ -56,9 +56,18 @@ class HarnessSpawnError(RuntimeError):
 class ClaudeCodeAdapter:
     """The Claude Code binding. Dumb: translates the CLI surface, never decides."""
 
-    def __init__(self, binary: str = "claude", *, settings_path: str | None = None) -> None:
+    def __init__(
+        self, binary: str = "claude", *, settings_path: str | None = None, permission_mode: str | None = None
+    ) -> None:
         self._binary = binary
         self._settings_path = settings_path
+        # The headless permission mode passed to ``claude -p`` (D-092). A non-interactive
+        # worker has no one to approve tool use, so ``default`` mode blocks every edit and
+        # non-trivial bash — the worker can inspect but never build. A workspace-isolated
+        # runner sets ``bypassPermissions`` so the sandboxed worktree worker can edit,
+        # run git/checks, commit, and push unattended. ``None`` omits the flag (the
+        # ``mock-claude-code`` façade takes no such flag).
+        self._permission_mode = permission_mode
 
     def spawn(self, envelope: NodeEnvelope, preamble: WorkerPreamble, session_hint: str | None) -> WorkerHandle:
         if not preamble.environments:
@@ -70,6 +79,8 @@ class ClaudeCodeAdapter:
             cmd += ["--session-id", session_id]
         if self._settings_path:
             cmd += ["--settings", self._settings_path]
+        if self._permission_mode:
+            cmd += ["--permission-mode", self._permission_mode]
         cmd.append(envelope.prompt or "")
 
         env = self._spawn_env(envelope, preamble, session_id)
@@ -90,7 +101,10 @@ class ClaudeCodeAdapter:
         return result.stdout
 
     def resume_with_message(self, environment_id: str, session_id: str, message: str) -> int:
-        cmd = [self._binary, "-p", "--resume", session_id, message]
+        cmd = [self._binary, "-p", "--resume", session_id]
+        if self._permission_mode:
+            cmd += ["--permission-mode", self._permission_mode]
+        cmd.append(message)
         proc = subprocess.Popen(cmd, cwd=environment_id, env=os.environ.copy())
         return proc.pid
 

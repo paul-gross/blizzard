@@ -46,7 +46,11 @@ def build_loop_context(config: RunnerConfig, hub: IHubClient) -> LoopContext:
     provider = WinterWorkspaceProvider(
         config.workspace_root, env_pool=config.workspace_envs, base_branch=config.base_branch
     )
-    harness = ClaudeCodeAdapter(binary=config.harness_binary, settings_path=config.worker_settings_path)
+    harness = ClaudeCodeAdapter(
+        binary=config.harness_binary,
+        settings_path=config.worker_settings_path,
+        permission_mode=config.harness_permission_mode,
+    )
     loop_config = LoopConfig(
         runner_id=config.runner_id,
         workspace_id=config.workspace_id,
