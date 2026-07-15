@@ -275,6 +275,17 @@
             ],
             "title": "Current Node Id"
           },
+          "current_node_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Node Name"
+          },
           "decision": {
             "anyOf": [
               {
@@ -329,7 +340,7 @@
           "pm_pointers": {
             "default": [],
             "items": {
-              "$ref": "#/components/schemas/PmPointerModel"
+              "$ref": "#/components/schemas/PmPointerView"
             },
             "title": "Pm Pointers",
             "type": "array"
@@ -459,7 +470,7 @@
         "type": "string"
       },
       "ChunkSummary": {
-        "description": "One row of the fleet chunk list \u2014 derived status + current node (D-004).",
+        "description": "One row of the fleet chunk list \u2014 derived status + current node (D-004).\n\n``current_node_name`` is the node's human graph name (``build``, ``review``) the\nboard renders in place of the raw ``nd_`` ULID; null when the chunk has no\ncurrent node or its pinned graph cannot resolve the id.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -476,6 +487,17 @@
             ],
             "title": "Current Node Id"
           },
+          "current_node_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Node Name"
+          },
           "graph_id": {
             "title": "Graph Id",
             "type": "string"
@@ -483,7 +505,7 @@
           "pm_pointers": {
             "default": [],
             "items": {
-              "$ref": "#/components/schemas/PmPointerModel"
+              "$ref": "#/components/schemas/PmPointerView"
             },
             "title": "Pm Pointers",
             "type": "array"
@@ -1230,6 +1252,36 @@
           "url"
         ],
         "title": "PmPointerModel",
+        "type": "object"
+      },
+      "PmPointerView": {
+        "description": "A pointer as the views render it (D-075) \u2014 the raw pair plus its legible label.\n\n``label`` is the board-legible ``{provider-code}:{repo}#{number}`` (e.g.\n``gh:blizzard#8``), null when the URL is not issue-shaped \u2014 the board then leans\non the chunk's stable short id instead.",
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "url"
+        ],
+        "title": "PmPointerView",
         "type": "object"
       },
       "PrView": {

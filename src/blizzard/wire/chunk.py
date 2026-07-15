@@ -23,6 +23,18 @@ class PmPointerModel(BaseModel):
     url: str
 
 
+class PmPointerView(BaseModel):
+    """A pointer as the views render it (D-075) — the raw pair plus its legible label.
+
+    ``label`` is the board-legible ``{provider-code}:{repo}#{number}`` (e.g.
+    ``gh:blizzard#8``), null when the URL is not issue-shaped — the board then leans
+    on the chunk's stable short id instead."""
+
+    provider: str
+    url: str
+    label: str | None = None
+
+
 class ChunkIngestRequest(BaseModel):
     """Ingest by pointer — specific items always, batch fine (D-047)."""
 
@@ -45,13 +57,18 @@ class ChunkIngestConflict(BaseModel):
 
 
 class ChunkSummary(BaseModel):
-    """One row of the fleet chunk list — derived status + current node (D-004)."""
+    """One row of the fleet chunk list — derived status + current node (D-004).
+
+    ``current_node_name`` is the node's human graph name (``build``, ``review``) the
+    board renders in place of the raw ``nd_`` ULID; null when the chunk has no
+    current node or its pinned graph cannot resolve the id."""
 
     chunk_id: str
     graph_id: str
     status: ChunkStatus
     current_node_id: str | None
-    pm_pointers: list[PmPointerModel] = []
+    current_node_name: str | None = None
+    pm_pointers: list[PmPointerView] = []
 
 
 class RouteView(BaseModel):
@@ -140,8 +157,9 @@ class ChunkDetail(BaseModel):
     graph_id: str
     status: ChunkStatus
     current_node_id: str | None
+    current_node_name: str | None = None
     latest_epoch: int | None
-    pm_pointers: list[PmPointerModel] = []
+    pm_pointers: list[PmPointerView] = []
     route: RouteView | None = None
     escalation: EscalationView | None = None
     # The chunk's live gate decision — the open (waiting_on_human) or resolved-but-not-

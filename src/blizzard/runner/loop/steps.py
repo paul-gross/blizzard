@@ -97,9 +97,7 @@ _CP_REAP_AFTER = crashpoint("reap.after-expire", "REAP done; stale leases expire
 # SPAWN leaves between spawn and record_spawn — see ``_resume_in_place``. Armed at either
 # bracket, recovery re-runs RESUME idempotently and the chunk still lands exactly once.
 _CP_RESUME_BEFORE = crashpoint("resume.before-reattach", "entered RESUME with marked intents; none re-attached yet")
-_CP_RESUME_AFTER_KILL = crashpoint(
-    "resume.after-kill.before-reattach", "survivor killed; session not yet re-attached"
-)
+_CP_RESUME_AFTER_KILL = crashpoint("resume.after-kill.before-reattach", "survivor killed; session not yet re-attached")
 _CP_RESUME_AFTER = crashpoint("resume.after-reattach", "session re-attached under the same lease; intent cleared")
 
 # PULL — the single outbound flusher (store-and-forward drain).

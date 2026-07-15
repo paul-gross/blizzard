@@ -31,12 +31,22 @@ const STATUS_COLUMN: Record<ChunkStatus, string> = {
   done: 'done',
 };
 
+/** One linked PM-pointer chip — the server-derived `{code}:{repo}#{number}` label (D-075). */
+export interface PointerChip {
+  readonly label: string;
+  readonly url: string;
+}
+
 /** One rendered board card — the derived-status view of a chunk. */
 export interface BoardCard {
   readonly chunkId: string;
   readonly shortId: string;
   readonly status: ChunkStatus;
+  /** The node's human graph name (`build`, `review`); falls back to the raw id. */
   readonly node: string;
+  /** The raw `nd_` ULID, kept reachable as the node label's tooltip. */
+  readonly nodeId: string;
+  readonly pointers: readonly PointerChip[];
 }
 
 /**
@@ -77,20 +87,37 @@ export interface BoardCard {
               </div>
               <div class="b-col-body">
                 @for (card of cardsFor(col.key); track card.chunkId) {
-                  <button
-                    type="button"
-                    class="card"
-                    data-testid="chunk-card"
-                    [attr.data-status]="card.status"
-                    [attr.aria-label]="'Open chunk ' + card.shortId"
-                    (click)="selectChunk.emit(card.chunkId)"
-                  >
-                    <div class="card-id" data-testid="chunk-id">{{ card.shortId }}</div>
-                    <div class="card-meta">
-                      <span class="st" data-testid="chunk-status">{{ card.status }}</span>
-                      <span class="nd" data-testid="chunk-node">{{ card.node }}</span>
-                    </div>
-                  </button>
+                  <div class="card" data-testid="chunk-card" [attr.data-status]="card.status">
+                    @if (card.pointers.length > 0) {
+                      <div class="chips">
+                        @for (p of card.pointers; track p.url) {
+                          <a
+                            class="chip"
+                            data-testid="pm-chip"
+                            [href]="p.url"
+                            target="_blank"
+                            rel="noreferrer"
+                            [attr.title]="p.url"
+                            >{{ p.label }}</a
+                          >
+                        }
+                      </div>
+                    }
+                    <button
+                      type="button"
+                      class="card-open"
+                      [attr.aria-label]="'Open chunk ' + card.shortId"
+                      (click)="selectChunk.emit(card.chunkId)"
+                    >
+                      <div class="card-id" data-testid="chunk-id">{{ card.shortId }}</div>
+                      <div class="card-meta">
+                        <span class="st" data-testid="chunk-status">{{ card.status }}</span>
+                        <span class="nd" data-testid="chunk-node" [attr.title]="card.nodeId || null">{{
+                          card.node
+                        }}</span>
+                      </div>
+                    </button>
+                  </div>
                 }
               </div>
             </div>
@@ -227,15 +254,42 @@ export interface BoardCard {
       flex-direction: column;
       gap: 3px;
       width: 100%;
+    }
+    .card:hover {
+      border-color: var(--cyan);
+    }
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 3px;
+    }
+    .chip {
+      border: 1px solid var(--line);
+      padding: 0 4px;
+      color: var(--amber-hi);
+      font-size: 9px;
+      letter-spacing: 0.08em;
+      text-decoration: none;
+    }
+    .chip:hover,
+    .chip:focus-visible {
+      border-color: var(--amber);
+      outline: none;
+    }
+    .card-open {
+      border: 0;
+      background: transparent;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      width: 100%;
       text-align: left;
       font: inherit;
       color: inherit;
       cursor: pointer;
     }
-    .card:hover {
-      border-color: var(--cyan);
-    }
-    .card:focus-visible {
+    .card-open:focus-visible {
       outline: 1px solid var(--cyan);
       outline-offset: 1px;
     }
@@ -293,7 +347,11 @@ export class BoardShell {
         chunkId: chunk.chunk_id,
         shortId: chunk.chunk_id.slice(0, 12),
         status: chunk.status,
-        node: chunk.current_node_id ?? '—',
+        node: chunk.current_node_name ?? chunk.current_node_id ?? '—',
+        nodeId: chunk.current_node_id ?? '',
+        // Only labeled pointers render as chips — an unparseable pointer URL has a
+        // null label and the card leans on the short id instead (issue-shape degrade).
+        pointers: (chunk.pm_pointers ?? []).flatMap((p) => (p.label ? [{ label: p.label, url: p.url }] : [])),
       });
     }
     return grouped;

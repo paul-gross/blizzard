@@ -22,6 +22,7 @@ from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.artifacts import ArtifactRow, GitCommitArtifact, from_row, store_key
 from blizzard.hub.domain.decisions import NotEscalated
 from blizzard.hub.domain.envelope import build_node_envelope
+from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.ingest import IngestConflict
 from blizzard.hub.domain.work import (
     Chunk,
@@ -34,6 +35,7 @@ from blizzard.hub.domain.work import (
     open_escalation,
     transition_history,
 )
+from blizzard.hub.pm.label import pointer_label
 from blizzard.hub.pm.source import PmSourceError
 from blizzard.wire.chunk import (
     ArtifactView,
@@ -45,7 +47,7 @@ from blizzard.wire.chunk import (
     ChunkSummary,
     EscalationView,
     PmItemView,
-    PmPointerModel,
+    PmPointerView,
     PrView,
     RouteView,
     TransitionView,
@@ -58,8 +60,9 @@ from blizzard.wire.facts import EscalationReport, LeaseMintReport
 router = APIRouter(prefix="/api", tags=["chunks"])
 
 
-def _pointer_models(chunk: Chunk) -> list[PmPointerModel]:
-    return [PmPointerModel(provider=p.provider, url=p.url) for p in chunk.pm_pointers]
+def _pointer_views(chunk: Chunk) -> list[PmPointerView]:
+    """Each pointer with its board-legible label (D-075) — null when not issue-shaped."""
+    return [PmPointerView(provider=p.provider, url=p.url, label=pointer_label(p)) for p in chunk.pm_pointers]
 
 
 def _publish_open_decision(services: HubServices, chunk_id: str) -> None:
@@ -112,17 +115,22 @@ def _artifact_views(rows: list[ArtifactRow]) -> list[ArtifactView]:
     return views
 
 
-def _current_node(services: HubServices, chunk: Chunk, facts: ChunkFacts, cache: dict[str, str | None]) -> str | None:
-    """The chunk's current node id — the newest transition's target, or the pinned
-    graph's entry node before the first transition (a nicer board value than ``None``);
-    the entry node per graph is memoised in ``cache`` so a fleet list resolves once."""
-    resolved = current_node_id(facts)
-    if resolved is not None:
-        return resolved
+def _current_node(
+    services: HubServices, chunk: Chunk, facts: ChunkFacts, cache: dict[str, Graph | None]
+) -> tuple[str | None, str | None]:
+    """The chunk's current node as ``(id, name)`` — the newest transition's target, or
+    the pinned graph's entry node before the first transition (a nicer board value than
+    ``None``). The name is the node's human graph name, resolved here so the board is
+    legible without reassembly (D-075); the graph per graph_id is memoised in ``cache``
+    so a fleet list resolves each once."""
     if chunk.graph_id not in cache:
-        graph = services.graphs.get(chunk.graph_id)
-        cache[chunk.graph_id] = graph.entry_node_id if graph is not None else None
-    return cache[chunk.graph_id]
+        cache[chunk.graph_id] = services.graphs.get(chunk.graph_id)
+    graph = cache[chunk.graph_id]
+    node_id = current_node_id(facts) or (graph.entry_node_id if graph is not None else None)
+    if node_id is None:
+        return None, None
+    node = graph.node_by_id(node_id) if graph is not None else None
+    return node_id, node.name if node is not None else None
 
 
 @router.post("/chunks", response_model=ChunkIngestResponse, status_code=status.HTTP_201_CREATED)
@@ -148,16 +156,18 @@ def ingest_chunk(request: ChunkIngestRequest, services: Annotated[HubServices, D
 def list_chunks(services: Annotated[HubServices, Depends(get_services)]) -> list[ChunkSummary]:
     """The fleet chunk list — derived status per chunk (D-004)."""
     summaries: list[ChunkSummary] = []
-    entry_cache: dict[str, str | None] = {}
+    graph_cache: dict[str, Graph | None] = {}
     for chunk in services.chunks.list_all():
         facts = services.chunks.load_facts(chunk.chunk_id) or ChunkFacts(minted=True)
+        node_id, node_name = _current_node(services, chunk, facts, graph_cache)
         summaries.append(
             ChunkSummary(
                 chunk_id=chunk.chunk_id,
                 graph_id=chunk.graph_id,
                 status=derive_chunk_status(facts),
-                current_node_id=_current_node(services, chunk, facts, entry_cache),
-                pm_pointers=_pointer_models(chunk),
+                current_node_id=node_id,
+                current_node_name=node_name,
+                pm_pointers=_pointer_views(chunk),
             )
         )
     return summaries
@@ -173,13 +183,15 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
     route = services.chunks.route_of(chunk_id)
     escalation = open_escalation(facts)
     decision = services.chunks.decision_for_chunk(chunk_id)
+    node_id, node_name = _current_node(services, chunk, facts, {})
     return ChunkDetail(
         chunk_id=chunk.chunk_id,
         graph_id=chunk.graph_id,
         status=derive_chunk_status(facts),
-        current_node_id=_current_node(services, chunk, facts, {}),
+        current_node_id=node_id,
+        current_node_name=node_name,
         latest_epoch=latest_epoch(facts),
-        pm_pointers=_pointer_models(chunk),
+        pm_pointers=_pointer_views(chunk),
         route=RouteView(
             runner_id=route.runner_id,
             workspace_id=route.workspace_id,
