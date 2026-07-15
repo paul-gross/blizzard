@@ -42,6 +42,21 @@ class WorkspaceAcquisitionError(RuntimeError):
     """
 
 
+class EnvironmentPreparationError(WorkspaceAcquisitionError):
+    """A reset-on-acquire step failed while preparing an environment (D-021).
+
+    Distinct from a plain refusal (pool exhausted — routine, the chunk just waits):
+    a preparation failure means the provider aborted mid-reset rather than hand a
+    half-reset environment to a worker, and it names the failing ``step`` and
+    ``environment_id`` so FILL can surface an attributable error.
+    """
+
+    def __init__(self, message: str, *, environment_id: str, step: str) -> None:
+        super().__init__(message)
+        self.environment_id = environment_id
+        self.step = step
+
+
 class IWorkspaceProvider(Protocol):
     """The environment-allocation seam (D-062)."""
 

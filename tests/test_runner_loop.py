@@ -194,6 +194,24 @@ def test_fill_env_bound_skips(tmp_path):  # type: ignore[no-untyped-def]
 
 
 @pytest.mark.unit
+def test_fill_preparation_failure_skips_without_claiming(tmp_path):  # type: ignore[no-untyped-def]
+    """A reset-on-acquire step failure (D-021) aborts the fill — no bind, no claim, no spawn."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    provider = FakeProvider({"e1": "/ws/e1"}, prepare_fail=True)
+    ctx = make_context(
+        store, hub=hub, provider=provider, harness=FakeHarness(handle=_HANDLE, verdict="pass"), probe=FakeProbe()
+    )
+
+    fill(ctx)
+
+    assert hub.claims == []
+    assert store.list_active_leases() == []
+    assert store.held_environment_ids() == []
+
+
+@pytest.mark.unit
 def test_fill_respects_max_agents(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _seed_running_lease(store)  # one active lease already occupies the single slot

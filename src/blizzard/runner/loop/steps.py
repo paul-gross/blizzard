@@ -28,7 +28,11 @@ from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.ids import LEASE_PREFIX, mint
 from blizzard.foundation.logging import get_logger
 from blizzard.hub.domain.work import ChunkStatus
-from blizzard.runner.environments.provider import AcquiredEnvironment, WorkspaceAcquisitionError
+from blizzard.runner.environments.provider import (
+    AcquiredEnvironment,
+    EnvironmentPreparationError,
+    WorkspaceAcquisitionError,
+)
 from blizzard.runner.harness.adapter import WorkerPreamble
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import HubClientError
@@ -616,6 +620,18 @@ def _fill_one(ctx: LoopContext) -> bool:
     _CP_FILL_BEFORE_ACQUIRE.reached()
     try:
         acquired = ctx.provider.acquire(entry.chunk_id, _SOLO_ENV_COUNT, held)
+    except EnvironmentPreparationError as exc:
+        # Not capacity — a reset-on-acquire step failed (D-021). Surface it as an
+        # attributable FILL error; the provider aborted rather than hand over a
+        # half-reset env, so the chunk simply waits for a fixed workspace.
+        _log.error(
+            "environment preparation failed at FILL",
+            chunk_id=entry.chunk_id,
+            environment_id=exc.environment_id,
+            step=exc.step,
+            detail=str(exc),
+        )
+        return False
     except WorkspaceAcquisitionError:
         _log.info("acquire refused — env-bound this tick", chunk_id=entry.chunk_id)
         return False  # env capacity exhausted; the chunk waits
