@@ -31,12 +31,18 @@ from blizzard.runner.config import RunnerConfig
 
 _HUB_URL = "http://hub.local:8421"
 _CHUNK = "ch_pass"
-_ITEM = {
-    "provider": "github",
-    "url": "http://forge.local/repos/acme/widget/issues/42",
-    "fetched_at": "2026-07-14T00:00:00+00:00",
-    "body": "please fix the flake",
-    "comments": ["seen it too", "repro attached"],
+_ITEMS: dict[str, object] = {
+    "items": [
+        {
+            "provider": "github",
+            "url": "http://forge.local/repos/acme/widget/issues/42",
+            "label": "gh:widget#42",
+            "fetched_at": "2026-07-14T00:00:00+00:00",
+            "body": "please fix the flake",
+            "comments": ["seen it too", "repro attached"],
+            "error": None,
+        }
+    ]
 }
 
 
@@ -66,20 +72,20 @@ def _runner_app(tmp_path: Path) -> TestClient:
 
 @pytest.mark.component
 def test_proxy_forwards_the_read_to_the_hub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The route forwards to the hub's pm-item route and returns the item verbatim (D-084)."""
+    """The route forwards to the hub's pm-items route and returns the items verbatim (D-084)."""
     seen: list[str] = []
 
     def fake_get(url: str, *, timeout: float) -> _FakeHubResponse:
         seen.append(url)
-        return _FakeHubResponse(200, _ITEM)
+        return _FakeHubResponse(200, _ITEMS)
 
     monkeypatch.setattr(pm_items_route.httpx, "get", fake_get)
     resp = _runner_app(tmp_path).get(f"/api/chunks/{_CHUNK}/pm-items")
 
     assert resp.status_code == 200, resp.text
-    assert resp.json() == _ITEM
+    assert resp.json() == _ITEMS
     # It forwarded to the hub's own pass-through route — the worker never crosses a layer.
-    assert seen == [f"{_HUB_URL}/api/chunks/{_CHUNK}/pm-item"]
+    assert seen == [f"{_HUB_URL}/api/chunks/{_CHUNK}/pm-items"]
 
 
 @pytest.mark.component

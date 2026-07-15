@@ -46,7 +46,8 @@ from blizzard.wire.chunk import (
     ChunkIngestResponse,
     ChunkSummary,
     EscalationView,
-    PmItemView,
+    PmItemEntry,
+    PmItemsView,
     PmPointerView,
     PrView,
     RouteView,
@@ -367,25 +368,40 @@ def report_escalation(
     return {"chunk_id": chunk_id}
 
 
-@router.get("/chunks/{chunk_id}/pm-item", response_model=PmItemView)
-def get_pm_item(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> PmItemView:
-    """Pass-through PM item read — body + comments, contents never stored (D-047)."""
+@router.get("/chunks/{chunk_id}/pm-items", response_model=PmItemsView)
+def get_pm_items(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> PmItemsView:
+    """Pass-through PM items read (D-047/D-084) — one entry per pointer, contents never stored.
+
+    Each pointer is fetched fresh from the forge; a per-pointer forge failure degrades to an
+    ``error`` on that entry rather than failing the whole read, so a grouped chunk (D-047) still
+    surfaces the pointers it reached beside a notice for the ones it did not. A chunk with no
+    pointers is an empty list — the board's empty state — not a 404."""
     if services.pm_source is None:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="no PM work-source is configured")
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
-    if not chunk.pm_pointers:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="chunk has no PM pointer")
-    pointer = chunk.pm_pointers[0]
-    try:
-        item = services.pm_source.fetch(pointer)
-    except PmSourceError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-    return PmItemView(
-        provider=pointer.provider,
-        url=pointer.url,
-        fetched_at=services.clock.now().isoformat(),
-        body=item.body,
-        comments=item.comments,
-    )
+    fetched_at = services.clock.now().isoformat()
+    entries: list[PmItemEntry] = []
+    for pointer in chunk.pm_pointers:
+        label = pointer_label(pointer)
+        try:
+            item = services.pm_source.fetch(pointer)
+        except PmSourceError as exc:
+            entries.append(
+                PmItemEntry(
+                    provider=pointer.provider, url=pointer.url, label=label, fetched_at=fetched_at, error=str(exc)
+                )
+            )
+        else:
+            entries.append(
+                PmItemEntry(
+                    provider=pointer.provider,
+                    url=pointer.url,
+                    label=label,
+                    fetched_at=fetched_at,
+                    body=item.body,
+                    comments=item.comments,
+                )
+            )
+    return PmItemsView(items=entries)

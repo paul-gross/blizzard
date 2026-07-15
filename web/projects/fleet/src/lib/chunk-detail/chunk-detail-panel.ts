@@ -1,6 +1,25 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 
-import type { ArtifactView, ChunkDetail, DecisionView, EscalationView, QuestionView, TransitionView } from '../api/hub';
+import type {
+  ArtifactView,
+  ChunkDetail,
+  DecisionView,
+  EscalationView,
+  PmItemEntry,
+  QuestionView,
+  TransitionView,
+} from '../api/hub';
+
+/** The chunk's related PM items and the state of the pass-through fetch, for the Issue tab.
+ *
+ * `loading` while the forge read is in flight, `error` when the whole read failed (an
+ * unreachable hub or no work-source configured — the tab shows a visible notice, AC5), and
+ * `success` with `items` (possibly empty for a chunk with no pointers — the empty state, AC4;
+ * a per-item `error` carries a single pointer's forge failure the tab notices in place). */
+export interface PmItemsState {
+  readonly status: 'loading' | 'error' | 'success';
+  readonly items: readonly PmItemEntry[];
+}
 
 /** Emitted when the operator answers a chunk's open question from the drawer. */
 export interface AnswerQuestionEvent {
@@ -55,6 +74,74 @@ export interface ResolveDecisionEvent {
         </button>
       </header>
 
+      <nav class="tabs" role="tablist" aria-label="Chunk detail sections">
+        @for (t of tabs; track t.key) {
+          <button
+            type="button"
+            class="tab"
+            role="tab"
+            [class.active]="activeTab() === t.key"
+            [attr.aria-selected]="activeTab() === t.key"
+            [attr.data-testid]="'tab-' + t.key"
+            (click)="activeTab.set(t.key)"
+          >
+            {{ t.label }}@if (t.key === 'issue') {<span class="tab-count" data-testid="issue-count">{{ pointerCount() }}</span>}
+          </button>
+        }
+      </nav>
+
+      @if (activeTab() === 'issue') {
+        <section class="d-section" aria-label="Issue" data-testid="issue-pane">
+          @switch (pmItems().status) {
+            @case ('loading') {
+              <p class="none" data-testid="issue-loading">Loading issue…</p>
+            }
+            @case ('error') {
+              <p class="notice" data-testid="issue-error">
+                Could not reach the forge — issue content is unavailable.
+              </p>
+            }
+            @default {
+              @if (pmItems().items.length === 0) {
+                <p class="none" data-testid="issue-empty">This chunk has no linked issue.</p>
+              } @else {
+                @for (item of pmItems().items; track item.url) {
+                  <article class="issue" data-testid="issue-item">
+                    <div class="i-head">
+                      <a
+                        class="i-label"
+                        data-testid="issue-label"
+                        [href]="item.url"
+                        target="_blank"
+                        rel="noreferrer"
+                      >{{ item.label ?? item.url }}</a>
+                    </div>
+                    @if (item.error) {
+                      <p class="notice" data-testid="issue-item-error">
+                        Could not load this issue — {{ item.error }}
+                      </p>
+                    } @else {
+                      <pre class="i-body" data-testid="issue-body">{{ item.body }}</pre>
+                      <div class="i-messages">
+                        <div class="s-head"><span class="lbl">Messages · {{ (item.comments ?? []).length }}</span></div>
+                        @if ((item.comments ?? []).length === 0) {
+                          <p class="none" data-testid="issue-no-messages">No messages.</p>
+                        } @else {
+                          <ul class="messages" data-testid="issue-messages">
+                            @for (c of item.comments ?? []; track $index) {
+                              <li class="message" data-testid="issue-message"><pre class="m-body">{{ c }}</pre></li>
+                            }
+                          </ul>
+                        }
+                      </div>
+                    }
+                  </article>
+                }
+              }
+            }
+          }
+        </section>
+      } @else {
       @if (openQuestions().length > 0 || openDecision()) {
         <section class="d-section awaiting" aria-label="Awaiting human" data-testid="awaiting-human">
           <div class="s-head"><span class="lbl">Awaiting human</span></div>
@@ -198,6 +285,7 @@ export interface ResolveDecisionEvent {
           </ul>
         }
       </section>
+      }
     </aside>
   `,
   styles: `
@@ -484,11 +572,114 @@ export interface ResolveDecisionEvent {
     .a-sep {
       color: var(--label-dim);
     }
+    .tabs {
+      display: flex;
+      gap: 0;
+      border-bottom: 1px solid var(--line);
+      background: rgba(0, 0, 0, 0.2);
+    }
+    .tab {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-family: inherit;
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--label-dim);
+      cursor: pointer;
+      font-size: 9px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      padding: 6px 10px;
+    }
+    .tab:hover {
+      color: var(--text);
+    }
+    .tab.active {
+      color: var(--cyan);
+      border-bottom-color: var(--cyan);
+    }
+    .tab:focus-visible {
+      outline: 1px solid var(--cyan);
+      outline-offset: -1px;
+    }
+    .tab-count {
+      color: var(--label-dim);
+      font-size: 9px;
+      letter-spacing: 0;
+    }
+    .tab.active .tab-count {
+      color: var(--cyan);
+    }
+    .notice {
+      margin: 0;
+      padding: 4px 6px;
+      border: 1px solid var(--danger, #e06c75);
+      border-left-width: 2px;
+      background: rgba(0, 0, 0, 0.2);
+      color: var(--danger, #e06c75);
+      font-size: 10px;
+    }
+    .issue {
+      border: 1px solid var(--line);
+      background: rgba(0, 0, 0, 0.2);
+      padding: 5px 6px;
+    }
+    .issue + .issue {
+      margin-top: 6px;
+    }
+    .i-head {
+      margin-bottom: 4px;
+    }
+    .i-label {
+      color: var(--cyan);
+      font-size: 11px;
+      text-decoration: none;
+      overflow-wrap: anywhere;
+    }
+    .i-label:hover {
+      text-decoration: underline;
+    }
+    .i-body {
+      margin: 0;
+      padding: 4px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: rgba(0, 0, 0, 0.3);
+      color: var(--text);
+      font-size: 11px;
+    }
+    .i-messages {
+      margin-top: 6px;
+    }
+    .messages {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .m-body {
+      margin: 0;
+      padding: 4px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      border: 1px solid var(--line);
+      background: rgba(0, 0, 0, 0.25);
+      color: var(--text);
+      font-size: 11px;
+    }
   `,
 })
 export class ChunkDetailPanel {
   /** The chunk aggregate to render (status, current node, history, artifacts). */
   readonly detail = input.required<ChunkDetail>();
+
+  /** The chunk's related PM items + fetch state, rendered by the Issue tab (issue #24).
+   * Defaults to `loading` so the panel constructs without the container wiring it. */
+  readonly pmItems = input<PmItemsState>({ status: 'loading', items: [] });
 
   /** Emitted when the operator dismisses the drawer. */
   readonly dismiss = output<void>();
@@ -498,6 +689,18 @@ export class ChunkDetailPanel {
 
   /** Emitted when the operator resolves an open gate decision (D-042). */
   readonly resolveDecision = output<ResolveDecisionEvent>();
+
+  /** The dock's tabs — the existing chunk detail, and the related issue content (issue #24). */
+  protected readonly tabs = [
+    { key: 'detail', label: 'Detail' },
+    { key: 'issue', label: 'Issue' },
+  ] as const;
+
+  /** The open tab; the issue content is its own tab, never a replacement of chunk detail. */
+  protected readonly activeTab = signal<'detail' | 'issue'>('detail');
+
+  /** The chunk's PM pointer count — the Issue tab's badge, legible before the read lands. */
+  protected readonly pointerCount = computed<number>(() => this.detail().pm_pointers?.length ?? 0);
 
   /** Transient "Copied" state for the takeover-command copy button. */
   protected readonly copied = signal(false);

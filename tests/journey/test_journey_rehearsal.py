@@ -132,7 +132,7 @@ chunk_id = os.environ["BLIZZARD_CHUNK_ID"]
 _raw = subprocess.run(
     ["blizzard", "runner", "pm-items", chunk_id], check=True, capture_output=True, text=True
 ).stdout
-_item = json.loads(_raw)
+_item = json.loads(_raw)["items"][0]
 _body = _item["body"]
 
 

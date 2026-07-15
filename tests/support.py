@@ -32,7 +32,7 @@ from blizzard.hub.delivery.forge import (
 )
 from blizzard.hub.domain.work import PmPointer
 from blizzard.hub.events.broker import EventBroker
-from blizzard.hub.pm.source import IPmSource, PmItem
+from blizzard.hub.pm.source import IPmSource, PmItem, PmSourceError
 from blizzard.hub.runtime import migration_runner
 
 
@@ -86,15 +86,32 @@ def _conforms_fake_forge(x: FakeForge) -> IForgeDelivery:
 
 
 class FakePmSource:
-    """An in-process :class:`IPmSource` — canned body + comments per pointer URL."""
+    """An in-process :class:`IPmSource` — canned body + comments per pointer URL.
 
-    def __init__(self, *, body: str = "issue body", comments: list[str] | None = None) -> None:
+    A default ``body``/``comments`` answers every pointer; ``by_url`` overrides the item for
+    specific pointer URLs (a grouped chunk reads distinct items), and ``fail_urls`` raises
+    :class:`PmSourceError` for a URL to exercise the per-pointer forge-failure degradation."""
+
+    def __init__(
+        self,
+        *,
+        body: str = "issue body",
+        comments: list[str] | None = None,
+        by_url: dict[str, PmItem] | None = None,
+        fail_urls: set[str] | None = None,
+    ) -> None:
         self.body = body
         self.comments = comments or []
+        self.by_url = by_url or {}
+        self.fail_urls = fail_urls or set()
         self.fetched: list[str] = []
 
     def fetch(self, pointer: PmPointer) -> PmItem:
         self.fetched.append(pointer.url)
+        if pointer.url in self.fail_urls:
+            raise PmSourceError(f"forge unreachable for {pointer.url}")
+        if pointer.url in self.by_url:
+            return self.by_url[pointer.url]
         return PmItem(body=self.body, comments=list(self.comments))
 
 

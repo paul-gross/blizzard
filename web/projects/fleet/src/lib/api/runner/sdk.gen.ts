@@ -21,7 +21,7 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
 /**
  * Get Pm Items
  *
- * Forward a chunk's PM-item read to the hub — the layered pass-through (D-084).
+ * Forward a chunk's PM-items read to the hub — the layered pass-through (D-084).
  */
 export const getPmItemsApiChunksChunkIdPmItemsGet = <ThrowOnError extends boolean = false>(options: Options<GetPmItemsApiChunksChunkIdPmItemsGetData, ThrowOnError>): RequestResult<GetPmItemsApiChunksChunkIdPmItemsGetResponses, GetPmItemsApiChunksChunkIdPmItemsGetErrors, ThrowOnError> => (options.client ?? client).get<GetPmItemsApiChunksChunkIdPmItemsGetResponses, GetPmItemsApiChunksChunkIdPmItemsGetErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/pm-items', ...options });
 

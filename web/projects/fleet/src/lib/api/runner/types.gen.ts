@@ -79,23 +79,36 @@ export type HeartbeatResponse = {
 };
 
 /**
- * PmItemView
+ * PmItemEntry
  *
- * A pass-through PM item read (D-047) — body + comments, vendor-native.
+ * One pointer's pass-through PM item (D-047/D-074) — body + comment thread, vendor-native.
+ *
+ * ``label`` is the board-legible pointer label (D-075) — ``gh:blizzard#8`` — null when the
+ * URL is not issue-shaped. A per-pointer forge failure degrades here rather than failing the
+ * whole read (D-084): ``error`` carries the reason and ``body`` is null, so one unreachable
+ * pointer never blinds the reader to the pointers it did reach.
  */
-export type PmItemView = {
+export type PmItemEntry = {
     /**
      * Body
      */
-    body: string;
+    body?: string | null;
     /**
      * Comments
      */
     comments?: Array<string>;
     /**
+     * Error
+     */
+    error?: string | null;
+    /**
      * Fetched At
      */
     fetched_at: string;
+    /**
+     * Label
+     */
+    label?: string | null;
     /**
      * Provider
      */
@@ -104,6 +117,21 @@ export type PmItemView = {
      * Url
      */
     url: string;
+};
+
+/**
+ * PmItemsView
+ *
+ * A chunk's pass-through PM items (D-074/D-084) — one entry per pointer, order preserved.
+ *
+ * Empty when the chunk holds no pointers — the board's empty state; a grouped chunk carrying
+ * many pointers (D-047) yields one entry per pointer, each fetched fresh and never stored.
+ */
+export type PmItemsView = {
+    /**
+     * Items
+     */
+    items?: Array<PmItemEntry>;
 };
 
 /**
@@ -211,7 +239,7 @@ export type GetPmItemsApiChunksChunkIdPmItemsGetResponses = {
     /**
      * Successful Response
      */
-    200: PmItemView;
+    200: PmItemsView;
 };
 
 export type GetPmItemsApiChunksChunkIdPmItemsGetResponse = GetPmItemsApiChunksChunkIdPmItemsGetResponses[keyof GetPmItemsApiChunksChunkIdPmItemsGetResponses];

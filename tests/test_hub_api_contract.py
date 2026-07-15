@@ -26,7 +26,7 @@ _NEW_PATHS = [
     "/api/chunks/{chunk_id}",
     "/api/chunks/{chunk_id}/envelope",
     "/api/chunks/{chunk_id}/completions",
-    "/api/chunks/{chunk_id}/pm-item",
+    "/api/chunks/{chunk_id}/pm-items",
     "/api/queue/peek",
     "/api/queue/reorder",
     "/api/chunks/{chunk_id}/group",

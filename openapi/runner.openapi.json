@@ -93,12 +93,19 @@
         "title": "HeartbeatResponse",
         "type": "object"
       },
-      "PmItemView": {
-        "description": "A pass-through PM item read (D-047) \u2014 body + comments, vendor-native.",
+      "PmItemEntry": {
+        "description": "One pointer's pass-through PM item (D-047/D-074) \u2014 body + comment thread, vendor-native.\n\n``label`` is the board-legible pointer label (D-075) \u2014 ``gh:blizzard#8`` \u2014 null when the\nURL is not issue-shaped. A per-pointer forge failure degrades here rather than failing the\nwhole read (D-084): ``error`` carries the reason and ``body`` is null, so one unreachable\npointer never blinds the reader to the pointers it did reach.",
         "properties": {
           "body": {
-            "title": "Body",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
           },
           "comments": {
             "default": [],
@@ -108,9 +115,31 @@
             "title": "Comments",
             "type": "array"
           },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
           "fetched_at": {
             "title": "Fetched At",
             "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
           },
           "provider": {
             "title": "Provider",
@@ -124,10 +153,24 @@
         "required": [
           "provider",
           "url",
-          "fetched_at",
-          "body"
+          "fetched_at"
         ],
-        "title": "PmItemView",
+        "title": "PmItemEntry",
+        "type": "object"
+      },
+      "PmItemsView": {
+        "description": "A chunk's pass-through PM items (D-074/D-084) \u2014 one entry per pointer, order preserved.\n\nEmpty when the chunk holds no pointers \u2014 the board's empty state; a grouped chunk carrying\nmany pointers (D-047) yields one entry per pointer, each fetched fresh and never stored.",
+        "properties": {
+          "items": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PmItemEntry"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "title": "PmItemsView",
         "type": "object"
       },
       "ReadinessResponse": {
@@ -256,7 +299,7 @@
   "paths": {
     "/api/chunks/{chunk_id}/pm-items": {
       "get": {
-        "description": "Forward a chunk's PM-item read to the hub \u2014 the layered pass-through (D-084).",
+        "description": "Forward a chunk's PM-items read to the hub \u2014 the layered pass-through (D-084).",
         "operationId": "get_pm_items_api_chunks__chunk_id__pm_items_get",
         "parameters": [
           {
@@ -274,7 +317,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PmItemView"
+                  "$ref": "#/components/schemas/PmItemsView"
                 }
               }
             },
