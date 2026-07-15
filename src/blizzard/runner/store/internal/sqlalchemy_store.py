@@ -41,6 +41,7 @@ from blizzard.runner.store.schema import (
     park_resumes,
     resume_clears,
     resume_intents,
+    workspace_prompt,
 )
 
 _log = get_logger("blizzard.runner.store")
@@ -224,6 +225,10 @@ class SqlAlchemyRunnerStore:
         rows = self._all(select(hub_control.c.paused).where(hub_control.c.runner_id == runner_id))
         return bool(rows[0].paused) if rows else False
 
+    def workspace_prompt_override(self, workspace_id: str) -> str | None:
+        rows = self._all(select(workspace_prompt.c.prompt).where(workspace_prompt.c.workspace_id == workspace_id))
+        return str(rows[0].prompt) if rows else None
+
     def resume_intent_lease_ids(self) -> set[str]:
         stmt = select(resume_intents.c.lease_id).where(_intent_is_open()).distinct()
         return {str(r.lease_id) for r in self._all(stmt)}
@@ -367,6 +372,21 @@ class SqlAlchemyRunnerStore:
                     .where(hub_control.c.runner_id == runner_id)
                     .values(paused=paused, updated_at=at)
                 )
+
+    def set_workspace_prompt(self, workspace_id: str, *, prompt: str, at: datetime) -> None:
+        with self._begin() as conn:
+            existing = conn.execute(
+                select(workspace_prompt.c.workspace_id).where(workspace_prompt.c.workspace_id == workspace_id)
+            ).one_or_none()
+            if existing is None:
+                conn.execute(workspace_prompt.insert().values(workspace_id=workspace_id, prompt=prompt, updated_at=at))
+            else:
+                conn.execute(
+                    workspace_prompt.update()
+                    .where(workspace_prompt.c.workspace_id == workspace_id)
+                    .values(prompt=prompt, updated_at=at)
+                )
+        _log.info("workspace prompt override set", workspace_id=workspace_id, length=len(prompt))
 
     def record_resume_intent(self, *, lease_id: str, marked_at: datetime) -> None:
         with self._begin() as conn:

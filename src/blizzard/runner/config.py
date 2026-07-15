@@ -9,6 +9,7 @@ band's ``BZ_RUNNER_PORT`` (band +3).
 
 from __future__ import annotations
 
+import json
 import os
 import tomllib
 from dataclasses import dataclass
@@ -35,6 +36,7 @@ ENV_HARNESS_BINARY = "BZ_HARNESS_BINARY"
 ENV_HARNESS_PERMISSION_MODE = "BZ_HARNESS_PERMISSION_MODE"
 ENV_BASE_BRANCH = "BZ_BASE_BRANCH"
 ENV_GATES = "BZ_RUNNER_GATES"  # comma-separated node names this runner gates (D-032/D-073)
+ENV_WORKSPACE_PROMPT = "BZ_WORKSPACE_PROMPT"  # the runner-owned workspace prompt, inline (issue #17)
 
 # Reconciliation-loop defaults (design/runner/loop.md). The runner is machine-level
 # and single-workspace (D-019); these seam the loop to the hub, the workspace it
@@ -79,6 +81,15 @@ class RunnerConfig:
     #: Node NAMES this runner imposes a human gate on (D-032/D-041/D-073). Reloaded each
     #: tick — the loop rebuilds its context from this config on every pass.
     gates: tuple[str, ...] = ()
+    #: The runner-owned workspace prompt prepended to every worker spawn (issue #17): the
+    #: standing "you are a fleet worker in this winter workspace" framing above the node
+    #: envelope. Two source knobs, one effective value (:meth:`resolved_workspace_prompt`):
+    #: ``workspace_prompt`` is the inline text; ``workspace_prompt_file`` is a path (absolute,
+    #: or relative to :attr:`root`) whose contents win over the inline text when set. Empty
+    #: on a fresh scaffold — an absent prompt still spawns a valid worker (table-only). The
+    #: runtime override (local API, no restart) lives in the store, not here.
+    workspace_prompt: str = ""
+    workspace_prompt_file: str = ""
 
     @property
     def config_path(self) -> Path:
@@ -91,6 +102,24 @@ class RunnerConfig:
     @staticmethod
     def default_db_url(root: Path) -> str:
         return f"sqlite:///{(root / DATA_DIRNAME / 'runner.db').resolve()}"
+
+    def resolved_workspace_prompt(self) -> str:
+        """The effective static workspace prompt (issue #17), resolved from its two knobs.
+
+        ``workspace_prompt_file`` wins when set — read once at ``host`` startup, so the
+        prompt file is loaded (not re-read per spawn); a relative path resolves under
+        :attr:`root`. A configured-but-missing file is an operator error and raises here
+        (fail fast at startup), which is not the same as an *absent* prompt — both knobs
+        empty is a valid, table-only spawn and returns ``""``.
+        """
+        if self.workspace_prompt_file:
+            path = Path(self.workspace_prompt_file)
+            if not path.is_absolute():
+                path = self.root / path
+            if not path.exists():
+                raise ConfigError(f"workspace_prompt_file does not exist: {path}")
+            return path.read_text()
+        return self.workspace_prompt
 
     @classmethod
     def scaffold(cls, root: Path) -> RunnerConfig:
@@ -121,12 +150,21 @@ class RunnerConfig:
             # The worker hook file `init` writes alongside the config; the adapter
             # delivers it as `--settings` so a spawned worker heartbeats (D-069).
             worker_settings_path=str(root / WORKER_SETTINGS_FILENAME),
+            # The runner-owned workspace prompt (issue #17): empty on a fresh scaffold —
+            # an operator sets it inline (or points `workspace_prompt_file` at a file), or
+            # replaces it at runtime through the local API. Seeded from the environment so a
+            # service's `blizzard runner init` can inject a default without hand-editing.
+            workspace_prompt=os.environ.get(ENV_WORKSPACE_PROMPT, ""),
         )
 
     def to_toml(self) -> str:
         envs = ", ".join(f'"{e}"' for e in self.workspace_envs)
         gates = ", ".join(f'"{g}"' for g in self.gates)
         settings = f'"{self.worker_settings_path}"' if self.worker_settings_path else '""'
+        # `json.dumps` emits a valid TOML basic string: TOML shares JSON's escapes
+        # (\n, \t, \", \\, \uXXXX), so a multi-line inline prompt round-trips intact.
+        workspace_prompt = json.dumps(self.workspace_prompt)
+        workspace_prompt_file = json.dumps(self.workspace_prompt_file)
         return (
             "# blizzard-runner runtime configuration (blizzard runner init)\n"
             f'db_url = "{self.db_url}"\n'
@@ -145,6 +183,11 @@ class RunnerConfig:
             f'base_branch = "{self.base_branch}"\n'
             "\n# Human gates this runner imposes by node name (D-032/D-073); empty = none.\n"
             f"gates = [{gates}]\n"
+            "\n# The runner-owned workspace prompt prepended to every worker spawn (issue #17).\n"
+            "# `workspace_prompt` is inline text; `workspace_prompt_file` (a path) wins when set.\n"
+            "# Empty = table-only injection. Replace at runtime via PUT /api/workspace-prompt.\n"
+            f"workspace_prompt = {workspace_prompt}\n"
+            f"workspace_prompt_file = {workspace_prompt_file}\n"
         )
 
     @classmethod
@@ -175,6 +218,8 @@ class RunnerConfig:
             max_agents=int(raw.get("max_agents", DEFAULT_MAX_AGENTS)),
             base_branch=str(raw.get("base_branch", DEFAULT_BASE_BRANCH)),
             gates=tuple(str(g) for g in raw.get("gates", ())),
+            workspace_prompt=str(raw.get("workspace_prompt", "")),
+            workspace_prompt_file=str(raw.get("workspace_prompt_file", "")),
         )
 
 

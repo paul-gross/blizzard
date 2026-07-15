@@ -169,3 +169,53 @@ def test_judge_resume_output_parses_to_choice(tmp_path: Path) -> None:
 
     output = adapter.judge(str(workdir), "sess-123", "Assess the build. Reply <Choice>name</Choice>.")
     assert adapter.parse_verdict(output) == "pass"
+
+
+@pytest.mark.component
+def test_spawn_runs_at_workspace_root_and_prepends_prefix(tmp_path: Path) -> None:
+    # The worker's cwd is the winter workspace root, not the env subdir (issue #17), and the
+    # runner-composed preamble is prepended to the node envelope prompt.
+    binary = _fake_binary(tmp_path)
+    workspace_root = tmp_path / "workspace"
+    workspace_root.mkdir()
+    env_workdir = workspace_root / "r1"
+    env_workdir.mkdir()
+    adapter = ClaudeCodeAdapter(binary=binary)
+    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
+    preamble = WorkerPreamble(
+        environments=[AcquiredEnvironment(environment_id="r1", workdir=str(env_workdir))],
+        lease_id="lease_1",
+        local_api_url="http://127.0.0.1:8431",
+        workspace_root=str(workspace_root),
+        prompt_prefix="PREAMBLE-TABLE",
+    )
+
+    handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
+    os.waitpid(handle.pid, 0)
+
+    # Ran at the workspace root — the marker file the fake writes lands there, not the env dir.
+    assert (workspace_root / "spawned-here.txt").exists()
+    assert not (env_workdir / "spawned-here.txt").exists()
+    # The composed prompt is the prefix followed by the envelope prompt.
+    assert (workspace_root / "spawned-here.txt").read_text() == f"PREAMBLE-TABLE\n\n{envelope.prompt}"
+
+
+@pytest.mark.component
+def test_spawn_falls_back_to_env_workdir_without_a_workspace_root(tmp_path: Path) -> None:
+    # An empty workspace_root keeps the legacy cwd (the first env's workdir).
+    binary = _fake_binary(tmp_path)
+    env_workdir = tmp_path / "r1"
+    env_workdir.mkdir()
+    adapter = ClaudeCodeAdapter(binary=binary)
+    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
+    preamble = WorkerPreamble(
+        environments=[AcquiredEnvironment(environment_id="r1", workdir=str(env_workdir))],
+        lease_id="lease_1",
+        local_api_url="http://127.0.0.1:8431",
+    )
+
+    handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
+    os.waitpid(handle.pid, 0)
+
+    # No prefix and no workspace root: cwd is the env workdir, prompt is the envelope prompt alone.
+    assert (env_workdir / "spawned-here.txt").read_text() == (envelope.prompt or "")

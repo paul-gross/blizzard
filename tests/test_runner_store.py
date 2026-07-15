@@ -94,3 +94,28 @@ def test_outbound_buffer_is_fifo_and_ackable(tmp_path):  # type: ignore[no-untyp
     assert store.pending_submission_lease_ids() == {"lease_1"}
     store.ack_outbound(s1, acked_at=_NOW)
     assert [f.seq for f in store.pending_outbound()] == [s2]
+
+
+@pytest.mark.unit
+def test_workspace_prompt_override_absent_is_none(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    # Never overridden — the spawn preamble falls back to static config (issue #17).
+    store = _store(tmp_path)
+    assert store.workspace_prompt_override("ws1") is None
+
+
+@pytest.mark.unit
+def test_workspace_prompt_override_set_then_read_and_upsert(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    store.set_workspace_prompt("ws1", prompt="first", at=_NOW)
+    assert store.workspace_prompt_override("ws1") == "first"
+    # A second set upserts the single per-workspace row rather than appending.
+    store.set_workspace_prompt("ws1", prompt="second", at=_NOW)
+    assert store.workspace_prompt_override("ws1") == "second"
+
+
+@pytest.mark.unit
+def test_workspace_prompt_empty_override_is_distinct_from_absent(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    # A present empty override is a deliberate clear-to-table-only — not None (issue #17).
+    store = _store(tmp_path)
+    store.set_workspace_prompt("ws1", prompt="", at=_NOW)
+    assert store.workspace_prompt_override("ws1") == ""

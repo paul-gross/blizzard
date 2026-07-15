@@ -31,7 +31,7 @@ from blizzard.wire.envelope import NodeEnvelope
 
 @dataclass(frozen=True)
 class WorkerPreamble:
-    """The runner's machine-local preamble prepended to the envelope (D-063).
+    """The runner's machine-local preamble prepended to the envelope (D-063, issue #17).
 
     The held environments with their workdirs, the minted lease id, and the runner's
     local-API URL — never sent to the hub; all machine-local execution truth.
@@ -39,11 +39,21 @@ class WorkerPreamble:
     ``BLIZZARD_LEASE_ID`` and ``BLIZZARD_RUNNER_URL`` ride it from ``lease_id`` and
     ``local_api_url`` so the worker's ``PostToolUse`` heartbeat hook posts to the
     right lease with no arguments (design/harness-adapters.md).
+
+    ``workspace_root`` is the spawn **cwd** (issue #17): the worker is launched at the
+    winter workspace root — not an env subdir — so it loads the workspace's shared
+    context the way an interactive agent there does; empty falls back to the first
+    environment's workdir (legacy behavior). ``prompt_prefix`` is the runner-composed
+    workspace prompt + info table the adapter prepends to the envelope prompt (rendered
+    by :func:`blizzard.runner.harness.preamble.render_worker_preamble`); empty prepends
+    nothing.
     """
 
     environments: list[AcquiredEnvironment]
     lease_id: str
     local_api_url: str
+    workspace_root: str = ""
+    prompt_prefix: str = ""
 
 
 @dataclass(frozen=True)

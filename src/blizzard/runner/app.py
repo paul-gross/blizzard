@@ -23,6 +23,7 @@ from blizzard.runner.api.health import router as health_router
 from blizzard.runner.api.heartbeat import router as heartbeat_router
 from blizzard.runner.api.pm_items import router as pm_items_router
 from blizzard.runner.api.readiness import router as readiness_router
+from blizzard.runner.api.workspace_prompt import router as workspace_prompt_router
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.readiness import ReadinessService
 from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
@@ -71,6 +72,9 @@ def create_app(
     # The PM-item pass-through proxy (D-084): a build worker reads its issue through
     # this route, which forwards to the hub — the worker never crosses a layer.
     app.include_router(pm_items_router)
+    # The runtime workspace-prompt control (issue #17): read the effective spawn preamble
+    # prompt, or replace the override so the next spawn picks it up with no restart.
+    app.include_router(workspace_prompt_router)
 
     # The runner-served web app (post-MVP); the mount point is live from the
     # scaffold so the seam is exercised (D-096).

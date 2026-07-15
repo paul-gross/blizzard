@@ -34,6 +34,7 @@ from blizzard.runner.environments.provider import (
     WorkspaceAcquisitionError,
 )
 from blizzard.runner.harness.adapter import WorkerPreamble
+from blizzard.runner.harness.preamble import render_worker_preamble
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import HubClientError
 from blizzard.runner.store.repository import (
@@ -923,7 +924,26 @@ def _spawn_attempt(
         created_at=now,
     )
     _CP_SPAWN_AFTER_MINT.reached()  # lease minted, worker not spawned — the orphan-lease window REAP absorbs
-    preamble = WorkerPreamble(environments=environments, lease_id=lease_id, local_api_url=ctx.config.local_api_url)
+    # The runner's spawn preamble (issue #17): the effective workspace prompt is the store's
+    # runtime override when set, else the static config prompt — read here so an API replace
+    # applies to the next spawn with no restart. Rendered with this attempt's machine-local
+    # facts, prepended to the envelope prompt; the worker's cwd is the workspace root.
+    override = ctx.store.workspace_prompt_override(ctx.config.workspace_id)
+    workspace_prompt = override if override is not None else ctx.config.workspace_prompt
+    prompt_prefix = render_worker_preamble(
+        workspace_prompt=workspace_prompt,
+        environments=environments,
+        lease_id=lease_id,
+        runner_id=ctx.config.runner_id,
+        chunk_id=chunk_id,
+    )
+    preamble = WorkerPreamble(
+        environments=environments,
+        lease_id=lease_id,
+        local_api_url=ctx.config.local_api_url,
+        workspace_root=ctx.config.workspace_root,
+        prompt_prefix=prompt_prefix,
+    )
     handle = ctx.harness.spawn(envelope, preamble, session_hint=str(uuid.uuid4()))
     ctx.store.record_spawn(
         lease_id, pid=handle.pid, process_start_time=handle.process_start_time, session_id=handle.session_id

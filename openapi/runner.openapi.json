@@ -217,6 +217,34 @@
         ],
         "title": "ValidationError",
         "type": "object"
+      },
+      "WorkspacePromptReplacement": {
+        "description": "A replacement workspace prompt \u2014 applies to subsequent spawns with no restart.",
+        "properties": {
+          "prompt": {
+            "title": "Prompt",
+            "type": "string"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "title": "WorkspacePromptReplacement",
+        "type": "object"
+      },
+      "WorkspacePromptResponse": {
+        "description": "The effective workspace prompt prepended to every worker spawn (openapi-ts consumes this).",
+        "properties": {
+          "prompt": {
+            "title": "Prompt",
+            "type": "string"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "title": "WorkspacePromptResponse",
+        "type": "object"
       }
     }
   },
@@ -407,6 +435,68 @@
         "summary": "Ready",
         "tags": [
           "meta"
+        ]
+      }
+    },
+    "/api/workspace-prompt": {
+      "get": {
+        "description": "The effective spawn preamble prompt: the runtime override if set, else static config (issue #17).",
+        "operationId": "read_workspace_prompt_api_workspace_prompt_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspacePromptResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Read Workspace Prompt",
+        "tags": [
+          "runner"
+        ]
+      },
+      "put": {
+        "description": "Replace the runtime workspace-prompt override \u2014 effective on subsequent spawns (issue #17).",
+        "operationId": "replace_workspace_prompt_api_workspace_prompt_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspacePromptReplacement"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspacePromptResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Replace Workspace Prompt",
+        "tags": [
+          "runner"
         ]
       }
     }

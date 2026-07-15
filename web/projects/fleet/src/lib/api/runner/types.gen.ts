@@ -162,6 +162,30 @@ export type ValidationError = {
     type: string;
 };
 
+/**
+ * WorkspacePromptReplacement
+ *
+ * A replacement workspace prompt — applies to subsequent spawns with no restart.
+ */
+export type WorkspacePromptReplacement = {
+    /**
+     * Prompt
+     */
+    prompt: string;
+};
+
+/**
+ * WorkspacePromptResponse
+ *
+ * The effective workspace prompt prepended to every worker spawn (openapi-ts consumes this).
+ */
+export type WorkspacePromptResponse = {
+    /**
+     * Prompt
+     */
+    prompt: string;
+};
+
 export type GetPmItemsApiChunksChunkIdPmItemsGetData = {
     body?: never;
     path: {
@@ -282,3 +306,44 @@ export type ReadyApiReadyGetResponses = {
 };
 
 export type ReadyApiReadyGetResponse = ReadyApiReadyGetResponses[keyof ReadyApiReadyGetResponses];
+
+export type ReadWorkspacePromptApiWorkspacePromptGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/workspace-prompt';
+};
+
+export type ReadWorkspacePromptApiWorkspacePromptGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: WorkspacePromptResponse;
+};
+
+export type ReadWorkspacePromptApiWorkspacePromptGetResponse = ReadWorkspacePromptApiWorkspacePromptGetResponses[keyof ReadWorkspacePromptApiWorkspacePromptGetResponses];
+
+export type ReplaceWorkspacePromptApiWorkspacePromptPutData = {
+    body: WorkspacePromptReplacement;
+    path?: never;
+    query?: never;
+    url: '/api/workspace-prompt';
+};
+
+export type ReplaceWorkspacePromptApiWorkspacePromptPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReplaceWorkspacePromptApiWorkspacePromptPutError = ReplaceWorkspacePromptApiWorkspacePromptPutErrors[keyof ReplaceWorkspacePromptApiWorkspacePromptPutErrors];
+
+export type ReplaceWorkspacePromptApiWorkspacePromptPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: WorkspacePromptResponse;
+};
+
+export type ReplaceWorkspacePromptApiWorkspacePromptPutResponse = ReplaceWorkspacePromptApiWorkspacePromptPutResponses[keyof ReplaceWorkspacePromptApiWorkspacePromptPutResponses];

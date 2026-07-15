@@ -59,6 +59,10 @@ def build_loop_context(config: RunnerConfig, hub: IHubClient) -> LoopContext:
         base_branch=config.base_branch,
         local_api_url=f"http://{config.host}:{config.port}",
         gates=config.gates,
+        # The spawn cwd + static workspace-prompt fallback (issue #17). The prompt file is
+        # resolved once here at loop-context build, not re-read per spawn.
+        workspace_root=config.workspace_root,
+        workspace_prompt=config.resolved_workspace_prompt(),
     )
     return LoopContext(
         store=store,

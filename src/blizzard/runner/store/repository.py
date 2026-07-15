@@ -213,6 +213,14 @@ class IReadRunnerStore(Protocol):
         on any normal tick; non-empty only on the first tick after a graceful restart."""
         ...
 
+    def workspace_prompt_override(self, workspace_id: str) -> str | None:
+        """The runtime workspace-prompt override for this workspace, or ``None`` (issue #17).
+
+        ``None`` means never overridden — the spawn preamble falls back to the static
+        config prompt. A present row (even an empty string) is a deliberate override that
+        wins over config, so an operator can clear the prompt to table-only at runtime."""
+        ...
+
 
 class IWriteRunnerStore(IReadRunnerStore, Protocol):
     """Read-write runner store — held only by the domain (the loop steps)."""
@@ -275,6 +283,10 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
 
     def set_hub_paused(self, runner_id: str, *, paused: bool, at: datetime) -> None:
         """Mirror the hub's pause brake locally (upsert) — read back by FILL (D-043/D-012)."""
+        ...
+
+    def set_workspace_prompt(self, workspace_id: str, *, prompt: str, at: datetime) -> None:
+        """Set the runtime workspace-prompt override (upsert) — read at spawn (issue #17)."""
         ...
 
     def record_resume_intent(self, *, lease_id: str, marked_at: datetime) -> None:

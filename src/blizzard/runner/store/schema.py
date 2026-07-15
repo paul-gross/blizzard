@@ -251,3 +251,21 @@ hub_control = Table(
     Column("paused", Boolean, nullable=False),
     Column("updated_at", DateTime, nullable=False),
 )
+
+# --- Workspace prompt override (the runtime-settable spawn preamble — issue #17) --
+#
+# The runner prepends a standing workspace prompt to every worker spawn. Its static
+# source is config (``blizzard-runner.toml``, loaded at ``host`` startup); this table
+# is the *runtime* override the local API writes (``PUT /api/workspace-prompt``), so a
+# replacement takes effect on subsequent spawns with no restart. One upserted row per
+# workspace (the runner is single-workspace — D-019), mirroring ``hub_control``'s shape.
+# A present row (including an empty ``prompt``) is a deliberate override that wins over
+# the static config; no row means "never overridden — fall back to config".
+
+workspace_prompt = Table(
+    "workspace_prompt",
+    metadata,
+    Column("workspace_id", String, primary_key=True),
+    Column("prompt", Text, nullable=False),
+    Column("updated_at", DateTime, nullable=False),
+)

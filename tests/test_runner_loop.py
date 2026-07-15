@@ -700,3 +700,61 @@ def test_full_happy_path_across_ticks(tmp_path):  # type: ignore[no-untyped-def]
     assert provider.released == ["e1"]
     assert store.held_environment_ids() == []
     assert store.live_tenure_chunk_ids() == []
+
+
+@pytest.mark.unit
+def test_spawn_prefixes_static_workspace_prompt_and_sets_workspace_root(tmp_path):  # type: ignore[no-untyped-def]
+    """The preamble carries the workspace root (spawn cwd) and the static config prompt (issue #17)."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    env = _build_envelope()
+    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.claim_outcome = claimed_outcome("ch_1", env)
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(
+            runner_id="r1",
+            workspace_id="ws1",
+            workspace_root="/ws",
+            workspace_prompt="STATIC-PROMPT",
+        ),
+    )
+
+    fill(ctx)
+
+    _, preamble = harness.spawns[0]
+    assert preamble.workspace_root == "/ws"
+    assert preamble.prompt_prefix.startswith("STATIC-PROMPT\n\n")
+    assert "| winter environment name | `e1` |" in preamble.prompt_prefix
+
+
+@pytest.mark.unit
+def test_spawn_reflects_runtime_prompt_override_with_no_restart(tmp_path):  # type: ignore[no-untyped-def]
+    """A store override (the PUT /api/workspace-prompt write) wins over static at the next spawn."""
+    store = _store(tmp_path)
+    # Simulate the local-API replace landing before this spawn.
+    store.set_workspace_prompt("ws1", prompt="OVERRIDDEN", at=datetime(2026, 7, 13, tzinfo=UTC))
+    hub = FakeHub()
+    env = _build_envelope()
+    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.claim_outcome = claimed_outcome("ch_1", env)
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=LoopConfig(runner_id="r1", workspace_id="ws1", workspace_prompt="STATIC-PROMPT"),
+    )
+
+    fill(ctx)
+
+    _, preamble = harness.spawns[0]
+    assert preamble.prompt_prefix.startswith("OVERRIDDEN\n\n")
+    assert "STATIC-PROMPT" not in preamble.prompt_prefix

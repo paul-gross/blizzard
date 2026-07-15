@@ -37,6 +37,13 @@ class LoopConfig:
     #: The runner's own local-API base URL, handed to a spawned worker as
     #: ``BLIZZARD_RUNNER_URL`` so its heartbeat hook posts back (design/harness-adapters.md).
     local_api_url: str = "http://127.0.0.1:8431"
+    #: The winter workspace root — the spawn cwd for every worker (issue #17), so it loads
+    #: the workspace's shared context instead of starting below it in an env subdir.
+    workspace_root: str = ""
+    #: The static workspace prompt from config (issue #17), resolved once at ``host``
+    #: startup. The fallback under the store's runtime override: the effective spawn
+    #: preamble prose is ``store.workspace_prompt_override(workspace_id)`` when set, else this.
+    workspace_prompt: str = ""
     #: Node NAMES this runner imposes a human gate on (D-032/D-041/D-073): for a gated
     #: node the runner submits a Decision instead of a transition, so an operator dials
     #: their own HITL level without forking the fleet's graph. Matched by name across all

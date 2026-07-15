@@ -87,7 +87,11 @@ class ClaudeCodeAdapter:
         if not preamble.environments:
             raise HarnessSpawnError("spawn requires at least one acquired environment")
         session_id = session_hint or ""
-        workdir = preamble.environments[0].workdir
+        # Spawn cwd is the winter workspace root (issue #17) so the worker loads the
+        # workspace's shared context (CLAUDE.md/AGENTS.md, .winter/, every repo and env)
+        # like an interactive agent there; the held env(s) are named in the preamble
+        # prompt instead. Falls back to the first env's workdir when no root is supplied.
+        workdir = preamble.workspace_root or preamble.environments[0].workdir
         cmd = [self._binary, "-p", "--output-format", "json", "--model", self._model]
         if session_id:
             cmd += ["--session-id", session_id]
@@ -95,7 +99,10 @@ class ClaudeCodeAdapter:
             cmd += ["--settings", self._settings_path]
         if self._permission_mode:
             cmd += ["--permission-mode", self._permission_mode]
-        cmd.append(envelope.prompt or "")
+        # The runner's workspace prompt + machine-local info table, prepended to the hub's
+        # node prompt (issue #17). The preamble is composed in the core; the adapter only
+        # concatenates it ahead of the envelope prompt (``bzh:deterministic-shell``).
+        cmd.append("\n\n".join(part for part in (preamble.prompt_prefix, envelope.prompt or "") if part))
 
         env = self._spawn_env(envelope, preamble, session_id)
         try:

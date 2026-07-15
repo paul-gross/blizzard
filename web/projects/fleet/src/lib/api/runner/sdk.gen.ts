@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { GetPmItemsApiChunksChunkIdPmItemsGetData, GetPmItemsApiChunksChunkIdPmItemsGetErrors, GetPmItemsApiChunksChunkIdPmItemsGetResponses, HealthApiHealthGetData, HealthApiHealthGetResponses, HeartbeatApiHeartbeatPostData, HeartbeatApiHeartbeatPostErrors, HeartbeatApiHeartbeatPostResponses, ReadyApiReadyGetData, ReadyApiReadyGetResponses, RecordAskApiLeasesLeaseIdAsksPostData, RecordAskApiLeasesLeaseIdAsksPostErrors, RecordAskApiLeasesLeaseIdAsksPostResponses } from './types.gen';
+import type { GetPmItemsApiChunksChunkIdPmItemsGetData, GetPmItemsApiChunksChunkIdPmItemsGetErrors, GetPmItemsApiChunksChunkIdPmItemsGetResponses, HealthApiHealthGetData, HealthApiHealthGetResponses, HeartbeatApiHeartbeatPostData, HeartbeatApiHeartbeatPostErrors, HeartbeatApiHeartbeatPostResponses, ReadWorkspacePromptApiWorkspacePromptGetData, ReadWorkspacePromptApiWorkspacePromptGetResponses, ReadyApiReadyGetData, ReadyApiReadyGetResponses, RecordAskApiLeasesLeaseIdAsksPostData, RecordAskApiLeasesLeaseIdAsksPostErrors, RecordAskApiLeasesLeaseIdAsksPostResponses, ReplaceWorkspacePromptApiWorkspacePromptPutData, ReplaceWorkspacePromptApiWorkspacePromptPutErrors, ReplaceWorkspacePromptApiWorkspacePromptPutResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -62,3 +62,24 @@ export const recordAskApiLeasesLeaseIdAsksPost = <ThrowOnError extends boolean =
  * Ready
  */
 export const readyApiReadyGet = <ThrowOnError extends boolean = false>(options?: Options<ReadyApiReadyGetData, ThrowOnError>): RequestResult<ReadyApiReadyGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ReadyApiReadyGetResponses, unknown, ThrowOnError>({ url: '/api/ready', ...options });
+
+/**
+ * Read Workspace Prompt
+ *
+ * The effective spawn preamble prompt: the runtime override if set, else static config (issue #17).
+ */
+export const readWorkspacePromptApiWorkspacePromptGet = <ThrowOnError extends boolean = false>(options?: Options<ReadWorkspacePromptApiWorkspacePromptGetData, ThrowOnError>): RequestResult<ReadWorkspacePromptApiWorkspacePromptGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ReadWorkspacePromptApiWorkspacePromptGetResponses, unknown, ThrowOnError>({ url: '/api/workspace-prompt', ...options });
+
+/**
+ * Replace Workspace Prompt
+ *
+ * Replace the runtime workspace-prompt override — effective on subsequent spawns (issue #17).
+ */
+export const replaceWorkspacePromptApiWorkspacePromptPut = <ThrowOnError extends boolean = false>(options: Options<ReplaceWorkspacePromptApiWorkspacePromptPutData, ThrowOnError>): RequestResult<ReplaceWorkspacePromptApiWorkspacePromptPutResponses, ReplaceWorkspacePromptApiWorkspacePromptPutErrors, ThrowOnError> => (options.client ?? client).put<ReplaceWorkspacePromptApiWorkspacePromptPutResponses, ReplaceWorkspacePromptApiWorkspacePromptPutErrors, ThrowOnError>({
+    url: '/api/workspace-prompt',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});

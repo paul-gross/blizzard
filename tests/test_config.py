@@ -75,3 +75,60 @@ def test_runner_loop_seams_fall_back_to_defaults_without_env(tmp_path: Path) -> 
     assert config.workspace_root == ""
     assert config.workspace_envs == ("e1",)
     assert config.harness_binary == "claude"
+
+
+@pytest.mark.unit
+def test_workspace_prompt_defaults_empty_and_round_trips_inline(tmp_path: Path) -> None:
+    # Absent on a fresh scaffold — a table-only spawn (issue #17); a multi-line inline
+    # prompt round-trips through to_toml (json-escaped basic string) intact.
+    root = tmp_path / "runner"
+    root.mkdir()
+    scaffolded = RunnerConfig.scaffold(root)
+    assert scaffolded.resolved_workspace_prompt() == ""
+
+    edited = RunnerConfig(
+        root=root,
+        db_url=scaffolded.db_url,
+        workspace_prompt="You are a fleet worker.\nWork in your held env.",
+    )
+    root_written = root / "blizzard-runner.toml"
+    root_written.write_text(edited.to_toml())
+    reloaded = RunnerConfig.load(root)
+    assert reloaded.workspace_prompt == "You are a fleet worker.\nWork in your held env."
+    assert reloaded.resolved_workspace_prompt() == "You are a fleet worker.\nWork in your held env."
+
+
+@pytest.mark.unit
+def test_workspace_prompt_file_wins_and_resolves_relative_to_root(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    (root / "prompt.md").write_text("# Fleet worker\nFrom a file.")
+    config = RunnerConfig(
+        root=root,
+        db_url=RunnerConfig.default_db_url(root),
+        workspace_prompt="inline-loses",
+        workspace_prompt_file="prompt.md",
+    )
+    # The file wins over the inline value, and a relative path resolves under root.
+    assert config.resolved_workspace_prompt() == "# Fleet worker\nFrom a file."
+
+
+@pytest.mark.unit
+def test_workspace_prompt_env_seeds_scaffold(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BZ_WORKSPACE_PROMPT", "seeded by the service")
+    assert RunnerConfig.scaffold(tmp_path).workspace_prompt == "seeded by the service"
+
+
+@pytest.mark.unit
+def test_missing_workspace_prompt_file_raises(tmp_path: Path) -> None:
+    from blizzard.runner.config import ConfigError
+
+    root = tmp_path / "runner"
+    root.mkdir()
+    config = RunnerConfig(
+        root=root,
+        db_url=RunnerConfig.default_db_url(root),
+        workspace_prompt_file="does-not-exist.md",
+    )
+    with pytest.raises(ConfigError):
+        config.resolved_workspace_prompt()
