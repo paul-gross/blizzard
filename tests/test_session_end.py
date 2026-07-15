@@ -102,9 +102,7 @@ def test_session_end_verb_soft_fails_without_identity(monkeypatch: pytest.Monkey
         return _FakeResponse()
 
     monkeypatch.setattr(httpx, "post", fake_post)
-    result = CliRunner().invoke(
-        runner_group, ["session-end"], env={"BLIZZARD_LEASE_ID": "", "BLIZZARD_RUNNER_URL": ""}
-    )
+    result = CliRunner().invoke(runner_group, ["session-end"], env={"BLIZZARD_LEASE_ID": "", "BLIZZARD_RUNNER_URL": ""})
 
     assert result.exit_code == 0  # soft-fail, never raise
     assert "skipping" in result.output
