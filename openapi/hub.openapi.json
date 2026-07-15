@@ -469,6 +469,7 @@
       "ChunkStatus": {
         "description": "The derived chunk statuses (D-067). Never stored \u2014 always a query result.",
         "enum": [
+          "not_ready",
           "ready",
           "running",
           "delivering",
@@ -2651,6 +2652,53 @@
           }
         },
         "summary": "Get Pm Items",
+        "tags": [
+          "chunks"
+        ]
+      }
+    },
+    "/api/chunks/{chunk_id}/promote": {
+      "post": {
+        "description": "Promote a not-ready chunk to ready so a runner may claim it (D-103).\n\nIdempotent: promoting an already-ready or already-running chunk is a harmless no-op.\n404 only when the chunk is unknown.",
+        "operationId": "promote_chunk_api_chunks__chunk_id__promote_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Promote Chunk Api Chunks  Chunk Id  Promote Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Promote Chunk",
         "tags": [
           "chunks"
         ]

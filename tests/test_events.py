@@ -79,7 +79,7 @@ async def test_lifecycle_publishes_events_and_the_stream_replays_them(tmp_path: 
     )
 
     # Drive the SSE endpoint's own generator (a real stream read of the replay tail): ingest
-    # emits chunk-changed(ready)+queue-changed; the claim emits chunk-changed(running)+queue-changed.
+    # emits chunk-changed(not_ready); the claim emits chunk-changed(running)+queue-changed.
     events = await drain_stream(hub.events, last_event_id=0)
     types = [e["event"] for e in events]
     assert "chunk-changed" in types
@@ -114,8 +114,7 @@ def test_route_emission_lands_in_the_replay_buffer(tmp_path: Path) -> None:
     )
     events = emitted_events(hub)
     assert [e["event"] for e in events] == [
-        "chunk-changed",  # ingest -> ready
-        "queue-changed",  # ingest admitted a ready chunk
+        "chunk-changed",  # ingest -> not_ready (no queue-changed: not in the ready queue, D-103)
         "chunk-changed",  # claim -> running
         "queue-changed",  # claim removed it from the queue
     ]

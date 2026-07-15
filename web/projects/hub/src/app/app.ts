@@ -8,6 +8,7 @@ import {
   RunnerStrip,
   injectHubChunksQuery,
   injectHubHealthQuery,
+  injectPromoteChunkMutation,
 } from 'fleet';
 
 /**
@@ -35,7 +36,13 @@ import {
           <fleet-queue-panel class="rail-queue" />
           <fleet-event-log-panel class="rail-log" />
         </div>
-        <fleet-board-shell class="board" [connection]="connection()" [chunks]="chunks()" (selectChunk)="selected.set($event)" />
+        <fleet-board-shell
+          class="board"
+          [connection]="connection()"
+          [chunks]="chunks()"
+          (selectChunk)="selected.set($event)"
+          (promote)="promoteChunk.mutate({ chunkId: $event })"
+        />
         @if (selected() !== null) {
           <fleet-chunk-detail class="detail" [chunkId]="selected()" (dismiss)="selected.set(null)" />
         }
@@ -92,6 +99,9 @@ export class App {
   private readonly health = injectHubHealthQuery();
   private readonly chunksQuery = injectHubChunksQuery();
   private readonly live = inject(FleetLiveUpdates);
+
+  /** Promote a not-ready chunk to ready from its board card (D-103). */
+  protected readonly promoteChunk = injectPromoteChunkMutation();
 
   constructor() {
     // Open the SSE stream and wire it to the query cache for the app's lifetime.

@@ -369,6 +369,8 @@ def test_acceptance_loop_one_chunk_ingest_to_landed(tmp_path: Path) -> None:
         )
         assert ingested.status_code == 201, ingested.text
         chunk_id = ingested.json()["chunk_id"]
+        assert hub.get(f"/api/chunks/{chunk_id}").json()["status"] == "not_ready"  # rests not-ready (D-103)
+        assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
         assert hub.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
 
         # 3. Drive the runner loop one synchronous tick at a time until the chunk lands.
@@ -567,6 +569,7 @@ def test_build_worker_reads_pm_item_through_the_passthrough(tmp_path: Path) -> N
         )
         assert ingested.status_code == 201, ingested.text
         chunk_id = ingested.json()["chunk_id"]
+        assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # ready for the runner (D-103)
 
         # Sanity: the hub's own pass-through returns the body + comment (the runner's proxy
         # forwards to exactly this route) — one entry per pointer.

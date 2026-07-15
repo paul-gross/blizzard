@@ -148,6 +148,7 @@ def test_retries_exhausted_escalates_and_takeover_resumes_session(tmp_path: Path
         )
         assert ingested.status_code == 201, ingested.text
         chunk_id = ingested.json()["chunk_id"]
+        assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # ready for the runner (D-103)
 
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         config = dataclasses.replace(config, max_agents=1)

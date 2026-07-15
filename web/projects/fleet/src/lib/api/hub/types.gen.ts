@@ -314,7 +314,7 @@ export type ChunkIngestResponse = {
  *
  * The derived chunk statuses (D-067). Never stored — always a query result.
  */
-export type ChunkStatus = 'ready' | 'running' | 'delivering' | 'waiting_on_human' | 'needs_human' | 'stopped' | 'done';
+export type ChunkStatus = 'not_ready' | 'ready' | 'running' | 'delivering' | 'waiting_on_human' | 'needs_human' | 'stopped' | 'done';
 
 /**
  * ChunkSummary
@@ -1807,6 +1807,40 @@ export type GetPmItemsApiChunksChunkIdPmItemsGetResponses = {
 };
 
 export type GetPmItemsApiChunksChunkIdPmItemsGetResponse = GetPmItemsApiChunksChunkIdPmItemsGetResponses[keyof GetPmItemsApiChunksChunkIdPmItemsGetResponses];
+
+export type PromoteChunkApiChunksChunkIdPromotePostData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/promote';
+};
+
+export type PromoteChunkApiChunksChunkIdPromotePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PromoteChunkApiChunksChunkIdPromotePostError = PromoteChunkApiChunksChunkIdPromotePostErrors[keyof PromoteChunkApiChunksChunkIdPromotePostErrors];
+
+export type PromoteChunkApiChunksChunkIdPromotePostResponses = {
+    /**
+     * Response Promote Chunk Api Chunks  Chunk Id  Promote Post
+     *
+     * Successful Response
+     */
+    202: {
+        [key: string]: string;
+    };
+};
+
+export type PromoteChunkApiChunksChunkIdPromotePostResponse = PromoteChunkApiChunksChunkIdPromotePostResponses[keyof PromoteChunkApiChunksChunkIdPromotePostResponses];
 
 export type RequeueChunkApiChunksChunkIdRequeuesPostData = {
     body?: never;

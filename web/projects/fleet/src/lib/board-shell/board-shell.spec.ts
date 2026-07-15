@@ -12,16 +12,41 @@ describe('BoardShell', () => {
     }).compileComponents();
   });
 
-  it('renders the board shell with all four columns and an empty state', async () => {
+  it('renders the board shell with all five columns and an empty state', async () => {
     const fixture = TestBed.createComponent(BoardShell);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="board-shell"]')).toBeTruthy();
-    // Four board columns — READY was removed; ready chunks live in the queue rail (issue #22).
-    expect(el.querySelectorAll('[data-col]')).toHaveLength(4);
+    // Five board columns: the not-ready backlog (D-103) plus the four post-dispatch lanes.
+    // READY has no column — ready chunks live in the queue rail (issue #22).
+    expect(el.querySelectorAll('[data-col]')).toHaveLength(5);
+    expect(el.querySelector('[data-col="notready"]')).toBeTruthy();
     expect(el.querySelector('[data-col="ready"]')).toBeNull();
     expect(el.querySelector('[data-testid="empty-state"]')?.textContent).toContain('NO CHUNKS');
+  });
+
+  it('renders a not-ready chunk in the backlog column with a Promote action that emits its id (D-103)', async () => {
+    const chunks: ChunkSummary[] = [
+      { chunk_id: 'ch_01notready00000000000000000', graph_id: 'gr_1', status: 'not_ready', current_node_id: 'nd_build', pm_pointers: [] },
+      { chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', status: 'running', current_node_id: 'nd_build', pm_pointers: [] },
+    ];
+    const fixture = TestBed.createComponent(BoardShell);
+    fixture.componentRef.setInput('chunks', chunks);
+    let promoted: string | undefined;
+    fixture.componentInstance.promote.subscribe((id) => (promoted = id));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    // The not-ready chunk is a card in its own column, distinct from the ready rail and the
+    // running lane; only it carries a Promote button.
+    const card = el.querySelector('[data-col="notready"] [data-testid="chunk-card"]');
+    expect(card?.getAttribute('data-status')).toBe('not_ready');
+    expect(el.querySelectorAll('[data-testid="promote-chunk"]')).toHaveLength(1);
+    expect(el.querySelector('[data-col="running"] [data-testid="promote-chunk"]')).toBeNull();
+
+    card?.querySelector<HTMLButtonElement>('[data-testid="promote-chunk"]')?.click();
+    expect(promoted).toBe('ch_01notready00000000000000000');
   });
 
   it('reflects the connection input in the header', async () => {

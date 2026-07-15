@@ -52,7 +52,9 @@ def _ingest(hub) -> str:  # type: ignore[no-untyped-def]
     assert hub.client.post("/api/graphs", json={"definition_yaml": _BUILD_DELIVER_YAML}).status_code == 201
     resp = hub.client.post("/api/chunks", json={"pointers": [_POINTER]})
     assert resp.status_code == 201, resp.text
-    return resp.json()["chunk_id"]
+    chunk_id = resp.json()["chunk_id"]
+    assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # ready to claim (D-103)
+    return chunk_id
 
 
 def _claim(hub, chunk_id: str) -> dict:  # type: ignore[no-untyped-def]

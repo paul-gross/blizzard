@@ -19,12 +19,17 @@ pytestmark = pytest.mark.component
 
 
 def _ingest(hub: HubHarness, n: int) -> str:
-    """Ingest one chunk holding a distinct pointer; advance the clock for a distinct mint."""
+    """Ingest and promote one chunk holding a distinct pointer, advancing the clock.
+
+    Queue shaping is ready-only, so the chunk is promoted out of its not-ready resting
+    state (D-103) before it can be peeked, reordered, or grouped."""
     pointer = {"provider": "github", "url": f"http://forge.local/repos/acme/widget/issues/{n}"}
     resp = hub.client.post("/api/chunks", json={"pointers": [pointer]})
     assert resp.status_code == 201, resp.text
+    chunk_id = resp.json()["chunk_id"]
+    assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
     hub.clock.advance(timedelta(seconds=1))  # distinct minted_at → deterministic FIFO
-    return resp.json()["chunk_id"]
+    return chunk_id
 
 
 def _peek_ids(hub: HubHarness) -> list[str]:
@@ -105,6 +110,7 @@ def test_group_is_pointer_union_deduped(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     shared = {"provider": "github", "url": "http://forge.local/repos/acme/widget/issues/shared"}
     survivor = hub.client.post("/api/chunks", json={"pointers": [shared]}).json()["chunk_id"]
+    assert hub.client.post(f"/api/chunks/{survivor}/promote").status_code == 202  # ready to group (D-103)
     hub.clock.advance(timedelta(seconds=1))
     # A second chunk cannot re-ingest the same live pointer (D-093), so give it its own.
     other = _ingest(hub, 9)

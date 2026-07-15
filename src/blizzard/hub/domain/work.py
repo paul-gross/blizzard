@@ -35,6 +35,7 @@ from blizzard.hub.domain.graph import Executor
 class ChunkStatus(StrEnum):
     """The derived chunk statuses (D-067). Never stored — always a query result."""
 
+    NOT_READY = "not_ready"
     READY = "ready"
     RUNNING = "running"
     DELIVERING = "delivering"
@@ -250,6 +251,7 @@ class ChunkFacts:
     """
 
     minted: bool
+    promoted: bool = False
     stopped: bool = False
     delivery_landed: bool = False
     pr_closed: bool = False
@@ -285,6 +287,12 @@ def derive_chunk_status(facts: ChunkFacts) -> ChunkStatus:
         return ChunkStatus.DELIVERING
     if _has_live_route(facts):
         return ChunkStatus.RUNNING
+    if not facts.promoted:
+        # An un-promoted chunk rests ``not_ready`` — visible but never claimed (D-103).
+        # Sits just above the ``ready`` fall-through and below every post-claim state, so a
+        # promoted chunk that later runs/delivers/parks still derives from those facts; only
+        # a fresh, un-promoted chunk with no live route lands here.
+        return ChunkStatus.NOT_READY
     return ChunkStatus.READY
 
 
@@ -539,6 +547,13 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
     """Read-write chunk access. Only the domain layer depends on this variant."""
 
     def mint(self, chunk: Chunk) -> None: ...
+    def record_promote(self, chunk_id: str, *, at: datetime) -> None:
+        """Record a ``chunk.promoted`` fact — flips ``not_ready`` to ``ready`` (D-103).
+
+        Idempotent: a chunk already promoted keeps its first row, so a re-promote (a
+        double board click, a CLI retry) writes nothing and the status is unchanged."""
+        ...
+
     def record_lease(self, chunk_id: str, *, epoch: int, runner_id: str, at: datetime) -> None: ...
     def set_runner_high_water(self, runner_id: str, *, seq: int, at: datetime) -> None:
         """Advance a runner's applied-seq high-water mark (upsert, D-069)."""

@@ -2,13 +2,14 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 
 import type { ChunkStatus, ChunkSummary } from '../api/hub';
 
-/** The four board columns, in dispatch → done order (workflow build → review → deliver). */
+/** The board columns, left → right: the not-ready backlog, then dispatch → done. */
 interface BoardColumn {
   readonly key: string;
   readonly label: string;
 }
 
 const COLUMNS: readonly BoardColumn[] = [
+  { key: 'notready', label: 'NOT READY' },
   { key: 'running', label: 'RUNNING' },
   { key: 'waiting', label: 'WAIT/HUMAN' },
   { key: 'needs', label: 'NEEDS HUMAN' },
@@ -16,13 +17,15 @@ const COLUMNS: readonly BoardColumn[] = [
 ];
 
 /**
- * Map a chunk's derived status (D-004) onto its board column. The board has one
- * column per non-ready resting state; the transient `delivering` shows under
- * RUNNING, and terminal `stopped` shows under DONE. `ready` maps to no board
- * column (`null`) — the ready queue lives in the left rail (fleet-queue-panel),
+ * Map a chunk's derived status (D-004) onto its board column. The transient
+ * `delivering` shows under RUNNING, and terminal `stopped` shows under DONE.
+ * `not_ready` chunks — freshly ingested and held from the fleet (D-103) — get their
+ * own leftmost backlog column, visibly distinct from `ready` chunks, which map to no
+ * board column (`null`): the ready queue lives in the left rail (fleet-queue-panel),
  * so a ready chunk shows there and never also as a board card (issue #22).
  */
 const STATUS_COLUMN: Record<ChunkStatus, string | null> = {
+  not_ready: 'notready',
   ready: null,
   running: 'running',
   delivering: 'running',
@@ -118,6 +121,17 @@ export interface BoardCard {
                         }}</span>
                       </div>
                     </button>
+                    @if (card.status === 'not_ready') {
+                      <button
+                        type="button"
+                        class="card-promote"
+                        data-testid="promote-chunk"
+                        [attr.aria-label]="'Promote chunk ' + card.shortId + ' to ready'"
+                        (click)="promote.emit(card.chunkId)"
+                      >
+                        PROMOTE
+                      </button>
+                    }
                   </div>
                 }
               </div>
@@ -215,7 +229,7 @@ export interface BoardCard {
     }
     .board {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(5, 1fr);
       gap: 1px;
       background: var(--line);
       flex: 1;
@@ -249,6 +263,31 @@ export interface BoardCard {
     }
     .b-col[data-col='done'] .card {
       border-left-color: var(--green);
+    }
+    /* The NOT READY backlog column reads as held/inert: a muted header label and a
+       dim card accent, distinct from the ready queue in the rail and from any live
+       lane. Colors come from tokens, never hard-coded hex (D-103). */
+    .b-col[data-col='notready'] .b-col-head .lbl {
+      color: var(--label-dim);
+    }
+    .card[data-status='not_ready'] {
+      border-left-color: var(--label-dim);
+    }
+    .card-promote {
+      align-self: flex-start;
+      border: 1px solid var(--amber-dim);
+      background: transparent;
+      color: var(--amber-hi);
+      padding: 1px 6px;
+      font: inherit;
+      font-size: 9px;
+      letter-spacing: 0.14em;
+      cursor: pointer;
+    }
+    .card-promote:hover,
+    .card-promote:focus-visible {
+      border-color: var(--amber);
+      outline: none;
     }
     .b-col-body {
       overflow-y: auto;
@@ -351,6 +390,9 @@ export class BoardShell {
 
   /** Emitted with a chunk id when its card is activated — opens the detail drawer. */
   readonly selectChunk = output<string>();
+
+  /** Emitted with a chunk id when a not-ready card's Promote is clicked (D-103). */
+  readonly promote = output<string>();
 
   protected readonly columns = COLUMNS;
 

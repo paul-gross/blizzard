@@ -27,6 +27,7 @@ from blizzard.hub.domain.ingest import IngestConflict
 from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
+    ChunkStatus,
     PmPointer,
     awaiting_external_merge,
     current_node_id,
@@ -163,8 +164,9 @@ def ingest_chunk(request: ChunkIngestRequest, services: Annotated[HubServices, D
             existing_chunk_id=exc.existing_chunk_id, provider=exc.pointer.provider, url=exc.pointer.url
         )
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=conflict.model_dump())
-    services.events.publish_chunk_changed(chunk_id, "ready")
-    services.events.publish_queue_changed()  # a fresh ready chunk changed the queue (D-048)
+    # A freshly ingested chunk rests ``not_ready`` (D-103) — visible on the board but not
+    # in the ready queue, so no ``queue-changed`` fires until it is promoted.
+    services.events.publish_chunk_changed(chunk_id, ChunkStatus.NOT_READY.value)
     return ChunkIngestResponse(chunk_id=chunk_id)
 
 
@@ -337,6 +339,21 @@ def requeue_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_se
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
     services.events.publish_queue_changed()  # requeue can re-admit the chunk to the queue (D-067)
+    return {"chunk_id": chunk_id}
+
+
+@router.post("/chunks/{chunk_id}/promote", status_code=status.HTTP_202_ACCEPTED)
+def promote_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> dict[str, str]:
+    """Promote a not-ready chunk to ready so a runner may claim it (D-103).
+
+    Idempotent: promoting an already-ready or already-running chunk is a harmless no-op.
+    404 only when the chunk is unknown."""
+    if services.chunks.get(chunk_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+    services.promote.promote(chunk_id)
+    facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
+    services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
+    services.events.publish_queue_changed()  # a promoted chunk enters the ready queue (D-048/D-103)
     return {"chunk_id": chunk_id}
 
 

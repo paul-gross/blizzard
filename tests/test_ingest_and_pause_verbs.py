@@ -102,6 +102,40 @@ def test_ingest_rejects_a_malformed_pointer(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 # --------------------------------------------------------------------------- #
+# `blizzard hub promote`
+# --------------------------------------------------------------------------- #
+
+
+def test_promote_posts_to_the_chunk_and_reports_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The verb POSTs to the chunk's promote sub-resource and echoes the ready line (D-103)."""
+    calls: list[str] = []
+
+    def fake_post(url: str, *, timeout: float) -> _FakeResponse:
+        calls.append(url)
+        return _FakeResponse(202)
+
+    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["promote", "ch_42"], env={"BZ_HUB_URL": "http://hub.local:8421"})
+
+    assert result.exit_code == 0, result.output
+    assert calls == ["http://hub.local:8421/api/chunks/ch_42/promote"]
+    assert "promoted ch_42" in result.output
+
+
+def test_promote_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A 404 (no such chunk) is a named error, not a stack trace."""
+
+    def fake_post(url: str, *, timeout: float) -> _FakeResponse:
+        return _FakeResponse(404)
+
+    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["promote", "ch_nope"])
+
+    assert result.exit_code != 0
+    assert "ch_nope" in result.output
+
+
+# --------------------------------------------------------------------------- #
 # `blizzard runner pause`
 # --------------------------------------------------------------------------- #
 

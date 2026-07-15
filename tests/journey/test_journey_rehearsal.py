@@ -275,7 +275,10 @@ def _file_hub(forge: httpx.Client, repo: str, title: str, body: str) -> str:
 def _ingest(hub: httpx.Client, url: str) -> str:
     resp = hub.post("/api/chunks", json={"pointers": [{"provider": "github", "url": url}]})
     assert resp.status_code == 201, resp.text
-    return resp.json()["chunk_id"]
+    chunk_id = resp.json()["chunk_id"]
+    # Ingest rests not-ready (D-103); promote so the fleet claims it as the journey expects.
+    assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+    return chunk_id
 
 
 def _restart_daemons(*, hub_dir: Path, forge_port: int, hub_port: int, hub: httpx.Client) -> subprocess.Popen[str]:
