@@ -17,9 +17,10 @@ import {
  * - the {@link FleetLiveUpdates} spine subscribes to `GET /api/events/stream` and
  *   invalidates the reads on every hub fact, so the board streams live (D-097);
  * - {@link BoardShell} renders every chunk in its derived-status column (D-004);
- *   selecting a card fills the {@link ChunkDetail} dock beneath the board — node
- *   history, artifacts, and the human-loop actions (answer a question, resolve a
- *   gate, copy a takeover) — without reflowing the board columns;
+ *   the {@link ChunkDetail} dock is always mounted beneath the board at a fixed
+ *   height — selecting a card fills it (node history, artifacts, and the human-loop
+ *   actions: answer a question, resolve a gate, copy a takeover) and deselecting
+ *   clears it back to a rest state, so the board columns never resize or reflow;
  * - {@link QueuePanel} shapes the ready queue (prioritize + group); {@link RunnerStrip}
  *   shows the registry with pause/resume — the two operator controls (MVP criterion 11).
  */
@@ -33,9 +34,7 @@ import {
         <fleet-board-shell class="board" [connection]="connection()" [chunks]="chunks()" (selectChunk)="selected.set($event)" />
         <fleet-queue-panel class="rail" />
       </div>
-      @if (selected() !== null) {
-        <fleet-chunk-detail class="dock" [chunkId]="selected()" (dismiss)="selected.set(null)" />
-      }
+      <fleet-chunk-detail class="dock" [chunkId]="selected()" (dismiss)="selected.set(null)" />
       <fleet-runner-strip class="runners" />
     </div>
   `,
@@ -64,8 +63,9 @@ import {
       border-left: 1px solid var(--bezel);
     }
     /* Chunk detail docks along the bottom, spanning the full width beneath the
-       board and rail. It is a layout-level row, not a workspace column, so filling
-       or clearing it never resizes or shifts the board columns. */
+       board and rail. It is a permanently mounted layout-level row — not a
+       workspace column — at a fixed height, so it reserves the same space whether
+       empty or filled: selecting or clearing it never resizes or shifts the board. */
     .dock {
       min-height: 0;
       height: clamp(220px, 34vh, 440px);

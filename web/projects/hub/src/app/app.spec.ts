@@ -44,25 +44,32 @@ describe('hub App', () => {
     expect(el.querySelector('[data-testid="runner-strip"]')).toBeTruthy();
   });
 
-  it('fills a bottom dock beside the workspace — not a workspace column — when a chunk is selected (issue #21)', async () => {
+  it('docks chunk detail in a persistent bottom row, so selecting never resizes the board (issue #21)', async () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    // Nothing selected: the dock is absent and the board+rail workspace stands alone.
-    expect(el.querySelector('fleet-chunk-detail')).toBeNull();
+    // Nothing selected: the dock is already mounted as a layout-level row — a
+    // sibling of the workspace, never a third column inside it — and holds a rest
+    // state prompting the operator to pick a chunk.
+    const dockBefore = el.querySelector('fleet-chunk-detail.dock');
+    expect(dockBefore).toBeTruthy();
+    expect(dockBefore?.closest('.workspace')).toBeNull();
+    expect(dockBefore?.parentElement?.classList.contains('layout')).toBe(true);
     expect(el.querySelector('.workspace')).toBeTruthy();
+    expect(el.querySelector('fleet-chunk-detail-panel')).toBeNull();
+    expect(el.querySelector('[data-testid="chunk-detail-empty"]')?.textContent).toContain('SELECT');
 
-    // Selecting a card fills the dock.
+    // Selecting a card fills the SAME dock element — the board layout gains no node,
+    // so the board columns cannot resize or shift.
     fixture.debugElement.query(By.css('fleet-board-shell')).componentInstance.selectChunk.emit('ch_1');
     await fixture.whenStable();
 
-    const dock = el.querySelector('fleet-chunk-detail');
-    expect(dock).toBeTruthy();
-    // The dock is a layout-level row, a sibling of the workspace — never a third
-    // column inside it — so filling it cannot reflow the board columns.
-    expect(dock?.classList.contains('dock')).toBe(true);
-    expect(dock?.closest('.workspace')).toBeNull();
-    expect(dock?.parentElement?.classList.contains('layout')).toBe(true);
+    const dockAfter = el.querySelector('fleet-chunk-detail.dock');
+    expect(dockAfter).toBe(dockBefore);
+    // The rest prompt is gone (the dock now reflects the selected chunk), while the
+    // dock stays a layout row beneath — not inside — the workspace.
+    expect(el.querySelector('[data-testid="chunk-detail-empty"]')?.textContent ?? '').not.toContain('SELECT');
+    expect(dockAfter?.closest('.workspace')).toBeNull();
   });
 });
