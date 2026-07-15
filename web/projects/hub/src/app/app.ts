@@ -17,8 +17,9 @@ import {
  * - the {@link FleetLiveUpdates} spine subscribes to `GET /api/events/stream` and
  *   invalidates the reads on every hub fact, so the board streams live (D-097);
  * - {@link BoardShell} renders every chunk in its derived-status column (D-004);
- *   selecting a card opens the {@link ChunkDetail} drawer — node history, artifacts,
- *   and the human-loop actions (answer a question, resolve a gate, copy a takeover);
+ *   selecting a card fills the {@link ChunkDetail} dock beneath the board — node
+ *   history, artifacts, and the human-loop actions (answer a question, resolve a
+ *   gate, copy a takeover) — without reflowing the board columns;
  * - {@link QueuePanel} shapes the ready queue (prioritize + group); {@link RunnerStrip}
  *   shows the registry with pause/resume — the two operator controls (MVP criterion 11).
  */
@@ -28,13 +29,13 @@ import {
   imports: [BoardShell, ChunkDetail, QueuePanel, RunnerStrip],
   template: `
     <div class="layout">
-      <div class="workspace" [class.has-detail]="selected() !== null">
+      <div class="workspace">
         <fleet-board-shell class="board" [connection]="connection()" [chunks]="chunks()" (selectChunk)="selected.set($event)" />
         <fleet-queue-panel class="rail" />
-        @if (selected() !== null) {
-          <fleet-chunk-detail class="detail" [chunkId]="selected()" (dismiss)="selected.set(null)" />
-        }
       </div>
+      @if (selected() !== null) {
+        <fleet-chunk-detail class="dock" [chunkId]="selected()" (dismiss)="selected.set(null)" />
+      }
       <fleet-runner-strip class="runners" />
     </div>
   `,
@@ -54,9 +55,6 @@ import {
       grid-template-columns: 1fr minmax(240px, 300px);
       min-height: 0;
     }
-    .workspace.has-detail {
-      grid-template-columns: 1fr minmax(240px, 300px) minmax(280px, 360px);
-    }
     .board {
       min-width: 0;
     }
@@ -65,8 +63,12 @@ import {
       overflow-y: auto;
       border-left: 1px solid var(--bezel);
     }
-    .detail {
-      min-width: 0;
+    /* Chunk detail docks along the bottom, spanning the full width beneath the
+       board and rail. It is a layout-level row, not a workspace column, so filling
+       or clearing it never resizes or shifts the board columns. */
+    .dock {
+      min-height: 0;
+      height: clamp(220px, 34vh, 440px);
     }
   `,
 })
@@ -80,7 +82,7 @@ export class App {
     this.live.start();
   }
 
-  /** The board card the operator opened, or `null` when the drawer is dismissed. */
+  /** The board card the operator opened, or `null` when the dock is dismissed. */
   protected readonly selected = signal<string | null>(null);
 
   /** Header status: the live stream's connection state, falling back to the health read. */

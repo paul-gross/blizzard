@@ -1,5 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { EVENT_SOURCE_FACTORY, type EventSourceFactory } from 'fleet';
 
@@ -41,5 +42,27 @@ describe('hub App', () => {
     // The queue-shaping panel and the runner strip compose alongside the board.
     expect(el.querySelector('[data-testid="queue-panel"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="runner-strip"]')).toBeTruthy();
+  });
+
+  it('fills a bottom dock beside the workspace — not a workspace column — when a chunk is selected (issue #21)', async () => {
+    const fixture = TestBed.createComponent(App);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    // Nothing selected: the dock is absent and the board+rail workspace stands alone.
+    expect(el.querySelector('fleet-chunk-detail')).toBeNull();
+    expect(el.querySelector('.workspace')).toBeTruthy();
+
+    // Selecting a card fills the dock.
+    fixture.debugElement.query(By.css('fleet-board-shell')).componentInstance.selectChunk.emit('ch_1');
+    await fixture.whenStable();
+
+    const dock = el.querySelector('fleet-chunk-detail');
+    expect(dock).toBeTruthy();
+    // The dock is a layout-level row, a sibling of the workspace — never a third
+    // column inside it — so filling it cannot reflow the board columns.
+    expect(dock?.classList.contains('dock')).toBe(true);
+    expect(dock?.closest('.workspace')).toBeNull();
+    expect(dock?.parentElement?.classList.contains('layout')).toBe(true);
   });
 });

@@ -41,10 +41,10 @@ import {
   `,
 })
 export class ChunkDetail {
-  /** The selected chunk id, or `null` when the drawer is closed. */
+  /** The selected chunk id, or `null` when the dock is closed. */
   readonly chunkId = input<string | null>(null);
 
-  /** Emitted when the operator dismisses the drawer. */
+  /** Emitted when the operator dismisses the dock. */
   readonly dismiss = output<void>();
 
   private readonly detailQuery = injectHubChunkDetailQuery(() => this.chunkId());
