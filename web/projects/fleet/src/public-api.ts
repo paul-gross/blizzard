@@ -12,6 +12,7 @@ export type { BoardCard } from './lib/board-shell/board-shell';
 export { ChunkDetailPanel } from './lib/chunk-detail/chunk-detail-panel';
 export type { AnswerQuestionEvent, ResolveDecisionEvent } from './lib/chunk-detail/chunk-detail-panel';
 export { ChunkDetail } from './lib/chunk-detail/chunk-detail';
+export { EventLogPanel } from './lib/event-log/event-log-panel';
 export { QueuePanel } from './lib/queue/queue-panel';
 export { RunnerStrip } from './lib/runners/runner-strip';
 
@@ -27,7 +28,7 @@ export {
   type SseHandle,
   type SseStatus,
 } from './lib/sse/sse.service';
-export { FleetLiveUpdates, HUB_EVENT_STREAM_URL, HUB_EVENT_TYPES } from './lib/sse/fleet-live';
+export { FleetLiveUpdates, HUB_EVENT_STREAM_URL, HUB_EVENT_TYPES, type LoggedEvent } from './lib/sse/fleet-live';
 
 export { injectHubHealthQuery } from './lib/health/health.query';
 export { injectHubChunksQuery } from './lib/chunks/chunks.query';

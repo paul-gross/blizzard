@@ -1,4 +1,4 @@
-import { DestroyRef, EnvironmentInjector, Injectable, type Signal, effect, inject } from '@angular/core';
+import { DestroyRef, EnvironmentInjector, Injectable, type Signal, effect, inject, signal } from '@angular/core';
 import { QueryClient } from '@tanstack/angular-query-experimental';
 
 import { hubChunkKey, hubChunksKey, hubQueueKey, hubRunnersKey } from '../query-keys';
@@ -37,6 +37,26 @@ interface RunnerEvent {
 type HubEventPayload = Partial<ChunkChanged & QuestionEvent & DecisionEvent & RunnerEvent>;
 
 /**
+ * One event recorded for the Event log feed (issue #25): its stream arrival order
+ * (`seq` — a stable, monotonic client key), its board vocabulary `type`, the parsed
+ * `data`, and the client-side arrival time `at` (ms epoch; the hub frames carry no
+ * timestamp of their own). Presentation — the human-readable summary — is the panel's.
+ */
+export interface LoggedEvent {
+  readonly seq: number;
+  readonly type: string;
+  readonly data: HubEventPayload;
+  readonly at: number;
+}
+
+/**
+ * Recent-event ring cap for the Event log — matches the broker's history depth
+ * (events/broker.py, `history=256`) so the feed holds as much as a fresh connect can
+ * ever backfill, and no more.
+ */
+const LOG_LIMIT = 256;
+
+/**
  * The live-update spine of the board (D-097): one SSE subscription to the hub's
  * event stream that **invalidates or patches TanStack queries** so every live view
  * keeps streaming while the cache stays truthful. It is the sanctioned bridge from
@@ -51,6 +71,11 @@ type HubEventPayload = Partial<ChunkChanged & QuestionEvent & DecisionEvent & Ru
  * Gap recovery is reconnect-then-re-GET: on every reconnect the service invalidates
  * the whole `hub` tree, so any events missed while the socket was down are closed by
  * a fresh read — and the transport also resumes with `last_event_id` for the replay.
+ *
+ * It also tees the same event feed into {@link log}, a bounded ring the Event log panel
+ * renders (issue #25): because the same single subscription records every frame, the
+ * broker's connect-time replay (its buffered history) lands in the log as backfill for
+ * free, and the query-invalidation dispatch stays exactly as it was.
  */
 @Injectable({ providedIn: 'root' })
 export class FleetLiveUpdates {
@@ -59,10 +84,20 @@ export class FleetLiveUpdates {
   private readonly injector = inject(EnvironmentInjector);
   private readonly destroyRef = inject(DestroyRef);
   private handle: SseHandle<HubEventPayload> | null = null;
+  private seq = 0;
+  private readonly _log = signal<readonly LoggedEvent[]>([]);
 
   /** Connection lifecycle for the header status, or `idle` before {@link start}. */
   get status(): Signal<SseStatus> {
     return this.handle?.status ?? IDLE_STATUS;
+  }
+
+  /**
+   * The recent-event feed for the Event log (issue #25), oldest → newest, capped at
+   * {@link LOG_LIMIT}. Empty before {@link start}; the panel reverses it for display.
+   */
+  get log(): Signal<readonly LoggedEvent[]> {
+    return this._log.asReadonly();
   }
 
   /**
@@ -76,7 +111,10 @@ export class FleetLiveUpdates {
     });
     this.handle = handle;
 
-    const sub = handle.events.subscribe(({ type, data }) => this.dispatch(type, data));
+    const sub = handle.events.subscribe(({ type, data }) => {
+      this.record(type, data);
+      this.dispatch(type, data);
+    });
 
     // Reconnect-then-re-GET: a fresh reconnect re-reads the whole tree to close any gap.
     let lastReopens = handle.reopens();
@@ -96,6 +134,15 @@ export class FleetLiveUpdates {
       ref.destroy();
       handle.close();
       this.handle = null;
+    });
+  }
+
+  /** Append one frame to the bounded Event log ring, dropping the oldest past the cap. */
+  private record(type: string, data: HubEventPayload): void {
+    const entry: LoggedEvent = { seq: ++this.seq, type, data, at: Date.now() };
+    this._log.update((prev) => {
+      const next = [...prev, entry];
+      return next.length > LOG_LIMIT ? next.slice(next.length - LOG_LIMIT) : next;
     });
   }
 

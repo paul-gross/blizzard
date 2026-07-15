@@ -86,6 +86,24 @@ describe('FleetLiveUpdates', () => {
     expect(keys).toContainEqual(['hub', 'queue']);
   });
 
+  it('accumulates the event feed into the log, oldest first, without touching dispatch', () => {
+    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+    const live = TestBed.inject(FleetLiveUpdates);
+
+    const source = FakeEventSource.instances[0];
+    source.open();
+    source.emitNamed('chunk-changed', JSON.stringify({ chunk_id: 'ch_a', status: 'running' }), '1');
+    source.emitNamed('queue-changed', JSON.stringify({}), '2');
+
+    const log = live.log();
+    expect(log).toHaveLength(2);
+    expect(log[0].type).toBe('chunk-changed');
+    expect(log[0].data.chunk_id).toBe('ch_a');
+    expect(log[1].type).toBe('queue-changed');
+    // Monotonic client keys for a stable render track.
+    expect(log[1].seq).toBeGreaterThan(log[0].seq);
+  });
+
   it('re-GETs the whole tree after a reconnect to close the gap', () => {
     vi.useFakeTimers();
     try {

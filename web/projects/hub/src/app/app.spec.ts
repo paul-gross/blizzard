@@ -38,8 +38,9 @@ describe('hub App', () => {
 
     expect(el.querySelector('fleet-board-shell')).toBeTruthy();
     expect(el.querySelector('[data-testid="board-shell"]')).toBeTruthy();
-    // The queue-shaping panel and the runner strip compose alongside the board.
+    // The queue-shaping panel, the event log, and the runner strip compose alongside the board.
     expect(el.querySelector('[data-testid="queue-panel"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="event-log-panel"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="runner-strip"]')).toBeTruthy();
   });
 });

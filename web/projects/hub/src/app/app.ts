@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import {
   BoardShell,
   ChunkDetail,
+  EventLogPanel,
   FleetLiveUpdates,
   QueuePanel,
   RunnerStrip,
@@ -20,16 +21,20 @@ import {
  *   selecting a card opens the {@link ChunkDetail} drawer — node history, artifacts,
  *   and the human-loop actions (answer a question, resolve a gate, copy a takeover);
  * - {@link QueuePanel} shapes the ready queue (prioritize + group); {@link RunnerStrip}
- *   shows the registry with pause/resume — the two operator controls (MVP criterion 11).
+ *   shows the registry with pause/resume — the two operator controls (MVP criterion 11);
+ * - {@link EventLogPanel} renders the live event feed under the queue in the left rail.
  */
 @Component({
   selector: 'app-root',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BoardShell, ChunkDetail, QueuePanel, RunnerStrip],
+  imports: [BoardShell, ChunkDetail, EventLogPanel, QueuePanel, RunnerStrip],
   template: `
     <div class="layout">
       <div class="workspace" [class.has-detail]="selected() !== null">
-        <fleet-queue-panel class="rail" />
+        <div class="rail">
+          <fleet-queue-panel class="rail-queue" />
+          <fleet-event-log-panel class="rail-log" />
+        </div>
         <fleet-board-shell class="board" [connection]="connection()" [chunks]="chunks()" (selectChunk)="selected.set($event)" />
         @if (selected() !== null) {
           <fleet-chunk-detail class="detail" [chunkId]="selected()" (dismiss)="selected.set(null)" />
@@ -62,8 +67,21 @@ import {
     }
     .rail {
       min-width: 0;
-      overflow-y: auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
       border-right: 1px solid var(--bezel);
+    }
+    /* The ready queue takes its natural height (shrinking if it must); the event log
+       fills the rest of the rail and scrolls its own feed. */
+    .rail-queue {
+      flex: 0 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+    }
+    .rail-log {
+      flex: 1 1 0;
+      min-height: 0;
     }
     .detail {
       min-width: 0;
