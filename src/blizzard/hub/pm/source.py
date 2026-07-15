@@ -8,8 +8,8 @@ implements it against the forge — the ``blizzard-mock`` forge in tests, GitHub
 production — deriving the API calls from the pointer's URL and the hub's own
 per-vendor credentials.
 
-``fetch`` returns a small domain :class:`PmItem`; the edge maps it onto the wire
-:class:`~blizzard.wire.chunk.PmItemView` with the pointer and a ``fetched_at``.
+``fetch`` returns a small domain :class:`PmItem`; the edge maps it onto a wire
+:class:`~blizzard.wire.chunk.PmItemEntry` with the pointer, its label, and a ``fetched_at``.
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ class PmSourceError(Exception):
 
 
 class IPmSource(Protocol):
-    """The pass-through read seam the ``pm-item`` route depends on (D-047)."""
+    """The pass-through read seam the ``pm-items`` route depends on (D-047)."""
 
     def fetch(self, pointer: PmPointer) -> PmItem:
         """Fetch a pointer's body + comments from the forge, never storing them."""

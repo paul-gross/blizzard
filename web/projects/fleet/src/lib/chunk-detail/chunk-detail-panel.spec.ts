@@ -2,7 +2,20 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
 import type { ChunkDetail } from '../api/hub';
-import { ChunkDetailPanel } from './chunk-detail-panel';
+import { ChunkDetailPanel, type PmItemsState } from './chunk-detail-panel';
+
+const ISSUE_DETAIL: ChunkDetail = {
+  chunk_id: 'ch_01issue00000000000000000000',
+  graph_id: 'gr_1',
+  status: 'running',
+  current_node_id: 'nd_build',
+  latest_epoch: 1,
+  pm_pointers: [
+    { provider: 'github', url: 'https://github.com/acme/widget/issues/42', label: 'gh:widget#42' },
+  ],
+  history: [],
+  artifacts: [],
+};
 
 const REVIEW_FAIL_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01review0000000000000000000',
@@ -257,5 +270,93 @@ describe('ChunkDetailPanel', () => {
 
     el.querySelector<HTMLButtonElement>('[data-testid="detail-close"]')?.click();
     expect(closed).toBe(true);
+  });
+
+  // --- The Issue tab (issue #24) --------------------------------------------
+
+  async function openIssueTab(pmItems: PmItemsState) {
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', ISSUE_DETAIL);
+    fixture.componentRef.setInput('pmItems', pmItems);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    el.querySelector<HTMLButtonElement>('[data-testid="tab-issue"]')?.click();
+    await fixture.whenStable();
+    return el;
+  }
+
+  it('keeps the issue content on its own tab — chunk detail is not replaced (AC3)', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', ISSUE_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    // Detail is the default tab: the chunk detail sections render, the Issue pane does not.
+    expect(el.querySelector('[data-testid="issue-pane"]')).toBeNull();
+    expect(el.querySelector('[aria-label="Node history"]')).not.toBeNull();
+    // The Issue tab badges the pointer count from the chunk aggregate.
+    expect(el.querySelector('[data-testid="issue-count"]')?.textContent).toContain('1');
+  });
+
+  it('renders the issue description and messages on the Issue tab (AC2)', async () => {
+    const el = await openIssueTab({
+      status: 'success',
+      items: [
+        {
+          provider: 'github',
+          url: 'https://github.com/acme/widget/issues/42',
+          label: 'gh:widget#42',
+          fetched_at: '2026-07-15T00:00:00Z',
+          body: 'the widget flake reproduces under load',
+          comments: ['seen it too', 'repro attached'],
+          error: null,
+        },
+      ],
+    });
+    expect(el.querySelector('[data-testid="issue-pane"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="issue-label"]')?.textContent).toContain('gh:widget#42');
+    expect(el.querySelector('[data-testid="issue-body"]')?.textContent).toContain('reproduces under load');
+    const messages = [...el.querySelectorAll('[data-testid="issue-message"]')].map((m) => m.textContent?.trim());
+    expect(messages).toEqual(['seen it too', 'repro attached']);
+    // The chunk-detail sections are hidden while the Issue tab is open — a tab, not a merge.
+    expect(el.querySelector('[aria-label="Node history"]')).toBeNull();
+  });
+
+  it('shows one entry per pointer for a grouped chunk (AC4)', async () => {
+    const el = await openIssueTab({
+      status: 'success',
+      items: [
+        { provider: 'github', url: 'https://github.com/acme/widget/issues/42', label: 'gh:widget#42', fetched_at: 't', body: 'first', comments: [] },
+        { provider: 'github', url: 'https://github.com/acme/widget/issues/43', label: 'gh:widget#43', fetched_at: 't', body: 'second', comments: [] },
+      ],
+    });
+    const items = el.querySelectorAll('[data-testid="issue-item"]');
+    expect(items).toHaveLength(2);
+    const bodies = [...el.querySelectorAll('[data-testid="issue-body"]')].map((b) => b.textContent?.trim());
+    expect(bodies).toEqual(['first', 'second']);
+  });
+
+  it('shows an empty state when the chunk has no linked issue (AC4)', async () => {
+    const el = await openIssueTab({ status: 'success', items: [] });
+    expect(el.querySelector('[data-testid="issue-empty"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="issue-item"]')).toBeNull();
+  });
+
+  it('degrades a single unreachable pointer to an inline notice (AC5)', async () => {
+    const el = await openIssueTab({
+      status: 'success',
+      items: [
+        { provider: 'github', url: 'https://github.com/acme/widget/issues/42', label: 'gh:widget#42', fetched_at: 't', body: 'reachable', comments: [] },
+        { provider: 'github', url: 'https://github.com/acme/widget/issues/43', label: 'gh:widget#43', fetched_at: 't', body: null, comments: [], error: 'forge unreachable for issues/43' },
+      ],
+    });
+    // The reachable pointer still renders its body beside the failed pointer's notice.
+    expect(el.querySelector('[data-testid="issue-body"]')?.textContent).toContain('reachable');
+    expect(el.querySelector('[data-testid="issue-item-error"]')?.textContent).toContain('forge unreachable');
+  });
+
+  it('shows a visible notice when the whole forge read fails (AC5)', async () => {
+    const el = await openIssueTab({ status: 'error', items: [] });
+    expect(el.querySelector('[data-testid="issue-error"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="issue-body"]')).toBeNull();
   });
 });

@@ -3,8 +3,8 @@
 Ingest wraps one or more PM pointers into chunks (``POST /chunks``); a pointer
 already held by a live chunk is rejected **409** with the existing chunk id (D-093).
 The list/detail views carry the **derived** status (D-004) — never a stored column
-— and the current node. ``GET /chunks/{id}/pm-item`` is the vendor-native
-pass-through read (D-047), contents never stored.
+— and the current node. ``GET /chunks/{id}/pm-items`` is the vendor-native
+pass-through read (D-047/D-084) — one entry per pointer, contents never stored.
 """
 
 from __future__ import annotations
@@ -178,11 +178,27 @@ class ChunkDetail(BaseModel):
     open_prs: list[PrView] = []
 
 
-class PmItemView(BaseModel):
-    """A pass-through PM item read (D-047) — body + comments, vendor-native."""
+class PmItemEntry(BaseModel):
+    """One pointer's pass-through PM item (D-047/D-074) — body + comment thread, vendor-native.
+
+    ``label`` is the board-legible pointer label (D-075) — ``gh:blizzard#8`` — null when the
+    URL is not issue-shaped. A per-pointer forge failure degrades here rather than failing the
+    whole read (D-084): ``error`` carries the reason and ``body`` is null, so one unreachable
+    pointer never blinds the reader to the pointers it did reach."""
 
     provider: str
     url: str
+    label: str | None = None
     fetched_at: str
-    body: str
+    body: str | None = None
     comments: list[str] = []
+    error: str | None = None
+
+
+class PmItemsView(BaseModel):
+    """A chunk's pass-through PM items (D-074/D-084) — one entry per pointer, order preserved.
+
+    Empty when the chunk holds no pointers — the board's empty state; a grouped chunk carrying
+    many pointers (D-047) yields one entry per pointer, each fetched fresh and never stored."""
+
+    items: list[PmItemEntry] = []

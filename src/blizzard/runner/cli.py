@@ -209,14 +209,15 @@ def ask(prompt: str, options: str | None) -> None:
 @runner.command("pm-items")
 @click.argument("chunk_id")
 def pm_items(chunk_id: str) -> None:
-    """Worker: pass-through read of a chunk's PM item (runner -> hub -> vendor).
+    """Worker: pass-through read of a chunk's PM items (runner -> hub -> vendor).
 
     A pure client of the runner's local API (D-023/D-084): the build node reads its
     chunk's issue body + comment thread through the runner's proxy route
     (``graphs/prompts/build.md``), which forwards to the hub — the worker never talks
     to the hub or the PM system directly. The runner URL is inherited from the spawn
-    environment (``BLIZZARD_RUNNER_URL``), so no identity argument; the item prints as
-    JSON (``{provider, url, fetched_at, body, comments}``) for the worker to consume.
+    environment (``BLIZZARD_RUNNER_URL``), so no identity argument; the items print as
+    JSON (``{items: [{provider, url, label, fetched_at, body, comments, error}, ...]}``)
+    — one entry per pointer — for the worker to consume.
     """
     runner_url = os.environ.get(ENV_RUNNER_URL)
     if not runner_url:

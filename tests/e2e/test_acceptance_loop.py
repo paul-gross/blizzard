@@ -132,7 +132,7 @@ _PM_BUILD_SCRIPT = (
     '    ["blizzard", "runner", "pm-items", chunk_id],\n'
     "    check=True, capture_output=True, text=True,\n"
     ").stdout\n"
-    "item = json.loads(out)\n"
+    "item = json.loads(out)['items'][0]\n"
     "payload = item['body'] + '\\n' + '\\n'.join(item['comments']) + '\\n'\n"
     '(pathlib.Path(repo) / "LANDED.md").write_text(payload)\n'
     'subprocess.run(["git", "-C", repo, "add", "-A"], check=True)\n'
@@ -569,11 +569,12 @@ def test_build_worker_reads_pm_item_through_the_passthrough(tmp_path: Path) -> N
         chunk_id = ingested.json()["chunk_id"]
 
         # Sanity: the hub's own pass-through returns the body + comment (the runner's proxy
-        # forwards to exactly this route).
-        item = hub.get(f"/api/chunks/{chunk_id}/pm-item")
+        # forwards to exactly this route) — one entry per pointer.
+        item = hub.get(f"/api/chunks/{chunk_id}/pm-items")
         assert item.status_code == 200, item.text
-        assert item.json()["body"] == _PM_BODY
-        assert item.json()["comments"] == [_PM_COMMENT]
+        entry = item.json()["items"][0]
+        assert entry["body"] == _PM_BODY
+        assert entry["comments"] == [_PM_COMMENT]
 
         # Drive the loop with the runner's local API up so the worker's `pm-items` verb lands.
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)

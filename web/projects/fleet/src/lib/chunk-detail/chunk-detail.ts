@@ -1,10 +1,12 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
 import { injectHubChunkDetailQuery } from '../chunks/chunk-detail.query';
+import { injectHubChunkPmItemsQuery } from '../chunks/chunk-pm-items.query';
 import { injectAnswerQuestionMutation, injectResolveDecisionMutation } from '../chunks/human.mutations';
 import {
   type AnswerQuestionEvent,
   ChunkDetailPanel,
+  type PmItemsState,
   type ResolveDecisionEvent,
 } from './chunk-detail-panel';
 
@@ -27,6 +29,7 @@ import {
     @if (detail(); as d) {
       <fleet-chunk-detail-panel
         [detail]="d"
+        [pmItems]="pmItems()"
         (dismiss)="dismiss.emit()"
         (answerQuestion)="onAnswer($event)"
         (resolveDecision)="onResolve($event)"
@@ -48,11 +51,21 @@ export class ChunkDetail {
   readonly dismiss = output<void>();
 
   private readonly detailQuery = injectHubChunkDetailQuery(() => this.chunkId());
+  private readonly pmItemsQuery = injectHubChunkPmItemsQuery(() => this.chunkId());
   private readonly answerMutation = injectAnswerQuestionMutation();
   private readonly resolveMutation = injectResolveDecisionMutation();
 
   /** The open chunk's aggregate, or `undefined` while closed / still loading. */
   protected readonly detail = computed(() => (this.chunkId() === null ? undefined : this.detailQuery.data()));
+
+  /** The open chunk's related PM items + fetch state for the Issue tab (issue #24). A failed
+   * read (unreachable hub / no work-source) becomes `error` so the tab shows a visible notice. */
+  protected readonly pmItems = computed<PmItemsState>(() => {
+    if (this.chunkId() === null) return { status: 'loading', items: [] };
+    if (this.pmItemsQuery.isError()) return { status: 'error', items: [] };
+    if (this.pmItemsQuery.isPending()) return { status: 'loading', items: [] };
+    return { status: 'success', items: this.pmItemsQuery.data()?.items ?? [] };
+  });
 
   protected onAnswer(event: AnswerQuestionEvent): void {
     this.answerMutation.mutate({ questionId: event.questionId, answer: event.answer, chunkId: event.chunkId });

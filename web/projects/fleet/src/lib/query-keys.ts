@@ -13,3 +13,8 @@ export const hubRunnersKey = ['hub', 'runners'] as const;
 export function hubChunkKey(chunkId: string | null): readonly unknown[] {
   return ['hub', 'chunk', chunkId];
 }
+
+/** One chunk's related PM items (issue body + comments), keyed by id. */
+export function hubChunkPmItemsKey(chunkId: string | null): readonly unknown[] {
+  return ['hub', 'chunk', chunkId, 'pm-items'];
+}
