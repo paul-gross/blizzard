@@ -35,7 +35,7 @@ from blizzard.hub.domain.work import (
     open_escalation,
     transition_history,
 )
-from blizzard.hub.pm.label import pointer_label
+from blizzard.hub.pm.label import ForgeWebBase, forge_web_base, pointer_label
 from blizzard.hub.pm.source import PmSourceError
 from blizzard.wire.chunk import (
     ArtifactView,
@@ -72,12 +72,25 @@ def _publish_open_decision(services: HubServices, chunk_id: str) -> None:
         services.events.publish_decision_opened(chunk_id, decision.decision_id)
 
 
-def _history_views(facts: ChunkFacts) -> list[TransitionView]:
-    """The chunk's transitions oldest-first — the board's node-history timeline (D-036)."""
+def _node_name(graph: Graph | None, node_id: str | None) -> str | None:
+    """The human graph name for ``node_id`` in ``graph``, or ``None`` when unresolvable."""
+    if graph is None or node_id is None:
+        return None
+    node = graph.node_by_id(node_id)
+    return node.name if node is not None else None
+
+
+def _history_views(facts: ChunkFacts, graph: Graph | None) -> list[TransitionView]:
+    """The chunk's transitions oldest-first — the board's node-history timeline (D-036).
+
+    Each edge's node ids are resolved to their human graph names against the chunk's
+    pinned graph so the timeline reads ``build -> review`` (D-075)."""
     return [
         TransitionView(
             from_node_id=t.from_node_id,
+            from_node_name=_node_name(graph, t.from_node_id),
             to_node_id=t.to_node_id,
+            to_node_name=_node_name(graph, t.to_node_id),
             choice_name=t.choice_name,
             epoch=t.epoch,
             recorded_at=t.recorded_at.isoformat(),
@@ -86,7 +99,7 @@ def _history_views(facts: ChunkFacts) -> list[TransitionView]:
     ]
 
 
-def _artifact_views(rows: list[ArtifactRow]) -> list[ArtifactView]:
+def _artifact_views(rows: list[ArtifactRow], web_base: ForgeWebBase | None) -> list[ArtifactView]:
     """The chunk's inline artifact store — every entry, with an asset's content and a
     git-commit's pinned reference surfaced (D-036); ordered by ``{node}.{name}.{epoch}``
     so a re-run's later-epoch entry follows its predecessors (append-only history)."""
@@ -102,12 +115,14 @@ def _artifact_views(rows: list[ArtifactRow]) -> list[ArtifactView]:
             "epoch": row.epoch,
         }
         if isinstance(artifact, GitCommitArtifact):
+            branch_url = web_base.branch_url(artifact.repo, artifact.branch_name) if web_base is not None else None
             views.append(
                 ArtifactView(
                     **common,
                     repo=artifact.repo,
                     branch_name=artifact.branch_name,
                     commit_hash=artifact.commit_hash,
+                    branch_url=branch_url,
                 )
             )
         else:
@@ -183,7 +198,10 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
     route = services.chunks.route_of(chunk_id)
     escalation = open_escalation(facts)
     decision = services.chunks.decision_for_chunk(chunk_id)
-    node_id, node_name = _current_node(services, chunk, facts, {})
+    graph = services.graphs.get(chunk.graph_id)
+    node_id = current_node_id(facts) or (graph.entry_node_id if graph is not None else None)
+    node_name = _node_name(graph, node_id)
+    web_base = forge_web_base(p.url for p in chunk.pm_pointers)
     return ChunkDetail(
         chunk_id=chunk.chunk_id,
         graph_id=chunk.graph_id,
@@ -203,8 +221,8 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
         if escalation is not None
         else None,
         decision=to_decision_view(decision) if decision is not None else None,
-        history=_history_views(facts),
-        artifacts=_artifact_views(services.chunks.load_artifacts(chunk_id)),
+        history=_history_views(facts, graph),
+        artifacts=_artifact_views(services.chunks.load_artifacts(chunk_id), web_base),
         questions=[question_view(q) for q in services.chunks.load_questions(chunk_id) if not q.answered],
         awaiting_external_merge=awaiting_external_merge(facts),
         open_prs=[PrView(repo=pr.repo, number=pr.number, url=pr.url) for pr in facts.pr_opened],

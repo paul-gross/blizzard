@@ -93,12 +93,21 @@ export type ArtifactKind = 'git_commit' | 'asset';
  * document); the ``repo``/``branch_name``/``commit_hash`` trio carries a
  * ``git_commit`` artifact's pinned reference (the hub stores the reference, never the
  * code — D-012).
+ *
+ * ``branch_url`` is the forge ``tree`` URL for the produced branch, resolved server-side
+ * from the chunk's issue-shaped PM pointer (D-075) so the board can link a ``git_commit``
+ * to the branch on the forge; null when no forge web base is derivable — the row then
+ * shows the branch name without a link (no broken link).
  */
 export type ArtifactView = {
     /**
      * Branch Name
      */
     branch_name?: string | null;
+    /**
+     * Branch Url
+     */
+    branch_url?: string | null;
     /**
      * Commit Hash
      */
@@ -1385,6 +1394,11 @@ export type SubmittedArtifact = {
  * and its destination — oldest first on the detail. This is what makes the review-fail
  * loop legible: a ``review -> build`` entry with ``choice_name = "fail"`` is a visible
  * step in the timeline (MVP criterion 9/11).
+ *
+ * ``from_node_name``/``to_node_name`` are the nodes' human graph names (``build``,
+ * ``review``) the board renders in place of the raw ``nd_`` ULIDs; resolved here so the
+ * timeline is legible without reassembly (D-075), null when the pinned graph cannot
+ * resolve the id.
  */
 export type TransitionView = {
     /**
@@ -1400,6 +1414,10 @@ export type TransitionView = {
      */
     from_node_id: string | null;
     /**
+     * From Node Name
+     */
+    from_node_name?: string | null;
+    /**
      * Recorded At
      */
     recorded_at: string;
@@ -1407,6 +1425,10 @@ export type TransitionView = {
      * To Node Id
      */
     to_node_id: string;
+    /**
+     * To Node Name
+     */
+    to_node_name?: string | null;
 };
 
 /**

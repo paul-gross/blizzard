@@ -102,18 +102,23 @@ def test_detail_carries_the_full_aggregate(tmp_path: Path) -> None:
     assert detail["current_node_name"] == "approve-gate"
     assert detail["pm_pointers"][0]["label"] == "gh:widget#7"
 
-    # Full transition history with the judgement choice on the edge (D-027/D-036).
+    # Full transition history with the judgement choice on the edge (D-027/D-036), and the
+    # nodes' human graph names resolved onto each edge so the timeline reads build -> gate.
     assert len(detail["history"]) == 1
     step = detail["history"][0]
     assert step["from_node_id"] == nodes["build"]
+    assert step["from_node_name"] == "build"
     assert step["to_node_id"] == nodes["approve-gate"]
+    assert step["to_node_name"] == "approve-gate"
     assert step["choice_name"] == "pass"
 
-    # Inline artifact store — the git-commit reference (the hub stores the pointer, D-012).
+    # Inline artifact store — the git-commit reference (the hub stores the pointer, D-012),
+    # with the forge branch link derived from the chunk's issue-shaped pointer (D-075).
     assert len(detail["artifacts"]) == 1
     art = detail["artifacts"][0]
     assert art["kind"] == "git_commit"
     assert (art["repo"], art["branch_name"], art["commit_hash"]) == ("acme/widget", "feature/widget", "abc123")
+    assert art["branch_url"] == "http://forge.local/acme/widget/tree/feature/widget"
 
     # The open gate decision with its choices (D-045).
     assert detail["decision"]["node_name"] == "approve-gate"
