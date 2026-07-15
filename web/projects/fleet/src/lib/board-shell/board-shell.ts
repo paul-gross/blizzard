@@ -239,8 +239,20 @@ export interface BoardCard {
       font-size: 13px;
       color: var(--label-dim);
     }
+    /* The DONE column carries the mockup's green treatment (flow-board.html): a
+       green header label + head accent, and green card accents, all from tokens. */
+    .b-col[data-col='done'] .b-col-head {
+      border-bottom-color: var(--green-dim);
+    }
+    .b-col[data-col='done'] .b-col-head .lbl {
+      color: var(--green);
+    }
+    .b-col[data-col='done'] .card {
+      border-left-color: var(--green);
+    }
     .b-col-body {
       overflow-y: auto;
+      overflow-x: hidden;
       flex: 1;
       padding: 4px;
       display: flex;
@@ -248,13 +260,16 @@ export interface BoardCard {
       gap: 4px;
     }
     .card {
+      box-sizing: border-box;
       border: 1px solid var(--line);
+      border-left: 3px solid var(--amber);
       background: rgba(0, 0, 0, 0.25);
       padding: 4px 6px;
       display: flex;
       flex-direction: column;
       gap: 3px;
       width: 100%;
+      overflow-wrap: anywhere;
     }
     .card:hover {
       border-color: var(--cyan);
