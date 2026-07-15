@@ -3,9 +3,9 @@
 Client verbs are pure clients of the runner's local API; ``host`` *becomes* the
 runner daemon (D-061). Only ``init`` / ``migrate`` / ``host`` are implemented in
 the scaffold — the rest are stubs that name themselves, present in ``--help`` and
-filled in by the backend builder. Worker-hook verbs (``heartbeat``, ``ask``,
-``pm-items``) take their identity from the spawn-injected environment and pass no
-identity arguments.
+filled in by the backend builder. Worker-hook verbs (``heartbeat``, ``session-end``,
+``ask``, ``pm-items``) take their identity from the spawn-injected environment and pass
+no identity arguments.
 """
 
 from __future__ import annotations
@@ -22,7 +22,12 @@ import uvicorn
 from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.config import ConfigError, RunnerConfig
-from blizzard.runner.loop.build import PeriodicDriver, mark_resume_intents_on_shutdown, run_single_tick
+from blizzard.runner.loop.build import (
+    PeriodicDriver,
+    mark_crash_resume_intents_on_startup,
+    mark_resume_intents_on_shutdown,
+    run_single_tick,
+)
 from blizzard.runner.runtime import ensure_current_revision, init_environment, migrate, migration_runner
 
 ENV_TICK_SECONDS = "BZ_RUNNER_TICK_SECONDS"
@@ -114,6 +119,16 @@ def host(directory: str, host_: str | None, port: int | None) -> None:
     if hasattr(server, "install_signal_handlers"):
         server.install_signal_handlers = lambda: None  # type: ignore[method-assign]
 
+    # Ungraceful-restart recovery (#13, D-082): a `kill -9` / OOM / reboot never ran the
+    # graceful shutdown marker below, so before the loop starts we detect the sessions killed
+    # mid-work — dead pid, no recorded session-end, heartbeat not stale — and mark them for the
+    # same startup RESUME the first tick runs. The mark is the only ungraceful-specific step;
+    # everything downstream is the graceful path's machinery (kill-first, unchanged epoch, the
+    # D-088 ownership fence). A clean `blizzard runner init` has no leases, so this is a no-op.
+    resumable = mark_crash_resume_intents_on_startup(config)
+    if resumable:
+        click.echo(f"marked {resumable} crash-interrupted lease(s) for restart-resume")
+
     driver.start()  # startup recovery is REAP running first inside the tick
     try:
         server.run()
@@ -173,6 +188,34 @@ def heartbeat() -> None:
         resp.raise_for_status()
     except httpx.HTTPError as exc:  # soft-fail — never break the worker's tool call
         click.echo(f"heartbeat: could not reach the runner ({exc}); skipping", err=True)
+
+
+@runner.command("session-end")
+def session_end() -> None:
+    """Worker hook: record the session's exit (identity from the environment).
+
+    A pure client of the runner's local API (D-023): the ``SessionEnd`` hook runs this
+    when the worker's Claude session exits, and it posts to ``BLIZZARD_RUNNER_URL`` for
+    the lease in ``BLIZZARD_LEASE_ID`` — both inherited from the spawn environment, so no
+    arguments (design/harness-adapters.md). The fact is the "declared done" signal
+    (exit-is-done, D-055) startup crash-recovery reads to tell a clean exit from a worker
+    killed mid-work (D-082). It fails **soft**, like the heartbeat: a hook must never break
+    the worker's exit, so a missing identity or an unreachable runner is reported to stderr
+    and the command still exits 0.
+    """
+    lease_id = os.environ.get(ENV_LEASE_ID)
+    runner_url = os.environ.get(ENV_RUNNER_URL)
+    if not lease_id or not runner_url:
+        click.echo(f"session-end: no {ENV_LEASE_ID}/{ENV_RUNNER_URL} in the environment; skipping", err=True)
+        return
+    try:
+        resp = httpx.post(
+            f"{runner_url.rstrip('/')}/api/leases/{lease_id}/session-end",
+            timeout=_HEARTBEAT_TIMEOUT,
+        )
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:  # soft-fail — never break the worker's exit
+        click.echo(f"session-end: could not reach the runner ({exc}); skipping", err=True)
 
 
 @runner.command()

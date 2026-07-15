@@ -29,7 +29,9 @@ source, and ``BLIZZARD_CRASH_SWEEP=1``; skipped otherwise (see ``conftest.py``).
 
 from __future__ import annotations
 
+import contextlib
 import os
+import signal
 import time
 from pathlib import Path
 
@@ -372,6 +374,89 @@ def test_graceful_restart_resumes_in_flight_session(crash_env: CrashEnv, tmp_pat
         assert _open_resume_intents(runner_dir) == set()
 
         _assert_invariants(runner_dir, hub_dir, when="after graceful restart-resume")
+        tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
+        commits = [line for line in tree.splitlines() if line.strip()]
+        assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
+    finally:
+        hub.close()
+        terminate(runner_proc)
+        terminate(hub_proc)
+
+
+# --------------------------------------------------------------------------- #
+# Ungraceful restart-resume (issue #13) — crash mid-work, no graceful marker
+# --------------------------------------------------------------------------- #
+
+
+def _session_ends(runner_dir: Path) -> set[str]:
+    store, engine = _runner_store(runner_dir)
+    try:
+        return store.session_ended_lease_ids()
+    finally:
+        engine.dispose()
+
+
+def test_kill9_runner_resumes_in_flight_session(crash_env: CrashEnv, tmp_path: Path) -> None:
+    """An involuntary ``kill -9`` mid-build (no graceful marker) still re-attaches the session (issue #13, D-082).
+
+    The graceful scenario's twin, crashed instead of stopped: the build worker commits then hangs,
+    and a ``kill -9`` of the whole tree — the runner *and* its in-flight worker, a faithful reboot —
+    skips the shutdown ``finally`` entirely, so **no resume-intent marker** is written. Startup
+    crash-recovery must find the killed-mid-work lease itself (dead pid, no recorded session-end,
+    heartbeat not stale) and route it to the *same* RESUME the graceful path uses, so the chunk
+    lands **exactly once** under the same lease/epoch/session — only the pid rewritten — rather than
+    being redone under a fresh retry. This is the acceptance criterion #12's marker could not cover:
+    the case the systemd unit (``Restart=always``) actually exists for."""
+    landed_file = "LANDED-crash-resume.md"
+    hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
+    hub_port, runner_port = free_port(), free_port()
+
+    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+    runner_proc = None
+    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    try:
+        await_http(hub, "/api/health", proc=hub_proc)
+        chunk_id = _ingest_hanging_chunk(hub, crash_env.forge, landed_file)
+        write_runner_config(
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+        )
+        runner_proc = start_runner(runner_dir, crash_point=None)
+
+        # Let the chunk get claimed and the worker reach its commit, then hang mid-flight.
+        assert wait_status(hub, chunk_id, {"running"}) == "running"
+        _await_committed(runner_dir, chunk_id, landed_file)
+        before = _leases_for_chunk(runner_dir, chunk_id)
+        assert len(before) == 1, f"expected one lease before the crash, got {before}"
+        lease_id, epoch, session_id, pid_before = before[0]
+        assert session_id and pid_before is not None
+
+        # kill -9 the whole tree: the runner AND its hanging worker. The runner never runs its
+        # shutdown finally, and the SIGKILL'd worker never fires its SessionEnd hook — so there is
+        # neither a graceful resume-intent marker nor a session-end fact, exactly a reboot mid-run.
+        runner_proc.kill()
+        runner_proc.wait(timeout=10)
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.kill(pid_before, signal.SIGKILL)
+
+        assert _open_resume_intents(runner_dir) == set(), "an ungraceful kill must leave no graceful marker"
+        assert _session_ends(runner_dir) == set(), "a worker killed mid-work must record no session-end"
+        _assert_invariants(runner_dir, hub_dir, when="after ungraceful kill -9 of the runner mid-build")
+
+        # Restart: `host` runs startup crash-recovery (marks the killed-mid-work lease), then the
+        # first tick's RESUME re-attaches the same session in place.
+        runner_proc = start_runner(runner_dir, crash_point=None)
+        assert wait_status(hub, chunk_id, {"done"}) == "done", "chunk did not converge after ungraceful restart"
+
+        after = _leases_for_chunk(runner_dir, chunk_id)
+        # Nothing worked twice: still exactly one lease, same lease/epoch/session — a same-lease
+        # resume with no retry, reached with no graceful marker to hand it off.
+        assert len(after) == 1, f"crash-resume minted an extra lease (retry, not resume): {after}"
+        r_lease_id, r_epoch, r_session_id, pid_after = after[0]
+        assert (r_lease_id, r_epoch, r_session_id) == (lease_id, epoch, session_id)
+        assert pid_after != pid_before, "the resumed process pid was not rewritten"
+        assert _open_resume_intents(runner_dir) == set(), "the crash resume-intent was not cleared after recovery"
+
+        _assert_invariants(runner_dir, hub_dir, when="after ungraceful crash restart-resume")
         tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
         commits = [line for line in tree.splitlines() if line.strip()]
         assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"

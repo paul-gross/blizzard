@@ -37,6 +37,7 @@ from blizzard.runner.harness.adapter import WorkerPreamble
 from blizzard.runner.harness.preamble import render_worker_preamble
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import HubClientError
+from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.store.repository import (
     AskRecord,
     BufferedFact,
@@ -68,7 +69,7 @@ _ESCALATED = "escalated"
 _PARKED = "parked"  # a runner-config gate: the node-step completed, the chunk parks on a decision
 _RELEASED = "released"  # restart-resume found the chunk reassigned/detached — abandon, no requeue (D-088)
 
-#: The message RESUME delivers into a marked session on a graceful restart (D-082). Framed
+#: The message RESUME delivers into a marked session on a restart (D-082). Framed
 #: as a ``#``-prefixed comment so it is inert whether the session is real-harness prose or a
 #: blizzard-mock behavior *script* it ``exec``s (the same convention as the elicitation tail
 #: and the answer-resume framing). The exact prose is unpinned (D-061).
@@ -95,8 +96,8 @@ _SOLO_ENV_COUNT = 1
 _CP_REAP_BEFORE = crashpoint("reap.before-expire", "entered REAP; no lease expired yet")
 _CP_REAP_AFTER = crashpoint("reap.after-expire", "REAP done; stale leases expired")
 
-# RESUME — the graceful-restart re-attach, second in the tick (only ever non-empty on the
-# first tick after a graceful restart). These bracket the re-attach the way SPAWN brackets
+# RESUME — the restart re-attach, second in the tick (only ever non-empty on the first tick
+# after a restart, graceful or crash-detected). These bracket the re-attach the way SPAWN brackets
 # its spawn: the kill→re-attach→record window's *un-recordable* middle (the harness
 # resume-with-message call whose pid is not yet durable) is the same by-construction gap
 # SPAWN leaves between spawn and record_spawn — see ``_resume_in_place``. Armed at either
@@ -186,21 +187,22 @@ def reap(ctx: LoopContext) -> None:
             continue
         if not ctx.process.is_alive(lease.pid, lease.process_start_time or ""):
             continue  # exited — ADVANCE's (exit-is-done, D-055)
-        if _is_heartbeat_stale(ctx, lease, now):
+        if _is_heartbeat_stale(ctx.store, lease, now):
             _log.info("reaping stalled worker", lease_id=lease.lease_id, chunk_id=lease.chunk_id, pid=lease.pid)
             _fail_attempt(ctx, lease, reason=_REAPED)
         # A live, beating worker runs on.
     _CP_REAP_AFTER.reached()
 
 
-def _is_heartbeat_stale(ctx: LoopContext, lease: LeaseRecord, now: datetime) -> bool:
+def _is_heartbeat_stale(store: IWriteRunnerStore, lease: LeaseRecord, now: datetime) -> bool:
     """True iff the lease's last activity is older than the staleness threshold.
 
     Last activity is the newest heartbeat, or — before the worker's first tool call —
     the lease's own creation instant, so a freshly spawned worker is never read as
-    stalled inside the threshold window.
+    stalled inside the threshold window. Takes the store (not the context) so startup
+    crash-recovery, which runs before a full loop context exists, can share it.
     """
-    last = ctx.store.latest_heartbeat(lease.lease_id) or lease.created_at
+    last = store.latest_heartbeat(lease.lease_id) or lease.created_at
     return now - _as_utc(last) > HEARTBEAT_STALENESS_THRESHOLD
 
 
@@ -210,7 +212,7 @@ def _as_utc(value: datetime) -> datetime:
 
 
 # --------------------------------------------------------------------------- #
-# RESUME — the graceful-restart re-attach (D-082)
+# RESUME — the restart re-attach: graceful marking (#12) + crash detection (#13), D-082
 # --------------------------------------------------------------------------- #
 
 
@@ -219,9 +221,10 @@ def mark_resume_intents(store: IWriteRunnerStore, *, now: datetime) -> int:
 
     Called once as the daemon exits gracefully (SIGTERM: ``systemctl restart``/stop), *before*
     the workers die, so the next startup's :func:`resume` re-attaches each in-flight session in
-    place instead of retrying it fresh. An ungraceful ``kill -9`` never runs this, so a crashed
-    worker still routes to today's reap/requeue-fresh — the scope boundary is exactly "did the
-    daemon get to run shutdown code" (design/runner/loop.md).
+    place instead of retrying it fresh. An ungraceful ``kill -9`` never runs this — that case is
+    recovered symmetrically by :func:`mark_crash_resume_intents`, which ``host`` runs at startup
+    to mark the same intent for a lease killed mid-work (#13), so both restart paths converge on
+    the one RESUME step (design/runner/loop.md).
 
     Marks an **active, non-parked, session-bearing** lease: a parked lease is dormant on a
     question (its own resume is the answer, [ask-answer.md]); a lease with a pending completion/
@@ -233,8 +236,9 @@ def mark_resume_intents(store: IWriteRunnerStore, *, now: datetime) -> int:
     Each ``record_resume_intent`` is one durable row, so marking is atomic per lease: a crash
     mid-marking (a ``kill -9`` racing the graceful shutdown) leaves each lease either fully
     marked or not at all. An unmarked in-flight lease simply falls back to the ungraceful path —
-    REAP requeues it fresh on the next startup — so this hook degrades to the crash-recovery
-    contract rather than to a corrupt half-state; there is no intra-lease window to guard.
+    startup crash-recovery (:func:`mark_crash_resume_intents`) re-detects and resumes it — so this
+    hook degrades to the crash-recovery contract rather than to a corrupt half-state; there is no
+    intra-lease window to guard.
     """
     parked = store.parked_lease_ids()
     pending = store.pending_submission_lease_ids()
@@ -251,11 +255,69 @@ def mark_resume_intents(store: IWriteRunnerStore, *, now: datetime) -> int:
     return marked
 
 
+def mark_crash_resume_intents(store: IWriteRunnerStore, *, process: IProcessProbe, now: datetime) -> int:
+    """Detect crash-orphaned sessions at startup and mark them for same-lease resume (#13, D-082).
+
+    The **ungraceful** sibling of :func:`mark_resume_intents`. A ``kill -9`` / OOM / reboot
+    never runs the graceful shutdown marker, so the next startup has to find the interrupted
+    sessions itself and route them to the *same* RESUME re-attach — instead of ADVANCE reading
+    each dead worker as a done declaration (D-055) and failing it verdict-less into a fresh
+    retry (D-009), discarding its accumulated context exactly when recovery should keep it.
+    Run once by the ``host`` command before the loop starts, symmetric with the graceful marker
+    in its shutdown ``finally``; the first tick's :func:`resume` then consumes the marks, so the
+    ungraceful path reuses every fence the graceful one already carries — kill-first, the
+    unchanged epoch, and the D-088 abandon-if-reassigned ownership check.
+
+    A session-bearing lease is crash-resumable — and marked here — iff **all** hold:
+
+    * its worker's process is **gone** — ``(pid, start_time)`` is no longer live. An
+      orphaned-but-alive worker (a bare ``kill -9`` of only the runner pid left its children
+      running) is skipped: it is re-adopted through its own live heartbeat on the ``Restart=
+      always`` bounce, never re-spawned;
+    * it recorded **no session-end** — the ``SessionEnd`` hook never fired, so the worker did
+      not declare done. A dead pid *with* a session-end is a clean exit ADVANCE judges (the
+      acceptance split this issue turns on);
+    * its heartbeat is **not stale** — it was actively working when killed. A worker already
+      stalled at crash time is left to today's reap/verdict-less-fail path and retried per the
+      node's ``retries`` (unchanged) — resuming a wedged session would only wedge it again.
+
+    Parked (dormant on a question, resumed by its answer) and pending-submission (outcome
+    already elicited, awaiting flush) leases are skipped for the same reasons the graceful
+    marker skips them. Marking is one-shot by construction: this runs only at startup, never
+    per tick, so a resume that itself fails (missing/corrupt session, stale-epoch first write)
+    is not re-marked — its resumed process exits and ADVANCE requeues it fresh, the self-heal
+    the graceful path already relies on. Returns the number marked.
+    """
+    parked = store.parked_lease_ids()
+    pending = store.pending_submission_lease_ids()
+    ended = store.session_ended_lease_ids()
+    marked = 0
+    for lease in store.list_active_leases():
+        if lease.pid is None or lease.session_id is None:
+            continue  # never reached spawn-return — REAP's residue, nothing to resume
+        if lease.lease_id in parked or lease.lease_id in pending:
+            continue  # dormant on a question / outcome already elicited — not a crash to resume
+        if lease.lease_id in ended:
+            continue  # declared done (SessionEnd fired) — ADVANCE judges it (exit-is-done, D-055)
+        if process.is_alive(lease.pid, lease.process_start_time or ""):
+            continue  # orphaned-but-alive — re-adopted via its live heartbeat, never re-spawned
+        if _is_heartbeat_stale(store, lease, now):
+            continue  # stalled at crash time — reaped & retried per the node's budget, unchanged
+        store.record_resume_intent(lease_id=lease.lease_id, marked_at=now)
+        marked += 1
+    if marked:
+        _log.info("marked crash-interrupted leases for restart-resume", count=marked)
+    return marked
+
+
 def resume(ctx: LoopContext) -> None:
-    """Re-attach to in-flight sessions a graceful restart marked (D-082) — startup recovery.
+    """Re-attach to in-flight sessions a restart marked for same-lease resume (D-082) — startup recovery.
 
     A no-op on every normal tick (nothing is marked); non-empty only on the first tick after a
-    graceful restart. Each marked lease is either **resumed in place** — under the unchanged
+    restart, whether marked by the graceful shutdown hook (#12) or by ``host``'s startup crash-
+    recovery scan when a ``kill -9`` / reboot skipped that hook (#13). Both write the same
+    resume-intent, so this step is indifferent to which; each marked lease is either **resumed in
+    place** — under the unchanged
     ``lease_id``/``epoch``/``session_id``, only ``pid``/``process_start_time`` rewritten, no retry
     consumed (D-078) — or, if the hub reassigned/detached the chunk while the runner was down
     (D-088), **abandoned**: released with no epoch bump, so the runner never re-asserts authority

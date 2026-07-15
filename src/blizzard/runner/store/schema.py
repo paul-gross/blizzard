@@ -201,23 +201,26 @@ park_resumes = Table(
     Column("resumed_at", DateTime, nullable=False),
 )
 
-# --- Resume intent (the graceful-restart resume marker — D-082) --------------
+# --- Resume intent (the restart resume marker — D-082) -----------------------
 #
-# A graceful ``blizzard-runner`` shutdown (SIGTERM: ``systemctl restart``/stop) marks
-# every active, non-parked, session-bearing lease with a resume-intent *before* the
-# daemon exits, then the startup RESUME step routes each marked lease to a same-lease
-# resume — kill any survivor, then resume the session in place under the **unchanged**
-# ``lease_id``/``epoch``/``session_id`` (only ``pid``/``process_start_time`` are
-# rewritten). This is the fourth sibling of the resume family (spawn / judgement /
-# answer, D-082): it is explicitly not a retry (new lease/epoch/session), so it consumes
-# no retry budget (D-078). An ungraceful ``kill -9`` writes no intent, so a crashed
-# worker still routes to today's reap/requeue-fresh — the scope boundary is exactly
-# "did the daemon get to run shutdown code".
+# A restart marks every active, non-parked, session-bearing lease with a resume-intent, then
+# the startup RESUME step routes each marked lease to a same-lease resume — kill any survivor,
+# then resume the session in place under the **unchanged** ``lease_id``/``epoch``/``session_id``
+# (only ``pid``/``process_start_time`` are rewritten). This is the fourth sibling of the resume
+# family (spawn / judgement / answer, D-082): it is explicitly not a retry (new lease/epoch/
+# session), so it consumes no retry budget (D-078).
+#
+# Two paths write the intent. A **graceful** shutdown (SIGTERM: ``systemctl restart``/stop)
+# marks *before* the daemon exits (#12). An ungraceful ``kill -9`` / OOM / reboot never runs
+# shutdown code, so ``host``'s **startup crash-recovery** scan marks it instead (#13,
+# ``mark_crash_resume_intents``) — for a lease whose worker is gone with no recorded session-end
+# and a non-stale heartbeat, i.e. killed mid-work rather than done or already stalled. The
+# RESUME step is indifferent to which path marked it.
 #
 # Facts-only (``bzh:facts-not-status``), mirroring park/park_resume: an intent is *open*
 # while a ``resume_intents`` row has no ``resume_clears`` for the same lease at or after
 # it — the RESUME step records a clear once it resumes (or abandons) the lease, and a
-# later graceful restart of a still-in-flight lease marks it afresh above that clear.
+# later restart of a still-in-flight lease marks it afresh above that clear.
 
 resume_intents = Table(
     "resume_intents",
@@ -233,6 +236,26 @@ resume_clears = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("lease_id", String, nullable=False),
     Column("cleared_at", DateTime, nullable=False),
+)
+
+# --- Session-end signal (the durable "declared done" fact — D-055/D-082) -----
+#
+# The graceful marker (above) fires *before* the daemon exits; an ungraceful ``kill -9``
+# / OOM / reboot never runs shutdown code, so startup crash-recovery cannot rely on a
+# marker at all. This table is the signal it *can* rely on: the Claude Code ``SessionEnd``
+# hook posts ``blizzard runner session-end`` when a worker's session exits naturally, so a
+# row here means the worker **declared done** (exit-is-done, D-055). A worker killed
+# mid-work never runs the hook, so it has no row — and that *absence*, paired with a dead
+# pid, is how startup tells a crash to resume (:func:`mark_crash_resume_intents`) from a
+# clean exit ADVANCE should judge. Append-only, machine-local (never travels to the hub),
+# mirroring ``heartbeats`` (``bzh:facts-not-status``): a lease "ended" iff a row exists.
+
+session_ends = Table(
+    "session_ends",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("lease_id", String, nullable=False),  # BLIZZARD_LEASE_ID the SessionEnd hook inherited
+    Column("ended_at", DateTime, nullable=False),  # injected-clock stamp of the session's exit
 )
 
 # --- Hub control mirror (the declarative pause brake read on PULL — D-043/D-012) --

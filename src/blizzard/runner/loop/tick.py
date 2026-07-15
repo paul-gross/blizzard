@@ -4,9 +4,11 @@
 ``blizzard runner tick`` CLI verb and the periodic daemon driver both call. Because
 startup recovery *is* REAP running first, a fresh daemon simply runs a tick — no special
 recovery path. RESUME sits second, before ADVANCE could mistake a killed-mid-work worker
-for a done declaration: on the first tick after a *graceful* restart it re-attaches each
-in-flight session a shutdown marked (D-082); on every other tick it is a no-op. The tick
-holds no state: every step reads and writes the runner store through the context's seams.
+for a done declaration: on the first tick after a restart it re-attaches each in-flight
+session marked for same-lease resume — by the graceful shutdown hook (D-082, #12) or, when
+a ``kill -9`` / reboot skipped that hook, by ``host``'s startup crash-recovery scan (#13);
+on every other tick it is a no-op. The tick holds no state: every step reads and writes the
+runner store through the context's seams.
 """
 
 from __future__ import annotations

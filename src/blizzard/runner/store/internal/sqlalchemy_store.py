@@ -41,6 +41,7 @@ from blizzard.runner.store.schema import (
     park_resumes,
     resume_clears,
     resume_intents,
+    session_ends,
     workspace_prompt,
 )
 
@@ -233,6 +234,10 @@ class SqlAlchemyRunnerStore:
         stmt = select(resume_intents.c.lease_id).where(_intent_is_open()).distinct()
         return {str(r.lease_id) for r in self._all(stmt)}
 
+    def session_ended_lease_ids(self) -> set[str]:
+        stmt = select(session_ends.c.lease_id).distinct()
+        return {str(r.lease_id) for r in self._all(stmt)}
+
     # --- writes -------------------------------------------------------------
 
     def record_lease(self, lease: NewLease) -> None:
@@ -397,6 +402,11 @@ class SqlAlchemyRunnerStore:
         with self._begin() as conn:
             conn.execute(resume_clears.insert().values(lease_id=lease_id, cleared_at=cleared_at))
         _log.info("resume intent cleared", lease_id=lease_id)
+
+    def record_session_end(self, *, lease_id: str, ended_at: datetime) -> None:
+        with self._begin() as conn:
+            conn.execute(session_ends.insert().values(lease_id=lease_id, ended_at=ended_at))
+        _log.info("session end recorded", lease_id=lease_id)
 
     # --- plumbing -----------------------------------------------------------
 

@@ -206,11 +206,21 @@ class IReadRunnerStore(Protocol):
         ...
 
     def resume_intent_lease_ids(self) -> set[str]:
-        """Leases carrying an **open** graceful-restart resume-intent (D-082).
+        """Leases carrying an **open** restart resume-intent (D-082).
 
         A ``resume_intents`` mark with no ``resume_clears`` for the same lease at or
-        after it — set by a graceful shutdown, consumed by the startup RESUME step. Empty
-        on any normal tick; non-empty only on the first tick after a graceful restart."""
+        after it — set by a graceful shutdown (#12) or ``host``'s startup crash-recovery
+        scan (#13), consumed by the startup RESUME step. Empty on any normal tick;
+        non-empty only on the first tick after a restart."""
+        ...
+
+    def session_ended_lease_ids(self) -> set[str]:
+        """Leases whose worker recorded a **session-end** — it declared done (D-055/D-082).
+
+        A ``session_ends`` row means the Claude Code ``SessionEnd`` hook fired on a natural
+        session exit. Startup crash-recovery reads this to keep a cleanly-exited worker out
+        of the resume path (:func:`mark_crash_resume_intents`): a dead pid *with* a session-end
+        is a done declaration ADVANCE judges, not a crash to re-attach."""
         ...
 
     def workspace_prompt_override(self, workspace_id: str) -> str | None:
@@ -295,4 +305,8 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
 
     def record_resume_clear(self, *, lease_id: str, cleared_at: datetime) -> None:
         """Clear a lease's resume-intent — the RESUME step resumed or abandoned it (D-082)."""
+        ...
+
+    def record_session_end(self, *, lease_id: str, ended_at: datetime) -> None:
+        """Record a worker's session-end — the ``SessionEnd`` hook fired on exit (D-055/D-082)."""
         ...

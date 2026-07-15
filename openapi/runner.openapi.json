@@ -221,6 +221,25 @@
         "title": "ReadinessResponse",
         "type": "object"
       },
+      "SessionEndResponse": {
+        "description": "The recorded acknowledgement (openapi-ts consumes this).",
+        "properties": {
+          "lease_id": {
+            "title": "Lease Id",
+            "type": "string"
+          },
+          "recorded": {
+            "title": "Recorded",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "recorded",
+          "lease_id"
+        ],
+        "title": "SessionEndResponse",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -455,6 +474,49 @@
           }
         },
         "summary": "Record Ask",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/leases/{lease_id}/session-end": {
+      "post": {
+        "description": "Record a lease's session-end, stamped with the injected clock (D-055/D-082).",
+        "operationId": "session_end_api_leases__lease_id__session_end_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "title": "Lease Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionEndResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Session End",
         "tags": [
           "runner"
         ]

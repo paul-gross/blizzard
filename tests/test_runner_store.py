@@ -82,6 +82,18 @@ def test_attempt_count_and_latest_epoch_track_retries(tmp_path):  # type: ignore
 
 
 @pytest.mark.unit
+def test_session_end_fact_is_recorded_and_derived(tmp_path):  # type: ignore[no-untyped-def]
+    """A ``session_ends`` row means the worker declared done — startup recovery reads its absence."""
+    store = _store(tmp_path)
+    _mint(store, lease="lease_1")
+    _mint(store, lease="lease_2")
+    assert store.session_ended_lease_ids() == set()  # neither has exited
+
+    store.record_session_end(lease_id="lease_1", ended_at=_NOW)
+    assert store.session_ended_lease_ids() == {"lease_1"}  # lease_1 declared done; lease_2 did not
+
+
+@pytest.mark.unit
 def test_outbound_buffer_is_fifo_and_ackable(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     s1 = store.enqueue_outbound(kind="lease.minted", chunk_id="ch_1", lease_id="lease_1", payload="{}", created_at=_NOW)
