@@ -29,8 +29,8 @@ import {
   template: `
     <div class="layout">
       <div class="workspace" [class.has-detail]="selected() !== null">
-        <fleet-board-shell class="board" [connection]="connection()" [chunks]="chunks()" (selectChunk)="selected.set($event)" />
         <fleet-queue-panel class="rail" />
+        <fleet-board-shell class="board" [connection]="connection()" [chunks]="chunks()" (selectChunk)="selected.set($event)" />
         @if (selected() !== null) {
           <fleet-chunk-detail class="detail" [chunkId]="selected()" (dismiss)="selected.set(null)" />
         }
@@ -51,11 +51,11 @@ import {
     }
     .workspace {
       display: grid;
-      grid-template-columns: 1fr minmax(240px, 300px);
+      grid-template-columns: minmax(240px, 300px) 1fr;
       min-height: 0;
     }
     .workspace.has-detail {
-      grid-template-columns: 1fr minmax(240px, 300px) minmax(280px, 360px);
+      grid-template-columns: minmax(240px, 300px) 1fr minmax(280px, 360px);
     }
     .board {
       min-width: 0;
@@ -63,7 +63,7 @@ import {
     .rail {
       min-width: 0;
       overflow-y: auto;
-      border-left: 1px solid var(--bezel);
+      border-right: 1px solid var(--bezel);
     }
     .detail {
       min-width: 0;
