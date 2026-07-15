@@ -35,6 +35,9 @@ _HEARTBEAT_TIMEOUT = 5.0
 # A PM-item read fans out runner -> hub -> vendor, so it is given a longer budget
 # than the millisecond-cheap hook posts (design/runner/api.md).
 _PM_ITEMS_TIMEOUT = 20.0
+# The operator's declarative pause/start verbs reach the hub directly (D-043), not the
+# local API, so they get the hub-client budget rather than a hook timeout.
+_HUB_CLIENT_TIMEOUT = 15.0
 
 
 def _stub(verb: str) -> None:
@@ -236,9 +239,31 @@ def status() -> None:
 
 
 @runner.command()
-def pause() -> None:
-    """Declarative control: pause the runner."""
-    _stub("pause")
+@click.option("--dir", "directory", default=".", help="Runner runtime directory.")
+@click.option("--by", "by", default="operator", help="Who is pausing (recorded on the fact).")
+def pause(directory: str, by: str) -> None:
+    """Declarative control: pause the runner — it stops claiming new work; in-flight chunks run on (D-043).
+
+    The machine-local half of the hub's pause brake: it reads this runner's id and hub URL
+    from the runtime config in DIR and POSTs ``/api/runners/{id}/pause`` to the hub. The
+    runner reads ``paused`` back on its next pull and adheres. Resume with ``blizzard hub
+    resume <runner_id>``."""
+    try:
+        config = RunnerConfig.load(Path(directory))
+    except ConfigError as exc:
+        raise click.ClickException(str(exc)) from exc
+    url = f"{config.hub_url.rstrip('/')}/api/runners/{config.runner_id}/pause"
+    try:
+        resp = httpx.post(url, json={"by": by}, timeout=_HUB_CLIENT_TIMEOUT)
+    except httpx.HTTPError as exc:
+        raise click.ClickException(f"pause: could not reach the hub at {config.hub_url} ({exc})") from exc
+    if resp.status_code == httpx.codes.NOT_FOUND:
+        raise click.ClickException(f"runner {config.runner_id} is not registered with the hub at {config.hub_url}")
+    try:
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise click.ClickException(f"pause: {exc}") from exc
+    click.echo(f"runner {config.runner_id} is now paused — it will stop claiming new work")
 
 
 @runner.command()
