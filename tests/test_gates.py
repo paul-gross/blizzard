@@ -95,6 +95,7 @@ def _ingest(hub, yaml_body: str) -> tuple[str, dict]:  # type: ignore[no-untyped
     assert graph.status_code == 201, graph.text
     nodes = {n["name"]: n["node_id"] for n in graph.json()["nodes"]}
     chunk_id = hub.client.post("/api/chunks", json={"pointers": [_POINTER]}).json()["chunk_id"]
+    assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # ready to claim (D-103)
     return chunk_id, nodes
 
 

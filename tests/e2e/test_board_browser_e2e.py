@@ -218,7 +218,10 @@ def _ingest_chunk(forge: httpx.Client, hub: httpx.Client, title: str) -> str:
         json={"pointers": [{"provider": "github", "url": f"{REPO}/issues/{issue.json()['number']}"}]},
     )
     assert ingested.status_code == 201, ingested.text
-    return ingested.json()["chunk_id"]
+    chunk_id = ingested.json()["chunk_id"]
+    # Ingest rests not-ready (D-103); promote so the board shows it ready and claimable.
+    assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+    return chunk_id
 
 
 def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chromium_available: bool) -> None:

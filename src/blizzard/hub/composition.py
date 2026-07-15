@@ -31,6 +31,7 @@ from blizzard.hub.domain.facts import FactIngestService, RunnerFactsService
 from blizzard.hub.domain.graph import GraphDoc, IReadGraphRepository
 from blizzard.hub.domain.graph_authoring import GraphMintService
 from blizzard.hub.domain.ingest import IngestService
+from blizzard.hub.domain.promote import PromoteService
 from blizzard.hub.domain.questions import QuestionService
 from blizzard.hub.domain.queue import GroupService, QueueService
 from blizzard.hub.domain.registry import FleetService
@@ -50,6 +51,7 @@ class HubServices:
     chunks: IReadChunkRepository
     graphs: IReadGraphRepository
     ingest: IngestService
+    promote: PromoteService
     claim: ClaimService
     apply: ApplyService
     decisions: DecisionService
@@ -93,6 +95,7 @@ def build_services(
         chunks=chunk_store,
         graphs=graph_store,
         ingest=IngestService(chunks=chunk_store, clock=clock),
+        promote=PromoteService(chunks=chunk_store, clock=clock),
         claim=ClaimService(chunks=chunk_store, clock=clock),
         apply=ApplyService(chunks=chunk_store, coordinator=coordinator, clock=clock),
         decisions=DecisionService(chunks=chunk_store, clock=clock),

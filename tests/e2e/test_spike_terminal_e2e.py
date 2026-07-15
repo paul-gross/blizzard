@@ -157,6 +157,7 @@ def test_spike_chunk_terminates_with_only_asset_artifacts(tmp_path: Path) -> Non
         )
         assert ingested.status_code == 201, ingested.text
         chunk_id = ingested.json()["chunk_id"]
+        assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # ready for the runner (D-103)
 
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         fenced = dict(os.environ)

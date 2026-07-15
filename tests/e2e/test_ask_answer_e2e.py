@@ -232,6 +232,7 @@ def test_ask_parks_then_answer_resumes_session_to_done(tmp_path: Path) -> None:
         )
         assert ingested.status_code == 201, ingested.text
         chunk_id = ingested.json()["chunk_id"]
+        assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # ready for the runner (D-103)
 
         # A free local-API port the worker's `blizzard runner ask` will POST to.
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)

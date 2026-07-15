@@ -34,6 +34,9 @@ export { injectHubChunksQuery } from './lib/chunks/chunks.query';
 export { injectHubChunkDetailQuery } from './lib/chunks/chunk-detail.query';
 export { injectAnswerQuestionMutation, injectResolveDecisionMutation } from './lib/chunks/human.mutations';
 export type { AnswerVars, ResolveVars } from './lib/chunks/human.mutations';
+
+export { injectPromoteChunkMutation } from './lib/chunks/promote.mutations';
+export type { PromoteVars } from './lib/chunks/promote.mutations';
 export { injectHubQueueQuery } from './lib/queue/queue.query';
 export { injectReorderQueueMutation, injectGroupChunksMutation } from './lib/queue/queue.mutations';
 export type { ReorderVars, GroupVars } from './lib/queue/queue.mutations';

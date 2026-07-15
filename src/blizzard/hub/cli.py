@@ -244,6 +244,28 @@ def ingest(pointers: tuple[str, ...], hub_url: str | None) -> None:
 @hub.command()
 @click.argument("chunk_id")
 @click.option("--hub-url", default=None, help=f"Hub API base URL (default ${ENV_HUB_URL} or {DEFAULT_HUB_URL}).")
+def promote(chunk_id: str, hub_url: str | None) -> None:
+    """Promote a not-ready CHUNK to ready so a runner may claim it (D-103).
+
+    A pure client of the hub API: ``POST /api/chunks/{id}/promote``. Idempotent — promoting
+    an already-ready chunk is a harmless no-op; 404 only when the chunk is unknown."""
+    url = f"{_hub_url(hub_url).rstrip('/')}/api/chunks/{chunk_id}/promote"
+    try:
+        resp = httpx.post(url, timeout=_CLIENT_TIMEOUT)
+    except httpx.HTTPError as exc:
+        raise _api_error("POST /chunks/{id}/promote", exc) from exc
+    if resp.status_code == httpx.codes.NOT_FOUND:
+        raise click.ClickException(f"no such chunk {chunk_id}")
+    try:
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise _api_error("POST /chunks/{id}/promote", exc) from exc
+    click.echo(f"promoted {chunk_id} — now ready for a runner to claim")
+
+
+@hub.command()
+@click.argument("chunk_id")
+@click.option("--hub-url", default=None, help=f"Hub API base URL (default ${ENV_HUB_URL} or {DEFAULT_HUB_URL}).")
 def requeue(chunk_id: str, hub_url: str | None) -> None:
     """Close an escalation by supersession: requeue CHUNK at its current node (D-067)."""
     url = f"{_hub_url(hub_url).rstrip('/')}/api/chunks/{chunk_id}/requeues"

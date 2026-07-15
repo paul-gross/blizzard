@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub
+from tests.support import build_hub, ingest
 
 pytestmark = pytest.mark.component
 
@@ -23,7 +23,7 @@ def test_ingest_mints_a_chunk_pinned_to_the_default_graph(tmp_path: Path) -> Non
     assert chunk_id.startswith("ch_")
 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
-    assert detail["status"] == "ready"
+    assert detail["status"] == "not_ready"  # rests not-ready until promoted (D-103)
     assert detail["pm_pointers"] == [{**_P1, "label": "gh:widget#1"}]
     # The default graph was minted on first ingest and the chunk pinned to it.
     graphs = hub.services.graphs.list_all()
@@ -56,6 +56,31 @@ def test_list_row_is_board_legible(tmp_path: Path) -> None:
     assert rows[chunk_id]["current_node_name"] == "build"  # the entry node, pre-first-transition
     assert rows[chunk_id]["pm_pointers"] == [{**_P1, "label": "gh:widget#1"}]
     assert rows[opaque_id]["pm_pointers"] == [{**opaque, "label": None}]
+
+
+def test_ingest_rests_not_ready_and_promote_makes_it_claimable(tmp_path: Path) -> None:
+    # Ingest mints not-ready (D-103): visible on the fleet list, absent from the ready queue,
+    # so no runner claims it. Promoting flips it to ready and admits it to the queue.
+    hub = build_hub(tmp_path)
+    chunk_id = hub.client.post("/api/chunks", json={"pointers": [_P1]}).json()["chunk_id"]
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "not_ready"
+    assert [r["chunk_id"] for r in hub.client.get("/api/chunks").json()] == [chunk_id]  # on the board
+    assert hub.client.get("/api/queue/peek").json()["entries"] == []  # never claimed
+
+    assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
+    assert [e["chunk_id"] for e in hub.client.get("/api/queue/peek").json()["entries"]] == [chunk_id]
+
+
+def test_promote_is_idempotent_and_404s_unknown_chunk(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = hub.client.post("/api/chunks", json={"pointers": [_P1]}).json()["chunk_id"]
+    assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+    # A second promote is a harmless no-op — still ready, still one queue entry.
+    assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
+    assert len(hub.client.get("/api/queue/peek").json()["entries"]) == 1
+    assert hub.client.post("/api/chunks/ch_nope/promote").status_code == 404
 
 
 def test_live_pointer_reingest_is_409(tmp_path: Path) -> None:
@@ -106,9 +131,9 @@ def test_terminal_pointer_reingest_mints_a_fresh_chunk(tmp_path: Path) -> None:
 
 def test_queue_peek_lists_ready_chunks_fifo_and_hides_claimed(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    first = hub.client.post("/api/chunks", json={"pointers": [_P1]}).json()["chunk_id"]
+    first = ingest(hub, [_P1])  # ingest + promote → ready and in the queue (D-103)
     hub.clock.advance(timedelta(seconds=1))  # a distinct, later mint time for FIFO ordering
-    second = hub.client.post("/api/chunks", json={"pointers": [_P2]}).json()["chunk_id"]
+    second = ingest(hub, [_P2])
 
     entries = hub.client.get("/api/queue/peek").json()["entries"]
     assert [e["chunk_id"] for e in entries] == [first, second]

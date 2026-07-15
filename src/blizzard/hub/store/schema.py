@@ -230,6 +230,23 @@ delivery_pr_closed = Table(
     Column("closed_at", DateTime, nullable=False),
 )
 
+# --- Readiness: the not-ready resting state and its promotion (D-004) --------
+#
+# Ingest mints a chunk in a NOT-READY resting state (D-103): visible on the board but
+# never claimed by a runner. A ``chunk.promoted`` fact — appended by ``POST
+# /chunks/{id}/promote`` — flips it to ``ready`` (facts append, status derives). An
+# un-promoted chunk with no ``chunk_promoted`` row derives ``not_ready`` and so is
+# excluded from ``list_ready``/``/queue/peek``; existing chunks predating this table
+# have no row and are back-filled by the migration so they stay claimable (D-103).
+
+chunk_promoted = Table(
+    "chunk_promoted",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
+    Column("promoted_at", DateTime, nullable=False),  # not_ready -> ready (D-103)
+)
+
 # --- Facts that make the derivation precedence correct (shaped) -------------
 
 chunk_stopped = Table(

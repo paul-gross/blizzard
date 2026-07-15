@@ -83,7 +83,10 @@ def _ingest(forge: httpx.Client, hub: httpx.Client, title: str) -> str:
         json={"pointers": [{"provider": "github", "url": f"{REPO}/issues/{issue.json()['number']}"}]},
     )
     assert ingested.status_code == 201, ingested.text
-    return ingested.json()["chunk_id"]
+    chunk_id = ingested.json()["chunk_id"]
+    # Ingest rests not-ready (D-103); promote so the chunk enters the ready queue.
+    assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+    return chunk_id
 
 
 def _stack(tmp_path: Path):

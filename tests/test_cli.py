@@ -24,7 +24,7 @@ def test_root_lists_hub_and_runner() -> None:
 def test_hub_lists_its_verbs() -> None:
     result = CliRunner().invoke(blizzard, ["hub", "--help"])
     assert result.exit_code == 0
-    for verb in ("init", "migrate", "host", "status", "answer", "ingest"):
+    for verb in ("init", "migrate", "host", "status", "answer", "ingest", "promote", "requeue"):
         assert verb in result.output
 
 

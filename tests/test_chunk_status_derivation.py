@@ -41,22 +41,37 @@ def _at(seconds: int) -> datetime:
     return _T0 + timedelta(seconds=seconds)
 
 
-def test_minted_with_no_facts_is_ready() -> None:
-    assert derive_chunk_status(ChunkFacts(minted=True)) is ChunkStatus.READY
+def test_minted_with_no_facts_is_not_ready() -> None:
+    # Ingest mints a chunk in the not-ready resting state (D-103): visible, never claimed
+    # until promoted. Un-promoted with no other facts falls through to not_ready.
+    assert derive_chunk_status(ChunkFacts(minted=True)) is ChunkStatus.NOT_READY
 
 
-def test_live_route_is_running() -> None:
+def test_promoted_chunk_with_no_route_is_ready() -> None:
+    # The ``chunk.promoted`` fact flips the resting state to ready (D-103) — now claimable.
+    assert derive_chunk_status(ChunkFacts(minted=True, promoted=True)) is ChunkStatus.READY
+
+
+def test_live_route_wins_over_not_ready() -> None:
+    # A live route derives running even without promotion: the route check sits above the
+    # not_ready fall-through, so a claimed chunk always reads its post-claim state (D-103).
     facts = ChunkFacts(minted=True, routes_created=[RouteCreatedFact(created_at=_at(1))])
     assert derive_chunk_status(facts) is ChunkStatus.RUNNING
 
 
-def test_released_route_re_derives_ready() -> None:
+def test_released_route_on_promoted_chunk_re_derives_ready() -> None:
     facts = ChunkFacts(
         minted=True,
+        promoted=True,
         routes_created=[RouteCreatedFact(created_at=_at(1))],
         routes_released=[RouteReleasedFact(released_at=_at(2))],
     )
     assert derive_chunk_status(facts) is ChunkStatus.READY
+
+
+def test_stopped_wins_over_not_ready() -> None:
+    # An operator can abandon a chunk before promoting it — stopped still wins (D-103).
+    assert derive_chunk_status(ChunkFacts(minted=True, stopped=True)) is ChunkStatus.STOPPED
 
 
 def test_reclaimed_after_release_is_running_again() -> None:

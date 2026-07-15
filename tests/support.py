@@ -302,6 +302,22 @@ def emitted_events(hub: HubHarness, *, since: int = 0) -> list[dict[str, str]]:
     return [{"id": str(e.id), "event": e.type, "data": e.data} for e in hub.events.replay_since(since)]
 
 
+def ingest(hub: HubHarness, pointers: list[dict], *, promote: bool = True) -> str:
+    """Ingest ``pointers`` into one chunk and (by default) promote it to ready (D-103).
+
+    Ingest now mints a chunk in the not-ready resting state, so most tests — which expect
+    the chunk claimable/in the ready queue — promote it in the same breath. Pass
+    ``promote=False`` to assert the not-ready default itself.
+    """
+    resp = hub.client.post("/api/chunks", json={"pointers": pointers})
+    assert resp.status_code == 201, resp.text
+    chunk_id = resp.json()["chunk_id"]
+    if promote:
+        promoted = hub.client.post(f"/api/chunks/{chunk_id}/promote")
+        assert promoted.status_code == 202, promoted.text
+    return chunk_id
+
+
 def report_lease(hub: HubHarness, chunk_id: str, *, epoch: int, seq: int, runner_id: str = "r1") -> dict:
     """Report a runner-minted ``lease.minted`` fact through POST /events (D-044/D-069).
 

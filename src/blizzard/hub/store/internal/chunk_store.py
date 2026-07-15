@@ -144,6 +144,7 @@ class ChunkStore:
             ]
             return ChunkFacts(
                 minted=True,
+                promoted=self._exists(conn, s.chunk_promoted, chunk_id),
                 stopped=self._exists(conn, s.chunk_stopped, chunk_id),
                 delivery_landed=self._exists(conn, s.delivery_landed, chunk_id),
                 pr_closed=self._exists(conn, s.delivery_pr_closed, chunk_id),
@@ -365,6 +366,14 @@ class ChunkStore:
                         chunk_id=chunk.chunk_id, provider=pointer.provider, url=pointer.url
                     )
                 )
+
+    def record_promote(self, chunk_id: str, *, at: datetime) -> None:
+        # Idempotent by chunk_id: a chunk already promoted keeps its first row, so a
+        # double promote (board click, CLI retry) is a harmless no-op (D-103).
+        with self._engine.begin() as conn:
+            if self._exists(conn, s.chunk_promoted, chunk_id):
+                return
+            conn.execute(insert(s.chunk_promoted).values(chunk_id=chunk_id, promoted_at=at))
 
     def record_lease(self, chunk_id: str, *, epoch: int, runner_id: str, at: datetime) -> None:
         with self._engine.begin() as conn:
