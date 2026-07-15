@@ -110,7 +110,7 @@
         "type": "string"
       },
       "ArtifactView": {
-        "description": "One entry of a chunk's inline artifact store (D-036).\n\n``key`` is the store key ``{node}.{artifact-name}.{epoch}`` \u2014 append-only, so\nevery re-run's entry is retained and latest-by-epoch resolution is the reader's\n(D-089). ``content`` carries an **asset's** text verbatim (a review's findings\ndocument); the ``repo``/``branch_name``/``commit_hash`` trio carries a\n``git_commit`` artifact's pinned reference (the hub stores the reference, never the\ncode \u2014 D-012).",
+        "description": "One entry of a chunk's inline artifact store (D-036).\n\n``key`` is the store key ``{node}.{artifact-name}.{epoch}`` \u2014 append-only, so\nevery re-run's entry is retained and latest-by-epoch resolution is the reader's\n(D-089). ``content`` carries an **asset's** text verbatim (a review's findings\ndocument); the ``repo``/``branch_name``/``commit_hash`` trio carries a\n``git_commit`` artifact's pinned reference (the hub stores the reference, never the\ncode \u2014 D-012).\n\n``branch_url`` is the forge ``tree`` URL for the produced branch, resolved server-side\nfrom the chunk's issue-shaped PM pointer (D-075) so the board can link a ``git_commit``\nto the branch on the forge; null when no forge web base is derivable \u2014 the row then\nshows the branch name without a link (no broken link).",
         "properties": {
           "branch_name": {
             "anyOf": [
@@ -122,6 +122,17 @@
               }
             ],
             "title": "Branch Name"
+          },
+          "branch_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch Url"
           },
           "commit_hash": {
             "anyOf": [
@@ -1974,7 +1985,7 @@
         "type": "object"
       },
       "TransitionView": {
-        "description": "One accepted transition in a chunk's history (D-027/D-036).\n\nThe edge a node-step took \u2014 its origin node, the judgement choice that routed it,\nand its destination \u2014 oldest first on the detail. This is what makes the review-fail\nloop legible: a ``review -> build`` entry with ``choice_name = \"fail\"`` is a visible\nstep in the timeline (MVP criterion 9/11).",
+        "description": "One accepted transition in a chunk's history (D-027/D-036).\n\nThe edge a node-step took \u2014 its origin node, the judgement choice that routed it,\nand its destination \u2014 oldest first on the detail. This is what makes the review-fail\nloop legible: a ``review -> build`` entry with ``choice_name = \"fail\"`` is a visible\nstep in the timeline (MVP criterion 9/11).\n\n``from_node_name``/``to_node_name`` are the nodes' human graph names (``build``,\n``review``) the board renders in place of the raw ``nd_`` ULIDs; resolved here so the\ntimeline is legible without reassembly (D-075), null when the pinned graph cannot\nresolve the id.",
         "properties": {
           "choice_name": {
             "anyOf": [
@@ -2002,6 +2013,17 @@
             ],
             "title": "From Node Id"
           },
+          "from_node_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Node Name"
+          },
           "recorded_at": {
             "title": "Recorded At",
             "type": "string"
@@ -2009,6 +2031,17 @@
           "to_node_id": {
             "title": "To Node Id",
             "type": "string"
+          },
+          "to_node_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To Node Name"
           }
         },
         "required": [

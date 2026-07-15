@@ -12,7 +12,7 @@ from __future__ import annotations
 import pytest
 
 from blizzard.hub.domain.work import PmPointer
-from blizzard.hub.pm.label import IssueRef, parse_issue_url, pointer_label
+from blizzard.hub.pm.label import ForgeWebBase, IssueRef, forge_web_base, parse_issue_url, pointer_label
 
 pytestmark = pytest.mark.unit
 
@@ -37,3 +37,23 @@ def test_non_issue_shaped_url_yields_no_label() -> None:
 def test_provider_without_a_short_code_keeps_its_raw_tag() -> None:
     pointer = PmPointer(provider="forgejo", url="https://forge.example/acme/widgets/issues/7")
     assert pointer_label(pointer) == "forgejo:widgets#7"
+
+
+def test_forge_web_base_derives_origin_and_owner_from_an_issue_pointer() -> None:
+    base = forge_web_base(["https://github.com/paul-gross/blizzard/issues/8"])
+    assert base == ForgeWebBase(origin="https://github.com", owner="paul-gross")
+
+
+def test_forge_web_base_skips_non_issue_urls_and_yields_none_when_none_match() -> None:
+    assert forge_web_base(["https://github.com/paul-gross/blizzard/pull/9", "not-a-url"]) is None
+
+
+def test_branch_url_qualifies_a_bare_repo_with_the_pointer_owner() -> None:
+    base = ForgeWebBase(origin="https://github.com", owner="paul-gross")
+    # A produced artifact names its repo by the worktree dir alone — qualify with the owner.
+    assert base.branch_url("blizzard", "feat/x") == "https://github.com/paul-gross/blizzard/tree/feat/x"
+
+
+def test_branch_url_passes_through_an_already_qualified_repo() -> None:
+    base = ForgeWebBase(origin="http://forge.local", owner="acme")
+    assert base.branch_url("acme/widget", "feature/widget") == "http://forge.local/acme/widget/tree/feature/widget"

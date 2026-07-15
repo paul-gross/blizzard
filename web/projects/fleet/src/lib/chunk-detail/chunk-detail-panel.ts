@@ -140,9 +140,13 @@ export interface ResolveDecisionEvent {
           <ol class="timeline" data-testid="history">
             @for (step of history(); track $index) {
               <li class="step" data-testid="history-step" [attr.data-choice]="step.choice_name">
-                <span class="from">{{ step.from_node_id ?? '·' }}</span>
+                <span class="from" [attr.title]="step.from_node_id || null">{{
+                  step.from_node_name ?? step.from_node_id ?? '·'
+                }}</span>
                 <span class="arrow">→</span>
-                <span class="to">{{ step.to_node_id }}</span>
+                <span class="to" [attr.title]="step.to_node_id || null">{{
+                  step.to_node_name ?? step.to_node_id
+                }}</span>
                 @if (step.choice_name) {
                   <span class="choice" data-testid="history-choice">{{ step.choice_name }}</span>
                 }
@@ -168,7 +172,26 @@ export interface ResolveDecisionEvent {
                 @if (art.kind === 'asset') {
                   <pre class="a-content" data-testid="artifact-content">{{ art.content }}</pre>
                 } @else {
-                  <div class="a-ref" data-testid="artifact-ref">{{ art.repo }} @ {{ art.commit_hash }}</div>
+                  <div class="a-ref" data-testid="artifact-ref">
+                    <span class="a-repo">{{ art.repo }}</span>
+                    @if (art.branch_name) {
+                      <span class="a-sep">·</span>
+                      @if (art.branch_url) {
+                        <a
+                          class="a-branch"
+                          data-testid="artifact-branch"
+                          [href]="art.branch_url"
+                          target="_blank"
+                          rel="noreferrer"
+                          [attr.title]="art.branch_url"
+                          >{{ art.branch_name }}</a
+                        >
+                      } @else {
+                        <span class="a-branch" data-testid="artifact-branch">{{ art.branch_name }}</span>
+                      }
+                    }
+                    <span class="a-commit">&#64; {{ art.commit_hash }}</span>
+                  </div>
                 }
               </li>
             }
@@ -442,6 +465,24 @@ export interface ResolveDecisionEvent {
       margin-top: 4px;
       color: var(--label-dim);
       font-size: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 4px;
+    }
+    .a-branch {
+      color: var(--amber-hi);
+    }
+    a.a-branch {
+      text-decoration: none;
+    }
+    a.a-branch:hover,
+    a.a-branch:focus-visible {
+      text-decoration: underline;
+      outline: none;
+    }
+    .a-sep {
+      color: var(--label-dim);
     }
   `,
 })

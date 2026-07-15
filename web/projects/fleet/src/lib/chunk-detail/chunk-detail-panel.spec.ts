@@ -39,6 +39,53 @@ const REVIEW_FAIL_DETAIL: ChunkDetail = {
   ],
 };
 
+const NAMED_DETAIL: ChunkDetail = {
+  chunk_id: 'ch_01named000000000000000000000',
+  graph_id: 'gr_1',
+  status: 'running',
+  current_node_id: 'nd_review',
+  current_node_name: 'review',
+  latest_epoch: 1,
+  pm_pointers: [],
+  history: [
+    {
+      from_node_id: 'nd_build',
+      from_node_name: 'build',
+      to_node_id: 'nd_review',
+      to_node_name: 'code-review',
+      choice_name: 'pass',
+      epoch: 1,
+      recorded_at: '2026-07-13T00:00:01Z',
+    },
+  ],
+  artifacts: [
+    {
+      key: 'build.widget.1',
+      kind: 'git_commit',
+      name: 'widget',
+      node_id: 'nd_build',
+      node_name: 'build',
+      epoch: 1,
+      repo: 'acme/widget',
+      branch_name: 'feature/widget',
+      commit_hash: 'c1',
+      branch_url: 'https://forge.example/acme/widget/tree/feature/widget',
+    },
+    {
+      key: 'build.orphan.1',
+      kind: 'git_commit',
+      name: 'orphan',
+      node_id: 'nd_build',
+      node_name: 'build',
+      epoch: 1,
+      repo: 'acme/orphan',
+      branch_name: 'feature/orphan',
+      commit_hash: 'c2',
+      branch_url: null,
+    },
+  ],
+};
+
 const WAITING_QUESTION_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01ask00000000000000000000000',
   graph_id: 'gr_1',
@@ -133,6 +180,48 @@ describe('ChunkDetailPanel', () => {
     const commitRef = el.querySelector('[data-kind="git_commit"] [data-testid="artifact-ref"]');
     expect(commitRef?.textContent).toContain('acme/widget');
     expect(commitRef?.textContent).toContain('c1');
+  });
+
+  it('renders human node names on transitions, keeping the raw id as a tooltip (issue #23)', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', NAMED_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const step = el.querySelector('[data-testid="history-step"]')!;
+    // The visible text is the human graph names, not the nd_ ULIDs.
+    expect(step.querySelector('.from')?.textContent?.trim()).toBe('build');
+    expect(step.querySelector('.to')?.textContent?.trim()).toBe('code-review');
+    expect(step.textContent).not.toContain('nd_');
+    // The raw node id stays reachable as the label's title.
+    expect(step.querySelector('.from')?.getAttribute('title')).toBe('nd_build');
+    expect(step.querySelector('.to')?.getAttribute('title')).toBe('nd_review');
+  });
+
+  it('falls back to the raw node id when a transition has no resolved name', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', REVIEW_FAIL_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const step = el.querySelector('[data-testid="history-step"]')!;
+    expect(step.querySelector('.to')?.textContent?.trim()).toBe('nd_review');
+  });
+
+  it('shows the artifact branch name and links it to the forge, degrading when no url (issue #23)', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', NAMED_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const [linked, orphan] = [...el.querySelectorAll('[data-kind="git_commit"] [data-testid="artifact-ref"]')];
+    // A derivable branch url renders as a link to the branch on the forge.
+    const link = linked.querySelector<HTMLAnchorElement>('a[data-testid="artifact-branch"]');
+    expect(link?.textContent?.trim()).toBe('feature/widget');
+    expect(link?.getAttribute('href')).toBe('https://forge.example/acme/widget/tree/feature/widget');
+    // No url degrades gracefully: the branch name shows as plain text, no broken link.
+    expect(orphan.querySelector('a')).toBeNull();
+    expect(orphan.querySelector('[data-testid="artifact-branch"]')?.textContent?.trim()).toBe('feature/orphan');
   });
 
   it('surfaces a waiting_on_human chunk’s open question and its options (MVP criterion 7)', async () => {

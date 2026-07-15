@@ -96,10 +96,17 @@ class TransitionView(BaseModel):
     The edge a node-step took — its origin node, the judgement choice that routed it,
     and its destination — oldest first on the detail. This is what makes the review-fail
     loop legible: a ``review -> build`` entry with ``choice_name = "fail"`` is a visible
-    step in the timeline (MVP criterion 9/11)."""
+    step in the timeline (MVP criterion 9/11).
+
+    ``from_node_name``/``to_node_name`` are the nodes' human graph names (``build``,
+    ``review``) the board renders in place of the raw ``nd_`` ULIDs; resolved here so the
+    timeline is legible without reassembly (D-075), null when the pinned graph cannot
+    resolve the id."""
 
     from_node_id: str | None
+    from_node_name: str | None = None
     to_node_id: str
+    to_node_name: str | None = None
     choice_name: str | None
     epoch: int
     recorded_at: str
@@ -113,7 +120,12 @@ class ArtifactView(BaseModel):
     (D-089). ``content`` carries an **asset's** text verbatim (a review's findings
     document); the ``repo``/``branch_name``/``commit_hash`` trio carries a
     ``git_commit`` artifact's pinned reference (the hub stores the reference, never the
-    code — D-012)."""
+    code — D-012).
+
+    ``branch_url`` is the forge ``tree`` URL for the produced branch, resolved server-side
+    from the chunk's issue-shaped PM pointer (D-075) so the board can link a ``git_commit``
+    to the branch on the forge; null when no forge web base is derivable — the row then
+    shows the branch name without a link (no broken link)."""
 
     key: str
     kind: str
@@ -125,6 +137,7 @@ class ArtifactView(BaseModel):
     repo: str | None = None
     branch_name: str | None = None
     commit_hash: str | None = None
+    branch_url: str | None = None
 
 
 class PrView(BaseModel):

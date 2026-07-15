@@ -186,6 +186,9 @@ def test_chunk_detail_exposes_the_review_fail_loop_and_findings_asset(tmp_path: 
     ]
     # The last history entry agrees with the derived current node (the tail is current).
     assert detail["history"][-1]["to_node_id"] == detail["current_node_id"] == nodes["build"]
+    # The edges carry the nodes' human graph names so the fail loop reads review -> build.
+    named = [(h["from_node_name"], h["to_node_name"]) for h in detail["history"]]
+    assert named == [("build", "review"), ("review", "build")]
 
     # The review-findings asset content is inline on the detail, keyed by node.name.epoch.
     findings = [a for a in detail["artifacts"] if a["name"] == "review-findings"]
