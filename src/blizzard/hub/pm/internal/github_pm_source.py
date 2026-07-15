@@ -15,15 +15,12 @@ URL and auth header; tests inject a client bound to a fake GitHub-shaped app.
 
 from __future__ import annotations
 
-import re
-
 import httpx
 
 from blizzard.foundation.logging import get_logger
 from blizzard.hub.domain.work import PmPointer
+from blizzard.hub.pm.label import parse_issue_url
 from blizzard.hub.pm.source import IPmSource, PmItem, PmSourceError
-
-_ISSUE_RE = re.compile(r"/(?:repos/)?(?P<owner>[^/]+)/(?P<repo>[^/]+)/issues/(?P<number>\d+)")
 
 _log = get_logger("blizzard.hub.pm")
 
@@ -52,10 +49,10 @@ class GitHubPmSource:
 
 
 def _parse_issue(url: str) -> tuple[str, str, int]:
-    match = _ISSUE_RE.search(url)
-    if match is None:
+    ref = parse_issue_url(url)  # the shared issue-URL parse (pm/label.py, D-075)
+    if ref is None:
         raise PmSourceError(f"pointer URL is not a GitHub-shaped issue: {url}")
-    return match["owner"], match["repo"], int(match["number"])
+    return ref.owner, ref.repo, ref.number
 
 
 def _conforms_pm_source(x: GitHubPmSource) -> IPmSource:

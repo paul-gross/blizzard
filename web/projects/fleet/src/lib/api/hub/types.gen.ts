@@ -205,6 +205,10 @@ export type ChunkDetail = {
      * Current Node Id
      */
     current_node_id: string | null;
+    /**
+     * Current Node Name
+     */
+    current_node_name?: string | null;
     decision?: DecisionView | null;
     escalation?: EscalationView | null;
     /**
@@ -226,7 +230,7 @@ export type ChunkDetail = {
     /**
      * Pm Pointers
      */
-    pm_pointers?: Array<PmPointerModel>;
+    pm_pointers?: Array<PmPointerView>;
     /**
      * Questions
      */
@@ -307,6 +311,10 @@ export type ChunkStatus = 'ready' | 'running' | 'delivering' | 'waiting_on_human
  * ChunkSummary
  *
  * One row of the fleet chunk list — derived status + current node (D-004).
+ *
+ * ``current_node_name`` is the node's human graph name (``build``, ``review``) the
+ * board renders in place of the raw ``nd_`` ULID; null when the chunk has no
+ * current node or its pinned graph cannot resolve the id.
  */
 export type ChunkSummary = {
     /**
@@ -318,13 +326,17 @@ export type ChunkSummary = {
      */
     current_node_id: string | null;
     /**
+     * Current Node Name
+     */
+    current_node_name?: string | null;
+    /**
      * Graph Id
      */
     graph_id: string;
     /**
      * Pm Pointers
      */
-    pm_pointers?: Array<PmPointerModel>;
+    pm_pointers?: Array<PmPointerView>;
     status: ChunkStatus;
 };
 
@@ -833,6 +845,30 @@ export type PmItemView = {
  * One ``{provider, url}`` PM pointer (D-075).
  */
 export type PmPointerModel = {
+    /**
+     * Provider
+     */
+    provider: string;
+    /**
+     * Url
+     */
+    url: string;
+};
+
+/**
+ * PmPointerView
+ *
+ * A pointer as the views render it (D-075) — the raw pair plus its legible label.
+ *
+ * ``label`` is the board-legible ``{provider-code}:{repo}#{number}`` (e.g.
+ * ``gh:blizzard#8``), null when the URL is not issue-shaped — the board then leans
+ * on the chunk's stable short id instead.
+ */
+export type PmPointerView = {
+    /**
+     * Label
+     */
+    label?: string | null;
     /**
      * Provider
      */

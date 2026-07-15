@@ -24,7 +24,7 @@ def test_ingest_mints_a_chunk_pinned_to_the_default_graph(tmp_path: Path) -> Non
 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "ready"
-    assert detail["pm_pointers"] == [_P1]
+    assert detail["pm_pointers"] == [{**_P1, "label": "gh:widget#1"}]
     # The default graph was minted on first ingest and the chunk pinned to it.
     graphs = hub.services.graphs.list_all()
     assert [g.name for g in graphs] == ["default-delivery"]
@@ -36,7 +36,26 @@ def test_ingest_batches_multiple_pointers_into_one_chunk(tmp_path: Path) -> None
     resp = hub.client.post("/api/chunks", json={"pointers": [_P1, _P2]})
     assert resp.status_code == 201
     detail = hub.client.get(f"/api/chunks/{resp.json()['chunk_id']}").json()
-    assert detail["pm_pointers"] == [_P1, _P2]
+    assert detail["pm_pointers"] == [
+        {**_P1, "label": "gh:widget#1"},
+        {**_P2, "label": "gh:widget#2"},
+    ]
+
+
+def test_list_row_is_board_legible(tmp_path: Path) -> None:
+    # The fleet list resolves the current node's human name and each pointer's
+    # `{code}:{repo}#{number}` label server-side, so the board renders `build` and
+    # `gh:widget#1` without reassembly (D-075). A non-issue-shaped URL degrades to a
+    # null label rather than erroring.
+    hub = build_hub(tmp_path)
+    chunk_id = hub.client.post("/api/chunks", json={"pointers": [_P1]}).json()["chunk_id"]
+    opaque = {"provider": "github", "url": "http://forge.local/acme/widget/wiki"}
+    opaque_id = hub.client.post("/api/chunks", json={"pointers": [opaque]}).json()["chunk_id"]
+
+    rows = {r["chunk_id"]: r for r in hub.client.get("/api/chunks").json()}
+    assert rows[chunk_id]["current_node_name"] == "build"  # the entry node, pre-first-transition
+    assert rows[chunk_id]["pm_pointers"] == [{**_P1, "label": "gh:widget#1"}]
+    assert rows[opaque_id]["pm_pointers"] == [{**opaque, "label": None}]
 
 
 def test_live_pointer_reingest_is_409(tmp_path: Path) -> None:
