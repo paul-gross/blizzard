@@ -28,7 +28,11 @@ from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.ids import LEASE_PREFIX, mint
 from blizzard.foundation.logging import get_logger
 from blizzard.hub.domain.work import ChunkStatus
-from blizzard.runner.environments.provider import AcquiredEnvironment, WorkspaceAcquisitionError
+from blizzard.runner.environments.provider import (
+    AcquiredEnvironment,
+    EnvironmentPreparationError,
+    WorkspaceAcquisitionError,
+)
 from blizzard.runner.harness.adapter import WorkerPreamble
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import HubClientError
@@ -97,9 +101,7 @@ _CP_REAP_AFTER = crashpoint("reap.after-expire", "REAP done; stale leases expire
 # SPAWN leaves between spawn and record_spawn — see ``_resume_in_place``. Armed at either
 # bracket, recovery re-runs RESUME idempotently and the chunk still lands exactly once.
 _CP_RESUME_BEFORE = crashpoint("resume.before-reattach", "entered RESUME with marked intents; none re-attached yet")
-_CP_RESUME_AFTER_KILL = crashpoint(
-    "resume.after-kill.before-reattach", "survivor killed; session not yet re-attached"
-)
+_CP_RESUME_AFTER_KILL = crashpoint("resume.after-kill.before-reattach", "survivor killed; session not yet re-attached")
 _CP_RESUME_AFTER = crashpoint("resume.after-reattach", "session re-attached under the same lease; intent cleared")
 
 # PULL — the single outbound flusher (store-and-forward drain).
@@ -618,6 +620,18 @@ def _fill_one(ctx: LoopContext) -> bool:
     _CP_FILL_BEFORE_ACQUIRE.reached()
     try:
         acquired = ctx.provider.acquire(entry.chunk_id, _SOLO_ENV_COUNT, held)
+    except EnvironmentPreparationError as exc:
+        # Not capacity — a reset-on-acquire step failed (D-021). Surface it as an
+        # attributable FILL error; the provider aborted rather than hand over a
+        # half-reset env, so the chunk simply waits for a fixed workspace.
+        _log.error(
+            "environment preparation failed at FILL",
+            chunk_id=entry.chunk_id,
+            environment_id=exc.environment_id,
+            step=exc.step,
+            detail=str(exc),
+        )
+        return False
     except WorkspaceAcquisitionError:
         _log.info("acquire refused — env-bound this tick", chunk_id=entry.chunk_id)
         return False  # env capacity exhausted; the chunk waits

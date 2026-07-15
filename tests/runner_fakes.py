@@ -18,6 +18,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.environments.provider import (
     AcquiredEnvironment,
+    EnvironmentPreparationError,
     IWorkspaceProvider,
     WorkspaceAcquisitionError,
 )
@@ -158,14 +159,17 @@ class FakeHub:
 class FakeProvider:
     """A scriptable :class:`IWorkspaceProvider` over a fixed pool of workdirs."""
 
-    def __init__(self, pool: dict[str, str], *, refuse: bool = False) -> None:
+    def __init__(self, pool: dict[str, str], *, refuse: bool = False, prepare_fail: bool = False) -> None:
         self._pool = pool  # env_id -> workdir
         self.refuse = refuse
+        self.prepare_fail = prepare_fail
         self.released: list[str] = []
 
     def acquire(self, chunk_id: str, count: int, held_ids: list[str]) -> list[AcquiredEnvironment]:
         if self.refuse:
             raise WorkspaceAcquisitionError("refused (scripted)")
+        if self.prepare_fail:
+            raise EnvironmentPreparationError("reset step failed (scripted)", environment_id="e1", step="checkout-base")
         free = [(e, wd) for e, wd in self._pool.items() if e not in set(held_ids)]
         if len(free) < count:
             raise WorkspaceAcquisitionError(f"need {count}, {len(free)} free")
