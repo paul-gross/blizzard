@@ -55,8 +55,8 @@ def test_runner_init(tmp_path: Path) -> None:
 
 
 def test_stub_verb_reports_not_implemented() -> None:
-    # `ingest` is still a scaffold stub (the ask/answer verbs `status`/`answer` and the
-    # worker `ask` verb are implemented in this wave); a stub names itself.
-    result = CliRunner().invoke(blizzard, ["hub", "ingest"])
+    # `runner status` is still a scaffold stub (ingest and the declarative pause are
+    # implemented in this wave); a stub names itself.
+    result = CliRunner().invoke(blizzard, ["runner", "status"])
     assert result.exit_code != 0
     assert "not yet implemented" in result.output

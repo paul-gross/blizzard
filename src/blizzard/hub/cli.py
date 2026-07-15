@@ -203,10 +203,42 @@ def decide(decision_id: str, choice: str, resolved_by: str, hub_url: str | None)
     click.echo(f"decision {decision_id} resolved: {body['choice']} (by {body['resolved_by']})")
 
 
+def _parse_pointer(token: str) -> dict[str, str]:
+    """Split a ``provider:url`` ingest token; the URL keeps its own colons (partition once)."""
+    provider, sep, url = token.partition(":")
+    if not sep or not provider or not url:
+        raise click.ClickException(f"pointer must be provider:url (got {token!r})")
+    return {"provider": provider, "url": url}
+
+
 @hub.command()
-def ingest() -> None:
-    """Ingest PM items by pointer, minting chunks."""
-    _stub("ingest")
+@click.argument("pointers", nargs=-1, required=True)
+@click.option("--hub-url", default=None, help=f"Hub API base URL (default ${ENV_HUB_URL} or {DEFAULT_HUB_URL}).")
+def ingest(pointers: tuple[str, ...], hub_url: str | None) -> None:
+    """Ingest PM items by pointer, minting a chunk (D-047).
+
+    Each POINTER is ``provider:url`` (e.g. ``github:https://github.com/o/r/issues/8``);
+    pass one or more — a batch mints one chunk carrying every pointer. A pure client of the
+    hub API: ``POST /api/chunks``. 409 when a pointer is already held by a live chunk (D-093)."""
+    models = [_parse_pointer(p) for p in pointers]
+    url = f"{_hub_url(hub_url).rstrip('/')}/api/chunks"
+    try:
+        resp = httpx.post(url, json={"pointers": models}, timeout=_CLIENT_TIMEOUT)
+    except httpx.HTTPError as exc:
+        raise _api_error("POST /chunks", exc) from exc
+    if resp.status_code == httpx.codes.CONFLICT:
+        body = resp.json()
+        raise click.ClickException(
+            f"pointer {body.get('provider')}:{body.get('url')} already held by chunk {body.get('existing_chunk_id')}"
+        )
+    if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:
+        raise click.ClickException("at least one pointer required")
+    try:
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise _api_error("POST /chunks", exc) from exc
+    chunk_id = resp.json()["chunk_id"]
+    click.echo(f"ingested {len(models)} pointer(s) → chunk {chunk_id}")
 
 
 @hub.command()
