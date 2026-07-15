@@ -43,9 +43,14 @@ import {
       display: block;
       height: 100%;
     }
+    /* Three rows: the workspace (board + rail) takes all remaining height, the
+       chunk-detail dock owns a fixed track, and the runner strip sits below.
+       Pinning the dock's height to the grid track — not to the dock element —
+       makes it authoritative regardless of component style-insertion order, so
+       filling or clearing the dock can never resize the 1fr board row. */
     .layout {
       display: grid;
-      grid-template-rows: 1fr auto;
+      grid-template-rows: 1fr clamp(220px, 34vh, 440px) auto;
       height: 100%;
       min-height: 0;
     }
@@ -64,11 +69,11 @@ import {
     }
     /* Chunk detail docks along the bottom, spanning the full width beneath the
        board and rail. It is a permanently mounted layout-level row — not a
-       workspace column — at a fixed height, so it reserves the same space whether
-       empty or filled: selecting or clearing it never resizes or shifts the board. */
+       workspace column — filling its fixed grid track (see .layout above), so it
+       reserves the same space whether empty or filled: selecting or clearing it
+       never resizes or shifts the board. */
     .dock {
       min-height: 0;
-      height: clamp(220px, 34vh, 440px);
     }
   `,
 })
