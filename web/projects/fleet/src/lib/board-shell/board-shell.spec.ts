@@ -12,13 +12,15 @@ describe('BoardShell', () => {
     }).compileComponents();
   });
 
-  it('renders the board shell with all five columns and an empty state', async () => {
+  it('renders the board shell with all four columns and an empty state', async () => {
     const fixture = TestBed.createComponent(BoardShell);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="board-shell"]')).toBeTruthy();
-    expect(el.querySelectorAll('[data-col]')).toHaveLength(5);
+    // Four board columns — READY was removed; ready chunks live in the queue rail (issue #22).
+    expect(el.querySelectorAll('[data-col]')).toHaveLength(4);
+    expect(el.querySelector('[data-col="ready"]')).toBeNull();
     expect(el.querySelector('[data-testid="empty-state"]')?.textContent).toContain('NO CHUNKS');
   });
 
@@ -31,7 +33,7 @@ describe('BoardShell', () => {
     expect(el.querySelector('[data-testid="conn"]')?.textContent).toContain('ok');
   });
 
-  it('renders one card per chunk, in its derived-status column, showing status + current node', async () => {
+  it('renders one card per non-ready chunk, in its derived-status column, showing status + current node', async () => {
     const chunks: ChunkSummary[] = [
       { chunk_id: 'ch_01ready0000000000000000000', graph_id: 'gr_1', status: 'ready', current_node_id: 'nd_build', pm_pointers: [] },
       { chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', status: 'running', current_node_id: 'nd_build', pm_pointers: [] },
@@ -42,19 +44,20 @@ describe('BoardShell', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    // No empty state once the fleet has chunks; one card per chunk.
+    // No empty state once the fleet has chunks. The ready chunk is not a board card —
+    // it lives in the queue rail (issue #22) — so only running + done render here.
     expect(el.querySelector('[data-testid="empty-state"]')).toBeNull();
-    expect(el.querySelectorAll('[data-testid="chunk-card"]')).toHaveLength(3);
+    expect(el.querySelectorAll('[data-testid="chunk-card"]')).toHaveLength(2);
 
     // A card carries the derived status and the current node id.
     const running = el.querySelector('[data-col="running"] [data-testid="chunk-card"]');
     expect(running?.querySelector('[data-testid="chunk-status"]')?.textContent).toContain('running');
     expect(running?.querySelector('[data-testid="chunk-node"]')?.textContent).toContain('nd_build');
 
-    // Each derived status lands in its own column: ready, running, done each hold one.
-    expect(el.querySelectorAll('[data-col="ready"] [data-testid="chunk-card"]')).toHaveLength(1);
+    // Each non-ready status lands in its own column; the ready chunk never appears as a card.
     expect(el.querySelectorAll('[data-col="running"] [data-testid="chunk-card"]')).toHaveLength(1);
     expect(el.querySelectorAll('[data-col="done"] [data-testid="chunk-card"]')).toHaveLength(1);
+    expect(el.querySelector('[data-status="ready"]')).toBeNull();
   });
 
   it('emits the chunk id when a card is activated (opens the detail drawer)', async () => {
@@ -123,8 +126,9 @@ describe('BoardShell', () => {
   it('degrades to the short chunk id when a chunk has no labeled pointer', async () => {
     const chunks: ChunkSummary[] = [
       // Zero pointers, and a pointer whose URL did not parse (null label) — no chips,
-      // the short id carries the identity, and nothing errors.
-      { chunk_id: 'ch_01ready0000000000000000000', graph_id: 'gr_1', status: 'ready', current_node_id: 'nd_build', pm_pointers: [] },
+      // the short id carries the identity, and nothing errors. Both are non-ready so
+      // they render on the board (ready chunks would live in the rail instead).
+      { chunk_id: 'ch_01done00000000000000000000', graph_id: 'gr_1', status: 'done', current_node_id: 'done', pm_pointers: [] },
       {
         chunk_id: 'ch_01running000000000000000000',
         graph_id: 'gr_1',
@@ -140,6 +144,7 @@ describe('BoardShell', () => {
 
     expect(el.querySelectorAll('[data-testid="pm-chip"]')).toHaveLength(0);
     expect(el.querySelectorAll('[data-testid="chunk-card"]')).toHaveLength(2);
-    expect(el.querySelectorAll('[data-testid="chunk-id"]')[1]?.textContent).toContain('ch_01running');
+    const running = el.querySelector('[data-col="running"] [data-testid="chunk-card"]');
+    expect(running?.querySelector('[data-testid="chunk-id"]')?.textContent).toContain('ch_01running');
   });
 });

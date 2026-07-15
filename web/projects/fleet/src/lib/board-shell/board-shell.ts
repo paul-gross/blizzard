@@ -2,14 +2,13 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 
 import type { ChunkStatus, ChunkSummary } from '../api/hub';
 
-/** The five board columns, in dispatch → done order (workflow build → review → deliver). */
+/** The four board columns, in dispatch → done order (workflow build → review → deliver). */
 interface BoardColumn {
   readonly key: string;
   readonly label: string;
 }
 
 const COLUMNS: readonly BoardColumn[] = [
-  { key: 'ready', label: 'READY' },
   { key: 'running', label: 'RUNNING' },
   { key: 'waiting', label: 'WAIT/HUMAN' },
   { key: 'needs', label: 'NEEDS HUMAN' },
@@ -17,12 +16,14 @@ const COLUMNS: readonly BoardColumn[] = [
 ];
 
 /**
- * Map a chunk's derived status (D-004) onto its board column. The walking-skeleton
- * board has one column per resting state; the transient `delivering` shows under
- * RUNNING, and terminal `stopped` shows under DONE.
+ * Map a chunk's derived status (D-004) onto its board column. The board has one
+ * column per non-ready resting state; the transient `delivering` shows under
+ * RUNNING, and terminal `stopped` shows under DONE. `ready` maps to no board
+ * column (`null`) — the ready queue lives in the left rail (fleet-queue-panel),
+ * so a ready chunk shows there and never also as a board card (issue #22).
  */
-const STATUS_COLUMN: Record<ChunkStatus, string> = {
-  ready: 'ready',
+const STATUS_COLUMN: Record<ChunkStatus, string | null> = {
+  ready: null,
   running: 'running',
   delivering: 'running',
   waiting_on_human: 'waiting',
@@ -50,7 +51,7 @@ export interface BoardCard {
 }
 
 /**
- * The mission-control board shell — header, the empty five-column board grid,
+ * The mission-control board shell — header, the empty four-column board grid,
  * and an empty-state message (D-097). This is the shared fleet view the hub app
  * renders; it lives once here so the runner app can compose it too. Presentational
  * only: it holds no data and no data client — chunks, counts, and live wiring land
@@ -214,7 +215,7 @@ export interface BoardCard {
     }
     .board {
       display: grid;
-      grid-template-columns: repeat(5, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 1px;
       background: var(--line);
       flex: 1;
@@ -342,7 +343,10 @@ export class BoardShell {
   private readonly cards = computed<Map<string, BoardCard[]>>(() => {
     const grouped = new Map<string, BoardCard[]>(COLUMNS.map((c) => [c.key, []]));
     for (const chunk of this.chunks()) {
-      const column = STATUS_COLUMN[chunk.status] ?? 'ready';
+      const column = STATUS_COLUMN[chunk.status];
+      // Ready chunks belong to the left rail (fleet-queue-panel), not the board —
+      // a null column skips them so they never double-show as a board card (issue #22).
+      if (!column) continue;
       grouped.get(column)?.push({
         chunkId: chunk.chunk_id,
         shortId: chunk.chunk_id.slice(0, 12),
