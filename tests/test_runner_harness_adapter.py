@@ -73,6 +73,7 @@ while i < len(args):
     elif a == "--output-format": i += 2
     elif a == "--settings": i += 2
     elif a == "--permission-mode": i += 2
+    elif a == "--model": i += 2
     elif a in ("-p", "--print"): i += 1
     else: prompt = a; i += 1
 sid = resume or session or "auto"
@@ -114,6 +115,28 @@ def test_spawn_launches_real_process_in_workdir(tmp_path: Path) -> None:
     os.waitpid(handle.pid, 0)  # let the fire-and-forget child finish
     assert (workdir / "spawned-here.txt").read_text() == (envelope.prompt or "")  # ran in the acquired workdir
     assert "--permission-mode" not in (workdir / "argv.txt").read_text()  # omitted when unset
+    assert "--model claude-opus-4-8" in (workdir / "argv.txt").read_text()  # pinned Opus, not the ambient default
+
+
+@pytest.mark.component
+def test_spawn_pins_a_configured_model(tmp_path: Path) -> None:
+    # The worker model is pinned so a spawn never inherits the operator's ambient
+    # ``claude`` default; the constructor argument overrides the Opus default.
+    binary = _fake_binary(tmp_path)
+    workdir = tmp_path / "e1"
+    workdir.mkdir()
+    adapter = ClaudeCodeAdapter(binary=binary, model="claude-sonnet-5")
+    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
+    preamble = WorkerPreamble(
+        environments=[AcquiredEnvironment(environment_id="e1", workdir=str(workdir))],
+        lease_id="lease_1",
+        local_api_url="http://127.0.0.1:8431",
+    )
+
+    handle = adapter.spawn(envelope, preamble, session_hint="sess-123")
+    os.waitpid(handle.pid, 0)
+
+    assert "--model claude-sonnet-5" in (workdir / "argv.txt").read_text()
 
 
 @pytest.mark.component

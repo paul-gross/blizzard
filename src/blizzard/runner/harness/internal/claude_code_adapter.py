@@ -48,6 +48,12 @@ _log = get_logger("blizzard.runner.harness")
 _CHOICE_OPEN = "<Choice>"
 _CHOICE_CLOSE = "</Choice>"
 
+# The model every fleet worker runs on. Pinned so a spawn never inherits the
+# operator's ambient ``claude`` default (which can resolve to a lightweight model
+# unfit for the build/review work). Opus is the fleet's standing choice; override
+# per-adapter via the ``model`` constructor argument.
+DEFAULT_WORKER_MODEL = "claude-opus-4-8"
+
 
 class HarnessSpawnError(RuntimeError):
     """The harness binary could not be launched (missing binary, bad workdir)."""
@@ -57,10 +63,18 @@ class ClaudeCodeAdapter:
     """The Claude Code binding. Dumb: translates the CLI surface, never decides."""
 
     def __init__(
-        self, binary: str = "claude", *, settings_path: str | None = None, permission_mode: str | None = None
+        self,
+        binary: str = "claude",
+        *,
+        settings_path: str | None = None,
+        permission_mode: str | None = None,
+        model: str = DEFAULT_WORKER_MODEL,
     ) -> None:
         self._binary = binary
         self._settings_path = settings_path
+        # The model passed to every ``claude`` spawn (D-092). Pinned so a worker never
+        # falls through to the operator's ambient default; defaults to Opus.
+        self._model = model
         # The headless permission mode passed to ``claude -p`` (D-092). A non-interactive
         # worker has no one to approve tool use, so ``default`` mode blocks every edit and
         # non-trivial bash — the worker can inspect but never build. A workspace-isolated
@@ -74,7 +88,7 @@ class ClaudeCodeAdapter:
             raise HarnessSpawnError("spawn requires at least one acquired environment")
         session_id = session_hint or ""
         workdir = preamble.environments[0].workdir
-        cmd = [self._binary, "-p", "--output-format", "json"]
+        cmd = [self._binary, "-p", "--output-format", "json", "--model", self._model]
         if session_id:
             cmd += ["--session-id", session_id]
         if self._settings_path:
