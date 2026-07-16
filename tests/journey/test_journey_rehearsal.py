@@ -284,14 +284,17 @@ def _blizzard_bin(name: str) -> str:
     return str(Path(sys.executable).parent / name)
 
 
-def _file_hub(forge: httpx.Client, repo: str, title: str, body: str) -> str:
+def _file_hub(forge: httpx.Client, repo: str, title: str, body: str) -> tuple[str, str]:
+    """File an issue and return its ``{source, ref}`` pointer (D-105) — ``repo`` is the
+    configured source's own name (``_pm_sources``), ``ref`` its issue number."""
     issue = forge.post(f"/repos/{OWNER}/{repo}/issues", json={"title": title, "body": body})
     assert issue.status_code == 201, issue.text
-    return f"https://github.com/{OWNER}/{repo}/issues/{issue.json()['number']}"
+    return repo, str(issue.json()["number"])
 
 
-def _ingest(hub: httpx.Client, url: str) -> str:
-    resp = hub.post("/api/chunks", json={"pointers": [{"provider": "github", "url": url}]})
+def _ingest(hub: httpx.Client, pointer: tuple[str, str]) -> str:
+    source, ref = pointer
+    resp = hub.post("/api/chunks", json={"pointers": [{"source": source, "ref": ref}]})
     assert resp.status_code == 201, resp.text
     chunk_id = resp.json()["chunk_id"]
     # Ingest rests not-ready (D-103); promote so the fleet claims it as the journey expects.

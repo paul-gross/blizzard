@@ -192,7 +192,7 @@ def test_review_cycle_fails_once_then_delivers(tmp_path: Path) -> None:
         issue_number = issue.json()["number"]
         ingested = hub.post(
             "/api/chunks",
-            json={"pointers": [{"provider": "github", "url": f"{REPO}/issues/{issue_number}"}]},
+            json={"pointers": [{"source": REPO_NAME, "ref": str(issue_number)}]},
         )
         assert ingested.status_code == 201, ingested.text
         chunk_id = ingested.json()["chunk_id"]

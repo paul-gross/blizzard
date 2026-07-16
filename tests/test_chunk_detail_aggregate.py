@@ -18,7 +18,7 @@ from tests.support import build_hub, report_lease
 
 pytestmark = pytest.mark.component
 
-_POINTER = {"provider": "github", "url": "http://forge.local/repos/acme/widget/issues/7"}
+_POINTER = {"source": "default", "ref": "7"}
 
 _GATE_YAML = """
 name: default-delivery
@@ -94,7 +94,7 @@ def test_detail_carries_the_full_aggregate(tmp_path: Path) -> None:
     # Route (runner/workspace/envs, D-021) and PM pointers.
     assert detail["route"]["runner_id"] == "r1"
     assert detail["route"]["environment_ids"] == ["e1", "e2"]
-    assert [p["url"] for p in detail["pm_pointers"]] == [_POINTER["url"]]
+    assert [p["ref"] for p in detail["pm_pointers"]] == [_POINTER["ref"]]
 
     # Board-legible identity (D-075/D-108): the current node's human name and the
     # pointer's `{source}#{number}` label are resolved server-side onto the detail.

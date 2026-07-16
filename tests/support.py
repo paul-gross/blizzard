@@ -11,12 +11,10 @@ can advance, so ids order and timestamps are deterministic (``bzh:injected-clock
 
 from __future__ import annotations
 
-import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from urllib.parse import urlsplit
 
 from fastapi.testclient import TestClient
 
@@ -39,26 +37,6 @@ from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.pm.registry import PmSourceRegistry
 from blizzard.hub.pm.source import IPmSource, PmItem, PmSourceError, UnknownSource
 from blizzard.hub.runtime import migration_runner
-
-# The issue-shaped pointer URL FakePmSource renders a label/web-url from — a small,
-# local echo of the GitHub adapter's own grammar (``pm/internal/github_pm_source.py``),
-# kept independent so this fake doesn't reach into an adapter's internals. Schemeless-
-# tolerant (``(?:^|/)``) to match the adapter's own D-107 fix.
-_ISSUE_RE = re.compile(r"(?:^|/)(?:repos/)?(?P<owner>[^/]+)/(?P<repo>[^/]+)/issues/(?P<number>\d+)")
-
-
-def _repo_of(url: str) -> str | None:
-    """``owner/repo`` from a pointer URL, independent of the issue shape (D-107) — the
-    same repo-membership-only extraction ``github_pm_source.py``'s own copy performs, so
-    a non-issue-shaped pointer at a matching repo still resolves (label degrades to
-    ``None``; ownership does not)."""
-    path = urlsplit(url).path.strip("/") or url.strip("/")
-    segments = [s for s in path.split("/") if s]
-    if segments and segments[0] == "repos":
-        segments = segments[1:]
-    if len(segments) < 2:
-        return None
-    return f"{segments[0]}/{segments[1]}"
 
 
 class FakeForge:
@@ -111,18 +89,18 @@ def _conforms_fake_forge(x: FakeForge) -> IForgeDelivery:
 
 
 class FakePmSource:
-    """An in-process :class:`IPmSource` — canned body + comments per pointer URL.
+    """An in-process :class:`IPmSource` — canned body + comments per pointer ref (D-105).
 
-    Still keyed on ``pointer.url`` (the pointer hasn't grown a ``source`` field yet —
-    that's Phase 3, D-105). A default ``body``/``comments`` answers every pointer;
-    ``by_url`` overrides the item for specific pointer URLs (a grouped chunk reads
-    distinct items), and ``fail_urls`` raises :class:`PmSourceError` for a URL to
-    exercise the per-pointer forge-failure degradation. ``name`` is this fake's
-    registered source name — the prefix its ``label`` renders under, mirroring a real
-    binding's configured ``name`` (D-106/D-108). ``repo`` is the ``owner/repo`` this fake
-    is pinned to (D-107) — :meth:`owns` compares a pointer's URL against it, mirroring
-    the real adapter's repo-matching resolution; two ``FakePmSource``s with distinct
-    ``repo``s exercise the two-sources-configured case."""
+    Keyed on ``pointer.ref`` (an opaque item token, mirroring the real GitHub adapter's
+    issue number) rather than a URL — the pointer names its binding by ``source``
+    (D-105/D-106) so this fake, like the real adapter, never re-derives a repo from a
+    URL. A default ``body``/``comments`` answers every pointer; ``by_ref`` overrides the
+    item for specific refs (a grouped chunk reads distinct items), and ``fail_refs``
+    raises :class:`PmSourceError` for a ref to exercise the per-pointer forge-failure
+    degradation. ``name`` is this fake's registered source name — the prefix its
+    ``label`` renders under and the ``source`` a pointer it mints carries, mirroring a
+    real binding's configured ``name`` (D-106/D-108). ``repo`` is the ``owner/repo`` this
+    fake renders ``web_url``s under — cosmetic only now that resolution is name-keyed."""
 
     def __init__(
         self,
@@ -131,43 +109,39 @@ class FakePmSource:
         repo: str = "acme/widget",
         body: str = "issue body",
         comments: list[str] | None = None,
-        by_url: dict[str, PmItem] | None = None,
-        fail_urls: set[str] | None = None,
+        by_ref: dict[str, PmItem] | None = None,
+        fail_refs: set[str] | None = None,
     ) -> None:
         self.name = name
         self.repo = repo
         self.body = body
         self.comments = comments or []
-        self.by_url = by_url or {}
-        self.fail_urls = fail_urls or set()
+        self.by_ref = by_ref or {}
+        self.fail_refs = fail_refs or set()
         self.fetched: list[str] = []
 
     def parse(self, token: str) -> PmPointer:
         prefix, sep, ref = token.partition(":")
         if not sep or prefix != self.name or not ref.isdigit():
             raise UnknownSource(f"{token!r} is not a {self.name!r} source token")
-        return PmPointer(provider="github", url=f"http://forge.local/repos/{self.repo}/issues/{ref}")
+        return PmPointer(source=self.name, ref=ref)
 
     def fetch(self, pointer: PmPointer) -> PmItem:
-        self.fetched.append(pointer.url)
-        if pointer.url in self.fail_urls:
-            raise PmSourceError(f"forge unreachable for {pointer.url}")
-        if pointer.url in self.by_url:
-            return self.by_url[pointer.url]
+        self.fetched.append(pointer.ref)
+        if pointer.ref in self.fail_refs:
+            raise PmSourceError(f"forge unreachable for {pointer.ref}")
+        if pointer.ref in self.by_ref:
+            return self.by_ref[pointer.ref]
         return PmItem(body=self.body, comments=list(self.comments))
 
     def label(self, pointer: PmPointer) -> str | None:
-        match = _ISSUE_RE.search(pointer.url)
-        return f"{self.name}#{match['number']}" if match is not None else None
+        return f"{self.name}#{pointer.ref}"
 
     def web_url(self, pointer: PmPointer) -> str | None:
-        return pointer.url if _ISSUE_RE.search(pointer.url) is not None else None
+        return f"http://forge.local/{self.repo}/issues/{pointer.ref}"
 
     def branch_url(self, repo: str, branch_name: str) -> str | None:
         return f"http://forge.local/{repo}/tree/{branch_name}"
-
-    def owns(self, pointer: PmPointer) -> bool:
-        return _repo_of(pointer.url) == self.repo
 
 
 def _conforms_fake_pm(x: FakePmSource) -> IPmSource:

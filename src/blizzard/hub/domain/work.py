@@ -50,10 +50,12 @@ class ChunkStatus(StrEnum):
 
 @dataclass(frozen=True)
 class PmPointer:
-    """One wrapped PM item — ``{provider, url}`` (D-075). Contents never stored."""
+    """One wrapped PM item — ``{source, ref}`` (D-105), superseding ``{provider, url}``
+    (D-075). ``source`` names a configured ``[[pm_source]]`` (D-106); ``ref`` is that
+    source's own item token (a GitHub issue number). Contents never stored."""
 
-    provider: str
-    url: str
+    source: str
+    ref: str
 
 
 @dataclass(frozen=True)

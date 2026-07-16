@@ -34,9 +34,10 @@ _CHUNK = "ch_pass"
 _ITEMS: dict[str, object] = {
     "items": [
         {
-            "provider": "github",
-            "url": "http://forge.local/repos/acme/widget/issues/42",
-            "label": "gh:widget#42",
+            "source": "widget",
+            "ref": "42",
+            "label": "widget#42",
+            "web_url": "http://forge.local/repos/acme/widget/issues/42",
             "fetched_at": "2026-07-14T00:00:00+00:00",
             "body": "please fix the flake",
             "comments": ["seen it too", "repro attached"],

@@ -26,7 +26,7 @@ from tests.support import build_hub
 
 pytestmark = pytest.mark.component
 
-_POINTER = {"provider": "github", "url": "http://forge.local/repos/acme/widget/issues/9"}
+_POINTER = {"source": "default", "ref": "9"}
 _ADDENDUM = "RE-ENTRY: address every review finding before declaring done."
 _FINDINGS = "BLOCKING: the widget endpoint returns 500 on empty input; add a guard."
 

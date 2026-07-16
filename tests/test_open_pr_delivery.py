@@ -17,7 +17,7 @@ from tests.support import FakeForge, build_hub, report_lease
 
 pytestmark = pytest.mark.component
 
-_POINTER = {"provider": "github", "url": "http://forge.local/repos/acme/widget/issues/12"}
+_POINTER = {"source": "default", "ref": "12"}
 
 _OPEN_PR_YAML = """
 name: default-delivery

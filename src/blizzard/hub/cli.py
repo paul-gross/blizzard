@@ -11,6 +11,7 @@ structlog inside the runtime and app.
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 import click
@@ -211,12 +212,53 @@ def decide(decision_id: str, choice: str, resolved_by: str, hub_url: str | None)
     click.echo(f"decision {decision_id} resolved: {body['choice']} (by {body['resolved_by']})")
 
 
+# A GitHub-shaped issue reference in a pasted URL — {owner}/{repo}/issues/{number},
+# with or without a leading scheme://host and with or without the REST /repos/
+# prefix. Source names are conventionally the repo tail (the same convention
+# migration 0012's backfill and `[[pm_source]]` config both assume), so a pasted
+# issue URL resolves to `{source: repo, ref: number}` without asking the hub anything
+# — this stays a pure API client (design/cli.md).
+_ISSUE_URL_RE = re.compile(r"(?:^|/)(?:repos/)?(?P<owner>[^/:#]+)/(?P<repo>[^/:#]+)/issues/(?P<number>\d+)/?$")
+
+
+def _pointer_from_url(url: str) -> dict[str, str] | None:
+    """``url`` resolved to ``{source, ref}`` by the repo-tail convention, or ``None``
+    when it isn't a GitHub-shaped issue URL."""
+    match = _ISSUE_URL_RE.search(url)
+    if match is None:
+        return None
+    return {"source": match["repo"], "ref": match["number"]}
+
+
 def _parse_pointer(token: str) -> dict[str, str]:
-    """Split a ``provider:url`` ingest token; the URL keeps its own colons (partition once)."""
-    provider, sep, url = token.partition(":")
-    if not sep or not provider or not url:
-        raise click.ClickException(f"pointer must be provider:url (got {token!r})")
-    return {"provider": provider, "url": url}
+    """An ingest token into ``{source, ref}`` (D-105).
+
+    Accepts ``source:ref`` (``blizzard:26``), ``source#ref`` (``blizzard#26``), or a
+    pasted PM item URL (``https://github.com/o/blizzard/issues/26``) — the ergonomic
+    path, copy straight from the browser — resolved to its repo tail. The old
+    ``github:<url>`` provider-tagged form still resolves, on the URL alone, but is
+    deprecated: it warns on stderr rather than silently accepting a provider tag the
+    pointer no longer carries."""
+    if token.startswith("github:"):
+        rest = token[len("github:") :]
+        resolved = _pointer_from_url(rest)
+        if resolved is not None:
+            click.echo(
+                f"warning: the 'github:' pointer prefix is deprecated (in {token!r}) — resolving {rest!r} on its own",
+                err=True,
+            )
+            return resolved
+    as_url = _pointer_from_url(token)
+    if as_url is not None:
+        return as_url
+    if "#" in token and "://" not in token:
+        source, sep, ref = token.partition("#")
+        if sep and source and ref:
+            return {"source": source, "ref": ref}
+    source, sep, ref = token.partition(":")
+    if sep and source and ref:
+        return {"source": source, "ref": ref}
+    raise click.ClickException(f"pointer must be source:ref, source#ref, or a PM item URL (got {token!r})")
 
 
 @hub.command()
@@ -225,9 +267,10 @@ def _parse_pointer(token: str) -> dict[str, str]:
 def ingest(pointers: tuple[str, ...], hub_url: str | None) -> None:
     """Ingest PM items by pointer, minting a chunk (D-047).
 
-    Each POINTER is ``provider:url`` (e.g. ``github:https://github.com/o/r/issues/8``);
-    pass one or more — a batch mints one chunk carrying every pointer. A pure client of the
-    hub API: ``POST /api/chunks``. 409 when a pointer is already held by a live chunk (D-093)."""
+    Each POINTER is ``source:ref`` (e.g. ``blizzard:26``), ``source#ref``, or a pasted
+    PM item URL; pass one or more — a batch mints one chunk carrying every pointer. A
+    pure client of the hub API: ``POST /api/chunks``. 409 when a pointer is already
+    held by a live chunk (D-093)."""
     models = [_parse_pointer(p) for p in pointers]
     url = f"{_hub_url(hub_url).rstrip('/')}/api/chunks"
     try:
@@ -237,7 +280,7 @@ def ingest(pointers: tuple[str, ...], hub_url: str | None) -> None:
     if resp.status_code == httpx.codes.CONFLICT:
         body = resp.json()
         raise click.ClickException(
-            f"pointer {body.get('provider')}:{body.get('url')} already held by chunk {body.get('existing_chunk_id')}"
+            f"pointer {body.get('source')}#{body.get('ref')} already held by chunk {body.get('existing_chunk_id')}"
         )
     if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:
         raise click.ClickException("at least one pointer required")

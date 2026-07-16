@@ -42,9 +42,10 @@ describe('ChunkDetail container', () => {
         return {
           items: [
             {
-              provider: 'github',
-              url: 'https://github.com/acme/widget/issues/42',
-              label: 'gh:widget#42',
+              source: 'widget',
+              ref: '42',
+              label: 'widget#42',
+              web_url: 'https://github.com/acme/widget/issues/42',
               fetched_at: '2026-07-15T00:00:00Z',
               body: 'the widget flake reproduces under load',
               comments: ['seen it too'],

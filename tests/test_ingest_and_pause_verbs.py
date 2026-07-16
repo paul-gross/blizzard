@@ -44,7 +44,7 @@ class _FakeResponse:
 
 
 def test_ingest_posts_the_pointers_and_reports_the_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The verb parses ``provider:url`` tokens, POSTs the batch, and echoes the minted id."""
+    """The verb parses ``source:ref`` tokens, POSTs the batch, and echoes the minted id."""
     calls: list[tuple[str, object]] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -54,38 +54,84 @@ def test_ingest_posts_the_pointers_and_reports_the_chunk(monkeypatch: pytest.Mon
     monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
     result = CliRunner().invoke(
         hub_group,
-        ["ingest", "github:https://github.com/o/r/issues/8", "jira:https://jira.example/PROJ-1"],
+        ["ingest", "blizzard:8", "widget:1"],
         env={"BZ_HUB_URL": "http://hub.local:8421"},
     )
 
     assert result.exit_code == 0, result.output
     url, body = calls[0]
     assert url == "http://hub.local:8421/api/chunks"
-    # The URL keeps its own colons — only the leading provider is split off.
     assert body == {
         "pointers": [
-            {"provider": "github", "url": "https://github.com/o/r/issues/8"},
-            {"provider": "jira", "url": "https://jira.example/PROJ-1"},
+            {"source": "blizzard", "ref": "8"},
+            {"source": "widget", "ref": "1"},
         ]
     }
     assert "ch_new" in result.output
+
+
+def test_ingest_accepts_a_source_hash_ref_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``source#ref`` is the alternate, unambiguous separator."""
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        return _FakeResponse(201, {"chunk_id": "ch_new"})
+
+    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["ingest", "blizzard#8"])
+
+    assert result.exit_code == 0, result.output
+
+
+def test_ingest_resolves_a_pasted_issue_url_by_its_repo_tail(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A pasted PM item URL resolves to ``{source: repo, ref: number}`` — the ergonomic
+    path, copied straight from the browser — without any request to the hub."""
+    calls: list[object] = []
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        calls.append(json)
+        return _FakeResponse(201, {"chunk_id": "ch_new"})
+
+    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["ingest", "https://github.com/paul-gross/blizzard/issues/26"])
+
+    assert result.exit_code == 0, result.output
+    assert calls[0] == {"pointers": [{"source": "blizzard", "ref": "26"}]}
+
+
+def test_ingest_warns_on_the_deprecated_github_prefix_but_still_resolves(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The old ``github:<url>`` provider-tagged form still resolves — on the URL alone —
+    but warns on stderr rather than silently accepting a provider tag the pointer no
+    longer carries."""
+    calls: list[object] = []
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        calls.append(json)
+        return _FakeResponse(201, {"chunk_id": "ch_new"})
+
+    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["ingest", "github:https://github.com/paul-gross/blizzard/issues/26"])
+
+    assert result.exit_code == 0, result.output
+    assert calls[0] == {"pointers": [{"source": "blizzard", "ref": "26"}]}
+    assert "deprecated" in result.output
 
 
 def test_ingest_maps_a_pointer_conflict(monkeypatch: pytest.MonkeyPatch) -> None:
     """A 409 (pointer already held by a live chunk) is a named error, not a stack trace."""
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
-        return _FakeResponse(409, {"existing_chunk_id": "ch_old", "provider": "github", "url": "u"})
+        return _FakeResponse(409, {"existing_chunk_id": "ch_old", "source": "blizzard", "ref": "8"})
 
     monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["ingest", "github:u"])
+    result = CliRunner().invoke(hub_group, ["ingest", "blizzard:8"])
 
     assert result.exit_code != 0
     assert "ch_old" in result.output
 
 
 def test_ingest_rejects_a_malformed_pointer(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A token without a ``provider:`` prefix errors before any request is made."""
+    """A token with neither a ``source:``/``source#`` separator nor a PM item URL shape
+    errors before any request is made."""
     attempted = False
 
     def fake_post(*args: object, **kwargs: object) -> _FakeResponse:
@@ -94,10 +140,10 @@ def test_ingest_rejects_a_malformed_pointer(monkeypatch: pytest.MonkeyPatch) -> 
         return _FakeResponse(201, {"chunk_id": "x"})
 
     monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["ingest", "no-colon-here"])
+    result = CliRunner().invoke(hub_group, ["ingest", "no-separator-here"])
 
     assert result.exit_code != 0
-    assert "provider:url" in result.output
+    assert "source:ref" in result.output
     assert attempted is False
 
 

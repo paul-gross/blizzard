@@ -225,7 +225,7 @@ def _ingest_chunk(forge: httpx.Client, hub: httpx.Client, title: str) -> str:
     assert issue.status_code == 201, issue.text
     ingested = hub.post(
         "/api/chunks",
-        json={"pointers": [{"provider": "github", "url": f"{REPO}/issues/{issue.json()['number']}"}]},
+        json={"pointers": [{"source": REPO_NAME, "ref": str(issue.json()["number"])}]},
     )
     assert ingested.status_code == 201, ingested.text
     return ingested.json()["chunk_id"]

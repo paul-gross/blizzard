@@ -8,8 +8,8 @@ import { QueuePanel } from './queue-panel';
 
 const QUEUE = {
   entries: [
-    { chunk_id: 'ch_top', graph_id: 'gr_1', position: 0, pm_pointers: [{ provider: 'github', url: 'u/1' }] },
-    { chunk_id: 'ch_mid', graph_id: 'gr_1', position: 1, pm_pointers: [{ provider: 'github', url: 'u/2' }] },
+    { chunk_id: 'ch_top', graph_id: 'gr_1', position: 0, pm_pointers: [{ source: 'widget', ref: '1' }] },
+    { chunk_id: 'ch_mid', graph_id: 'gr_1', position: 1, pm_pointers: [{ source: 'widget', ref: '2' }] },
     { chunk_id: 'ch_low', graph_id: 'gr_1', position: 2, pm_pointers: [] },
   ],
 };

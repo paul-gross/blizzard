@@ -94,7 +94,7 @@
         "type": "object"
       },
       "PmItemEntry": {
-        "description": "One pointer's pass-through PM item (D-047/D-074) \u2014 body + comment thread, vendor-native.\n\n``label`` is the board-legible pointer label (D-075) \u2014 ``gh:blizzard#8`` \u2014 null when the\nURL is not issue-shaped. A per-pointer forge failure degrades here rather than failing the\nwhole read (D-084): ``error`` carries the reason and ``body`` is null, so one unreachable\npointer never blinds the reader to the pointers it did reach.",
+        "description": "One pointer's pass-through PM item (D-047/D-074/D-105) \u2014 body + comment thread,\nvendor-native.\n\n``label``/``web_url`` are the board-legible pointer label (``blizzard#8``) and its\nbrowser address (D-108) \u2014 both null when no configured source names ``source``. A\nper-pointer forge failure degrades here rather than failing the whole read (D-084):\n``error`` carries the reason and ``body`` is null, so one unreachable pointer never\nblinds the reader to the pointers it did reach.",
         "properties": {
           "body": {
             "anyOf": [
@@ -141,18 +141,29 @@
             ],
             "title": "Label"
           },
-          "provider": {
-            "title": "Provider",
+          "ref": {
+            "title": "Ref",
             "type": "string"
           },
-          "url": {
-            "title": "Url",
+          "source": {
+            "title": "Source",
             "type": "string"
+          },
+          "web_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Web Url"
           }
         },
         "required": [
-          "provider",
-          "url",
+          "source",
+          "ref",
           "fetched_at"
         ],
         "title": "PmItemEntry",

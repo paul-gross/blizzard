@@ -259,7 +259,7 @@ def pm_items(chunk_id: str) -> None:
     (``graphs/prompts/build.md``), which forwards to the hub — the worker never talks
     to the hub or the PM system directly. The runner URL is inherited from the spawn
     environment (``BLIZZARD_RUNNER_URL``), so no identity argument; the items print as
-    JSON (``{items: [{provider, url, label, fetched_at, body, comments, error}, ...]}``)
+    JSON (``{items: [{source, ref, label, web_url, fetched_at, body, comments, error}, ...]}``)
     — one entry per pointer — for the worker to consume.
     """
     runner_url = os.environ.get(ENV_RUNNER_URL)

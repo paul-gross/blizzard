@@ -29,7 +29,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from tests.e2e.test_acceptance_loop import REPO, _forge, _free_port, _hub
+from tests.e2e.test_acceptance_loop import REPO, REPO_NAME, _forge, _free_port, _hub
 from tests.service.support import (
     mint_fixture,
     mock_runner,
@@ -80,7 +80,7 @@ def _ingest(forge: httpx.Client, hub: httpx.Client, title: str) -> str:
     assert issue.status_code == 201, issue.text
     ingested = hub.post(
         "/api/chunks",
-        json={"pointers": [{"provider": "github", "url": f"{REPO}/issues/{issue.json()['number']}"}]},
+        json={"pointers": [{"source": REPO_NAME, "ref": str(issue.json()["number"])}]},
     )
     assert ingested.status_code == 201, ingested.text
     chunk_id = ingested.json()["chunk_id"]

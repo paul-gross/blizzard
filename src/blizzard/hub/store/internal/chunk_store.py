@@ -236,8 +236,7 @@ class ChunkStore:
                 p.chunk_id
                 for p in conn.execute(
                     select(s.chunk_pm_pointers.c.chunk_id).where(
-                        (s.chunk_pm_pointers.c.provider == pointer.provider)
-                        & (s.chunk_pm_pointers.c.url == pointer.url)
+                        (s.chunk_pm_pointers.c.source == pointer.source) & (s.chunk_pm_pointers.c.ref == pointer.ref)
                     )
                 ).all()
             ]
@@ -362,9 +361,7 @@ class ChunkStore:
             )
             for pointer in chunk.pm_pointers:
                 conn.execute(
-                    insert(s.chunk_pm_pointers).values(
-                        chunk_id=chunk.chunk_id, provider=pointer.provider, url=pointer.url
-                    )
+                    insert(s.chunk_pm_pointers).values(chunk_id=chunk.chunk_id, source=pointer.source, ref=pointer.ref)
                 )
 
     def record_promote(self, chunk_id: str, *, at: datetime) -> None:
@@ -725,23 +722,23 @@ class ChunkStore:
             conn.execute(insert(s.queue_positions).values(chunk_id=chunk_id, position=position, set_at=at))
 
     def add_pm_pointers(self, chunk_id: str, pointers: list[PmPointer], *, at: datetime) -> None:
-        """Fold pointers into the survivor of a group, de-duped by (provider, url) (D-076)."""
+        """Fold pointers into the survivor of a group, de-duped by (source, ref) (D-076)."""
         with self._engine.begin() as conn:
             existing = {
-                (p.provider, p.url)
+                (p.source, p.ref)
                 for p in conn.execute(
-                    select(s.chunk_pm_pointers.c.provider, s.chunk_pm_pointers.c.url).where(
+                    select(s.chunk_pm_pointers.c.source, s.chunk_pm_pointers.c.ref).where(
                         s.chunk_pm_pointers.c.chunk_id == chunk_id
                     )
                 ).all()
             }
             for pointer in pointers:
-                if (pointer.provider, pointer.url) in existing:
+                if (pointer.source, pointer.ref) in existing:
                     continue
                 conn.execute(
-                    insert(s.chunk_pm_pointers).values(chunk_id=chunk_id, provider=pointer.provider, url=pointer.url)
+                    insert(s.chunk_pm_pointers).values(chunk_id=chunk_id, source=pointer.source, ref=pointer.ref)
                 )
-                existing.add((pointer.provider, pointer.url))
+                existing.add((pointer.source, pointer.ref))
 
     def record_grouped(self, chunk_id: str, *, grouped_into: str, at: datetime) -> None:
         """Record ``chunk.grouped`` — the merged-away chunk is ephemeral now (D-048/D-047)."""
@@ -774,7 +771,7 @@ class ChunkStore:
 
     def _chunk(self, conn, row) -> Chunk:  # type: ignore[no-untyped-def]
         pointers = [
-            PmPointer(provider=p.provider, url=p.url)
+            PmPointer(source=p.source, ref=p.ref)
             for p in conn.execute(
                 select(s.chunk_pm_pointers).where(s.chunk_pm_pointers.c.chunk_id == row.chunk_id)
             ).all()

@@ -130,8 +130,8 @@ describe('BoardShell', () => {
         current_node_id: 'nd_build',
         current_node_name: 'build',
         pm_pointers: [
-          { provider: 'github', url: 'https://github.com/paul-gross/blizzard/issues/8', label: 'gh:blizzard#8' },
-          { provider: 'github', url: 'https://github.com/paul-gross/widget/issues/9', label: 'gh:widget#9' },
+          { source: 'blizzard', ref: '8', label: 'blizzard#8', web_url: 'https://github.com/paul-gross/blizzard/issues/8' },
+          { source: 'widget', ref: '9', label: 'widget#9', web_url: 'https://github.com/paul-gross/widget/issues/9' },
         ],
       },
     ];
@@ -142,7 +142,7 @@ describe('BoardShell', () => {
 
     const chips = el.querySelectorAll<HTMLAnchorElement>('[data-testid="pm-chip"]');
     expect(chips).toHaveLength(2);
-    expect(chips[0].textContent?.trim()).toBe('gh:blizzard#8');
+    expect(chips[0].textContent?.trim()).toBe('blizzard#8');
     expect(chips[0].getAttribute('href')).toBe('https://github.com/paul-gross/blizzard/issues/8');
     // The short chunk id stays visible as the stable handle.
     expect(el.querySelector('[data-testid="chunk-id"]')?.textContent).toContain('ch_01running');
@@ -159,7 +159,7 @@ describe('BoardShell', () => {
         graph_id: 'gr_1',
         status: 'running',
         current_node_id: 'nd_build',
-        pm_pointers: [{ provider: 'github', url: 'https://github.com/paul-gross/blizzard/wiki', label: null }],
+        pm_pointers: [{ source: 'blizzard', ref: 'wiki', label: null, web_url: null }],
       },
     ];
     const fixture = TestBed.createComponent(BoardShell);

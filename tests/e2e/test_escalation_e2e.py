@@ -36,6 +36,7 @@ import pytest
 from tests.e2e.test_acceptance_loop import (
     FIXTURE_ENV,
     REPO,
+    REPO_NAME,
     _drive_until_done,
     _forge,
     _free_port,
@@ -144,7 +145,7 @@ def test_retries_exhausted_escalates_and_takeover_resumes_session(tmp_path: Path
         issue_number = issue.json()["number"]
         ingested = hub.post(
             "/api/chunks",
-            json={"pointers": [{"provider": "github", "url": f"{REPO}/issues/{issue_number}"}]},
+            json={"pointers": [{"source": REPO_NAME, "ref": str(issue_number)}]},
         )
         assert ingested.status_code == 201, ingested.text
         chunk_id = ingested.json()["chunk_id"]

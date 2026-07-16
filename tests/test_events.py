@@ -12,7 +12,7 @@ from tests.support import build_hub, drain_stream, emitted_events
 
 pytestmark = pytest.mark.component
 
-_POINTER = {"provider": "github", "url": "http://forge.local/repos/acme/widget/issues/5"}
+_POINTER = {"source": "default", "ref": "5"}
 
 
 def test_broker_frames_events_with_monotonic_ids() -> None:

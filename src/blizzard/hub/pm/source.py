@@ -19,10 +19,10 @@ legal hub with no PM reach.
 ``fetch`` returns a small domain :class:`PmItem`; the edge maps it onto a wire
 :class:`~blizzard.wire.chunk.PmItemEntry` with the pointer, its label, and a ``fetched_at``.
 
-D-107 (Phase 2) adds ``owns``: ingest-time resolution and the board label/fetch both
-need to find *which* configured source claims a given pointer, and repo-matching is
-the only way while the pointer itself carries no source name — see
-:func:`blizzard.hub.pm.registry.resolve_source`, the one resolver both call sites share.
+D-105 gives the pointer its own ``source`` name, so finding a pointer's binding is a
+plain registry lookup (``registry.get(pointer.source)``) — the D-107 repo-matching
+``owns`` this seam carried through Phase 2, while the pointer had no source name of
+its own, is retired.
 """
 
 from __future__ import annotations
@@ -75,15 +75,6 @@ class IPmSource(Protocol):
     def branch_url(self, repo: str, branch_name: str) -> str | None:
         """The forge's browser ``tree`` address for ``branch_name`` on ``repo``, or
         ``None`` when this source has no web origin to link through."""
-        ...
-
-    def owns(self, pointer: PmPointer) -> bool:
-        """True when ``pointer`` names this source's own configured repo (D-107).
-
-        The repo-matching resolution ingest-time rejection and the board label/fetch
-        both need: parse ``pointer.url`` for its owner/repo and compare against this
-        binding's own configured repo. This phase (D-105 not yet landed) the pointer
-        carries no source name, so this is the only way to find a pointer's binding."""
         ...
 
 

@@ -105,6 +105,6 @@ def build_node_envelope(
         node=config,
         prompt=prompt,
         judgement_prompt=_judgement_prompt(node),
-        pm_pointers=[{"provider": p.provider, "url": p.url} for p in chunk.pm_pointers],
+        pm_pointers=[{"source": p.source, "ref": p.ref} for p in chunk.pm_pointers],
         artifacts=[_to_envelope_artifact(r) for r in latest_artifacts_by_name(artifacts)],
     )

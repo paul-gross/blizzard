@@ -11,7 +11,7 @@ const ISSUE_DETAIL: ChunkDetail = {
   current_node_id: 'nd_build',
   latest_epoch: 1,
   pm_pointers: [
-    { provider: 'github', url: 'https://github.com/acme/widget/issues/42', label: 'gh:widget#42' },
+    { source: 'widget', ref: '42', label: 'widget#42', web_url: 'https://github.com/acme/widget/issues/42' },
   ],
   history: [],
   artifacts: [],
@@ -391,9 +391,10 @@ describe('ChunkDetailPanel', () => {
       status: 'success',
       items: [
         {
-          provider: 'github',
-          url: 'https://github.com/acme/widget/issues/42',
-          label: 'gh:widget#42',
+          source: 'widget',
+          ref: '42',
+          label: 'widget#42',
+          web_url: 'https://github.com/acme/widget/issues/42',
           fetched_at: '2026-07-15T00:00:00Z',
           body: 'the widget flake reproduces under load',
           comments: ['seen it too', 'repro attached'],
@@ -402,7 +403,7 @@ describe('ChunkDetailPanel', () => {
       ],
     });
     expect(el.querySelector('[data-testid="issue-pane"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="issue-label"]')?.textContent).toContain('gh:widget#42');
+    expect(el.querySelector('[data-testid="issue-label"]')?.textContent).toContain('widget#42');
     expect(el.querySelector('[data-testid="issue-body"]')?.textContent).toContain('reproduces under load');
     const messages = [...el.querySelectorAll('[data-testid="issue-message"]')].map((m) => m.textContent?.trim());
     expect(messages).toEqual(['seen it too', 'repro attached']);
@@ -414,8 +415,8 @@ describe('ChunkDetailPanel', () => {
     const el = await openIssueTab({
       status: 'success',
       items: [
-        { provider: 'github', url: 'https://github.com/acme/widget/issues/42', label: 'gh:widget#42', fetched_at: 't', body: 'first', comments: [] },
-        { provider: 'github', url: 'https://github.com/acme/widget/issues/43', label: 'gh:widget#43', fetched_at: 't', body: 'second', comments: [] },
+        { source: 'widget', ref: '42', label: 'widget#42', web_url: 'https://github.com/acme/widget/issues/42', fetched_at: 't', body: 'first', comments: [] },
+        { source: 'widget', ref: '43', label: 'widget#43', web_url: 'https://github.com/acme/widget/issues/43', fetched_at: 't', body: 'second', comments: [] },
       ],
     });
     const items = el.querySelectorAll('[data-testid="issue-item"]');
@@ -434,8 +435,8 @@ describe('ChunkDetailPanel', () => {
     const el = await openIssueTab({
       status: 'success',
       items: [
-        { provider: 'github', url: 'https://github.com/acme/widget/issues/42', label: 'gh:widget#42', fetched_at: 't', body: 'reachable', comments: [] },
-        { provider: 'github', url: 'https://github.com/acme/widget/issues/43', label: 'gh:widget#43', fetched_at: 't', body: null, comments: [], error: 'forge unreachable for issues/43' },
+        { source: 'widget', ref: '42', label: 'widget#42', web_url: 'https://github.com/acme/widget/issues/42', fetched_at: 't', body: 'reachable', comments: [] },
+        { source: 'widget', ref: '43', label: 'widget#43', web_url: 'https://github.com/acme/widget/issues/43', fetched_at: 't', body: null, comments: [], error: 'forge unreachable for issues/43' },
       ],
     });
     // The reachable pointer still renders its body beside the failed pointer's notice.

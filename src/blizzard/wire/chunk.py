@@ -17,22 +17,25 @@ from blizzard.wire.question import QuestionView
 
 
 class PmPointerModel(BaseModel):
-    """One ``{provider, url}`` PM pointer (D-075)."""
+    """One ``{source, ref}`` PM pointer (D-105) — ``source`` names a configured
+    ``[[pm_source]]``; ``ref`` is that source's own item token."""
 
-    provider: str
-    url: str
+    source: str
+    ref: str
 
 
 class PmPointerView(BaseModel):
-    """A pointer as the views render it (D-075) — the raw pair plus its legible label.
+    """A pointer as the views render it (D-105/D-108) — the raw pair plus its legible
+    label and browser URL, both rendered by the pointer's configured source binding.
 
-    ``label`` is the board-legible ``{provider-code}:{repo}#{number}`` (e.g.
-    ``gh:blizzard#8``), null when the URL is not issue-shaped — the board then leans
-    on the chunk's stable short id instead."""
+    ``label`` is the board-legible ``{name}#{ref}`` (e.g. ``blizzard#8``); ``web_url``
+    is its browser-openable address. Both null when no configured source names
+    ``source`` — the board then leans on the chunk's stable short id instead."""
 
-    provider: str
-    url: str
+    source: str
+    ref: str
     label: str | None = None
+    web_url: str | None = None
 
 
 class ChunkIngestRequest(BaseModel):
@@ -51,8 +54,8 @@ class ChunkIngestConflict(BaseModel):
     """The 409 body: the pointer is already held by a live chunk (D-093)."""
 
     existing_chunk_id: str
-    provider: str
-    url: str
+    source: str
+    ref: str
     detail: str = "pointer already held by a live chunk"
 
 
@@ -192,16 +195,19 @@ class ChunkDetail(BaseModel):
 
 
 class PmItemEntry(BaseModel):
-    """One pointer's pass-through PM item (D-047/D-074) — body + comment thread, vendor-native.
+    """One pointer's pass-through PM item (D-047/D-074/D-105) — body + comment thread,
+    vendor-native.
 
-    ``label`` is the board-legible pointer label (D-075) — ``gh:blizzard#8`` — null when the
-    URL is not issue-shaped. A per-pointer forge failure degrades here rather than failing the
-    whole read (D-084): ``error`` carries the reason and ``body`` is null, so one unreachable
-    pointer never blinds the reader to the pointers it did reach."""
+    ``label``/``web_url`` are the board-legible pointer label (``blizzard#8``) and its
+    browser address (D-108) — both null when no configured source names ``source``. A
+    per-pointer forge failure degrades here rather than failing the whole read (D-084):
+    ``error`` carries the reason and ``body`` is null, so one unreachable pointer never
+    blinds the reader to the pointers it did reach."""
 
-    provider: str
-    url: str
+    source: str
+    ref: str
     label: str | None = None
+    web_url: str | None = None
     fetched_at: str
     body: str | None = None
     comments: list[str] = []

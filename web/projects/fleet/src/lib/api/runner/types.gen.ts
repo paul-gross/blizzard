@@ -81,12 +81,14 @@ export type HeartbeatResponse = {
 /**
  * PmItemEntry
  *
- * One pointer's pass-through PM item (D-047/D-074) — body + comment thread, vendor-native.
+ * One pointer's pass-through PM item (D-047/D-074/D-105) — body + comment thread,
+ * vendor-native.
  *
- * ``label`` is the board-legible pointer label (D-075) — ``gh:blizzard#8`` — null when the
- * URL is not issue-shaped. A per-pointer forge failure degrades here rather than failing the
- * whole read (D-084): ``error`` carries the reason and ``body`` is null, so one unreachable
- * pointer never blinds the reader to the pointers it did reach.
+ * ``label``/``web_url`` are the board-legible pointer label (``blizzard#8``) and its
+ * browser address (D-108) — both null when no configured source names ``source``. A
+ * per-pointer forge failure degrades here rather than failing the whole read (D-084):
+ * ``error`` carries the reason and ``body`` is null, so one unreachable pointer never
+ * blinds the reader to the pointers it did reach.
  */
 export type PmItemEntry = {
     /**
@@ -110,13 +112,17 @@ export type PmItemEntry = {
      */
     label?: string | null;
     /**
-     * Provider
+     * Ref
      */
-    provider: string;
+    ref: string;
     /**
-     * Url
+     * Source
      */
-    url: string;
+    source: string;
+    /**
+     * Web Url
+     */
+    web_url?: string | null;
 };
 
 /**

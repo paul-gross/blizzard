@@ -19,7 +19,7 @@ from tests.support import build_hub
 
 pytestmark = pytest.mark.component
 
-_POINTER = {"provider": "github", "url": "http://forge.local/repos/acme/widget/issues/2"}
+_POINTER = {"source": "default", "ref": "2"}
 
 
 def _claim_body(runner: str) -> dict:
@@ -60,7 +60,7 @@ def test_repeated_races_never_double_claim(tmp_path: Path) -> None:
     """Many chunks, each raced by two runners — never two winners on one chunk."""
     hub = build_hub(tmp_path)
     for i in range(8):
-        pointer = {"provider": "github", "url": f"http://forge.local/repos/acme/widget/issues/{100 + i}"}
+        pointer = {"source": "default", "ref": str(100 + i)}
         chunk_id = hub.client.post("/api/chunks", json={"pointers": [pointer]}).json()["chunk_id"]
         start = threading.Barrier(2)
         codes: list[int] = []

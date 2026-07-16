@@ -99,8 +99,8 @@ chunk_pm_pointers = Table(
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
-    Column("provider", String, nullable=False),
-    Column("url", String, nullable=False),
+    Column("source", String, nullable=False),
+    Column("ref", String, nullable=False),
 )
 
 # --- Movement record (transition.recorded — D-027/D-036) --------------------

@@ -1,7 +1,8 @@
 """Chunk ingest — wrap PM pointers into a chunk (D-047/D-093).
 
-The ``POST /chunks`` domain rule: a caller submits one or more ``{provider, url}``
-pointers and the hub mints a chunk pinned to the configured default graph (D-081).
+The ``POST /chunks`` domain rule: a caller submits one or more ``{source, ref}``
+(D-105) pointers and the hub mints a chunk pinned to the configured default graph
+(D-081).
 Contents are never stored — only the pointer (D-047).
 
 **Batch = one chunk (D-076).** The wire response carries a single ``chunk_id``, so a
@@ -27,7 +28,7 @@ class IngestConflict(Exception):
     """A submitted pointer is already held by a live chunk (D-093) — the 409 carrier."""
 
     def __init__(self, *, existing_chunk_id: str, pointer: PmPointer) -> None:
-        super().__init__(f"pointer {pointer.url} already held by live chunk {existing_chunk_id}")
+        super().__init__(f"pointer {pointer.source}#{pointer.ref} already held by live chunk {existing_chunk_id}")
         self.existing_chunk_id = existing_chunk_id
         self.pointer = pointer
 

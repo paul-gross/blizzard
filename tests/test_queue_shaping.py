@@ -23,7 +23,7 @@ def _ingest(hub: HubHarness, n: int) -> str:
 
     Queue shaping is ready-only, so the chunk is promoted out of its not-ready resting
     state (D-103) before it can be peeked, reordered, or grouped."""
-    pointer = {"provider": "github", "url": f"http://forge.local/repos/acme/widget/issues/{n}"}
+    pointer = {"source": "default", "ref": str(n)}
     resp = hub.client.post("/api/chunks", json={"pointers": [pointer]})
     assert resp.status_code == 201, resp.text
     chunk_id = resp.json()["chunk_id"]
@@ -93,12 +93,8 @@ def test_group_merges_pointers_and_discards_the_rest(tmp_path: Path) -> None:
     assert body["chunk_id"] == survivor
     assert sorted(body["merged_chunk_ids"]) == sorted([b, c])
     # The survivor carries the union of all three pointers (D-076).
-    urls = {p["url"] for p in body["pm_pointers"]}
-    assert urls == {
-        "http://forge.local/repos/acme/widget/issues/1",
-        "http://forge.local/repos/acme/widget/issues/2",
-        "http://forge.local/repos/acme/widget/issues/3",
-    }
+    refs = {p["ref"] for p in body["pm_pointers"]}
+    assert refs == {"1", "2", "3"}
     # The merged-away chunks are ephemeral — gone from the queue and the fleet list (D-047).
     assert _peek_ids(hub) == [survivor]
     listed = {row["chunk_id"] for row in hub.client.get("/api/chunks").json()}
@@ -108,7 +104,7 @@ def test_group_merges_pointers_and_discards_the_rest(tmp_path: Path) -> None:
 
 def test_group_is_pointer_union_deduped(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    shared = {"provider": "github", "url": "http://forge.local/repos/acme/widget/issues/shared"}
+    shared = {"source": "default", "ref": "shared"}
     survivor = hub.client.post("/api/chunks", json={"pointers": [shared]}).json()["chunk_id"]
     assert hub.client.post(f"/api/chunks/{survivor}/promote").status_code == 202  # ready to group (D-103)
     hub.clock.advance(timedelta(seconds=1))
@@ -117,11 +113,8 @@ def test_group_is_pointer_union_deduped(tmp_path: Path) -> None:
     resp = hub.client.post(f"/api/chunks/{survivor}/group", json={"merge_chunk_ids": [survivor, other]})
     assert resp.status_code == 200, resp.text
     # Self-reference in merge_chunk_ids is a no-op; the union has no duplicate.
-    urls = [p["url"] for p in resp.json()["pm_pointers"]]
-    assert sorted(urls) == [
-        "http://forge.local/repos/acme/widget/issues/9",
-        "http://forge.local/repos/acme/widget/issues/shared",
-    ]
+    refs = [p["ref"] for p in resp.json()["pm_pointers"]]
+    assert sorted(refs) == ["9", "shared"]
 
 
 def test_group_rejects_a_non_ready_member(tmp_path: Path) -> None:
@@ -154,7 +147,7 @@ def test_grouped_pointer_reingest_points_at_survivor(tmp_path: Path) -> None:
     # naming the survivor, not the discarded chunk (D-093/D-047).
     resp = hub.client.post(
         "/api/chunks",
-        json={"pointers": [{"provider": "github", "url": "http://forge.local/repos/acme/widget/issues/2"}]},
+        json={"pointers": [{"source": "default", "ref": "2"}]},
     )
     assert resp.status_code == 409
     assert resp.json()["existing_chunk_id"] == survivor

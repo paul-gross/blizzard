@@ -212,6 +212,6 @@ export class QueuePanel {
     if (pointers.length === 0) return '—';
     const [first] = pointers;
     const suffix = pointers.length > 1 ? ` +${pointers.length - 1}` : '';
-    return `${first.provider}:${first.url}${suffix}`;
+    return `${first.source}#${first.ref}${suffix}`;
   }
 }

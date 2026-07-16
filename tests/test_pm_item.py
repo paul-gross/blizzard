@@ -11,8 +11,8 @@ from tests.support import FakePmSource, build_hub
 
 pytestmark = pytest.mark.component
 
-_POINTER = {"provider": "github", "url": "http://forge.local/repos/acme/widget/issues/42"}
-_POINTER_2 = {"provider": "github", "url": "http://forge.local/repos/acme/widget/issues/43"}
+_POINTER = {"source": "widget", "ref": "42"}
+_POINTER_2 = {"source": "widget", "ref": "43"}
 
 
 def test_pm_items_reads_body_and_comments_from_the_forge(tmp_path: Path) -> None:
@@ -25,47 +25,50 @@ def test_pm_items_reads_body_and_comments_from_the_forge(tmp_path: Path) -> None
     items = resp.json()["items"]
     assert len(items) == 1
     item = items[0]
-    assert item["provider"] == "github"
-    assert item["url"] == _POINTER["url"]
+    assert item["source"] == "widget"
+    assert item["ref"] == "42"
     assert item["label"] == "widget#42"
+    assert item["web_url"]
     assert item["body"] == "please fix the flake"
     assert item["comments"] == ["seen it too", "repro attached"]
     assert item["error"] is None
     assert item["fetched_at"]
     # The read went to the forge for this pointer — contents are fetched, not stored.
-    assert pm.fetched == [_POINTER["url"]]
+    assert pm.fetched == ["42"]
 
 
 def test_pm_items_returns_one_entry_per_pointer(tmp_path: Path) -> None:
     """A grouped chunk carrying many pointers (D-047) yields one entry per pointer, order preserved."""
     pm = FakePmSource(
-        by_url={
-            _POINTER["url"]: PmItem(body="first issue", comments=["a"]),
-            _POINTER_2["url"]: PmItem(body="second issue", comments=[]),
-        }
+        name="widget",
+        by_ref={
+            "42": PmItem(body="first issue", comments=["a"]),
+            "43": PmItem(body="second issue", comments=[]),
+        },
     )
-    hub = build_hub(tmp_path, pm={"default": pm})
+    hub = build_hub(tmp_path, pm={"widget": pm})
     chunk_id = hub.client.post("/api/chunks", json={"pointers": [_POINTER, _POINTER_2]}).json()["chunk_id"]
 
     items = hub.client.get(f"/api/chunks/{chunk_id}/pm-items").json()["items"]
-    assert [i["url"] for i in items] == [_POINTER["url"], _POINTER_2["url"]]
+    assert [i["ref"] for i in items] == ["42", "43"]
     assert [i["body"] for i in items] == ["first issue", "second issue"]
 
 
 def test_pm_items_degrades_per_pointer_when_the_forge_is_unreachable(tmp_path: Path) -> None:
     """One unreachable pointer surfaces as an ``error`` entry; the reachable one still reads (D-084)."""
     pm = FakePmSource(
-        by_url={_POINTER["url"]: PmItem(body="reachable", comments=[])},
-        fail_urls={_POINTER_2["url"]},
+        name="widget",
+        by_ref={"42": PmItem(body="reachable", comments=[])},
+        fail_refs={"43"},
     )
-    hub = build_hub(tmp_path, pm={"default": pm})
+    hub = build_hub(tmp_path, pm={"widget": pm})
     chunk_id = hub.client.post("/api/chunks", json={"pointers": [_POINTER, _POINTER_2]}).json()["chunk_id"]
 
     resp = hub.client.get(f"/api/chunks/{chunk_id}/pm-items")
     assert resp.status_code == 200
     ok, failed = resp.json()["items"]
     assert ok["body"] == "reachable" and ok["error"] is None
-    assert failed["body"] is None and failed["error"] and _POINTER_2["url"] in failed["error"]
+    assert failed["body"] is None and failed["error"] and "43" in failed["error"]
 
 
 def test_pm_items_with_no_pointers_is_an_empty_list(tmp_path: Path) -> None:

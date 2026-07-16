@@ -18,7 +18,7 @@ from tests.support import build_hub, report_lease
 
 pytestmark = pytest.mark.component
 
-_POINTER = {"provider": "github", "url": "http://forge.local/repos/acme/widget/issues/7"}
+_POINTER = {"source": "default", "ref": "7"}
 
 # build (worker) -> approve-gate (human) -> deliver (hub). The gate is the D-032 shape
 # from the design sample graph, reduced to the minimum this suite drives.

@@ -21,7 +21,7 @@ from tests.support import build_hub
 
 pytestmark = pytest.mark.component
 
-_POINTER = {"provider": "github", "url": "http://forge.local/repos/acme/widget/issues/9"}
+_POINTER = {"source": "default", "ref": "9"}
 _TAKEOVER = "cd /ws/e1 && mock-claude-code --resume sess-abc"
 
 _GRAPH_YAML = """

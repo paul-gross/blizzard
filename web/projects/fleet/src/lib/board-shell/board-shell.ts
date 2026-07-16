@@ -35,7 +35,7 @@ const STATUS_COLUMN: Record<ChunkStatus, string | null> = {
   done: 'done',
 };
 
-/** One linked PM-pointer chip — the server-derived `{code}:{repo}#{number}` label (D-075). */
+/** One linked PM-pointer chip — the server-derived `{source}#{ref}` label (D-105/D-108). */
 export interface PointerChip {
   readonly label: string;
   readonly url: string;
@@ -410,9 +410,11 @@ export class BoardShell {
         status: chunk.status,
         node: chunk.current_node_name ?? chunk.current_node_id ?? '—',
         nodeId: chunk.current_node_id ?? '',
-        // Only labeled pointers render as chips — an unparseable pointer URL has a
-        // null label and the card leans on the short id instead (issue-shape degrade).
-        pointers: (chunk.pm_pointers ?? []).flatMap((p) => (p.label ? [{ label: p.label, url: p.url }] : [])),
+        // Only labeled pointers render as chips — a pointer naming no configured
+        // source has a null label/web_url and the card leans on the short id instead.
+        pointers: (chunk.pm_pointers ?? []).flatMap((p) =>
+          p.label && p.web_url ? [{ label: p.label, url: p.web_url }] : [],
+        ),
       });
     }
     return grouped;

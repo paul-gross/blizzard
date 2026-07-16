@@ -51,7 +51,7 @@ def _chunk() -> Chunk:
     return Chunk(
         chunk_id="ch_1",
         graph_id="gr_1",
-        pm_pointers=[PmPointer(provider="github", url="http://f/issues/1")],
+        pm_pointers=[PmPointer(source="default", ref="1")],
         minted_at=datetime(2026, 7, 13, tzinfo=UTC),
     )
 
@@ -75,7 +75,7 @@ def test_envelope_carries_authored_judgement_prose_and_choice_set() -> None:
     assert env.prompt == "do the work"
     assert env.judgement_prompt == "render your verdict"
     assert "<Choice>" not in (env.judgement_prompt or "")  # the tail is the runner's to render
-    assert env.pm_pointers == [{"provider": "github", "url": "http://f/issues/1"}]
+    assert env.pm_pointers == [{"source": "default", "ref": "1"}]
     assert [a.name for a in env.artifacts] == ["f"]
 
 

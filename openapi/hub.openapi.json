@@ -1211,7 +1211,7 @@
         "type": "object"
       },
       "PmItemEntry": {
-        "description": "One pointer's pass-through PM item (D-047/D-074) \u2014 body + comment thread, vendor-native.\n\n``label`` is the board-legible pointer label (D-075) \u2014 ``gh:blizzard#8`` \u2014 null when the\nURL is not issue-shaped. A per-pointer forge failure degrades here rather than failing the\nwhole read (D-084): ``error`` carries the reason and ``body`` is null, so one unreachable\npointer never blinds the reader to the pointers it did reach.",
+        "description": "One pointer's pass-through PM item (D-047/D-074/D-105) \u2014 body + comment thread,\nvendor-native.\n\n``label``/``web_url`` are the board-legible pointer label (``blizzard#8``) and its\nbrowser address (D-108) \u2014 both null when no configured source names ``source``. A\nper-pointer forge failure degrades here rather than failing the whole read (D-084):\n``error`` carries the reason and ``body`` is null, so one unreachable pointer never\nblinds the reader to the pointers it did reach.",
         "properties": {
           "body": {
             "anyOf": [
@@ -1258,18 +1258,29 @@
             ],
             "title": "Label"
           },
-          "provider": {
-            "title": "Provider",
+          "ref": {
+            "title": "Ref",
             "type": "string"
           },
-          "url": {
-            "title": "Url",
+          "source": {
+            "title": "Source",
             "type": "string"
+          },
+          "web_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Web Url"
           }
         },
         "required": [
-          "provider",
-          "url",
+          "source",
+          "ref",
           "fetched_at"
         ],
         "title": "PmItemEntry",
@@ -1291,26 +1302,26 @@
         "type": "object"
       },
       "PmPointerModel": {
-        "description": "One ``{provider, url}`` PM pointer (D-075).",
+        "description": "One ``{source, ref}`` PM pointer (D-105) \u2014 ``source`` names a configured\n``[[pm_source]]``; ``ref`` is that source's own item token.",
         "properties": {
-          "provider": {
-            "title": "Provider",
+          "ref": {
+            "title": "Ref",
             "type": "string"
           },
-          "url": {
-            "title": "Url",
+          "source": {
+            "title": "Source",
             "type": "string"
           }
         },
         "required": [
-          "provider",
-          "url"
+          "source",
+          "ref"
         ],
         "title": "PmPointerModel",
         "type": "object"
       },
       "PmPointerView": {
-        "description": "A pointer as the views render it (D-075) \u2014 the raw pair plus its legible label.\n\n``label`` is the board-legible ``{provider-code}:{repo}#{number}`` (e.g.\n``gh:blizzard#8``), null when the URL is not issue-shaped \u2014 the board then leans\non the chunk's stable short id instead.",
+        "description": "A pointer as the views render it (D-105/D-108) \u2014 the raw pair plus its legible\nlabel and browser URL, both rendered by the pointer's configured source binding.\n\n``label`` is the board-legible ``{name}#{ref}`` (e.g. ``blizzard#8``); ``web_url``\nis its browser-openable address. Both null when no configured source names\n``source`` \u2014 the board then leans on the chunk's stable short id instead.",
         "properties": {
           "label": {
             "anyOf": [
@@ -1323,18 +1334,29 @@
             ],
             "title": "Label"
           },
-          "provider": {
-            "title": "Provider",
+          "ref": {
+            "title": "Ref",
             "type": "string"
           },
-          "url": {
-            "title": "Url",
+          "source": {
+            "title": "Source",
             "type": "string"
+          },
+          "web_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Web Url"
           }
         },
         "required": [
-          "provider",
-          "url"
+          "source",
+          "ref"
         ],
         "title": "PmPointerView",
         "type": "object"
@@ -2172,7 +2194,7 @@
         ]
       },
       "post": {
-        "description": "Ingest by pointer (D-047); 422 on a pointer no configured source claims (D-107);\n409 on a pointer held by a live chunk (D-093).",
+        "description": "Ingest by pointer (D-047); 422 on a pointer naming no configured source (D-106);\n409 on a pointer held by a live chunk (D-093).",
         "operationId": "ingest_chunk_api_chunks_post",
         "requestBody": {
           "content": {
@@ -2616,7 +2638,7 @@
     },
     "/api/chunks/{chunk_id}/pm-items": {
       "get": {
-        "description": "Pass-through PM items read (D-047/D-084/D-107) \u2014 one entry per pointer, contents never stored.\n\nEach pointer is resolved to its own binding by repo match, then fetched fresh from the\nforge; a per-pointer resolution or forge failure degrades to an ``error`` on that entry\nrather than failing the whole read, so a grouped chunk (D-047) still surfaces the pointers\nit reached beside a notice for the ones it did not. A chunk with no pointers is an empty\nlist \u2014 the board's empty state \u2014 not a 404. No configured PM source at all is a 503 up\nfront \u2014 the request-wide degradation preserved unchanged from before per-pointer\nresolution existed.",
+        "description": "Pass-through PM items read (D-047/D-084/D-105) \u2014 one entry per pointer, contents never stored.\n\nEach pointer is resolved to its own binding by name (``pm.get(pointer.source)``), then\nfetched fresh from the forge; a per-pointer resolution or forge failure degrades to an\n``error`` on that entry rather than failing the whole read, so a grouped chunk (D-047)\nstill surfaces the pointers it reached beside a notice for the ones it did not. A chunk\nwith no pointers is an empty list \u2014 the board's empty state \u2014 not a 404. No configured\nPM source at all is a 503 up front \u2014 the request-wide degradation preserved unchanged\nfrom before per-pointer resolution existed.",
         "operationId": "get_pm_items_api_chunks__chunk_id__pm_items_get",
         "parameters": [
           {

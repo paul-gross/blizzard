@@ -10,7 +10,7 @@ from tests.support import build_hub
 
 pytestmark = pytest.mark.component
 
-_POINTER = {"provider": "github", "url": "http://forge.local/repos/acme/widget/issues/7"}
+_POINTER = {"source": "default", "ref": "7"}
 
 
 def _ingest(hub) -> str:  # type: ignore[no-untyped-def]

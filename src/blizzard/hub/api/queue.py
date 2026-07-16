@@ -39,7 +39,7 @@ def _entries(ready: list[Chunk]) -> list[QueuePeekEntry]:
             chunk_id=chunk.chunk_id,
             graph_id=chunk.graph_id,
             position=position,
-            pm_pointers=[PmPointerModel(provider=p.provider, url=p.url) for p in chunk.pm_pointers],
+            pm_pointers=[PmPointerModel(source=p.source, ref=p.ref) for p in chunk.pm_pointers],
         )
         for position, chunk in enumerate(ready)
     ]
@@ -85,6 +85,6 @@ def group_chunks(
     services.events.publish_chunk_changed(survivor.chunk_id, "ready")
     return ChunkGroupResponse(
         chunk_id=survivor.chunk_id,
-        pm_pointers=[PmPointerModel(provider=p.provider, url=p.url) for p in survivor.pm_pointers],
+        pm_pointers=[PmPointerModel(source=p.source, ref=p.ref) for p in survivor.pm_pointers],
         merged_chunk_ids=[m for m in request.merge_chunk_ids if m != survivor.chunk_id],
     )

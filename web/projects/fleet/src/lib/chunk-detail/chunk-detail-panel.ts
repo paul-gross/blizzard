@@ -106,16 +106,16 @@ export interface ResolveDecisionEvent {
               @if (pmItems().items.length === 0) {
                 <p class="none" data-testid="issue-empty">This chunk has no linked issue.</p>
               } @else {
-                @for (item of pmItems().items; track item.url) {
+                @for (item of pmItems().items; track item.source + ':' + item.ref) {
                   <article class="issue" data-testid="issue-item">
                     <div class="i-head">
                       <a
                         class="i-label"
                         data-testid="issue-label"
-                        [href]="item.url"
+                        [href]="item.web_url"
                         target="_blank"
                         rel="noreferrer"
-                      >{{ item.label ?? item.url }}</a>
+                      >{{ item.label ?? (item.source + '#' + item.ref) }}</a>
                     </div>
                     @if (item.error) {
                       <p class="notice" data-testid="issue-item-error">

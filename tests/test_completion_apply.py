@@ -14,7 +14,7 @@ from tests.support import build_hub, report_lease
 
 pytestmark = pytest.mark.component
 
-_POINTER = {"provider": "github", "url": "http://forge.local/repos/acme/widget/issues/9"}
+_POINTER = {"source": "default", "ref": "9"}
 
 # A build -> deliver graph named `default-delivery`, reused by name on ingest (D-081),
 # so these apply-mechanics tests reach a terminal chunk in one build pass — decoupled

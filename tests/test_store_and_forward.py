@@ -19,7 +19,7 @@ from tests.support import FakeForge, build_hub, report_lease
 
 pytestmark = pytest.mark.component
 
-_POINTER = {"provider": "github", "url": "http://forge.local/repos/acme/widget/issues/7"}
+_POINTER = {"source": "default", "ref": "7"}
 
 # A build -> deliver graph named `default-delivery`, reused by name on ingest (D-081),
 # so a build completion reaches the deliver hub node in one pass — decoupled from the

@@ -386,7 +386,7 @@ def test_acceptance_loop_one_chunk_ingest_to_landed(tmp_path: Path) -> None:
 
         ingested = hub.post(
             "/api/chunks",
-            json={"pointers": [{"provider": "github", "url": f"{REPO}/issues/{issue_number}"}]},
+            json={"pointers": [{"source": REPO_NAME, "ref": str(issue_number)}]},
         )
         assert ingested.status_code == 201, ingested.text
         chunk_id = ingested.json()["chunk_id"]
@@ -580,13 +580,12 @@ def test_build_worker_reads_pm_item_through_the_passthrough(tmp_path: Path) -> N
         commented = forge.post(f"/repos/{REPO}/issues/{issue_number}/comments", json={"body": _PM_COMMENT})
         assert commented.status_code == 201, commented.text
 
-        # Ingest the item's *canonical web URL* (D-075) — the pass-through parses owner/
-        # repo/number from it and re-issues the read against the hub's own forge base URL,
-        # so the github.com host is nominal (the sibling scenarios ingest a bare shorthand
-        # only because they never exercise the fetch).
+        # Ingest by {source, ref} (D-105) — the source names the configured binding, and
+        # the ref is this binding's own opaque item token (the issue number); the fetch
+        # goes through the hub's own forge base URL regardless.
         ingested = hub.post(
             "/api/chunks",
-            json={"pointers": [{"provider": "github", "url": f"https://github.com/{REPO}/issues/{issue_number}"}]},
+            json={"pointers": [{"source": REPO_NAME, "ref": str(issue_number)}]},
         )
         assert ingested.status_code == 201, ingested.text
         chunk_id = ingested.json()["chunk_id"]

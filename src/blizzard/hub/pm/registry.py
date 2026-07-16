@@ -6,19 +6,16 @@ credentialed clients live behind each entry's adapter, built at the composition 
 reach — the pass-through routes degrade per-chunk/per-pointer rather than refusing to
 start (D-106).
 
-:func:`resolve_source` is the D-107 repo-matching resolver: the pointer carries no
-source name yet (D-105 lands in Phase 3), so finding a pointer's binding means asking
-every configured source whether it owns the pointer's repo. Both the ingest-time 422
-rule and the board label/fetch read use this one resolver — built once, per Phase 1's
-carried-forward finding that a first-entry shim renders a lying label the moment more
-than one source is configured.
+D-105 gives the pointer its own ``source`` name, so finding a pointer's binding is a
+plain lookup — ``registry.get(pointer.source)`` — rather than the D-107 repo-matching
+``resolve_source`` this module carried through Phase 2, while the pointer itself named
+no source. That resolver is retired with it.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 
-from blizzard.hub.domain.work import PmPointer
 from blizzard.hub.pm.source import IPmSource, IPmSourceRegistry
 
 
@@ -37,17 +34,3 @@ class PmSourceRegistry:
 
 def _conforms_pm_source_registry(x: PmSourceRegistry) -> IPmSourceRegistry:
     return x
-
-
-def resolve_source(registry: IPmSourceRegistry, pointer: PmPointer) -> IPmSource | None:
-    """The configured source whose repo matches ``pointer`` (D-107), or ``None``.
-
-    Tries every configured source's :meth:`~blizzard.hub.pm.source.IPmSource.owns` in
-    turn; the first (and, by config-load's duplicate-``(provider, repo)`` rejection,
-    only) match wins. ``None`` when no configured source claims it — the caller decides
-    what that means (a 422 at ingest, a null label at read)."""
-    for name in registry.names():
-        source = registry.get(name)
-        if source is not None and source.owns(pointer):
-            return source
-    return None

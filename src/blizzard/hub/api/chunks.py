@@ -36,9 +36,7 @@ from blizzard.hub.domain.work import (
     open_escalation,
     transition_history,
 )
-from blizzard.hub.pm.label import ForgeWebBase, forge_web_base
-from blizzard.hub.pm.registry import resolve_source
-from blizzard.hub.pm.source import IPmSourceRegistry, PmSourceError
+from blizzard.hub.pm.source import IPmSource, IPmSourceRegistry, PmSourceError
 from blizzard.wire.chunk import (
     ArtifactView,
     CheckDeliveryResponse,
@@ -64,18 +62,21 @@ router = APIRouter(prefix="/api", tags=["chunks"])
 
 
 def _pointer_views(chunk: Chunk, pm: IPmSourceRegistry) -> list[PmPointerView]:
-    """Each pointer with its board-legible label (D-075/D-108) — null when not
-    issue-shaped, or when no configured source claims it (D-107).
+    """Each pointer with its board-legible label and browser URL (D-105/D-108) —
+    both null when no configured source names ``pointer.source`` (D-106).
 
-    Each pointer is resolved to its own binding by repo match
-    (:func:`~blizzard.hub.pm.registry.resolve_source`) — a chunk's pointers need not all
-    share one source, and Phase 1's first-entry shim rendered a wrong label the moment
-    more than one source was configured."""
+    Each pointer is resolved to its own binding by name (``pm.get(p.source)``) — a
+    chunk's pointers need not all share one source."""
     views: list[PmPointerView] = []
     for p in chunk.pm_pointers:
-        source = resolve_source(pm, p)
+        source = pm.get(p.source)
         views.append(
-            PmPointerView(provider=p.provider, url=p.url, label=source.label(p) if source is not None else None)
+            PmPointerView(
+                source=p.source,
+                ref=p.ref,
+                label=source.label(p) if source is not None else None,
+                web_url=source.web_url(p) if source is not None else None,
+            )
         )
     return views
 
@@ -114,7 +115,22 @@ def _history_views(facts: ChunkFacts, graph: Graph | None) -> list[TransitionVie
     ]
 
 
-def _artifact_views(rows: list[ArtifactRow], web_base: ForgeWebBase | None) -> list[ArtifactView]:
+def _branch_url_source(chunk: Chunk, pm: IPmSourceRegistry) -> IPmSource | None:
+    """The binding a chunk's artifact branch links resolve through (D-108).
+
+    The one-forge-per-chunk assumption (D-075) is no longer *inferred* by sniffing
+    whichever pointer URL happened to parse first — it is *declared*: the chunk's
+    first pointer whose ``source`` names a configured binding lends its
+    :meth:`~blizzard.hub.pm.source.IPmSource.branch_url`. ``None`` when no pointer's
+    source is configured — the degradation ``_artifact_views`` already preserves."""
+    for p in chunk.pm_pointers:
+        source = pm.get(p.source)
+        if source is not None:
+            return source
+    return None
+
+
+def _artifact_views(rows: list[ArtifactRow], web_base: IPmSource | None) -> list[ArtifactView]:
     """The chunk's inline artifact store — every entry, with an asset's content and a
     git-commit's pinned reference surfaced (D-036); ordered by ``{node}.{name}.{epoch}``
     so a re-run's later-epoch entry follows its predecessors (append-only history)."""
@@ -165,28 +181,28 @@ def _current_node(
 
 @router.post("/chunks", response_model=ChunkIngestResponse, status_code=status.HTTP_201_CREATED)
 def ingest_chunk(request: ChunkIngestRequest, services: Annotated[HubServices, Depends(get_services)]) -> object:
-    """Ingest by pointer (D-047); 422 on a pointer no configured source claims (D-107);
+    """Ingest by pointer (D-047); 422 on a pointer naming no configured source (D-106);
     409 on a pointer held by a live chunk (D-093)."""
     if not request.pointers:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="at least one pointer required")
-    pointers = [PmPointer(provider=p.provider, url=p.url) for p in request.pointers]
-    # Resolution before minting, and before the live-holder check (D-107): an
-    # unconfigured pointer should not consult the store, and the whole request rejects
-    # together rather than partially ingesting. The route resolves; the domain stays
+    pointers = [PmPointer(source=p.source, ref=p.ref) for p in request.pointers]
+    # Resolution before minting, and before the live-holder check: an unconfigured
+    # pointer should not consult the store, and the whole request rejects together
+    # rather than partially ingesting. The route resolves; the domain stays
     # registry-free (bzh:domain-takes-objects) — it never sees the registry at all.
     for pointer in pointers:
-        if resolve_source(services.pm, pointer) is None:
+        if services.pm.get(pointer.source) is None:
             configured = ", ".join(sorted(services.pm.names())) or "none"
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"pointer {pointer.url!r} is not claimed by any configured PM source (configured: {configured})",
+                detail=(f"pointer source {pointer.source!r} is not a configured PM source (configured: {configured})"),
             )
     graph = services.graph_mint.ensure_default(services.default_graph_doc, definition_yaml=services.default_graph_yaml)
     try:
         chunk_id = services.ingest.ingest(pointers, graph=graph)
     except IngestConflict as exc:
         conflict = ChunkIngestConflict(
-            existing_chunk_id=exc.existing_chunk_id, provider=exc.pointer.provider, url=exc.pointer.url
+            existing_chunk_id=exc.existing_chunk_id, source=exc.pointer.source, ref=exc.pointer.ref
         )
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=conflict.model_dump())
     # A freshly ingested chunk rests ``not_ready`` (D-103) — visible on the board but not
@@ -229,7 +245,7 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
     graph = services.graphs.get(chunk.graph_id)
     node_id = current_node_id(facts) or (graph.entry_node_id if graph is not None else None)
     node_name = _node_name(graph, node_id)
-    web_base = forge_web_base(p.url for p in chunk.pm_pointers)
+    web_base = _branch_url_source(chunk, services.pm)
     return ChunkDetail(
         chunk_id=chunk.chunk_id,
         graph_id=chunk.graph_id,
@@ -412,15 +428,15 @@ def report_escalation(
 
 @router.get("/chunks/{chunk_id}/pm-items", response_model=PmItemsView)
 def get_pm_items(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> PmItemsView:
-    """Pass-through PM items read (D-047/D-084/D-107) — one entry per pointer, contents never stored.
+    """Pass-through PM items read (D-047/D-084/D-105) — one entry per pointer, contents never stored.
 
-    Each pointer is resolved to its own binding by repo match, then fetched fresh from the
-    forge; a per-pointer resolution or forge failure degrades to an ``error`` on that entry
-    rather than failing the whole read, so a grouped chunk (D-047) still surfaces the pointers
-    it reached beside a notice for the ones it did not. A chunk with no pointers is an empty
-    list — the board's empty state — not a 404. No configured PM source at all is a 503 up
-    front — the request-wide degradation preserved unchanged from before per-pointer
-    resolution existed."""
+    Each pointer is resolved to its own binding by name (``pm.get(pointer.source)``), then
+    fetched fresh from the forge; a per-pointer resolution or forge failure degrades to an
+    ``error`` on that entry rather than failing the whole read, so a grouped chunk (D-047)
+    still surfaces the pointers it reached beside a notice for the ones it did not. A chunk
+    with no pointers is an empty list — the board's empty state — not a 404. No configured
+    PM source at all is a 503 up front — the request-wide degradation preserved unchanged
+    from before per-pointer resolution existed."""
     if not services.pm.names():
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="no PM work-source is configured")
     chunk = services.chunks.get(chunk_id)
@@ -429,33 +445,41 @@ def get_pm_items(chunk_id: str, services: Annotated[HubServices, Depends(get_ser
     fetched_at = services.clock.now().isoformat()
     entries: list[PmItemEntry] = []
     for pointer in chunk.pm_pointers:
-        source = resolve_source(services.pm, pointer)
+        source = services.pm.get(pointer.source)
         if source is None:
             entries.append(
                 PmItemEntry(
-                    provider=pointer.provider,
-                    url=pointer.url,
+                    source=pointer.source,
+                    ref=pointer.ref,
                     label=None,
+                    web_url=None,
                     fetched_at=fetched_at,
-                    error=f"no configured PM source claims {pointer.url}",
+                    error=f"no configured PM source named {pointer.source!r}",
                 )
             )
             continue
         label = source.label(pointer)
+        web_url = source.web_url(pointer)
         try:
             item = source.fetch(pointer)
         except PmSourceError as exc:
             entries.append(
                 PmItemEntry(
-                    provider=pointer.provider, url=pointer.url, label=label, fetched_at=fetched_at, error=str(exc)
+                    source=pointer.source,
+                    ref=pointer.ref,
+                    label=label,
+                    web_url=web_url,
+                    fetched_at=fetched_at,
+                    error=str(exc),
                 )
             )
         else:
             entries.append(
                 PmItemEntry(
-                    provider=pointer.provider,
-                    url=pointer.url,
+                    source=pointer.source,
+                    ref=pointer.ref,
                     label=label,
+                    web_url=web_url,
                     fetched_at=fetched_at,
                     body=item.body,
                     comments=item.comments,
