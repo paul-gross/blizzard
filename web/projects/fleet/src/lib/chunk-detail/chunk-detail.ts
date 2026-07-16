@@ -13,9 +13,10 @@ import {
 /**
  * The chunk detail **container** — owns the reactive detail query (D-036) and the
  * human-loop mutations (answer a question, resolve a gate decision — D-042/D-052),
- * and renders the presentational {@link ChunkDetailPanel} over them. This is the
- * data seam the board opens when a card is selected; the panel stays presentational
- * and every server call goes through the generated client (bzh:generated-client).
+ * and renders the presentational {@link ChunkDetailPanel} over them. It stays
+ * mounted in the bottom dock and shows a rest state until a card is selected; the
+ * panel stays presentational and every server call goes through the generated
+ * client (bzh:generated-client).
  *
  * Reactive over the selected `chunkId`: the query re-keys and disables itself while
  * nothing is open, so no request fires for the empty board. Answering or resolving
@@ -34,6 +35,10 @@ import {
         (answerQuestion)="onAnswer($event)"
         (resolveDecision)="onResolve($event)"
       />
+    } @else {
+      <p class="rest" data-testid="chunk-detail-empty">
+        {{ chunkId() === null ? 'SELECT A CHUNK TO SEE ITS HISTORY & ARTIFACTS' : 'LOADING…' }}
+      </p>
     }
   `,
   styles: `
@@ -41,13 +46,27 @@ import {
       display: block;
       height: 100%;
     }
+    /* The dock is always mounted; when no chunk is open it holds this rest state
+       so the bottom dock keeps its shape (top edge, height) whether empty or filled. */
+    .rest {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      margin: 0;
+      border-top: 1px solid var(--bezel);
+      background: linear-gradient(180deg, var(--panel) 0%, var(--panel-deep) 100%);
+      color: var(--label-dim);
+      font-size: 11px;
+      letter-spacing: 0.12em;
+    }
   `,
 })
 export class ChunkDetail {
-  /** The selected chunk id, or `null` when the drawer is closed. */
+  /** The selected chunk id, or `null` when the dock is closed. */
   readonly chunkId = input<string | null>(null);
 
-  /** Emitted when the operator dismisses the drawer. */
+  /** Emitted when the operator dismisses the dock. */
   readonly dismiss = output<void>();
 
   private readonly detailQuery = injectHubChunkDetailQuery(() => this.chunkId());

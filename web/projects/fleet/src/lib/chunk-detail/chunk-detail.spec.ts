@@ -69,6 +69,17 @@ describe('ChunkDetail container', () => {
 
   afterEach(() => stub.restore());
 
+  it('holds an empty rest state — not the detail panel — while no chunk is selected (issue #21)', async () => {
+    const fixture = TestBed.createComponent(ChunkDetail);
+    // chunkId defaults to null: the dock stays mounted but empty.
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('fleet-chunk-detail-panel')).toBeNull();
+    const rest = el.querySelector('[data-testid="chunk-detail-empty"]');
+    expect(rest?.textContent).toContain('SELECT');
+  });
+
   it('fires the resolve-decision client call when a gate choice button is clicked (D-042)', async () => {
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_gate');
