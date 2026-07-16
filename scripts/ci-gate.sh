@@ -36,7 +36,8 @@ uv run pytest
 step "OpenAPI spec drift: blizzard-export-openapi + git diff openapi/"
 uv run blizzard-export-openapi --out-dir openapi >/dev/null
 if ! git diff --quiet -- openapi/; then
-  echo "ERROR: OpenAPI specs under openapi/ are stale — run 'mise run export-openapi' and commit." >&2
+  echo "ERROR: openapi/ differs from what's staged (working tree vs index, not vs the last commit)." >&2
+  echo "        Run 'mise run export-openapi', then 'git add openapi/' to stage the regenerated specs." >&2
   git --no-pager diff -- openapi/ >&2
   exit 1
 fi
@@ -57,7 +58,8 @@ if [ -f "$WEB_DIR/package.json" ]; then
   step "generated-client drift ($WEB_DIR): openapi-ts codegen + git diff"
   ( cd "$WEB_DIR" && npm run generate:client >/dev/null )
   if ! git diff --quiet -- "$WEB_DIR"; then
-    echo "ERROR: the generated API client is stale — regenerate and commit." >&2
+    echo "ERROR: $WEB_DIR differs from what's staged (working tree vs index, not vs the last commit)." >&2
+    echo "        Run 'npm run generate:client' in $WEB_DIR, then stage the regenerated client." >&2
     git --no-pager diff --stat -- "$WEB_DIR" >&2
     exit 1
   fi

@@ -47,7 +47,10 @@ class LoopConfig:
     #: Node NAMES this runner imposes a human gate on (D-032/D-041/D-073): for a gated
     #: node the runner submits a Decision instead of a transition, so an operator dials
     #: their own HITL level without forking the fleet's graph. Matched by name across all
-    #: graphs, read fresh from config each tick (a new tick rebuilds the context).
+    #: graphs, read fresh from config at context build — true of every ``run_single_tick``
+    #: (a fresh context per call, ``build.py``), but the hosted daemon's ``PeriodicDriver``
+    #: builds one context and reuses it for its lifetime, so there a config edit needs a
+    #: restart to take effect, not just a new tick.
     gates: tuple[str, ...] = ()
 
 

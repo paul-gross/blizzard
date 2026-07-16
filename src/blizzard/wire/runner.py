@@ -33,7 +33,9 @@ class RunnerView(BaseModel):
 
     A runner can be paused by two different parties for two different reasons, so the two
     are reported separately rather than collapsed into one ``paused`` (issue #43): the
-    board shows *which*, and a reader that wants "is it claiming?" ORs them.
+    board shows *which*. A reader that wants "is it claiming?" ORs them; since issue #45
+    the two diverge past claiming — ``hub_paused`` keeps its claims-only meaning, while
+    ``locally_paused`` alone answers "is it spawning anything at all?".
     """
 
     runner_id: str
@@ -42,7 +44,7 @@ class RunnerView(BaseModel):
     last_seen_at: str
     online: bool
     hub_paused: bool  # the fleet paused it — `blizzard hub pause`, cleared by `hub resume`
-    locally_paused: bool = False  # it paused itself — `blizzard runner pause`, cleared by `runner start`
+    locally_paused: bool = False  # it paused itself — spawns nothing, `blizzard runner pause`/`start`
 
 
 class RunnerListResponse(BaseModel):

@@ -80,10 +80,25 @@ export const readyApiReadyGet = <ThrowOnError extends boolean = false>(options?:
 /**
  * Patch Runner
  *
- * Set this runner's own pause brake — it stops claiming; in-flight chunks run on (issue #43).
+ * Set this runner's own pause brake — it starts no new workers (issue #45).
  *
  * Local to this machine and independent of the hub's brake: it works with the hub
- * unreachable, and it neither reads nor writes the hub's flag.
+ * unreachable, and it neither reads nor writes the hub's flag. Every spawn site honors
+ * it — FILL, restart-resume, an answer-resume, ADVANCE's next-node, a requeue or
+ * claim-adopt respawn, and the judgement resume that elicits a verdict from an exited
+ * worker's session. REAP still reaps an orphan lease (nothing to kill, and its respawn
+ * is itself suppressed), but does not kill a worker that is merely stalled — pause is
+ * not a drain. Escalating a chunk to a human at an exhausted retry budget is deferred
+ * too, wherever it would happen (REAP, a rejected flush at PULL): a paused runner does
+ * not hand work off as unrecoverable while it waits. No retry is consumed at all: the
+ * budget counts lease mints, and the one mint site sits below the gate.
+ *
+ * A worker that *exits* while paused is **not** judged until the brake clears — judging
+ * it resumes its session headlessly, which is itself a spawn the brake forbids. It waits
+ * exactly like a suppressed respawn: the lease stays active, and ADVANCE retries the
+ * judgement every tick until the brake clears. A live worker already running is left
+ * alone throughout — this is not a drain, and it does not kill. Leases, routes, epochs,
+ * environments, and retry budgets are otherwise unchanged.
  */
 export const patchRunnerApiRunnerPatch = <ThrowOnError extends boolean = false>(options: Options<PatchRunnerApiRunnerPatchData, ThrowOnError>): RequestResult<PatchRunnerApiRunnerPatchResponses, PatchRunnerApiRunnerPatchErrors, ThrowOnError> => (options.client ?? client).patch<PatchRunnerApiRunnerPatchResponses, PatchRunnerApiRunnerPatchErrors, ThrowOnError>({
     url: '/api/runner',

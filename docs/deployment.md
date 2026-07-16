@@ -262,9 +262,15 @@ mints per worker — setting one does not affect the other.
 
 `runner pause` and `runner start` are pure clients of this API and never contact the hub,
 so they keep working while it is unreachable. They set the runner's **own** brake, which
-is a different thing from `blizzard hub pause <runner_id>`: either one stops new claims
-(in-flight chunks always run on), and each is cleared only where it was set — `runner
-start` locally, `blizzard hub resume` at the hub.
+means something different from `blizzard hub pause <runner_id>`: the hub brake still just
+stops new claims (in-flight chunks always run on); the runner's own brake means "start no
+processes on this machine" — no new claims, but also no restart-resume, no requeue
+respawn, and no judging a worker that exits while it's on, since judging one resumes its
+session. Nothing is lost either way: a live worker already running is left alone (this is
+not a drain), and every lease, route, and retry budget the brake defers is picked up
+exactly where it left off once the brake clears — see `blizzard-runner pause --help` for
+the full contract. Each brake is cleared only where it was set — `runner start` locally,
+`blizzard hub resume` at the hub.
 
 With no daemon running, the verbs report that rather than reading the store behind its
 back — the store is reached only through the daemon that owns it, in every case. What you
@@ -290,7 +296,12 @@ Two systemd mechanisms combine to deliver the journey's "came back under systemd
 
 The startup pass is where the "reaped the stale leases … continued at exactly the
 node the hub last recorded" clause is honored, and it is **not** new code — it is
-the loop's normal first move:
+the loop's normal first move — **provided the runner's own brake (`runner pause`,
+issue #45) is off.** If it is on, the runner's first tick(s) after a restart still run
+REAP and RESUME, but a stalled worker is not killed and a marked session is not
+re-attached — both wait, exactly where the crash or the shutdown left them, for the
+first tick after `runner start` clears the brake. Nothing described below is lost in
+the meantime, only deferred.
 
 - **Supervisor.** The runner's first tick after any restart is **REAP**. It reaps
   the leases the crash stranded (their workers are gone), re-reads its environment
@@ -311,6 +322,13 @@ each agent mid-thought rather than reaping and re-running it from the top. An
 ungraceful `kill -9` skips the marking, so its workers fall back to the reap path
 above; and a crash *during* the re-attach itself degrades to that same reap path — the
 resume is bounded by the crash-point sweep's recovery, no stronger.
+
+`runner pause`, then `systemctl restart` to adopt a new wheel, is a plausible
+maintenance sequence — but a runner paused *before* the restart stays paused after it
+(the brake is a durable fact, not daemon state), so its marked sessions sit un-resumed
+until `runner start` is run too. Pause to stop new work landing mid-upgrade, then
+start again once the new wheel is confirmed healthy, the same way you would leave it
+paused across any other maintenance window.
 
 A clean `systemctl stop` (or the stop half of a restart) still runs that shutdown pass:
 it is exempt from `Restart=` — only a failure or a boot brings a daemon back — so an

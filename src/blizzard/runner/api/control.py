@@ -4,8 +4,11 @@ The runner's own half of the pause brake, and the D-043 declarative pattern appl
 locally: pause/start is *state on the runner singleton*, not a directive queue. Two
 independent surfaces carry a pause and this is the machine-local one —
 
-* **local** (this route) — "this runner says it won't try". Set here, adhered to by FILL,
-  and reachable with the hub down: the operator contract's standing requirement
+* **local** (this route) — "this runner says it won't try". Set here; since issue #45 it
+  blocks every spawn site (FILL's claim, restart-resume, an answer-resume, ADVANCE's
+  next-node, a requeue or claim-adopt respawn, and ADVANCE's judgement resume), defers
+  REAP's kill of a stalled worker, and defers escalation at an exhausted retry budget —
+  and is reachable with the hub down: the operator contract's standing requirement
   ([api.md]). Pause/start facts append and the flag derives from the newest (D-004/D-039).
 * **hub** (``PATCH /runners/{id}`` at the hub, mirrored here by PULL) — the fleet-level
   brake. Untouched by this route; clear it where it was set (``blizzard hub resume``).
@@ -53,10 +56,25 @@ class RunnerControlPatch(BaseModel):
 
 @router.patch("/runner", response_model=RunnerControlView)
 def patch_runner(request_body: RunnerControlPatch, request: Request) -> RunnerControlView:
-    """Set this runner's own pause brake — it stops claiming; in-flight chunks run on (issue #43).
+    """Set this runner's own pause brake — it starts no new workers (issue #45).
 
     Local to this machine and independent of the hub's brake: it works with the hub
-    unreachable, and it neither reads nor writes the hub's flag.
+    unreachable, and it neither reads nor writes the hub's flag. Every spawn site honors
+    it — FILL, restart-resume, an answer-resume, ADVANCE's next-node, a requeue or
+    claim-adopt respawn, and the judgement resume that elicits a verdict from an exited
+    worker's session. REAP still reaps an orphan lease (nothing to kill, and its respawn
+    is itself suppressed), but does not kill a worker that is merely stalled — pause is
+    not a drain. Escalating a chunk to a human at an exhausted retry budget is deferred
+    too, wherever it would happen (REAP, a rejected flush at PULL): a paused runner does
+    not hand work off as unrecoverable while it waits. No retry is consumed at all: the
+    budget counts lease mints, and the one mint site sits below the gate.
+
+    A worker that *exits* while paused is **not** judged until the brake clears — judging
+    it resumes its session headlessly, which is itself a spawn the brake forbids. It waits
+    exactly like a suppressed respawn: the lease stays active, and ADVANCE retries the
+    judgement every tick until the brake clears. A live worker already running is left
+    alone throughout — this is not a drain, and it does not kill. Leases, routes, epochs,
+    environments, and retry budgets are otherwise unchanged.
     """
     store: IWriteRunnerStore | None = getattr(request.app.state, "runner_store", None)
     config: RunnerConfig | None = getattr(request.app.state, "config", None)

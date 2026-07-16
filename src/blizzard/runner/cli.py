@@ -123,7 +123,7 @@ def _set_local_paused(*, paused: bool, by: str, directory: str, runner_url: str 
         raise click.ClickException(f"{verb}: could not reach the runner at {where} ({exc})") from exc
     view = resp.json()
     if paused:
-        click.echo(f"runner {view['runner_id']} is now locally paused — it will stop claiming new work")
+        click.echo(f"runner {view['runner_id']} is now locally paused — it starts no new workers")
         if view.get("hub_paused"):
             click.echo("note: it is also paused at the hub — `blizzard hub resume` clears that one")
         return
@@ -418,13 +418,20 @@ def status() -> None:
 )
 @click.option("--by", "by", default="operator", help="Who is pausing (recorded on the fact).")
 def pause(directory: str, runner_url: str | None, by: str) -> None:
-    """Declarative control: pause this runner — it stops claiming new work; in-flight chunks run on (D-043).
+    """Declarative control: pause this runner — it starts no new workers (issue #45).
 
     This runner's **own** brake — "it says it won't try" — and a pure client of its local
-    API (``PATCH /runner``), so it works with the hub unreachable. It is distinct from the
-    hub's brake (``blizzard hub pause <runner_id>``), which coerces a runner from the fleet
-    side: either one stops new claims, and each is cleared where it was set. Clear this one
-    with ``blizzard runner start``."""
+    API (``PATCH /runner``), so it works with the hub unreachable. It blocks every spawn
+    site (FILL, restart-resume, an answer-resume, ADVANCE's next-node, a requeue or
+    claim-adopt respawn, and the judgement resume that would elicit a verdict from an
+    exited worker's session) and defers both REAP's kill of a stalled worker and
+    escalation to a human at an exhausted retry budget, wherever it would happen. No
+    retry is consumed anywhere; a live worker already running is left alone (this is not
+    a drain, and it does not kill). A worker that *exits* while paused simply waits
+    unjudged — judging it is itself a spawn — until the brake clears. It is distinct from
+    the hub's brake (``blizzard hub pause <runner_id>``), which coerces a runner from the
+    fleet side and keeps its claims-only meaning, and each is cleared where it was set.
+    Clear this one with ``blizzard runner start``."""
     _set_local_paused(paused=True, by=by, directory=directory, runner_url=runner_url)
 
 
@@ -445,7 +452,7 @@ def pause(directory: str, runner_url: str | None, by: str) -> None:
 )
 @click.option("--by", "by", default="operator", help="Who is starting it (recorded on the fact).")
 def start(directory: str, runner_url: str | None, by: str) -> None:
-    """Declarative control: clear this runner's own pause brake — it resumes claiming (D-043).
+    """Declarative control: clear this runner's own pause brake — it resumes spawning (issue #45).
 
     The counterpart to ``blizzard runner pause``, and local in the same way. It clears only
     the local brake: a runner also paused at the hub stays paused until ``blizzard hub

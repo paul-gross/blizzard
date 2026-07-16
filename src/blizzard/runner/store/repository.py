@@ -209,8 +209,13 @@ class IReadRunnerStore(Protocol):
         """This runner's own brake, derived from the newest local pause fact (issue #43).
 
         The runner's half of the pause control (``PATCH /runner``): set locally, adhered
-        to with the hub unreachable, and distinct from ``hub_paused`` — FILL stops on
-        either. Defaults False when the operator has never set it."""
+        to with the hub unreachable, and distinct from ``hub_paused``. Since issue #45 it
+        blocks every spawn site — FILL's claim, restart-resume, an answer-resume, ADVANCE's
+        next-node, a requeue or claim-adopt respawn, and ADVANCE's judgement resume — and
+        REAP defers killing a stalled worker and every ``_fail_attempt`` caller defers
+        escalating an exhausted budget, so nothing is started and nothing is handed off as
+        unrecoverable while paused. The hub brake keeps its claims-only meaning, checked in
+        FILL alone. Defaults False when the operator has never set it."""
         ...
 
     def resume_intent_lease_ids(self) -> set[str]:

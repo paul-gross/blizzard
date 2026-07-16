@@ -197,10 +197,35 @@ def reap(ctx: LoopContext) -> None:
     to tell a real completion from a crash. The conservative threshold is what keeps
     the two apart — a worker that exited cleanly still carries a fresh final heartbeat,
     so REAP never preempts ADVANCE's judgement of it.
+
+    **The local brake (issue #45) is checked per case, not blanket, once the escalate
+    branch grew its own gate.** The two live cases carry different stakes while locally
+    paused:
+
+    * the **stall** case has a live process to kill — the only kill in this function —
+      and a local pause is not a drain (it must not kill a worker still running), so
+      this case alone is suppressed here, deferred to the first tick after the brake
+      clears.
+    * the **orphan** case has no process to kill (``pid is None``, so the top-of-
+      :func:`_fail_attempt` kill is a no-op) and its requeue branch already self-defers
+      correctly — the respawn is gated at :func:`_spawn_attempt`, so no retry is consumed
+      by construction (:data:`attempt_count` counts mints, and the mint sits below that
+      gate) — and its escalate branch, at an exhausted budget, defers there too (the same
+      gate every ``_fail_attempt`` caller shares). Suspending it here as well would only
+      cost startup recovery time for no correctness gain, so it runs unguarded — at the
+      price that its orphan leases occupy ``max_agents`` slots invisibly while paused,
+      since FILL is paused too (logged below so that state is at least greppable).
+
+    (An earlier version of this guard suspended both cases and justified it as "avoiding
+    burning a retry on a brake" — false: the retry budget was never at risk, since it
+    counts mints and every mint site already sits below :func:`_spawn_suppressed`. The
+    real reason to suspend anything here is the kill, not the retry.)
     """
     _CP_REAP_BEFORE.reached()
+    local_paused = ctx.store.local_paused(ctx.config.runner_id)
     now = ctx.clock.now()
     parked = ctx.store.parked_lease_ids()
+    deferred = 0
     for lease in ctx.store.list_active_leases():
         if lease.lease_id in parked:
             # Dormant on a question (ask-and-exit): no live worker to stall, so the
@@ -214,9 +239,17 @@ def reap(ctx: LoopContext) -> None:
         if not ctx.process.is_alive(lease.pid, lease.process_start_time or ""):
             continue  # exited — ADVANCE's (exit-is-done, D-055)
         if is_heartbeat_stale(ctx.store, lease, now):
+            if local_paused:
+                # Do not kill a live worker while the runner's own brake is on — pause is
+                # not a drain. The lease waits; the first tick after the brake clears
+                # reaps it exactly as it would have now.
+                deferred += 1
+                continue
             _log.info("reaping stalled worker", lease_id=lease.lease_id, chunk_id=lease.chunk_id, pid=lease.pid)
             _fail_attempt(ctx, lease, reason=_REAPED, via="reap")
         # A live, beating worker runs on.
+    if deferred:
+        _log.info("reap deferred — locally paused", runner_id=ctx.config.runner_id, count=deferred)
     _CP_REAP_AFTER.reached()
 
 
@@ -401,7 +434,18 @@ def _resume_in_place(ctx: LoopContext, lease: LeaseRecord) -> None:
     spawn-record gap** the fresh spawn (``_spawn_attempt``) and the answer-resume
     (``_resume_if_answered``) already carry — no crash point can arm a window whose recovery
     input (the new pid) does not yet exist — so it is left un-armed here too rather than asserted
-    away. It is bounded to that one call-return→store-write gap (design/runner/loop.md)."""
+    away. It is bounded to that one call-return→store-write gap (design/runner/loop.md).
+
+    Gated by the local brake (issue #45) **before the kill** — gating after would kill the
+    survivor and leave it not re-attached, the one behavior explicitly out of scope. A
+    suppressed resume leaves the marked intent open; RESUME re-asks it every tick until the
+    brake clears. Left untouched, the lease is exactly the shape ADVANCE's exited-worker
+    judge would otherwise select — active, session-bearing, dead pid, not pending, not
+    parked — so :func:`advance` skips any lease whose resume intent is still open, the same
+    way it skips a pending or parked one; RESUME, not ADVANCE, owns it until the intent
+    clears."""
+    if _spawn_suppressed(ctx, via="resume", chunk_id=lease.chunk_id, lease_id=lease.lease_id):
+        return
     now = ctx.clock.now()
     if lease.pid is not None:
         ctx.process.kill(lease.pid)  # kill-first — never two processes on one session (D-049)
@@ -686,8 +730,16 @@ def fill(ctx: LoopContext) -> None:
     **either** is set: the hub's flag (mirrored locally by PULL) and this runner's own
     local flag (``PATCH /runner``, issue #43), which the operator sets machine-locally and
     which therefore holds with the hub unreachable. In-flight chunks are untouched under
-    either (REAP/ADVANCE still run), so pausing drains the fleet rather than killing it
-    ([loop.md]).
+    either — FILL only ever stops *new* claims — but since issue #45 the two brakes'
+    reach beyond FILL diverges: the hub brake keeps its D-043 claims-only meaning (checked
+    here alone), while the local brake also blocks every other spawn site (restart-resume,
+    an answer-resume, ADVANCE's next-node, a requeue or claim-adopt respawn, and ADVANCE's
+    judgement resume) via :func:`_spawn_suppressed`, its one shared home, and defers
+    escalation (:func:`_fail_attempt`'s exhausted-budget branch) the same way REAP's own
+    kill of a stalled worker is deferred — a locally-paused runner starts no process and
+    hands nothing off as unrecoverable while it waits. So a hub-only pause still drains the
+    fleet the way it always has ([loop.md]); a local pause spawns nothing, anywhere, while
+    leaving every lease, route, and retry budget exactly as it was.
 
     Recovery runs first: :func:`_reconcile_interrupted_claims` reconciles any binding
     left by a crash in FILL's own bind→claim→spawn window **before** new work is peeked,
@@ -817,7 +869,7 @@ def _fill_one(ctx: LoopContext) -> bool:
         return True  # peek fresh next iteration
 
     _CP_FILL_AFTER_CLAIM.reached()
-    _spawn_attempt(ctx, entry.chunk_id, outcome.claimed.envelope, acquired)
+    _spawn_attempt(ctx, entry.chunk_id, outcome.claimed.envelope, acquired, via="fill")
     return True
 
 
@@ -840,12 +892,29 @@ def advance(ctx: LoopContext) -> None:
 
     A worker whose completion or decision is already buffered is skipped: the outcome is
     elicited exactly once, then the chunk waits at its node boundary for the flush (D-069).
+
+    A lease with an **open resume intent** is skipped too (issue #45): RESUME, not this
+    step, owns it until the intent clears. This is not just a pause artifact — it holds
+    on every tick, restart or not. On an ordinary restart RESUME already resolved every
+    marked lease (re-attached it or abandoned it) earlier in the same tick, so this set
+    is empty by the time ADVANCE runs and the skip is inert; it only ever bites when
+    RESUME left the intent open — the runner's own brake is on (:func:`_resume_in_place`
+    suppressed), or the hub was unreachable for the ownership check. Either way, the
+    lease left behind is *exactly* the shape this loop would otherwise read as exited
+    work — active, session-bearing, dead pid — and judging it here would be wrong
+    twice over: it elicits a verdict from a worker RESUME never got to re-attach
+    (:meth:`ctx.harness.judge` resumes the session headlessly, a real spawn the local
+    brake forbids), and a worker killed mid-work is not a done declaration (D-055) even
+    though its process is gone.
     """
     pending = ctx.store.pending_submission_lease_ids()
     parked = ctx.store.parked_lease_ids()
+    resume_intents = ctx.store.resume_intent_lease_ids()
     for lease in ctx.store.list_active_leases():
         if lease.pid is None or lease.session_id is None:
             continue  # REAP's residue
+        if lease.lease_id in resume_intents:
+            continue  # RESUME hasn't re-attached (or abandoned) it yet — not exited work
         if lease.lease_id in pending:
             continue  # outcome elicited, awaiting flush — the node boundary (D-069)
         if lease.lease_id in parked:
@@ -861,7 +930,19 @@ def advance(ctx: LoopContext) -> None:
 
 
 def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
-    """Park on an open ask, else elicit the verdict and buffer the completion (D-069/D-009)."""
+    """Park on an open ask, else elicit the verdict and buffer the completion (D-069/D-009).
+
+    The judgement elicitation (below) is a real spawn — :meth:`ctx.harness.judge` resumes
+    the exited worker's session headlessly to capture its verdict reply — so it is gated
+    by the local brake (issue #45) the same as the other three primitives, just placed
+    later in this function: the ask-park and gate-decision branches above it end the
+    attempt with no process started (a park or a human decision, not a judgement), and
+    the artifact push is idempotent forge state, not a spawn, so none of those need the
+    gate. Only the judge call does. A suppressed judgement leaves the lease exactly as it
+    was — active, session-bearing, dead pid, no completion buffered — so ADVANCE retries
+    it every tick until the brake clears, the same self-driving shape every other gate in
+    this module leaves behind.
+    """
     if lease.session_id is None:
         return  # not spawned — REAP's residue (guarded by the caller too)
 
@@ -869,6 +950,7 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
     # parked on a question — forward it and park, no verdict, no retry consumed. This is
     # what D-009 turns on: an exit with an open ask is a park; an exit with neither is a
     # failure. The park fact stops REAP's clock and makes the chunk derive waiting_on_human.
+    # Not a spawn, so it proceeds regardless of the local brake.
     ask = ctx.store.unforwarded_ask(lease.lease_id)
     if ask is not None:
         _park_on_ask(ctx, lease, ask)
@@ -884,7 +966,9 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
     except HubClientError:
         return  # hub unreachable — the worker's exit is durable; retry next tick
 
-    # 1. Push produced branches to their forge origins BEFORE submitting (D-026).
+    # 1. Push produced branches to their forge origins BEFORE submitting (D-026). Not a
+    #    harness spawn, and idempotent, so this runs regardless of the local brake — the
+    #    branch is forge state the runner already holds, not new work being started.
     _CP_ADV_BEFORE_PUSH.reached()
     artifacts = _push_and_collect_artifacts(ctx, bindings)
     _CP_ADV_AFTER_PUSH.reached()
@@ -892,12 +976,19 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
     # 1b. Runner-config gate (D-032/D-073): this operator gates this node by name, so the
     #     node-step's outcome is a human's, not the worker's. Submit a Decision carrying
     #     the step's artifacts instead of eliciting a verdict — the human judges (D-045).
+    #     Not a spawn either — parking for a human is not starting a process — so this
+    #     also proceeds regardless of the local brake.
     if lease.node_name in ctx.config.gates:
         _buffer_decision(ctx, lease, artifacts)
         return
 
-    # 2. Elicit the verdict via the judgement resume (D-038). A dead worker whose
-    #    session cannot answer a parseable <Choice> is a failure (D-009).
+    # 2. Elicit the verdict via the judgement resume (D-038) — the fourth spawn primitive
+    #    (issue #45), gated here rather than hoisted to the top of this function so the
+    #    park/gate/push work above (none of it a spawn) still happens while paused.
+    if _spawn_suppressed(ctx, via="advance", chunk_id=lease.chunk_id, lease_id=lease.lease_id):
+        return
+
+    # A dead worker whose session cannot answer a parseable <Choice> is a failure (D-009).
     prompt = (envelope.judgement_prompt or "") + _elicitation_tail(envelope)
     # The adapter works in a directory; the runner resolves the provider-returned
     # workdir from the binding and supplies it (design/runner/environments.md).
@@ -973,7 +1064,7 @@ def _apply_response(
     """Act on the apply-response: continue in place, hold at a hub node, or finish (D-072)."""
     if outcome == ApplyOutcome.NEXT and next_envelope is not None:
         envs = _bindings_as_environments(bindings)
-        _spawn_attempt(ctx, chunk_id, next_envelope, envs)
+        _spawn_attempt(ctx, chunk_id, next_envelope, envs, via="apply-response")
     elif outcome == ApplyOutcome.HUB_NODE_TAKEN:
         _log.info("hub node took over — holding envs until terminal", chunk_id=chunk_id)
     elif outcome == ApplyOutcome.DONE:
@@ -1039,10 +1130,49 @@ def _resolve_gate(ctx: LoopContext, chunk_id: str, decision: DecisionView) -> No
 # --------------------------------------------------------------------------- #
 
 
+def _spawn_suppressed(ctx: LoopContext, *, via: str, chunk_id: str, lease_id: str | None = None) -> bool:
+    """True — and logged once — when the runner's own brake blocks this spawn (issue #45).
+
+    Reads **``local_paused`` only**: the hub brake (D-043) keeps its claims-only meaning
+    and stays read in FILL alone. The local brake is the machine declining to work, and
+    "start no processes on my machine" is a local statement, not a claims-only one — this
+    is that gate's one shared home, called before each of the **four** spawn primitives'
+    first mutation (:func:`_spawn_attempt`, :func:`_resume_in_place`,
+    :func:`_resume_if_answered`, and the judgement resume inside
+    :func:`_advance_exited_worker`) so a suppressed spawn writes no fact, kills no pid,
+    mints no lease, and elicits no verdict. The lease is left exactly as it was — active,
+    unmodified — and the shape it is left in (an interrupted claim, an open resume intent,
+    an open park, an unjudged exit) is what the next tick's own recovery re-drives once
+    the brake clears; no new state is needed here.
+
+    ``chunk_id`` is always present; ``lease_id`` is ``None`` at :func:`_spawn_attempt` (the
+    gate fires before a lease is minted) and carries the held/prior lease at restart-resume,
+    answer-resume, and the judgement resume."""
+    if not ctx.store.local_paused(ctx.config.runner_id):
+        return False
+    _log.info(
+        "spawn suppressed — locally paused",
+        runner_id=ctx.config.runner_id,
+        via=via,
+        chunk_id=chunk_id,
+        lease_id=lease_id,
+    )
+    return True
+
+
 def _spawn_attempt(
-    ctx: LoopContext, chunk_id: str, envelope: NodeEnvelope, environments: list[AcquiredEnvironment]
+    ctx: LoopContext, chunk_id: str, envelope: NodeEnvelope, environments: list[AcquiredEnvironment], *, via: str
 ) -> None:
-    """Mint a fresh-epoch lease and spawn a headless worker for a node-step (D-082/D-092)."""
+    """Mint a fresh-epoch lease and spawn a headless worker for a node-step (D-082/D-092).
+
+    Always its caller's final statement, with no post-spawn logic after it (fill/apply-
+    response/adopt/reclaim/requeue) — that is what lets the local-pause gate below stay a
+    silent ``None`` return indistinguishable from a real spawn (issue #45): there is no
+    boolean a caller could misread as "spawn failed" and burn a retry on. A future caller
+    that adds post-spawn logic must re-read this contract first. ``via`` names the calling
+    site, attributing the gate's suppression log line to it."""
+    if _spawn_suppressed(ctx, via=via, chunk_id=chunk_id):
+        return
     now = ctx.clock.now()
     epoch = ctx.store.latest_epoch(chunk_id) + 1
     lease_id = mint(LEASE_PREFIX, ctx.clock)
@@ -1117,7 +1247,18 @@ def _fail_attempt(ctx: LoopContext, lease: LeaseRecord, *, reason: str, via: str
     itself caught and abandoned by that later PULL pass, an escalation is a one-way door. So this
     branch re-asks the same ownership question :func:`_release_detached` asks and, if the chunk is
     no longer ours, abandons in place (:func:`_abandon_reassigned`) instead of escalating — the
-    same outcome PULL would reach later this tick, without the intervening false escalation."""
+    same outcome PULL would reach later this tick, without the intervening false escalation.
+
+    **Escalation is deferred while locally paused (issue #45)**, for the same one-way-door
+    reason: an ``escalation.recorded`` fact hands the chunk to a human, and a runner that
+    has told its operator it will start no processes should not also be handing work off
+    as unrecoverable while it waits. The requeue branch above needs no such gate — it
+    already self-defers correctly, since its respawn is gated at :func:`_spawn_attempt` and
+    :data:`attempt_count` counts mints, which sit below that gate, so no retry is consumed
+    by a requeue this function records but that respawn never mints. This one function is
+    every caller's escalate path (REAP's orphan case, ADVANCE's verdict-less exit, PULL's
+    rejection paths), so gating it here — rather than in each caller — is what keeps them
+    all honoring the same brake without three separate checks drifting out of sync."""
     now = ctx.clock.now()
     if lease.pid is not None:
         ctx.process.kill(lease.pid)  # best-effort hygiene; the epoch fence is the guarantee
@@ -1133,6 +1274,15 @@ def _fail_attempt(ctx: LoopContext, lease: LeaseRecord, *, reason: str, via: str
         return
     if _reassigned_or_detached(ctx, lease):
         _abandon_reassigned(ctx, lease, killed=True, via=via)
+        return
+    if ctx.store.local_paused(ctx.config.runner_id):
+        _log.info(
+            "escalation deferred — locally paused",
+            runner_id=ctx.config.runner_id,
+            via=via,
+            chunk_id=lease.chunk_id,
+            lease_id=lease.lease_id,
+        )
         return
     ctx.store.record_closure(
         lease_id=lease.lease_id, chunk_id=lease.chunk_id, node_id=lease.node_id, reason=_ESCALATED, closed_at=now
@@ -1156,7 +1306,7 @@ def _adopt_interrupted_claim(ctx: LoopContext, chunk_id: str) -> None:
     except HubClientError:
         return  # hub unreachable — the binding is durable; retry next tick
     _log.info("adopting interrupted claim — spawning current node", chunk_id=chunk_id)
-    _spawn_attempt(ctx, chunk_id, envelope, _bindings_as_environments(bindings))
+    _spawn_attempt(ctx, chunk_id, envelope, _bindings_as_environments(bindings), via="adopt")
 
 
 def _reclaim_interrupted(ctx: LoopContext, chunk_id: str, bindings: list[EnvBindingRecord]) -> None:
@@ -1183,7 +1333,7 @@ def _reclaim_interrupted(ctx: LoopContext, chunk_id: str, bindings: list[EnvBind
         _release_all(ctx, chunk_id)
         return
     _log.info("re-claimed interrupted chunk — spawning current node", chunk_id=chunk_id)
-    _spawn_attempt(ctx, chunk_id, outcome.claimed.envelope, envs)
+    _spawn_attempt(ctx, chunk_id, outcome.claimed.envelope, envs, via="reclaim")
 
 
 def _requeue(ctx: LoopContext, lease: LeaseRecord) -> None:
@@ -1197,7 +1347,7 @@ def _requeue(ctx: LoopContext, lease: LeaseRecord) -> None:
     except HubClientError:
         return  # the closed attempt is durable; FILL/ADVANCE re-drives next tick
     _log.info("requeuing at node", chunk_id=lease.chunk_id, node=lease.node_name)
-    _spawn_attempt(ctx, lease.chunk_id, envelope, _bindings_as_environments(bindings))
+    _spawn_attempt(ctx, lease.chunk_id, envelope, _bindings_as_environments(bindings), via="requeue")
 
 
 def _escalate(ctx: LoopContext, lease: LeaseRecord) -> None:
@@ -1262,7 +1412,13 @@ def _resume_if_answered(ctx: LoopContext, lease: LeaseRecord) -> None:
     lease, same node-step (D-082) — via the adapter's resume-with-message. The lease's
     new pid is recorded so it reads live again, the park is closed, and ``answer.delivered``
     is buffered up to the hub (board detail; the status already flipped at question.answered).
+
+    Gated by the local brake (issue #45) **before the poll** — a paused runner makes no hub
+    poll at all. A suppressed resume leaves the park open; the answer is picked up once the
+    brake clears (no retry consumed either way, D-009).
     """
+    if _spawn_suppressed(ctx, via="answer-resume", chunk_id=lease.chunk_id, lease_id=lease.lease_id):
+        return
     park = ctx.store.open_park(lease.lease_id)
     if park is None:
         return  # not actually parked (raced with a resume)

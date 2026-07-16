@@ -1373,7 +1373,9 @@ export type RunnerRegistrationResponse = {
  *
  * A runner can be paused by two different parties for two different reasons, so the two
  * are reported separately rather than collapsed into one ``paused`` (issue #43): the
- * board shows *which*, and a reader that wants "is it claiming?" ORs them.
+ * board shows *which*. A reader that wants "is it claiming?" ORs them; since issue #45
+ * the two diverge past claiming — ``hub_paused`` keeps its claims-only meaning, while
+ * ``locally_paused`` alone answers "is it spawning anything at all?".
  */
 export type RunnerView = {
     /**

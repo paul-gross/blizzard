@@ -1952,7 +1952,7 @@
         "type": "object"
       },
       "RunnerView": {
-        "description": "One fleet-registry row \u2014 derived liveness and both brakes (D-004/D-070/D-043).\n\nA runner can be paused by two different parties for two different reasons, so the two\nare reported separately rather than collapsed into one ``paused`` (issue #43): the\nboard shows *which*, and a reader that wants \"is it claiming?\" ORs them.",
+        "description": "One fleet-registry row \u2014 derived liveness and both brakes (D-004/D-070/D-043).\n\nA runner can be paused by two different parties for two different reasons, so the two\nare reported separately rather than collapsed into one ``paused`` (issue #43): the\nboard shows *which*. A reader that wants \"is it claiming?\" ORs them; since issue #45\nthe two diverge past claiming \u2014 ``hub_paused`` keeps its claims-only meaning, while\n``locally_paused`` alone answers \"is it spawning anything at all?\".",
         "properties": {
           "hub_paused": {
             "title": "Hub Paused",
