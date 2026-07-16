@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub
+from tests.support import build_hub, pointer_token
 
 pytestmark = pytest.mark.component
 
@@ -28,7 +28,7 @@ def _claim_body(runner: str) -> dict:
 
 def test_two_concurrent_claims_yield_one_win_one_conflict(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunk_id = hub.client.post("/api/chunks", json={"pointers": [_POINTER]}).json()["chunk_id"]
+    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
 
     start = threading.Barrier(2)
     results: dict[str, int] = {}
@@ -61,7 +61,7 @@ def test_repeated_races_never_double_claim(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     for i in range(8):
         pointer = {"source": "default", "ref": str(100 + i)}
-        chunk_id = hub.client.post("/api/chunks", json={"pointers": [pointer]}).json()["chunk_id"]
+        chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(pointer)]}).json()["chunk_id"]
         start = threading.Barrier(2)
         codes: list[int] = []
         lock = threading.Lock()

@@ -181,22 +181,24 @@ def _current_node(
 
 @router.post("/chunks", response_model=ChunkIngestResponse, status_code=status.HTTP_201_CREATED)
 def ingest_chunk(request: ChunkIngestRequest, services: Annotated[HubServices, Depends(get_services)]) -> object:
-    """Ingest by pointer (D-047); 422 on a pointer naming no configured source (D-106);
-    409 on a pointer held by a live chunk (D-093)."""
-    if not request.pointers:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="at least one pointer required")
-    pointers = [PmPointer(source=p.source, ref=p.ref) for p in request.pointers]
-    # Resolution before minting, and before the live-holder check: an unconfigured
-    # pointer should not consult the store, and the whole request rejects together
+    """Ingest by source-native token (D-047/D-109); 422 on a token no configured source
+    claims (D-106/D-107); 409 on a pointer held by a live chunk (D-093)."""
+    if not request.tokens:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="at least one token required")
+    # Resolution before minting, and before the live-holder check: an unresolvable
+    # token should not consult the store, and the whole request rejects together
     # rather than partially ingesting. The route resolves; the domain stays
     # registry-free (bzh:domain-takes-objects) — it never sees the registry at all.
-    for pointer in pointers:
-        if services.pm.get(pointer.source) is None:
+    pointers: list[PmPointer] = []
+    for token in request.tokens:
+        pointer = services.pm.resolve(token)
+        if pointer is None:
             configured = ", ".join(sorted(services.pm.names())) or "none"
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=(f"pointer source {pointer.source!r} is not a configured PM source (configured: {configured})"),
+                detail=(f"token {token!r} is not claimed by any configured PM source (configured: {configured})"),
             )
+        pointers.append(pointer)
     graph = services.graph_mint.ensure_default(services.default_graph_doc, definition_yaml=services.default_graph_yaml)
     try:
         chunk_id = services.ingest.ingest(pointers, graph=graph)

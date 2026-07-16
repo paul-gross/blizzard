@@ -8,22 +8,32 @@ here. One instance per configured ``[[pm_source]]`` (D-106): pinned to its own
 its own credentialed client — never the delivery forge's.
 
 D-105 gives the pointer its own ``source`` name and an opaque ``ref`` (this binding's
-own item token — a GitHub issue number): no URL parsing survives here at all. A
-pointer reaching this binding is, by construction, one ``registry.get(pointer.source)``
-lookup away from here (D-106) — ``fetch``/``label``/``web_url`` trust ``pointer.ref``
-directly rather than re-deriving it from a URL, unlike the Phase 1/2 shape this
-binding grew from (``pm/label.py``'s issue-URL grammar, now gone).
+own item token — a GitHub issue number): ``fetch``/``label``/``web_url`` trust
+``pointer.ref`` directly rather than re-deriving it from a URL, unlike the Phase 1/2
+shape this binding grew from (``pm/label.py``'s issue-URL grammar, now gone).
+
+D-109 gives ``parse`` its production caller and, with it, the URL grammar `cli.py`'s
+own ``_ISSUE_URL_RE`` used to carry (a config-blind guess that a source's name equals
+its repo tail): the same regex now lives here, checked against *this binding's own
+configured* ``repo`` — the hub's own configuration, not a client-side heuristic.
 """
 
 from __future__ import annotations
+
+import re
 
 import httpx
 
 from blizzard.foundation.logging import get_logger
 from blizzard.hub.domain.work import PmPointer
-from blizzard.hub.pm.source import IPmSource, PmItem, PmSourceError, UnknownSource
+from blizzard.hub.pm.source import IPmSource, PmItem, PmSourceError
 
 _log = get_logger("blizzard.hub.pm")
+
+# A GitHub-shaped issue reference — {owner}/{repo}/issues/{number} — with or without a
+# leading scheme://host and with or without the REST /repos/ prefix, so both the full
+# browser URL and the schemeless shorthand resolve the same way (D-109).
+_ISSUE_URL_RE = re.compile(r"(?:^|/)(?:repos/)?(?P<owner>[^/:#]+)/(?P<repo>[^/:#]+)/issues/(?P<number>\d+)/?$")
 
 
 class GitHubPmSource:
@@ -35,12 +45,22 @@ class GitHubPmSource:
         self._repo = repo
         self._web_base = web_base.rstrip("/")
 
-    def parse(self, token: str) -> PmPointer:
-        """A ``{name}:{number}`` ingest token (D-105) into a pointer pinned to this source."""
-        prefix, sep, ref = token.partition(":")
-        if not sep or prefix != self._name or not ref.isdigit():
-            raise UnknownSource(f"{token!r} is not a {self._name!r} source token")
-        return PmPointer(source=self._name, ref=ref)
+    def parse(self, token: str) -> PmPointer | None:
+        """This source's own ingest-token forms (D-105/D-109) into a pointer, or
+        ``None`` when ``token`` isn't shaped for this source: ``{name}:{number}``,
+        ``{name}#{number}``, or the item's own issue URL — full
+        (``https://github.com/{owner}/{repo}/issues/{n}``) or schemeless
+        (``{owner}/{repo}/issues/{n}``) — naming *this binding's own configured*
+        ``repo``. A URL naming a different repo is not this source's token; some other
+        configured binding may claim it instead."""
+        for sep_char in (":", "#"):
+            prefix, sep, ref = token.partition(sep_char)
+            if sep and prefix == self._name and ref.isdigit():
+                return PmPointer(source=self._name, ref=ref)
+        match = _ISSUE_URL_RE.search(token)
+        if match is not None and f"{match['owner']}/{match['repo']}" == self._repo:
+            return PmPointer(source=self._name, ref=match["number"])
+        return None
 
     def fetch(self, pointer: PmPointer) -> PmItem:
         base = f"/repos/{self._repo}/issues/{pointer.ref}"

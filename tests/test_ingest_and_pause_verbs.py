@@ -43,8 +43,9 @@ class _FakeResponse:
 # --------------------------------------------------------------------------- #
 
 
-def test_ingest_posts_the_pointers_and_reports_the_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The verb parses ``source:ref`` tokens, POSTs the batch, and echoes the minted id."""
+def test_ingest_posts_the_tokens_verbatim_and_reports_the_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The verb carries no token grammar (D-109): it POSTs every token through
+    unchanged and echoes the minted id."""
     calls: list[tuple[str, object]] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -61,30 +62,32 @@ def test_ingest_posts_the_pointers_and_reports_the_chunk(monkeypatch: pytest.Mon
     assert result.exit_code == 0, result.output
     url, body = calls[0]
     assert url == "http://hub.local:8421/api/chunks"
-    assert body == {
-        "pointers": [
-            {"source": "blizzard", "ref": "8"},
-            {"source": "widget", "ref": "1"},
-        ]
-    }
+    assert body == {"tokens": ["blizzard:8", "widget:1"]}
     assert "ch_new" in result.output
 
 
-def test_ingest_accepts_a_source_hash_ref_token(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``source#ref`` is the alternate, unambiguous separator."""
+def test_ingest_passes_a_source_hash_ref_token_through(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``source#ref`` travels through exactly like ``source:ref`` — the hub, not the
+    CLI, tells them apart (D-108/D-109)."""
+    calls: list[object] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        calls.append(json)
         return _FakeResponse(201, {"chunk_id": "ch_new"})
 
     monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["ingest", "blizzard#8"])
 
     assert result.exit_code == 0, result.output
+    assert calls[0] == {"tokens": ["blizzard#8"]}
 
 
-def test_ingest_resolves_a_pasted_issue_url_by_its_repo_tail(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A pasted PM item URL resolves to ``{source: repo, ref: number}`` — the ergonomic
-    path, copied straight from the browser — without any request to the hub."""
+def test_ingest_passes_a_pasted_issue_url_through_for_the_hub_to_resolve(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A pasted PM item URL travels through byte-for-byte (D-109) — the ergonomic path,
+    copied straight from the browser — with no local resolution or repo-tail guess.
+    Only the hub, which holds the source configuration, can say which source it names
+    (the whole point of this phase: the CLI can no longer assume a source is named
+    after its repo tail)."""
     calls: list[object] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -95,13 +98,15 @@ def test_ingest_resolves_a_pasted_issue_url_by_its_repo_tail(monkeypatch: pytest
     result = CliRunner().invoke(hub_group, ["ingest", "https://github.com/paul-gross/blizzard/issues/26"])
 
     assert result.exit_code == 0, result.output
-    assert calls[0] == {"pointers": [{"source": "blizzard", "ref": "26"}]}
+    assert calls[0] == {"tokens": ["https://github.com/paul-gross/blizzard/issues/26"]}
 
 
-def test_ingest_warns_on_the_deprecated_github_prefix_but_still_resolves(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The old ``github:<url>`` provider-tagged form still resolves — on the URL alone —
-    but warns on stderr rather than silently accepting a provider tag the pointer no
-    longer carries."""
+def test_ingest_warns_on_the_deprecated_github_prefix_but_still_passes_the_rest_through(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The old ``github:<rest>`` provider-tagged form still works — ``rest`` travels
+    through on its own merits — but warns on stderr rather than silently accepting a
+    provider tag the pointer no longer carries."""
     calls: list[object] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -112,7 +117,7 @@ def test_ingest_warns_on_the_deprecated_github_prefix_but_still_resolves(monkeyp
     result = CliRunner().invoke(hub_group, ["ingest", "github:https://github.com/paul-gross/blizzard/issues/26"])
 
     assert result.exit_code == 0, result.output
-    assert calls[0] == {"pointers": [{"source": "blizzard", "ref": "26"}]}
+    assert calls[0] == {"tokens": ["https://github.com/paul-gross/blizzard/issues/26"]}
     assert "deprecated" in result.output
 
 
@@ -129,50 +134,50 @@ def test_ingest_maps_a_pointer_conflict(monkeypatch: pytest.MonkeyPatch) -> None
     assert "ch_old" in result.output
 
 
-def test_ingest_rejects_a_malformed_pointer(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A token with neither a ``source:``/``source#`` separator nor a PM item URL shape
-    errors before any request is made."""
-    attempted = False
+def test_ingest_maps_a_422_naming_the_unclaimed_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The hub resolves tokens now, not the CLI (D-109): a token no configured source
+    claims is a 422 whose detail — naming the token and the configured sources — is
+    the *only* feedback a user gets, so it must surface verbatim rather than a generic
+    error."""
 
-    def fake_post(*args: object, **kwargs: object) -> _FakeResponse:
-        nonlocal attempted
-        attempted = True
-        return _FakeResponse(201, {"chunk_id": "x"})
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        return _FakeResponse(
+            422,
+            {"detail": "token 'no-separator-here' is not claimed by any configured PM source (configured: blizzard)"},
+        )
 
     monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
     result = CliRunner().invoke(hub_group, ["ingest", "no-separator-here"])
 
     assert result.exit_code != 0
-    assert "source:ref" in result.output
-    assert attempted is False
+    assert "no-separator-here" in result.output
+    assert "blizzard" in result.output
 
 
-def test_ingest_rejects_a_url_that_is_not_issue_shaped(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A pasted URL that isn't a PM *item* URL errors here, rather than falling through
-    to the ``source:ref`` split.
+def test_ingest_passes_a_non_issue_url_through_for_the_hub_to_reject(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Phase 3's finale fixed a *local* bug here: a pasted non-issue URL used to fall
+    through to the ``source:ref`` split and partition on the URL's own scheme colon
+    (``https://…/pull/5`` -> ``{source: "https", ref: "//…/pull/5"}``). With the CLI
+    carrying no grammar at all (D-109), that class of input isn't rejected locally
+    any more — it travels to the hub exactly as pasted, and the hub's 422 (naming the
+    token and the configured sources) is what the user now sees."""
+    calls: list[object] = []
 
-    That split partitions on the first colon, so ``https://…/pull/5`` would otherwise
-    mint the nonsense pointer ``{source: "https", ref: "//…/pull/5"}`` and travel to the
-    hub, which can only reject it as an unconfigured source named ``https`` — an error
-    naming neither the paste nor the real problem.
-    """
-    attempted = False
-
-    def fake_post(*args: object, **kwargs: object) -> _FakeResponse:
-        nonlocal attempted
-        attempted = True
-        return _FakeResponse(201, {"chunk_id": "x"})
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        calls.append(json)
+        return _FakeResponse(
+            422,
+            {"detail": "token '...' is not claimed by any configured PM source (configured: blizzard)"},
+        )
 
     monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
-    for token in (
-        "https://github.com/paul-gross/blizzard/pull/5",  # a PR, not an issue
-        "github:https://github.com/paul-gross/blizzard/pull/5",  # …under the legacy prefix
-        "https://example.com/nothing/here",
-    ):
+    tokens = ("https://github.com/paul-gross/blizzard/pull/5", "https://example.com/nothing/here")
+    for token in tokens:
         result = CliRunner().invoke(hub_group, ["ingest", token])
-        assert result.exit_code != 0, f"{token!r} should not be accepted: {result.output}"
-        assert "not a PM item URL" in result.output, result.output
-    assert attempted is False
+        assert result.exit_code != 0, f"{token!r} should have been rejected by the hub: {result.output}"
+        assert "not claimed by any configured PM source" in result.output, result.output
+    # The scheme colon was never split on locally — each token traveled through whole.
+    assert calls == [{"tokens": [t]} for t in tokens]
 
 
 # --------------------------------------------------------------------------- #

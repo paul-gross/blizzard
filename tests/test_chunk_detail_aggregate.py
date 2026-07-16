@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub, report_lease
+from tests.support import build_hub, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -67,7 +67,7 @@ def test_detail_carries_the_full_aggregate(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     graph = hub.client.post("/api/graphs", json={"definition_yaml": _GATE_YAML})
     nodes = {n["name"]: n["node_id"] for n in graph.json()["nodes"]}
-    chunk_id = hub.client.post("/api/chunks", json={"pointers": [_POINTER]}).json()["chunk_id"]
+    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
 
     hub.client.post(
         "/api/routes",

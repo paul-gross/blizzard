@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import HubHarness, build_hub
+from tests.support import HubHarness, build_hub, pointer_token
 
 pytestmark = pytest.mark.component
 
@@ -24,7 +24,7 @@ def _ingest(hub: HubHarness, n: int) -> str:
     Queue shaping is ready-only, so the chunk is promoted out of its not-ready resting
     state (D-103) before it can be peeked, reordered, or grouped."""
     pointer = {"source": "default", "ref": str(n)}
-    resp = hub.client.post("/api/chunks", json={"pointers": [pointer]})
+    resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token(pointer)]})
     assert resp.status_code == 201, resp.text
     chunk_id = resp.json()["chunk_id"]
     assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
@@ -105,7 +105,7 @@ def test_group_merges_pointers_and_discards_the_rest(tmp_path: Path) -> None:
 def test_group_is_pointer_union_deduped(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     shared = {"source": "default", "ref": "shared"}
-    survivor = hub.client.post("/api/chunks", json={"pointers": [shared]}).json()["chunk_id"]
+    survivor = hub.client.post("/api/chunks", json={"tokens": [pointer_token(shared)]}).json()["chunk_id"]
     assert hub.client.post(f"/api/chunks/{survivor}/promote").status_code == 202  # ready to group (D-103)
     hub.clock.advance(timedelta(seconds=1))
     # A second chunk cannot re-ingest the same live pointer (D-093), so give it its own.
@@ -147,7 +147,7 @@ def test_grouped_pointer_reingest_points_at_survivor(tmp_path: Path) -> None:
     # naming the survivor, not the discarded chunk (D-093/D-047).
     resp = hub.client.post(
         "/api/chunks",
-        json={"pointers": [{"source": "default", "ref": "2"}]},
+        json={"tokens": [pointer_token({"source": "default", "ref": "2"})]},
     )
     assert resp.status_code == 409
     assert resp.json()["existing_chunk_id"] == survivor

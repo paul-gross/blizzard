@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import FakeForge, build_hub, report_lease
+from tests.support import FakeForge, build_hub, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -45,7 +45,7 @@ nodes:
 
 def _ingest(hub) -> str:  # type: ignore[no-untyped-def]
     assert hub.client.post("/api/graphs", json={"definition_yaml": _OPEN_PR_YAML}).status_code == 201
-    resp = hub.client.post("/api/chunks", json={"pointers": [_POINTER]})
+    resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]})
     assert resp.status_code == 201, resp.text
     return resp.json()["chunk_id"]
 

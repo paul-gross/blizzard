@@ -1,10 +1,14 @@
 """Chunk ingest, views, and the PM pass-through (D-047/D-004).
 
-Ingest wraps one or more PM pointers into chunks (``POST /chunks``); a pointer
-already held by a live chunk is rejected **409** with the existing chunk id (D-093).
-The list/detail views carry the **derived** status (D-004) — never a stored column
-— and the current node. ``GET /chunks/{id}/pm-items`` is the vendor-native
-pass-through read (D-047/D-084) — one entry per pointer, contents never stored.
+Ingest wraps one or more source-native **tokens** into chunks (``POST /chunks``,
+D-109) — ``{name}:{ref}``, ``{name}#{ref}``, or the item's own URL; the hub resolves
+each against its configured PM sources (``IPmSourceRegistry.resolve``) and 422s a
+token none of them claims (D-107), naming the token and the configured sources. A
+resolved pointer already held by a live chunk is rejected **409** with the existing
+chunk id (D-093). The list/detail views carry the **derived** status (D-004) — never
+a stored column — and the current node. ``GET /chunks/{id}/pm-items`` is the
+vendor-native pass-through read (D-047/D-084) — one entry per pointer, contents never
+stored.
 """
 
 from __future__ import annotations
@@ -39,9 +43,14 @@ class PmPointerView(BaseModel):
 
 
 class ChunkIngestRequest(BaseModel):
-    """Ingest by pointer — specific items always, batch fine (D-047)."""
+    """Ingest by source-native token — specific items always, batch fine (D-047/D-109).
 
-    pointers: list[PmPointerModel]
+    Each token is resolved against the configured PM sources' own grammar
+    (``IPmSource.parse``): ``{name}:{ref}``, ``{name}#{ref}``, or the item's own URL.
+    Tokens only — no pre-resolved ``{source, ref}`` shape travels alongside them; the
+    two intake shapes would reintroduce the same config-blind guess D-109 removes."""
+
+    tokens: list[str]
 
 
 class ChunkIngestResponse(BaseModel):

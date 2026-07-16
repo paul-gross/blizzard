@@ -153,7 +153,7 @@ def test_spike_chunk_terminates_with_only_asset_artifacts(tmp_path: Path) -> Non
         issue_number = issue.json()["number"]
         ingested = hub.post(
             "/api/chunks",
-            json={"pointers": [{"source": REPO_NAME, "ref": str(issue_number)}]},
+            json={"tokens": [f"{REPO_NAME}:{issue_number}"]},
         )
         assert ingested.status_code == 201, ingested.text
         chunk_id = ingested.json()["chunk_id"]

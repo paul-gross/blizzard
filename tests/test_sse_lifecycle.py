@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub, emitted_events, report_lease
+from tests.support import build_hub, emitted_events, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -65,7 +65,7 @@ _BUILD_ARTIFACT = {
 
 def test_question_ask_and_answer_emit_typed_events(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunk_id = hub.client.post("/api/chunks", json={"pointers": [_POINTER]}).json()["chunk_id"]
+    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
 
     ask = hub.client.post(
         "/api/questions",
@@ -96,7 +96,7 @@ def test_decision_open_and_resolve_emit_typed_events(tmp_path: Path) -> None:
     graph = hub.client.post("/api/graphs", json={"definition_yaml": _GATE_YAML})
     assert graph.status_code == 201, graph.text
     nodes = {n["name"]: n["node_id"] for n in graph.json()["nodes"]}
-    chunk_id = hub.client.post("/api/chunks", json={"pointers": [_POINTER]}).json()["chunk_id"]
+    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
 
     hub.client.post(
         "/api/routes",

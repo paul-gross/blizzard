@@ -80,7 +80,7 @@ def _ingest(forge: httpx.Client, hub: httpx.Client, title: str) -> str:
     assert issue.status_code == 201, issue.text
     ingested = hub.post(
         "/api/chunks",
-        json={"pointers": [{"source": REPO_NAME, "ref": str(issue.json()["number"])}]},
+        json={"tokens": [f"{REPO_NAME}:{issue.json()['number']}"]},
     )
     assert ingested.status_code == 201, ingested.text
     chunk_id = ingested.json()["chunk_id"]

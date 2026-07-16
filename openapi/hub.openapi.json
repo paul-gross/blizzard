@@ -436,18 +436,18 @@
         "type": "object"
       },
       "ChunkIngestRequest": {
-        "description": "Ingest by pointer \u2014 specific items always, batch fine (D-047).",
+        "description": "Ingest by source-native token \u2014 specific items always, batch fine (D-047/D-109).\n\nEach token is resolved against the configured PM sources' own grammar\n(``IPmSource.parse``): ``{name}:{ref}``, ``{name}#{ref}``, or the item's own URL.\nTokens only \u2014 no pre-resolved ``{source, ref}`` shape travels alongside them; the\ntwo intake shapes would reintroduce the same config-blind guess D-109 removes.",
         "properties": {
-          "pointers": {
+          "tokens": {
             "items": {
-              "$ref": "#/components/schemas/PmPointerModel"
+              "type": "string"
             },
-            "title": "Pointers",
+            "title": "Tokens",
             "type": "array"
           }
         },
         "required": [
-          "pointers"
+          "tokens"
         ],
         "title": "ChunkIngestRequest",
         "type": "object"
@@ -2194,7 +2194,7 @@
         ]
       },
       "post": {
-        "description": "Ingest by pointer (D-047); 422 on a pointer naming no configured source (D-106);\n409 on a pointer held by a live chunk (D-093).",
+        "description": "Ingest by source-native token (D-047/D-109); 422 on a token no configured source\nclaims (D-106/D-107); 409 on a pointer held by a live chunk (D-093).",
         "operationId": "ingest_chunk_api_chunks_post",
         "requestBody": {
           "content": {

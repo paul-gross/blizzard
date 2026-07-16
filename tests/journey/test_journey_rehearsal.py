@@ -294,7 +294,7 @@ def _file_hub(forge: httpx.Client, repo: str, title: str, body: str) -> tuple[st
 
 def _ingest(hub: httpx.Client, pointer: tuple[str, str]) -> str:
     source, ref = pointer
-    resp = hub.post("/api/chunks", json={"pointers": [{"source": source, "ref": ref}]})
+    resp = hub.post("/api/chunks", json={"tokens": [f"{source}:{ref}"]})
     assert resp.status_code == 201, resp.text
     chunk_id = resp.json()["chunk_id"]
     # Ingest rests not-ready (D-103); promote so the fleet claims it as the journey expects.

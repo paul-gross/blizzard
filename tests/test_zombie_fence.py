@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import FakeForge, build_hub, report_lease
+from tests.support import FakeForge, build_hub, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -68,7 +68,7 @@ def test_reaped_lease_completion_is_fenced_and_cannot_deliver(tmp_path: Path) ->
     forge = FakeForge()
     hub = build_hub(tmp_path, forge=forge)
     _mint_build_deliver_graph(hub)
-    chunk_id = hub.client.post("/api/chunks", json={"pointers": [_POINTER]}).json()["chunk_id"]
+    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
     build_node_id = hub.client.post(
         "/api/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
@@ -105,7 +105,7 @@ def test_zombie_completion_never_enters_merge_queue_even_if_it_races_first(tmp_p
     forge = FakeForge()
     hub = build_hub(tmp_path, forge=forge)
     _mint_build_deliver_graph(hub)
-    chunk_id = hub.client.post("/api/chunks", json={"pointers": [_POINTER]}).json()["chunk_id"]
+    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
     build_node_id = hub.client.post(
         "/api/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},

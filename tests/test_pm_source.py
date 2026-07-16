@@ -4,7 +4,8 @@ Exercises :class:`~blizzard.hub.pm.internal.github_pm_source.GitHubPmSource`'s
 ``{source, ref}`` pointer handling (D-105) and vendor-native read against the GitHub-REST
 double — the same choice of a local double over a ``blizzard-mock`` dev dependency
 recorded in ``tests.support`` — plus the D-106 factory that builds one credentialed
-client per configured source and the D-108 label/web-base rendering the binding owns.
+client per configured source, the D-108 label/web-base rendering the binding owns, and
+the D-109 ``parse``/registry ``resolve`` that give it its production caller.
 """
 
 from __future__ import annotations
@@ -16,7 +17,6 @@ from blizzard.hub.domain.work import PmPointer
 from blizzard.hub.pm.internal.factory import build_pm_registry
 from blizzard.hub.pm.internal.github_pm_source import GitHubPmSource
 from blizzard.hub.pm.registry import PmSourceRegistry
-from blizzard.hub.pm.source import UnknownSource
 from tests.support import github_double
 
 pytestmark = pytest.mark.component
@@ -50,17 +50,62 @@ def test_branch_url_qualifies_a_bare_repo_with_this_source_s_owner() -> None:
     assert source.branch_url("other/widget", "feat/x") == "https://github.com/other/widget/tree/feat/x"
 
 
-def test_parse_accepts_this_source_s_own_token_form() -> None:
+def test_parse_accepts_this_source_s_own_colon_token_form() -> None:
     source = GitHubPmSource(github_double(), name="widget", repo="acme/widget", web_base="https://github.com")
     pointer = source.parse("widget:12")
+    assert pointer is not None
     assert pointer.source == "widget"
     assert pointer.ref == "12"
 
 
+def test_parse_accepts_this_source_s_own_hash_token_form() -> None:
+    source = GitHubPmSource(github_double(), name="widget", repo="acme/widget", web_base="https://github.com")
+    pointer = source.parse("widget#12")
+    assert pointer is not None
+    assert pointer.source == "widget"
+    assert pointer.ref == "12"
+
+
+def test_parse_accepts_this_source_s_own_full_issue_url() -> None:
+    source = GitHubPmSource(github_double(), name="widget", repo="acme/widget", web_base="https://github.com")
+    pointer = source.parse("https://github.com/acme/widget/issues/12")
+    assert pointer is not None
+    assert pointer.source == "widget"
+    assert pointer.ref == "12"
+
+
+def test_parse_accepts_this_source_s_own_schemeless_issue_url() -> None:
+    """The schemeless shorthand (``{owner}/{repo}/issues/{n}``) the e2e tier ingests."""
+    source = GitHubPmSource(github_double(), name="widget", repo="acme/widget", web_base="https://github.com")
+    pointer = source.parse("acme/widget/issues/12")
+    assert pointer is not None
+    assert pointer.source == "widget"
+    assert pointer.ref == "12"
+
+
+def test_parse_resolves_a_url_even_when_the_source_name_is_not_the_repo_tail() -> None:
+    """The regression this phase exists to fix: the old CLI heuristic assumed a
+    source's name is its repo tail and could never resolve this case (D-109)."""
+    source = GitHubPmSource(github_double(), name="bz", repo="paul-gross/blizzard", web_base="https://github.com")
+    pointer = source.parse("https://github.com/paul-gross/blizzard/issues/26")
+    assert pointer is not None
+    assert pointer.source == "bz"
+    assert pointer.ref == "26"
+
+
 def test_parse_rejects_a_token_naming_a_different_source() -> None:
     source = GitHubPmSource(github_double(), name="widget", repo="acme/widget", web_base="https://github.com")
-    with pytest.raises(UnknownSource):
-        source.parse("other:12")
+    assert source.parse("other:12") is None
+
+
+def test_parse_rejects_a_url_naming_a_different_repo() -> None:
+    source = GitHubPmSource(github_double(), name="widget", repo="acme/widget", web_base="https://github.com")
+    assert source.parse("https://github.com/other-org/other-repo/issues/12") is None
+
+
+def test_parse_rejects_an_unshaped_token() -> None:
+    source = GitHubPmSource(github_double(), name="widget", repo="acme/widget", web_base="https://github.com")
+    assert source.parse("no-separator-here") is None
 
 
 # --------------------------------------------------------------------------- #
@@ -151,6 +196,44 @@ def test_registry_get_picks_the_named_binding_over_real_adapters() -> None:
     assert registry.get(beta_pointer.source).label(beta_pointer) == "beta#7"  # type: ignore[union-attr]
     # A name no binding declares resolves to None — the 422 at ingest, the null label at read.
     assert registry.get("gamma") is None
+
+
+# --------------------------------------------------------------------------- #
+# The registry's intake-side resolver (D-109) — tries every configured binding's
+# own `parse` in turn, first claim wins.
+# --------------------------------------------------------------------------- #
+
+
+def test_resolve_tries_every_binding_and_returns_the_first_claim() -> None:
+    alpha = GitHubPmSource(github_double(), name="alpha", repo="acme/alpha", web_base="https://x")
+    beta = GitHubPmSource(github_double(), name="beta", repo="acme/beta", web_base="https://x")
+    registry = PmSourceRegistry({"alpha": alpha, "beta": beta})
+
+    pointer = registry.resolve("beta:7")
+
+    assert pointer == PmPointer(source="beta", ref="7")
+
+
+def test_resolve_over_a_url_naming_a_source_whose_name_is_not_its_repo_tail() -> None:
+    """The regression D-109 exists to fix, proven at the registry (the resolver a
+    hub route actually calls), not just the binding directly."""
+    bz = GitHubPmSource(github_double(), name="bz", repo="paul-gross/blizzard", web_base="https://github.com")
+    registry = PmSourceRegistry({"bz": bz})
+
+    pointer = registry.resolve("https://github.com/paul-gross/blizzard/issues/26")
+
+    assert pointer == PmPointer(source="bz", ref="26")
+
+
+def test_resolve_returns_none_when_no_binding_claims_the_token() -> None:
+    widget = GitHubPmSource(github_double(), name="widget", repo="acme/widget", web_base="https://x")
+    registry = PmSourceRegistry({"widget": widget})
+
+    assert registry.resolve("other:12") is None
+
+
+def test_resolve_over_an_empty_registry_is_none() -> None:
+    assert PmSourceRegistry({}).resolve("anything:1") is None
 
 
 def test_registry_get_over_an_empty_registry_is_none() -> None:

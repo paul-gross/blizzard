@@ -11,7 +11,6 @@ structlog inside the runtime and app.
 from __future__ import annotations
 
 import os
-import re
 from pathlib import Path
 
 import click
@@ -212,78 +211,42 @@ def decide(decision_id: str, choice: str, resolved_by: str, hub_url: str | None)
     click.echo(f"decision {decision_id} resolved: {body['choice']} (by {body['resolved_by']})")
 
 
-# A GitHub-shaped issue reference in a pasted URL — {owner}/{repo}/issues/{number},
-# with or without a leading scheme://host and with or without the REST /repos/
-# prefix. Source names are conventionally the repo tail (the same convention
-# migration 0012's backfill and `[[pm_source]]` config both assume), so a pasted
-# issue URL resolves to `{source: repo, ref: number}` without asking the hub anything
-# — this stays a pure API client (design/cli.md).
-_ISSUE_URL_RE = re.compile(r"(?:^|/)(?:repos/)?(?P<owner>[^/:#]+)/(?P<repo>[^/:#]+)/issues/(?P<number>\d+)/?$")
+def _parse_pointer(token: str) -> str:
+    """The ingest token the CLI hands the hub (D-109).
 
-
-def _pointer_from_url(url: str) -> dict[str, str] | None:
-    """``url`` resolved to ``{source, ref}`` by the repo-tail convention, or ``None``
-    when it isn't a GitHub-shaped issue URL."""
-    match = _ISSUE_URL_RE.search(url)
-    if match is None:
-        return None
-    return {"source": match["repo"], "ref": match["number"]}
-
-
-def _parse_pointer(token: str) -> dict[str, str]:
-    """An ingest token into ``{source, ref}`` (D-105).
-
-    Accepts ``source:ref`` (``blizzard:26``), ``source#ref`` (``blizzard#26``), or a
-    pasted PM item URL (``https://github.com/o/blizzard/issues/26``) — the ergonomic
-    path, copy straight from the browser — resolved to its repo tail. The old
-    ``github:<url>`` provider-tagged form still resolves, on the URL alone, but is
-    deprecated: it warns on stderr rather than silently accepting a provider tag the
-    pointer no longer carries.
-
-    A token that *looks* like a URL (carries ``://``) but is not an issue URL is
-    rejected outright rather than falling through to the ``source:ref`` split — that
-    split would otherwise partition ``https://…/pull/5`` on its scheme colon and mint
-    the nonsense pointer ``{source: "https", ref: "//…/pull/5"}``, which the hub can
-    only reject downstream as an unconfigured source. The error belongs here, where the
-    paste happened."""
+    The CLI carries no grammar of its own any more: the hub resolves every token
+    against its configured PM sources' own ``parse`` (``{name}:{ref}``,
+    ``{name}#{ref}``, or the item's own URL — D-108/D-109), so a token travels
+    through verbatim. The one thing that survives here is the deprecated
+    ``github:<rest>`` prefix (D-074): it warns on stderr and passes ``rest`` on its own
+    merits rather than silently accepting a provider tag the pointer no longer
+    carries."""
     if token.startswith("github:"):
         rest = token[len("github:") :]
-        resolved = _pointer_from_url(rest)
-        if resolved is not None:
-            click.echo(
-                f"warning: the 'github:' pointer prefix is deprecated (in {token!r}) — resolving {rest!r} on its own",
-                err=True,
-            )
-            return resolved
-    as_url = _pointer_from_url(token)
-    if as_url is not None:
-        return as_url
-    if "://" in token:
-        raise click.ClickException(f"not a PM item URL — expected .../{{owner}}/{{repo}}/issues/{{n}} (got {token!r})")
-    if "#" in token:
-        source, sep, ref = token.partition("#")
-        if sep and source and ref:
-            return {"source": source, "ref": ref}
-    source, sep, ref = token.partition(":")
-    if sep and source and ref:
-        return {"source": source, "ref": ref}
-    raise click.ClickException(f"pointer must be source:ref, source#ref, or a PM item URL (got {token!r})")
+        click.echo(
+            f"warning: the 'github:' pointer prefix is deprecated (in {token!r}) — resolving {rest!r} on its own",
+            err=True,
+        )
+        return rest
+    return token
 
 
 @hub.command()
 @click.argument("pointers", nargs=-1, required=True)
 @click.option("--hub-url", default=None, help=f"Hub API base URL (default ${ENV_HUB_URL} or {DEFAULT_HUB_URL}).")
 def ingest(pointers: tuple[str, ...], hub_url: str | None) -> None:
-    """Ingest PM items by pointer, minting a chunk (D-047).
+    """Ingest PM items by token, minting a chunk (D-047/D-109).
 
-    Each POINTER is ``source:ref`` (e.g. ``blizzard:26``), ``source#ref``, or a pasted
-    PM item URL; pass one or more — a batch mints one chunk carrying every pointer. A
-    pure client of the hub API: ``POST /api/chunks``. 409 when a pointer is already
-    held by a live chunk (D-093)."""
-    models = [_parse_pointer(p) for p in pointers]
+    Each POINTER is a source-native token — ``source:ref`` (e.g. ``blizzard:26``),
+    ``source#ref``, or a pasted PM item URL; pass one or more — a batch mints one
+    chunk carrying every pointer. A pure client of the hub API: ``POST /api/chunks``.
+    The hub resolves each token against its configured PM sources and 422s one none
+    of them claims, naming the token and what is configured; 409 when a resolved
+    pointer is already held by a live chunk (D-093)."""
+    tokens = [_parse_pointer(p) for p in pointers]
     url = f"{_hub_url(hub_url).rstrip('/')}/api/chunks"
     try:
-        resp = httpx.post(url, json={"pointers": models}, timeout=_CLIENT_TIMEOUT)
+        resp = httpx.post(url, json={"tokens": tokens}, timeout=_CLIENT_TIMEOUT)
     except httpx.HTTPError as exc:
         raise _api_error("POST /chunks", exc) from exc
     if resp.status_code == httpx.codes.CONFLICT:
@@ -292,13 +255,13 @@ def ingest(pointers: tuple[str, ...], hub_url: str | None) -> None:
             f"pointer {body.get('source')}#{body.get('ref')} already held by chunk {body.get('existing_chunk_id')}"
         )
     if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:
-        raise click.ClickException("at least one pointer required")
+        raise click.ClickException(resp.json().get("detail", "at least one token required"))
     try:
         resp.raise_for_status()
     except httpx.HTTPError as exc:
         raise _api_error("POST /chunks", exc) from exc
     chunk_id = resp.json()["chunk_id"]
-    click.echo(f"ingested {len(models)} pointer(s) → chunk {chunk_id}")
+    click.echo(f"ingested {len(tokens)} pointer(s) → chunk {chunk_id}")
 
 
 @hub.command()

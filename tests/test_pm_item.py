@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.pm.source import PmItem
-from tests.support import FakePmSource, build_hub
+from tests.support import FakePmSource, build_hub, pointer_token
 
 pytestmark = pytest.mark.component
 
@@ -18,7 +18,7 @@ _POINTER_2 = {"source": "widget", "ref": "43"}
 def test_pm_items_reads_body_and_comments_from_the_forge(tmp_path: Path) -> None:
     pm = FakePmSource(name="widget", body="please fix the flake", comments=["seen it too", "repro attached"])
     hub = build_hub(tmp_path, pm={"widget": pm})
-    chunk_id = hub.client.post("/api/chunks", json={"pointers": [_POINTER]}).json()["chunk_id"]
+    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
 
     resp = hub.client.get(f"/api/chunks/{chunk_id}/pm-items")
     assert resp.status_code == 200
@@ -47,7 +47,9 @@ def test_pm_items_returns_one_entry_per_pointer(tmp_path: Path) -> None:
         },
     )
     hub = build_hub(tmp_path, pm={"widget": pm})
-    chunk_id = hub.client.post("/api/chunks", json={"pointers": [_POINTER, _POINTER_2]}).json()["chunk_id"]
+    chunk_id = hub.client.post(
+        "/api/chunks", json={"tokens": [pointer_token(_POINTER), pointer_token(_POINTER_2)]}
+    ).json()["chunk_id"]
 
     items = hub.client.get(f"/api/chunks/{chunk_id}/pm-items").json()["items"]
     assert [i["ref"] for i in items] == ["42", "43"]
@@ -62,7 +64,9 @@ def test_pm_items_degrades_per_pointer_when_the_forge_is_unreachable(tmp_path: P
         fail_refs={"43"},
     )
     hub = build_hub(tmp_path, pm={"widget": pm})
-    chunk_id = hub.client.post("/api/chunks", json={"pointers": [_POINTER, _POINTER_2]}).json()["chunk_id"]
+    chunk_id = hub.client.post(
+        "/api/chunks", json={"tokens": [pointer_token(_POINTER), pointer_token(_POINTER_2)]}
+    ).json()["chunk_id"]
 
     resp = hub.client.get(f"/api/chunks/{chunk_id}/pm-items")
     assert resp.status_code == 200

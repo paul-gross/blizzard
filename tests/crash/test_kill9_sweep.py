@@ -137,7 +137,7 @@ def _ingest_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str) -> s
     issue = forge.post(f"/repos/{REPO}/issues", json={"title": landed_file, "body": "a crash-sweep chunk"})
     assert issue.status_code == 201, issue.text
     number = issue.json()["number"]
-    ingested = hub.post("/api/chunks", json={"pointers": [{"source": REPO_NAME, "ref": str(number)}]})
+    ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{number}"]})
     assert ingested.status_code == 201, ingested.text
     chunk_id = ingested.json()["chunk_id"]
     # Ingest rests not-ready (D-103) — promote so the sweep's scenarios claim it as before.
@@ -275,7 +275,7 @@ def _ingest_hanging_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: s
     issue = forge.post(f"/repos/{REPO}/issues", json={"title": landed_file, "body": "a restart-resume chunk"})
     assert issue.status_code == 201, issue.text
     number = issue.json()["number"]
-    ingested = hub.post("/api/chunks", json={"pointers": [{"source": REPO_NAME, "ref": str(number)}]})
+    ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{number}"]})
     assert ingested.status_code == 201, ingested.text
     chunk_id = ingested.json()["chunk_id"]
     # Ingest rests not-ready (D-103) — promote so the resume scenarios claim it as before.

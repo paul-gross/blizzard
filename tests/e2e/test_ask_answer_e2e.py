@@ -228,7 +228,7 @@ def test_ask_parks_then_answer_resumes_session_to_done(tmp_path: Path) -> None:
         issue_number = issue.json()["number"]
         ingested = hub.post(
             "/api/chunks",
-            json={"pointers": [{"source": REPO_NAME, "ref": str(issue_number)}]},
+            json={"tokens": [f"{REPO_NAME}:{issue_number}"]},
         )
         assert ingested.status_code == 201, ingested.text
         chunk_id = ingested.json()["chunk_id"]

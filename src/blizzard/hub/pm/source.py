@@ -16,6 +16,13 @@ address — grammar that used to live in the domain-layer ``pm/label.py`` module
 seam slot: the hub builds one binding per declared source, and an empty registry is a
 legal hub with no PM reach.
 
+D-109 gives ``parse`` its production caller: ``POST /chunks`` takes source-native
+tokens, and :meth:`IPmSourceRegistry.resolve` walks the configured bindings, returning
+the first pointer one claims. Exactly one binding can ever claim a token — config
+rejects a duplicate ``name`` and a duplicate ``(provider, repo)`` (D-106) — so ``parse``
+returns ``None`` for "not my token" rather than raising: the registry loops cleanly over
+every binding, and the route is what raises/reports when nothing claims it (422, D-107).
+
 ``fetch`` returns a small domain :class:`PmItem`; the edge maps it onto a wire
 :class:`~blizzard.wire.chunk.PmItemEntry` with the pointer, its label, and a ``fetched_at``.
 
@@ -45,18 +52,13 @@ class PmSourceError(Exception):
     """The forge read failed — an unreachable forge or an unresolvable pointer."""
 
 
-class UnknownSource(Exception):
-    """A raw ingest token — or, at a registry miss, a name — no configured source owns."""
-
-
 class IPmSource(Protocol):
     """One configured, credentialed PM binding (D-047/D-106/D-108)."""
 
-    def parse(self, token: str) -> PmPointer:
-        """This source's own ingest-token form into a pointer.
-
-        Raises :class:`UnknownSource` when ``token`` is not shaped for this source —
-        Phase 2's ingest-time resolution tries each configured source in turn."""
+    def parse(self, token: str) -> PmPointer | None:
+        """This source's own ingest-token form into a pointer, or ``None`` when
+        ``token`` is not shaped for this source — the registry's :meth:`resolve`
+        (D-109) tries each configured source in turn and 422s when none claims it."""
         ...
 
     def fetch(self, pointer: PmPointer) -> PmItem:
@@ -87,4 +89,12 @@ class IPmSourceRegistry(Protocol):
 
     def names(self) -> list[str]:
         """Every configured source's name."""
+        ...
+
+    def resolve(self, token: str) -> PmPointer | None:
+        """The first configured binding's :meth:`IPmSource.parse` of ``token`` that
+        claims it, or ``None`` when none do (D-109). Exactly one binding can ever
+        claim a token — config rejects a duplicate ``name`` (unambiguous
+        ``name:ref``/``name#ref``) and a duplicate ``(provider, repo)`` (a URL maps to
+        at most one source) — so which binding is tried first never matters."""
         ...

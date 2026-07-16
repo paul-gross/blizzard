@@ -288,13 +288,18 @@ export type ChunkGroupResponse = {
 /**
  * ChunkIngestRequest
  *
- * Ingest by pointer — specific items always, batch fine (D-047).
+ * Ingest by source-native token — specific items always, batch fine (D-047/D-109).
+ *
+ * Each token is resolved against the configured PM sources' own grammar
+ * (``IPmSource.parse``): ``{name}:{ref}``, ``{name}#{ref}``, or the item's own URL.
+ * Tokens only — no pre-resolved ``{source, ref}`` shape travels alongside them; the
+ * two intake shapes would reintroduce the same config-blind guess D-109 removes.
  */
 export type ChunkIngestRequest = {
     /**
-     * Pointers
+     * Tokens
      */
-    pointers: Array<PmPointerModel>;
+    tokens: Array<string>;
 };
 
 /**

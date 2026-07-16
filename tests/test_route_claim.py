@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub
+from tests.support import build_hub, pointer_token
 
 pytestmark = pytest.mark.component
 
@@ -14,7 +14,7 @@ _POINTER = {"source": "default", "ref": "7"}
 
 
 def _ingest(hub) -> str:  # type: ignore[no-untyped-def]
-    return hub.client.post("/api/chunks", json={"pointers": [_POINTER]}).json()["chunk_id"]
+    return hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
 
 
 def _claim_body(chunk_id: str, runner: str = "r1") -> dict:

@@ -10,12 +10,19 @@ D-105 gives the pointer its own ``source`` name, so finding a pointer's binding 
 plain lookup — ``registry.get(pointer.source)`` — rather than the D-107 repo-matching
 ``resolve_source`` this module carried through Phase 2, while the pointer itself named
 no source. That resolver is retired with it.
+
+D-109 adds :meth:`resolve`, the intake-side counterpart: an ingest **token** (as
+opposed to an already-resolved pointer's ``source`` name) is tried against every
+configured binding's own :meth:`~blizzard.hub.pm.source.IPmSource.parse` in turn, first
+claim wins. Config guarantees at most one claim (a unique ``name``, and no two sources
+sharing a ``(provider, repo)``), so registration order never matters in practice.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 
+from blizzard.hub.domain.work import PmPointer
 from blizzard.hub.pm.source import IPmSource, IPmSourceRegistry
 
 
@@ -30,6 +37,15 @@ class PmSourceRegistry:
 
     def names(self) -> list[str]:
         return list(self._sources.keys())
+
+    def resolve(self, token: str) -> PmPointer | None:
+        """The first configured binding's ``parse`` of ``token`` that claims it, or
+        ``None`` when none do (D-109)."""
+        for source in self._sources.values():
+            pointer = source.parse(token)
+            if pointer is not None:
+                return pointer
+        return None
 
 
 def _conforms_pm_source_registry(x: PmSourceRegistry) -> IPmSourceRegistry:

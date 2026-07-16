@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub, report_lease
+from tests.support import build_hub, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -94,7 +94,7 @@ def _ingest(hub, yaml_body: str) -> tuple[str, dict]:  # type: ignore[no-untyped
     graph = hub.client.post("/api/graphs", json={"definition_yaml": yaml_body})
     assert graph.status_code == 201, graph.text
     nodes = {n["name"]: n["node_id"] for n in graph.json()["nodes"]}
-    chunk_id = hub.client.post("/api/chunks", json={"pointers": [_POINTER]}).json()["chunk_id"]
+    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
     assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # ready to claim (D-103)
     return chunk_id, nodes
 

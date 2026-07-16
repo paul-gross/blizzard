@@ -386,7 +386,7 @@ def test_acceptance_loop_one_chunk_ingest_to_landed(tmp_path: Path) -> None:
 
         ingested = hub.post(
             "/api/chunks",
-            json={"pointers": [{"source": REPO_NAME, "ref": str(issue_number)}]},
+            json={"tokens": [f"{REPO_NAME}:{issue_number}"]},
         )
         assert ingested.status_code == 201, ingested.text
         chunk_id = ingested.json()["chunk_id"]
@@ -585,7 +585,7 @@ def test_build_worker_reads_pm_item_through_the_passthrough(tmp_path: Path) -> N
         # goes through the hub's own forge base URL regardless.
         ingested = hub.post(
             "/api/chunks",
-            json={"pointers": [{"source": REPO_NAME, "ref": str(issue_number)}]},
+            json={"tokens": [f"{REPO_NAME}:{issue_number}"]},
         )
         assert ingested.status_code == 201, ingested.text
         chunk_id = ingested.json()["chunk_id"]

@@ -35,7 +35,7 @@ from blizzard.hub.delivery.forge import (
 from blizzard.hub.domain.work import PmPointer
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.pm.registry import PmSourceRegistry
-from blizzard.hub.pm.source import IPmSource, PmItem, PmSourceError, UnknownSource
+from blizzard.hub.pm.source import IPmSource, PmItem, PmSourceError
 from blizzard.hub.runtime import migration_runner
 
 
@@ -120,11 +120,16 @@ class FakePmSource:
         self.fail_refs = fail_refs or set()
         self.fetched: list[str] = []
 
-    def parse(self, token: str) -> PmPointer:
-        prefix, sep, ref = token.partition(":")
-        if not sep or prefix != self.name or not ref.isdigit():
-            raise UnknownSource(f"{token!r} is not a {self.name!r} source token")
-        return PmPointer(source=self.name, ref=ref)
+    def parse(self, token: str) -> PmPointer | None:
+        """``{name}:{ref}`` or ``{name}#{ref}`` (D-105/D-109); ``None`` otherwise — this
+        fake carries no URL grammar (the real binding's own concern, D-108) and, unlike
+        the real GitHub adapter, does not require a numeric ``ref`` — tests key fakes on
+        whatever ref shape is convenient."""
+        for sep_char in (":", "#"):
+            prefix, sep, ref = token.partition(sep_char)
+            if sep and prefix == self.name and ref:
+                return PmPointer(source=self.name, ref=ref)
+        return None
 
     def fetch(self, pointer: PmPointer) -> PmItem:
         self.fetched.append(pointer.ref)
@@ -357,14 +362,23 @@ def emitted_events(hub: HubHarness, *, since: int = 0) -> list[dict[str, str]]:
     return [{"id": str(e.id), "event": e.type, "data": e.data} for e in hub.events.replay_since(since)]
 
 
+def pointer_token(pointer: dict) -> str:
+    """A ``{source, ref}`` pointer dict's own ``{source}:{ref}`` ingest token (D-109) —
+    the request-side shape a test builds from the same dict it asserts the response
+    (``{source, ref, label, web_url}``) against."""
+    return f"{pointer['source']}:{pointer['ref']}"
+
+
 def ingest(hub: HubHarness, pointers: list[dict], *, promote: bool = True) -> str:
-    """Ingest ``pointers`` into one chunk and (by default) promote it to ready (D-103).
+    """Ingest ``pointers`` (as ``{source, ref}`` dicts) into one chunk and (by default)
+    promote it to ready (D-103) — each dict is converted to its ``{source}:{ref}``
+    ingest token before posting (D-109).
 
     Ingest now mints a chunk in the not-ready resting state, so most tests — which expect
     the chunk claimable/in the ready queue — promote it in the same breath. Pass
     ``promote=False`` to assert the not-ready default itself.
     """
-    resp = hub.client.post("/api/chunks", json={"pointers": pointers})
+    resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token(p) for p in pointers]})
     assert resp.status_code == 201, resp.text
     chunk_id = resp.json()["chunk_id"]
     if promote:

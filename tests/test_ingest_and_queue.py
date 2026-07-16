@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.domain.work import PmPointer
-from tests.support import FakePmSource, build_hub, ingest
+from tests.support import FakePmSource, build_hub, ingest, pointer_token
 
 pytestmark = pytest.mark.component
 
@@ -18,7 +18,7 @@ _P2 = {"source": "default", "ref": "2"}
 
 def test_ingest_mints_a_chunk_pinned_to_the_default_graph(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    resp = hub.client.post("/api/chunks", json={"pointers": [_P1]})
+    resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_P1)]})
     assert resp.status_code == 201
     chunk_id = resp.json()["chunk_id"]
     assert chunk_id.startswith("ch_")
@@ -36,7 +36,7 @@ def test_ingest_mints_a_chunk_pinned_to_the_default_graph(tmp_path: Path) -> Non
 
 def test_ingest_batches_multiple_pointers_into_one_chunk(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    resp = hub.client.post("/api/chunks", json={"pointers": [_P1, _P2]})
+    resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_P1), pointer_token(_P2)]})
     assert resp.status_code == 201
     detail = hub.client.get(f"/api/chunks/{resp.json()['chunk_id']}").json()
     assert detail["pm_pointers"] == [
@@ -54,7 +54,7 @@ def test_list_row_is_board_legible(tmp_path: Path) -> None:
     # a board row carrying one can only arise from a chunk minted before its source was
     # dropped from config).
     hub = build_hub(tmp_path)
-    chunk_id = hub.client.post("/api/chunks", json={"pointers": [_P1]}).json()["chunk_id"]
+    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_P1)]}).json()["chunk_id"]
     graph = hub.services.graph_mint.ensure_default(
         hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
     )
@@ -73,7 +73,7 @@ def test_ingest_rests_not_ready_and_promote_makes_it_claimable(tmp_path: Path) -
     # Ingest mints not-ready (D-103): visible on the fleet list, absent from the ready queue,
     # so no runner claims it. Promoting flips it to ready and admits it to the queue.
     hub = build_hub(tmp_path)
-    chunk_id = hub.client.post("/api/chunks", json={"pointers": [_P1]}).json()["chunk_id"]
+    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_P1)]}).json()["chunk_id"]
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "not_ready"
     assert [r["chunk_id"] for r in hub.client.get("/api/chunks").json()] == [chunk_id]  # on the board
     assert hub.client.get("/api/queue/peek").json()["entries"] == []  # never claimed
@@ -85,7 +85,7 @@ def test_ingest_rests_not_ready_and_promote_makes_it_claimable(tmp_path: Path) -
 
 def test_promote_is_idempotent_and_404s_unknown_chunk(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunk_id = hub.client.post("/api/chunks", json={"pointers": [_P1]}).json()["chunk_id"]
+    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_P1)]}).json()["chunk_id"]
     assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
     # A second promote is a harmless no-op — still ready, still one queue entry.
     assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
@@ -96,9 +96,9 @@ def test_promote_is_idempotent_and_404s_unknown_chunk(tmp_path: Path) -> None:
 
 def test_live_pointer_reingest_is_409(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    first = hub.client.post("/api/chunks", json={"pointers": [_P1]}).json()["chunk_id"]
+    first = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_P1)]}).json()["chunk_id"]
 
-    conflict = hub.client.post("/api/chunks", json={"pointers": [_P1]})
+    conflict = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_P1)]})
     assert conflict.status_code == 409
     body = conflict.json()
     assert body["existing_chunk_id"] == first
@@ -112,13 +112,13 @@ def test_live_pointer_reingest_is_409(tmp_path: Path) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_ingest_rejects_a_pointer_no_configured_source_claims(tmp_path: Path) -> None:
-    """A source name no ``[[pm_source]]`` declares is a 422, naming the pointer and what
-    is configured."""
+def test_ingest_rejects_a_token_no_configured_source_claims(tmp_path: Path) -> None:
+    """A token no configured binding's ``parse`` claims is a 422, naming the token and
+    what is configured (D-109)."""
     hub = build_hub(tmp_path, pm={"widget": FakePmSource(name="widget", repo="acme/widget")})
     other = {"source": "other", "ref": "1"}
 
-    resp = hub.client.post("/api/chunks", json={"pointers": [other]})
+    resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token(other)]})
 
     assert resp.status_code == 422, resp.text
     detail = resp.json()["detail"]
@@ -130,7 +130,7 @@ def test_ingest_rejects_a_pointer_no_configured_source_claims(tmp_path: Path) ->
 
 def test_ingest_succeeds_when_a_configured_source_claims_the_pointer(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, pm={"widget": FakePmSource(name="widget", repo="acme/widget")})
-    resp = hub.client.post("/api/chunks", json={"pointers": [{"source": "widget", "ref": "1"}]})
+    resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token({"source": "widget", "ref": "1"})]})
     assert resp.status_code == 201, resp.text
 
 
@@ -143,7 +143,7 @@ def test_resolver_picks_the_matching_source_when_two_are_configured(tmp_path: Pa
     hub = build_hub(tmp_path, pm={"alpha": alpha, "beta": beta})
     beta_pointer = {"source": "beta", "ref": "7"}
 
-    chunk_id = hub.client.post("/api/chunks", json={"pointers": [beta_pointer]}).json()["chunk_id"]
+    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(beta_pointer)]}).json()["chunk_id"]
 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["pm_pointers"] == [
@@ -162,7 +162,7 @@ def test_pm_items_503s_when_no_pm_source_is_configured_at_all(tmp_path: Path) ->
     up front rather than 422ing at ingest, since an empty registry names no source at all."""
     hub = build_hub(tmp_path, pm={})
 
-    resp = hub.client.post("/api/chunks", json={"pointers": [_P1]})
+    resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_P1)]})
     assert resp.status_code == 422, resp.text  # no source at all also can't claim it
 
     # Mint the degenerate chunk straight through the domain service (bypassing the route's
@@ -192,7 +192,7 @@ def _pass(hub, chunk_id: str, node_id: str, epoch: int, *, artifacts: list[dict]
 
 def test_terminal_pointer_reingest_mints_a_fresh_chunk(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    chunk_id = hub.client.post("/api/chunks", json={"pointers": [_P1]}).json()["chunk_id"]
+    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_P1)]}).json()["chunk_id"]
     # Drive the chunk terminal through the default build -> review -> deliver graph.
     build_id = hub.client.post(
         "/api/routes",
@@ -207,7 +207,7 @@ def test_terminal_pointer_reingest_mints_a_fresh_chunk(tmp_path: Path) -> None:
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
 
     # Re-ingesting the same pointer once every prior holder is terminal is legal (D-093).
-    again = hub.client.post("/api/chunks", json={"pointers": [_P1]})
+    again = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_P1)]})
     assert again.status_code == 201
     assert again.json()["chunk_id"] != chunk_id
 

@@ -22,7 +22,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub
+from tests.support import build_hub, pointer_token
 
 pytestmark = pytest.mark.component
 
@@ -100,7 +100,7 @@ def _mint_and_claim(hub) -> tuple[str, dict[str, str]]:  # type: ignore[no-untyp
     assert minted.status_code == 201, minted.text
     node_ids = {n["name"]: n["node_id"] for n in minted.json()["nodes"]}
 
-    chunk_id = hub.client.post("/api/chunks", json={"pointers": [_POINTER]}).json()["chunk_id"]
+    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
     claim = hub.client.post(
         "/api/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},

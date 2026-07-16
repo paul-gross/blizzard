@@ -28,8 +28,8 @@ export const listChunksApiChunksGet = <ThrowOnError extends boolean = false>(opt
 /**
  * Ingest Chunk
  *
- * Ingest by pointer (D-047); 422 on a pointer naming no configured source (D-106);
- * 409 on a pointer held by a live chunk (D-093).
+ * Ingest by source-native token (D-047/D-109); 422 on a token no configured source
+ * claims (D-106/D-107); 409 on a pointer held by a live chunk (D-093).
  */
 export const ingestChunkApiChunksPost = <ThrowOnError extends boolean = false>(options: Options<IngestChunkApiChunksPostData, ThrowOnError>): RequestResult<IngestChunkApiChunksPostResponses, IngestChunkApiChunksPostErrors, ThrowOnError> => (options.client ?? client).post<IngestChunkApiChunksPostResponses, IngestChunkApiChunksPostErrors, ThrowOnError>({
     url: '/api/chunks',
