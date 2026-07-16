@@ -38,6 +38,7 @@ from blizzard.runner.store.schema import (
     lease_context,
     lease_spawns,
     leases,
+    local_pause_facts,
     outbound_buffer,
     park_facts,
     park_resumes,
@@ -228,6 +229,15 @@ class SqlAlchemyRunnerStore:
         rows = self._all(select(hub_control.c.paused).where(hub_control.c.runner_id == runner_id))
         return bool(rows[0].paused) if rows else False
 
+    def local_paused(self, runner_id: str) -> bool:
+        rows = self._all(
+            select(local_pause_facts.c.paused)
+            .where(local_pause_facts.c.runner_id == runner_id)
+            .order_by(local_pause_facts.c.id.desc())
+            .limit(1)
+        )
+        return bool(rows[0].paused) if rows else False
+
     def workspace_prompt_override(self, workspace_id: str) -> str | None:
         rows = self._all(select(workspace_prompt.c.prompt).where(workspace_prompt.c.workspace_id == workspace_id))
         return str(rows[0].prompt) if rows else None
@@ -413,6 +423,23 @@ class SqlAlchemyRunnerStore:
                     .where(hub_control.c.runner_id == runner_id)
                     .values(paused=paused, updated_at=at)
                 )
+
+    def record_local_pause(
+        self, runner_id: str, *, paused: bool, at: datetime, by: str, report_kind: str, report_payload: str
+    ) -> None:
+        # Both inserts, one transaction: the brake and the report that makes it visible
+        # land together or not at all. Two transactions would leave a `kill -9` window
+        # where the runner has stopped claiming and the hub is never told — and nothing
+        # reconciles that afterwards, since PULL only mirrors hub->runner. The buffer
+        # delivers whenever the hub is next reachable, so this stays a local write (D-069).
+        with self._begin() as conn:
+            conn.execute(local_pause_facts.insert().values(runner_id=runner_id, paused=paused, set_at=at, set_by=by))
+            conn.execute(
+                outbound_buffer.insert().values(
+                    kind=report_kind, chunk_id=None, lease_id=None, payload=report_payload, created_at=at
+                )
+            )
+        _log.info("local pause fact recorded", runner_id=runner_id, paused=paused, set_by=by, report=report_kind)
 
     def set_workspace_prompt(self, workspace_id: str, *, prompt: str, at: datetime) -> None:
         with self._begin() as conn:

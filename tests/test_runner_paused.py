@@ -9,10 +9,13 @@ a :class:`FakeHub` whose ``paused`` flag the test flips.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.steps import fill, pull
+from blizzard.wire.facts import RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED
 from blizzard.wire.queue import QueuePeekEntry
 from tests.runner_fakes import (
     FakeHarness,
@@ -31,6 +34,18 @@ _CHOICES = [("pass", "meets criteria"), ("fail", "does not")]
 
 def _store(tmp_path):  # type: ignore[no-untyped-def]
     return make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+
+
+def _pause_locally(store, ctx, *, paused: bool):  # type: ignore[no-untyped-def]
+    """Set the runner's own brake, the way `PATCH /runner` does — fact + report, one write."""
+    store.record_local_pause(
+        "r1",
+        paused=paused,
+        at=ctx.clock.now(),
+        by="operator",
+        report_kind=RUNNER_LOCALLY_PAUSED if paused else RUNNER_LOCALLY_RESUMED,
+        report_payload=json.dumps({"runner_id": "r1", "by": "operator"}),
+    )
 
 
 def _ctx_with_a_claimable_chunk(tmp_path, *, paused: bool):  # type: ignore[no-untyped-def]
@@ -111,3 +126,64 @@ def test_unreachable_hub_keeps_last_mirrored_brake(tmp_path):  # type: ignore[no
     assert store.hub_paused("r1") is True
     fill(ctx)
     assert hub.claims == []  # still adhering to the last directive (D-012)
+
+
+# --------------------------------------------------------------------------- #
+# The runner's own brake (issue #43) — a second, independent surface
+# --------------------------------------------------------------------------- #
+#
+# The local brake is the runner declining to claim ("I won't try"), set through its own
+# local API and needing no hub. The hub's brake coerces it from the fleet side. Effective
+# paused is the OR, and each is cleared only where it was set — so these assert both the
+# gating and the independence.
+
+
+@pytest.mark.unit
+def test_fill_claims_nothing_while_locally_paused(tmp_path):  # type: ignore[no-untyped-def]
+    ctx, hub, store = _ctx_with_a_claimable_chunk(tmp_path, paused=False)
+    pull(ctx)  # the hub's brake is off — only the local one stops this claim
+    _pause_locally(store, ctx, paused=True)
+    fill(ctx)
+    assert hub.claims == []
+    assert store.list_active_leases() == []
+
+
+@pytest.mark.unit
+def test_fill_claims_again_after_a_local_start(tmp_path):  # type: ignore[no-untyped-def]
+    ctx, hub, store = _ctx_with_a_claimable_chunk(tmp_path, paused=False)
+    pull(ctx)
+    _pause_locally(store, ctx, paused=True)
+    fill(ctx)
+    assert hub.claims == []
+
+    # Facts append and the flag derives from the newest (D-004/D-039) — no row is mutated.
+    _pause_locally(store, ctx, paused=False)
+    fill(ctx)
+    assert len(hub.claims) == 1
+    assert len(store.list_active_leases()) == 1
+
+
+@pytest.mark.unit
+def test_a_local_start_does_not_clear_the_hubs_brake(tmp_path):  # type: ignore[no-untyped-def]
+    """Each brake is cleared only on the surface that set it — the OR still holds."""
+    ctx, hub, store = _ctx_with_a_claimable_chunk(tmp_path, paused=True)
+    pull(ctx)  # mirror the hub's brake on
+    _pause_locally(store, ctx, paused=False)
+    fill(ctx)
+    # Locally started, but the hub still says paused — so nothing is claimed.
+    assert store.local_paused("r1") is False
+    assert store.hub_paused("r1") is True
+    assert hub.claims == []
+
+
+@pytest.mark.unit
+def test_in_flight_chunk_runs_on_while_locally_paused(tmp_path):  # type: ignore[no-untyped-def]
+    """Pausing drains rather than kills — the same contract the hub's brake honors."""
+    ctx, _hub, store = _ctx_with_a_claimable_chunk(tmp_path, paused=False)
+    pull(ctx)
+    fill(ctx)
+    assert len(store.list_active_leases()) == 1
+
+    _pause_locally(store, ctx, paused=True)
+    fill(ctx)
+    assert len(store.list_active_leases()) == 1  # untouched — only new claims stop

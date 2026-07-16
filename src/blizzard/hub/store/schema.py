@@ -441,3 +441,25 @@ runner_pause_facts = Table(
     Column("set_at", DateTime, nullable=False),
     Column("set_by", String, nullable=False),  # who flipped it — recorded on the fact
 )
+
+# The runner's *own* brake, as reported to us (issue #43). A separate table from
+# ``runner_pause_facts`` above because they are separate concepts with separate authors:
+# that one is the fleet's brake, authored here and pulled down by the runner; this one is
+# authored on the runner machine and arrives through its outbound buffer (D-069), so the
+# hub is a reader of it and never sets it. Keeping them apart is what lets the board say
+# *which* brake is on — the runner declining, the fleet coercing, or both.
+#
+# No ForeignKey to ``runner_registrations``: a fact can arrive from a runner the registry
+# has not seen yet (the buffer replays an outage in FIFO order, and its pause may precede
+# its registration). ``_apply`` decides what to do with an unknown runner; the schema does
+# not make the arrival unrepresentable.
+
+runner_local_pause_facts = Table(
+    "runner_local_pause_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("runner_id", String, nullable=False),
+    Column("paused", Boolean, nullable=False),  # locally_paused derives from the newest fact
+    Column("set_at", DateTime, nullable=False),  # the runner's clock, off the fact's payload
+    Column("set_by", String, nullable=False),
+)

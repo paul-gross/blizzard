@@ -127,7 +127,10 @@ def status(url: str | None) -> None:
     click.echo(f"\nrunners ({len(fleet)}):")
     for r in fleet:
         liveness = "online" if r.get("online") else "offline"
-        brake = " [paused]" if r.get("paused") else ""
+        # Name which brake is on (issue #43): "paused" alone would hide whether the fleet
+        # stopped this runner or it stopped itself — and they are cleared by different verbs.
+        brakes = [name for name, on in (("hub", r.get("hub_paused")), ("local", r.get("locally_paused"))) if on]
+        brake = f" [paused: {'+'.join(brakes)}]" if brakes else ""
         click.echo(f"  {r['runner_id']:<16} {liveness:<8} ws={r.get('workspace_id', '-')}{brake}")
     open_qs = questions.json()
     click.echo(f"\nopen questions ({len(open_qs)}):")
@@ -351,5 +354,8 @@ def _set_runner_pause(runner_id: str, *, verb: str, by: str, hub_url: str | None
     except httpx.HTTPError as exc:
         raise _api_error(f"POST /runners/{{id}}/{verb}", exc) from exc
     body = resp.json()
-    state = "paused" if body.get("paused") else "running"
-    click.echo(f"runner {runner_id} is now {state}")
+    state = "paused" if body.get("hub_paused") else "running"
+    click.echo(f"runner {runner_id} is now {state} (at the hub)")
+    if body.get("locally_paused"):
+        # Resuming here cannot clear the runner's own brake, so don't imply it did.
+        click.echo(f"note: runner {runner_id} also paused itself — clear that with `blizzard runner start`")

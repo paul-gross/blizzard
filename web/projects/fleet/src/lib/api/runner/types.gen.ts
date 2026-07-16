@@ -163,6 +163,46 @@ export type ReadinessResponse = {
 };
 
 /**
+ * RunnerControlPatch
+ *
+ * Declarative controls on the runner singleton — ``paused`` now, routing knobs post-MVP.
+ */
+export type RunnerControlPatch = {
+    /**
+     * By
+     */
+    by?: string;
+    /**
+     * Paused
+     */
+    paused: boolean;
+};
+
+/**
+ * RunnerControlView
+ *
+ * The runner singleton's derived pause state (openapi-ts consumes this).
+ */
+export type RunnerControlView = {
+    /**
+     * Hub Paused
+     */
+    hub_paused: boolean;
+    /**
+     * Local Paused
+     */
+    local_paused: boolean;
+    /**
+     * Paused
+     */
+    paused: boolean;
+    /**
+     * Runner Id
+     */
+    runner_id: string;
+};
+
+/**
  * SessionEndResponse
  *
  * The recorded acknowledgement (openapi-ts consumes this).
@@ -380,6 +420,31 @@ export type ReadyApiReadyGetResponses = {
 };
 
 export type ReadyApiReadyGetResponse = ReadyApiReadyGetResponses[keyof ReadyApiReadyGetResponses];
+
+export type PatchRunnerApiRunnerPatchData = {
+    body: RunnerControlPatch;
+    path?: never;
+    query?: never;
+    url: '/api/runner';
+};
+
+export type PatchRunnerApiRunnerPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PatchRunnerApiRunnerPatchError = PatchRunnerApiRunnerPatchErrors[keyof PatchRunnerApiRunnerPatchErrors];
+
+export type PatchRunnerApiRunnerPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: RunnerControlView;
+};
+
+export type PatchRunnerApiRunnerPatchResponse = PatchRunnerApiRunnerPatchResponses[keyof PatchRunnerApiRunnerPatchResponses];
 
 export type ReadWorkspacePromptApiWorkspacePromptGetData = {
     body?: never;

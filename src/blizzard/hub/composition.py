@@ -93,6 +93,9 @@ def build_services(
     graph_store = GraphStore(engine)
     registry_store = RunnerRegistryStore(engine)
     coordinator = MergeQueueCoordinator(chunks=chunk_store, forge=forge, clock=clock, base_branch=base_branch)
+    # One fleet service, shared: the API's pause routes and the fact ingest both land
+    # registry facts, and two instances would be two of the same thing (issue #43).
+    fleet = FleetService(registry=registry_store, clock=clock)
     return HubServices(
         chunks=chunk_store,
         graphs=graph_store,
@@ -103,13 +106,13 @@ def build_services(
         decisions=DecisionService(chunks=chunk_store, clock=clock),
         requeue=RequeueService(chunks=chunk_store, clock=clock),
         detach=DetachService(chunks=chunk_store, clock=clock),
-        facts=FactIngestService(chunks=chunk_store, clock=clock),
+        facts=FactIngestService(chunks=chunk_store, fleet=fleet, clock=clock),
         graph_mint=GraphMintService(graphs=graph_store, clock=clock),
         runner_facts=RunnerFactsService(chunks=chunk_store, clock=clock),
         questions=QuestionService(chunks=chunk_store, clock=clock),
         queue=QueueService(chunks=chunk_store, clock=clock),
         group=GroupService(chunks=chunk_store, clock=clock),
-        fleet=FleetService(registry=registry_store, clock=clock),
+        fleet=fleet,
         delivery_check=DeliveryCheckService(chunks=chunk_store, forge=forge, clock=clock),
         events=events,
         clock=clock,

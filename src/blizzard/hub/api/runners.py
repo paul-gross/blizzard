@@ -41,7 +41,8 @@ def _view(liveness: RunnerLiveness) -> RunnerView:
         registered_at=r.registered_at.isoformat(),
         last_seen_at=r.last_seen_at.isoformat(),
         online=liveness.online,
-        paused=r.paused,
+        hub_paused=r.hub_paused,
+        locally_paused=r.locally_paused,
     )
 
 

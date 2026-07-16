@@ -33,6 +33,13 @@ ESCALATION_RECORDED = "escalation.recorded"
 # records that the resume-with-answer ran (board detail, status already flipped).
 QUESTION_ASKED = "question.asked"
 ANSWER_DELIVERED = "answer.delivered"
+# The runner's *own* brake, reported upward so the board can render it (issue #43). Named
+# apart from the hub's `runner.paused` / `runner.resumed` on purpose: they are two
+# concepts, not two spellings. The hub's is the fleet coercing a runner; this is the runner
+# declining to claim, set machine-locally and true even when the hub never heard about it.
+# Runner-scoped: no chunk_id, no lease_id.
+RUNNER_LOCALLY_PAUSED = "runner.locally_paused"
+RUNNER_LOCALLY_RESUMED = "runner.locally_resumed"
 
 
 class LeaseMintReport(BaseModel):

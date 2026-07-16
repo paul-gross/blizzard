@@ -296,6 +296,27 @@ hub_control = Table(
     Column("updated_at", DateTime, nullable=False),
 )
 
+# --- Local pause facts (the runner's own brake — issue #43) -------------------
+#
+# The runner's half of the pause control (``PATCH /runner``, D-043 applied locally): the
+# operator tells *this* runner to stop claiming, and it adheres without the hub knowing
+# or being reachable — the operator contract's standing requirement ([api.md]). Distinct
+# from ``hub_control`` above in both concept and shape: that mirrors a hub-owned value,
+# so it upserts; this is a locally-minted fact, so pause/start facts **append** and the
+# flag derives from the newest (D-004/D-039), exactly like the hub's own
+# ``runner_pause_facts``. Effective paused is the OR of the two — FILL adheres to either.
+# ``set_by`` records who flipped it, on the fact.
+
+local_pause_facts = Table(
+    "local_pause_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("runner_id", String, nullable=False),
+    Column("paused", Boolean, nullable=False),  # locally paused derives from the newest fact
+    Column("set_at", DateTime, nullable=False),
+    Column("set_by", String, nullable=False),
+)
+
 # --- Workspace prompt override (the runtime-settable spawn preamble — issue #17) --
 #
 # The runner prepends a standing workspace prompt to every worker spawn. Its static

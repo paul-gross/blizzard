@@ -29,14 +29,20 @@ class RunnerRegistrationResponse(BaseModel):
 
 
 class RunnerView(BaseModel):
-    """One fleet-registry row — derived liveness and paused state (D-004/D-070/D-043)."""
+    """One fleet-registry row — derived liveness and both brakes (D-004/D-070/D-043).
+
+    A runner can be paused by two different parties for two different reasons, so the two
+    are reported separately rather than collapsed into one ``paused`` (issue #43): the
+    board shows *which*, and a reader that wants "is it claiming?" ORs them.
+    """
 
     runner_id: str
     workspace_id: str
     registered_at: str
     last_seen_at: str
     online: bool
-    paused: bool
+    hub_paused: bool  # the fleet paused it — `blizzard hub pause`, cleared by `hub resume`
+    locally_paused: bool = False  # it paused itself — `blizzard runner pause`, cleared by `runner start`
 
 
 class RunnerListResponse(BaseModel):

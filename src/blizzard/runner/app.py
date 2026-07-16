@@ -19,6 +19,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.web import mount_web_app
 from blizzard.runner.api.asks import router as asks_router
+from blizzard.runner.api.control import router as control_router
 from blizzard.runner.api.health import router as health_router
 from blizzard.runner.api.heartbeat import router as heartbeat_router
 from blizzard.runner.api.pm_items import router as pm_items_router
@@ -77,6 +78,9 @@ def create_app(
     # The runtime workspace-prompt control (issue #17): read the effective spawn preamble
     # prompt, or replace the override so the next spawn picks it up with no restart.
     app.include_router(workspace_prompt_router)
+    # The runner's own declarative pause brake (issue #43): local, distinct from the hub's,
+    # and reachable with the hub down — the operator contract's standing requirement.
+    app.include_router(control_router)
 
     # The runner-served web app (post-MVP); the mount point is live from the
     # scaffold so the seam is exercised (D-096).

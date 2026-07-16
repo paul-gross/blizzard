@@ -221,6 +221,54 @@
         "title": "ReadinessResponse",
         "type": "object"
       },
+      "RunnerControlPatch": {
+        "description": "Declarative controls on the runner singleton \u2014 ``paused`` now, routing knobs post-MVP.",
+        "properties": {
+          "by": {
+            "default": "operator",
+            "title": "By",
+            "type": "string"
+          },
+          "paused": {
+            "title": "Paused",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "paused"
+        ],
+        "title": "RunnerControlPatch",
+        "type": "object"
+      },
+      "RunnerControlView": {
+        "description": "The runner singleton's derived pause state (openapi-ts consumes this).",
+        "properties": {
+          "hub_paused": {
+            "title": "Hub Paused",
+            "type": "boolean"
+          },
+          "local_paused": {
+            "title": "Local Paused",
+            "type": "boolean"
+          },
+          "paused": {
+            "title": "Paused",
+            "type": "boolean"
+          },
+          "runner_id": {
+            "title": "Runner Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runner_id",
+          "local_paused",
+          "hub_paused",
+          "paused"
+        ],
+        "title": "RunnerControlView",
+        "type": "object"
+      },
       "SessionEndResponse": {
         "description": "The recorded acknowledgement (openapi-ts consumes this).",
         "properties": {
@@ -540,6 +588,48 @@
         "summary": "Ready",
         "tags": [
           "meta"
+        ]
+      }
+    },
+    "/api/runner": {
+      "patch": {
+        "description": "Set this runner's own pause brake \u2014 it stops claiming; in-flight chunks run on (issue #43).\n\nLocal to this machine and independent of the hub's brake: it works with the hub\nunreachable, and it neither reads nor writes the hub's flag.",
+        "operationId": "patch_runner_api_runner_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerControlPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerControlView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Runner",
+        "tags": [
+          "runner"
         ]
       }
     },

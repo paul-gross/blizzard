@@ -690,9 +690,12 @@ def fill(ctx: LoopContext) -> None:
     race-second-place — release the bindings and move on. The winning claim carries
     the first node envelope, so the worker starts without a second round-trip.
 
-    The pause brake (D-043): while the runner is paused at the hub — mirrored locally by
-    PULL — FILL claims nothing. In-flight chunks are untouched (REAP/ADVANCE still run),
-    so pausing drains the fleet rather than killing it ([loop.md]).
+    The pause brake (D-043) has two independent surfaces and FILL claims nothing while
+    **either** is set: the hub's flag (mirrored locally by PULL) and this runner's own
+    local flag (``PATCH /runner``, issue #43), which the operator sets machine-locally and
+    which therefore holds with the hub unreachable. In-flight chunks are untouched under
+    either (REAP/ADVANCE still run), so pausing drains the fleet rather than killing it
+    ([loop.md]).
 
     Recovery runs first: :func:`_reconcile_interrupted_claims` reconciles any binding
     left by a crash in FILL's own bind→claim→spawn window **before** new work is peeked,
@@ -701,8 +704,15 @@ def fill(ctx: LoopContext) -> None:
     in-flight work, it does not start new work.
     """
     _reconcile_interrupted_claims(ctx)
-    if ctx.store.hub_paused(ctx.config.runner_id):
-        _log.info("paused — no new claims this tick", runner_id=ctx.config.runner_id)
+    hub_paused = ctx.store.hub_paused(ctx.config.runner_id)
+    local_paused = ctx.store.local_paused(ctx.config.runner_id)
+    if hub_paused or local_paused:
+        _log.info(
+            "paused — no new claims this tick",
+            runner_id=ctx.config.runner_id,
+            hub_paused=hub_paused,
+            local_paused=local_paused,
+        )
         return
     slots = ctx.config.max_agents - len(ctx.store.list_active_leases())
     for _ in range(max(slots, 0)):

@@ -1348,21 +1348,29 @@ export type RunnerRegistrationResponse = {
 /**
  * RunnerView
  *
- * One fleet-registry row — derived liveness and paused state (D-004/D-070/D-043).
+ * One fleet-registry row — derived liveness and both brakes (D-004/D-070/D-043).
+ *
+ * A runner can be paused by two different parties for two different reasons, so the two
+ * are reported separately rather than collapsed into one ``paused`` (issue #43): the
+ * board shows *which*, and a reader that wants "is it claiming?" ORs them.
  */
 export type RunnerView = {
+    /**
+     * Hub Paused
+     */
+    hub_paused: boolean;
     /**
      * Last Seen At
      */
     last_seen_at: string;
     /**
+     * Locally Paused
+     */
+    locally_paused?: boolean;
+    /**
      * Online
      */
     online: boolean;
-    /**
-     * Paused
-     */
-    paused: boolean;
     /**
      * Registered At
      */

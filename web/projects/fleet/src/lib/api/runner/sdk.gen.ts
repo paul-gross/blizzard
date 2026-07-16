@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { GetPmItemsApiChunksChunkIdPmItemsGetData, GetPmItemsApiChunksChunkIdPmItemsGetErrors, GetPmItemsApiChunksChunkIdPmItemsGetResponses, HealthApiHealthGetData, HealthApiHealthGetResponses, HeartbeatApiHeartbeatPostData, HeartbeatApiHeartbeatPostErrors, HeartbeatApiHeartbeatPostResponses, ReadWorkspacePromptApiWorkspacePromptGetData, ReadWorkspacePromptApiWorkspacePromptGetResponses, ReadyApiReadyGetData, ReadyApiReadyGetResponses, RecordAskApiLeasesLeaseIdAsksPostData, RecordAskApiLeasesLeaseIdAsksPostErrors, RecordAskApiLeasesLeaseIdAsksPostResponses, ReplaceWorkspacePromptApiWorkspacePromptPutData, ReplaceWorkspacePromptApiWorkspacePromptPutErrors, ReplaceWorkspacePromptApiWorkspacePromptPutResponses, SessionEndApiLeasesLeaseIdSessionEndPostData, SessionEndApiLeasesLeaseIdSessionEndPostErrors, SessionEndApiLeasesLeaseIdSessionEndPostResponses } from './types.gen';
+import type { GetPmItemsApiChunksChunkIdPmItemsGetData, GetPmItemsApiChunksChunkIdPmItemsGetErrors, GetPmItemsApiChunksChunkIdPmItemsGetResponses, HealthApiHealthGetData, HealthApiHealthGetResponses, HeartbeatApiHeartbeatPostData, HeartbeatApiHeartbeatPostErrors, HeartbeatApiHeartbeatPostResponses, PatchRunnerApiRunnerPatchData, PatchRunnerApiRunnerPatchErrors, PatchRunnerApiRunnerPatchResponses, ReadWorkspacePromptApiWorkspacePromptGetData, ReadWorkspacePromptApiWorkspacePromptGetResponses, ReadyApiReadyGetData, ReadyApiReadyGetResponses, RecordAskApiLeasesLeaseIdAsksPostData, RecordAskApiLeasesLeaseIdAsksPostErrors, RecordAskApiLeasesLeaseIdAsksPostResponses, ReplaceWorkspacePromptApiWorkspacePromptPutData, ReplaceWorkspacePromptApiWorkspacePromptPutErrors, ReplaceWorkspacePromptApiWorkspacePromptPutResponses, SessionEndApiLeasesLeaseIdSessionEndPostData, SessionEndApiLeasesLeaseIdSessionEndPostErrors, SessionEndApiLeasesLeaseIdSessionEndPostResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -69,6 +69,23 @@ export const sessionEndApiLeasesLeaseIdSessionEndPost = <ThrowOnError extends bo
  * Ready
  */
 export const readyApiReadyGet = <ThrowOnError extends boolean = false>(options?: Options<ReadyApiReadyGetData, ThrowOnError>): RequestResult<ReadyApiReadyGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ReadyApiReadyGetResponses, unknown, ThrowOnError>({ url: '/api/ready', ...options });
+
+/**
+ * Patch Runner
+ *
+ * Set this runner's own pause brake — it stops claiming; in-flight chunks run on (issue #43).
+ *
+ * Local to this machine and independent of the hub's brake: it works with the hub
+ * unreachable, and it neither reads nor writes the hub's flag.
+ */
+export const patchRunnerApiRunnerPatch = <ThrowOnError extends boolean = false>(options: Options<PatchRunnerApiRunnerPatchData, ThrowOnError>): RequestResult<PatchRunnerApiRunnerPatchResponses, PatchRunnerApiRunnerPatchErrors, ThrowOnError> => (options.client ?? client).patch<PatchRunnerApiRunnerPatchResponses, PatchRunnerApiRunnerPatchErrors, ThrowOnError>({
+    url: '/api/runner',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Read Workspace Prompt
