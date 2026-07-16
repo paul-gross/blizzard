@@ -28,9 +28,14 @@ ENV_HUB_URL = "BZ_HUB_URL"
 DEFAULT_HUB_URL = "http://127.0.0.1:8421"
 _CLIENT_TIMEOUT = 15.0
 
-
-def _stub(verb: str) -> None:
-    raise click.ClickException(f"`blizzard hub {verb}` is not yet implemented (scaffold stub).")
+# The runtime root the dir-taking verbs resolve, highest to lowest: an explicit
+# ``--dir`` (or ``init``'s DIRECTORY), then ``BZ_HUB_DIR``, then the cwd. The env rung
+# is what lets winter's per-env band (`[env.<name>.vars]`) aim one feature env at a
+# chosen runtime root — a store snapshot, or a shared dir during an exclusive handoff —
+# without a bespoke command line per invocation (issue #39). Selectable, not shareable:
+# the store is still single-writer, so two live daemons on one `hub.db` remains unsafe.
+ENV_HUB_DIR = "BZ_HUB_DIR"
+DEFAULT_DIR = "."
 
 
 def _hub_url(override: str | None) -> str:
@@ -50,16 +55,20 @@ def hub(ctx: click.Context) -> None:
 
 
 @hub.command()
-@click.argument("directory", default=".")
+@click.argument("directory", default=DEFAULT_DIR, envvar=ENV_HUB_DIR)
 def init(directory: str) -> None:
-    """Scaffold config + data dir + a migrated store under DIRECTORY. Idempotent."""
+    """Scaffold config + data dir + a migrated store under DIRECTORY. Idempotent.
+
+    DIRECTORY defaults to $BZ_HUB_DIR, then the cwd."""
     config = init_environment(Path(directory))
     revision = migration_runner(config).current_revision()
     click.echo(f"hub runtime ready at {config.root} (store revision {revision})")
 
 
 @hub.command("migrate")
-@click.option("--dir", "directory", default=".", help="Hub runtime directory.")
+@click.option(
+    "--dir", "directory", default=DEFAULT_DIR, envvar=ENV_HUB_DIR, help="Hub runtime directory (overrides $BZ_HUB_DIR)."
+)
 @click.option("--down", default=None, help="Reverse migrations down to this revision (e.g. base).")
 def migrate_cmd(directory: str, down: str | None) -> None:
     """Apply pending store migrations, or reverse with --down <rev>."""
@@ -71,7 +80,9 @@ def migrate_cmd(directory: str, down: str | None) -> None:
 
 
 @hub.command()
-@click.option("--dir", "directory", default=".", help="Hub runtime directory.")
+@click.option(
+    "--dir", "directory", default=DEFAULT_DIR, envvar=ENV_HUB_DIR, help="Hub runtime directory (overrides $BZ_HUB_DIR)."
+)
 @click.option("--host", "host_", default=None, help="Bind host (overrides config).")
 @click.option("--port", type=int, default=None, help="Bind port (overrides config).")
 def host(directory: str, host_: str | None, port: int | None) -> None:
@@ -85,7 +96,7 @@ def host(directory: str, host_: str | None, port: int | None) -> None:
     except RevisionMismatchError as exc:
         raise click.ClickException(str(exc)) from exc
     # Composition can still reject the config (an ``[[pm_source]]`` naming an unset
-    # ``token_env`` fails here, at boot, by design — D-106). Surface it as the same
+    # ``token_env`` fails here, at boot, by design — D-108). Surface it as the same
     # clean CLI error the config-load and migration guards above raise, not a
     # traceback; and build before announcing, so we never claim to serve and then die.
     try:
@@ -124,7 +135,10 @@ def status(url: str | None) -> None:
     click.echo(f"\nrunners ({len(fleet)}):")
     for r in fleet:
         liveness = "online" if r.get("online") else "offline"
-        brake = " [paused]" if r.get("paused") else ""
+        # Name which brake is on (issue #43): "paused" alone would hide whether the fleet
+        # stopped this runner or it stopped itself — and they are cleared by different verbs.
+        brakes = [name for name, on in (("hub", r.get("hub_paused")), ("local", r.get("locally_paused"))) if on]
+        brake = f" [paused: {'+'.join(brakes)}]" if brakes else ""
         click.echo(f"  {r['runner_id']:<16} {liveness:<8} ws={r.get('workspace_id', '-')}{brake}")
     open_qs = questions.json()
     click.echo(f"\nopen questions ({len(open_qs)}):")
@@ -212,11 +226,11 @@ def decide(decision_id: str, choice: str, resolved_by: str, hub_url: str | None)
 
 
 def _parse_pointer(token: str) -> str:
-    """The ingest token the CLI hands the hub (D-109).
+    """The ingest token the CLI hands the hub (D-111).
 
     The CLI carries no grammar of its own any more: the hub resolves every token
     against its configured PM sources' own ``parse`` (``{name}:{ref}``,
-    ``{name}#{ref}``, or the item's own URL — D-108/D-109), so a token travels
+    ``{name}#{ref}``, or the item's own URL — D-110/D-111), so a token travels
     through verbatim. The one thing that survives here is the deprecated
     ``github:<rest>`` prefix (D-074): it warns on stderr and passes ``rest`` on its own
     merits rather than silently accepting a provider tag the pointer no longer
@@ -235,7 +249,7 @@ def _parse_pointer(token: str) -> str:
 @click.argument("pointers", nargs=-1, required=True)
 @click.option("--hub-url", default=None, help=f"Hub API base URL (default ${ENV_HUB_URL} or {DEFAULT_HUB_URL}).")
 def ingest(pointers: tuple[str, ...], hub_url: str | None) -> None:
-    """Ingest PM items by token, minting a chunk (D-047/D-109).
+    """Ingest PM items by token, minting a chunk (D-047/D-111).
 
     Each POINTER is a source-native token — ``source:ref`` (e.g. ``blizzard:26``),
     ``source#ref``, or a pasted PM item URL; pass one or more — a batch mints one
@@ -309,9 +323,27 @@ def requeue(chunk_id: str, hub_url: str | None) -> None:
 
 @hub.command()
 @click.argument("chunk_id")
-def detach(chunk_id: str) -> None:
-    """Forcibly release a chunk from its runner (D-088)."""
-    _stub("detach")
+@click.option("--hub-url", default=None, help=f"Hub API base URL (default ${ENV_HUB_URL} or {DEFAULT_HUB_URL}).")
+def detach(chunk_id: str, hub_url: str | None) -> None:
+    """Forcibly release CHUNK from its runner (D-088).
+
+    A pure client of the hub API: ``POST /api/chunks/{id}/detach``. The chunk re-derives
+    ready and is re-claimable at its current node; the holding runner releases it on its
+    next tick. 409 when the chunk has no live route to release."""
+    url = f"{_hub_url(hub_url).rstrip('/')}/api/chunks/{chunk_id}/detach"
+    try:
+        resp = httpx.post(url, timeout=_CLIENT_TIMEOUT)
+    except httpx.HTTPError as exc:
+        raise _api_error("POST /chunks/{id}/detach", exc) from exc
+    if resp.status_code == httpx.codes.CONFLICT:
+        raise click.ClickException(resp.json().get("detail", "chunk has no live route"))
+    if resp.status_code == httpx.codes.NOT_FOUND:
+        raise click.ClickException(f"no such chunk {chunk_id}")
+    try:
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise _api_error("POST /chunks/{id}/detach", exc) from exc
+    click.echo(f"detached {chunk_id} — released from its runner, re-claimable at its current node")
 
 
 @hub.command()
@@ -345,5 +377,8 @@ def _set_runner_pause(runner_id: str, *, verb: str, by: str, hub_url: str | None
     except httpx.HTTPError as exc:
         raise _api_error(f"POST /runners/{{id}}/{verb}", exc) from exc
     body = resp.json()
-    state = "paused" if body.get("paused") else "running"
-    click.echo(f"runner {runner_id} is now {state}")
+    state = "paused" if body.get("hub_paused") else "running"
+    click.echo(f"runner {runner_id} is now {state} (at the hub)")
+    if body.get("locally_paused"):
+        # Resuming here cannot clear the runner's own brake, so don't imply it did.
+        click.echo(f"note: runner {runner_id} also paused itself — clear that with `blizzard runner start`")

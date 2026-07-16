@@ -79,16 +79,88 @@ export type HeartbeatResponse = {
 };
 
 /**
+ * LeaseListResponse
+ *
+ * Every active lease, derived at read time (issue #28).
+ */
+export type LeaseListResponse = {
+    /**
+     * Items
+     */
+    items?: Array<LeaseView>;
+};
+
+/**
+ * LeaseView
+ *
+ * One active lease with its joined binding facts and derived state (issue #28).
+ */
+export type LeaseView = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Environment Id
+     */
+    environment_id: string | null;
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * Graph Id
+     */
+    graph_id: string;
+    /**
+     * Last Heartbeat At
+     */
+    last_heartbeat_at: string | null;
+    /**
+     * Lease Id
+     */
+    lease_id: string;
+    /**
+     * Node Id
+     */
+    node_id: string;
+    /**
+     * Node Name
+     */
+    node_name: string;
+    /**
+     * Pid
+     */
+    pid: number | null;
+    /**
+     * Session Id
+     */
+    session_id: string | null;
+    /**
+     * State
+     */
+    state: 'running' | 'stale' | 'parked' | 'spawning' | 'exited';
+    /**
+     * Workdir
+     */
+    workdir: string | null;
+};
+
+/**
  * PmItemEntry
  *
- * One pointer's pass-through PM item (D-047/D-074/D-105) — body + comment thread,
- * vendor-native.
+ * One pointer's pass-through PM item (D-047/D-074/D-107) — title, body + comment
+ * thread, vendor-native.
  *
  * ``label``/``web_url`` are the board-legible pointer label (``blizzard#8``) and its
- * browser address (D-108) — both null when no configured source names ``source``. A
+ * browser address (D-110) — both null when no configured source names ``source``. A
  * per-pointer forge failure degrades here rather than failing the whole read (D-084):
- * ``error`` carries the reason and ``body`` is null, so one unreachable pointer never
- * blinds the reader to the pointers it did reach.
+ * ``error`` carries the reason and ``title``/``body`` are null, so one unreachable
+ * pointer never blinds the reader to the pointers it did reach.
  */
 export type PmItemEntry = {
     /**
@@ -119,6 +191,10 @@ export type PmItemEntry = {
      * Source
      */
     source: string;
+    /**
+     * Title
+     */
+    title?: string | null;
     /**
      * Web Url
      */
@@ -166,6 +242,46 @@ export type ReadinessResponse = {
      * Store Revision
      */
     store_revision: string | null;
+};
+
+/**
+ * RunnerControlPatch
+ *
+ * Declarative controls on the runner singleton — ``paused`` now, routing knobs post-MVP.
+ */
+export type RunnerControlPatch = {
+    /**
+     * By
+     */
+    by?: string;
+    /**
+     * Paused
+     */
+    paused: boolean;
+};
+
+/**
+ * RunnerControlView
+ *
+ * The runner singleton's derived pause state (openapi-ts consumes this).
+ */
+export type RunnerControlView = {
+    /**
+     * Hub Paused
+     */
+    hub_paused: boolean;
+    /**
+     * Local Paused
+     */
+    local_paused: boolean;
+    /**
+     * Paused
+     */
+    paused: boolean;
+    /**
+     * Runner Id
+     */
+    runner_id: string;
 };
 
 /**
@@ -311,6 +427,22 @@ export type HeartbeatApiHeartbeatPostResponses = {
 
 export type HeartbeatApiHeartbeatPostResponse = HeartbeatApiHeartbeatPostResponses[keyof HeartbeatApiHeartbeatPostResponses];
 
+export type ListLeasesApiLeasesGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/leases';
+};
+
+export type ListLeasesApiLeasesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: LeaseListResponse;
+};
+
+export type ListLeasesApiLeasesGetResponse = ListLeasesApiLeasesGetResponses[keyof ListLeasesApiLeasesGetResponses];
+
 export type RecordAskApiLeasesLeaseIdAsksPostData = {
     body: AskRequest;
     path: {
@@ -386,6 +518,31 @@ export type ReadyApiReadyGetResponses = {
 };
 
 export type ReadyApiReadyGetResponse = ReadyApiReadyGetResponses[keyof ReadyApiReadyGetResponses];
+
+export type PatchRunnerApiRunnerPatchData = {
+    body: RunnerControlPatch;
+    path?: never;
+    query?: never;
+    url: '/api/runner';
+};
+
+export type PatchRunnerApiRunnerPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PatchRunnerApiRunnerPatchError = PatchRunnerApiRunnerPatchErrors[keyof PatchRunnerApiRunnerPatchErrors];
+
+export type PatchRunnerApiRunnerPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: RunnerControlView;
+};
+
+export type PatchRunnerApiRunnerPatchResponse = PatchRunnerApiRunnerPatchResponses[keyof PatchRunnerApiRunnerPatchResponses];
 
 export type ReadWorkspacePromptApiWorkspacePromptGetData = {
     body?: never;

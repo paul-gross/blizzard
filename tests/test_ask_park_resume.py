@@ -21,8 +21,9 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.loop.steps import HEARTBEAT_STALENESS_THRESHOLD, advance, reap
+from blizzard.runner.loop.steps import advance, reap
 from blizzard.runner.store.repository import NewLease
 from blizzard.wire.facts import ANSWER_DELIVERED, QUESTION_ASKED
 from blizzard.wire.question import QuestionView

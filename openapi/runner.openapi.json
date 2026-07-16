@@ -93,8 +93,139 @@
         "title": "HeartbeatResponse",
         "type": "object"
       },
+      "LeaseListResponse": {
+        "description": "Every active lease, derived at read time (issue #28).",
+        "properties": {
+          "items": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/LeaseView"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "title": "LeaseListResponse",
+        "type": "object"
+      },
+      "LeaseView": {
+        "description": "One active lease with its joined binding facts and derived state (issue #28).",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "environment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Environment Id"
+          },
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "graph_id": {
+            "title": "Graph Id",
+            "type": "string"
+          },
+          "last_heartbeat_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Heartbeat At"
+          },
+          "lease_id": {
+            "title": "Lease Id",
+            "type": "string"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "node_name": {
+            "title": "Node Name",
+            "type": "string"
+          },
+          "pid": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pid"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "state": {
+            "enum": [
+              "running",
+              "stale",
+              "parked",
+              "spawning",
+              "exited"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "workdir": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workdir"
+          }
+        },
+        "required": [
+          "lease_id",
+          "chunk_id",
+          "graph_id",
+          "node_id",
+          "node_name",
+          "epoch",
+          "session_id",
+          "pid",
+          "environment_id",
+          "workdir",
+          "created_at",
+          "last_heartbeat_at",
+          "state"
+        ],
+        "title": "LeaseView",
+        "type": "object"
+      },
       "PmItemEntry": {
-        "description": "One pointer's pass-through PM item (D-047/D-074/D-105) \u2014 body + comment thread,\nvendor-native.\n\n``label``/``web_url`` are the board-legible pointer label (``blizzard#8``) and its\nbrowser address (D-108) \u2014 both null when no configured source names ``source``. A\nper-pointer forge failure degrades here rather than failing the whole read (D-084):\n``error`` carries the reason and ``body`` is null, so one unreachable pointer never\nblinds the reader to the pointers it did reach.",
+        "description": "One pointer's pass-through PM item (D-047/D-074/D-107) \u2014 title, body + comment\nthread, vendor-native.\n\n``label``/``web_url`` are the board-legible pointer label (``blizzard#8``) and its\nbrowser address (D-110) \u2014 both null when no configured source names ``source``. A\nper-pointer forge failure degrades here rather than failing the whole read (D-084):\n``error`` carries the reason and ``title``/``body`` are null, so one unreachable\npointer never blinds the reader to the pointers it did reach.",
         "properties": {
           "body": {
             "anyOf": [
@@ -148,6 +279,17 @@
           "source": {
             "title": "Source",
             "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
           },
           "web_url": {
             "anyOf": [
@@ -230,6 +372,54 @@
           "detail"
         ],
         "title": "ReadinessResponse",
+        "type": "object"
+      },
+      "RunnerControlPatch": {
+        "description": "Declarative controls on the runner singleton \u2014 ``paused`` now, routing knobs post-MVP.",
+        "properties": {
+          "by": {
+            "default": "operator",
+            "title": "By",
+            "type": "string"
+          },
+          "paused": {
+            "title": "Paused",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "paused"
+        ],
+        "title": "RunnerControlPatch",
+        "type": "object"
+      },
+      "RunnerControlView": {
+        "description": "The runner singleton's derived pause state (openapi-ts consumes this).",
+        "properties": {
+          "hub_paused": {
+            "title": "Hub Paused",
+            "type": "boolean"
+          },
+          "local_paused": {
+            "title": "Local Paused",
+            "type": "boolean"
+          },
+          "paused": {
+            "title": "Paused",
+            "type": "boolean"
+          },
+          "runner_id": {
+            "title": "Runner Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runner_id",
+          "local_paused",
+          "hub_paused",
+          "paused"
+        ],
+        "title": "RunnerControlView",
         "type": "object"
       },
       "SessionEndResponse": {
@@ -437,6 +627,28 @@
         ]
       }
     },
+    "/api/leases": {
+      "get": {
+        "description": "Every active lease, derived at read time (issue #28) \u2014 local store only.",
+        "operationId": "list_leases_api_leases_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaseListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Leases",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
     "/api/leases/{lease_id}/asks": {
       "post": {
         "description": "Record a worker's ask against its lease, minting the question id ([ask-answer.md]).",
@@ -551,6 +763,48 @@
         "summary": "Ready",
         "tags": [
           "meta"
+        ]
+      }
+    },
+    "/api/runner": {
+      "patch": {
+        "description": "Set this runner's own pause brake \u2014 it stops claiming; in-flight chunks run on (issue #43).\n\nLocal to this machine and independent of the hub's brake: it works with the hub\nunreachable, and it neither reads nor writes the hub's flag.",
+        "operationId": "patch_runner_api_runner_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerControlPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerControlView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Runner",
+        "tags": [
+          "runner"
         ]
       }
     },

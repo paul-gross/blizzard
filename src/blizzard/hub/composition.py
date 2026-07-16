@@ -27,6 +27,7 @@ from blizzard.hub.delivery.forge import IForgeDelivery
 from blizzard.hub.domain.apply import ApplyService
 from blizzard.hub.domain.claim import ClaimService
 from blizzard.hub.domain.decisions import DecisionService, RequeueService
+from blizzard.hub.domain.detach import DetachService
 from blizzard.hub.domain.facts import FactIngestService, RunnerFactsService
 from blizzard.hub.domain.graph import GraphDoc, IReadGraphRepository
 from blizzard.hub.domain.graph_authoring import GraphMintService
@@ -56,6 +57,7 @@ class HubServices:
     apply: ApplyService
     decisions: DecisionService
     requeue: RequeueService
+    detach: DetachService
     facts: FactIngestService
     graph_mint: GraphMintService
     runner_facts: RunnerFactsService
@@ -91,6 +93,9 @@ def build_services(
     graph_store = GraphStore(engine)
     registry_store = RunnerRegistryStore(engine)
     coordinator = MergeQueueCoordinator(chunks=chunk_store, forge=forge, clock=clock, base_branch=base_branch)
+    # One fleet service, shared: the API's pause routes and the fact ingest both land
+    # registry facts, and two instances would be two of the same thing (issue #43).
+    fleet = FleetService(registry=registry_store, clock=clock)
     return HubServices(
         chunks=chunk_store,
         graphs=graph_store,
@@ -100,13 +105,14 @@ def build_services(
         apply=ApplyService(chunks=chunk_store, coordinator=coordinator, clock=clock),
         decisions=DecisionService(chunks=chunk_store, clock=clock),
         requeue=RequeueService(chunks=chunk_store, clock=clock),
-        facts=FactIngestService(chunks=chunk_store, clock=clock),
+        detach=DetachService(chunks=chunk_store, clock=clock),
+        facts=FactIngestService(chunks=chunk_store, fleet=fleet, clock=clock),
         graph_mint=GraphMintService(graphs=graph_store, clock=clock),
         runner_facts=RunnerFactsService(chunks=chunk_store, clock=clock),
         questions=QuestionService(chunks=chunk_store, clock=clock),
         queue=QueueService(chunks=chunk_store, clock=clock),
         group=GroupService(chunks=chunk_store, clock=clock),
-        fleet=FleetService(registry=registry_store, clock=clock),
+        fleet=fleet,
         delivery_check=DeliveryCheckService(chunks=chunk_store, forge=forge, clock=clock),
         events=events,
         clock=clock,

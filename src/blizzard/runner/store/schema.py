@@ -18,13 +18,14 @@ from __future__ import annotations
 from sqlalchemy import (
     Boolean,
     Column,
-    DateTime,
     Integer,
     MetaData,
     String,
     Table,
     Text,
 )
+
+from blizzard.foundation.store.utc import UtcDateTime
 
 metadata = MetaData()
 
@@ -44,7 +45,7 @@ leases = Table(
     Column("pid", Integer, nullable=True),  # filled at spawn-return (D-092)
     Column("process_start_time", String, nullable=True),  # stable across pid reuse; REAP keys on it
     Column("session_id", String, nullable=True),  # harness-assigned, recorded at spawn-return
-    Column("created_at", DateTime, nullable=False),
+    Column("created_at", UtcDateTime, nullable=False),
 )
 
 # --- Environment bindings (chunk -> env ids, from the provider — D-021/D-062) -
@@ -56,7 +57,7 @@ env_bindings = Table(
     Column("chunk_id", String, nullable=False),
     Column("environment_id", String, nullable=False),  # opaque provider id
     Column("workdir", String, nullable=False),  # provider-returned working directory (D-063)
-    Column("bound_at", DateTime, nullable=False),
+    Column("bound_at", UtcDateTime, nullable=False),
 )
 
 # --- Outbound buffer (store-and-forward, per-runner monotonic seq — D-069) ---
@@ -78,8 +79,8 @@ outbound_buffer = Table(
     Column("chunk_id", String, nullable=True),  # the correlated chunk, when the fact has one
     Column("lease_id", String, nullable=True),  # the correlated attempt, when the fact has one
     Column("payload", Text, nullable=False),  # the JSON body posted to the matching hub route
-    Column("created_at", DateTime, nullable=False),
-    Column("acked_at", DateTime, nullable=True),  # NULL = pending; set when the hub acks the seq
+    Column("created_at", UtcDateTime, nullable=False),
+    Column("acked_at", UtcDateTime, nullable=True),  # NULL = pending; set when the hub acks the seq
 )
 
 # --- Heartbeats (progress detection, machine-local — never leaves the box) ----
@@ -97,7 +98,7 @@ heartbeats = Table(
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("lease_id", String, nullable=False),  # the attempt the beat belongs to (BLIZZARD_LEASE_ID)
-    Column("beat_at", DateTime, nullable=False),  # injected-clock stamp of the tool call
+    Column("beat_at", UtcDateTime, nullable=False),  # injected-clock stamp of the tool call
 )
 
 # --- Lease node context (the node identity of each attempt — 0002's leases lacks it) -
@@ -116,7 +117,7 @@ lease_context = Table(
     Column("node_id", String, nullable=False),  # which node this attempt is at
     Column("node_name", String, nullable=False),
     Column("retries_max", Integer, nullable=False),  # the node's retry budget, from the envelope
-    Column("recorded_at", DateTime, nullable=False),
+    Column("recorded_at", UtcDateTime, nullable=False),
 )
 
 # --- Lease spawns (the spawn generation of each attempt — issue #13) ----------
@@ -137,7 +138,7 @@ lease_spawns = Table(
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("lease_id", String, nullable=False),  # the attempt this process was spawned for
-    Column("spawned_at", DateTime, nullable=False),  # injected-clock stamp of the spawn-return
+    Column("spawned_at", UtcDateTime, nullable=False),  # injected-clock stamp of the spawn-return
 )
 
 # --- Lease closures (a lease is closed iff a closure fact exists — facts-not-status) -
@@ -155,7 +156,7 @@ lease_closures = Table(
     Column("chunk_id", String, nullable=False),
     Column("node_id", String, nullable=False),
     Column("reason", String, nullable=False),  # transitioned | reaped | failed | escalated
-    Column("closed_at", DateTime, nullable=False),
+    Column("closed_at", UtcDateTime, nullable=False),
 )
 
 # --- Binding releases (a binding is released iff a release fact exists — D-062/D-083) -
@@ -171,7 +172,7 @@ binding_releases = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("chunk_id", String, nullable=False),
     Column("environment_id", String, nullable=False),
-    Column("released_at", DateTime, nullable=False),
+    Column("released_at", UtcDateTime, nullable=False),
 )
 
 # --- Asks (the worker's local open-ask fact — [ask-answer.md]) ---------------
@@ -192,7 +193,7 @@ asks = Table(
     Column("question", Text, nullable=False),
     Column("options", Text, nullable=False),  # JSON list[str] (may be empty)
     Column("session_id", String, nullable=True),  # the session to resume around the answer
-    Column("asked_at", DateTime, nullable=False),
+    Column("asked_at", UtcDateTime, nullable=False),
 )
 
 # --- Park / resume (the chunk's dormancy on a question — [ask-answer.md]) ----
@@ -210,7 +211,7 @@ park_facts = Table(
     Column("lease_id", String, nullable=False),
     Column("chunk_id", String, nullable=False),
     Column("question_id", String, nullable=False),  # the ask this park is on
-    Column("parked_at", DateTime, nullable=False),
+    Column("parked_at", UtcDateTime, nullable=False),
 )
 
 park_resumes = Table(
@@ -219,7 +220,7 @@ park_resumes = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("lease_id", String, nullable=False),
     Column("question_id", String, nullable=False),
-    Column("resumed_at", DateTime, nullable=False),
+    Column("resumed_at", UtcDateTime, nullable=False),
 )
 
 # --- Resume intent (the restart resume marker — D-082) -----------------------
@@ -248,7 +249,7 @@ resume_intents = Table(
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("lease_id", String, nullable=False),
-    Column("marked_at", DateTime, nullable=False),
+    Column("marked_at", UtcDateTime, nullable=False),
 )
 
 resume_clears = Table(
@@ -256,7 +257,7 @@ resume_clears = Table(
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("lease_id", String, nullable=False),
-    Column("cleared_at", DateTime, nullable=False),
+    Column("cleared_at", UtcDateTime, nullable=False),
 )
 
 # --- Session-end signal (the durable "declared done" fact — D-055/D-082) -----
@@ -276,7 +277,7 @@ session_ends = Table(
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("lease_id", String, nullable=False),  # BLIZZARD_LEASE_ID the SessionEnd hook inherited
-    Column("ended_at", DateTime, nullable=False),  # injected-clock stamp of the session's exit
+    Column("ended_at", UtcDateTime, nullable=False),  # injected-clock stamp of the session's exit
 )
 
 # --- Hub control mirror (the declarative pause brake read on PULL — D-043/D-012) --
@@ -293,7 +294,28 @@ hub_control = Table(
     metadata,
     Column("runner_id", String, primary_key=True),
     Column("paused", Boolean, nullable=False),
-    Column("updated_at", DateTime, nullable=False),
+    Column("updated_at", UtcDateTime, nullable=False),
+)
+
+# --- Local pause facts (the runner's own brake — issue #43) -------------------
+#
+# The runner's half of the pause control (``PATCH /runner``, D-043 applied locally): the
+# operator tells *this* runner to stop claiming, and it adheres without the hub knowing
+# or being reachable — the operator contract's standing requirement ([api.md]). Distinct
+# from ``hub_control`` above in both concept and shape: that mirrors a hub-owned value,
+# so it upserts; this is a locally-minted fact, so pause/start facts **append** and the
+# flag derives from the newest (D-004/D-039), exactly like the hub's own
+# ``runner_pause_facts``. Effective paused is the OR of the two — FILL adheres to either.
+# ``set_by`` records who flipped it, on the fact.
+
+local_pause_facts = Table(
+    "local_pause_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("runner_id", String, nullable=False),
+    Column("paused", Boolean, nullable=False),  # locally paused derives from the newest fact
+    Column("set_at", UtcDateTime, nullable=False),
+    Column("set_by", String, nullable=False),
 )
 
 # --- Workspace prompt override (the runtime-settable spawn preamble — issue #17) --
@@ -311,7 +333,7 @@ workspace_prompt = Table(
     metadata,
     Column("workspace_id", String, primary_key=True),
     Column("prompt", Text, nullable=False),
-    Column("updated_at", DateTime, nullable=False),
+    Column("updated_at", UtcDateTime, nullable=False),
 )
 
 # --- Daemon liveness (when the runner was last known alive — issue #13) -------
@@ -332,5 +354,5 @@ daemon_liveness = Table(
     "daemon_liveness",
     metadata,
     Column("runner_id", String, primary_key=True),
-    Column("alive_at", DateTime, nullable=False),  # injected-clock stamp of the newest tick
+    Column("alive_at", UtcDateTime, nullable=False),  # injected-clock stamp of the newest tick
 )

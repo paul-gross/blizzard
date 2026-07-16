@@ -1,8 +1,8 @@
-"""The 0012 pointer-identity reshape — ``{provider, url}`` -> ``{source, ref}`` (D-105).
+"""The 0012 pointer-identity reshape — ``{provider, url}`` -> ``{source, ref}`` (D-107).
 
 Exercises the backfill on a store migrated to the revision *before* 0012, seeded with
 rows in the **pre-0012** shape: an issue-shaped GitHub URL (backfills to the repo tail
-plus the issue number) and a non-issue-shaped row (survives verbatim into ``ref``, D-105's
+plus the issue number) and a non-issue-shaped row (survives verbatim into ``ref``, D-107's
 lossless branch). Also exercises ``downgrade()``'s canonicalizing reverse.
 
 Seeded with literal SQL against the pre-0012 shape rather than
@@ -28,7 +28,7 @@ from blizzard.hub.runtime import migration_runner
 
 pytestmark = pytest.mark.component
 
-_BEFORE = "0011_hub_chunk_promoted"  # the head just before the pointer reshape
+_BEFORE = "0012_hub_runner_local_pause"  # the head just before the pointer reshape
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 # Literal, revision-pinned table shapes — the pre-0012 ``chunk_pm_pointers`` plus the
@@ -132,7 +132,7 @@ def test_downgrade_reconstructs_a_structurally_canonical_url(tmp_path: Path) -> 
 
     with engine.connect() as conn:
         rows = {r.chunk_id: r for r in conn.execute(sa.select(_OLD_POINTERS))}
-    # Canonicalizing, not byte-exact, and *not resolvable* (D-105): the owner segment is
+    # Canonicalizing, not byte-exact, and *not resolvable* (D-107): the owner segment is
     # unrecoverable from the repo tail alone, so the reconstructed URL carries a
     # documented placeholder owner rather than the original ``paul-gross``. Nothing is
     # served at that address — a downgraded hub's PM reads 404 until re-ingested. It is
@@ -147,7 +147,7 @@ def test_downgrade_reconstructs_a_structurally_canonical_url(tmp_path: Path) -> 
 
 
 def test_down_then_up_returns_the_identical_source_ref_rows(tmp_path: Path) -> None:
-    """The property that makes 0012 rehearsable despite the lossy owner (D-099/D-105).
+    """The property that makes 0012 rehearsable despite the lossy owner (D-099/D-107).
 
     ``downgrade()`` cannot restore the original bytes, so byte-exactness is not the bar.
     The bar is that the *pointer identity* — the ``(source, ref)`` the whole system keys

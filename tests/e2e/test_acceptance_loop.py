@@ -86,7 +86,7 @@ REPO = f"{OWNER}/{REPO_NAME}"
 FIXTURE_ENV = "e2e"
 RUNNER_ENV = "e1"
 
-# The env var every scenario's ``[[pm_source]]`` (D-106/D-107) names as its credential —
+# The env var every scenario's ``[[pm_source]]`` (D-108/D-109) names as its credential —
 # a dummy value suffices, since the mock forge checks no token.
 PM_TOKEN_ENV = "BZ_PM_TOKEN_TOYAPI"
 
@@ -287,7 +287,7 @@ def _hub(hub_dir: Path, forge_port: int, port: int) -> Iterator[httpx.Client]:
     }
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
-    # Declare the one PM source every scenario ingests against (D-106/D-107) — since
+    # Declare the one PM source every scenario ingests against (D-108/D-109) — since
     # Phase 2, ingest 422s a pointer no configured source claims.
     write_pm_sources(
         hub_dir,
@@ -580,7 +580,7 @@ def test_build_worker_reads_pm_item_through_the_passthrough(tmp_path: Path) -> N
         commented = forge.post(f"/repos/{REPO}/issues/{issue_number}/comments", json={"body": _PM_COMMENT})
         assert commented.status_code == 201, commented.text
 
-        # Ingest by {source, ref} (D-105) — the source names the configured binding, and
+        # Ingest by {source, ref} (D-107) — the source names the configured binding, and
         # the ref is this binding's own opaque item token (the issue number); the fetch
         # goes through the hub's own forge base URL regardless.
         ingested = hub.post(

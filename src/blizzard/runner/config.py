@@ -20,6 +20,10 @@ DATA_DIRNAME = "data"
 # The runner-owned worker hook file `init` scaffolds (design/harness-adapters.md); the
 # adapter passes it to a spawned worker as `--settings` to deliver the heartbeat hook.
 WORKER_SETTINGS_FILENAME = "worker-settings.json"
+# The local API's unix socket (D-068): it lives under the state dir beside the store, and
+# filesystem permissions are its access control — so the CLI finds it from the runtime dir
+# alone. The TCP listener runs alongside it for the browser, which cannot speak a socket.
+SOCKET_FILENAME = "runner.sock"
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8431
@@ -53,6 +57,16 @@ DEFAULT_HARNESS_PERMISSION_MODE = "bypassPermissions"
 DEFAULT_MAX_AGENTS = 1
 DEFAULT_BASE_BRANCH = "main"
 DEFAULT_ENV_POOL: tuple[str, ...] = ("e1",)
+
+
+def socket_path_for(root: Path) -> Path:
+    """The local API's socket under a runtime dir — derivable from the path alone.
+
+    Deliberately not a method on the loaded config: it is what lets the CLI's local verbs
+    address the daemon from ``--dir`` without reading the toml or opening the store — a
+    pure client of the local API (D-023/D-068).
+    """
+    return root / SOCKET_FILENAME
 
 
 class ConfigError(RuntimeError):
@@ -98,6 +112,11 @@ class RunnerConfig:
     @property
     def data_dir(self) -> Path:
         return self.root / DATA_DIRNAME
+
+    @property
+    def socket_path(self) -> Path:
+        """The local API's unix socket, under the state dir with the store (D-068)."""
+        return socket_path_for(self.root)
 
     @staticmethod
     def default_db_url(root: Path) -> str:

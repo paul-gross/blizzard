@@ -32,12 +32,16 @@ from datetime import datetime
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.store.utc import as_utc
+from blizzard.hub.domain.registry import FleetService
 from blizzard.hub.domain.work import IWriteChunkRepository
 from blizzard.wire.facts import (
     ANSWER_DELIVERED,
     ESCALATION_RECORDED,
     LEASE_MINTED,
     QUESTION_ASKED,
+    RUNNER_LOCALLY_PAUSED,
+    RUNNER_LOCALLY_RESUMED,
     RunnerFactAck,
     RunnerFactBatch,
 )
@@ -62,10 +66,16 @@ class RunnerFactsService:
 
 
 class FactIngestService:
-    """Apply a runner's batched pushed facts idempotently against its high-water mark (D-069)."""
+    """Apply a runner's batched pushed facts idempotently against its high-water mark (D-069).
 
-    def __init__(self, *, chunks: IWriteChunkRepository, clock: IClock) -> None:
+    Most facts are chunk-scoped and land through ``chunks``; ``fleet`` is here for the
+    runner-scoped ones — a runner reporting a brake it set on itself is about the runner,
+    not about any chunk (issue #43).
+    """
+
+    def __init__(self, *, chunks: IWriteChunkRepository, fleet: FleetService, clock: IClock) -> None:
         self._chunks = chunks
+        self._fleet = fleet
         self._clock = clock
 
     def ingest(self, batch: RunnerFactBatch) -> RunnerFactAck:
@@ -143,6 +153,18 @@ class FactIngestService:
                 question_id=str(payload["question_id"]), chunk_id=str(payload["chunk_id"]), at=now
             )
             return True
+        if kind in (RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED):
+            # Runner-scoped and hub-read-only: the runner already stopped claiming before
+            # this arrived; landing it is what makes the brake visible on the board. Stamped
+            # with the runner's own clock off the payload — when it decided, not when the
+            # buffer drained, which may be an outage later (D-069).
+            self._fleet.record_local_pause(
+                runner_id,
+                paused=kind == RUNNER_LOCALLY_PAUSED,
+                at=_parse_at(payload.get("at"), now),
+                by=str(payload.get("by", "operator")),
+            )
+            return True
         _log.warning("unknown runner fact kind", kind=kind)
         return False
 
@@ -152,9 +174,15 @@ def _opt(value: object) -> str | None:
 
 
 def _parse_at(value: object, fallback: datetime) -> datetime:
+    """Read an ISO-8601 instant off a batched payload, falling back on a malformed stamp.
+
+    Coerces a naive result to UTC (``bzh:utc-instants``): a runner's outbound buffer
+    (D-069) can still hold — and later deliver — a pre-fix naive stamp minted before its
+    own upgrade, since D-069 replays whatever it already buffered rather than re-minting.
+    """
     if isinstance(value, str):
         try:
-            return datetime.fromisoformat(value)
+            return as_utc(datetime.fromisoformat(value))
         except ValueError:
             return fallback
     return fallback

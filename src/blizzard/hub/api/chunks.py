@@ -15,12 +15,14 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
+from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.decisions import to_decision_view
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.api.questions import question_view
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.artifacts import ArtifactRow, GitCommitArtifact, from_row, store_key
 from blizzard.hub.domain.decisions import NotEscalated
+from blizzard.hub.domain.detach import NotRouted
 from blizzard.hub.domain.envelope import build_node_envelope
 from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.ingest import IngestConflict
@@ -62,8 +64,8 @@ router = APIRouter(prefix="/api", tags=["chunks"])
 
 
 def _pointer_views(chunk: Chunk, pm: IPmSourceRegistry) -> list[PmPointerView]:
-    """Each pointer with its board-legible label and browser URL (D-105/D-108) —
-    both null when no configured source names ``pointer.source`` (D-106).
+    """Each pointer with its board-legible label and browser URL (D-107/D-110) —
+    both null when no configured source names ``pointer.source`` (D-108).
 
     Each pointer is resolved to its own binding by name (``pm.get(p.source)``) — a
     chunk's pointers need not all share one source."""
@@ -109,14 +111,14 @@ def _history_views(facts: ChunkFacts, graph: Graph | None) -> list[TransitionVie
             to_node_name=_node_name(graph, t.to_node_id),
             choice_name=t.choice_name,
             epoch=t.epoch,
-            recorded_at=t.recorded_at.isoformat(),
+            recorded_at=iso_utc(t.recorded_at),
         )
         for t in transition_history(facts)
     ]
 
 
 def _branch_url_source(chunk: Chunk, pm: IPmSourceRegistry) -> IPmSource | None:
-    """The binding a chunk's artifact branch links resolve through (D-108).
+    """The binding a chunk's artifact branch links resolve through (D-110).
 
     The one-forge-per-chunk assumption (D-075) is no longer *inferred* by sniffing
     whichever pointer URL happened to parse first — it is *declared*: the chunk's
@@ -181,8 +183,8 @@ def _current_node(
 
 @router.post("/chunks", response_model=ChunkIngestResponse, status_code=status.HTTP_201_CREATED)
 def ingest_chunk(request: ChunkIngestRequest, services: Annotated[HubServices, Depends(get_services)]) -> object:
-    """Ingest by source-native token (D-047/D-109); 422 on a token no configured source
-    claims (D-106/D-107); 409 on a pointer held by a live chunk (D-093)."""
+    """Ingest by source-native token (D-047/D-111); 422 on a token no configured source
+    claims (D-108/D-109); 409 on a pointer held by a live chunk (D-093)."""
     if not request.tokens:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="at least one token required")
     # Resolution before minting, and before the live-holder check: an unresolvable
@@ -385,6 +387,22 @@ def requeue_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_se
     return {"chunk_id": chunk_id}
 
 
+@router.post("/chunks/{chunk_id}/detach", status_code=status.HTTP_202_ACCEPTED)
+def detach_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> dict[str, str]:
+    """Forcibly release a chunk from its runner without touching any escalation (D-088)."""
+    chunk = services.chunks.get(chunk_id)
+    if chunk is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+    try:
+        services.detach.detach(chunk)
+    except NotRouted as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
+    services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
+    services.events.publish_queue_changed()  # a detached chunk re-enters the ready queue (D-088)
+    return {"chunk_id": chunk_id}
+
+
 @router.post("/chunks/{chunk_id}/promote", status_code=status.HTTP_202_ACCEPTED)
 def promote_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> dict[str, str]:
     """Promote a not-ready chunk to ready so a runner may claim it (D-103).
@@ -430,7 +448,7 @@ def report_escalation(
 
 @router.get("/chunks/{chunk_id}/pm-items", response_model=PmItemsView)
 def get_pm_items(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> PmItemsView:
-    """Pass-through PM items read (D-047/D-084/D-105) — one entry per pointer, contents never stored.
+    """Pass-through PM items read (D-047/D-084/D-107) — one entry per pointer, contents never stored.
 
     Each pointer is resolved to its own binding by name (``pm.get(pointer.source)``), then
     fetched fresh from the forge; a per-pointer resolution or forge failure degrades to an
@@ -444,7 +462,7 @@ def get_pm_items(chunk_id: str, services: Annotated[HubServices, Depends(get_ser
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
-    fetched_at = services.clock.now().isoformat()
+    fetched_at = iso_utc(services.clock.now())
     entries: list[PmItemEntry] = []
     for pointer in chunk.pm_pointers:
         source = services.pm.get(pointer.source)
@@ -483,6 +501,7 @@ def get_pm_items(chunk_id: str, services: Annotated[HubServices, Depends(get_ser
                     label=label,
                     web_url=web_url,
                     fetched_at=fetched_at,
+                    title=item.title,
                     body=item.body,
                     comments=item.comments,
                 )

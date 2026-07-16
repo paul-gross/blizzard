@@ -135,7 +135,7 @@ def test_fetch_runner_paused_reads_the_derived_brake() -> None:
                 "registered_at": "2026-07-13T00:00:00+00:00",
                 "last_seen_at": "2026-07-13T00:00:00+00:00",
                 "online": True,
-                "paused": True,
+                "hub_paused": True,
             },
         )
 

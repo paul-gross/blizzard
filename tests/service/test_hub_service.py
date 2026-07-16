@@ -191,4 +191,8 @@ def test_runner_registers_and_reads_its_pause_brake(tmp_path: Path) -> None:
         )
         # the operator flips the pause brake; the hub's registry reflects it (D-043).
         assert hub.post("/api/runners/runner-brake/pause", json={"by": "operator"}).status_code == 200
-        assert hub.get("/api/runners/runner-brake").json()["paused"] is True
+        view = hub.get("/api/runners/runner-brake").json()
+        assert view["hub_paused"] is True
+        # The runner's own brake is a separate field the hub only ever reads (D-105); the
+        # operator flipping the fleet's brake must not appear to have set it.
+        assert view["locally_paused"] is False

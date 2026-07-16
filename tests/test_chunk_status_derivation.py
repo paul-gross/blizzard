@@ -69,6 +69,37 @@ def test_released_route_on_promoted_chunk_re_derives_ready() -> None:
     assert derive_chunk_status(facts) is ChunkStatus.READY
 
 
+def _detached_route(**extra: object) -> ChunkFacts:
+    """A route created then released — detach's fact shape (D-088): one write, no
+    supersession, no epoch bump. Used to pin that detach clears only the running
+    branch and leaves every higher-precedence branch untouched."""
+    return ChunkFacts(
+        minted=True,
+        promoted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        routes_released=[RouteReleasedFact(released_at=_at(2))],
+        **extra,  # type: ignore[arg-type]
+    )
+
+
+def test_detached_route_with_no_other_facts_re_derives_ready() -> None:
+    assert derive_chunk_status(_detached_route()) is ChunkStatus.READY
+
+
+def test_detached_route_with_an_open_escalation_still_derives_needs_human() -> None:
+    # Detach releases the route only; it does not supersede the escalation (that is
+    # requeue's job, D-067), so a detached, still-escalated chunk stays needs_human.
+    facts = _detached_route(escalations=[EscalationFact(epoch=1, recorded_at=_at(3))])
+    assert derive_chunk_status(facts) is ChunkStatus.NEEDS_HUMAN
+
+
+def test_detached_route_with_an_open_question_still_derives_waiting_on_human() -> None:
+    # Same shape, an open ask instead of an escalation — explicit acceptance criterion
+    # of the detach issue: the ask/answer park survives a detach.
+    facts = _detached_route(questions=[QuestionFact(question_id="qn_1", asked_at=_at(3), answered=False)])
+    assert derive_chunk_status(facts) is ChunkStatus.WAITING_ON_HUMAN
+
+
 def test_stopped_wins_over_not_ready() -> None:
     # An operator can abandon a chunk before promoting it — stopped still wins (D-103).
     assert derive_chunk_status(ChunkFacts(minted=True, stopped=True)) is ChunkStatus.STOPPED

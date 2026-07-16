@@ -37,6 +37,19 @@ def _mint(store, chunk="ch_1", node="nd_build", node_name="build", epoch=1, leas
 
 
 @pytest.mark.unit
+def test_lease_round_trips_its_own_written_instant(tmp_path):  # type: ignore[no-untyped-def]
+    """``created_at`` reads back UTC-aware and equal to what was written (issue #28,
+    ``bzh:utc-instants``) — the store column is ``UtcDateTime``-typed, not a plain
+    ``DateTime`` that sqlite would hand back naive."""
+    store = _store(tmp_path)
+    _mint(store)
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None
+    assert lease.created_at == _NOW
+    assert lease.created_at.tzinfo is not None
+
+
+@pytest.mark.unit
 def test_minted_lease_is_active_until_closed(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _mint(store)

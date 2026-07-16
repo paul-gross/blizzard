@@ -50,8 +50,8 @@ class ChunkStatus(StrEnum):
 
 @dataclass(frozen=True)
 class PmPointer:
-    """One wrapped PM item — ``{source, ref}`` (D-105), superseding ``{provider, url}``
-    (D-075). ``source`` names a configured ``[[pm_source]]`` (D-106); ``ref`` is that
+    """One wrapped PM item — ``{source, ref}`` (D-107), superseding ``{provider, url}``
+    (D-075). ``source`` names a configured ``[[pm_source]]`` (D-108); ``ref`` is that
     source's own item token (a GitHub issue number). Contents never stored."""
 
     source: str
@@ -378,7 +378,22 @@ def _newest_transition_enters_hub_node(facts: ChunkFacts) -> bool:
 
 
 def _has_live_route(facts: ChunkFacts) -> bool:
-    """A ``route.created`` with no later ``route.released`` (D-088)."""
+    """A ``route.created`` with no later ``route.released`` (D-088).
+
+    Tie semantics (worth naming so the next reader doesn't have to rediscover it):
+    on a same-instant ``created``/``released`` pair this uses strict ``>``, so a tie
+    reads as still-live — a *reclaim* wins ties, because a fresh ``route.created``
+    stamped at the exact instant of a prior release must still derive ``running``
+    (see ``test_reclaimed_after_release_is_running_again``). This is the opposite
+    tie-break from :meth:`ChunkStore.route_of`, which uses ``>=`` so a *release*
+    wins ties (the gate a same-instant detach relies on). The two are not aligned
+    to a single winner: doing so would silently break whichever direction lost, and
+    a plain-timestamp fact model cannot tell "created after released" from "released
+    after created" when the instants coincide — there is no sequence/epoch tiebreak
+    for routes the way :func:`newest_transition` has one for transitions. Under
+    :class:`~blizzard.foundation.clock.SystemClock` a same-instant tie is not
+    reachable in practice, so this divergence is accepted rather than forced.
+    """
     if not facts.routes_created:
         return False
     newest_created = max(facts.routes_created, key=lambda r: r.created_at)
@@ -705,7 +720,7 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         ...
 
     def add_pm_pointers(self, chunk_id: str, pointers: list[PmPointer], *, at: datetime) -> None:
-        """Fold PM pointers into a group survivor, de-duped by (source, ref) (D-076/D-105)."""
+        """Fold PM pointers into a group survivor, de-duped by (source, ref) (D-076/D-107)."""
         ...
 
     def record_grouped(self, chunk_id: str, *, grouped_into: str, at: datetime) -> None:

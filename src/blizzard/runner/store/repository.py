@@ -205,6 +205,14 @@ class IReadRunnerStore(Protocol):
         first hears otherwise)."""
         ...
 
+    def local_paused(self, runner_id: str) -> bool:
+        """This runner's own brake, derived from the newest local pause fact (issue #43).
+
+        The runner's half of the pause control (``PATCH /runner``): set locally, adhered
+        to with the hub unreachable, and distinct from ``hub_paused`` — FILL stops on
+        either. Defaults False when the operator has never set it."""
+        ...
+
     def resume_intent_lease_ids(self) -> set[str]:
         """Leases carrying an **open** restart resume-intent (D-082).
 
@@ -320,6 +328,22 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
 
     def set_hub_paused(self, runner_id: str, *, paused: bool, at: datetime) -> None:
         """Mirror the hub's pause brake locally (upsert) — read back by FILL (D-043/D-012)."""
+        ...
+
+    def record_local_pause(
+        self, runner_id: str, *, paused: bool, at: datetime, by: str, report_kind: str, report_payload: str
+    ) -> None:
+        """Append a local pause/start fact **and** its hub-bound report, atomically (issue #43).
+
+        Appends rather than upserts because this is a locally-minted fact, not a mirror of
+        someone else's value (D-004/D-039) — the same shape as the hub's own pause facts.
+
+        The report is not a separate call by design: a brake the hub is never told about
+        leaves the board showing a runner as claiming when it has stopped, and nothing
+        reconciles it (PULL only mirrors hub→runner). Taking the buffer entry here is what
+        makes the pair crash-atomic — `kill -9` at any instant is a supported operation.
+        ``report_kind``/``report_payload`` stay caller-supplied so the store owns no fact
+        vocabulary (the same split as :meth:`enqueue_outbound`)."""
         ...
 
     def set_workspace_prompt(self, workspace_id: str, *, prompt: str, at: datetime) -> None:

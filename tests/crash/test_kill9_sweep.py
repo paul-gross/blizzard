@@ -18,6 +18,13 @@ RESUME's boundaries are the exception: they fire only on the first tick after a
 swept by the dedicated graceful-restart scenario (``test_kill9_at_resume_crash_point``)
 which arms each on the restart process. The registry is partitioned accordingly.
 
+The ``abandon.*`` family is a second exception, for the same reason: the boundary is
+reached only when the hub reassigns or detaches a chunk out from under an active
+lease (D-088), which the plain ``build -> deliver`` scenario never triggers. It is
+swept by its own dedicated scenario (``test_kill9_at_abandon_crash_point``), which
+detaches a running chunk mid-flight via the real hub endpoint and proves the crash
+recovers through RESUME, not through REAP's retry path (blizzard#38 slice 5).
+
 Two whole-process cases round it out: an external ``kill -9`` of the runner daemon
 mid-flight, and a kill of the hub mid-delivery.
 
@@ -70,10 +77,14 @@ _ALL_POINTS = [p.name for p in discover_crash_points()]
 
 # RESUME's crash points fire only on the FIRST tick after a *graceful* restart, so the generic
 # `build -> deliver` scenario below — which never restarts gracefully — can never reach them.
-# Partition the registry: the generic sweep drives every non-resume boundary; the resume points
-# are swept by the graceful-restart scenario further down (`test_kill9_at_resume_crash_point`).
+# Likewise, the `abandon.*` boundary fires only when the hub reassigns/detaches a chunk out from
+# under an active lease, which the generic scenario never does either. Partition the registry:
+# the generic sweep drives every remaining boundary; resume points are swept by the
+# graceful-restart scenario (`test_kill9_at_resume_crash_point`) and abandon points by the
+# dedicated detach scenario (`test_kill9_at_abandon_crash_point`), further down.
 _RESUME_POINTS = [p for p in _ALL_POINTS if p.startswith("resume.")]
-_GENERIC_POINTS = [p for p in _ALL_POINTS if not p.startswith("resume.")]
+_ABANDON_POINTS = [p for p in _ALL_POINTS if p.startswith("abandon.")]
+_GENERIC_POINTS = [p for p in _ALL_POINTS if not p.startswith("resume.") and not p.startswith("abandon.")]
 
 # A representative CI subset — one crash point per boundary family, biased toward the
 # recovery-critical windows the sweep's two real bugs lived in: the FILL bind→claim window
@@ -101,6 +112,11 @@ _CI_SUBSET = (
 # real-subprocess wall time (each resume case restarts the runner twice).
 _RESUME_CI_SUBSET = ("resume.after-kill.before-reattach",)
 
+# The abandon CI subset: `abandon.*` is a new boundary family (blizzard#38 slice 5) with exactly
+# one point today — its lone member is that family's CI representative, so a new family never
+# ships with zero CI coverage (bzh:crash-point-registry).
+_ABANDON_CI_SUBSET = ("abandon.after-kill.before-release",)
+
 
 def _select(points: list[str], ci_subset: tuple[str, ...]) -> list[str]:
     """The points to parametrize: all of ``points``, or its CI subset under the CI profile."""
@@ -116,6 +132,35 @@ def _select(points: list[str], ci_subset: tuple[str, ...]) -> list[str]:
 
 _POINTS = _select(_GENERIC_POINTS, _CI_SUBSET)
 _RESUME_SWEEP = _select(_RESUME_POINTS, _RESUME_CI_SUBSET)
+_ABANDON_SWEEP = _select(_ABANDON_POINTS, _ABANDON_CI_SUBSET)
+
+
+def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every family prefix in the registry yields a non-empty CI-profile selection.
+
+    ``_select`` only asserts a *named* CI-subset point still exists (catching a rename) — it
+    never asserts the converse. The three named subsets (``_CI_SUBSET`` / ``_RESUME_CI_SUBSET`` /
+    ``_ABANDON_CI_SUBSET``) are closed allowlists, so a new point added to an already-partitioned
+    family (a fourth ``resume.*`` boundary, a second ``abandon.*`` one) is silently absent from
+    CI: those families are unreachable by the generic sweep, so the new point gets zero coverage,
+    with no failure to say so. This makes the "a new family never ships with zero CI coverage"
+    claim (see ``_ABANDON_CI_SUBSET`` above) mechanical rather than aspirational.
+
+    Forces the CI profile via ``monkeypatch`` rather than trusting the ambient environment, so
+    this assertion holds whether it is run standalone or under ``mise run crash-sweep-ci`` — a
+    fast, registry-only computation, not a sweep run, independent of ``crash_env`` and
+    ``BLIZZARD_CRASH_SWEEP``.
+    """
+    monkeypatch.setenv("BLIZZARD_CRASH_SWEEP_CI", "1")
+    families = {p.split(".", 1)[0] for p in _ALL_POINTS}
+    assert families, "the crash-point registry is empty — nothing to partition"
+    ci_selected = (
+        set(_select(_GENERIC_POINTS, _CI_SUBSET))
+        | set(_select(_RESUME_POINTS, _RESUME_CI_SUBSET))
+        | set(_select(_ABANDON_POINTS, _ABANDON_CI_SUBSET))
+    )
+    uncovered = {family for family in families if not any(p.startswith(f"{family}.") for p in ci_selected)}
+    assert not uncovered, f"registry families with zero CI-subset coverage: {sorted(uncovered)}"
 
 
 def _is_hub_point(point: str) -> bool:
@@ -523,6 +568,208 @@ def test_kill9_at_resume_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         assert len(after) == 1, f"resume across a crash at {point} minted an extra lease (retry): {after}"
         assert (after[0][0], after[0][1], after[0][2]) == (lease_id, epoch, session_id)
         assert _open_resume_intents(runner_dir) == set(), "the resume-intent was not cleared after recovery"
+        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}")
+        tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
+        commits = [line for line in tree.splitlines() if line.strip()]
+        assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
+    finally:
+        hub.close()
+        terminate(runner_proc)
+        terminate(hub_proc)
+
+
+# --------------------------------------------------------------------------- #
+# Live detach recovery (blizzard#38, D-088) — the abandon crash point
+# --------------------------------------------------------------------------- #
+
+
+def _hang_once_build_script(landed_file: str, marker: Path) -> str:
+    """Commit ``landed_file``, then ``hang()`` — but only the *first* time.
+
+    Identical to :func:`build_script` plus a ``hang()`` gated on ``marker``: the first
+    attempt (no marker yet) hangs mid-flight, which is the window this scenario detaches
+    the chunk in; a fresh re-claim after the abandon runs the same script again in a new
+    workdir, finds the marker, and returns normally so the chunk can actually reach
+    ``done`` instead of hanging forever a second time."""
+    return (
+        "import pathlib, subprocess\n"
+        f"repo = {REPO_NAME!r}\n"
+        f"marker = pathlib.Path({str(marker)!r})\n"
+        f"(pathlib.Path(repo) / {landed_file!r}).write_text('landed by the crash sweep\\n')\n"
+        'subprocess.run(["git", "-C", repo, "add", "-A"], check=True)\n'
+        "subprocess.run(\n"
+        '    ["git", "-C", repo,\n'
+        '     "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
+        '     "commit", "-m", "feat: land a change from the crash sweep"],\n'
+        "    check=True,\n"
+        ")\n"
+        "if not marker.exists():\n"
+        "    marker.write_text('hung once\\n')\n"
+        "    hang()\n"
+    )
+
+
+def _abandon_graph_yaml(landed_file: str, marker: Path) -> str:
+    """The hang-once ``build -> deliver`` graph this scenario detaches mid-flight."""
+    import yaml
+
+    graph = {
+        "name": "default-delivery",
+        "entry": "build",
+        "nodes": {
+            "build": {
+                "executor": "runner",
+                "prompt": _hang_once_build_script(landed_file, marker),
+                "judgement": {
+                    "prompt": "verdict('pass', 'committed before the detach; checks are green')\n",
+                    "choices": {
+                        "pass": {
+                            "description": "The change is committed and the node's checks are green.",
+                            "to": "deliver",
+                        }
+                    },
+                },
+                "retries": {"max": 1, "exhausted": "escalate"},
+            },
+            "deliver": {"executor": "hub", "mode": "merge-to-main"},
+        },
+    }
+    return yaml.safe_dump(graph, sort_keys=False)
+
+
+def _ingest_abandon_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str, marker: Path) -> str:
+    """Mint the hang-once graph and ingest a fresh issue against it to a ready chunk."""
+    minted = hub.post("/api/graphs", json={"definition_yaml": _abandon_graph_yaml(landed_file, marker)})
+    assert minted.status_code == 201, minted.text
+    issue = forge.post(f"/repos/{REPO}/issues", json={"title": landed_file, "body": "an abandon-crash chunk"})
+    assert issue.status_code == 201, issue.text
+    number = issue.json()["number"]
+    ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{number}"]})
+    assert ingested.status_code == 201, ingested.text
+    chunk_id = ingested.json()["chunk_id"]
+    assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # rests not-ready otherwise (D-103)
+    return chunk_id
+
+
+def _await_marker(marker: Path, *, timeout: float = 30.0) -> None:
+    """Block until ``marker`` exists — proof the first attempt reached its hang, past the commit.
+
+    Waiting on the committed file alone (:func:`_await_committed`) is not enough here: the file
+    is written *before* the commit, so a detach racing in right after would kill the worker before
+    it ever reaches the ``hang()`` line — leaving the marker unwritten, so the fresh re-claim
+    would hang all over again instead of landing. Waiting on the marker pins the detach to
+    strictly after the point the first attempt is actually parked at."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if marker.exists():
+            return
+        time.sleep(0.2)
+    raise AssertionError(f"the build worker never reached its hang-once marker ({marker}) before the timeout")
+
+
+def _closure_reason(runner_dir: Path, lease_id: str) -> str | None:
+    """The closure reason recorded for ``lease_id``, or ``None`` if it is still active."""
+    engine = create_engine_from_url(RunnerConfig.load(runner_dir).db_url)
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(
+                select(runner_schema.lease_closures.c.reason).where(runner_schema.lease_closures.c.lease_id == lease_id)
+            ).first()
+        return str(row[0]) if row is not None else None
+    finally:
+        engine.dispose()
+
+
+def _wait_for_closure(runner_dir: Path, lease_id: str, *, timeout: float = 30.0) -> str | None:
+    """Poll until ``lease_id`` closes, or the timeout elapses (return whatever was last seen)."""
+    deadline = time.monotonic() + timeout
+    reason = None
+    while time.monotonic() < deadline:
+        reason = _closure_reason(runner_dir, lease_id)
+        if reason is not None:
+            return reason
+        time.sleep(0.25)
+    return reason
+
+
+@pytest.mark.parametrize("point", _ABANDON_SWEEP)
+def test_kill9_at_abandon_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
+    """A ``kill -9`` right after the abandon's kill (worker dead, envs still held) still recovers.
+
+    A live operator detach (D-088) is the new way this window is reached (blizzard#38 slice 5):
+    the chunk is claimed and hung mid-flight, the operator detaches it via the real hub endpoint,
+    and the armed runner's next PULL discovers the detach, kills the hung worker, and self-SIGKILLs
+    at ``point`` before the environments are released. The claim under test (plan.md §2 property 4)
+    is that this is recovered by the **same** path restart-resume already carries: the dead pid's
+    heartbeat is fresh at crash time, so the startup scan marks it for resume rather than reaping
+    it as stalled; RESUME then re-asks the hub, finds the chunk still not ours, and re-runs the
+    abandon idempotently. The original lease must close ``released`` — not ``reaped`` — which is
+    exactly the distinction that would catch REAP's expire path retrying the chunk instead of
+    releasing it. The chunk is then re-claimable and lands exactly once."""
+    landed_file = f"LANDED-{point.replace('.', '_')}.md"
+    marker = tmp_path / "hang-once.marker"
+    hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
+    hub_port, runner_port = free_port(), free_port()
+
+    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+    runner_proc = None
+    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    try:
+        await_http(hub, "/api/health", proc=hub_proc)
+        chunk_id = _ingest_abandon_chunk(hub, crash_env.forge, landed_file, marker)
+        write_runner_config(
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+        )
+        # Armed from the start: unarmed in effect until a live PULL discovers the detach and
+        # reaches `point` inside the abandon it triggers — the claim + spawn + commit + hang
+        # happen normally first.
+        runner_proc = start_runner(runner_dir, crash_point=point)
+
+        assert wait_status(hub, chunk_id, {"running"}) == "running"
+        # Wait for the marker, not just the committed file: the file is written before the
+        # commit, so racing the detach in right after it appears could kill the worker before it
+        # ever reaches `hang()` — see `_await_marker`.
+        _await_marker(marker)
+        before = _leases_for_chunk(runner_dir, chunk_id)
+        assert len(before) == 1, f"expected one lease before detach, got {before}"
+        lease_id_before, _epoch_before, _session_before, pid_before = before[0]
+        assert pid_before is not None
+        assert _session_ends(runner_dir) == set(), "the hung worker must not have declared done yet"
+
+        # The operator detaches the running chunk (D-088) — a live route release, not a requeue.
+        detached = hub.post(f"/api/chunks/{chunk_id}/detach")
+        assert detached.status_code == 202, detached.text
+        assert hub.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready", "detach did not release the route"
+
+        # The armed runner's next PULL learns of the detach, kills the hung worker, and self-SIGKILLs
+        # at `point` before the environments are released.
+        code = wait_death(runner_proc)
+        assert code == -9, f"armed runner at {point} exited {code}, not SIGKILL (-9); point never reached?"
+        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}")
+        # The kill (not the mock harness's own SessionEnd hook) is what ended the worker — a
+        # SIGKILL is uncatchable, so no session-end fact was recorded for it.
+        assert _session_ends(runner_dir) == set(), "a SIGKILL'd worker must record no session-end"
+
+        # Restart UNARMED: startup crash-recovery must read the dead pid's fresh-at-crash heartbeat
+        # as resumable (not stale), mark it, and RESUME must re-run the abandon idempotently.
+        runner_proc = start_runner(runner_dir, crash_point=None)
+        reason = _wait_for_closure(runner_dir, lease_id_before)
+        assert reason == "released", (
+            f"the original lease closed {reason!r}, not 'released' — the abandon window was not "
+            "recovered via RESUME (a REAP-retry here would consume a retry instead of releasing)"
+        )
+        assert _open_resume_intents(runner_dir) == set(), "the resume-intent was not cleared after recovery"
+
+        # Re-claimable: the same (only) runner picks the now-ready chunk back up fresh and, this
+        # time past the marker, runs it to completion rather than hanging again.
+        assert wait_status(hub, chunk_id, {"done"}) == "done", f"chunk did not converge after kill at {point}"
+        after = _leases_for_chunk(runner_dir, chunk_id)
+        assert len(after) == 2, f"expected the original (released) lease plus one fresh re-claim: {after}"
+        lease_ids_after = {row[0] for row in after}
+        assert lease_id_before in lease_ids_after
+        fresh_lease_id = next(lid for lid in lease_ids_after if lid != lease_id_before)
+        assert _closure_reason(runner_dir, fresh_lease_id) == "transitioned", "the fresh re-claim did not land cleanly"
+
         _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}")
         tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
         commits = [line for line in tree.splitlines() if line.strip()]

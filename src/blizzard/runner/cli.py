@@ -18,10 +18,12 @@ from pathlib import Path
 import click
 import httpx
 import uvicorn
+from click.core import ParameterSource
 
 from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.runner.app import build_hosted_app
-from blizzard.runner.config import ConfigError, RunnerConfig
+from blizzard.runner.config import ConfigError, RunnerConfig, socket_path_for
+from blizzard.runner.listeners import ListenerError, bind_listeners, unlink_socket
 from blizzard.runner.loop.build import (
     PeriodicDriver,
     mark_crash_resume_intents_on_startup,
@@ -33,20 +35,101 @@ from blizzard.runner.runtime import ensure_current_revision, init_environment, m
 ENV_TICK_SECONDS = "BZ_RUNNER_TICK_SECONDS"
 DEFAULT_TICK_SECONDS = 30.0
 
+# The runtime root the dir-taking verbs resolve, highest to lowest: an explicit
+# ``--dir`` (or ``init``'s DIRECTORY), then ``BZ_RUNNER_DIR``, then the cwd. The env rung
+# is what lets winter's per-env band (`[env.<name>.vars]`) aim one feature env at a
+# chosen runtime root — a store snapshot, or a shared dir during an exclusive handoff —
+# without a bespoke command line per invocation (issue #39). Selectable, not shareable:
+# the store is still single-writer, so two live daemons on one `runner.db` remains unsafe.
+ENV_RUNNER_DIR = "BZ_RUNNER_DIR"
+DEFAULT_DIR = "."
+
 # Spawn-injected worker identity the heartbeat hook inherits (design/harness-adapters.md).
+# `BLIZZARD_*` is the worker namespace — per-process-tree execution truth the runner mints
+# at spawn — and is distinct from the operator's `BZ_*` config namespace below.
 ENV_LEASE_ID = "BLIZZARD_LEASE_ID"
 ENV_RUNNER_URL = "BLIZZARD_RUNNER_URL"
+# The operator's TCP door onto the local API (issue #43) — the `BZ_*` namespace, and the
+# override for when the socket is not the right address (a remote-ish Tailnet reach, or a
+# daemon whose runtime dir this shell cannot see).
+ENV_LOCAL_API_URL = "BZ_RUNNER_URL"
 _HEARTBEAT_TIMEOUT = 5.0
 # A PM-item read fans out runner -> hub -> vendor, so it is given a longer budget
 # than the millisecond-cheap hook posts (design/runner/api.md).
 _PM_ITEMS_TIMEOUT = 20.0
-# The operator's declarative pause/start verbs reach the hub directly (D-043), not the
-# local API, so they get the hub-client budget rather than a hook timeout.
-_HUB_CLIENT_TIMEOUT = 15.0
+# The operator's declarative pause/start verbs are pure clients of the runner's own local
+# API (issue #43) — a machine-local round trip, so they get a hook-scale budget rather
+# than the hub-client one.
+_LOCAL_CLIENT_TIMEOUT = 5.0
 
 
 def _stub(verb: str) -> None:
     raise click.ClickException(f"`blizzard runner {verb}` is not yet implemented (scaffold stub).")
+
+
+# The local verbs address the runner's own API through one of its two doors (D-068): the
+# socket under `--dir` (the default — no port, found from the runtime dir alone) or the TCP
+# listener named by `--runner-url`. Ranked by where each value came from, because `--dir`
+# always *has* a value: it defaults to "." and takes $BZ_RUNNER_DIR, which winter's per-env
+# band exports ambiently across a whole feature env — so "is it set?" cannot mean "did the
+# operator choose it?". An explicit flag beats an ambient variable; only a genuine tie on
+# the command line is ambiguous. Both from the environment resolves to the socket, D-068's
+# default transport.
+_SOURCE_RANK = {
+    ParameterSource.COMMANDLINE: 2,
+    ParameterSource.ENVIRONMENT: 1,
+    ParameterSource.DEFAULT: 0,
+}
+
+
+def _rank(source: ParameterSource | None) -> int:
+    return _SOURCE_RANK.get(source, 0) if source is not None else 0
+
+
+def _local_api_client(directory: str, runner_url: str | None) -> tuple[httpx.Client, str]:
+    """A client of the runner's local API, over the socket or TCP — never the store, never the hub."""
+    ctx = click.get_current_context()
+    dir_rank = _rank(ctx.get_parameter_source("directory"))
+    url_rank = _rank(ctx.get_parameter_source("runner_url")) if runner_url is not None else -1
+
+    if dir_rank == 2 and url_rank == 2:
+        raise click.UsageError(
+            "--dir and --runner-url are mutually exclusive: --dir names the socket, --runner-url TCP"
+        )
+    if url_rank > dir_rank and runner_url is not None:
+        return httpx.Client(base_url=runner_url, timeout=_LOCAL_CLIENT_TIMEOUT), runner_url
+
+    sock = socket_path_for(Path(directory))
+    if not sock.exists():
+        # D-068: no degraded read path — an absent socket is a daemon-not-running diagnostic,
+        # never a reason to fall back to reading the store.
+        raise click.ClickException(
+            f"no runner daemon is serving at {sock} — start one with `blizzard runner host --dir {directory}`"
+        )
+    # The base_url host is a placeholder: the UDS transport decides where the bytes go.
+    transport = httpx.HTTPTransport(uds=str(sock))
+    return httpx.Client(transport=transport, base_url="http://runner", timeout=_LOCAL_CLIENT_TIMEOUT), str(sock)
+
+
+def _set_local_paused(*, paused: bool, by: str, directory: str, runner_url: str | None) -> None:
+    """PATCH the runner singleton's own pause brake — the D-043 pattern applied locally."""
+    client, where = _local_api_client(directory, runner_url)
+    verb = "pause" if paused else "start"
+    try:
+        with client:
+            resp = client.patch("/api/runner", json={"paused": paused, "by": by})
+            resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise click.ClickException(f"{verb}: could not reach the runner at {where} ({exc})") from exc
+    view = resp.json()
+    if paused:
+        click.echo(f"runner {view['runner_id']} is now locally paused — it will stop claiming new work")
+        if view.get("hub_paused"):
+            click.echo("note: it is also paused at the hub — `blizzard hub resume` clears that one")
+        return
+    click.echo(f"runner {view['runner_id']} is no longer locally paused")
+    if view.get("hub_paused"):
+        click.echo("note: it stays paused at the hub — clear that with `blizzard hub resume`")
 
 
 @click.group(invoke_without_command=True)
@@ -58,16 +141,24 @@ def runner(ctx: click.Context) -> None:
 
 
 @runner.command()
-@click.argument("directory", default=".")
+@click.argument("directory", default=DEFAULT_DIR, envvar=ENV_RUNNER_DIR)
 def init(directory: str) -> None:
-    """Scaffold config + data dir + a migrated store under DIRECTORY. Idempotent."""
+    """Scaffold config + data dir + a migrated store under DIRECTORY. Idempotent.
+
+    DIRECTORY defaults to $BZ_RUNNER_DIR, then the cwd."""
     config = init_environment(Path(directory))
     revision = migration_runner(config).current_revision()
     click.echo(f"runner runtime ready at {config.root} (store revision {revision})")
 
 
 @runner.command("migrate")
-@click.option("--dir", "directory", default=".", help="Runner runtime directory.")
+@click.option(
+    "--dir",
+    "directory",
+    default=DEFAULT_DIR,
+    envvar=ENV_RUNNER_DIR,
+    help="Runner runtime directory (overrides $BZ_RUNNER_DIR).",
+)
 @click.option("--down", default=None, help="Reverse migrations down to this revision (e.g. base).")
 def migrate_cmd(directory: str, down: str | None) -> None:
     """Apply pending store migrations, or reverse with --down <rev>."""
@@ -79,7 +170,13 @@ def migrate_cmd(directory: str, down: str | None) -> None:
 
 
 @runner.command()
-@click.option("--dir", "directory", default=".", help="Runner runtime directory.")
+@click.option(
+    "--dir",
+    "directory",
+    default=DEFAULT_DIR,
+    envvar=ENV_RUNNER_DIR,
+    help="Runner runtime directory (overrides $BZ_RUNNER_DIR).",
+)
 @click.option("--host", "host_", default=None, help="Bind host (overrides config).")
 @click.option("--port", type=int, default=None, help="Bind port (overrides config).")
 def host(directory: str, host_: str | None, port: int | None) -> None:
@@ -95,7 +192,18 @@ def host(directory: str, host_: str | None, port: int | None) -> None:
     app = build_hosted_app(config)
     interval = float(os.environ.get(ENV_TICK_SECONDS, DEFAULT_TICK_SECONDS))
     driver = PeriodicDriver(config, interval_seconds=interval)
-    click.echo(f"serving blizzard-runner on {config.host}:{config.port} (loop tick {interval}s)")
+
+    # Two doors onto the one app (D-068, issue #43): the unix socket the CLI's local verbs
+    # address, and the TCP port the browser and the worker hooks address. Bound up front so
+    # a clash fails startup loudly; served by a single `Server` below, which is what keeps
+    # the shutdown path (and its D-082 marking) exactly as it was.
+    try:
+        sockets = bind_listeners(config)
+    except ListenerError as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(
+        f"serving blizzard-runner on {config.host}:{config.port} and {config.socket_path} (loop tick {interval}s)"
+    )
 
     # The graceful-restart resume marker (D-082) lives in this frame's `finally`, so it must run
     # *after* `server.run()` returns — which means SIGTERM must drain the server, not hard-exit
@@ -109,6 +217,8 @@ def host(directory: str, host_: str | None, port: int | None) -> None:
     # on uvicorn's own graceful `handle_exit` — equivalent for our purpose. Guarding the monkey-
     # patch with `hasattr` keeps a uvicorn upgrade from crashing startup on a missing attribute.
     # A `kill -9` skips all of this — the ungraceful-crash boundary (design/runner/loop.md).
+    # Host/port here are for uvicorn's own startup log only: `run(sockets=...)` below serves
+    # exactly the pre-bound sockets and never consults them (uvicorn Server.startup).
     server = uvicorn.Server(uvicorn.Config(app, host=config.host, port=config.port))
 
     def _drain(_signum: int, _frame: types.FrameType | None) -> None:
@@ -131,7 +241,7 @@ def host(directory: str, host_: str | None, port: int | None) -> None:
 
     driver.start()  # startup recovery is REAP running first inside the tick
     try:
-        server.run()
+        server.run(sockets=sockets)
     finally:
         # Stop the loop first so no in-flight tick races the marking: `stop()` blocks on the
         # tick thread (an unbounded join — see PeriodicDriver.stop) so the loop is quiescent
@@ -140,10 +250,19 @@ def host(directory: str, host_: str | None, port: int | None) -> None:
         marked = mark_resume_intents_on_shutdown(config)
         if marked:
             click.echo(f"marked {marked} in-flight lease(s) for restart-resume")
+        # uvicorn closes a pre-bound socket but does not unlink its file; leaving it would
+        # make the next start take the stale-corpse path in `bind_listeners` for nothing.
+        unlink_socket(config.socket_path)
 
 
 @runner.command("tick")
-@click.option("--dir", "directory", default=".", help="Runner runtime directory.")
+@click.option(
+    "--dir",
+    "directory",
+    default=DEFAULT_DIR,
+    envvar=ENV_RUNNER_DIR,
+    help="Runner runtime directory (overrides $BZ_RUNNER_DIR).",
+)
 def tick_cmd(directory: str) -> None:
     """Run ONE synchronous reconciliation tick (REAP → PULL → FILL → ADVANCE).
 
@@ -283,37 +402,55 @@ def status() -> None:
 
 
 @runner.command()
-@click.option("--dir", "directory", default=".", help="Runner runtime directory.")
+@click.option(
+    "--dir",
+    "directory",
+    default=DEFAULT_DIR,
+    envvar=ENV_RUNNER_DIR,
+    help="Runner runtime directory (overrides $BZ_RUNNER_DIR).",
+)
+@click.option(
+    "--runner-url",
+    "runner_url",
+    default=None,
+    envvar=ENV_LOCAL_API_URL,
+    help="Runner local API over TCP (overrides $BZ_RUNNER_URL).",
+)
 @click.option("--by", "by", default="operator", help="Who is pausing (recorded on the fact).")
-def pause(directory: str, by: str) -> None:
-    """Declarative control: pause the runner — it stops claiming new work; in-flight chunks run on (D-043).
+def pause(directory: str, runner_url: str | None, by: str) -> None:
+    """Declarative control: pause this runner — it stops claiming new work; in-flight chunks run on (D-043).
 
-    The machine-local half of the hub's pause brake: it reads this runner's id and hub URL
-    from the runtime config in DIR and POSTs ``/api/runners/{id}/pause`` to the hub. The
-    runner reads ``paused`` back on its next pull and adheres. Resume with ``blizzard hub
-    resume <runner_id>``."""
-    try:
-        config = RunnerConfig.load(Path(directory))
-    except ConfigError as exc:
-        raise click.ClickException(str(exc)) from exc
-    url = f"{config.hub_url.rstrip('/')}/api/runners/{config.runner_id}/pause"
-    try:
-        resp = httpx.post(url, json={"by": by}, timeout=_HUB_CLIENT_TIMEOUT)
-    except httpx.HTTPError as exc:
-        raise click.ClickException(f"pause: could not reach the hub at {config.hub_url} ({exc})") from exc
-    if resp.status_code == httpx.codes.NOT_FOUND:
-        raise click.ClickException(f"runner {config.runner_id} is not registered with the hub at {config.hub_url}")
-    try:
-        resp.raise_for_status()
-    except httpx.HTTPError as exc:
-        raise click.ClickException(f"pause: {exc}") from exc
-    click.echo(f"runner {config.runner_id} is now paused — it will stop claiming new work")
+    This runner's **own** brake — "it says it won't try" — and a pure client of its local
+    API (``PATCH /runner``), so it works with the hub unreachable. It is distinct from the
+    hub's brake (``blizzard hub pause <runner_id>``), which coerces a runner from the fleet
+    side: either one stops new claims, and each is cleared where it was set. Clear this one
+    with ``blizzard runner start``."""
+    _set_local_paused(paused=True, by=by, directory=directory, runner_url=runner_url)
 
 
 @runner.command()
-def start() -> None:
-    """Declarative control: resume the runner."""
-    _stub("start")
+@click.option(
+    "--dir",
+    "directory",
+    default=DEFAULT_DIR,
+    envvar=ENV_RUNNER_DIR,
+    help="Runner runtime directory (overrides $BZ_RUNNER_DIR).",
+)
+@click.option(
+    "--runner-url",
+    "runner_url",
+    default=None,
+    envvar=ENV_LOCAL_API_URL,
+    help="Runner local API over TCP (overrides $BZ_RUNNER_URL).",
+)
+@click.option("--by", "by", default="operator", help="Who is starting it (recorded on the fact).")
+def start(directory: str, runner_url: str | None, by: str) -> None:
+    """Declarative control: clear this runner's own pause brake — it resumes claiming (D-043).
+
+    The counterpart to ``blizzard runner pause``, and local in the same way. It clears only
+    the local brake: a runner also paused at the hub stays paused until ``blizzard hub
+    resume <runner_id>`` clears that one too."""
+    _set_local_paused(paused=False, by=by, directory=directory, runner_url=runner_url)
 
 
 @runner.command()

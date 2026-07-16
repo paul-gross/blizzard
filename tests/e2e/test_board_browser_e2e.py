@@ -416,8 +416,11 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 # --- Pause brake from the board: A stays ready while paused ------------
                 expect(page.get_by_test_id("queue-row")).to_have_count(1)  # A alone remains ready
                 page.get_by_test_id("runner-toggle").click()  # Pause
-                expect(page.get_by_test_id("runner")).to_have_attribute("data-paused", "true")
-                expect(page.get_by_test_id("runner-paused")).to_be_visible()
+                # The board's toggle drives the *hub's* brake; the runner's own brake is a
+                # separate concept the board renders apart and cannot clear (D-105).
+                expect(page.get_by_test_id("runner")).to_have_attribute("data-hub-paused", "true")
+                expect(page.get_by_test_id("runner-hub-paused")).to_be_visible()
+                expect(page.get_by_test_id("runner-locally-paused")).to_have_count(0)
 
                 _tick_n(config, fenced, 4)  # PULL reads paused → FILL claims nothing
                 assert hub.get(f"/api/chunks/{chunk_a}").json()["status"] == "ready", "paused runner still claimed A"
@@ -425,7 +428,7 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
 
                 # --- Resume from the board: the claim resumes -------------------------
                 page.get_by_test_id("runner-toggle").click()  # Resume
-                expect(page.get_by_test_id("runner")).to_have_attribute("data-paused", "false")
+                expect(page.get_by_test_id("runner")).to_have_attribute("data-hub-paused", "false")
                 status = _tick_until(config, hub, chunk_a, fenced, {"running", "waiting_on_human", "done"}, 60.0)
                 assert status != "ready", f"resumed runner did not claim A (status {status!r})"
                 expect(queue_row(chunk_a)).to_have_count(0)  # A left the ready queue — the claim resumed

@@ -73,6 +73,79 @@ start; the daemon refuses to start on a revision mismatch, so a forgotten migrat
 fails loudly rather than corrupting state. A graceful `systemctl restart` also
 preserves in-flight work across the upgrade — see the recovery contract below.
 
+## Naming the runtime directory
+
+Every verb that takes a runtime dir — `init`'s positional `DIRECTORY`, and `--dir` on
+`migrate`, `host`, `runner tick`, `runner pause`, and `runner start` — resolves it from
+three rungs, highest to lowest: the explicit flag or argument, then an environment
+variable, then the current working directory.
+
+| Daemon | Variable | Names |
+|--------|----------|-------|
+| hub | `BZ_HUB_DIR` | the hub runtime dir (`blizzard-hub.toml` + `data/hub.db`) |
+| runner | `BZ_RUNNER_DIR` | the runner runtime dir (`blizzard-runner.toml` + `data/runner.db` + `runner.sock`) |
+
+The units above pass `--dir` explicitly, so they are unaffected. The variable is for
+callers that cannot hand-write a flag at every invocation — an operator shell aimed at a
+deployment, or winter's per-env band pointing one feature env at a store snapshot or at a
+shared runtime dir during an exclusive handoff.
+
+> **Selectable is not shareable.** The store is single-writer, and each daemon migrates
+> on boot. Aiming a second live daemon at a runtime dir a running instance already holds
+> risks lock contention and corruption — this variable chooses a root, it does not make
+> one safe to share.
+
+## The runner's two doors
+
+The runner daemon serves one API on two listeners, and which one you address depends on
+who you are:
+
+| Client | Door | How it addresses it |
+|--------|------|---------------------|
+| the CLI's local verbs (`runner pause`, `runner start`) | `runner.sock`, mode 0600, in the runtime dir | `--dir` (or `$BZ_RUNNER_DIR`) — no port, no config file read |
+| the runner's web app in a browser | the TCP port (`8431` by default) | same-origin `/api/*` on the page's own host |
+| worker hooks (`heartbeat`, `ask`, …) | the TCP port | `BLIZZARD_RUNNER_URL`, injected into the spawn |
+
+Same app, same routes — two doors, not two APIs. A browser cannot open a unix socket,
+which is why the TCP listener exists; the socket exists because the operator's controls
+should not depend on a port, and filesystem permissions are their access control (D-068).
+
+**Run the local verbs as the service account.** The socket is mode 0600 and the unit runs
+as `blizzard`, so the filesystem access control above is doing its job: another account —
+including root's shell habits — is not the owner, and the verb fails with `EACCES`. Use
+the same `sudo -u` form the install steps use:
+
+```bash
+sudo -u blizzard /opt/blizzard/venv/bin/blizzard-runner pause --dir /var/lib/blizzard/runner
+sudo -u blizzard /opt/blizzard/venv/bin/blizzard-runner start --dir /var/lib/blizzard/runner
+```
+
+`--runner-url` (or `$BZ_RUNNER_URL`) points a local verb at the TCP door instead — for a
+shell that cannot see the runtime dir, or cannot open the socket. Passing both `--dir` and
+`--runner-url` explicitly is an error; an explicit flag beats either variable, and if both
+arrive from the environment the socket wins (D-068's default transport). Note the two are
+different namespaces: `$BZ_RUNNER_URL` is this operator setting, while
+`BLIZZARD_RUNNER_URL` in the table above is spawn-injected worker identity the runner
+mints per worker — setting one does not affect the other.
+
+`runner pause` and `runner start` are pure clients of this API and never contact the hub,
+so they keep working while it is unreachable. They set the runner's **own** brake, which
+is a different thing from `blizzard hub pause <runner_id>`: either one stops new claims
+(in-flight chunks always run on), and each is cleared only where it was set — `runner
+start` locally, `blizzard hub resume` at the hub.
+
+With no daemon running, the verbs report that rather than reading the store behind its
+back — the store is reached only through the daemon that owns it, in every case. What you
+see depends on how the daemon left:
+
+| How it stopped | On disk | What a local verb reports |
+|----------------|---------|---------------------------|
+| `systemctl stop` / SIGTERM | the socket is unlinked on the way out | `no runner daemon is serving at …` — start one |
+| `kill -9`, OOM, reboot | the socket file is left behind | a connection error against that path — nothing is listening on the corpse |
+
+Either way the next `host` start is clean: it clears a socket nothing is serving, and
+refuses to start beside one that is still live (the store is single-writer).
+
 ## The recovery contract
 
 Two systemd mechanisms combine to deliver the journey's "came back under systemd":
@@ -144,9 +217,11 @@ BLIZZARD_CRASH_SWEEP=1 uv run pytest \
   tests/crash/test_kill9_sweep.py::test_graceful_restart_resumes_in_flight_session
 ```
 
-The full sweep — the same recovery asserted at all 25 crash-point-registry
-boundaries, including a `kill -9` *mid-RESUME* at each graceful-restart boundary
-(`test_kill9_at_resume_crash_point`) — is `mise run crash-sweep`, and the tag
+The full sweep — the same recovery asserted at every boundary the crash-point
+registry enumerates (`discover_crash_points`; see `bzh:crash-point-registry`), including
+a `kill -9` *mid-RESUME* at each graceful-restart boundary
+(`test_kill9_at_resume_crash_point`) and mid-abandon at each detach boundary
+(`test_kill9_at_abandon_crash_point`) — is `mise run crash-sweep`, and the tag
 `release` workflow runs it in CI. The unit files themselves are guarded by
 `tests/test_systemd_units.py`, which holds their `ExecStart` to the real shipped
 entry points and asserts the `Restart=` and boot-enable directives this contract

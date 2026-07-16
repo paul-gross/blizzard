@@ -19,6 +19,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 
+from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.registry import RunnerLiveness
@@ -38,10 +39,11 @@ def _view(liveness: RunnerLiveness) -> RunnerView:
     return RunnerView(
         runner_id=r.runner_id,
         workspace_id=r.workspace_id,
-        registered_at=r.registered_at.isoformat(),
-        last_seen_at=r.last_seen_at.isoformat(),
+        registered_at=iso_utc(r.registered_at),
+        last_seen_at=iso_utc(r.last_seen_at),
         online=liveness.online,
-        paused=r.paused,
+        hub_paused=r.hub_paused,
+        locally_paused=r.locally_paused,
     )
 
 

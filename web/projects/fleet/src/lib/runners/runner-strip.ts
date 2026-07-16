@@ -30,23 +30,37 @@ import { injectRunnerPauseMutation } from './runners.mutations';
               data-testid="runner"
               [attr.data-runner]="runner.runner_id"
               [attr.data-online]="runner.online"
-              [attr.data-paused]="runner.paused"
+              [attr.data-hub-paused]="runner.hub_paused"
+              [attr.data-locally-paused]="runner.locally_paused"
             >
               <span class="dot" [class.online]="runner.online" [class.offline]="!runner.online" aria-hidden="true"></span>
               <span class="rid" data-testid="runner-id">{{ runner.runner_id }}</span>
               <span class="wid">{{ runner.workspace_id }}</span>
               <span class="seen" data-testid="runner-seen">{{ seenLabel(runner) }}</span>
-              @if (runner.paused) {
-                <span class="badge paused" data-testid="runner-paused">PAUSED</span>
+              <!-- Two brakes, two badges: a runner stopped by both shows both, because
+                   they are cleared by different people in different places. -->
+              @if (runner.locally_paused) {
+                <span
+                  class="badge paused local"
+                  data-testid="runner-locally-paused"
+                  title="This runner paused itself. Clear it on the runner: blizzard runner start"
+                  >LOCALLY PAUSED</span
+                >
               }
+              @if (runner.hub_paused) {
+                <span class="badge paused hub" data-testid="runner-hub-paused">HUB PAUSED</span>
+              }
+              <!-- The button is the hub's brake only: the board cannot clear a brake the
+                   runner set on itself, so it never offers to. -->
               <button
                 type="button"
                 class="act"
                 data-testid="runner-toggle"
-                [attr.aria-label]="(runner.paused ? 'Resume ' : 'Pause ') + runner.runner_id"
+                [attr.aria-label]="(runner.hub_paused ? 'Resume ' : 'Pause ') + runner.runner_id + ' at the hub'"
+                [title]="toggleHint(runner)"
                 (click)="toggle(runner)"
               >
-                {{ runner.paused ? 'Resume' : 'Pause' }}
+                {{ runner.hub_paused ? 'Resume' : 'Pause' }}
               </button>
             </li>
           }
@@ -124,11 +138,17 @@ import { injectRunnerPauseMutation } from './runners.mutations';
       font-size: 9px;
     }
     .badge.paused {
-      color: var(--amber-hi);
       border: 1px solid var(--line);
       font-size: 8px;
       letter-spacing: 0.12em;
       padding: 0 4px;
+    }
+    /* Distinct hues so "who stopped it" reads at a glance, not just from the text. */
+    .badge.paused.hub {
+      color: var(--amber-hi);
+    }
+    .badge.paused.local {
+      color: var(--label-dim);
     }
     .act {
       font-family: inherit;
@@ -152,16 +172,39 @@ export class RunnerStrip {
   protected readonly runners = computed<readonly RunnerView[]>(() => this.runnersQuery.data() ?? []);
 
   protected toggle(runner: RunnerView): void {
-    this.pauseMutation.mutate({ runnerId: runner.runner_id, paused: !runner.paused });
+    this.pauseMutation.mutate({ runnerId: runner.runner_id, paused: !runner.hub_paused });
   }
 
-  /** A compact "seen 12s ago" liveness label from `last_seen_at`. */
+  /** Why resuming at the hub may not start a runner: its own brake is not ours to clear. */
+  protected toggleHint(runner: RunnerView): string {
+    if (runner.hub_paused && runner.locally_paused) {
+      return 'Resuming here clears the hub brake only — this runner also paused itself.';
+    }
+    return runner.hub_paused ? 'Resume this runner at the hub' : 'Pause this runner at the hub';
+  }
+
+  /**
+   * A compact "seen 12s ago" liveness label from `last_seen_at`.
+   *
+   * Liveness is decided where both instants share one clock — the hub, via `online`
+   * (`derive_online` compares `last_seen_at` against the hub's own clock, D-070); this
+   * label is decoration computed against the *browser's* clock, and a browser's clock
+   * must never make a correctness call. A small negative age (`-60s <= age < 0`) is
+   * benign browser-vs-hub skew — `last_seen_at` is hub-stamped and an unsynced laptop
+   * is genuinely minutes off — so it reads as "just now". A larger negative age is
+   * *not* skew (a wire timestamp missing its UTC offset would produce exactly this,
+   * `bzh:utc-instants`), and confidently printing `0s` would mask a runner that has
+   * actually been unreachable for hours — so it falls through to the hub-derived
+   * `online` state instead of guessing.
+   */
   protected seenLabel(runner: RunnerView): string {
     const seen = Date.parse(runner.last_seen_at);
     if (Number.isNaN(seen)) return runner.online ? 'online' : 'offline';
-    const secondsAgo = Math.max(0, Math.round((Date.now() - seen) / 1000));
-    if (secondsAgo < 60) return `seen ${secondsAgo}s ago`;
-    const minutesAgo = Math.round(secondsAgo / 60);
+    const secondsAgo = Math.round((Date.now() - seen) / 1000);
+    if (secondsAgo < -60) return runner.online ? 'online' : 'offline';
+    const clamped = Math.max(0, secondsAgo);
+    if (clamped < 60) return `seen ${clamped}s ago`;
+    const minutesAgo = Math.round(clamped / 60);
     if (minutesAgo < 60) return `seen ${minutesAgo}m ago`;
     return `seen ${Math.round(minutesAgo / 60)}h ago`;
   }

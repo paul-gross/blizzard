@@ -15,6 +15,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
+from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.work import DecisionRow
@@ -39,10 +40,10 @@ def to_decision_view(row: DecisionRow) -> DecisionView:
         node_name=row.node_name,
         epoch=row.epoch,
         choices=[DecisionChoiceModel(name=c.name, description=c.description) for c in row.choices],
-        submitted_at=row.submitted_at.isoformat(),
+        submitted_at=iso_utc(row.submitted_at),
         resolved_choice=row.resolved_choice,
         resolved_by=row.resolved_by,
-        resolved_at=row.resolved_at.isoformat() if row.resolved_at is not None else None,
+        resolved_at=iso_utc(row.resolved_at) if row.resolved_at is not None else None,
         transitioned=row.transitioned,
     )
 
@@ -78,5 +79,5 @@ def resolve_decision(
         decision_id=decision_id,
         choice=result.choice,
         resolved_by=result.resolved_by,
-        resolved_at=(decision.resolved_at.isoformat() if decision is not None and decision.resolved_at else ""),
+        resolved_at=(iso_utc(decision.resolved_at) if decision is not None and decision.resolved_at else ""),
     )

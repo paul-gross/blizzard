@@ -1,4 +1,4 @@
-"""pointer identity ``{provider, url}`` -> ``{source, ref}`` (hub store tree, D-105)
+"""pointer identity ``{provider, url}`` -> ``{source, ref}`` (hub store tree, D-107)
 
 A PM pointer stops carrying a raw ``{provider, url}`` pair and instead names a
 configured ``[[pm_source]]`` plus that source's own item reference: ``{source, ref}``.
@@ -20,7 +20,7 @@ same rows.
 
 - ``provider == "github"`` and ``url`` is issue-shaped (``.../{owner}/{repo}/issues/{n}``)
   -> ``source = repo`` (the repo **tail**, not ``owner/repo`` — e.g. ``blizzard`` for
-  ``paul-gross/blizzard``; source names are conventionally the repo tail, D-106), and
+  ``paul-gross/blizzard``; source names are conventionally the repo tail, D-108), and
   ``ref = str(n)``. This is what lands the live rows on the configured name ``blizzard``
   rendering ``blizzard#26``.
 - anything else -> ``source = provider``, ``ref = url`` verbatim — lossless; nothing
@@ -30,10 +30,10 @@ A row whose backfilled ``source`` matches no ``[[pm_source]]`` the operator late
 configures is not this migration's concern and must not fail it — refusing to boot
 because a chunk that went ``done`` months ago names a retired source would be wrong. The
 hub's pass-through routes already degrade a pointer with no matching configured source
-to a null label (D-106); the composition root is where an operator would be warned of a
+to a null label (D-108); the composition root is where an operator would be warned of a
 still-unresolved name, not a hard migration failure or a startup refusal.
 
-**``downgrade()`` is canonicalizing, not byte-exact (D-105):** reversing
+**``downgrade()`` is canonicalizing, not byte-exact (D-107):** reversing
 ``source="blizzard", ref="26"`` needs a full issue URL, but the *owner* segment
 (``paul-gross`` in ``https://github.com/paul-gross/blizzard/issues/26``) was never
 retained forward — only the repo tail was. That owner is genuinely unrecoverable from
@@ -42,7 +42,7 @@ backfilled GitHub-issue row and reconstructed as ``provider="github"``,
 ``url=f"https://github.com/{_UNKNOWN_OWNER}/{source}/issues/{ref}"`` — *structurally*
 canonical under a documented, constant placeholder owner, **not resolvable**: nothing
 is served at that address (the real owner is gone, so no reconstruction could be).
-That is the accepted, recorded cost (D-105), and its operational consequence is
+That is the accepted, recorded cost (D-107), and its operational consequence is
 concrete: **a downgraded hub running pre-0012 code parses that URL for owner/repo and
 404s on every PM read** of a backfilled pointer until the chunk is re-ingested. A
 rollback restores the *schema*, not the hub's PM reach.
@@ -65,8 +65,8 @@ the forward rule does not record which branch it took — so a hypothetical
 exists in any live store (a bare number is not a URL), and down-then-up remains stable
 for it regardless; it is recorded here rather than guarded against.
 
-Revision ID: 0012_hub_pm_pointer_source_ref
-Revises: 0011_hub_chunk_promoted
+Revision ID: 0013_hub_pm_pointer_source_ref
+Revises: 0012_hub_runner_local_pause
 """
 
 from __future__ import annotations
@@ -77,8 +77,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0012_hub_pm_pointer_source_ref"
-down_revision: str | None = "0011_hub_chunk_promoted"
+revision: str = "0013_hub_pm_pointer_source_ref"
+down_revision: str | None = "0012_hub_runner_local_pause"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -90,7 +90,7 @@ _ISSUE_RE = re.compile(r"(?:^|/)(?:repos/)?(?P<owner>[^/]+)/(?P<repo>[^/]+)/issu
 
 # The documented, constant placeholder owner downgrade() reconstructs a GitHub issue
 # URL under — the repo tail alone (this revision's forward output) cannot recover the
-# real owner, and this is the deliberate, recorded cost of that (D-105).
+# real owner, and this is the deliberate, recorded cost of that (D-107).
 _UNKNOWN_OWNER = "unknown"
 
 _OLD_POINTERS = sa.Table(

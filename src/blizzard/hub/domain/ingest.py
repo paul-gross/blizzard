@@ -1,7 +1,7 @@
 """Chunk ingest — wrap PM pointers into a chunk (D-047/D-093).
 
 The ``POST /chunks`` domain rule: a caller submits one or more ``{source, ref}``
-(D-105) pointers and the hub mints a chunk pinned to the configured default graph
+(D-107) pointers and the hub mints a chunk pinned to the configured default graph
 (D-081).
 Contents are never stored — only the pointer (D-047).
 

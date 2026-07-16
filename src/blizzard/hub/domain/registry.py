@@ -23,11 +23,12 @@ returned alongside it by the service because it needs the clock.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.store.utc import as_utc
 
 _log = get_logger("blizzard.hub.registry")
 
@@ -40,13 +41,24 @@ STALE_AFTER = timedelta(minutes=5)
 
 @dataclass(frozen=True)
 class RunnerRegistration:
-    """A fleet-registry row with its **derived** paused state (D-019/D-043)."""
+    """A fleet-registry row with its two **derived** brakes (D-019/D-043, issue #43).
+
+    They are separate concepts, so they are separate fields rather than one ``paused``:
+
+    * ``hub_paused`` — the fleet's brake, set here and pulled down by the runner, which
+      adheres. Advisory today: the hub does not yet refuse a paused runner's claim (#44).
+    * ``locally_paused`` — the runner's own brake, set on its machine and reported up. The
+      hub only ever reads this one.
+
+    Either stops new claims, so a reader wanting "is it claiming?" wants both.
+    """
 
     runner_id: str
     workspace_id: str
     registered_at: datetime
     last_seen_at: datetime
-    paused: bool
+    hub_paused: bool
+    locally_paused: bool = False
 
 
 @dataclass(frozen=True)
@@ -60,16 +72,13 @@ class RunnerLiveness:
 def derive_online(last_seen_at: datetime, now: datetime, *, threshold: timedelta) -> bool:
     """True iff the runner was seen within ``threshold`` of ``now`` (D-004/D-070).
 
-    Both operands are coerced to UTC-aware first: the injected clock stamps aware
-    instants, but sqlite reads a stored timestamp back naive (it drops the tzinfo), so a
-    raw subtraction would raise. Reading a naive value as UTC is exact — that is the tz
-    the clock wrote it in.
+    Both operands are coerced to UTC-aware first via :func:`~blizzard.foundation.store.utc.as_utc`
+    (idempotent — every store column is ``UtcDateTime``-typed): this is a public pure
+    function whose inputs are not guaranteed to come from the store, so the domain keeps
+    its own defensive coercion rather than depending on unnamed adapter behavior
+    (``bzh:domain-core``).
     """
-    return (_as_utc(now) - _as_utc(last_seen_at)) <= threshold
-
-
-def _as_utc(value: datetime) -> datetime:
-    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+    return (as_utc(now) - as_utc(last_seen_at)) <= threshold
 
 
 class IReadRunnerRegistry(Protocol):
@@ -96,7 +105,11 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
         ...
 
     def record_pause(self, runner_id: str, *, paused: bool, at: datetime, by: str) -> None:
-        """Append a pause/resume fact; ``paused`` derives from the newest one (D-043)."""
+        """Append a fleet pause/resume fact; ``hub_paused`` derives from the newest (D-043)."""
+        ...
+
+    def record_local_pause(self, runner_id: str, *, paused: bool, at: datetime, by: str) -> None:
+        """Land a runner-reported local pause/start fact; ``locally_paused`` derives (issue #43)."""
         ...
 
 
@@ -119,12 +132,27 @@ class FleetService:
         return self._registry.touch_last_seen(runner_id, at=self._clock.now())
 
     def set_paused(self, runner_id: str, *, paused: bool, by: str) -> bool:
-        """Flip the pause brake for a registered runner; returns False if unknown (D-043)."""
+        """Flip the fleet's brake for a registered runner; returns False if unknown (D-043)."""
         if self._registry.get_runner(runner_id) is None:
             return False
         self._registry.record_pause(runner_id, paused=paused, at=self._clock.now(), by=by)
         _log.info("runner pause set", runner_id=runner_id, paused=paused, by=by)
         return True
+
+    def record_local_pause(self, runner_id: str, *, paused: bool, at: datetime, by: str) -> None:
+        """Land a runner's report that it paused or started *itself* (issue #43).
+
+        Not a control: the runner has already stopped claiming by the time this arrives, and
+        the hub cannot set this brake. Landing it is what lets the board show a runner that
+        is declining work rather than silently rendering it as running.
+
+        Unlike ``set_paused`` this does not require a known runner. The fact rides the
+        outbound buffer, which replays an outage in FIFO order, so a pause can legitimately
+        arrive before the registration that follows it — dropping it would lose the brake
+        exactly when the board most needs it (D-069).
+        """
+        self._registry.record_local_pause(runner_id, paused=paused, at=at, by=by)
+        _log.info("runner local pause reported", runner_id=runner_id, paused=paused, by=by)
 
     def get_liveness(self, runner_id: str) -> RunnerLiveness | None:
         """One runner with its derived liveness — the runner's own pull read (D-043/D-070)."""

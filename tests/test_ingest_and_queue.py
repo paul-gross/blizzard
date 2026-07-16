@@ -48,7 +48,7 @@ def test_ingest_batches_multiple_pointers_into_one_chunk(tmp_path: Path) -> None
 def test_list_row_is_board_legible(tmp_path: Path) -> None:
     # The fleet list resolves the current node's human name and each pointer's
     # `{source}#{ref}` label server-side, so the board renders `build` and `default#1`
-    # without reassembly (D-075/D-108). A pointer naming no configured source degrades
+    # without reassembly (D-075/D-110). A pointer naming no configured source degrades
     # to a null label/web_url rather than erroring — minted straight through the domain
     # service (ingest's 422 already rejects an unconfigured source at the front door, so
     # a board row carrying one can only arise from a chunk minted before its source was
@@ -107,14 +107,14 @@ def test_live_pointer_reingest_is_409(tmp_path: Path) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Ingest-time source resolution (D-106) — the 422 rejection and the name-keyed
+# Ingest-time source resolution (D-108) — the 422 rejection and the name-keyed
 # lookup two configured sources need.
 # --------------------------------------------------------------------------- #
 
 
 def test_ingest_rejects_a_token_no_configured_source_claims(tmp_path: Path) -> None:
     """A token no configured binding's ``parse`` claims is a 422, naming the token and
-    what is configured (D-109)."""
+    what is configured (D-111)."""
     hub = build_hub(tmp_path, pm={"widget": FakePmSource(name="widget", repo="acme/widget")})
     other = {"source": "other", "ref": "1"}
 
@@ -136,7 +136,7 @@ def test_ingest_succeeds_when_a_configured_source_claims_the_pointer(tmp_path: P
 
 def test_resolver_picks_the_matching_source_when_two_are_configured(tmp_path: Path) -> None:
     """A pointer resolves to its own named binding by ``registry.get(pointer.source)``
-    (D-105/D-106) — the fetch, and the label it renders, must come from ``beta``'s
+    (D-107/D-108) — the fetch, and the label it renders, must come from ``beta``'s
     binding, not ``alpha``'s, even though ``alpha`` is registered first."""
     alpha = FakePmSource(name="alpha", repo="acme/alpha")
     beta = FakePmSource(name="beta", repo="acme/beta")
@@ -158,7 +158,7 @@ def test_resolver_picks_the_matching_source_when_two_are_configured(tmp_path: Pa
 
 
 def test_pm_items_503s_when_no_pm_source_is_configured_at_all(tmp_path: Path) -> None:
-    """An explicitly empty registry is a legal, PM-reach-free hub (D-106) — pm-items 503s
+    """An explicitly empty registry is a legal, PM-reach-free hub (D-108) — pm-items 503s
     up front rather than 422ing at ingest, since an empty registry names no source at all."""
     hub = build_hub(tmp_path, pm={})
 

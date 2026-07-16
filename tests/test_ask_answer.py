@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub, pointer_token
+from tests.support import assert_all_timestamps_utc, build_hub, pointer_token
 
 pytestmark = pytest.mark.component
 
@@ -88,12 +88,40 @@ def test_forwarded_question_parks_chunk_and_surfaces(tmp_path: Path) -> None:
     assert detail["questions"][0]["options"] == ["rest", "graphql"]
 
     # GET /questions is the fleet open-question surface (hub status).
-    open_qs = hub.client.get("/api/questions").json()
+    open_resp = hub.client.get("/api/questions")
+    open_qs = open_resp.json()
     assert [q["question_id"] for q in open_qs] == ["qn_1"]
+    assert_all_timestamps_utc(open_resp.json())  # bzh:utc-instants — asked_at
 
     # GET /questions/{id} is the runner's answer poll — open until answered.
     poll = hub.client.get("/api/questions/qn_1").json()
     assert poll["answered"] is False
+
+
+def test_ask_question_normalizes_a_naive_asked_at(tmp_path: Path) -> None:
+    """Insurance on the typed route too (issue #28, ``bzh:utc-instants``): ``_parse``
+    coerces a naive ``asked_at`` to UTC rather than storing it (and later re-emitting
+    it) naive."""
+    hub = build_hub(tmp_path)
+    chunk_id = _claim(hub)
+    _ask(hub, chunk_id, question_id="qn_naive")
+    resp = hub.client.post(
+        "/api/questions",
+        json={
+            "question_id": "qn_also_naive",
+            "chunk_id": chunk_id,
+            "node_id": "nd_build",
+            "session_id": "sess-1",
+            "runner_id": "r1",
+            "epoch": 1,
+            "question": "Which API?",
+            "options": [],
+            "asked_at": "2026-07-13T00:00:00",  # naive — no offset
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    poll = hub.client.get("/api/questions/qn_also_naive").json()
+    assert poll["asked_at"] == "2026-07-13T00:00:00+00:00"
 
 
 def test_question_asked_via_events_batch_lands(tmp_path: Path) -> None:
@@ -127,6 +155,44 @@ def test_question_asked_via_events_batch_lands(tmp_path: Path) -> None:
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "waiting_on_human"
 
 
+def test_question_asked_via_events_batch_normalizes_a_naive_asked_at(tmp_path: Path) -> None:
+    """Legacy-buffered-payload insurance (issue #28, ``bzh:utc-instants``).
+
+    A runner's outbound buffer (D-069) can still hold — and later deliver — a naive
+    ``asked_at`` string minted before the runner's own upgrade; ``_parse_at`` coerces it
+    to UTC rather than storing (and later re-emitting) a naive instant.
+    """
+    hub = build_hub(tmp_path)
+    chunk_id = _claim(hub)
+    resp = hub.client.post(
+        "/api/events",
+        json={
+            "runner_id": "r1",
+            "facts": [
+                {
+                    "seq": 5,
+                    "kind": "question.asked",
+                    "payload": {
+                        "question_id": "qn_legacy",
+                        "chunk_id": chunk_id,
+                        "node_id": "nd_build",
+                        "session_id": "sess-1",
+                        "epoch": 1,
+                        "question": "batch?",
+                        "options": [],
+                        "asked_at": "2026-07-13T00:00:00",  # naive — no offset
+                    },
+                }
+            ],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["applied"] == [5]
+
+    poll = hub.client.get("/api/questions/qn_legacy").json()
+    assert poll["asked_at"] == "2026-07-13T00:00:00+00:00"
+
+
 def test_answer_first_write_wins_second_gets_409_with_winner(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = _claim(hub)
@@ -141,6 +207,7 @@ def test_answer_first_write_wins_second_gets_409_with_winner(tmp_path: Path) -> 
         "answered_by": "alice",
         "answered_at": first.json()["answered_at"],
     }
+    assert_all_timestamps_utc(first.json())  # bzh:utc-instants — answered_at
 
     # A racing second answer loses the CAS and is told who already answered.
     second = hub.client.post("/api/questions/qn_1/answer", json={"answer": "graphql", "answered_by": "bob"})

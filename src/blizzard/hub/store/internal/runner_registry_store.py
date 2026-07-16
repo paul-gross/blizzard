@@ -1,15 +1,19 @@
 """SQLAlchemy adapter for the fleet-registry seam (package-private).
 
 Implements :class:`~blizzard.hub.domain.registry.IWriteRunnerRegistry` over the hub's
-``runner_registrations`` and ``runner_pause_facts`` tables. All ``sqlalchemy`` usage is
-confined here (``bzh:dependency-inversion``); the domain sees only
-:class:`~blizzard.hub.domain.registry.RunnerRegistration`.
+``runner_registrations``, ``runner_pause_facts``, and ``runner_local_pause_facts`` tables.
+All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``); the domain sees
+only :class:`~blizzard.hub.domain.registry.RunnerRegistration`.
 
-Facts only, status derived (``bzh:facts-not-status``): ``paused`` is never a column on
-the registration — it is derived from the newest ``runner_pause_facts`` row (D-043, the
-D-039 pattern). ``last_seen_at`` is the one refreshed timestamp (not a fact), bumped by
-registration and the heartbeat; liveness derives from it in the domain, against the
-clock. Timestamps arrive already stamped from the injected clock (``bzh:injected-clock``).
+Facts only, status derived (``bzh:facts-not-status``): neither brake is a column on the
+registration. ``hub_paused`` derives from the newest ``runner_pause_facts`` row (D-043,
+the D-039 pattern) and ``locally_paused`` from the newest ``runner_local_pause_facts`` row
+— two independent fact streams with two different authors (issue #43): the fleet sets the
+first here, the runner reports the second up through its outbound buffer.
+
+``last_seen_at`` is the one refreshed timestamp (not a fact), bumped by registration and
+the heartbeat; liveness derives from it in the domain, against the clock. Timestamps
+arrive already stamped from the injected clock (``bzh:injected-clock``).
 """
 
 from __future__ import annotations
@@ -37,12 +41,15 @@ class RunnerRegistryStore:
             ).one_or_none()
             if row is None:
                 return None
-            return self._registration(row, self._paused(conn, runner_id))
+            return self._registration(row, self._paused(conn, runner_id), self._locally_paused(conn, runner_id))
 
     def list_runners(self) -> list[RunnerRegistration]:
         with self._engine.connect() as conn:
             rows = conn.execute(select(s.runner_registrations).order_by(s.runner_registrations.c.registered_at)).all()
-            return [self._registration(row, self._paused(conn, row.runner_id)) for row in rows]
+            return [
+                self._registration(row, self._paused(conn, row.runner_id), self._locally_paused(conn, row.runner_id))
+                for row in rows
+            ]
 
     # --- writes -------------------------------------------------------------
 
@@ -78,27 +85,43 @@ class RunnerRegistryStore:
         with self._engine.begin() as conn:
             conn.execute(insert(s.runner_pause_facts).values(runner_id=runner_id, paused=paused, set_at=at, set_by=by))
 
+    def record_local_pause(self, runner_id: str, *, paused: bool, at: datetime, by: str) -> None:
+        with self._engine.begin() as conn:
+            conn.execute(
+                insert(s.runner_local_pause_facts).values(runner_id=runner_id, paused=paused, set_at=at, set_by=by)
+            )
+
     # --- helpers ------------------------------------------------------------
 
     @staticmethod
     def _paused(conn, runner_id: str) -> bool:  # type: ignore[no-untyped-def]
-        """Derive paused from the newest pause/resume fact (D-043), default False."""
+        """Derive the fleet's brake from the newest pause/resume fact (D-043), default False."""
+        return RunnerRegistryStore._newest(conn, s.runner_pause_facts, runner_id)
+
+    @staticmethod
+    def _locally_paused(conn, runner_id: str) -> bool:  # type: ignore[no-untyped-def]
+        """Derive the runner's own brake from the newest fact it reported (issue #43).
+
+        Defaults False: a runner that has never reported one is not locally paused — and a
+        runner the hub has never heard from at all is simply not claiming anyway."""
+        return RunnerRegistryStore._newest(conn, s.runner_local_pause_facts, runner_id)
+
+    @staticmethod
+    def _newest(conn, table, runner_id: str) -> bool:  # type: ignore[no-untyped-def]
         row = conn.execute(
-            select(s.runner_pause_facts.c.paused)
-            .where(s.runner_pause_facts.c.runner_id == runner_id)
-            .order_by(s.runner_pause_facts.c.id.desc())
-            .limit(1)
+            select(table.c.paused).where(table.c.runner_id == runner_id).order_by(table.c.id.desc()).limit(1)
         ).one_or_none()
         return bool(row.paused) if row is not None else False
 
     @staticmethod
-    def _registration(row, paused: bool) -> RunnerRegistration:  # type: ignore[no-untyped-def]
+    def _registration(row, hub_paused: bool, locally_paused: bool) -> RunnerRegistration:  # type: ignore[no-untyped-def]
         return RunnerRegistration(
             runner_id=row.runner_id,
             workspace_id=row.workspace_id,
             registered_at=row.registered_at,
             last_seen_at=row.last_seen_at,
-            paused=paused,
+            hub_paused=hub_paused,
+            locally_paused=locally_paused,
         )
 
 

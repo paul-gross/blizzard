@@ -29,7 +29,13 @@ from fastapi.responses import StreamingResponse
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.events.broker import EventBroker
-from blizzard.wire.facts import QUESTION_ASKED, RunnerFactAck, RunnerFactBatch
+from blizzard.wire.facts import (
+    QUESTION_ASKED,
+    RUNNER_LOCALLY_PAUSED,
+    RUNNER_LOCALLY_RESUMED,
+    RunnerFactAck,
+    RunnerFactBatch,
+)
 
 router = APIRouter(prefix="/api", tags=["meta"])
 
@@ -59,6 +65,14 @@ def ingest_runner_facts(
         applied = set(ack.applied)
         for fact in batch.facts:
             if fact.seq not in applied:
+                continue
+            # Runner-scoped facts (issue #43) carry no chunk_id: they are about the runner,
+            # so they refresh the fleet column, not a card. Handled before the chunk branch
+            # below, which would otherwise skip them and land them invisibly — applied to
+            # the store but never pushed, so the board would keep showing a runner as
+            # claiming until something unrelated forced a refetch.
+            if fact.kind in (RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED):
+                services.events.publish_runner_changed(batch.runner_id)
                 continue
             chunk_id = fact.payload.get("chunk_id")
             if not isinstance(chunk_id, str):

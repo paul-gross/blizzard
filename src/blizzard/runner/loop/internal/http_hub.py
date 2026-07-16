@@ -81,7 +81,7 @@ class HttpHubClient:
 
     def fetch_runner_paused(self, runner_id: str) -> bool:
         resp = self._get(f"{_API}/runners/{runner_id}")
-        return bool(RunnerView.model_validate(resp.json()).paused)
+        return bool(RunnerView.model_validate(resp.json()).hub_paused)
 
     def report_lease(self, chunk_id: str, *, epoch: int, runner_id: str) -> None:
         self._post(

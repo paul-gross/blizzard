@@ -35,7 +35,7 @@ const STATUS_COLUMN: Record<ChunkStatus, string | null> = {
   done: 'done',
 };
 
-/** One linked PM-pointer chip — the server-derived `{source}#{ref}` label (D-105/D-108). */
+/** One linked PM-pointer chip — the server-derived `{source}#{ref}` label (D-107/D-110). */
 export interface PointerChip {
   readonly label: string;
   readonly url: string;

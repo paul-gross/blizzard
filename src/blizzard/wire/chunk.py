@@ -1,9 +1,9 @@
 """Chunk ingest, views, and the PM pass-through (D-047/D-004).
 
 Ingest wraps one or more source-native **tokens** into chunks (``POST /chunks``,
-D-109) — ``{name}:{ref}``, ``{name}#{ref}``, or the item's own URL; the hub resolves
+D-111) — ``{name}:{ref}``, ``{name}#{ref}``, or the item's own URL; the hub resolves
 each against its configured PM sources (``IPmSourceRegistry.resolve``) and 422s a
-token none of them claims (D-107), naming the token and the configured sources. A
+token none of them claims (D-109), naming the token and the configured sources. A
 resolved pointer already held by a live chunk is rejected **409** with the existing
 chunk id (D-093). The list/detail views carry the **derived** status (D-004) — never
 a stored column — and the current node. ``GET /chunks/{id}/pm-items`` is the
@@ -21,7 +21,7 @@ from blizzard.wire.question import QuestionView
 
 
 class PmPointerModel(BaseModel):
-    """One ``{source, ref}`` PM pointer (D-105) — ``source`` names a configured
+    """One ``{source, ref}`` PM pointer (D-107) — ``source`` names a configured
     ``[[pm_source]]``; ``ref`` is that source's own item token."""
 
     source: str
@@ -29,7 +29,7 @@ class PmPointerModel(BaseModel):
 
 
 class PmPointerView(BaseModel):
-    """A pointer as the views render it (D-105/D-108) — the raw pair plus its legible
+    """A pointer as the views render it (D-107/D-110) — the raw pair plus its legible
     label and browser URL, both rendered by the pointer's configured source binding.
 
     ``label`` is the board-legible ``{name}#{ref}`` (e.g. ``blizzard#8``); ``web_url``
@@ -43,12 +43,12 @@ class PmPointerView(BaseModel):
 
 
 class ChunkIngestRequest(BaseModel):
-    """Ingest by source-native token — specific items always, batch fine (D-047/D-109).
+    """Ingest by source-native token — specific items always, batch fine (D-047/D-111).
 
     Each token is resolved against the configured PM sources' own grammar
     (``IPmSource.parse``): ``{name}:{ref}``, ``{name}#{ref}``, or the item's own URL.
     Tokens only — no pre-resolved ``{source, ref}`` shape travels alongside them; the
-    two intake shapes would reintroduce the same config-blind guess D-109 removes."""
+    two intake shapes would reintroduce the same config-blind guess D-111 removes."""
 
     tokens: list[str]
 
@@ -204,20 +204,21 @@ class ChunkDetail(BaseModel):
 
 
 class PmItemEntry(BaseModel):
-    """One pointer's pass-through PM item (D-047/D-074/D-105) — body + comment thread,
-    vendor-native.
+    """One pointer's pass-through PM item (D-047/D-074/D-107) — title, body + comment
+    thread, vendor-native.
 
     ``label``/``web_url`` are the board-legible pointer label (``blizzard#8``) and its
-    browser address (D-108) — both null when no configured source names ``source``. A
+    browser address (D-110) — both null when no configured source names ``source``. A
     per-pointer forge failure degrades here rather than failing the whole read (D-084):
-    ``error`` carries the reason and ``body`` is null, so one unreachable pointer never
-    blinds the reader to the pointers it did reach."""
+    ``error`` carries the reason and ``title``/``body`` are null, so one unreachable
+    pointer never blinds the reader to the pointers it did reach."""
 
     source: str
     ref: str
     label: str | None = None
     web_url: str | None = None
     fetched_at: str
+    title: str | None = None
     body: str | None = None
     comments: list[str] = []
     error: str | None = None

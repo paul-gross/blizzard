@@ -288,12 +288,12 @@ export type ChunkGroupResponse = {
 /**
  * ChunkIngestRequest
  *
- * Ingest by source-native token — specific items always, batch fine (D-047/D-109).
+ * Ingest by source-native token — specific items always, batch fine (D-047/D-111).
  *
  * Each token is resolved against the configured PM sources' own grammar
  * (``IPmSource.parse``): ``{name}:{ref}``, ``{name}#{ref}``, or the item's own URL.
  * Tokens only — no pre-resolved ``{source, ref}`` shape travels alongside them; the
- * two intake shapes would reintroduce the same config-blind guess D-109 removes.
+ * two intake shapes would reintroduce the same config-blind guess D-111 removes.
  */
 export type ChunkIngestRequest = {
     /**
@@ -828,14 +828,14 @@ export type OpenDecisionsResponse = {
 /**
  * PmItemEntry
  *
- * One pointer's pass-through PM item (D-047/D-074/D-105) — body + comment thread,
- * vendor-native.
+ * One pointer's pass-through PM item (D-047/D-074/D-107) — title, body + comment
+ * thread, vendor-native.
  *
  * ``label``/``web_url`` are the board-legible pointer label (``blizzard#8``) and its
- * browser address (D-108) — both null when no configured source names ``source``. A
+ * browser address (D-110) — both null when no configured source names ``source``. A
  * per-pointer forge failure degrades here rather than failing the whole read (D-084):
- * ``error`` carries the reason and ``body`` is null, so one unreachable pointer never
- * blinds the reader to the pointers it did reach.
+ * ``error`` carries the reason and ``title``/``body`` are null, so one unreachable
+ * pointer never blinds the reader to the pointers it did reach.
  */
 export type PmItemEntry = {
     /**
@@ -867,6 +867,10 @@ export type PmItemEntry = {
      */
     source: string;
     /**
+     * Title
+     */
+    title?: string | null;
+    /**
      * Web Url
      */
     web_url?: string | null;
@@ -890,7 +894,7 @@ export type PmItemsView = {
 /**
  * PmPointerModel
  *
- * One ``{source, ref}`` PM pointer (D-105) — ``source`` names a configured
+ * One ``{source, ref}`` PM pointer (D-107) — ``source`` names a configured
  * ``[[pm_source]]``; ``ref`` is that source's own item token.
  */
 export type PmPointerModel = {
@@ -907,7 +911,7 @@ export type PmPointerModel = {
 /**
  * PmPointerView
  *
- * A pointer as the views render it (D-105/D-108) — the raw pair plus its legible
+ * A pointer as the views render it (D-107/D-110) — the raw pair plus its legible
  * label and browser URL, both rendered by the pointer's configured source binding.
  *
  * ``label`` is the board-legible ``{name}#{ref}`` (e.g. ``blizzard#8``); ``web_url``
@@ -1365,21 +1369,29 @@ export type RunnerRegistrationResponse = {
 /**
  * RunnerView
  *
- * One fleet-registry row — derived liveness and paused state (D-004/D-070/D-043).
+ * One fleet-registry row — derived liveness and both brakes (D-004/D-070/D-043).
+ *
+ * A runner can be paused by two different parties for two different reasons, so the two
+ * are reported separately rather than collapsed into one ``paused`` (issue #43): the
+ * board shows *which*, and a reader that wants "is it claiming?" ORs them.
  */
 export type RunnerView = {
+    /**
+     * Hub Paused
+     */
+    hub_paused: boolean;
     /**
      * Last Seen At
      */
     last_seen_at: string;
     /**
+     * Locally Paused
+     */
+    locally_paused?: boolean;
+    /**
      * Online
      */
     online: boolean;
-    /**
-     * Paused
-     */
-    paused: boolean;
     /**
      * Registered At
      */
@@ -1666,6 +1678,40 @@ export type SubmitDecisionApiChunksChunkIdDecisionsPostResponses = {
 };
 
 export type SubmitDecisionApiChunksChunkIdDecisionsPostResponse = SubmitDecisionApiChunksChunkIdDecisionsPostResponses[keyof SubmitDecisionApiChunksChunkIdDecisionsPostResponses];
+
+export type DetachChunkApiChunksChunkIdDetachPostData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/detach';
+};
+
+export type DetachChunkApiChunksChunkIdDetachPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DetachChunkApiChunksChunkIdDetachPostError = DetachChunkApiChunksChunkIdDetachPostErrors[keyof DetachChunkApiChunksChunkIdDetachPostErrors];
+
+export type DetachChunkApiChunksChunkIdDetachPostResponses = {
+    /**
+     * Response Detach Chunk Api Chunks  Chunk Id  Detach Post
+     *
+     * Successful Response
+     */
+    202: {
+        [key: string]: string;
+    };
+};
+
+export type DetachChunkApiChunksChunkIdDetachPostResponse = DetachChunkApiChunksChunkIdDetachPostResponses[keyof DetachChunkApiChunksChunkIdDetachPostResponses];
 
 export type GetEnvelopeApiChunksChunkIdEnvelopeGetData = {
     body?: never;

@@ -177,6 +177,16 @@ class ChunkStore:
             ]
 
     def route_of(self, chunk_id: str) -> Route | None:
+        """The chunk's live route, or ``None`` if its newest release has caught up to it.
+
+        Tie semantics: the ``released_at >= created_at`` comparison below uses ``>=``,
+        so a *release* wins a same-instant tie against the newest ``route.created`` —
+        this is what lets a same-instant detach's own gate see "no route" immediately.
+        :func:`blizzard.hub.domain.work._has_live_route` derives the same live/not-live
+        question for chunk status and deliberately uses the opposite tie-break (``>``,
+        a *reclaim* wins ties there) — see that function's docstring for why the two
+        are not reconciled to one winner.
+        """
         with self._engine.connect() as conn:
             created = conn.execute(
                 select(s.route_created)

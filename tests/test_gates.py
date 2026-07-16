@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub, pointer_token, report_lease
+from tests.support import assert_all_timestamps_utc, build_hub, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -144,8 +144,10 @@ def test_graph_gate_opens_a_decision_and_parks(tmp_path: Path) -> None:
     assert {c["name"] for c in decision["choices"]} == {"approve", "reject"}
 
     # The open decision is surfaced fleet-wide.
-    open_list = hub.client.get("/api/decisions").json()["decisions"]
+    resp = hub.client.get("/api/decisions")
+    open_list = resp.json()["decisions"]
     assert [d["decision_id"] for d in open_list] == [decision["decision_id"]]
+    assert_all_timestamps_utc(resp.json())  # bzh:utc-instants — submitted_at
 
 
 def test_worker_transition_out_of_a_gate_is_rejected(tmp_path: Path) -> None:
@@ -181,6 +183,7 @@ def test_decide_then_resolving_transition_advances_the_chunk(tmp_path: Path) -> 
     # A person decides — first-write-wins.
     resolve = hub.client.post(f"/api/decisions/{decision_id}/resolution", json={"choice": "approve"})
     assert resolve.status_code == 200, resolve.text
+    assert_all_timestamps_utc(resolve.json())  # bzh:utc-instants — resolved_at
     # Resolved: no longer waiting_on_human (route still live -> running), decision resolved.
     mid = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert mid["status"] == "running"
@@ -193,8 +196,10 @@ def test_decide_then_resolving_transition_advances_the_chunk(tmp_path: Path) -> 
     )
     # approve -> deliver (a hub node): the coordinator lands the build artifact.
     assert resolving.json()["outcome"] == "hub_node_taken", resolving.text
-    done = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    done_resp = hub.client.get(f"/api/chunks/{chunk_id}")
+    done = done_resp.json()
     assert done["status"] == "done"
+    assert_all_timestamps_utc(done_resp.json())  # bzh:utc-instants — transitions[].recorded_at
     assert hub.forge.landed and hub.forge.landed[0].repo == "acme/widget"
     # The decision is now transitioned; it drops off the chunk's live decision + the open list.
     assert done["decision"] is None
@@ -317,3 +322,83 @@ def test_requeue_on_a_non_escalated_chunk_is_409(tmp_path: Path) -> None:
     _claim_and_lease(hub, chunk_id)  # running, not escalated
     resp = hub.client.post(f"/api/chunks/{chunk_id}/requeues")
     assert resp.status_code == 409
+
+
+# --------------------------------------------------------------------------- #
+# Detach (D-088)
+# --------------------------------------------------------------------------- #
+
+
+def test_detach_a_claimed_chunk_re_derives_ready_and_reenters_the_queue(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, _ = _ingest(hub, _PLAIN_YAML)
+    _claim_and_lease(hub, chunk_id)
+    # The release fact must post-date the route creation; advance the test clock past the tie.
+    hub.clock.advance(timedelta(seconds=1))
+    resp = hub.client.post(f"/api/chunks/{chunk_id}/detach")
+    assert resp.status_code == 202, resp.text
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
+    # The detached chunk re-enters the ready queue, claimable at its current node.
+    peek = hub.client.get("/api/queue/peek").json()
+    assert any(e["chunk_id"] == chunk_id for e in peek["entries"])
+
+
+def test_detach_an_unknown_chunk_is_404(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    resp = hub.client.post("/api/chunks/does-not-exist/detach")
+    assert resp.status_code == 404
+
+
+def test_detach_a_ready_unclaimed_chunk_is_409(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, _ = _ingest(hub, _PLAIN_YAML)  # promoted (ready), never claimed -> no live route
+    resp = hub.client.post(f"/api/chunks/{chunk_id}/detach")
+    assert resp.status_code == 409
+
+
+def test_detach_twice_is_409_the_second_time(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, _ = _ingest(hub, _PLAIN_YAML)
+    _claim_and_lease(hub, chunk_id)
+    first = hub.client.post(f"/api/chunks/{chunk_id}/detach")
+    assert first.status_code == 202, first.text
+    # The route is already released; detach is deliberately not silently idempotent.
+    second = hub.client.post(f"/api/chunks/{chunk_id}/detach")
+    assert second.status_code == 409
+
+
+def test_detach_an_escalated_chunk_succeeds_and_the_escalation_survives(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, _ = _ingest(hub, _PLAIN_YAML)
+    _claim_and_lease(hub, chunk_id)
+    esc = hub.client.post(
+        f"/api/chunks/{chunk_id}/escalations",
+        json={"epoch": 1, "runner_id": "r1", "takeover_command": "cd env && claude --resume s"},
+    )
+    assert esc.status_code == 202
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "needs_human"
+
+    resp = hub.client.post(f"/api/chunks/{chunk_id}/detach")
+    assert resp.status_code == 202, resp.text
+    # The runner is released, but detach is not requeue: the escalation stays open.
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "needs_human"
+
+
+def test_detach_publishes_chunk_changed_and_queue_changed(tmp_path: Path) -> None:
+    """The board learns of a detach live, as it does of a requeue (D-088, D-067).
+
+    Both events matter and for different reasons: ``chunk-changed`` carries the chunk's
+    re-derived status to any open detail view, and ``queue-changed`` tells the queue view a
+    new entry is claimable — a detached chunk re-enters the ready queue."""
+    hub = build_hub(tmp_path)
+    chunk_id, _ = _ingest(hub, _PLAIN_YAML)
+    _claim_and_lease(hub, chunk_id)
+    hub.clock.advance(timedelta(seconds=1))
+    before = len(hub.events.snapshot())
+
+    assert hub.client.post(f"/api/chunks/{chunk_id}/detach").status_code == 202
+
+    published = hub.events.snapshot()[before:]
+    assert [e.type for e in published] == ["chunk-changed", "queue-changed"]
+    # chunk-changed carries the *re-derived* status, not the pre-detach one.
+    assert f'"chunk_id": "{chunk_id}", "status": "ready"' in published[0].framed()

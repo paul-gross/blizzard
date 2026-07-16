@@ -4,7 +4,7 @@ Builds the store-backed ``host`` composition with the two external seams — the
 delivery and the PM read — replaced by in-process fakes (``bzh:pluggable-seams``): a
 :class:`FakeForge` that records lands and lets a test arm a conflict, and a
 :class:`FakePmSource` that returns canned issue text, wired into the hub through a
-:class:`~blizzard.hub.pm.registry.PmSourceRegistry` (D-106) the same way the real
+:class:`~blizzard.hub.pm.registry.PmSourceRegistry` (D-108) the same way the real
 factory would. The clock is a :class:`~blizzard.foundation.clock.FixedClock` the test
 can advance, so ids order and timestamps are deterministic (``bzh:injected-clock``).
 """
@@ -89,24 +89,26 @@ def _conforms_fake_forge(x: FakeForge) -> IForgeDelivery:
 
 
 class FakePmSource:
-    """An in-process :class:`IPmSource` — canned body + comments per pointer ref (D-105).
+    """An in-process :class:`IPmSource` — canned title + body + comments per pointer ref (D-107).
 
     Keyed on ``pointer.ref`` (an opaque item token, mirroring the real GitHub adapter's
     issue number) rather than a URL — the pointer names its binding by ``source``
-    (D-105/D-106) so this fake, like the real adapter, never re-derives a repo from a
-    URL. A default ``body``/``comments`` answers every pointer; ``by_ref`` overrides the
-    item for specific refs (a grouped chunk reads distinct items), and ``fail_refs``
-    raises :class:`PmSourceError` for a ref to exercise the per-pointer forge-failure
-    degradation. ``name`` is this fake's registered source name — the prefix its
-    ``label`` renders under and the ``source`` a pointer it mints carries, mirroring a
-    real binding's configured ``name`` (D-106/D-108). ``repo`` is the ``owner/repo`` this
-    fake renders ``web_url``s under — cosmetic only now that resolution is name-keyed."""
+    (D-107/D-108) so this fake, like the real adapter, never re-derives a repo from a
+    URL. A default ``title``/``body``/``comments`` answers every pointer; ``by_ref``
+    overrides the item for specific refs (a grouped chunk reads distinct items), and
+    ``fail_refs`` raises :class:`PmSourceError` for a ref to exercise the per-pointer
+    forge-failure degradation. ``name`` is this fake's registered source name — the
+    prefix its ``label`` renders under and the ``source`` a pointer it mints carries,
+    mirroring a real binding's configured ``name`` (D-108/D-110). ``repo`` is the
+    ``owner/repo`` this fake renders ``web_url``s under — cosmetic only now that
+    resolution is name-keyed."""
 
     def __init__(
         self,
         *,
         name: str = "default",
         repo: str = "acme/widget",
+        title: str = "issue title",
         body: str = "issue body",
         comments: list[str] | None = None,
         by_ref: dict[str, PmItem] | None = None,
@@ -114,6 +116,7 @@ class FakePmSource:
     ) -> None:
         self.name = name
         self.repo = repo
+        self.title = title
         self.body = body
         self.comments = comments or []
         self.by_ref = by_ref or {}
@@ -121,8 +124,8 @@ class FakePmSource:
         self.fetched: list[str] = []
 
     def parse(self, token: str) -> PmPointer | None:
-        """``{name}:{ref}`` or ``{name}#{ref}`` (D-105/D-109); ``None`` otherwise — this
-        fake carries no URL grammar (the real binding's own concern, D-108) and, unlike
+        """``{name}:{ref}`` or ``{name}#{ref}`` (D-107/D-111); ``None`` otherwise — this
+        fake carries no URL grammar (the real binding's own concern, D-110) and, unlike
         the real GitHub adapter, does not require a numeric ``ref`` — tests key fakes on
         whatever ref shape is convenient."""
         for sep_char in (":", "#"):
@@ -137,7 +140,7 @@ class FakePmSource:
             raise PmSourceError(f"forge unreachable for {pointer.ref}")
         if pointer.ref in self.by_ref:
             return self.by_ref[pointer.ref]
-        return PmItem(body=self.body, comments=list(self.comments))
+        return PmItem(body=self.body, title=self.title, comments=list(self.comments))
 
     def label(self, pointer: PmPointer) -> str | None:
         return f"{self.name}#{pointer.ref}"
@@ -151,6 +154,17 @@ class FakePmSource:
 
 def _conforms_fake_pm(x: FakePmSource) -> IPmSource:
     return x
+
+
+class _OmitTitle:
+    """The sentinel a test uses to make :func:`github_double` omit ``title`` from the payload."""
+
+    def __repr__(self) -> str:
+        return "OMIT_TITLE"
+
+
+OMIT_TITLE = _OmitTitle()
+"""Sentinel — a forge payload with no ``title`` key at all (real GitHub never sends this)."""
 
 
 def github_double(*, conflict_branches: set[str] | None = None, issues: dict[str, dict] | None = None) -> TestClient:
@@ -173,7 +187,14 @@ def github_double(*, conflict_branches: set[str] | None = None, issues: dict[str
     def get_issue(owner: str, repo: str, number: int) -> dict:
         key = f"{owner}/{repo}#{number}"
         data = issue_store.get(key, {"body": f"issue {number}", "comments": []})
-        return {"number": number, "title": f"issue {number}", "body": data["body"]}
+        payload: dict[str, object] = {"number": number, "body": data["body"]}
+        # Real GitHub *always* returns a "title", so the double does too by default — a double
+        # laxer than the forge it stands for would hide bugs. A test opts into the degenerate
+        # shapes explicitly: ``OMIT_TITLE`` drops the key, ``None`` sends it null.
+        title = data.get("title", f"issue {number}")
+        if title is not OMIT_TITLE:
+            payload["title"] = title
+        return payload
 
     @app.get("/repos/{owner}/{repo}/issues/{number}/comments")
     def get_comments(owner: str, repo: str, number: int) -> list[dict]:
@@ -266,10 +287,10 @@ def build_hub(
     """A migrated, fully-wired hub over ``tmp_path`` with fake external seams.
 
     ``pm`` is ``{name: FakePmSource}`` — the same name-keyed shape the real
-    :func:`~blizzard.hub.pm.internal.factory.build_pm_registry` produces (D-106);
+    :func:`~blizzard.hub.pm.internal.factory.build_pm_registry` produces (D-108);
     defaults to one entry so the common single-source case needs no test churn.
     ``None`` defaults to one source; an explicit ``pm={}`` is a legal, deliberately
-    **empty** registry (D-106) — ``or`` would silently coerce that back to the default,
+    **empty** registry (D-108) — ``or`` would silently coerce that back to the default,
     which is what made the empty-registry path unreachable through this harness."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     config = HubConfig(root=tmp_path, db_url=db_url)
@@ -288,7 +309,7 @@ def build_hub(
 
 
 def write_pm_sources(hub_dir: Path, sources: Sequence[PmSourceConfig]) -> HubConfig:
-    """Declare ``[[pm_source]]`` entries on an already-``init``ed hub runtime dir (D-106/D-107).
+    """Declare ``[[pm_source]]`` entries on an already-``init``ed hub runtime dir (D-108/D-109).
 
     Every upper-tier fixture (``tests/e2e``, ``tests/crash``, ``tests/journey``,
     ``tests/service``) runs ``blizzard hub init`` from its own subprocess-driven support
@@ -363,7 +384,7 @@ def emitted_events(hub: HubHarness, *, since: int = 0) -> list[dict[str, str]]:
 
 
 def pointer_token(pointer: dict) -> str:
-    """A ``{source, ref}`` pointer dict's own ``{source}:{ref}`` ingest token (D-109) —
+    """A ``{source, ref}`` pointer dict's own ``{source}:{ref}`` ingest token (D-111) —
     the request-side shape a test builds from the same dict it asserts the response
     (``{source, ref, label, web_url}``) against."""
     return f"{pointer['source']}:{pointer['ref']}"
@@ -372,7 +393,7 @@ def pointer_token(pointer: dict) -> str:
 def ingest(hub: HubHarness, pointers: list[dict], *, promote: bool = True) -> str:
     """Ingest ``pointers`` (as ``{source, ref}`` dicts) into one chunk and (by default)
     promote it to ready (D-103) — each dict is converted to its ``{source}:{ref}``
-    ingest token before posting (D-109).
+    ingest token before posting (D-111).
 
     Ingest now mints a chunk in the not-ready resting state, so most tests — which expect
     the chunk claimable/in the ready queue — promote it in the same breath. Pass
@@ -385,6 +406,38 @@ def ingest(hub: HubHarness, pointers: list[dict], *, promote: bool = True) -> st
         promoted = hub.client.post(f"/api/chunks/{chunk_id}/promote")
         assert promoted.status_code == 202, promoted.text
     return chunk_id
+
+
+def assert_utc_iso(value: object) -> None:
+    """Assert ``value`` is a literal ISO-8601 string carrying an explicit UTC offset.
+
+    Pins the wire **bytes**, not a parsed-then-compared value (issue #28,
+    ``bzh:utc-instants``): a naive string re-parses fine with ``datetime.fromisoformat``
+    on the same box that emitted it, so only the literal trailing designator
+    (``+00:00`` / ``Z``) catches the naive-serialization bug — the finale's literal-bytes
+    insight, generalized.
+    """
+    assert isinstance(value, str), f"expected an ISO-8601 timestamp string, got {value!r}"
+    assert value.endswith("+00:00") or value.endswith("Z"), f"timestamp missing a UTC offset: {value!r}"
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    assert parsed.tzinfo is not None
+
+
+def assert_all_timestamps_utc(payload: object) -> None:
+    """Recursively walk a response body, applying :func:`assert_utc_iso` to every ``*_at`` key.
+
+    A route test calls this once on its response; a route that later adds a seventh
+    timestamp field is covered without the test itself changing.
+    """
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            if key.endswith("_at") and value is not None:
+                assert_utc_iso(value)
+            else:
+                assert_all_timestamps_utc(value)
+    elif isinstance(payload, list):
+        for item in payload:
+            assert_all_timestamps_utc(item)
 
 
 def report_lease(hub: HubHarness, chunk_id: str, *, epoch: int, seq: int, runner_id: str = "r1") -> dict:

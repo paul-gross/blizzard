@@ -16,7 +16,9 @@ _POINTER_2 = {"source": "widget", "ref": "43"}
 
 
 def test_pm_items_reads_body_and_comments_from_the_forge(tmp_path: Path) -> None:
-    pm = FakePmSource(name="widget", body="please fix the flake", comments=["seen it too", "repro attached"])
+    pm = FakePmSource(
+        name="widget", title="flaky test", body="please fix the flake", comments=["seen it too", "repro attached"]
+    )
     hub = build_hub(tmp_path, pm={"widget": pm})
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
 
@@ -29,6 +31,7 @@ def test_pm_items_reads_body_and_comments_from_the_forge(tmp_path: Path) -> None
     assert item["ref"] == "42"
     assert item["label"] == "widget#42"
     assert item["web_url"]
+    assert item["title"] == "flaky test"
     assert item["body"] == "please fix the flake"
     assert item["comments"] == ["seen it too", "repro attached"]
     assert item["error"] is None
@@ -60,7 +63,7 @@ def test_pm_items_degrades_per_pointer_when_the_forge_is_unreachable(tmp_path: P
     """One unreachable pointer surfaces as an ``error`` entry; the reachable one still reads (D-084)."""
     pm = FakePmSource(
         name="widget",
-        by_ref={"42": PmItem(body="reachable", comments=[])},
+        by_ref={"42": PmItem(title="reachable issue", body="reachable", comments=[])},
         fail_refs={"43"},
     )
     hub = build_hub(tmp_path, pm={"widget": pm})
@@ -71,7 +74,9 @@ def test_pm_items_degrades_per_pointer_when_the_forge_is_unreachable(tmp_path: P
     resp = hub.client.get(f"/api/chunks/{chunk_id}/pm-items")
     assert resp.status_code == 200
     ok, failed = resp.json()["items"]
-    assert ok["body"] == "reachable" and ok["error"] is None
+    assert ok["title"] == "reachable issue" and ok["body"] == "reachable" and ok["error"] is None
+    # A per-pointer forge failure nulls title alongside body — never a partial item (D-084).
+    assert failed["title"] is None
     assert failed["body"] is None and failed["error"] and "43" in failed["error"]
 
 

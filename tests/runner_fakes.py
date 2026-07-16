@@ -30,7 +30,7 @@ from blizzard.runner.loop.worktree import GitArtifact, IWorktreeGit
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 from blizzard.runner.store.repository import IWriteRunnerStore
 from blizzard.runner.store.schema import metadata as runner_metadata
-from blizzard.wire.chunk import ChunkDetail
+from blizzard.wire.chunk import ChunkDetail, RouteView
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeConfig, NodeEnvelope
@@ -60,7 +60,12 @@ class FakeHub:
     seq without re-applying, mirroring the hub's idempotency contract.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, default_runner_id: str = "r1") -> None:
+        # The runner id the unscripted `get_chunk` fallback's route reports as holding the
+        # chunk. `make_context` sets this to match whatever `LoopConfig.runner_id` the context
+        # is actually wired to (default or explicit), so "the route is ours" stays true by
+        # construction rather than by two literals happening to agree (blizzard#38).
+        self.default_runner_id = default_runner_id
         self.queue: list[QueuePeekEntry] = []
         self.claim_outcome: RouteClaimOutcome | None = None
         self.apply_responses: list[ApplyResponse] = []
@@ -125,7 +130,10 @@ class FakeHub:
         if self.down:
             raise HubClientError("fake hub is down")
         # Default a hub-node-held chunk to `delivering` (the merge queue is still
-        # working) unless a test scripts a terminal state.
+        # working) with its route still ours — the common case, since a test that
+        # seeds a lease this fake never claimed still owns a live route in reality
+        # (nothing has told the hub otherwise) — unless a test scripts something else,
+        # e.g. a released/reassigned route (D-088).
         if chunk_id in self.chunks:
             return self.chunks[chunk_id]
         return ChunkDetail(
@@ -134,6 +142,7 @@ class FakeHub:
             status=ChunkStatus.DELIVERING,
             current_node_id="deliver",
             latest_epoch=1,
+            route=RouteView(runner_id=self.default_runner_id, workspace_id="ws1", environment_ids=[]),
         )
 
     def get_question(self, question_id: str) -> QuestionView:
@@ -264,6 +273,11 @@ def make_context(
     config: LoopConfig | None = None,
 ) -> LoopContext:
     """Assemble a :class:`LoopContext` from a real store and injected fakes."""
+    resolved_config = config if config is not None else LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1)
+    # Derived, not duplicated (blizzard#38): the fake's unscripted `get_chunk` route always
+    # reports the runner this context is actually for, so a test that passes a custom
+    # `LoopConfig(runner_id=...)` can never have every lease silently read as reassigned.
+    hub.default_runner_id = resolved_config.runner_id
     _hub: IHubClient = hub
     _provider: IWorkspaceProvider = provider
     _harness: IHarnessAdapter = harness
@@ -277,7 +291,7 @@ def make_context(
         harness=_harness,
         process=_probe,
         worktree_git=_wt,
-        config=config if config is not None else LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1),
+        config=resolved_config,
     )
 
 

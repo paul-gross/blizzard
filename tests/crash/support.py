@@ -41,7 +41,7 @@ RUNNER_ENV = "e1"
 # A brisk tick so a scenario converges in seconds, not the daemon's 30s production cadence.
 TICK_SECONDS = "0.3"
 
-# The env var every scenario's ``[[pm_source]]`` (D-106/D-107) names as its credential —
+# The env var every scenario's ``[[pm_source]]`` (D-108/D-109) names as its credential —
 # shared across every source this support module declares, since the mock forge checks
 # no token: one env var suffices regardless of how many sources are configured.
 PM_TOKEN_ENV = "BZ_PM_TOKEN_CRASH"
@@ -242,7 +242,7 @@ def start_hub(
 ) -> subprocess.Popen[str]:
     """Start (or restart) the hub daemon; arm ``crash_point`` when it is a deliver point.
 
-    ``pm_sources`` (D-106/D-107) is declared only on the first call for ``hub_dir`` — the
+    ``pm_sources`` (D-108/D-109) is declared only on the first call for ``hub_dir`` — the
     one that also runs ``hub init`` — since a restart reuses the config file already on
     disk; defaults to :func:`default_pm_sources`, the crash sweep's single source. Every
     restart still carries ``PM_TOKEN_ENV`` regardless, since the config always names it."""

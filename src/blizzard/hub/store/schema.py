@@ -23,7 +23,6 @@ from __future__ import annotations
 from sqlalchemy import (
     Boolean,
     Column,
-    DateTime,
     Float,
     ForeignKey,
     Integer,
@@ -32,6 +31,8 @@ from sqlalchemy import (
     Table,
     Text,
 )
+
+from blizzard.foundation.store.utc import UtcDateTime
 
 metadata = MetaData()
 
@@ -44,7 +45,7 @@ graphs = Table(
     Column("name", String, nullable=False),
     Column("entry_node_id", String, nullable=False),
     Column("definition_yaml", Text, nullable=False),  # the inlined source, for audit/re-export
-    Column("created_at", DateTime, nullable=False),
+    Column("created_at", UtcDateTime, nullable=False),
 )
 
 graph_nodes = Table(
@@ -91,7 +92,7 @@ chunks = Table(
     metadata,
     Column("chunk_id", String, primary_key=True),  # ch_<ulid> (D-075)
     Column("graph_id", String, ForeignKey("graphs.graph_id"), nullable=False),  # pinned at mint
-    Column("minted_at", DateTime, nullable=False),
+    Column("minted_at", UtcDateTime, nullable=False),
 )
 
 chunk_pm_pointers = Table(
@@ -116,7 +117,7 @@ transitions = Table(
     Column("decision_id", String, nullable=True),  # gates only (D-045); shaped for P7
     Column("epoch", Integer, nullable=False),  # the fencing epoch checked against latest (D-007)
     Column("runner_id", String, nullable=False),  # reporting author, or the hub coordinator (D-079)
-    Column("recorded_at", DateTime, nullable=False),
+    Column("recorded_at", UtcDateTime, nullable=False),
 )
 
 # --- Artifacts (the chunk artifact store — D-036) ---------------------------
@@ -133,7 +134,7 @@ artifacts = Table(
     Column("kind", String, nullable=False),  # git_commit | asset
     Column("data", Text, nullable=False),  # '<branch>:<commit>' | raw content (D-036)
     Column("repo", String, nullable=True),  # git_commit only
-    Column("produced_at", DateTime, nullable=False),
+    Column("produced_at", UtcDateTime, nullable=False),
 )
 
 # --- Lease facts (lease.minted, runner-reported — D-044) --------------------
@@ -145,7 +146,7 @@ lease_facts = Table(
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("epoch", Integer, nullable=False),  # the fence input the transition check consumes (D-007)
     Column("runner_id", String, nullable=False),
-    Column("minted_at", DateTime, nullable=False),
+    Column("minted_at", UtcDateTime, nullable=False),
 )
 
 # --- Routes (route.created / route.released — D-021/D-080/D-088) ------------
@@ -157,7 +158,7 @@ route_created = Table(
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("runner_id", String, nullable=False),
     Column("workspace_id", String, nullable=False),
-    Column("created_at", DateTime, nullable=False),
+    Column("created_at", UtcDateTime, nullable=False),
 )
 
 route_environments = Table(
@@ -173,7 +174,7 @@ route_released = Table(
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
-    Column("released_at", DateTime, nullable=False),
+    Column("released_at", UtcDateTime, nullable=False),
 )
 
 # --- Delivery landing facts (per-repo, then whole-chunk — D-030/D-091) ------
@@ -185,7 +186,7 @@ delivery_repo_landed = Table(
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("repo", String, nullable=False),
     Column("commit_hash", String, nullable=False),
-    Column("landed_at", DateTime, nullable=False),
+    Column("landed_at", UtcDateTime, nullable=False),
 )
 
 delivery_landed = Table(
@@ -193,7 +194,7 @@ delivery_landed = Table(
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
-    Column("landed_at", DateTime, nullable=False),  # terminal: all repos landed (D-030)
+    Column("landed_at", UtcDateTime, nullable=False),  # terminal: all repos landed (D-030)
 )
 
 # --- Open-PR delivery facts (pr.opened / pr.closed — D-059/D-065) -----------
@@ -215,7 +216,7 @@ delivery_pr_opened = Table(
     Column("pr_number", Integer, nullable=False),
     Column("pr_url", String, nullable=False),  # the PR's html url — surfaced on the board
     Column("commit_hash", String, nullable=False),  # the authoritative head the PR carries (D-060)
-    Column("opened_at", DateTime, nullable=False),
+    Column("opened_at", UtcDateTime, nullable=False),
 )
 
 delivery_pr_closed = Table(
@@ -227,7 +228,7 @@ delivery_pr_closed = Table(
     Column("pr_number", Integer, nullable=False),
     Column("merged", Boolean, nullable=False),  # merged vs closed-without-merge — both terminal (D-065)
     Column("landed_commit", String, nullable=True),  # the merge commit where one exists
-    Column("closed_at", DateTime, nullable=False),
+    Column("closed_at", UtcDateTime, nullable=False),
 )
 
 # --- Readiness: the not-ready resting state and its promotion (D-004) --------
@@ -244,7 +245,7 @@ chunk_promoted = Table(
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
-    Column("promoted_at", DateTime, nullable=False),  # not_ready -> ready (D-103)
+    Column("promoted_at", UtcDateTime, nullable=False),  # not_ready -> ready (D-103)
 )
 
 # --- Facts that make the derivation precedence correct (shaped) -------------
@@ -254,7 +255,7 @@ chunk_stopped = Table(
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
-    Column("stopped_at", DateTime, nullable=False),  # terminal operator abandonment (D-067)
+    Column("stopped_at", UtcDateTime, nullable=False),  # terminal operator abandonment (D-067)
 )
 
 escalations = Table(
@@ -264,7 +265,7 @@ escalations = Table(
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("epoch", Integer, nullable=False),  # closed by a later lease mint, not a resolution (D-067)
     Column("takeover_command", Text, nullable=False, server_default=""),  # the pasteable resume command (D-035)
-    Column("recorded_at", DateTime, nullable=False),
+    Column("recorded_at", UtcDateTime, nullable=False),
 )
 
 # --- Questions and answers (the ask/answer rendezvous — questions.md) --------
@@ -287,7 +288,7 @@ questions = Table(
     Column("epoch", Integer, nullable=False),  # the parked lease's fencing epoch (D-007)
     Column("question", Text, nullable=False),
     Column("options", Text, nullable=False),  # JSON list[str] of offered choices (may be empty)
-    Column("asked_at", DateTime, nullable=False),  # reap clock stops for the chunk from here
+    Column("asked_at", UtcDateTime, nullable=False),  # reap clock stops for the chunk from here
 )
 
 question_answers = Table(
@@ -298,7 +299,7 @@ question_answers = Table(
     Column("question_id", String, ForeignKey("questions.question_id"), primary_key=True),
     Column("answer", Text, nullable=False),  # the chosen option or free text, carried into the resume prompt
     Column("answered_by", String, nullable=False),  # who won the CAS
-    Column("answered_at", DateTime, nullable=False),
+    Column("answered_at", UtcDateTime, nullable=False),
 )
 
 answer_deliveries = Table(
@@ -309,7 +310,7 @@ answer_deliveries = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("question_id", String, ForeignKey("questions.question_id"), nullable=False),
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
-    Column("delivered_at", DateTime, nullable=False),
+    Column("delivered_at", UtcDateTime, nullable=False),
 )
 
 # --- Human gates: decisions and their resolutions (D-045/D-032) -------------
@@ -331,7 +332,7 @@ decisions = Table(
     Column("node_name", String, nullable=False),  # the node's name — what runner gate-config matches (D-041)
     Column("epoch", Integer, nullable=False),  # the parked step's fence; stale decisions rejected (D-007)
     Column("choices", Text, nullable=False),  # JSON list of {name, description} — the buttons (D-042)
-    Column("submitted_at", DateTime, nullable=False),
+    Column("submitted_at", UtcDateTime, nullable=False),
 )
 
 decision_resolutions = Table(
@@ -342,7 +343,7 @@ decision_resolutions = Table(
     Column("decision_id", String, ForeignKey("decisions.decision_id"), primary_key=True),
     Column("choice", String, nullable=False),  # the picked choice name — routes the resolving transition
     Column("resolved_by", String, nullable=False),
-    Column("resolved_at", DateTime, nullable=False),
+    Column("resolved_at", UtcDateTime, nullable=False),
 )
 
 # --- Requeue facts (close needs_human by supersession — D-067) --------------
@@ -358,7 +359,7 @@ requeues = Table(
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
-    Column("requeued_at", DateTime, nullable=False),  # supersedes an earlier escalation (D-067)
+    Column("requeued_at", UtcDateTime, nullable=False),  # supersedes an earlier escalation (D-067)
 )
 
 # --- Store-and-forward high-water mark (per-runner idempotency — D-069) ------
@@ -373,7 +374,7 @@ runner_high_water = Table(
     metadata,
     Column("runner_id", String, primary_key=True),
     Column("seq", Integer, nullable=False),  # greatest applied per-runner seq (D-069)
-    Column("updated_at", DateTime, nullable=False),
+    Column("updated_at", UtcDateTime, nullable=False),
 )
 
 # --- Queue shaping: ready-queue ordering (D-048/D-004) ----------------------
@@ -392,7 +393,7 @@ queue_positions = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("position", Float, nullable=False),  # lower sorts earlier; newest fact per chunk wins
-    Column("set_at", DateTime, nullable=False),
+    Column("set_at", UtcDateTime, nullable=False),
 )
 
 # --- Queue shaping: grouping (chunk.grouped — D-048/D-076/D-047) -------------
@@ -410,7 +411,7 @@ chunk_grouped = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),  # the merged-away chunk
     Column("grouped_into", String, ForeignKey("chunks.chunk_id"), nullable=False),  # the survivor
-    Column("grouped_at", DateTime, nullable=False),
+    Column("grouped_at", UtcDateTime, nullable=False),
 )
 
 # --- The fleet registry (runner.registered / paused / resumed — D-019/D-070/D-043) --
@@ -428,8 +429,8 @@ runner_registrations = Table(
     metadata,
     Column("runner_id", String, primary_key=True),
     Column("workspace_id", String, nullable=False),  # the per-runner workspace binding (D-019)
-    Column("registered_at", DateTime, nullable=False),
-    Column("last_seen_at", DateTime, nullable=False),  # liveness derives from this (D-070)
+    Column("registered_at", UtcDateTime, nullable=False),
+    Column("last_seen_at", UtcDateTime, nullable=False),  # liveness derives from this (D-070)
 )
 
 runner_pause_facts = Table(
@@ -438,6 +439,28 @@ runner_pause_facts = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("runner_id", String, ForeignKey("runner_registrations.runner_id"), nullable=False),
     Column("paused", Boolean, nullable=False),  # paused derives from the newest fact (D-043)
-    Column("set_at", DateTime, nullable=False),
+    Column("set_at", UtcDateTime, nullable=False),
     Column("set_by", String, nullable=False),  # who flipped it — recorded on the fact
+)
+
+# The runner's *own* brake, as reported to us (issue #43). A separate table from
+# ``runner_pause_facts`` above because they are separate concepts with separate authors:
+# that one is the fleet's brake, authored here and pulled down by the runner; this one is
+# authored on the runner machine and arrives through its outbound buffer (D-069), so the
+# hub is a reader of it and never sets it. Keeping them apart is what lets the board say
+# *which* brake is on — the runner declining, the fleet coercing, or both.
+#
+# No ForeignKey to ``runner_registrations``: a fact can arrive from a runner the registry
+# has not seen yet (the buffer replays an outage in FIFO order, and its pause may precede
+# its registration). ``_apply`` decides what to do with an unknown runner; the schema does
+# not make the arrival unrepresentable.
+
+runner_local_pause_facts = Table(
+    "runner_local_pause_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("runner_id", String, nullable=False),
+    Column("paused", Boolean, nullable=False),  # locally_paused derives from the newest fact
+    Column("set_at", UtcDateTime, nullable=False),  # the runner's clock, off the fact's payload
+    Column("set_by", String, nullable=False),
 )
