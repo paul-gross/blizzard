@@ -50,9 +50,11 @@ sudo -u blizzard /opt/blizzard/venv/bin/blizzard-hub    init /var/lib/blizzard/h
 sudo -u blizzard /opt/blizzard/venv/bin/blizzard-runner init /var/lib/blizzard/runner
 
 # 4. Point the hub at the forge and the runner at its workspace. The hub's
-#    credentials go in /etc/blizzard/hub.env (BZ_FORGE_URL, BZ_FORGE_TOKEN, …);
-#    the runner's workspace/harness bindings live in its own config.toml, written
-#    by `init` and edited in place (no credentials — D-084).
+#    delivery credentials go in /etc/blizzard/hub.env (BZ_FORGE_URL, BZ_FORGE_TOKEN, …);
+#    its PM work sources are declared in blizzard-hub.toml's [[pm_source]] blocks
+#    (init scaffolds a commented-out example — see "Configuring PM work sources"
+#    below); the runner's workspace/harness bindings live in its own config.toml,
+#    written by `init` and edited in place (no credentials — D-084).
 
 # 5. Install and enable both units. `enable` is what starts them at boot; `--now`
 #    starts them immediately too.
@@ -94,6 +96,100 @@ shared runtime dir during an exclusive handoff.
 > on boot. Aiming a second live daemon at a runtime dir a running instance already holds
 > risks lock contention and corruption — this variable chooses a root, it does not make
 > one safe to share.
+
+## Configuring PM work sources
+
+The hub's PM pass-through (D-047, MVP criterion 1) reads every chunk's PM item through a
+**configured PM work source** — a named, credentialed binding to one forge repo, declared
+as an `[[pm_source]]` table in `blizzard-hub.toml`. This is a separate seam from the
+delivery forge above: `BZ_FORGE_URL`/`BZ_FORGE_TOKEN` in the hub's env file control where
+a chunk's PR is opened and landed; `[[pm_source]]` controls where its PM item is *read
+from*, and each source carries its own credential (D-108) rather than sharing the
+delivery forge's.
+
+`blizzard hub init` scaffolds a commented-out example block — uncomment it and fill in
+your own repo to configure a source:
+
+```toml
+[[pm_source]]
+name = "blizzard"                                  # source id — ingest tokens and board labels key on it
+provider = "github"                                # the only adapter grammar today
+repo = "paul-gross/blizzard"                       # the "owner/repo" this source is pinned to
+token_env = "BZ_PM_TOKEN"                          # names an env var — see credentials below
+# api_base = "https://ghe.example.internal/api/v3" # optional: override the provider's API origin
+# web_base = "https://ghe.example.internal"         # optional: override the web origin
+```
+
+Every field:
+
+| Field | Required | Meaning |
+|-------|----------|---------|
+| `name` | yes | The source's identity. Ingest tokens (`name:ref`, `name#ref`) and board pointer labels (`{source}#{ref}`) key on it. Must not contain `:` (the ingest token grammar splits on the first one). Must be unique across all `[[pm_source]]` blocks. |
+| `provider` | yes | The adapter grammar this source speaks. Only `"github"` exists today; an unknown provider fails at config load, not at first use. |
+| `repo` | yes | The `owner/name` coordinate this source is pinned to. Each `(provider, repo)` pair may appear under only one `name` — two names for the same repo would let one item be ingested twice under two identities (D-093). |
+| `token_env` | yes | Names an environment variable — **not the secret itself** (D-084). See "Credential indirection" below. |
+| `api_base` | no | Overrides the provider's default API origin. Required to reach a self-hosted forge (e.g. GitHub Enterprise). |
+| `web_base` | no | Overrides the provider's default web origin, used for the item's browsable URL. Derived from `api_base` when omitted, so a self-hosted GHE source only needs to set `api_base`. |
+
+**A self-hosted GitHub Enterprise example** — an internal repo behind a company GHE
+instance, alongside the public `blizzard` source:
+
+```toml
+[[pm_source]]
+name = "internal"
+provider = "github"
+repo = "acme/internal-tool"
+token_env = "BZ_INTERNAL_TOKEN"
+api_base = "https://git.corp.internal/api/v3"
+web_base = "https://git.corp.internal"
+```
+
+### Credential indirection
+
+`token_env` names an environment variable; the secret itself goes in the hub's env
+file (`/etc/blizzard/hub.env` under the systemd layout above), never in
+`blizzard-hub.toml` — the same separation the delivery forge's `BZ_FORGE_TOKEN`
+already follows (D-084). An unset `token_env` fails at boot, naming the missing
+variable rather than silently ingesting unauthenticated.
+
+### The upgrade note
+
+**An existing hub must add at least one `[[pm_source]]` block, or two things break
+on the next deploy:**
+
+- `GET /chunks/{id}/pm-items` 503s outright — "no PM work-source is configured" —
+  until at least one source exists.
+- Every chunk's board pointer label goes null: rendering `{source}#{ref}` needs a
+  source name, and there is none to render until a source is configured.
+
+This is not optional for a hub that already ingests PM items; there is no
+backward-compatible default, because the PM source list also bounds which repos
+the hub is willing to ingest from (see below). Add the `[[pm_source]]` block to
+`blizzard-hub.toml` as part of the same maintenance window as the wheel upgrade,
+before running `migrate`/restarting the daemon (see the install/upgrade steps above).
+
+### Ingest tokens
+
+`blizzard hub ingest` takes one or more source-native tokens and mints a chunk. Each
+token is one of:
+
+- `<source>:<ref>` — e.g. `blizzard:26`
+- `<source>#<ref>` — e.g. `blizzard#26`
+- a pasted PM item URL (e.g. the GitHub issue's own URL)
+
+The CLI carries no parsing of its own: it hands the token to the hub, which resolves
+it against every configured source's own `parse`. The legacy `github:<rest>` prefix
+is deprecated — it still resolves (warns on stderr, then passes `rest` on its own
+merits) but carries no provider selection of its own anymore, since a token now
+resolves against whichever configured source claims it.
+
+### Unconfigured repos are a 422 at the front door
+
+The configured source list is also the hub's allowlist of ingestable repos: a token
+that names a repo (via URL or an unresolvable source name) that no `[[pm_source]]`
+covers gets rejected with `422 Unprocessable Entity`, naming the token and the
+sources that *are* configured. Adding a repo to the fleet means adding its
+`[[pm_source]]` block first — there is no separate allowlist to keep in sync.
 
 ## The runner's two doors
 

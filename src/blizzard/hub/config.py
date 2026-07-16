@@ -34,6 +34,23 @@ ENV_PORT = "BZ_HUB_PORT"
 _KNOWN_PM_PROVIDERS = {"github"}
 _REQUIRED_PM_SOURCE_KEYS = ("name", "provider", "repo", "token_env")
 
+# A fresh scaffold has no configured source, and without one `pm-items` 503s and board
+# pointer labels go null (you cannot render `{source}#{ref}` without a source name) — so
+# `to_toml()` emits this as a comment rather than leaving the block undiscoverable.
+_PM_SOURCE_EXAMPLE_COMMENT = """
+# Uncomment and edit to configure a PM work source — without at least one
+# [[pm_source]], `pm-items` 503s and board pointer labels render null.
+#
+# [[pm_source]]
+# name = "blizzard"          # names this source; ingest tokens and board labels key on it
+# provider = "github"        # the only adapter grammar that exists today
+# repo = "owner/name"        # the "owner/repo" this source is pinned to
+# token_env = "BZ_PM_TOKEN"  # names an env var — the secret itself lives in this
+#                             # runtime's env file (e.g. /etc/blizzard/hub.env), never here
+# api_base = "https://ghe.example.internal/api/v3"  # optional: override the API origin (e.g. GHE)
+# web_base = "https://ghe.example.internal"          # optional: override the web origin; derives from api_base
+"""
+
 
 class ConfigError(RuntimeError):
     """A runtime directory is missing its config — it was never initialized."""
@@ -100,6 +117,8 @@ class HubConfig:
             f'host = "{self.host}"\n',
             f"port = {self.port}\n",
         ]
+        if not self.pm_sources:
+            lines.append(_PM_SOURCE_EXAMPLE_COMMENT)
         for source in self.pm_sources:
             lines.append("\n[[pm_source]]\n")
             lines.append(f'name = "{source.name}"\n')
