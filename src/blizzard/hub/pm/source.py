@@ -22,9 +22,10 @@ from blizzard.hub.domain.work import PmPointer
 
 @dataclass(frozen=True)
 class PmItem:
-    """A pass-through PM item — body and comment bodies, vendor-native (D-047)."""
+    """A pass-through PM item — title, body, and comment bodies, vendor-native (D-047)."""
 
     body: str
+    title: str = ""
     comments: list[str] = field(default_factory=list)
 
 

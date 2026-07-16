@@ -435,6 +435,7 @@ def get_pm_items(chunk_id: str, services: Annotated[HubServices, Depends(get_ser
                     url=pointer.url,
                     label=label,
                     fetched_at=fetched_at,
+                    title=item.title,
                     body=item.body,
                     comments=item.comments,
                 )

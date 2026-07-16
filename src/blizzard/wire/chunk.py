@@ -192,17 +192,18 @@ class ChunkDetail(BaseModel):
 
 
 class PmItemEntry(BaseModel):
-    """One pointer's pass-through PM item (D-047/D-074) — body + comment thread, vendor-native.
+    """One pointer's pass-through PM item (D-047/D-074) — title, body + comment thread, vendor-native.
 
     ``label`` is the board-legible pointer label (D-075) — ``gh:blizzard#8`` — null when the
     URL is not issue-shaped. A per-pointer forge failure degrades here rather than failing the
-    whole read (D-084): ``error`` carries the reason and ``body`` is null, so one unreachable
-    pointer never blinds the reader to the pointers it did reach."""
+    whole read (D-084): ``error`` carries the reason and ``title``/``body`` are null, so one
+    unreachable pointer never blinds the reader to the pointers it did reach."""
 
     provider: str
     url: str
     label: str | None = None
     fetched_at: str
+    title: str | None = None
     body: str | None = None
     comments: list[str] = []
     error: str | None = None

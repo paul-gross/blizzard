@@ -16,7 +16,7 @@ _POINTER_2 = {"provider": "github", "url": "http://forge.local/repos/acme/widget
 
 
 def test_pm_items_reads_body_and_comments_from_the_forge(tmp_path: Path) -> None:
-    pm = FakePmSource(body="please fix the flake", comments=["seen it too", "repro attached"])
+    pm = FakePmSource(title="flaky test", body="please fix the flake", comments=["seen it too", "repro attached"])
     hub = build_hub(tmp_path, pm=pm)
     chunk_id = hub.client.post("/api/chunks", json={"pointers": [_POINTER]}).json()["chunk_id"]
 
@@ -28,6 +28,7 @@ def test_pm_items_reads_body_and_comments_from_the_forge(tmp_path: Path) -> None
     assert item["provider"] == "github"
     assert item["url"] == _POINTER["url"]
     assert item["label"] == "gh:widget#42"
+    assert item["title"] == "flaky test"
     assert item["body"] == "please fix the flake"
     assert item["comments"] == ["seen it too", "repro attached"]
     assert item["error"] is None
@@ -55,7 +56,7 @@ def test_pm_items_returns_one_entry_per_pointer(tmp_path: Path) -> None:
 def test_pm_items_degrades_per_pointer_when_the_forge_is_unreachable(tmp_path: Path) -> None:
     """One unreachable pointer surfaces as an ``error`` entry; the reachable one still reads (D-084)."""
     pm = FakePmSource(
-        by_url={_POINTER["url"]: PmItem(body="reachable", comments=[])},
+        by_url={_POINTER["url"]: PmItem(title="reachable issue", body="reachable", comments=[])},
         fail_urls={_POINTER_2["url"]},
     )
     hub = build_hub(tmp_path, pm=pm)
@@ -64,7 +65,9 @@ def test_pm_items_degrades_per_pointer_when_the_forge_is_unreachable(tmp_path: P
     resp = hub.client.get(f"/api/chunks/{chunk_id}/pm-items")
     assert resp.status_code == 200
     ok, failed = resp.json()["items"]
-    assert ok["body"] == "reachable" and ok["error"] is None
+    assert ok["title"] == "reachable issue" and ok["body"] == "reachable" and ok["error"] is None
+    # A per-pointer forge failure nulls title alongside body — never a partial item (D-084).
+    assert failed["title"] is None
     assert failed["body"] is None and failed["error"] and _POINTER_2["url"] in failed["error"]
 
 

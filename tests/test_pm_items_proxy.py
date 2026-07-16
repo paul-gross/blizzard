@@ -38,6 +38,7 @@ _ITEMS: dict[str, object] = {
             "url": "http://forge.local/repos/acme/widget/issues/42",
             "label": "gh:widget#42",
             "fetched_at": "2026-07-14T00:00:00+00:00",
+            "title": "the flake is back",
             "body": "please fix the flake",
             "comments": ["seen it too", "repro attached"],
             "error": None,
@@ -72,7 +73,10 @@ def _runner_app(tmp_path: Path) -> TestClient:
 
 @pytest.mark.component
 def test_proxy_forwards_the_read_to_the_hub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The route forwards to the hub's pm-items route and returns the items verbatim (D-084)."""
+    """The route forwards to the hub's pm-items route and returns the items verbatim (D-084).
+
+    ``title`` is carried by the shared ``PmItemsView`` wire model (D-084's pass-through
+    point), so it rides through this proxy untouched with no proxy-side code change."""
     seen: list[str] = []
 
     def fake_get(url: str, *, timeout: float) -> _FakeHubResponse:
@@ -84,8 +88,46 @@ def test_proxy_forwards_the_read_to_the_hub(tmp_path: Path, monkeypatch: pytest.
 
     assert resp.status_code == 200, resp.text
     assert resp.json() == _ITEMS
+    assert resp.json()["items"][0]["title"] == "the flake is back"
     # It forwarded to the hub's own pass-through route — the worker never crosses a layer.
     assert seen == [f"{_HUB_URL}/api/chunks/{_CHUNK}/pm-items"]
+
+
+@pytest.mark.component
+def test_proxy_carries_a_degraded_entry_through_rather_than_500ing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A hub-degraded entry (null ``title``/``body`` + ``error``) rides through as a 200 (D-084).
+
+    The hub degrades a per-pointer forge failure to an ``error`` entry rather than failing the
+    whole read; the proxy re-validates that payload through ``PmItemsView``. A wire model that
+    rejected a null ``title`` here would turn a harmless degrade into a proxy ``502``/``500`` —
+    the exact blinding D-084 forbids — so the degrade is pinned at the proxy, not just the hub."""
+    degraded: dict[str, object] = {
+        "items": [
+            {
+                "provider": "github",
+                "url": "http://forge.local/repos/acme/widget/issues/9",
+                "label": "gh:widget#9",
+                "fetched_at": "2026-07-14T00:00:00+00:00",
+                "title": None,
+                "body": None,
+                "comments": [],
+                "error": "forge unreachable for http://forge.local/repos/acme/widget/issues/9",
+            }
+        ]
+    }
+
+    def fake_get(url: str, *, timeout: float) -> _FakeHubResponse:
+        return _FakeHubResponse(200, degraded)
+
+    monkeypatch.setattr(pm_items_route.httpx, "get", fake_get)
+    resp = _runner_app(tmp_path).get(f"/api/chunks/{_CHUNK}/pm-items")
+
+    assert resp.status_code == 200, resp.text
+    entry = resp.json()["items"][0]
+    assert entry["title"] is None and entry["body"] is None
+    assert "forge unreachable" in entry["error"]
 
 
 @pytest.mark.component

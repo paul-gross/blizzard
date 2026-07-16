@@ -86,20 +86,23 @@ def _conforms_fake_forge(x: FakeForge) -> IForgeDelivery:
 
 
 class FakePmSource:
-    """An in-process :class:`IPmSource` — canned body + comments per pointer URL.
+    """An in-process :class:`IPmSource` — canned title + body + comments per pointer URL.
 
-    A default ``body``/``comments`` answers every pointer; ``by_url`` overrides the item for
-    specific pointer URLs (a grouped chunk reads distinct items), and ``fail_urls`` raises
-    :class:`PmSourceError` for a URL to exercise the per-pointer forge-failure degradation."""
+    A default ``title``/``body``/``comments`` answers every pointer; ``by_url`` overrides the
+    item for specific pointer URLs (a grouped chunk reads distinct items), and ``fail_urls``
+    raises :class:`PmSourceError` for a URL to exercise the per-pointer forge-failure
+    degradation."""
 
     def __init__(
         self,
         *,
+        title: str = "issue title",
         body: str = "issue body",
         comments: list[str] | None = None,
         by_url: dict[str, PmItem] | None = None,
         fail_urls: set[str] | None = None,
     ) -> None:
+        self.title = title
         self.body = body
         self.comments = comments or []
         self.by_url = by_url or {}
@@ -112,11 +115,22 @@ class FakePmSource:
             raise PmSourceError(f"forge unreachable for {pointer.url}")
         if pointer.url in self.by_url:
             return self.by_url[pointer.url]
-        return PmItem(body=self.body, comments=list(self.comments))
+        return PmItem(body=self.body, title=self.title, comments=list(self.comments))
 
 
 def _conforms_fake_pm(x: FakePmSource) -> IPmSource:
     return x
+
+
+class _OmitTitle:
+    """The sentinel a test uses to make :func:`github_double` omit ``title`` from the payload."""
+
+    def __repr__(self) -> str:
+        return "OMIT_TITLE"
+
+
+OMIT_TITLE = _OmitTitle()
+"""Sentinel — a forge payload with no ``title`` key at all (real GitHub never sends this)."""
 
 
 def github_double(*, conflict_branches: set[str] | None = None, issues: dict[str, dict] | None = None) -> TestClient:
@@ -139,7 +153,14 @@ def github_double(*, conflict_branches: set[str] | None = None, issues: dict[str
     def get_issue(owner: str, repo: str, number: int) -> dict:
         key = f"{owner}/{repo}#{number}"
         data = issue_store.get(key, {"body": f"issue {number}", "comments": []})
-        return {"number": number, "title": f"issue {number}", "body": data["body"]}
+        payload: dict[str, object] = {"number": number, "body": data["body"]}
+        # Real GitHub *always* returns a "title", so the double does too by default — a double
+        # laxer than the forge it stands for would hide bugs. A test opts into the degenerate
+        # shapes explicitly: ``OMIT_TITLE`` drops the key, ``None`` sends it null.
+        title = data.get("title", f"issue {number}")
+        if title is not OMIT_TITLE:
+            payload["title"] = title
+        return payload
 
     @app.get("/repos/{owner}/{repo}/issues/{number}/comments")
     def get_comments(owner: str, repo: str, number: int) -> list[dict]:

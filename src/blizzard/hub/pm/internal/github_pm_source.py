@@ -44,6 +44,7 @@ class GitHubPmSource:
             raise PmSourceError(f"failed to read {pointer.url}: {exc}") from exc
         return PmItem(
             body=str(issue.json().get("body") or ""),
+            title=str(issue.json().get("title") or ""),
             comments=[str(c.get("body") or "") for c in comments.json()],
         )
 

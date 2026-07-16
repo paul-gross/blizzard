@@ -68,3 +68,10 @@ export type {
 
 export * as hubApi from './lib/api/hub';
 export * as runnerApi from './lib/api/runner';
+
+/*
+ * The runner client instance itself. The generated `index.ts` re-exports the SDK
+ * functions and types but not the client, so a consumer outside this library has no
+ * handle to configure its transport or stub it in a test. `local-panel` needs both.
+ */
+export { client as runnerClient } from './lib/api/runner/client.gen';
