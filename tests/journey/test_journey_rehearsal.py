@@ -105,8 +105,8 @@ WEB_REPO = "toy-web"
 
 
 def _pm_sources(forge_port: int) -> tuple[PmSourceConfig, ...]:
-    """Two ``[[pm_source]]`` bindings (D-105/D-106) — one per fixture repo — since the
-    journey files issues across both. This is the case that proves the D-106
+    """Two ``[[pm_source]]`` bindings (D-106/D-107) — one per fixture repo — since the
+    journey files issues across both. This is the case that proves the D-107
     repo-matching resolver: a first-entry shim would fetch half these issues from the
     wrong repo the moment two sources are configured (the Phase 1 finale's ``alpha#7``
     lying-label bug)."""

@@ -4,7 +4,7 @@ Builds the store-backed ``host`` composition with the two external seams — the
 delivery and the PM read — replaced by in-process fakes (``bzh:pluggable-seams``): a
 :class:`FakeForge` that records lands and lets a test arm a conflict, and a
 :class:`FakePmSource` that returns canned issue text, wired into the hub through a
-:class:`~blizzard.hub.pm.registry.PmSourceRegistry` (D-105) the same way the real
+:class:`~blizzard.hub.pm.registry.PmSourceRegistry` (D-106) the same way the real
 factory would. The clock is a :class:`~blizzard.foundation.clock.FixedClock` the test
 can advance, so ids order and timestamps are deterministic (``bzh:injected-clock``).
 """
@@ -43,12 +43,12 @@ from blizzard.hub.runtime import migration_runner
 # The issue-shaped pointer URL FakePmSource renders a label/web-url from — a small,
 # local echo of the GitHub adapter's own grammar (``pm/internal/github_pm_source.py``),
 # kept independent so this fake doesn't reach into an adapter's internals. Schemeless-
-# tolerant (``(?:^|/)``) to match the adapter's own D-106 fix.
+# tolerant (``(?:^|/)``) to match the adapter's own D-107 fix.
 _ISSUE_RE = re.compile(r"(?:^|/)(?:repos/)?(?P<owner>[^/]+)/(?P<repo>[^/]+)/issues/(?P<number>\d+)")
 
 
 def _repo_of(url: str) -> str | None:
-    """``owner/repo`` from a pointer URL, independent of the issue shape (D-106) — the
+    """``owner/repo`` from a pointer URL, independent of the issue shape (D-107) — the
     same repo-membership-only extraction ``github_pm_source.py``'s own copy performs, so
     a non-issue-shaped pointer at a matching repo still resolves (label degrades to
     ``None``; ownership does not)."""
@@ -114,13 +114,13 @@ class FakePmSource:
     """An in-process :class:`IPmSource` — canned body + comments per pointer URL.
 
     Still keyed on ``pointer.url`` (the pointer hasn't grown a ``source`` field yet —
-    that's Phase 3, D-104). A default ``body``/``comments`` answers every pointer;
+    that's Phase 3, D-105). A default ``body``/``comments`` answers every pointer;
     ``by_url`` overrides the item for specific pointer URLs (a grouped chunk reads
     distinct items), and ``fail_urls`` raises :class:`PmSourceError` for a URL to
     exercise the per-pointer forge-failure degradation. ``name`` is this fake's
     registered source name — the prefix its ``label`` renders under, mirroring a real
-    binding's configured ``name`` (D-105/D-107). ``repo`` is the ``owner/repo`` this fake
-    is pinned to (D-106) — :meth:`owns` compares a pointer's URL against it, mirroring
+    binding's configured ``name`` (D-106/D-108). ``repo`` is the ``owner/repo`` this fake
+    is pinned to (D-107) — :meth:`owns` compares a pointer's URL against it, mirroring
     the real adapter's repo-matching resolution; two ``FakePmSource``s with distinct
     ``repo``s exercise the two-sources-configured case."""
 
@@ -287,10 +287,10 @@ def build_hub(
     """A migrated, fully-wired hub over ``tmp_path`` with fake external seams.
 
     ``pm`` is ``{name: FakePmSource}`` — the same name-keyed shape the real
-    :func:`~blizzard.hub.pm.internal.factory.build_pm_registry` produces (D-105);
+    :func:`~blizzard.hub.pm.internal.factory.build_pm_registry` produces (D-106);
     defaults to one entry so the common single-source case needs no test churn.
     ``None`` defaults to one source; an explicit ``pm={}`` is a legal, deliberately
-    **empty** registry (D-105) — ``or`` would silently coerce that back to the default,
+    **empty** registry (D-106) — ``or`` would silently coerce that back to the default,
     which is what made the empty-registry path unreachable through this harness."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     config = HubConfig(root=tmp_path, db_url=db_url)
@@ -309,7 +309,7 @@ def build_hub(
 
 
 def write_pm_sources(hub_dir: Path, sources: Sequence[PmSourceConfig]) -> HubConfig:
-    """Declare ``[[pm_source]]`` entries on an already-``init``ed hub runtime dir (D-105/D-106).
+    """Declare ``[[pm_source]]`` entries on an already-``init``ed hub runtime dir (D-106/D-107).
 
     Every upper-tier fixture (``tests/e2e``, ``tests/crash``, ``tests/journey``,
     ``tests/service``) runs ``blizzard hub init`` from its own subprocess-driven support

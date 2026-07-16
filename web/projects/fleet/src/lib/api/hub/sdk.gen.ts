@@ -28,7 +28,7 @@ export const listChunksApiChunksGet = <ThrowOnError extends boolean = false>(opt
 /**
  * Ingest Chunk
  *
- * Ingest by pointer (D-047); 422 on a pointer no configured source claims (D-106);
+ * Ingest by pointer (D-047); 422 on a pointer no configured source claims (D-107);
  * 409 on a pointer held by a live chunk (D-093).
  */
 export const ingestChunkApiChunksPost = <ThrowOnError extends boolean = false>(options: Options<IngestChunkApiChunksPostData, ThrowOnError>): RequestResult<IngestChunkApiChunksPostResponses, IngestChunkApiChunksPostErrors, ThrowOnError> => (options.client ?? client).post<IngestChunkApiChunksPostResponses, IngestChunkApiChunksPostErrors, ThrowOnError>({
@@ -139,7 +139,7 @@ export const reportLeaseApiChunksChunkIdLeasesPost = <ThrowOnError extends boole
 /**
  * Get Pm Items
  *
- * Pass-through PM items read (D-047/D-084/D-106) — one entry per pointer, contents never stored.
+ * Pass-through PM items read (D-047/D-084/D-107) — one entry per pointer, contents never stored.
  *
  * Each pointer is resolved to its own binding by repo match, then fetched fresh from the
  * forge; a per-pointer resolution or forge failure degrades to an ``error`` on that entry

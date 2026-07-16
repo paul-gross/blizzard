@@ -137,7 +137,7 @@ def test_missing_workspace_prompt_file_raises(tmp_path: Path) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# `[[pm_source]]` (D-104/D-105) — the hub's configured PM work sources.
+# `[[pm_source]]` (D-105/D-106) — the hub's configured PM work sources.
 # --------------------------------------------------------------------------- #
 
 
@@ -206,7 +206,7 @@ def test_pm_source_duplicate_name_raises(tmp_path: Path) -> None:
 @pytest.mark.unit
 def test_pm_source_duplicate_provider_and_repo_raises(tmp_path: Path) -> None:
     # Two names for one (provider, repo) would let the same item be ingested twice
-    # under two identities — this is what holds D-093 up (D-104).
+    # under two identities — this is what holds D-093 up (D-105).
     root = tmp_path / "hub"
     root.mkdir()
     (root / "blizzard-hub.toml").write_text(
@@ -220,7 +220,7 @@ def test_pm_source_duplicate_provider_and_repo_raises(tmp_path: Path) -> None:
 
 @pytest.mark.unit
 def test_pm_source_name_with_a_colon_raises(tmp_path: Path) -> None:
-    # hub/cli.py's ingest token partitions on the first colon (D-104's open question).
+    # hub/cli.py's ingest token partitions on the first colon (D-105's open question).
     root = tmp_path / "hub"
     root.mkdir()
     (root / "blizzard-hub.toml").write_text(

@@ -9,7 +9,7 @@ without a migrated database; the fleet routes then report the store is unwired.
 ``build_hosted_app`` is the ``host`` composition root: it opens the store, wires the
 readiness seam, constructs the forge-delivery seam over its own GitHub-shaped HTTP
 client (base URL + token from the environment) and the PM source registry over the
-configured ``[[pm_source]]`` entries — each with its own credentialed client (D-105) —
+configured ``[[pm_source]]`` entries — each with its own credentialed client (D-106) —
 and assembles the fleet services (:func:`blizzard.hub.composition.build_services`).
 """
 
@@ -134,7 +134,7 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
     forge: IForgeDelivery = (
         GitHubForgeDelivery(client, default_owner=owner) if client is not None else _UnconfiguredForge()
     )
-    # The PM registry builds its own credentialed client per configured source (D-105) —
+    # The PM registry builds its own credentialed client per configured source (D-106) —
     # it no longer shares the delivery forge's client or credential.
     pm = build_pm_registry(config.pm_sources)
     base_branch = os.environ.get(ENV_FORGE_BASE_BRANCH, DEFAULT_FORGE_BASE_BRANCH)

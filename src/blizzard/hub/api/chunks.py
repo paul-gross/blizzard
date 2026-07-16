@@ -64,8 +64,8 @@ router = APIRouter(prefix="/api", tags=["chunks"])
 
 
 def _pointer_views(chunk: Chunk, pm: IPmSourceRegistry) -> list[PmPointerView]:
-    """Each pointer with its board-legible label (D-075/D-107) — null when not
-    issue-shaped, or when no configured source claims it (D-106).
+    """Each pointer with its board-legible label (D-075/D-108) — null when not
+    issue-shaped, or when no configured source claims it (D-107).
 
     Each pointer is resolved to its own binding by repo match
     (:func:`~blizzard.hub.pm.registry.resolve_source`) — a chunk's pointers need not all
@@ -165,12 +165,12 @@ def _current_node(
 
 @router.post("/chunks", response_model=ChunkIngestResponse, status_code=status.HTTP_201_CREATED)
 def ingest_chunk(request: ChunkIngestRequest, services: Annotated[HubServices, Depends(get_services)]) -> object:
-    """Ingest by pointer (D-047); 422 on a pointer no configured source claims (D-106);
+    """Ingest by pointer (D-047); 422 on a pointer no configured source claims (D-107);
     409 on a pointer held by a live chunk (D-093)."""
     if not request.pointers:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="at least one pointer required")
     pointers = [PmPointer(provider=p.provider, url=p.url) for p in request.pointers]
-    # Resolution before minting, and before the live-holder check (D-106): an
+    # Resolution before minting, and before the live-holder check (D-107): an
     # unconfigured pointer should not consult the store, and the whole request rejects
     # together rather than partially ingesting. The route resolves; the domain stays
     # registry-free (bzh:domain-takes-objects) — it never sees the registry at all.
@@ -412,7 +412,7 @@ def report_escalation(
 
 @router.get("/chunks/{chunk_id}/pm-items", response_model=PmItemsView)
 def get_pm_items(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> PmItemsView:
-    """Pass-through PM items read (D-047/D-084/D-106) — one entry per pointer, contents never stored.
+    """Pass-through PM items read (D-047/D-084/D-107) — one entry per pointer, contents never stored.
 
     Each pointer is resolved to its own binding by repo match, then fetched fresh from the
     forge; a per-pointer resolution or forge failure degrades to an ``error`` on that entry

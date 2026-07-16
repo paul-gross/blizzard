@@ -3,8 +3,8 @@
 Exercises :class:`~blizzard.hub.pm.internal.github_pm_source.GitHubPmSource`'s URL
 parsing and vendor-native read against the GitHub-REST double — the same choice of a
 local double over a ``blizzard-mock`` dev dependency recorded in ``tests.support`` —
-plus the D-105 factory that builds one credentialed client per configured source and
-the D-107 label/web-base rendering the binding now owns.
+plus the D-106 factory that builds one credentialed client per configured source and
+the D-108 label/web-base rendering the binding now owns.
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ def test_unparseable_pointer_raises() -> None:
 
 
 def test_fetch_rejects_a_pointer_naming_a_different_repo() -> None:
-    """A source is pinned to its own configured repo (D-105) — a pointer naming another
+    """A source is pinned to its own configured repo (D-106) — a pointer naming another
     repo is a hard error, not a silent cross-repo read."""
     source = GitHubPmSource(github_double(), name="widget", repo="acme/widget", web_base="https://x")
     with pytest.raises(PmSourceError):
@@ -53,7 +53,7 @@ def test_fetch_rejects_a_pointer_naming_a_different_repo() -> None:
 
 
 def test_label_renders_source_name_hash_number() -> None:
-    """D-107: the label is ``{name}#{number}`` — the source's own configured name, not a
+    """D-108: the label is ``{name}#{number}`` — the source's own configured name, not a
     provider short-code."""
     source = GitHubPmSource(github_double(), name="widget", repo="acme/widget", web_base="https://x")
     pointer = PmPointer(provider="github", url="http://forge/repos/acme/widget/issues/12")
@@ -92,7 +92,7 @@ def test_parse_rejects_a_token_naming_a_different_source() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# The factory (D-105) — one credentialed client per configured source.
+# The factory (D-106) — one credentialed client per configured source.
 # --------------------------------------------------------------------------- #
 
 
@@ -130,7 +130,7 @@ def test_factory_derives_web_base_by_stripping_the_api_v3_path_suffix(monkeypatc
 
 def test_factory_gives_each_source_its_own_credentialed_client(monkeypatch: pytest.MonkeyPatch) -> None:
     """Two sources, two tokens: each built client carries only its own credential — the
-    PM seam never shares one client (or token) across sources (D-105)."""
+    PM seam never shares one client (or token) across sources (D-106)."""
     monkeypatch.setenv("_TEST_TOKEN_ONE", "token-one")
     monkeypatch.setenv("_TEST_TOKEN_TWO", "token-two")
     sources = [
@@ -169,7 +169,7 @@ def _source(name: str, repo: str) -> GitHubPmSource:
 @pytest.mark.parametrize(
     ("url", "owned"),
     [
-        # Both URL shapes the e2e tier ingests (D-106) — schemeless shorthand and full html_url.
+        # Both URL shapes the e2e tier ingests (D-107) — schemeless shorthand and full html_url.
         ("acme/widget/issues/3", True),
         ("https://github.com/acme/widget/issues/3", True),
         # The REST `/repos/` prefix is stripped before the owner/repo pair is read.
@@ -188,7 +188,7 @@ def _source(name: str, repo: str) -> GitHubPmSource:
     ],
 )
 def test_owns_matches_repo_membership_on_the_real_adapter(url: str, owned: bool) -> None:
-    """``owns`` (D-106) against the real GitHub grammar, not a test double's copy.
+    """``owns`` (D-107) against the real GitHub grammar, not a test double's copy.
 
     ``tests.support.FakePmSource`` reimplements this matching with its own copy of the
     issue regex, so the component tier's two-sources-configured proof never exercises
@@ -197,7 +197,7 @@ def test_owns_matches_repo_membership_on_the_real_adapter(url: str, owned: bool)
 
 
 def test_resolver_picks_the_matching_binding_over_real_adapters() -> None:
-    """The D-106 resolver over two **real** bindings — the Phase 1 regression, proven
+    """The D-107 resolver over two **real** bindings — the Phase 1 regression, proven
     against the adapters that ship rather than against ``FakePmSource``.
 
     Phase 1's shim returned the registry's first entry for every pointer, so a ``beta``

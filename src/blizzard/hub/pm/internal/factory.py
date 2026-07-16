@@ -1,7 +1,7 @@
-"""Builds the hub's PM source registry from configuration (D-105).
+"""Builds the hub's PM source registry from configuration (D-106).
 
 One credentialed ``httpx.Client`` per configured ``[[pm_source]]`` — never a shared
-client, never a shared token (D-084/D-105): the delivery forge keeps its own client
+client, never a shared token (D-084/D-106): the delivery forge keeps its own client
 (``hub/app.py``); this is the PM seam's own composition. A ``provider -> builder`` map
 selects the adapter; confined to ``internal/`` (``bzh:dependency-inversion``), so
 ``httpx`` construction for PM stays out of the composition root.
@@ -19,7 +19,7 @@ from blizzard.hub.pm.internal.github_pm_source import GitHubPmSource
 from blizzard.hub.pm.registry import PmSourceRegistry
 from blizzard.hub.pm.source import IPmSource
 
-# The provider's default API origin, used when a source omits `api_base` (D-105).
+# The provider's default API origin, used when a source omits `api_base` (D-106).
 _DEFAULT_API_BASES = {"github": "https://api.github.com"}
 
 
@@ -32,7 +32,7 @@ _BUILDERS: dict[str, Callable[[PmSourceConfig, httpx.Client, str], IPmSource]] =
 
 
 def _derive_web_base(api_base: str) -> str:
-    """The provider's web origin from its API base (D-105) — GitHub-adapter knowledge.
+    """The provider's web origin from its API base (D-106) — GitHub-adapter knowledge.
 
     Public GitHub splits ``api.github.com`` from ``github.com`` by stripping the
     ``api.`` host prefix; a GitHub Enterprise install splits
@@ -52,7 +52,7 @@ def build_pm_registry(sources: Sequence[PmSourceConfig]) -> PmSourceRegistry:
 
     A source whose ``token_env`` names an unset variable fails here, at boot, naming
     the variable — not at first fetch. An empty ``sources`` is a legal, PM-reach-free
-    hub (D-105)."""
+    hub (D-106)."""
     built: dict[str, IPmSource] = {}
     for source in sources:
         builder = _BUILDERS.get(source.provider)

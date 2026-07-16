@@ -3,21 +3,21 @@
 Implements :class:`~blizzard.hub.pm.source.IPmSource` against a GitHub REST v3
 surface — the ``blizzard-mock`` forge in tests, GitHub in production. Confined to
 ``internal/`` (adapter placement, ``bzh:dependency-inversion``); ``httpx`` is used only
-here. One instance per configured ``[[pm_source]]`` (D-105): pinned to its own
+here. One instance per configured ``[[pm_source]]`` (D-106): pinned to its own
 ``repo``, its own ``web_base`` (an origin, e.g. ``https://github.com``), and carrying
 its own credentialed client — never the delivery forge's.
 
-Owns the GitHub issue-URL grammar absorbed from ``pm/label.py`` (D-107): the issue-URL
+Owns the GitHub issue-URL grammar absorbed from ``pm/label.py`` (D-108): the issue-URL
 regex is this binding's own copy now, decoupling it from the domain-layer module
 ``pm/label.py`` still holds for its surviving ``forge_web_base`` sniff (retired only in
 Phase 3, once the pointer carries ``source`` explicitly and this binding's own
 ``web_url``/``branch_url`` take over).
 
-This phase (D-104 not yet landed) the pointer is still ``{provider, url}``: ``fetch``
+This phase (D-105 not yet landed) the pointer is still ``{provider, url}``: ``fetch``
 still extracts the issue *number* from ``pointer.url``, but the repo comes from this
 binding's own configuration — a pointer whose URL names a different repo than this
 source is configured for is a :class:`~blizzard.hub.pm.source.PmSourceError`, not a
-silent cross-repo read. ``owns`` (D-106) answers the same repo-match as a boolean,
+silent cross-repo read. ``owns`` (D-107) answers the same repo-match as a boolean,
 without raising — the ingest-time resolver and the board label/fetch both use it to
 find which configured source is a pointer's binding.
 """
@@ -37,16 +37,16 @@ _log = get_logger("blizzard.hub.pm")
 
 # The GitHub-shaped issue reference — an {owner}/{repo}/{number} triple, with or
 # without the REST ``/repos/`` prefix, and with or without a leading scheme://host (a
-# bare ``owner/repo/issues/N`` ingest shorthand parses too — D-106's resolver needs it
+# bare ``owner/repo/issues/N`` ingest shorthand parses too — D-107's resolver needs it
 # to match the schemeless form the CLI/tests still ingest). Absorbed from
-# ``pm/label.py`` (D-107): this binding owns its own copy rather than importing the
+# ``pm/label.py`` (D-108): this binding owns its own copy rather than importing the
 # domain module's.
 _ISSUE_RE = re.compile(r"(?:^|/)(?:repos/)?(?P<owner>[^/]+)/(?P<repo>[^/]+)/issues/(?P<number>\d+)")
 
 
 def _repo_of(url: str) -> str | None:
     """The ``owner/repo`` a GitHub-shaped URL names, or ``None`` when it has fewer than
-    two path segments — repo membership alone (D-106), independent of whether the URL is
+    two path segments — repo membership alone (D-107), independent of whether the URL is
     issue-shaped. ``owns`` needs this: a pointer at a non-issue path (a wiki page, say)
     still belongs to its repo's configured source, even though ``label``/``web_url``
     (which need the issue grammar specifically) render it ``None``. Tolerates the same
@@ -70,7 +70,7 @@ class GitHubPmSource:
         self._web_base = web_base.rstrip("/")
 
     def parse(self, token: str) -> PmPointer:
-        """A ``{name}:{number}`` ingest token (D-104) into a pointer pinned to this repo."""
+        """A ``{name}:{number}`` ingest token (D-105) into a pointer pinned to this repo."""
         prefix, sep, ref = token.partition(":")
         if not sep or prefix != self._name or not ref.isdigit():
             raise UnknownSource(f"{token!r} is not a {self._name!r} source token")
@@ -94,7 +94,7 @@ class GitHubPmSource:
         )
 
     def label(self, pointer: PmPointer) -> str | None:
-        """``{name}#{number}`` (D-107) — ``None`` when the URL isn't issue-shaped."""
+        """``{name}#{number}`` (D-108) — ``None`` when the URL isn't issue-shaped."""
         match = _ISSUE_RE.search(pointer.url)
         if match is None:
             return None
@@ -107,7 +107,7 @@ class GitHubPmSource:
         return f"{self._web_base}/{self._repo}/issues/{match['number']}"
 
     def owns(self, pointer: PmPointer) -> bool:
-        """True when ``pointer``'s URL names this source's own configured repo (D-106) —
+        """True when ``pointer``'s URL names this source's own configured repo (D-107) —
         repo membership alone, not the stricter issue-shape ``label``/``fetch`` need."""
         return _repo_of(pointer.url) == self._repo
 

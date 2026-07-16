@@ -46,7 +46,7 @@ def test_ingest_batches_multiple_pointers_into_one_chunk(tmp_path: Path) -> None
 def test_list_row_is_board_legible(tmp_path: Path) -> None:
     # The fleet list resolves the current node's human name and each pointer's
     # `{source}#{number}` label server-side, so the board renders `build` and
-    # `default#1` without reassembly (D-075/D-107). A non-issue-shaped URL degrades to
+    # `default#1` without reassembly (D-075/D-108). A non-issue-shaped URL degrades to
     # a null label rather than erroring.
     hub = build_hub(tmp_path)
     chunk_id = hub.client.post("/api/chunks", json={"pointers": [_P1]}).json()["chunk_id"]
@@ -96,7 +96,7 @@ def test_live_pointer_reingest_is_409(tmp_path: Path) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Ingest-time source resolution (D-106) — the 422 rejection and the repo-matching
+# Ingest-time source resolution (D-107) — the 422 rejection and the repo-matching
 # resolver two configured sources need.
 # --------------------------------------------------------------------------- #
 
@@ -146,7 +146,7 @@ def test_resolver_picks_the_matching_source_when_two_are_configured(tmp_path: Pa
 
 
 def test_pm_items_503s_when_no_pm_source_is_configured_at_all(tmp_path: Path) -> None:
-    """An explicitly empty registry is a legal, PM-reach-free hub (D-105) — pm-items 503s
+    """An explicitly empty registry is a legal, PM-reach-free hub (D-106) — pm-items 503s
     up front rather than 422ing at ingest, since an empty registry claims no repo at all."""
     hub = build_hub(tmp_path, pm={})
 

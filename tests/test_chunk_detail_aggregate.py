@@ -96,7 +96,7 @@ def test_detail_carries_the_full_aggregate(tmp_path: Path) -> None:
     assert detail["route"]["environment_ids"] == ["e1", "e2"]
     assert [p["url"] for p in detail["pm_pointers"]] == [_POINTER["url"]]
 
-    # Board-legible identity (D-075/D-107): the current node's human name and the
+    # Board-legible identity (D-075/D-108): the current node's human name and the
     # pointer's `{source}#{number}` label are resolved server-side onto the detail.
     assert detail["current_node_id"] == nodes["approve-gate"]
     assert detail["current_node_name"] == "approve-gate"

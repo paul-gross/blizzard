@@ -85,7 +85,7 @@ def host(directory: str, host_: str | None, port: int | None) -> None:
     except RevisionMismatchError as exc:
         raise click.ClickException(str(exc)) from exc
     # Composition can still reject the config (an ``[[pm_source]]`` naming an unset
-    # ``token_env`` fails here, at boot, by design — D-105). Surface it as the same
+    # ``token_env`` fails here, at boot, by design — D-106). Surface it as the same
     # clean CLI error the config-load and migration guards above raise, not a
     # traceback; and build before announcing, so we never claim to serve and then die.
     try:

@@ -1,6 +1,6 @@
 """The forge web base (unit tier) — the shared issue-URL parse and branch-link derivation (D-075).
 
-D-107 moved the board-legible pointer *label* (``gh:blizzard#8``) onto the configured
+D-108 moved the board-legible pointer *label* (``gh:blizzard#8``) onto the configured
 GitHub PM binding (``tests/test_pm_source.py`` now covers its rendering); what remains
 here is the issue-URL parse and ``forge_web_base``'s sniff-the-first-pointer origin,
 still needed by ``api/chunks.py``'s artifact branch links until the pointer carries a

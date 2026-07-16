@@ -6,7 +6,7 @@ URL is the single portability knob (``bzh:sql-portable``): the sqlite default
 lives under the data dir, and postgres is the same config with a different URL.
 The bind port falls back to the winter service band's ``BZ_HUB_PORT`` (band +2).
 
-``[[pm_source]]`` (D-105) is the zero-or-more configured PM work sources: each a
+``[[pm_source]]`` (D-106) is the zero-or-more configured PM work sources: each a
 named, credentialed forge binding the composition root (``hub/pm/internal/factory.py``)
 turns into one ``httpx.Client`` + adapter instance. ``tomllib`` parses the array of
 tables for free; there is no stdlib TOML writer, so :meth:`HubConfig.to_toml` hand-rolls
@@ -29,7 +29,7 @@ DEFAULT_PORT = 8421
 ENV_HOST = "BZ_HUB_HOST"
 ENV_PORT = "BZ_HUB_PORT"
 
-# The only PM provider grammar a source may declare (D-105); an unknown provider fails
+# The only PM provider grammar a source may declare (D-106); an unknown provider fails
 # at config load, not at first use.
 _KNOWN_PM_PROVIDERS = {"github"}
 _REQUIRED_PM_SOURCE_KEYS = ("name", "provider", "repo", "token_env")
@@ -41,7 +41,7 @@ class ConfigError(RuntimeError):
 
 @dataclass(frozen=True)
 class PmSourceConfig:
-    """One configured PM work source (D-105) — a named, credentialed forge binding.
+    """One configured PM work source (D-106) — a named, credentialed forge binding.
 
     ``name`` is the operator-chosen identity ingest tokens and board labels key on
     (conventionally the repo tail, e.g. ``blizzard`` for ``paul-gross/blizzard``);
@@ -50,7 +50,7 @@ class PmSourceConfig:
     environment variable carrying the credential — never the secret itself (D-084).
     ``api_base``/``web_base`` override the provider's default API/web origins (required
     to reach a self-hosted forge, e.g. GHE); ``web_base`` derives from ``api_base`` when
-    omitted — the adapter's own knowledge (D-105), not this dataclass's.
+    omitted — the adapter's own knowledge (D-106), not this dataclass's.
     """
 
     name: str
@@ -130,7 +130,7 @@ class HubConfig:
 
 
 def _parse_pm_sources(raw_sources: object) -> tuple[PmSourceConfig, ...]:
-    """Validate and project ``[[pm_source]]`` entries (D-104/D-105); each rejection names
+    """Validate and project ``[[pm_source]]`` entries (D-105/D-106); each rejection names
     the offending entry rather than failing generically."""
     if not isinstance(raw_sources, list):
         return ()
@@ -148,7 +148,7 @@ def _parse_pm_sources(raw_sources: object) -> tuple[PmSourceConfig, ...]:
         repo = str(entry["repo"])
         token_env = str(entry["token_env"])
         if ":" in name:
-            # hub/cli.py's ingest-token grammar partitions on the first colon (D-104's
+            # hub/cli.py's ingest-token grammar partitions on the first colon (D-105's
             # open question) — a colon in a source name breaks that split.
             raise ConfigError(f"[[pm_source]] name {name!r} must not contain ':'")
         if name in seen_names:

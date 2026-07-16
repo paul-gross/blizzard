@@ -1,7 +1,7 @@
 """The forge web base (D-075) — the one browser-openable origin a chunk's pointers share.
 
 Historically this module also derived the board's pointer label (``gh:blizzard#8``);
-D-107 moves that rendering, and the GitHub issue-URL grammar it depended on, onto the
+D-108 moves that rendering, and the GitHub issue-URL grammar it depended on, onto the
 configured :class:`~blizzard.hub.pm.source.IPmSource` binding
 (``pm/internal/github_pm_source.py``) — provider grammar is adapter knowledge, not a
 domain-layer concern once there is more than one provider. What survives here is
@@ -21,7 +21,7 @@ from urllib.parse import urlsplit
 
 # The GitHub-shaped issue reference — an {owner}/{repo}/{number} triple, with or
 # without the REST ``/repos/`` prefix. Also owned (its own copy) by the GitHub PM
-# adapter now (D-107) — this module no longer feeds it.
+# adapter now (D-108) — this module no longer feeds it.
 _ISSUE_RE = re.compile(r"/(?:repos/)?(?P<owner>[^/]+)/(?P<repo>[^/]+)/issues/(?P<number>\d+)")
 
 
