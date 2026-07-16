@@ -7,9 +7,10 @@ guard (``blizzard hub host``) and the offline ``migrate`` verb own that. Keeping
 without a migrated database; the fleet routes then report the store is unwired.
 
 ``build_hosted_app`` is the ``host`` composition root: it opens the store, wires the
-readiness seam, constructs the forge-delivery and PM read seams over a single
-GitHub-shaped HTTP client (base URL + token from the environment), and assembles the
-fleet services (:func:`blizzard.hub.composition.build_services`).
+readiness seam, constructs the forge-delivery seam over its own GitHub-shaped HTTP
+client (base URL + token from the environment) and the PM source registry over the
+configured ``[[pm_source]]`` entries — each with its own credentialed client (D-105) —
+and assembles the fleet services (:func:`blizzard.hub.composition.build_services`).
 """
 
 from __future__ import annotations
@@ -41,8 +42,7 @@ from blizzard.hub.delivery.forge import IForgeDelivery, LandingRequest, LandingR
 from blizzard.hub.delivery.internal.github_forge import GitHubForgeDelivery
 from blizzard.hub.domain.readiness import ReadinessService
 from blizzard.hub.events.broker import EventBroker
-from blizzard.hub.pm.internal.github_pm_source import GitHubPmSource
-from blizzard.hub.pm.source import IPmSource
+from blizzard.hub.pm.internal.factory import build_pm_registry
 from blizzard.hub.runtime import migration_runner
 
 ENV_FORGE_URL = "BZ_FORGE_URL"
@@ -134,10 +134,12 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
     forge: IForgeDelivery = (
         GitHubForgeDelivery(client, default_owner=owner) if client is not None else _UnconfiguredForge()
     )
-    pm_source: IPmSource | None = GitHubPmSource(client) if client is not None else None
+    # The PM registry builds its own credentialed client per configured source (D-105) —
+    # it no longer shares the delivery forge's client or credential.
+    pm = build_pm_registry(config.pm_sources)
     base_branch = os.environ.get(ENV_FORGE_BASE_BRANCH, DEFAULT_FORGE_BASE_BRANCH)
 
-    services = build_services(engine, forge=forge, events=EventBroker(), pm_source=pm_source, base_branch=base_branch)
+    services = build_services(engine, forge=forge, events=EventBroker(), pm=pm, base_branch=base_branch)
     return create_app(config, readiness=readiness, services=services)
 
 

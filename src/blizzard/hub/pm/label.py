@@ -1,12 +1,15 @@
-"""The board-legible PM pointer label (D-075) — ``{provider-code}:{repo}#{number}``.
+"""The forge web base (D-075) — the one browser-openable origin a chunk's pointers share.
 
-D-075 wants the PM pointer legible on the board without reassembly: the raw
-``{provider, url}`` pair is the durable referent, and this module derives the human
-form the views render — ``gh:blizzard#8``. The issue-URL parse is shared with the
-GitHub adapter (one regex, not one per consumer), and the provider short-code map is
-the single provider→indicator registry: a provider without an entry renders its raw
-tag rather than an invented code. Dependency-free (``bzh:domain-core``) — pure
-parsing over the domain pointer, no transport or store.
+Historically this module also derived the board's pointer label (``gh:blizzard#8``);
+D-107 moves that rendering, and the GitHub issue-URL grammar it depended on, onto the
+configured :class:`~blizzard.hub.pm.source.IPmSource` binding
+(``pm/internal/github_pm_source.py``) — provider grammar is adapter knowledge, not a
+domain-layer concern once there is more than one provider. What survives here is
+``forge_web_base``: the pointer's URL is still (this phase) the only browser-openable
+forge address the hub holds, so a chunk's artifact branch links still sniff it from
+the first issue-shaped pointer. This retires in Phase 3, once the pointer carries
+``source`` explicitly and ``IPmSource.branch_url`` takes over. Dependency-free
+(``bzh:domain-core``) — pure parsing over the domain pointer, no transport or store.
 """
 
 from __future__ import annotations
@@ -16,14 +19,10 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
-from blizzard.hub.domain.work import PmPointer
-
 # The GitHub-shaped issue reference — an {owner}/{repo}/{number} triple, with or
-# without the REST ``/repos/`` prefix. Shared by the adapter's fetch and the label.
+# without the REST ``/repos/`` prefix. Also owned (its own copy) by the GitHub PM
+# adapter now (D-107) — this module no longer feeds it.
 _ISSUE_RE = re.compile(r"/(?:repos/)?(?P<owner>[^/]+)/(?P<repo>[^/]+)/issues/(?P<number>\d+)")
-
-# provider → short display code. A provider absent here renders its raw tag.
-_PROVIDER_CODES = {"github": "gh"}
 
 
 @dataclass(frozen=True)
@@ -76,16 +75,3 @@ def forge_web_base(pointer_urls: Iterable[str]) -> ForgeWebBase | None:
             continue
         return ForgeWebBase(origin=f"{parts.scheme}://{parts.netloc}", owner=ref.owner)
     return None
-
-
-def pointer_label(pointer: PmPointer) -> str | None:
-    """The board-legible ``{provider-code}:{repo}#{number}`` for ``pointer`` (D-075).
-
-    ``None`` when the URL is not issue-shaped — a view degrades to the chunk's stable
-    short id rather than rendering a broken label.
-    """
-    ref = parse_issue_url(pointer.url)
-    if ref is None:
-        return None
-    code = _PROVIDER_CODES.get(pointer.provider, pointer.provider)
-    return f"{code}:{ref.repo}#{ref.number}"

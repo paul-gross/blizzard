@@ -66,10 +66,11 @@ import httpx
 import pytest
 
 from blizzard.foundation.store.invariants import check_invariants
-from blizzard.hub.config import HubConfig
+from blizzard.hub.config import HubConfig, PmSourceConfig
 from blizzard.runner.config import RunnerConfig
 from tests.crash.support import (
     OWNER,
+    PM_TOKEN_ENV,
     await_http,
     forge_daemon,
     free_port,
@@ -101,6 +102,23 @@ MAX_AGENTS = 2
 # backend qualifies bare artifacts with OWNER, and both origins are minted by the fixture.
 API_REPO = "toy-api"
 WEB_REPO = "toy-web"
+
+
+def _pm_sources(forge_port: int) -> tuple[PmSourceConfig, ...]:
+    """Two ``[[pm_source]]`` bindings (D-105/D-106) — one per fixture repo — since the
+    journey files issues across both. This is the case that proves the D-106
+    repo-matching resolver: a first-entry shim would fetch half these issues from the
+    wrong repo the moment two sources are configured (the Phase 1 finale's ``alpha#7``
+    lying-label bug)."""
+    api_base = f"http://127.0.0.1:{forge_port}"
+    return (
+        PmSourceConfig(
+            name=API_REPO, provider="github", repo=f"{OWNER}/{API_REPO}", token_env=PM_TOKEN_ENV, api_base=api_base
+        ),
+        PmSourceConfig(
+            name=WEB_REPO, provider="github", repo=f"{OWNER}/{WEB_REPO}", token_env=PM_TOKEN_ENV, api_base=api_base
+        ),
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -284,7 +302,9 @@ def _ingest(hub: httpx.Client, url: str) -> str:
 def _restart_daemons(*, hub_dir: Path, forge_port: int, hub_port: int, hub: httpx.Client) -> subprocess.Popen[str]:
     """Bring the hub back through the systemd units' migrate-then-host path (the runner is
     restarted by the caller). Returns the fresh, healthy hub process."""
-    hub_proc = start_hub(hub_dir, forge_port=forge_port, port=hub_port, crash_point=None)
+    hub_proc = start_hub(
+        hub_dir, forge_port=forge_port, port=hub_port, crash_point=None, pm_sources=_pm_sources(forge_port)
+    )
     await_http(hub, "/api/health", proc=hub_proc)
     return hub_proc
 
@@ -331,7 +351,9 @@ def test_the_acceptance_journey_end_to_end(tmp_path: Path) -> None:
     runner_proc: subprocess.Popen[str] | None = None
     with forge_daemon(bin_dir, origins, forge_port) as forge:
         try:
-            hub_proc = start_hub(hub_dir, forge_port=forge_port, port=hub_port, crash_point=None)
+            hub_proc = start_hub(
+                hub_dir, forge_port=forge_port, port=hub_port, crash_point=None, pm_sources=_pm_sources(forge_port)
+            )
             await_http(hub, "/api/health", proc=hub_proc)
             assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
 

@@ -96,11 +96,11 @@ def test_detail_carries_the_full_aggregate(tmp_path: Path) -> None:
     assert detail["route"]["environment_ids"] == ["e1", "e2"]
     assert [p["url"] for p in detail["pm_pointers"]] == [_POINTER["url"]]
 
-    # Board-legible identity (D-075): the current node's human name and the pointer's
-    # `{code}:{repo}#{number}` label are resolved server-side onto the detail.
+    # Board-legible identity (D-075/D-107): the current node's human name and the
+    # pointer's `{source}#{number}` label are resolved server-side onto the detail.
     assert detail["current_node_id"] == nodes["approve-gate"]
     assert detail["current_node_name"] == "approve-gate"
-    assert detail["pm_pointers"][0]["label"] == "gh:widget#7"
+    assert detail["pm_pointers"][0]["label"] == "default#7"
 
     # Full transition history with the judgement choice on the edge (D-027/D-036), and the
     # nodes' human graph names resolved onto each edge so the timeline reads build -> gate.

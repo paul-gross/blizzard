@@ -138,6 +138,8 @@ def _ingest_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str) -> s
     ingested = hub.post("/api/chunks", json={"pointers": [{"provider": "github", "url": f"{REPO}/issues/{number}"}]})
     assert ingested.status_code == 201, ingested.text
     chunk_id = ingested.json()["chunk_id"]
+    # Ingest rests not-ready (D-103) — promote so the sweep's scenarios claim it as before.
+    assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
     assert hub.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
     return chunk_id
 

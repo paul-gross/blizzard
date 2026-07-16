@@ -58,10 +58,12 @@ import httpx
 import pytest
 import uvicorn
 
+from blizzard.hub.config import PmSourceConfig
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop.build import run_single_tick
 from blizzard.runner.runtime import init_environment as init_runner_environment
+from tests.support import write_pm_sources
 
 pytestmark = [
     pytest.mark.e2e,
@@ -83,6 +85,10 @@ REPO = f"{OWNER}/{REPO_NAME}"
 # INNER env (``e1``, the runner's default pool) inside the fixture workspace.
 FIXTURE_ENV = "e2e"
 RUNNER_ENV = "e1"
+
+# The env var every scenario's ``[[pm_source]]`` (D-105/D-106) names as its credential —
+# a dummy value suffices, since the mock forge checks no token.
+PM_TOKEN_ENV = "BZ_PM_TOKEN_TOYAPI"
 
 # The scripted build-node prompt: *the prompt is the program*. It runs under the mock
 # harness in the acquired env dir (which holds the repo worktrees as children), so it
@@ -277,9 +283,24 @@ def _hub(hub_dir: Path, forge_port: int, port: int) -> Iterator[httpx.Client]:
         **os.environ,
         "BZ_FORGE_URL": f"http://127.0.0.1:{forge_port}",
         "BZ_FORGE_OWNER": OWNER,
+        PM_TOKEN_ENV: "e2e-fixture-token",
     }
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
+    # Declare the one PM source every scenario ingests against (D-105/D-106) — since
+    # Phase 2, ingest 422s a pointer no configured source claims.
+    write_pm_sources(
+        hub_dir,
+        [
+            PmSourceConfig(
+                name=REPO_NAME,
+                provider="github",
+                repo=REPO,
+                token_env=PM_TOKEN_ENV,
+                api_base=f"http://127.0.0.1:{forge_port}",
+            )
+        ],
+    )
     proc = subprocess.Popen(
         [hub_bin, "host", "--dir", str(hub_dir), "--host", "127.0.0.1", "--port", str(port)],
         env=env,

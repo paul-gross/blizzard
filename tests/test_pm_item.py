@@ -16,8 +16,8 @@ _POINTER_2 = {"provider": "github", "url": "http://forge.local/repos/acme/widget
 
 
 def test_pm_items_reads_body_and_comments_from_the_forge(tmp_path: Path) -> None:
-    pm = FakePmSource(body="please fix the flake", comments=["seen it too", "repro attached"])
-    hub = build_hub(tmp_path, pm=pm)
+    pm = FakePmSource(name="widget", body="please fix the flake", comments=["seen it too", "repro attached"])
+    hub = build_hub(tmp_path, pm={"widget": pm})
     chunk_id = hub.client.post("/api/chunks", json={"pointers": [_POINTER]}).json()["chunk_id"]
 
     resp = hub.client.get(f"/api/chunks/{chunk_id}/pm-items")
@@ -27,7 +27,7 @@ def test_pm_items_reads_body_and_comments_from_the_forge(tmp_path: Path) -> None
     item = items[0]
     assert item["provider"] == "github"
     assert item["url"] == _POINTER["url"]
-    assert item["label"] == "gh:widget#42"
+    assert item["label"] == "widget#42"
     assert item["body"] == "please fix the flake"
     assert item["comments"] == ["seen it too", "repro attached"]
     assert item["error"] is None
@@ -44,7 +44,7 @@ def test_pm_items_returns_one_entry_per_pointer(tmp_path: Path) -> None:
             _POINTER_2["url"]: PmItem(body="second issue", comments=[]),
         }
     )
-    hub = build_hub(tmp_path, pm=pm)
+    hub = build_hub(tmp_path, pm={"default": pm})
     chunk_id = hub.client.post("/api/chunks", json={"pointers": [_POINTER, _POINTER_2]}).json()["chunk_id"]
 
     items = hub.client.get(f"/api/chunks/{chunk_id}/pm-items").json()["items"]
@@ -58,7 +58,7 @@ def test_pm_items_degrades_per_pointer_when_the_forge_is_unreachable(tmp_path: P
         by_url={_POINTER["url"]: PmItem(body="reachable", comments=[])},
         fail_urls={_POINTER_2["url"]},
     )
-    hub = build_hub(tmp_path, pm=pm)
+    hub = build_hub(tmp_path, pm={"default": pm})
     chunk_id = hub.client.post("/api/chunks", json={"pointers": [_POINTER, _POINTER_2]}).json()["chunk_id"]
 
     resp = hub.client.get(f"/api/chunks/{chunk_id}/pm-items")

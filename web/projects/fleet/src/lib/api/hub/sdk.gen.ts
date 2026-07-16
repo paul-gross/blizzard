@@ -28,7 +28,8 @@ export const listChunksApiChunksGet = <ThrowOnError extends boolean = false>(opt
 /**
  * Ingest Chunk
  *
- * Ingest by pointer (D-047); 409 on a pointer held by a live chunk (D-093).
+ * Ingest by pointer (D-047); 422 on a pointer no configured source claims (D-106);
+ * 409 on a pointer held by a live chunk (D-093).
  */
 export const ingestChunkApiChunksPost = <ThrowOnError extends boolean = false>(options: Options<IngestChunkApiChunksPostData, ThrowOnError>): RequestResult<IngestChunkApiChunksPostResponses, IngestChunkApiChunksPostErrors, ThrowOnError> => (options.client ?? client).post<IngestChunkApiChunksPostResponses, IngestChunkApiChunksPostErrors, ThrowOnError>({
     url: '/api/chunks',
@@ -138,12 +139,15 @@ export const reportLeaseApiChunksChunkIdLeasesPost = <ThrowOnError extends boole
 /**
  * Get Pm Items
  *
- * Pass-through PM items read (D-047/D-084) — one entry per pointer, contents never stored.
+ * Pass-through PM items read (D-047/D-084/D-106) — one entry per pointer, contents never stored.
  *
- * Each pointer is fetched fresh from the forge; a per-pointer forge failure degrades to an
- * ``error`` on that entry rather than failing the whole read, so a grouped chunk (D-047) still
- * surfaces the pointers it reached beside a notice for the ones it did not. A chunk with no
- * pointers is an empty list — the board's empty state — not a 404.
+ * Each pointer is resolved to its own binding by repo match, then fetched fresh from the
+ * forge; a per-pointer resolution or forge failure degrades to an ``error`` on that entry
+ * rather than failing the whole read, so a grouped chunk (D-047) still surfaces the pointers
+ * it reached beside a notice for the ones it did not. A chunk with no pointers is an empty
+ * list — the board's empty state — not a 404. No configured PM source at all is a 503 up
+ * front — the request-wide degradation preserved unchanged from before per-pointer
+ * resolution existed.
  */
 export const getPmItemsApiChunksChunkIdPmItemsGet = <ThrowOnError extends boolean = false>(options: Options<GetPmItemsApiChunksChunkIdPmItemsGetData, ThrowOnError>): RequestResult<GetPmItemsApiChunksChunkIdPmItemsGetResponses, GetPmItemsApiChunksChunkIdPmItemsGetErrors, ThrowOnError> => (options.client ?? client).get<GetPmItemsApiChunksChunkIdPmItemsGetResponses, GetPmItemsApiChunksChunkIdPmItemsGetErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/pm-items', ...options });
 

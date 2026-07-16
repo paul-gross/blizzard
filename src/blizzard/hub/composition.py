@@ -38,7 +38,7 @@ from blizzard.hub.domain.registry import FleetService
 from blizzard.hub.domain.work import IReadChunkRepository
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.graphs import default_graph_yaml, load_default_graph_doc
-from blizzard.hub.pm.source import IPmSource
+from blizzard.hub.pm.source import IPmSourceRegistry
 from blizzard.hub.store.internal.chunk_store import ChunkStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
@@ -68,7 +68,7 @@ class HubServices:
     clock: IClock
     default_graph_doc: GraphDoc
     default_graph_yaml: str
-    pm_source: IPmSource | None = None
+    pm: IPmSourceRegistry
 
 
 def build_services(
@@ -76,7 +76,7 @@ def build_services(
     *,
     forge: IForgeDelivery,
     events: EventBroker,
-    pm_source: IPmSource | None = None,
+    pm: IPmSourceRegistry,
     clock: IClock | None = None,
     base_branch: str = "main",
 ) -> HubServices:
@@ -112,5 +112,5 @@ def build_services(
         clock=clock,
         default_graph_doc=load_default_graph_doc(),
         default_graph_yaml=default_graph_yaml(),
-        pm_source=pm_source,
+        pm=pm,
     )

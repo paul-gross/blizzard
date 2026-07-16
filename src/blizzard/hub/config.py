@@ -5,6 +5,12 @@ runtime root; the daemon and the offline ``migrate`` verb read it back. The stor
 URL is the single portability knob (``bzh:sql-portable``): the sqlite default
 lives under the data dir, and postgres is the same config with a different URL.
 The bind port falls back to the winter service band's ``BZ_HUB_PORT`` (band +2).
+
+``[[pm_source]]`` (D-105) is the zero-or-more configured PM work sources: each a
+named, credentialed forge binding the composition root (``hub/pm/internal/factory.py``)
+turns into one ``httpx.Client`` + adapter instance. ``tomllib`` parses the array of
+tables for free; there is no stdlib TOML writer, so :meth:`HubConfig.to_toml` hand-rolls
+the emit in the same string-concat style as the rest of this file.
 """
 
 from __future__ import annotations
@@ -23,9 +29,36 @@ DEFAULT_PORT = 8421
 ENV_HOST = "BZ_HUB_HOST"
 ENV_PORT = "BZ_HUB_PORT"
 
+# The only PM provider grammar a source may declare (D-105); an unknown provider fails
+# at config load, not at first use.
+_KNOWN_PM_PROVIDERS = {"github"}
+_REQUIRED_PM_SOURCE_KEYS = ("name", "provider", "repo", "token_env")
+
 
 class ConfigError(RuntimeError):
     """A runtime directory is missing its config — it was never initialized."""
+
+
+@dataclass(frozen=True)
+class PmSourceConfig:
+    """One configured PM work source (D-105) — a named, credentialed forge binding.
+
+    ``name`` is the operator-chosen identity ingest tokens and board labels key on
+    (conventionally the repo tail, e.g. ``blizzard`` for ``paul-gross/blizzard``);
+    ``provider`` selects the adapter grammar (only ``github`` exists); ``repo`` is the
+    ``owner/name`` coordinate the binding is pinned to; ``token_env`` names the
+    environment variable carrying the credential — never the secret itself (D-084).
+    ``api_base``/``web_base`` override the provider's default API/web origins (required
+    to reach a self-hosted forge, e.g. GHE); ``web_base`` derives from ``api_base`` when
+    omitted — the adapter's own knowledge (D-105), not this dataclass's.
+    """
+
+    name: str
+    provider: str
+    repo: str
+    token_env: str
+    api_base: str | None = None
+    web_base: str | None = None
 
 
 @dataclass(frozen=True)
@@ -36,6 +69,7 @@ class HubConfig:
     db_url: str
     host: str = DEFAULT_HOST
     port: int = DEFAULT_PORT
+    pm_sources: tuple[PmSourceConfig, ...] = ()
 
     @property
     def config_path(self) -> Path:
@@ -60,12 +94,23 @@ class HubConfig:
         )
 
     def to_toml(self) -> str:
-        return (
-            "# blizzard-hub runtime configuration (blizzard hub init)\n"
-            f'db_url = "{self.db_url}"\n'
-            f'host = "{self.host}"\n'
-            f"port = {self.port}\n"
-        )
+        lines = [
+            "# blizzard-hub runtime configuration (blizzard hub init)\n",
+            f'db_url = "{self.db_url}"\n',
+            f'host = "{self.host}"\n',
+            f"port = {self.port}\n",
+        ]
+        for source in self.pm_sources:
+            lines.append("\n[[pm_source]]\n")
+            lines.append(f'name = "{source.name}"\n')
+            lines.append(f'provider = "{source.provider}"\n')
+            lines.append(f'repo = "{source.repo}"\n')
+            lines.append(f'token_env = "{source.token_env}"\n')
+            if source.api_base is not None:
+                lines.append(f'api_base = "{source.api_base}"\n')
+            if source.web_base is not None:
+                lines.append(f'web_base = "{source.web_base}"\n')
+        return "".join(lines)
 
     @classmethod
     def load(cls, root: Path, *, host: str | None = None, port: int | None = None) -> HubConfig:
@@ -80,4 +125,50 @@ class HubConfig:
             db_url=str(raw["db_url"]),
             host=host or str(raw.get("host", DEFAULT_HOST)),
             port=port if port is not None else int(raw.get("port", DEFAULT_PORT)),
+            pm_sources=_parse_pm_sources(raw.get("pm_source", [])),
         )
+
+
+def _parse_pm_sources(raw_sources: object) -> tuple[PmSourceConfig, ...]:
+    """Validate and project ``[[pm_source]]`` entries (D-104/D-105); each rejection names
+    the offending entry rather than failing generically."""
+    if not isinstance(raw_sources, list):
+        return ()
+    sources: list[PmSourceConfig] = []
+    seen_names: set[str] = set()
+    seen_provider_repo: set[tuple[str, str]] = set()
+    for entry in raw_sources:
+        if not isinstance(entry, dict):
+            raise ConfigError(f"[[pm_source]] entry must be a table, got {entry!r}")
+        missing = [key for key in _REQUIRED_PM_SOURCE_KEYS if key not in entry]
+        if missing:
+            raise ConfigError(f"[[pm_source]] entry is missing required key(s) {missing}: {entry!r}")
+        name = str(entry["name"])
+        provider = str(entry["provider"])
+        repo = str(entry["repo"])
+        token_env = str(entry["token_env"])
+        if ":" in name:
+            # hub/cli.py's ingest-token grammar partitions on the first colon (D-104's
+            # open question) — a colon in a source name breaks that split.
+            raise ConfigError(f"[[pm_source]] name {name!r} must not contain ':'")
+        if name in seen_names:
+            raise ConfigError(f"duplicate [[pm_source]] name {name!r}")
+        seen_names.add(name)
+        provider_repo = (provider, repo)
+        if provider_repo in seen_provider_repo:
+            # Two names for one (provider, repo) would let the same item be ingested
+            # twice under two identities — this is what holds D-093 up, not a nicety.
+            raise ConfigError(f"duplicate [[pm_source]] (provider, repo) {provider_repo!r} across two names")
+        seen_provider_repo.add(provider_repo)
+        if provider not in _KNOWN_PM_PROVIDERS:
+            raise ConfigError(
+                f"[[pm_source]] {name!r} has unknown provider {provider!r} (known: {sorted(_KNOWN_PM_PROVIDERS)})"
+            )
+        api_base = str(entry["api_base"]) if entry.get("api_base") else None
+        web_base = str(entry["web_base"]) if entry.get("web_base") else None
+        sources.append(
+            PmSourceConfig(
+                name=name, provider=provider, repo=repo, token_env=token_env, api_base=api_base, web_base=web_base
+            )
+        )
+    return tuple(sources)
