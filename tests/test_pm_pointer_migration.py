@@ -120,7 +120,7 @@ def test_non_issue_shaped_row_survives_verbatim(tmp_path: Path) -> None:
     assert rows["ch_other"].ref == "https://jira.example/PROJ-9"
 
 
-def test_downgrade_reconstructs_a_resolvable_url(tmp_path: Path) -> None:
+def test_downgrade_reconstructs_a_structurally_canonical_url(tmp_path: Path) -> None:
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     runner.upgrade(_BEFORE)
@@ -132,13 +132,98 @@ def test_downgrade_reconstructs_a_resolvable_url(tmp_path: Path) -> None:
 
     with engine.connect() as conn:
         rows = {r.chunk_id: r for r in conn.execute(sa.select(_OLD_POINTERS))}
-    # Canonicalizing, not byte-exact (D-105): the owner segment is unrecoverable from
-    # the repo tail alone, so the reconstructed URL carries a documented placeholder
-    # owner rather than the original ``paul-gross`` — but it is a resolvable GitHub
-    # issue URL for the same repo tail and issue number.
+    # Canonicalizing, not byte-exact, and *not resolvable* (D-105): the owner segment is
+    # unrecoverable from the repo tail alone, so the reconstructed URL carries a
+    # documented placeholder owner rather than the original ``paul-gross``. Nothing is
+    # served at that address — a downgraded hub's PM reads 404 until re-ingested. It is
+    # issue-*shaped* so that a re-upgrade re-parses it (see the round-trip test below),
+    # which is the property the placeholder exists to hold.
     assert rows["ch_issue"].provider == "github"
-    assert rows["ch_issue"].url.endswith("/blizzard/issues/26")
-    assert rows["ch_issue"].url.startswith("https://github.com/")
+    assert rows["ch_issue"].url == "https://github.com/unknown/blizzard/issues/26"
+    assert rows["ch_issue"].url != "https://github.com/paul-gross/blizzard/issues/26"  # the owner is gone
     # The non-issue row round-trips exactly — it was copied verbatim both ways.
     assert rows["ch_other"].provider == "jira"
     assert rows["ch_other"].url == "https://jira.example/PROJ-9"
+
+
+def test_down_then_up_returns_the_identical_source_ref_rows(tmp_path: Path) -> None:
+    """The property that makes 0012 rehearsable despite the lossy owner (D-099/D-105).
+
+    ``downgrade()`` cannot restore the original bytes, so byte-exactness is not the bar.
+    The bar is that the *pointer identity* — the ``(source, ref)`` the whole system keys
+    on (D-093 uniqueness, D-076 dedup, the registry lookup) — survives a down-then-up
+    cycle unchanged. It does because the forward rule reads only the repo tail and the
+    issue number, and the placeholder-owner reconstruction preserves both; the owner it
+    fabricates is the one segment the forward rule already discards. Without this, a
+    rollback-and-reapply would silently re-key live chunks.
+    """
+    db_url = f"sqlite:///{tmp_path / 'hub.db'}"
+    runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
+    runner.upgrade(_BEFORE)
+    engine = create_engine_from_url(db_url)
+    _seed(engine)
+
+    runner.upgrade("head")
+    with engine.connect() as conn:
+        before = {r.chunk_id: (r.source, r.ref) for r in conn.execute(sa.select(_NEW_POINTERS))}
+
+    runner.downgrade(_BEFORE)
+    runner.upgrade("head")
+    with engine.connect() as conn:
+        after = {r.chunk_id: (r.source, r.ref) for r in conn.execute(sa.select(_NEW_POINTERS))}
+
+    assert after == before
+    # Both branches specifically — the backfilled GitHub row (whose owner was lost) and
+    # the verbatim-copied row (which never had one to lose).
+    assert before["ch_issue"] == ("blizzard", "26")
+    assert before["ch_other"] == ("jira", "https://jira.example/PROJ-9")
+
+
+def test_upgrade_is_idempotent_over_an_already_reshaped_store(tmp_path: Path) -> None:
+    """Re-running the revision on reshaped bytes no-ops rather than double-backfilling —
+    the guard is on the revision itself, not per-row (0011's skip-rows trick doesn't
+    transfer to a column reshape)."""
+    db_url = f"sqlite:///{tmp_path / 'hub.db'}"
+    runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
+    runner.upgrade(_BEFORE)
+    engine = create_engine_from_url(db_url)
+    _seed(engine)
+    runner.upgrade("head")
+
+    with engine.connect() as conn:
+        first = {r.chunk_id: (r.source, r.ref) for r in conn.execute(sa.select(_NEW_POINTERS))}
+
+    runner.upgrade("head")  # a second pass over the same, already-reshaped store
+
+    with engine.connect() as conn:
+        second = {r.chunk_id: (r.source, r.ref) for r in conn.execute(sa.select(_NEW_POINTERS))}
+    assert second == first
+
+
+def test_a_fresh_store_reaches_0012_in_the_pre_reshape_shape(tmp_path: Path) -> None:
+    """0002 must materialize ``{provider, url}``, not head-of-tree ``schema.py``'s shape.
+
+    0002 creates ``chunk_pm_pointers``; it once did so by importing the live
+    ``schema.py`` table object. Once ``schema.py`` gained ``{source, ref}`` that import
+    would have made a *fresh* store materialize the post-reshape columns at revision
+    0002 — and 0012's ``if "url" not in columns: return`` guard would then fire, so its
+    backfill would be dead on every fresh store (i.e. every test store) while the live
+    store still needed it. A revision pinned in time must not read a moving shape, so
+    0002 now carries its own frozen literal. This asserts the freeze holds from both
+    ends: the pre-reshape shape exists at 0002, and 0012 genuinely reshapes it away.
+    """
+    db_url = f"sqlite:///{tmp_path / 'hub.db'}"
+    runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
+    engine = create_engine_from_url(db_url)
+
+    def columns() -> set[str]:
+        with engine.connect() as conn:
+            return {c["name"] for c in sa.inspect(conn).get_columns("chunk_pm_pointers")}
+
+    runner.upgrade("0002_hub_walking_skeleton")
+    assert {"provider", "url"} <= columns(), "0002 must create the pre-reshape shape"
+    assert not ({"source", "ref"} & columns()), "0002 leaked head-of-tree schema.py's shape"
+
+    runner.upgrade("head")
+    assert {"source", "ref"} <= columns(), "0012 must reshape a fresh store, not no-op"
+    assert not ({"provider", "url"} & columns())

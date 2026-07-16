@@ -705,7 +705,7 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         ...
 
     def add_pm_pointers(self, chunk_id: str, pointers: list[PmPointer], *, at: datetime) -> None:
-        """Fold PM pointers into a group survivor, de-duped by (provider, url) (D-076)."""
+        """Fold PM pointers into a group survivor, de-duped by (source, ref) (D-076/D-105)."""
         ...
 
     def record_grouped(self, chunk_id: str, *, grouped_into: str, at: datetime) -> None:

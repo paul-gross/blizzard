@@ -147,6 +147,34 @@ def test_ingest_rejects_a_malformed_pointer(monkeypatch: pytest.MonkeyPatch) -> 
     assert attempted is False
 
 
+def test_ingest_rejects_a_url_that_is_not_issue_shaped(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A pasted URL that isn't a PM *item* URL errors here, rather than falling through
+    to the ``source:ref`` split.
+
+    That split partitions on the first colon, so ``https://…/pull/5`` would otherwise
+    mint the nonsense pointer ``{source: "https", ref: "//…/pull/5"}`` and travel to the
+    hub, which can only reject it as an unconfigured source named ``https`` — an error
+    naming neither the paste nor the real problem.
+    """
+    attempted = False
+
+    def fake_post(*args: object, **kwargs: object) -> _FakeResponse:
+        nonlocal attempted
+        attempted = True
+        return _FakeResponse(201, {"chunk_id": "x"})
+
+    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    for token in (
+        "https://github.com/paul-gross/blizzard/pull/5",  # a PR, not an issue
+        "github:https://github.com/paul-gross/blizzard/pull/5",  # …under the legacy prefix
+        "https://example.com/nothing/here",
+    ):
+        result = CliRunner().invoke(hub_group, ["ingest", token])
+        assert result.exit_code != 0, f"{token!r} should not be accepted: {result.output}"
+        assert "not a PM item URL" in result.output, result.output
+    assert attempted is False
+
+
 # --------------------------------------------------------------------------- #
 # `blizzard hub promote`
 # --------------------------------------------------------------------------- #

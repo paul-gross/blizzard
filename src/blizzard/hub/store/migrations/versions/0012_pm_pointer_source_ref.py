@@ -39,11 +39,31 @@ still-unresolved name, not a hard migration failure or a startup refusal.
 retained forward — only the repo tail was. That owner is genuinely unrecoverable from
 ``source`` alone. This revision's resolution: a numeric ``ref`` is treated as a
 backfilled GitHub-issue row and reconstructed as ``provider="github"``,
-``url=f"https://github.com/{_UNKNOWN_OWNER}/{source}/issues/{ref}"`` — a resolvable,
-canonical URL under a documented, constant placeholder owner (not the original bytes,
-which is the accepted, recorded cost, D-105). A non-numeric ``ref`` was never
-GitHub-issue-shaped in the first place (the verbatim-copy branch above): its downgrade
-is the exact inverse, ``provider=source``, ``url=ref``, with no loss at all.
+``url=f"https://github.com/{_UNKNOWN_OWNER}/{source}/issues/{ref}"`` — *structurally*
+canonical under a documented, constant placeholder owner, **not resolvable**: nothing
+is served at that address (the real owner is gone, so no reconstruction could be).
+That is the accepted, recorded cost (D-105), and its operational consequence is
+concrete: **a downgraded hub running pre-0012 code parses that URL for owner/repo and
+404s on every PM read** of a backfilled pointer until the chunk is re-ingested. A
+rollback restores the *schema*, not the hub's PM reach.
+
+What the placeholder buys — and the property actually worth holding — is that
+**down-then-up is stable**: re-upgrading a downgraded row returns the identical
+``(source, ref)``, because ``_backfill_source_ref`` reads only the repo tail and the
+number, both of which survive the round trip. The owner is the only casualty, and it
+is precisely the segment the forward rule already discarded. A reconstruction that
+instead dropped the owner segment (an ``owner``-less ``{repo}/issues/{n}``) would fail
+to re-parse and break that stability, which is why the placeholder is a constant and
+not an omission.
+
+A non-numeric ``ref`` was never GitHub-issue-shaped in the first place (the
+verbatim-copy branch above): its downgrade is the exact inverse, ``provider=source``,
+``url=ref``, with no loss at all. The ``ref.isdigit()`` discriminator is a heuristic —
+the forward rule does not record which branch it took — so a hypothetical
+*non-GitHub* row whose ``url`` was itself purely numeric (``provider="jira"``,
+``url="123"``) reverses to a GitHub-shaped URL rather than its own bytes. No such row
+exists in any live store (a bare number is not a URL), and down-then-up remains stable
+for it regardless; it is recorded here rather than guarded against.
 
 Revision ID: 0012_hub_pm_pointer_source_ref
 Revises: 0011_hub_chunk_promoted

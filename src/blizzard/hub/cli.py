@@ -238,7 +238,14 @@ def _parse_pointer(token: str) -> dict[str, str]:
     path, copy straight from the browser — resolved to its repo tail. The old
     ``github:<url>`` provider-tagged form still resolves, on the URL alone, but is
     deprecated: it warns on stderr rather than silently accepting a provider tag the
-    pointer no longer carries."""
+    pointer no longer carries.
+
+    A token that *looks* like a URL (carries ``://``) but is not an issue URL is
+    rejected outright rather than falling through to the ``source:ref`` split — that
+    split would otherwise partition ``https://…/pull/5`` on its scheme colon and mint
+    the nonsense pointer ``{source: "https", ref: "//…/pull/5"}``, which the hub can
+    only reject downstream as an unconfigured source. The error belongs here, where the
+    paste happened."""
     if token.startswith("github:"):
         rest = token[len("github:") :]
         resolved = _pointer_from_url(rest)
@@ -251,7 +258,9 @@ def _parse_pointer(token: str) -> dict[str, str]:
     as_url = _pointer_from_url(token)
     if as_url is not None:
         return as_url
-    if "#" in token and "://" not in token:
+    if "://" in token:
+        raise click.ClickException(f"not a PM item URL — expected .../{{owner}}/{{repo}}/issues/{{n}} (got {token!r})")
+    if "#" in token:
         source, sep, ref = token.partition("#")
         if sep and source and ref:
             return {"source": source, "ref": ref}
