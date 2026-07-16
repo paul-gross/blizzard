@@ -206,11 +206,35 @@ class IReadRunnerStore(Protocol):
         ...
 
     def resume_intent_lease_ids(self) -> set[str]:
-        """Leases carrying an **open** graceful-restart resume-intent (D-082).
+        """Leases carrying an **open** restart resume-intent (D-082).
 
         A ``resume_intents`` mark with no ``resume_clears`` for the same lease at or
-        after it — set by a graceful shutdown, consumed by the startup RESUME step. Empty
-        on any normal tick; non-empty only on the first tick after a graceful restart."""
+        after it — set by a graceful shutdown (#12) or ``host``'s startup crash-recovery
+        scan (#13), consumed by the startup RESUME step. Empty on any normal tick;
+        non-empty only on the first tick after a restart."""
+        ...
+
+    def session_ended_lease_ids(self) -> set[str]:
+        """Leases whose **current spawn** recorded a session-end — it declared done (D-055/D-082).
+
+        A ``session_ends`` row means the Claude Code ``SessionEnd`` hook fired on a natural
+        session exit. Startup crash-recovery reads this to keep a cleanly-exited worker out
+        of the resume path (:func:`mark_crash_resume_intents`): a dead pid *with* a session-end
+        is a done declaration ADVANCE judges, not a crash to re-attach.
+
+        Scoped to the lease's newest ``lease_spawns`` fact, because a lease outlives its
+        sessions: the ask/answer and resume paths re-spawn under the same lease and session
+        id, so an unscoped read would let one natural exit suppress the resume of every
+        later crash on that lease — the sessions most worth resuming."""
+        ...
+
+    def last_daemon_liveness(self) -> datetime | None:
+        """When the runner was last known alive, or ``None`` if it never ticked (issue #13).
+
+        The crash-time reference startup recovery classifies staleness against. The tick
+        stamps it each pass, so after an involuntary stop the newest value is when the daemon
+        died, to within one tick — letting the scan ask "was this worker still working *when
+        the daemon died*" instead of measuring the outage itself."""
         ...
 
     def workspace_prompt_override(self, workspace_id: str) -> str | None:
@@ -229,8 +253,21 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         """Persist a minted lease and its node context, atomically."""
         ...
 
-    def record_spawn(self, lease_id: str, *, pid: int, process_start_time: str, session_id: str) -> None:
-        """Fill a lease's spawn-return facts: pid, process start time, session id (D-092)."""
+    def record_spawn(
+        self, lease_id: str, *, pid: int, process_start_time: str, session_id: str, spawned_at: datetime
+    ) -> None:
+        """Fill a lease's spawn-return facts: pid, process start time, session id (D-092).
+
+        ``spawned_at`` additionally appends the lease's spawn generation, so a fact recorded
+        by an earlier session of the same lease can be told from one recorded by the process
+        running now (issue #13)."""
+        ...
+
+    def record_daemon_liveness(self, *, runner_id: str, alive_at: datetime) -> None:
+        """Stamp the runner as alive at ``alive_at`` — the tick's liveness beat (issue #13).
+
+        Upserted, one row per runner: only the newest instant matters, and it is the crash-time
+        reference startup recovery reads back via :meth:`last_daemon_liveness`."""
         ...
 
     def record_binding(self, *, chunk_id: str, environment_id: str, workdir: str, bound_at: datetime) -> None:
@@ -295,4 +332,8 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
 
     def record_resume_clear(self, *, lease_id: str, cleared_at: datetime) -> None:
         """Clear a lease's resume-intent — the RESUME step resumed or abandoned it (D-082)."""
+        ...
+
+    def record_session_end(self, *, lease_id: str, ended_at: datetime) -> None:
+        """Record a worker's session-end — the ``SessionEnd`` hook fired on exit (D-055/D-082)."""
         ...

@@ -163,6 +163,22 @@ export type ReadinessResponse = {
 };
 
 /**
+ * SessionEndResponse
+ *
+ * The recorded acknowledgement (openapi-ts consumes this).
+ */
+export type SessionEndResponse = {
+    /**
+     * Lease Id
+     */
+    lease_id: string;
+    /**
+     * Recorded
+     */
+    recorded: boolean;
+};
+
+/**
  * ValidationError
  */
 export type ValidationError = {
@@ -318,6 +334,36 @@ export type RecordAskApiLeasesLeaseIdAsksPostResponses = {
 };
 
 export type RecordAskApiLeasesLeaseIdAsksPostResponse = RecordAskApiLeasesLeaseIdAsksPostResponses[keyof RecordAskApiLeasesLeaseIdAsksPostResponses];
+
+export type SessionEndApiLeasesLeaseIdSessionEndPostData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+    };
+    query?: never;
+    url: '/api/leases/{lease_id}/session-end';
+};
+
+export type SessionEndApiLeasesLeaseIdSessionEndPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SessionEndApiLeasesLeaseIdSessionEndPostError = SessionEndApiLeasesLeaseIdSessionEndPostErrors[keyof SessionEndApiLeasesLeaseIdSessionEndPostErrors];
+
+export type SessionEndApiLeasesLeaseIdSessionEndPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: SessionEndResponse;
+};
+
+export type SessionEndApiLeasesLeaseIdSessionEndPostResponse = SessionEndApiLeasesLeaseIdSessionEndPostResponses[keyof SessionEndApiLeasesLeaseIdSessionEndPostResponses];
 
 export type ReadyApiReadyGetData = {
     body?: never;

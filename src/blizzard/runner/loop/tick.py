@@ -4,9 +4,11 @@
 ``blizzard runner tick`` CLI verb and the periodic daemon driver both call. Because
 startup recovery *is* REAP running first, a fresh daemon simply runs a tick — no special
 recovery path. RESUME sits second, before ADVANCE could mistake a killed-mid-work worker
-for a done declaration: on the first tick after a *graceful* restart it re-attaches each
-in-flight session a shutdown marked (D-082); on every other tick it is a no-op. The tick
-holds no state: every step reads and writes the runner store through the context's seams.
+for a done declaration: on the first tick after a restart it re-attaches each in-flight
+session marked for same-lease resume — by the graceful shutdown hook (D-082, #12) or, when
+a ``kill -9`` / reboot skipped that hook, by ``host``'s startup crash-recovery scan (#13);
+on every other tick it is a no-op. The tick holds no state: every step reads and writes the
+runner store through the context's seams.
 """
 
 from __future__ import annotations
@@ -21,6 +23,11 @@ _log = get_logger("blizzard.runner.loop")
 def tick(ctx: LoopContext) -> None:
     """Run one reconciliation pass. Idempotent; safe to call on startup and per-timer."""
     _log.debug("tick start", runner_id=ctx.config.runner_id)
+    # Stamp liveness first, so the newest stamp is when the daemon was last known alive —
+    # the crash-time reference the next startup's recovery scan classifies staleness against
+    # (issue #13). Recorded before the steps, not after, so a pass that dies mid-step still
+    # leaves the beat that proves the daemon reached it.
+    ctx.store.record_daemon_liveness(runner_id=ctx.config.runner_id, alive_at=ctx.clock.now())
     reap(ctx)
     resume(ctx)
     pull(ctx)

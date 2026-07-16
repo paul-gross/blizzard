@@ -119,6 +119,27 @@ lease_context = Table(
     Column("recorded_at", DateTime, nullable=False),
 )
 
+# --- Lease spawns (the spawn generation of each attempt — issue #13) ----------
+#
+# 0002's `leases` is frozen and `record_spawn` rewrites its pid/session in place, so
+# the lease alone cannot say *when* its current process was spawned. A lease outlives
+# its sessions — the ask/answer and resume paths re-spawn under the same lease_id and
+# session_id (`_resume_if_answered`, `_resume_in_place`) — so a per-lease fact that is
+# true "forever after" cannot be read as true "of the process running now".
+#
+# Append-only, one row per spawn: the newest `spawned_at` for a lease is its current
+# spawn generation. Startup crash-recovery scopes the session-end check to it, so a
+# session-end left by an *earlier* session of the same lease no longer reads as "this
+# process declared done" and permanently suppresses its resume.
+
+lease_spawns = Table(
+    "lease_spawns",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("lease_id", String, nullable=False),  # the attempt this process was spawned for
+    Column("spawned_at", DateTime, nullable=False),  # injected-clock stamp of the spawn-return
+)
+
 # --- Lease closures (a lease is closed iff a closure fact exists — facts-not-status) -
 #
 # Append-only: an active lease is one with no closure. `reason` distinguishes a
@@ -201,23 +222,26 @@ park_resumes = Table(
     Column("resumed_at", DateTime, nullable=False),
 )
 
-# --- Resume intent (the graceful-restart resume marker — D-082) --------------
+# --- Resume intent (the restart resume marker — D-082) -----------------------
 #
-# A graceful ``blizzard-runner`` shutdown (SIGTERM: ``systemctl restart``/stop) marks
-# every active, non-parked, session-bearing lease with a resume-intent *before* the
-# daemon exits, then the startup RESUME step routes each marked lease to a same-lease
-# resume — kill any survivor, then resume the session in place under the **unchanged**
-# ``lease_id``/``epoch``/``session_id`` (only ``pid``/``process_start_time`` are
-# rewritten). This is the fourth sibling of the resume family (spawn / judgement /
-# answer, D-082): it is explicitly not a retry (new lease/epoch/session), so it consumes
-# no retry budget (D-078). An ungraceful ``kill -9`` writes no intent, so a crashed
-# worker still routes to today's reap/requeue-fresh — the scope boundary is exactly
-# "did the daemon get to run shutdown code".
+# A restart marks every active, non-parked, session-bearing lease with a resume-intent, then
+# the startup RESUME step routes each marked lease to a same-lease resume — kill any survivor,
+# then resume the session in place under the **unchanged** ``lease_id``/``epoch``/``session_id``
+# (only ``pid``/``process_start_time`` are rewritten). This is the fourth sibling of the resume
+# family (spawn / judgement / answer, D-082): it is explicitly not a retry (new lease/epoch/
+# session), so it consumes no retry budget (D-078).
+#
+# Two paths write the intent. A **graceful** shutdown (SIGTERM: ``systemctl restart``/stop)
+# marks *before* the daemon exits (#12). An ungraceful ``kill -9`` / OOM / reboot never runs
+# shutdown code, so ``host``'s **startup crash-recovery** scan marks it instead (#13,
+# ``mark_crash_resume_intents``) — for a lease whose worker is gone with no recorded session-end
+# and a non-stale heartbeat, i.e. killed mid-work rather than done or already stalled. The
+# RESUME step is indifferent to which path marked it.
 #
 # Facts-only (``bzh:facts-not-status``), mirroring park/park_resume: an intent is *open*
 # while a ``resume_intents`` row has no ``resume_clears`` for the same lease at or after
 # it — the RESUME step records a clear once it resumes (or abandons) the lease, and a
-# later graceful restart of a still-in-flight lease marks it afresh above that clear.
+# later restart of a still-in-flight lease marks it afresh above that clear.
 
 resume_intents = Table(
     "resume_intents",
@@ -233,6 +257,26 @@ resume_clears = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("lease_id", String, nullable=False),
     Column("cleared_at", DateTime, nullable=False),
+)
+
+# --- Session-end signal (the durable "declared done" fact — D-055/D-082) -----
+#
+# The graceful marker (above) fires *before* the daemon exits; an ungraceful ``kill -9``
+# / OOM / reboot never runs shutdown code, so startup crash-recovery cannot rely on a
+# marker at all. This table is the signal it *can* rely on: the Claude Code ``SessionEnd``
+# hook posts ``blizzard runner session-end`` when a worker's session exits naturally, so a
+# row here means the worker **declared done** (exit-is-done, D-055). A worker killed
+# mid-work never runs the hook, so it has no row — and that *absence*, paired with a dead
+# pid, is how startup tells a crash to resume (:func:`mark_crash_resume_intents`) from a
+# clean exit ADVANCE should judge. Append-only, machine-local (never travels to the hub),
+# mirroring ``heartbeats`` (``bzh:facts-not-status``): a lease "ended" iff a row exists.
+
+session_ends = Table(
+    "session_ends",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("lease_id", String, nullable=False),  # BLIZZARD_LEASE_ID the SessionEnd hook inherited
+    Column("ended_at", DateTime, nullable=False),  # injected-clock stamp of the session's exit
 )
 
 # --- Hub control mirror (the declarative pause brake read on PULL — D-043/D-012) --
@@ -268,4 +312,25 @@ workspace_prompt = Table(
     Column("workspace_id", String, primary_key=True),
     Column("prompt", Text, nullable=False),
     Column("updated_at", DateTime, nullable=False),
+)
+
+# --- Daemon liveness (when the runner was last known alive — issue #13) -------
+#
+# The crash-time reference startup recovery classifies against. A worker's staleness
+# is "was it still working *when the daemon died*" — but a restart only has the clock
+# at recovery, and `now - last_heartbeat` silently measures `downtime + idle-at-crash`.
+# An outage longer than the staleness threshold would then read every in-flight lease
+# as stalled, defeating the reboot case #13 exists for.
+#
+# The tick stamps this each pass (~30s), so after a crash the last row is when the
+# daemon was last alive — crash time, accurate to one tick. One upserted row per
+# runner, mirroring ``hub_control``'s shape. No row means "never ticked": recovery
+# falls back to the wall clock, which is the pre-#13 reading and only reachable on a
+# store that has never run a tick (so it has no in-flight leases to misjudge).
+
+daemon_liveness = Table(
+    "daemon_liveness",
+    metadata,
+    Column("runner_id", String, primary_key=True),
+    Column("alive_at", DateTime, nullable=False),  # injected-clock stamp of the newest tick
 )

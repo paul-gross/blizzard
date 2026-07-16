@@ -8,22 +8,28 @@ hub, and the real runner reconciliation loop over a minted ``blizzard-mock`` fix
 every seam real, no tokens and no network. It proves the operator surface end to end
 (MVP criterion 11, D-048/D-097):
 
+0. **Promote from the board.** Ingest rests a chunk not-ready (D-103): it renders in the
+   board's backlog column and no runner may claim it. Promoting it from its card makes it
+   claimable — it leaves the board for the rail's ready queue (there is no READY column).
 1. **Live board, no reload.** The board is loaded once and never reloaded. As facts
    land at the hub they fan out over ``GET /api/events/stream`` (SSE), the
    ``FleetLiveUpdates`` spine invalidates the TanStack reads, and the chunk's status
-   chip **flips in place** — ``ready`` → ``waiting_on_human`` → ``done`` — with no
-   navigation. The fleet **runner strip** lights up ``online`` when the runner
-   registers (its per-pull liveness heartbeat, D-070).
-2. **Detail drawer.** Selecting a card opens the chunk detail, which renders the
-   **node history** (the edges the chunk took) and the **artifact store** (the build's
-   ``git_commit`` reference and the review's findings asset), D-036.
+   chip **flips in place** — ``waiting_on_human`` → ``done`` — with no navigation. The
+   fleet **runner strip** lights up ``online`` when the runner registers (its per-pull
+   liveness heartbeat, D-070).
+2. **Detail dock.** Selecting a card fills the bottom chunk-detail dock, which renders
+   the **node history** (the edges the chunk took) and the **artifact store** (the
+   build's ``git_commit`` reference and the review's findings asset), D-036. The dock is
+   permanently mounted at a fixed height, so filling or clearing it leaves the board's
+   geometry **pixel-identical** — issue #21's criteria, and the one claim in this file
+   that only a laying-out browser can prove.
 3. **Queue shaping honored by FILL.** Two ready chunks are **grouped** into one from
    the UI — the survivor carries the union of PM pointers (plural) — and the ready
    queue is **reordered** (move-to-top) from the UI. The next FILL then honors **both**:
    the grouped survivor, with its plural pointers, is what the runner claims, and it is
    claimed **first** because it was moved to the top (D-047/D-048/D-080).
 4. **Answer from the board.** A parked chunk's open question is answered from the detail
-   drawer; the holding runner resumes the dormant session and the chunk lands (D-052,
+   dock; the holding runner resumes the dormant session and the chunk lands (D-052,
    MVP criterion 7).
 5. **Pause brake from the board.** Pausing the runner from the fleet strip stops new
    claims — a still-ready chunk is *not* claimed across several ticks — and resuming it
@@ -210,7 +216,11 @@ def _tick_n(config: RunnerConfig, fenced: dict[str, str], count: int) -> None:
 
 
 def _ingest_chunk(forge: httpx.Client, hub: httpx.Client, title: str) -> str:
-    """File a forge issue and ingest its pointer into a ready chunk; return the chunk id."""
+    """File a forge issue and ingest its pointer into a not-ready chunk; return the chunk id.
+
+    Ingest rests the chunk not-ready (D-103). The scenario promotes it from the **board**
+    rather than here, so the promote control itself is exercised through the browser.
+    """
     issue = forge.post(f"/repos/{REPO}/issues", json={"title": title, "body": "the chunk"})
     assert issue.status_code == 201, issue.text
     ingested = hub.post(
@@ -218,10 +228,7 @@ def _ingest_chunk(forge: httpx.Client, hub: httpx.Client, title: str) -> str:
         json={"pointers": [{"provider": "github", "url": f"{REPO}/issues/{issue.json()['number']}"}]},
     )
     assert ingested.status_code == 201, ingested.text
-    chunk_id = ingested.json()["chunk_id"]
-    # Ingest rests not-ready (D-103); promote so the board shows it ready and claimable.
-    assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
-    return chunk_id
+    return ingested.json()["chunk_id"]
 
 
 def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chromium_available: bool) -> None:
@@ -296,10 +303,25 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 def queue_row(chunk_id: str):
                     return page.locator(f'[data-testid="queue-row"][data-chunk="{chunk_id}"]')
 
-                # All three chunks render in READY; no runner has registered yet.
+                # All three chunks rest NOT READY (D-103) — held from the fleet in the
+                # board's backlog column, and queued for no claim. No runner has
+                # registered yet.
                 expect(page.get_by_test_id("chunk-card")).to_have_count(3)
-                expect(col_cards("ready")).to_have_count(3)
+                expect(col_cards("notready")).to_have_count(3)
                 expect(page.get_by_test_id("runners-empty")).to_be_visible()
+                expect(page.get_by_test_id("queue-row")).to_have_count(0)
+
+                # --- Promote all three from the board ---------------------------------
+                # Promoting is what makes a chunk claimable. A ready chunk is *not* a
+                # board card — the READY column was dropped in favor of the rail's ready
+                # queue — so the backlog empties into the queue as each is promoted.
+                # Each click is awaited by the backlog shrinking: promote is idempotent, so
+                # clicking `.first` again before the promoted card has left would just
+                # re-promote the same chunk.
+                for remaining in (2, 1, 0):
+                    col("notready").get_by_test_id("promote-chunk").first.click()
+                    expect(col_cards("notready")).to_have_count(remaining)
+                expect(page.get_by_test_id("chunk-card")).to_have_count(0)
                 expect(page.get_by_test_id("queue-row")).to_have_count(3)
 
                 # --- Group B + C from the UI (survivor = top-most selected = B) --------
@@ -310,7 +332,7 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 # C is merged away (ephemeral, D-047) — it vanishes from the board live —
                 # and B survives carrying the union of PM pointers (plural, "+1").
                 expect(page.get_by_test_id("queue-row")).to_have_count(2)
-                expect(col_cards("ready")).to_have_count(2)
+                expect(queue_row(chunk_c)).to_have_count(0)
                 expect(queue_row(chunk_b).get_by_test_id("queue-pointer")).to_contain_text("+1")
 
                 # --- Reorder from the UI: move the grouped survivor to the top ---------
@@ -339,15 +361,27 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 # --- Live chip flip, no reload: drive to the park and watch it flip ----
                 status = _tick_until(config, hub, chunk_b, fenced, {"waiting_on_human", "done", "needs_human"}, 90.0)
                 assert status == "waiting_on_human", f"survivor did not park on its question (status {status!r})"
-                # The survivor's card flipped ready → waiting_on_human in place; A stays ready.
+                # The survivor left the ready queue and its card landed in WAIT/HUMAN, live
+                # over SSE with no reload; A stays ready in the queue.
                 expect(col_cards("waiting")).to_have_count(1)
                 expect(col("waiting").get_by_test_id("chunk-status")).to_have_text("waiting_on_human")
-                expect(col_cards("ready")).to_have_count(1)
+                expect(queue_row(chunk_a)).to_have_count(1)  # A still ready, still queued
 
-                # --- Detail drawer: open the parked chunk, answer from the board -------
+                # --- Detail dock: selecting must not move the board (issue #21) --------
+                # The dock is mounted whether or not a chunk is open, so it rests on a
+                # "select a chunk" prompt here. This is the one assertion in the suite
+                # that needs a real layout: the unit tier runs in jsdom, which does not
+                # lay out, so it cannot see the board move. Geometry is compared exactly
+                # — the dock owns a fixed grid track, so the board's box is invariant.
+                expect(page.get_by_test_id("chunk-detail-empty")).to_be_visible()
+                board_at_rest = page.get_by_test_id("board").bounding_box()
+
                 col_cards("waiting").first.click()
                 expect(page.get_by_test_id("chunk-detail")).to_be_visible()
                 expect(page.get_by_test_id("detail-id")).to_have_text(chunk_b)
+                assert page.get_by_test_id("board").bounding_box() == board_at_rest, (
+                    "selecting a chunk moved or resized the board — the dock is not holding its track"
+                )
                 expect(page.get_by_test_id("question-text")).to_contain_text("API style")
                 page.get_by_test_id("answer-input").fill(_ANSWER_SCRIPT)
                 page.get_by_test_id("answer-submit").click()
@@ -358,35 +392,43 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                     time.sleep(0.3)
                 assert hub.get("/api/questions").json() == [], "the board answer did not close the open question"
 
-                # --- Resume to done, chip flips again, drawer shows history + artifacts -
+                # --- Resume to done, chip flips again, dock shows history + artifacts --
                 status = _tick_until(config, hub, chunk_b, fenced, {"done", "needs_human", "stopped"}, 120.0)
                 assert status == "done", f"survivor did not land after the board answer (status {status!r})"
                 expect(col_cards("done")).to_have_count(1)
                 expect(col("done").get_by_test_id("chunk-status")).to_have_text("done")
 
-                # The drawer (still open on B) renders the node history and the artifact store.
+                # The dock (still filled with B) renders the node history and the artifact
+                # store — issue #21's "existing detail content continues to render".
                 expect(page.get_by_test_id("detail-status")).to_have_text("done")
                 assert page.get_by_test_id("history-step").count() >= 1, "detail shows no node history"
                 assert page.get_by_test_id("artifact").count() >= 1, "detail shows no artifacts"
                 expect(page.get_by_test_id("artifact-ref").first).to_be_visible()  # the build git_commit
+
+                # Dismissing clears the dock back to its rest state, and the board still
+                # has not moved — the round trip is geometry-neutral (issue #21).
                 page.get_by_test_id("detail-close").click()
+                expect(page.get_by_test_id("chunk-detail-empty")).to_be_visible()
+                assert page.get_by_test_id("board").bounding_box() == board_at_rest, (
+                    "deselecting resized or shifted the board — the dock did not return to its track"
+                )
 
                 # --- Pause brake from the board: A stays ready while paused ------------
-                expect(col_cards("ready")).to_have_count(1)  # A alone remains ready
+                expect(page.get_by_test_id("queue-row")).to_have_count(1)  # A alone remains ready
                 page.get_by_test_id("runner-toggle").click()  # Pause
                 expect(page.get_by_test_id("runner")).to_have_attribute("data-paused", "true")
                 expect(page.get_by_test_id("runner-paused")).to_be_visible()
 
                 _tick_n(config, fenced, 4)  # PULL reads paused → FILL claims nothing
                 assert hub.get(f"/api/chunks/{chunk_a}").json()["status"] == "ready", "paused runner still claimed A"
-                expect(col_cards("ready")).to_have_count(1)
+                expect(queue_row(chunk_a)).to_have_count(1)
 
                 # --- Resume from the board: the claim resumes -------------------------
                 page.get_by_test_id("runner-toggle").click()  # Resume
                 expect(page.get_by_test_id("runner")).to_have_attribute("data-paused", "false")
                 status = _tick_until(config, hub, chunk_a, fenced, {"running", "waiting_on_human", "done"}, 60.0)
                 assert status != "ready", f"resumed runner did not claim A (status {status!r})"
-                expect(col_cards("ready")).to_have_count(0)  # A left the ready queue — the claim resumed
+                expect(queue_row(chunk_a)).to_have_count(0)  # A left the ready queue — the claim resumed
             finally:
                 browser.close()
 

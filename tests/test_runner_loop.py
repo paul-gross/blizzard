@@ -68,7 +68,7 @@ def _seed_running_lease(store, *, chunk="ch_1", lease="lease_1", pid=100, start=
             created_at=_NOW,
         )
     )
-    store.record_spawn(lease, pid=pid, process_start_time=start, session_id=session)
+    store.record_spawn(lease, pid=pid, process_start_time=start, session_id=session, spawned_at=_NOW)
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
 
@@ -339,7 +339,7 @@ def test_advance_review_harvests_findings_asset_from_assessment(tmp_path):  # ty
             created_at=_NOW,
         )
     )
-    store.record_spawn("lease_r", pid=100, process_start_time="start-100", session_id="sess-a")
+    store.record_spawn("lease_r", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
     hub = FakeHub()

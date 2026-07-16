@@ -85,7 +85,7 @@ describe('BoardShell', () => {
     expect(el.querySelector('[data-status="ready"]')).toBeNull();
   });
 
-  it('emits the chunk id when a card is activated (opens the detail drawer)', async () => {
+  it('emits the chunk id when a card is activated (fills the detail dock)', async () => {
     const chunks: ChunkSummary[] = [
       { chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', status: 'running', current_node_id: 'nd_build', pm_pointers: [] },
     ];

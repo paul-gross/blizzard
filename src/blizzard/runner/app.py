@@ -23,6 +23,7 @@ from blizzard.runner.api.health import router as health_router
 from blizzard.runner.api.heartbeat import router as heartbeat_router
 from blizzard.runner.api.pm_items import router as pm_items_router
 from blizzard.runner.api.readiness import router as readiness_router
+from blizzard.runner.api.session_end import router as session_end_router
 from blizzard.runner.api.workspace_prompt import router as workspace_prompt_router
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.readiness import ReadinessService
@@ -68,6 +69,7 @@ def create_app(
     app.include_router(health_router)
     app.include_router(readiness_router)
     app.include_router(heartbeat_router)
+    app.include_router(session_end_router)
     app.include_router(asks_router)
     # The PM-item pass-through proxy (D-084): a build worker reads its issue through
     # this route, which forwards to the hub — the worker never crosses a layer.

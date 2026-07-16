@@ -53,7 +53,7 @@ def _seed_running_lease(  # type: ignore[no-untyped-def]
             created_at=_NOW,
         )
     )
-    store.record_spawn(lease, pid=pid, process_start_time=start, session_id=session)
+    store.record_spawn(lease, pid=pid, process_start_time=start, session_id=session, spawned_at=_NOW)
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
 

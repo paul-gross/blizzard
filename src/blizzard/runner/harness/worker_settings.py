@@ -3,9 +3,11 @@
 Hook delivery is spawn-scoped and adapter-owned: the Claude Code adapter passes this
 settings file on the command line (``claude -p --settings <file>``), carrying the
 worker hook set. The ``PostToolUse`` hook fires ``blizzard runner heartbeat`` on every
-tool call — progress detection with no agent cooperation (D-069). The heartbeat verb
-takes its identity from the spawn environment (``BLIZZARD_LEASE_ID`` /
-``BLIZZARD_RUNNER_URL``), so the hook command needs no arguments.
+tool call — progress detection with no agent cooperation (D-069). The ``SessionEnd`` hook
+fires ``blizzard runner session-end`` when the session exits, recording the "declared done"
+signal startup crash-recovery reads after an involuntary restart (D-055/D-082). Both verbs
+take their identity from the spawn environment (``BLIZZARD_LEASE_ID`` /
+``BLIZZARD_RUNNER_URL``), so the hook commands need no arguments.
 
 The file ships with the runner and is versioned with it — nothing is materialized into
 a project repo (repos know nothing about the fleet), and a human's own ``claude``
@@ -22,6 +24,8 @@ from typing import Any
 
 #: The command a worker's PostToolUse hook runs — a pure client of the local API.
 HEARTBEAT_HOOK_COMMAND = "blizzard runner heartbeat"
+#: The command a worker's SessionEnd hook runs — the "declared done" signal (D-055/D-082).
+SESSION_END_HOOK_COMMAND = "blizzard runner session-end"
 
 
 def worker_settings_document() -> dict[str, Any]:
@@ -30,6 +34,9 @@ def worker_settings_document() -> dict[str, Any]:
         "hooks": {
             "PostToolUse": [
                 {"hooks": [{"type": "command", "command": HEARTBEAT_HOOK_COMMAND}]},
+            ],
+            "SessionEnd": [
+                {"hooks": [{"type": "command", "command": SESSION_END_HOOK_COMMAND}]},
             ],
         },
     }

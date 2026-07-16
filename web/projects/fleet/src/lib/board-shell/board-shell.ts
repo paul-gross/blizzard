@@ -388,7 +388,7 @@ export class BoardShell {
   /** The fleet chunk list (derived status + current node); empty when the fleet is idle. */
   readonly chunks = input<readonly ChunkSummary[]>([]);
 
-  /** Emitted with a chunk id when its card is activated — opens the detail drawer. */
+  /** Emitted with a chunk id when its card is activated — fills the detail dock. */
   readonly selectChunk = output<string>();
 
   /** Emitted with a chunk id when a not-ready card's Promote is clicked (D-103). */

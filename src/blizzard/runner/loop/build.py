@@ -27,7 +27,7 @@ from blizzard.runner.loop.hub import IHubClient
 from blizzard.runner.loop.internal.http_hub import HttpHubClient
 from blizzard.runner.loop.internal.subprocess_worktree_git import SubprocessWorktreeGit
 from blizzard.runner.loop.process import LinuxProcessProbe
-from blizzard.runner.loop.steps import mark_resume_intents
+from blizzard.runner.loop.steps import mark_crash_resume_intents, mark_resume_intents
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 
@@ -95,6 +95,24 @@ def mark_resume_intents_on_shutdown(config: RunnerConfig) -> int:
     store = SqlAlchemyRunnerStore(engine)
     try:
         return mark_resume_intents(store, now=SystemClock().now())
+    finally:
+        engine.dispose()
+
+
+def mark_crash_resume_intents_on_startup(config: RunnerConfig) -> int:
+    """Detect crash-orphaned sessions at daemon startup and mark them for resume (#13, D-082).
+
+    The ungraceful counterpart of :func:`mark_resume_intents_on_shutdown`: an involuntary
+    ``kill -9`` / OOM / reboot never ran the shutdown marker, so ``host`` calls this once
+    before starting the loop to find the interrupted sessions and route them to the same
+    startup RESUME. It needs the runner store plus a process probe (the liveness check that
+    tells a killed worker from an orphaned-but-alive one) — no hub, no workspace provider —
+    so it opens just the store and delegates the which-leases decision to
+    :func:`mark_crash_resume_intents`."""
+    engine = create_engine_from_url(config.db_url)
+    store = SqlAlchemyRunnerStore(engine)
+    try:
+        return mark_crash_resume_intents(store, process=LinuxProcessProbe(), now=SystemClock().now())
     finally:
         engine.dispose()
 

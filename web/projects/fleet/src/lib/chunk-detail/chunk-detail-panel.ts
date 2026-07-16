@@ -21,14 +21,14 @@ export interface PmItemsState {
   readonly items: readonly PmItemEntry[];
 }
 
-/** Emitted when the operator answers a chunk's open question from the drawer. */
+/** Emitted when the operator answers a chunk's open question from the dock. */
 export interface AnswerQuestionEvent {
   readonly questionId: string;
   readonly answer: string;
   readonly chunkId: string;
 }
 
-/** Emitted when the operator resolves a chunk's open gate decision from the drawer. */
+/** Emitted when the operator resolves a chunk's open gate decision from the dock. */
 export interface ResolveDecisionEvent {
   readonly decisionId: string;
   readonly choice: string;
@@ -36,8 +36,9 @@ export interface ResolveDecisionEvent {
 }
 
 /**
- * The chunk detail drawer — a chunk's node history and its artifact store (D-036,
- * MVP criterion 9/11). Slides over the board when a card is selected and renders:
+ * The chunk detail dock — a chunk's node history and its artifact store (D-036,
+ * MVP criterion 9/11). Fills the bottom dock beneath the board when a card is
+ * selected — without reflowing the board columns — and renders:
  *
  * - the **awaiting-human** state, when the chunk is parked (`waiting_on_human`): its
  *   open **question** with an inline **Answer** action (MVP criterion 7, D-052) and/or
@@ -59,7 +60,7 @@ export interface ResolveDecisionEvent {
   selector: 'fleet-chunk-detail-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <aside class="drawer" data-testid="chunk-detail" role="dialog" aria-label="Chunk detail">
+    <aside class="dock" data-testid="chunk-detail" role="region" aria-label="Chunk detail">
       <header class="d-head">
         <div class="d-title">
           <span class="lbl">Chunk</span>
@@ -302,12 +303,12 @@ export interface ResolveDecisionEvent {
       text-transform: uppercase;
       color: var(--label);
     }
-    .drawer {
+    .dock {
       display: flex;
       flex-direction: column;
       height: 100%;
       background: linear-gradient(180deg, var(--panel) 0%, var(--panel-deep) 100%);
-      border-left: 1px solid var(--bezel);
+      border-top: 1px solid var(--bezel);
       color: var(--text);
       overflow-y: auto;
     }
@@ -681,7 +682,7 @@ export class ChunkDetailPanel {
    * Defaults to `loading` so the panel constructs without the container wiring it. */
   readonly pmItems = input<PmItemsState>({ status: 'loading', items: [] });
 
-  /** Emitted when the operator dismisses the drawer. */
+  /** Emitted when the operator dismisses the dock. */
   readonly dismiss = output<void>();
 
   /** Emitted when the operator answers an open question (MVP criterion 7). */

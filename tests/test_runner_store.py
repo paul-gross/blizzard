@@ -50,7 +50,7 @@ def test_minted_lease_is_active_until_closed(tmp_path):  # type: ignore[no-untyp
 def test_spawn_facts_populate_pid_and_session(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _mint(store)
-    store.record_spawn("lease_1", pid=999, process_start_time="12345", session_id="sess-a")
+    store.record_spawn("lease_1", pid=999, process_start_time="12345", session_id="sess-a", spawned_at=_NOW)
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None
     assert (lease.pid, lease.process_start_time, lease.session_id) == (999, "12345", "sess-a")
@@ -79,6 +79,18 @@ def test_attempt_count_and_latest_epoch_track_retries(tmp_path):  # type: ignore
     assert store.attempt_count("ch_1", "nd_other") == 0
     assert store.latest_epoch("ch_1") == 2
     assert store.latest_epoch("ch_absent") == 0
+
+
+@pytest.mark.unit
+def test_session_end_fact_is_recorded_and_derived(tmp_path):  # type: ignore[no-untyped-def]
+    """A ``session_ends`` row means the worker declared done — startup recovery reads its absence."""
+    store = _store(tmp_path)
+    _mint(store, lease="lease_1")
+    _mint(store, lease="lease_2")
+    assert store.session_ended_lease_ids() == set()  # neither has exited
+
+    store.record_session_end(lease_id="lease_1", ended_at=_NOW)
+    assert store.session_ended_lease_ids() == {"lease_1"}  # lease_1 declared done; lease_2 did not
 
 
 @pytest.mark.unit
