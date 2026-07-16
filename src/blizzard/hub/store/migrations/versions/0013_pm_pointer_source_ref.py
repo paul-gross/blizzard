@@ -43,7 +43,7 @@ backfilled GitHub-issue row and reconstructed as ``provider="github"``,
 canonical under a documented, constant placeholder owner, **not resolvable**: nothing
 is served at that address (the real owner is gone, so no reconstruction could be).
 That is the accepted, recorded cost (D-107), and its operational consequence is
-concrete: **a downgraded hub running pre-0012 code parses that URL for owner/repo and
+concrete: **a downgraded hub running pre-0013 code parses that URL for owner/repo and
 404s on every PM read** of a backfilled pointer until the chunk is re-ingested. A
 rollback restores the *schema*, not the hub's PM reach.
 
@@ -164,7 +164,7 @@ def downgrade() -> None:
     bind = op.get_bind()
     columns = {c["name"] for c in sa.inspect(bind).get_columns("chunk_pm_pointers")}
     if "provider" in columns:
-        return  # already the pre-0012 shape
+        return  # already the pre-0013 shape
 
     rows = bind.execute(sa.select(_NEW_POINTERS)).all()
     reconstructed = [

@@ -15,6 +15,8 @@ import pytest
 from blizzard.foundation.store.migrations import RevisionMismatchError
 from tests.conftest import Daemon
 
+pytestmark = pytest.mark.unit
+
 
 def test_init_creates_config_data_dir_and_migrates_to_head(daemon: Daemon, tmp_path: Path) -> None:
     config = daemon.runtime.init_environment(tmp_path)

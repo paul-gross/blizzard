@@ -10,7 +10,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from blizzard.tools.openapi import export
+
+pytestmark = pytest.mark.unit
 
 
 def test_export_writes_both_specs(tmp_path: Path) -> None:

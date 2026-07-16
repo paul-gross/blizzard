@@ -14,6 +14,8 @@ from click.testing import CliRunner
 
 from blizzard.cli.main import blizzard
 
+pytestmark = pytest.mark.unit
+
 
 def test_root_lists_hub_and_runner() -> None:
     result = CliRunner().invoke(blizzard, ["--help"])
@@ -125,7 +127,6 @@ def test_stub_verb_reports_not_implemented() -> None:
     assert "not yet implemented" in result.output
 
 
-@pytest.mark.unit
 def test_hub_host_reports_an_unset_pm_source_token_env_as_a_clean_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

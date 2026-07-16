@@ -141,8 +141,16 @@ provider = "github"
 repo = "acme/internal-tool"
 token_env = "BZ_INTERNAL_TOKEN"
 api_base = "https://git.corp.internal/api/v3"
-web_base = "https://git.corp.internal"
+web_base = "https://git.corp.internal"        # explicit override illustration only —
+                                               # api_base alone is enough (web_base derives
+                                               # from it); shown here so the override syntax
+                                               # is visible somewhere in this doc.
 ```
+
+`name = "internal"` is a free choice **only** because `acme/internal-tool` is a brand-new
+source with no chunks minted against it yet. That freedom does not extend to a repo that
+already has chunks in this hub — see the repo-tail rule in the upgrade note below, which
+this example is not an illustration of.
 
 ### Credential indirection
 
@@ -168,6 +176,28 @@ the hub is willing to ingest from (see below). Add the `[[pm_source]]` block to
 `blizzard-hub.toml` as part of the same maintenance window as the wheel upgrade,
 before running `migrate`/restarting the daemon (see the install/upgrade steps above).
 
+**For a repo that already has chunks in this hub, `name` is not a free choice — it
+must be the repo's own tail** (the part after the last `/`; e.g. `blizzard` for
+`paul-gross/blizzard`). The migration that introduced `[[pm_source]]` backfilled every
+existing pointer's `source` to its repo tail, so a `name` that does not match strands
+those pointers: nothing 503s (the hub sees a non-empty source list and boots clean),
+but every pre-existing chunk for that repo silently degrades — `label` goes `null` and
+its `pm-items` entry carries `error="no configured PM source named '<repo-tail>'"`,
+because the pointer's `source` and the configured `name` no longer agree. A repo with
+no chunks minted against it yet has no such constraint — any `name` is safe (the GHE
+example above is exactly that case, not an illustration of the repo-tail rule).
+
+**Verify you got it right** after the upgrade: for any chunk that existed before this
+release, read its PM items and confirm no entry carries an `error`:
+
+```
+curl -s http://<hub>/api/chunks/<chunk_id>/pm-items | jq '.items[].error'
+```
+
+Every value printed should be `null`. A non-null `error` naming a PM source means the
+configured `name` does not match the backfilled repo tail for that chunk's pointer —
+fix the `name` (or add a second `[[pm_source]]` under the correct tail) and restart.
+
 ### Ingest tokens
 
 `blizzard hub ingest` takes one or more source-native tokens and mints a chunk. Each
@@ -176,6 +206,12 @@ token is one of:
 - `<source>:<ref>` — e.g. `blizzard:26`
 - `<source>#<ref>` — e.g. `blizzard#26`
 - a pasted PM item URL (e.g. the GitHub issue's own URL)
+
+For the `github` provider, `<ref>` must be numeric (the issue number) — a `<source>:<ref>`
+or `<source>#<ref>` token with a non-numeric `ref` (e.g. `blizzard:v2`) matches no
+configured source's `parse` and surfaces as the same 422 an unconfigured repo gets ("not
+claimed by any configured PM source"), which misdiagnoses as a missing `[[pm_source]]`
+rather than a malformed ref.
 
 The CLI carries no parsing of its own: it hands the token to the hub, which resolves
 it against every configured source's own `parse`. The legacy `github:<rest>` prefix

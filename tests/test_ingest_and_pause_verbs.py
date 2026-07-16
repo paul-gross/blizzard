@@ -1,14 +1,19 @@
-"""The client verbs that wrap the hub's ingest + the runner's own declarative pause (unit tier).
+"""The client verbs that wrap the hub's ingest + the runner's own declarative pause
+(mixed tier — marked per test, not file-wide; see below).
 
 ``blizzard hub ingest`` (wraps ``POST /api/chunks``, D-047) is a pure client of the hub's
 API, driven here with ``httpx.post`` stubbed: the request it builds, the success line, the
-mapped error statuses — no live hub.
+mapped error statuses — no live hub. These (plus ``promote``/``detach``, the same shape)
+are **unit** tier: one verb driven in isolation with its only collaborator stubbed.
 
 ``blizzard runner pause`` / ``start`` are pure clients of the *runner's own* local API
 (``PATCH /runner``, issue #43) — a different surface and a different concept from the hub's
-pause brake. They are driven against a **live** daemon on a **real unix socket**, because
-the socket transport and its hub-independence are exactly what is under test (D-068,
-design/cli.md:18); a stubbed transport would assert nothing about either.
+pause brake. The tests that drive them against a **live** daemon on a **real unix socket**
+(``_serve_local_api``) are **component** tier — a real server, a real store, and the CLI
+wired together, doubled only at the hub seam (``_no_hub``) — because the socket transport
+and its hub-independence are exactly what is under test (D-068, design/cli.md:18); a
+stubbed transport would assert nothing about either. The two tests that never bring up a
+live daemon (no daemon serving; the flag-conflict validation) stay **unit**.
 """
 
 from __future__ import annotations
@@ -58,6 +63,7 @@ class _FakeResponse:
 # --------------------------------------------------------------------------- #
 
 
+@pytest.mark.unit
 def test_ingest_posts_the_tokens_verbatim_and_reports_the_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
     """The verb carries no token grammar (D-111): it POSTs every token through
     unchanged and echoes the minted id."""
@@ -81,6 +87,7 @@ def test_ingest_posts_the_tokens_verbatim_and_reports_the_chunk(monkeypatch: pyt
     assert "ch_new" in result.output
 
 
+@pytest.mark.unit
 def test_ingest_passes_a_source_hash_ref_token_through(monkeypatch: pytest.MonkeyPatch) -> None:
     """``source#ref`` travels through exactly like ``source:ref`` — the hub, not the
     CLI, tells them apart (D-110/D-111)."""
@@ -97,6 +104,7 @@ def test_ingest_passes_a_source_hash_ref_token_through(monkeypatch: pytest.Monke
     assert calls[0] == {"tokens": ["blizzard#8"]}
 
 
+@pytest.mark.unit
 def test_ingest_passes_a_pasted_issue_url_through_for_the_hub_to_resolve(monkeypatch: pytest.MonkeyPatch) -> None:
     """A pasted PM item URL travels through byte-for-byte (D-111) — the ergonomic path,
     copied straight from the browser — with no local resolution or repo-tail guess.
@@ -116,6 +124,7 @@ def test_ingest_passes_a_pasted_issue_url_through_for_the_hub_to_resolve(monkeyp
     assert calls[0] == {"tokens": ["https://github.com/paul-gross/blizzard/issues/26"]}
 
 
+@pytest.mark.unit
 def test_ingest_warns_on_the_deprecated_github_prefix_but_still_passes_the_rest_through(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -136,6 +145,7 @@ def test_ingest_warns_on_the_deprecated_github_prefix_but_still_passes_the_rest_
     assert "deprecated" in result.output
 
 
+@pytest.mark.unit
 def test_ingest_maps_a_pointer_conflict(monkeypatch: pytest.MonkeyPatch) -> None:
     """A 409 (pointer already held by a live chunk) is a named error, not a stack trace."""
 
@@ -149,6 +159,7 @@ def test_ingest_maps_a_pointer_conflict(monkeypatch: pytest.MonkeyPatch) -> None
     assert "ch_old" in result.output
 
 
+@pytest.mark.unit
 def test_ingest_maps_a_422_naming_the_unclaimed_token(monkeypatch: pytest.MonkeyPatch) -> None:
     """The hub resolves tokens now, not the CLI (D-111): a token no configured source
     claims is a 422 whose detail — naming the token and the configured sources — is
@@ -169,6 +180,7 @@ def test_ingest_maps_a_422_naming_the_unclaimed_token(monkeypatch: pytest.Monkey
     assert "blizzard" in result.output
 
 
+@pytest.mark.unit
 def test_ingest_passes_a_non_issue_url_through_for_the_hub_to_reject(monkeypatch: pytest.MonkeyPatch) -> None:
     """Phase 3's finale fixed a *local* bug here: a pasted non-issue URL used to fall
     through to the ``source:ref`` split and partition on the URL's own scheme colon
@@ -200,6 +212,7 @@ def test_ingest_passes_a_non_issue_url_through_for_the_hub_to_reject(monkeypatch
 # --------------------------------------------------------------------------- #
 
 
+@pytest.mark.unit
 def test_promote_posts_to_the_chunk_and_reports_ready(monkeypatch: pytest.MonkeyPatch) -> None:
     """The verb POSTs to the chunk's promote sub-resource and echoes the ready line (D-103)."""
     calls: list[str] = []
@@ -216,6 +229,7 @@ def test_promote_posts_to_the_chunk_and_reports_ready(monkeypatch: pytest.Monkey
     assert "promoted ch_42" in result.output
 
 
+@pytest.mark.unit
 def test_promote_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
     """A 404 (no such chunk) is a named error, not a stack trace."""
 
@@ -234,6 +248,7 @@ def test_promote_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
 # --------------------------------------------------------------------------- #
 
 
+@pytest.mark.unit
 def test_detach_posts_to_the_chunk_and_reports_released(monkeypatch: pytest.MonkeyPatch) -> None:
     """The verb POSTs to the chunk's detach sub-resource and echoes the release line (D-088)."""
     calls: list[str] = []
@@ -250,6 +265,7 @@ def test_detach_posts_to_the_chunk_and_reports_released(monkeypatch: pytest.Monk
     assert "detached ch_42" in result.output
 
 
+@pytest.mark.unit
 def test_detach_maps_a_conflict_with_the_servers_detail(monkeypatch: pytest.MonkeyPatch) -> None:
     """A 409 (no live route) surfaces the server's own detail text, not a hardcoded fallback."""
 
@@ -263,6 +279,7 @@ def test_detach_maps_a_conflict_with_the_servers_detail(monkeypatch: pytest.Monk
     assert "chunk ch_42 has no live route" in result.output
 
 
+@pytest.mark.unit
 def test_detach_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
     """A 404 (no such chunk) is a named error, not a stack trace."""
 
@@ -341,6 +358,7 @@ def _no_hub(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(runner_cli.httpx, "post", explode)
 
 
+@pytest.mark.component
 def test_pause_patches_the_runners_own_local_api(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """`runner pause` sets this runner's own brake through its local API, over the socket."""
     root = _init_runner(tmp_path)
@@ -355,6 +373,7 @@ def test_pause_patches_the_runners_own_local_api(tmp_path: Path, monkeypatch: py
     assert store.hub_paused("runner-local") is False  # the hub's brake is a separate concept
 
 
+@pytest.mark.component
 def test_pause_succeeds_with_the_hub_unreachable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The whole point (design/cli.md:18): the local brake does not depend on the hub.
 
@@ -370,6 +389,7 @@ def test_pause_succeeds_with_the_hub_unreachable(tmp_path: Path, monkeypatch: py
     assert _store(root).local_paused("runner-local") is True
 
 
+@pytest.mark.component
 def test_start_clears_the_local_brake(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """`runner start` is the counterpart; facts append and the flag derives from the newest."""
     root = _init_runner(tmp_path)
@@ -383,6 +403,7 @@ def test_start_clears_the_local_brake(tmp_path: Path, monkeypatch: pytest.Monkey
     assert _store(root).local_paused("runner-local") is False
 
 
+@pytest.mark.component
 def test_pause_reports_itself_upward_atomically(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The brake and the fact the board reads it from are one write (issue #43).
 
@@ -404,6 +425,7 @@ def test_pause_reports_itself_upward_atomically(tmp_path: Path, monkeypatch: pyt
     assert json.loads(pending[0].payload)["by"] == "alice"
 
 
+@pytest.mark.component
 def test_start_reports_the_resume_upward(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Clearing the brake is reported too, FIFO behind the pause — else the board sticks."""
     root = _init_runner(tmp_path)
@@ -416,6 +438,7 @@ def test_start_reports_the_resume_upward(tmp_path: Path, monkeypatch: pytest.Mon
     assert kinds == ["runner.locally_paused", "runner.locally_resumed"]
 
 
+@pytest.mark.unit
 def test_pause_reports_a_daemon_that_is_not_running(tmp_path: Path) -> None:
     """No socket means no daemon — a diagnostic, never a fallback to reading the store (D-068)."""
     root = _init_runner(tmp_path)  # initialized, but nothing is serving
@@ -425,6 +448,7 @@ def test_pause_reports_a_daemon_that_is_not_running(tmp_path: Path) -> None:
     assert "no runner daemon is serving" in result.output
 
 
+@pytest.mark.component
 def test_pause_over_tcp_when_runner_url_is_given(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """--runner-url addresses the same API through its TCP door — same route, same effect."""
     root = _init_runner(tmp_path)
@@ -436,6 +460,7 @@ def test_pause_over_tcp_when_runner_url_is_given(tmp_path: Path, monkeypatch: py
     assert _store(root).local_paused("runner-local") is True
 
 
+@pytest.mark.unit
 def test_dir_and_runner_url_conflict_only_on_the_command_line(tmp_path: Path) -> None:
     """A genuine tie is ambiguous; an ambient $BZ_RUNNER_DIR beside an explicit flag is not.
 
