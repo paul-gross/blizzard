@@ -318,6 +318,38 @@ def ingest(hub: HubHarness, pointers: list[dict], *, promote: bool = True) -> st
     return chunk_id
 
 
+def assert_utc_iso(value: object) -> None:
+    """Assert ``value`` is a literal ISO-8601 string carrying an explicit UTC offset.
+
+    Pins the wire **bytes**, not a parsed-then-compared value (issue #28,
+    ``bzh:utc-instants``): a naive string re-parses fine with ``datetime.fromisoformat``
+    on the same box that emitted it, so only the literal trailing designator
+    (``+00:00`` / ``Z``) catches the naive-serialization bug — the finale's literal-bytes
+    insight, generalized.
+    """
+    assert isinstance(value, str), f"expected an ISO-8601 timestamp string, got {value!r}"
+    assert value.endswith("+00:00") or value.endswith("Z"), f"timestamp missing a UTC offset: {value!r}"
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    assert parsed.tzinfo is not None
+
+
+def assert_all_timestamps_utc(payload: object) -> None:
+    """Recursively walk a response body, applying :func:`assert_utc_iso` to every ``*_at`` key.
+
+    A route test calls this once on its response; a route that later adds a seventh
+    timestamp field is covered without the test itself changing.
+    """
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            if key.endswith("_at") and value is not None:
+                assert_utc_iso(value)
+            else:
+                assert_all_timestamps_utc(value)
+    elif isinstance(payload, list):
+        for item in payload:
+            assert_all_timestamps_utc(item)
+
+
 def report_lease(hub: HubHarness, chunk_id: str, *, epoch: int, seq: int, runner_id: str = "r1") -> dict:
     """Report a runner-minted ``lease.minted`` fact through POST /events (D-044/D-069).
 

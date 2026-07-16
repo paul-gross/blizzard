@@ -16,6 +16,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
+from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.work import ChunkFacts, QuestionRow, derive_chunk_status
@@ -35,11 +36,11 @@ def question_view(row: QuestionRow) -> QuestionView:
         epoch=row.epoch,
         question=row.question,
         options=row.options,
-        asked_at=row.asked_at.isoformat(),
+        asked_at=iso_utc(row.asked_at),
         answered=row.answered,
         answer=row.answer,
         answered_by=row.answered_by,
-        answered_at=row.answered_at.isoformat() if row.answered_at is not None else None,
+        answered_at=iso_utc(row.answered_at) if row.answered_at is not None else None,
     )
 
 
@@ -67,7 +68,7 @@ def answer_question(
         question_id=outcome.question_id,
         answer=outcome.answer,
         answered_by=outcome.answered_by,
-        answered_at=outcome.answered_at.isoformat(),
+        answered_at=iso_utc(outcome.answered_at),
     )
     if not outcome.won:
         # A racing second answer — the loser is told who already answered (D-045 kin).

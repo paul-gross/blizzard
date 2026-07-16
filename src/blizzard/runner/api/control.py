@@ -27,6 +27,7 @@ from fastapi import APIRouter, Request, status
 from fastapi.exceptions import HTTPException
 from pydantic import BaseModel
 
+from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.store.repository import IWriteRunnerStore
 from blizzard.wire.facts import RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED
@@ -77,7 +78,7 @@ def patch_runner(request_body: RunnerControlPatch, request: Request) -> RunnerCo
         at=now,
         by=request_body.by,
         report_kind=RUNNER_LOCALLY_PAUSED if request_body.paused else RUNNER_LOCALLY_RESUMED,
-        report_payload=json.dumps({"runner_id": config.runner_id, "by": request_body.by, "at": now.isoformat()}),
+        report_payload=json.dumps({"runner_id": config.runner_id, "by": request_body.by, "at": iso_utc(now)}),
     )
     return _view(store, config.runner_id)
 

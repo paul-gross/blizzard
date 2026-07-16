@@ -22,12 +22,14 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.ids import LEASE_PREFIX, mint
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.work import ChunkStatus
+from blizzard.runner.domain.leases import as_utc, is_heartbeat_stale
 from blizzard.runner.environments.provider import (
     AcquiredEnvironment,
     EnvironmentPreparationError,
@@ -58,6 +60,19 @@ from blizzard.wire.facts import (
     RunnerFactBatch,
 )
 from blizzard.wire.route import RouteClaim
+
+#: This module's public API — the loop steps it owns. ``HEARTBEAT_STALENESS_THRESHOLD``
+#: lives in ``runner/domain/leases.py`` (its one owner, ``bzh:domain-core``); this
+#: module no longer re-exports it — importers (tests included) reach it there.
+__all__ = [
+    "advance",
+    "fill",
+    "flush_outbound",
+    "mark_resume_intents",
+    "pull",
+    "reap",
+    "resume",
+]
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -157,13 +172,6 @@ _CP_FLUSH_AFTER_SUBMIT = crashpoint("flush.after-submit.before-ack", "hub applie
 _CP_FLUSH_AFTER_ACK = crashpoint("flush.after-ack.before-apply-response", "ack recorded; apply-response not consumed")
 _CP_FLUSH_AFTER_APPLY = crashpoint("flush.after-apply-response", "apply-response consumed; chunk continued in place")
 
-#: REAP's staleness threshold (design/runner/loop.md). Deliberately **conservative**:
-#: heartbeats ride tool calls, so the threshold is bounded below by the longest tool
-#: call a healthy worker makes — one long test run must never read as a stall. A live
-#: worker whose last heartbeat is older than this has stopped making tool calls and is
-#: reaped as stalled (D-078). ~1h; the open-question constant (decisions/open-questions.md).
-HEARTBEAT_STALENESS_THRESHOLD = timedelta(hours=1)
-
 
 # --------------------------------------------------------------------------- #
 # REAP
@@ -205,28 +213,11 @@ def reap(ctx: LoopContext) -> None:
             continue
         if not ctx.process.is_alive(lease.pid, lease.process_start_time or ""):
             continue  # exited — ADVANCE's (exit-is-done, D-055)
-        if _is_heartbeat_stale(ctx.store, lease, now):
+        if is_heartbeat_stale(ctx.store, lease, now):
             _log.info("reaping stalled worker", lease_id=lease.lease_id, chunk_id=lease.chunk_id, pid=lease.pid)
             _fail_attempt(ctx, lease, reason=_REAPED, via="reap")
         # A live, beating worker runs on.
     _CP_REAP_AFTER.reached()
-
-
-def _is_heartbeat_stale(store: IWriteRunnerStore, lease: LeaseRecord, now: datetime) -> bool:
-    """True iff the lease's last activity is older than the staleness threshold.
-
-    Last activity is the newest heartbeat, or — before the worker's first tool call —
-    the lease's own creation instant, so a freshly spawned worker is never read as
-    stalled inside the threshold window. Takes the store (not the context) so startup
-    crash-recovery, which runs before a full loop context exists, can share it.
-    """
-    last = store.latest_heartbeat(lease.lease_id) or lease.created_at
-    return now - _as_utc(last) > HEARTBEAT_STALENESS_THRESHOLD
-
-
-def _as_utc(value: datetime) -> datetime:
-    """Read a stored timestamp back as UTC-aware — sqlite drops the tzinfo the clock set."""
-    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
 
 
 # --------------------------------------------------------------------------- #
@@ -318,9 +309,10 @@ def mark_crash_resume_intents(store: IWriteRunnerStore, *, process: IProcessProb
     parked = store.parked_lease_ids()
     pending = store.pending_submission_lease_ids()
     ended = store.session_ended_lease_ids()
-    # _as_utc: sqlite hands the stamp back naive, and it is about to be subtracted from.
+    # as_utc: this instant is about to be subtracted from, and a naive one would
+    # silently compare wrong. UtcDateTime reads it back aware, so this is a guard.
     last_alive = store.last_daemon_liveness()
-    crashed_at = _as_utc(last_alive) if last_alive is not None else now
+    crashed_at = as_utc(last_alive) if last_alive is not None else now
     marked = 0
     for lease in store.list_active_leases():
         if lease.pid is None or lease.session_id is None:
@@ -331,7 +323,7 @@ def mark_crash_resume_intents(store: IWriteRunnerStore, *, process: IProcessProb
             continue  # declared done (SessionEnd fired) — ADVANCE judges it (exit-is-done, D-055)
         if process.is_alive(lease.pid, lease.process_start_time or ""):
             continue  # orphaned-but-alive — re-adopted via its live heartbeat, never re-spawned
-        if _is_heartbeat_stale(store, lease, crashed_at):
+        if is_heartbeat_stale(store, lease, crashed_at):
             continue  # stalled at crash time — reaped & retried per the node's budget, unchanged
         store.record_resume_intent(lease_id=lease.lease_id, marked_at=now)
         marked += 1
@@ -1251,7 +1243,7 @@ def _park_on_ask(ctx: LoopContext, lease: LeaseRecord, ask: AskRecord) -> None:
             "epoch": lease.epoch,
             "question": ask.question,
             "options": ask.options,
-            "asked_at": ask.asked_at.isoformat(),
+            "asked_at": iso_utc(ask.asked_at),
         }
     )
     ctx.store.enqueue_outbound(

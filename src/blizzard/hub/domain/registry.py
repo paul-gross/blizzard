@@ -23,11 +23,12 @@ returned alongside it by the service because it needs the clock.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Protocol
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.store.utc import as_utc
 
 _log = get_logger("blizzard.hub.registry")
 
@@ -71,16 +72,13 @@ class RunnerLiveness:
 def derive_online(last_seen_at: datetime, now: datetime, *, threshold: timedelta) -> bool:
     """True iff the runner was seen within ``threshold`` of ``now`` (D-004/D-070).
 
-    Both operands are coerced to UTC-aware first: the injected clock stamps aware
-    instants, but sqlite reads a stored timestamp back naive (it drops the tzinfo), so a
-    raw subtraction would raise. Reading a naive value as UTC is exact — that is the tz
-    the clock wrote it in.
+    Both operands are coerced to UTC-aware first via :func:`~blizzard.foundation.store.utc.as_utc`
+    (idempotent — every store column is ``UtcDateTime``-typed): this is a public pure
+    function whose inputs are not guaranteed to come from the store, so the domain keeps
+    its own defensive coercion rather than depending on unnamed adapter behavior
+    (``bzh:domain-core``).
     """
-    return (_as_utc(now) - _as_utc(last_seen_at)) <= threshold
-
-
-def _as_utc(value: datetime) -> datetime:
-    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+    return (as_utc(now) - as_utc(last_seen_at)) <= threshold
 
 
 class IReadRunnerRegistry(Protocol):

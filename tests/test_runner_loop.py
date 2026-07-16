@@ -17,9 +17,10 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.work import ChunkStatus
+from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.context import LoopConfig
-from blizzard.runner.loop.steps import HEARTBEAT_STALENESS_THRESHOLD, advance, fill, pull, reap
+from blizzard.runner.loop.steps import advance, fill, pull, reap
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.loop.worktree import GitArtifact
 from blizzard.runner.store.repository import NewLease

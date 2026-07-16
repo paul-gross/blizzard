@@ -79,6 +79,78 @@ export type HeartbeatResponse = {
 };
 
 /**
+ * LeaseListResponse
+ *
+ * Every active lease, derived at read time (issue #28).
+ */
+export type LeaseListResponse = {
+    /**
+     * Items
+     */
+    items?: Array<LeaseView>;
+};
+
+/**
+ * LeaseView
+ *
+ * One active lease with its joined binding facts and derived state (issue #28).
+ */
+export type LeaseView = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Environment Id
+     */
+    environment_id: string | null;
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * Graph Id
+     */
+    graph_id: string;
+    /**
+     * Last Heartbeat At
+     */
+    last_heartbeat_at: string | null;
+    /**
+     * Lease Id
+     */
+    lease_id: string;
+    /**
+     * Node Id
+     */
+    node_id: string;
+    /**
+     * Node Name
+     */
+    node_name: string;
+    /**
+     * Pid
+     */
+    pid: number | null;
+    /**
+     * Session Id
+     */
+    session_id: string | null;
+    /**
+     * State
+     */
+    state: 'running' | 'stale' | 'parked' | 'spawning' | 'exited';
+    /**
+     * Workdir
+     */
+    workdir: string | null;
+};
+
+/**
  * PmItemEntry
  *
  * One pointer's pass-through PM item (D-047/D-074) — body + comment thread, vendor-native.
@@ -344,6 +416,22 @@ export type HeartbeatApiHeartbeatPostResponses = {
 };
 
 export type HeartbeatApiHeartbeatPostResponse = HeartbeatApiHeartbeatPostResponses[keyof HeartbeatApiHeartbeatPostResponses];
+
+export type ListLeasesApiLeasesGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/leases';
+};
+
+export type ListLeasesApiLeasesGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: LeaseListResponse;
+};
+
+export type ListLeasesApiLeasesGetResponse = ListLeasesApiLeasesGetResponses[keyof ListLeasesApiLeasesGetResponses];
 
 export type RecordAskApiLeasesLeaseIdAsksPostData = {
     body: AskRequest;

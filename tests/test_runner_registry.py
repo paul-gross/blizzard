@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.domain.registry import STALE_AFTER
-from tests.support import HubHarness, build_hub, emitted_events
+from tests.support import HubHarness, assert_all_timestamps_utc, build_hub, emitted_events
 
 pytestmark = pytest.mark.component
 
@@ -39,13 +39,15 @@ def test_register_is_idempotent_upsert(tmp_path: Path) -> None:
 def test_list_runners_derives_online_and_paused(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     _register(hub)
-    runners = hub.client.get("/api/runners").json()["runners"]
+    resp = hub.client.get("/api/runners")
+    runners = resp.json()["runners"]
     assert len(runners) == 1
     assert runners[0]["runner_id"] == "runner-a"
     assert runners[0]["online"] is True  # just seen, at the fixed clock now
     # Two brakes, reported apart (issue #43): neither is on for a fresh runner.
     assert runners[0]["hub_paused"] is False
     assert runners[0]["locally_paused"] is False
+    assert_all_timestamps_utc(resp.json())  # bzh:utc-instants — registered_at, last_seen_at
 
 
 def test_liveness_goes_offline_when_stale_and_heartbeat_refreshes(tmp_path: Path) -> None:

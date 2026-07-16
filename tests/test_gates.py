@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import build_hub, report_lease
+from tests.support import assert_all_timestamps_utc, build_hub, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -144,8 +144,10 @@ def test_graph_gate_opens_a_decision_and_parks(tmp_path: Path) -> None:
     assert {c["name"] for c in decision["choices"]} == {"approve", "reject"}
 
     # The open decision is surfaced fleet-wide.
-    open_list = hub.client.get("/api/decisions").json()["decisions"]
+    resp = hub.client.get("/api/decisions")
+    open_list = resp.json()["decisions"]
     assert [d["decision_id"] for d in open_list] == [decision["decision_id"]]
+    assert_all_timestamps_utc(resp.json())  # bzh:utc-instants — submitted_at
 
 
 def test_worker_transition_out_of_a_gate_is_rejected(tmp_path: Path) -> None:
@@ -181,6 +183,7 @@ def test_decide_then_resolving_transition_advances_the_chunk(tmp_path: Path) -> 
     # A person decides — first-write-wins.
     resolve = hub.client.post(f"/api/decisions/{decision_id}/resolution", json={"choice": "approve"})
     assert resolve.status_code == 200, resolve.text
+    assert_all_timestamps_utc(resolve.json())  # bzh:utc-instants — resolved_at
     # Resolved: no longer waiting_on_human (route still live -> running), decision resolved.
     mid = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert mid["status"] == "running"
@@ -193,8 +196,10 @@ def test_decide_then_resolving_transition_advances_the_chunk(tmp_path: Path) -> 
     )
     # approve -> deliver (a hub node): the coordinator lands the build artifact.
     assert resolving.json()["outcome"] == "hub_node_taken", resolving.text
-    done = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    done_resp = hub.client.get(f"/api/chunks/{chunk_id}")
+    done = done_resp.json()
     assert done["status"] == "done"
+    assert_all_timestamps_utc(done_resp.json())  # bzh:utc-instants — transitions[].recorded_at
     assert hub.forge.landed and hub.forge.landed[0].repo == "acme/widget"
     # The decision is now transitioned; it drops off the chunk's live decision + the open list.
     assert done["decision"] is None

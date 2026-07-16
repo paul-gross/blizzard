@@ -183,13 +183,28 @@ export class RunnerStrip {
     return runner.hub_paused ? 'Resume this runner at the hub' : 'Pause this runner at the hub';
   }
 
-  /** A compact "seen 12s ago" liveness label from `last_seen_at`. */
+  /**
+   * A compact "seen 12s ago" liveness label from `last_seen_at`.
+   *
+   * Liveness is decided where both instants share one clock — the hub, via `online`
+   * (`derive_online` compares `last_seen_at` against the hub's own clock, D-070); this
+   * label is decoration computed against the *browser's* clock, and a browser's clock
+   * must never make a correctness call. A small negative age (`-60s <= age < 0`) is
+   * benign browser-vs-hub skew — `last_seen_at` is hub-stamped and an unsynced laptop
+   * is genuinely minutes off — so it reads as "just now". A larger negative age is
+   * *not* skew (a wire timestamp missing its UTC offset would produce exactly this,
+   * `bzh:utc-instants`), and confidently printing `0s` would mask a runner that has
+   * actually been unreachable for hours — so it falls through to the hub-derived
+   * `online` state instead of guessing.
+   */
   protected seenLabel(runner: RunnerView): string {
     const seen = Date.parse(runner.last_seen_at);
     if (Number.isNaN(seen)) return runner.online ? 'online' : 'offline';
-    const secondsAgo = Math.max(0, Math.round((Date.now() - seen) / 1000));
-    if (secondsAgo < 60) return `seen ${secondsAgo}s ago`;
-    const minutesAgo = Math.round(secondsAgo / 60);
+    const secondsAgo = Math.round((Date.now() - seen) / 1000);
+    if (secondsAgo < -60) return runner.online ? 'online' : 'offline';
+    const clamped = Math.max(0, secondsAgo);
+    if (clamped < 60) return `seen ${clamped}s ago`;
+    const minutesAgo = Math.round(clamped / 60);
     if (minutesAgo < 60) return `seen ${minutesAgo}m ago`;
     return `seen ${Math.round(minutesAgo / 60)}h ago`;
   }

@@ -15,6 +15,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
+from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.decisions import to_decision_view
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.api.questions import question_view
@@ -96,7 +97,7 @@ def _history_views(facts: ChunkFacts, graph: Graph | None) -> list[TransitionVie
             to_node_name=_node_name(graph, t.to_node_id),
             choice_name=t.choice_name,
             epoch=t.epoch,
-            recorded_at=t.recorded_at.isoformat(),
+            recorded_at=iso_utc(t.recorded_at),
         )
         for t in transition_history(facts)
     ]
@@ -415,7 +416,7 @@ def get_pm_items(chunk_id: str, services: Annotated[HubServices, Depends(get_ser
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
-    fetched_at = services.clock.now().isoformat()
+    fetched_at = iso_utc(services.clock.now())
     entries: list[PmItemEntry] = []
     for pointer in chunk.pm_pointers:
         label = pointer_label(pointer)

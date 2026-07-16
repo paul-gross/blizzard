@@ -32,6 +32,7 @@ from datetime import datetime
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.domain.registry import FleetService
 from blizzard.hub.domain.work import IWriteChunkRepository
 from blizzard.wire.facts import (
@@ -173,9 +174,15 @@ def _opt(value: object) -> str | None:
 
 
 def _parse_at(value: object, fallback: datetime) -> datetime:
+    """Read an ISO-8601 instant off a batched payload, falling back on a malformed stamp.
+
+    Coerces a naive result to UTC (``bzh:utc-instants``): a runner's outbound buffer
+    (D-069) can still hold — and later deliver — a pre-fix naive stamp minted before its
+    own upgrade, since D-069 replays whatever it already buffered rather than re-minting.
+    """
     if isinstance(value, str):
         try:
-            return datetime.fromisoformat(value)
+            return as_utc(datetime.fromisoformat(value))
         except ValueError:
             return fallback
     return fallback

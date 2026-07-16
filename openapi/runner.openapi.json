@@ -93,6 +93,137 @@
         "title": "HeartbeatResponse",
         "type": "object"
       },
+      "LeaseListResponse": {
+        "description": "Every active lease, derived at read time (issue #28).",
+        "properties": {
+          "items": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/LeaseView"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "title": "LeaseListResponse",
+        "type": "object"
+      },
+      "LeaseView": {
+        "description": "One active lease with its joined binding facts and derived state (issue #28).",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "environment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Environment Id"
+          },
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "graph_id": {
+            "title": "Graph Id",
+            "type": "string"
+          },
+          "last_heartbeat_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Heartbeat At"
+          },
+          "lease_id": {
+            "title": "Lease Id",
+            "type": "string"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "node_name": {
+            "title": "Node Name",
+            "type": "string"
+          },
+          "pid": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pid"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "state": {
+            "enum": [
+              "running",
+              "stale",
+              "parked",
+              "spawning",
+              "exited"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "workdir": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workdir"
+          }
+        },
+        "required": [
+          "lease_id",
+          "chunk_id",
+          "graph_id",
+          "node_id",
+          "node_name",
+          "epoch",
+          "session_id",
+          "pid",
+          "environment_id",
+          "workdir",
+          "created_at",
+          "last_heartbeat_at",
+          "state"
+        ],
+        "title": "LeaseView",
+        "type": "object"
+      },
       "PmItemEntry": {
         "description": "One pointer's pass-through PM item (D-047/D-074) \u2014 body + comment thread, vendor-native.\n\n``label`` is the board-legible pointer label (D-075) \u2014 ``gh:blizzard#8`` \u2014 null when the\nURL is not issue-shaped. A per-pointer forge failure degrades here rather than failing the\nwhole read (D-084): ``error`` carries the reason and ``body`` is null, so one unreachable\npointer never blinds the reader to the pointers it did reach.",
         "properties": {
@@ -469,6 +600,28 @@
           }
         },
         "summary": "Heartbeat",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/leases": {
+      "get": {
+        "description": "Every active lease, derived at read time (issue #28) \u2014 local store only.",
+        "operationId": "list_leases_api_leases_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaseListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Leases",
         "tags": [
           "runner"
         ]

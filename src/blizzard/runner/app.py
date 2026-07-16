@@ -22,16 +22,19 @@ from blizzard.runner.api.asks import router as asks_router
 from blizzard.runner.api.control import router as control_router
 from blizzard.runner.api.health import router as health_router
 from blizzard.runner.api.heartbeat import router as heartbeat_router
+from blizzard.runner.api.leases import router as leases_router
 from blizzard.runner.api.pm_items import router as pm_items_router
 from blizzard.runner.api.readiness import router as readiness_router
 from blizzard.runner.api.session_end import router as session_end_router
 from blizzard.runner.api.workspace_prompt import router as workspace_prompt_router
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.domain.leases import LocalLeaseService
 from blizzard.runner.domain.readiness import ReadinessService
 from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.harness.adapter import IHarnessAdapter
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
+from blizzard.runner.loop.process import LinuxProcessProbe
 from blizzard.runner.runtime import migration_runner
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 from blizzard.runner.store.repository import IWriteRunnerStore
@@ -44,6 +47,7 @@ def create_app(
     workspace_provider: IWorkspaceProvider | None = None,
     harness: IHarnessAdapter | None = None,
     runner_store: IWriteRunnerStore | None = None,
+    leases: LocalLeaseService | None = None,
 ) -> FastAPI:
     """Build a fully wired runner app from resolved config.
 
@@ -51,6 +55,10 @@ def create_app(
     composition root (:func:`build_hosted_app`). It is optional so the store-free
     paths — the OpenAPI export and unit tests — build the app without opening a
     database; the ``/api/ready`` probe then reports ``ready=false`` honestly.
+
+    ``leases`` is the store-backed, hub-free lease-derivation service (issue #28)
+    wired the same way — optional so the store-free paths leave ``GET /api/leases``
+    answering 503 rather than pretending.
     """
     log = get_logger("blizzard.runner")
 
@@ -65,6 +73,8 @@ def create_app(
     # stamps the beat (``bzh:injected-clock``). Both None on the store-free app.
     app.state.runner_store = runner_store
     app.state.clock = SystemClock() if runner_store is not None else None
+    # The panel's derived-lease-state read (issue #28) — hub-free by construction.
+    app.state.leases = leases
 
     # API routers first, so /api/* always wins over the web mount at /.
     app.include_router(health_router)
@@ -72,6 +82,7 @@ def create_app(
     app.include_router(heartbeat_router)
     app.include_router(session_end_router)
     app.include_router(asks_router)
+    app.include_router(leases_router)
     # The PM-item pass-through proxy (D-084): a build worker reads its issue through
     # this route, which forwards to the hub — the worker never crosses a layer.
     app.include_router(pm_items_router)
@@ -117,12 +128,16 @@ def build_hosted_app(config: RunnerConfig) -> FastAPI:
         settings_path=config.worker_settings_path,
         permission_mode=config.harness_permission_mode,
     )
+    # The panel's derived-lease-state read (issue #28) — ``stale_after`` is left at its
+    # default (``HEARTBEAT_STALENESS_THRESHOLD``) so the panel and REAP never desync.
+    leases = LocalLeaseService(store=runner_store, clock=SystemClock(), process=LinuxProcessProbe())
     return create_app(
         config,
         readiness=readiness,
         workspace_provider=workspace_provider,
         harness=harness,
         runner_store=runner_store,
+        leases=leases,
     )
 
 

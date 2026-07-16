@@ -18,6 +18,7 @@ from datetime import datetime
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
+from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.domain.work import AnswerOutcome, IWriteChunkRepository
 from blizzard.wire.question import QuestionAsked
 
@@ -60,8 +61,13 @@ class QuestionService:
 
 
 def _parse(value: str, clock: IClock) -> datetime:
-    """Read an ISO-8601 instant, falling back to now on a malformed stamp."""
+    """Read an ISO-8601 instant, falling back to now on a malformed stamp.
+
+    Coerces a naive result to UTC (``bzh:utc-instants``): a legacy runner still
+    buffering pre-fix payloads (D-069) can deliver a naive ``asked_at`` string even
+    after this fix lands, since the outbound buffer replays whatever it already holds.
+    """
     try:
-        return datetime.fromisoformat(value)
+        return as_utc(datetime.fromisoformat(value))
     except ValueError:
         return clock.now()
