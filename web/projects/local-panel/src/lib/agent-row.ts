@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import type { runnerApi } from 'fleet';
 
+import { injectChunkTitleQuery } from './chunk-title.query';
+
 /** Bounded tolerance for benign browser-vs-hub clock skew (`bzh:utc-instants`). */
 const SKEW_TOLERANCE_MS = 60_000;
 
@@ -25,8 +27,18 @@ function formatHeartbeatAge(deltaMs: number): string {
  * One active lease — presentational, `OnPush`. Shaped like the mockup's `.lease`
  * row (`runner-panel.html`): lease id + chunk id + epoch on the first line, the
  * derived `state` right-aligned with its heartbeat age; node/env/pid/session on
- * the second. `chunk_id` alone is the row's identity in this phase — issue titles
- * layer on in #29's follow-up phase, not here.
+ * the last. `chunk_id` is the row's identity — always rendered, never conditional
+ * on anything below.
+ *
+ * The issue title is layered on top (issue #28, decision 1) via
+ * {@link injectChunkTitleQuery} — a severable, volatile read (D-084's PM
+ * pass-through). Per the mockup's chip+title shape (`runner-panel.html:542`),
+ * `chunk_id` alone is what the row *is*; chips/title are decoration that
+ * *arrived*, so this template never branches on the title query's
+ * `isError()`/`isPending()` — it reads `data()?.items` optimistically and renders
+ * whatever it finds, or nothing. Every degraded case (hub down, no work-source,
+ * empty items, a per-pointer forge failure) collapses to "render nothing extra";
+ * the row itself, and the panel around it, are never aware anything failed.
  *
  * `data-lease-id` is a stable hook for #29 to select a row by; deliberately no
  * `(select)` output or `role="button"` yet — an affordance with no target is dead
@@ -48,6 +60,11 @@ function formatHeartbeatAge(deltaMs: number): string {
           </span>
         </span>
       </div>
+      @if (chips() || titleText()) {
+        <div class="ttl" data-testid="agent-title">
+          <span class="chips">{{ chips() }}</span> {{ titleText() }}
+        </div>
+      }
       <div class="l2">
         node <b>{{ agent().node_name }}</b> · env <b>{{ agent().environment_id ?? '—' }}</b> · pid
         <b>{{ agent().pid ?? '—' }}</b> · session <b>{{ agent().session_id ?? '—' }}</b>
@@ -116,6 +133,17 @@ function formatHeartbeatAge(deltaMs: number): string {
     .hb-age.dim {
       color: var(--label-dim);
     }
+    .ttl {
+      color: var(--text);
+      font-size: 10.5px;
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .ttl .chips {
+      color: var(--cyan);
+    }
     .l2 {
       color: var(--label);
       font-size: 10px;
@@ -130,6 +158,32 @@ function formatHeartbeatAge(deltaMs: number): string {
 export class AgentRow {
   /** The lease this row renders, incl. the server-derived `state` (issue #28). */
   readonly agent = input.required<runnerApi.LeaseView>();
+
+  /**
+   * The severable title read (issue #28, decision 1) — one query per row, keyed
+   * on this row's own `chunk_id`. Never awaited, never branched on for
+   * `isError()`/`isPending()`; see {@link injectChunkTitleQuery} for the
+   * severability guarantee this rests on.
+   */
+  protected readonly titleQuery = injectChunkTitleQuery(() => this.agent().chunk_id);
+
+  /**
+   * Space-joined pointer labels (`gh:winter#412`) from whatever pm-items arrived
+   * — empty when the read hasn't resolved, failed, returned no items, or every
+   * item lacks a board-legible label (D-075). A per-pointer forge failure still
+   * carries its `label` (parsed from the pointer URL, not fetched), so one bad
+   * pointer degrading to `title: null` doesn't blind this chip (D-084).
+   */
+  protected readonly chips = computed<string>(() => {
+    const items = this.titleQuery.data()?.items ?? [];
+    return items
+      .map((item) => item.label)
+      .filter((label): label is string => !!label)
+      .join(' ');
+  });
+
+  /** The first pm-item's title, or empty when unresolved/failed/absent. */
+  protected readonly titleText = computed<string>(() => this.titleQuery.data()?.items?.[0]?.title ?? '');
 
   /** `st-running` / `st-stale` / `st-parked` / `st-spawning` / `st-exited`. */
   protected readonly stateClass = computed(() => `st-${this.agent().state}`);
