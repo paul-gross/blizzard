@@ -98,6 +98,8 @@ def test_running_lease_shape_and_binding_join(tmp_path: Path) -> None:
         "created_at": _NOW.isoformat(),
         "last_heartbeat_at": beat_at.isoformat(),
         "state": "running",
+        "closed_at": None,
+        "closure_reason": None,
     }
 
 
@@ -149,6 +151,33 @@ def test_spawning_state_reaches_the_wire_via_a_null_pid(tmp_path: Path) -> None:
     assert items[0]["pid"] is None
     assert items[0]["session_id"] is None
     assert items[0]["last_heartbeat_at"] is None
+
+
+@pytest.mark.component
+def test_closed_lease_appears_after_active_with_state_and_reason(tmp_path: Path) -> None:
+    """The widened route (issue #29): recently-closed leases join active ones,
+    ordered after them, carrying ``state: "closed"`` and the closure reason on the wire."""
+    app, store = _app_with_leases(tmp_path, probe=FakeProbe(alive={(100, "start-100")}))
+    _seed_lease(store, lease_id="lease_1", chunk_id="ch_1")
+    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    _seed_lease(store, lease_id="lease_2", chunk_id="ch_2")
+    closed_at = _NOW + timedelta(minutes=5)
+    store.record_closure(lease_id="lease_2", chunk_id="ch_2", node_id="nd_build", reason="failed", closed_at=closed_at)
+
+    with TestClient(app) as client:
+        resp = client.get("/api/leases")
+
+    assert resp.status_code == 200, resp.text
+    items = resp.json()["items"]
+    assert [item["lease_id"] for item in items] == ["lease_1", "lease_2"]
+    active, closed = items
+    assert active["state"] == "running"
+    assert active["closed_at"] is None
+    assert active["closure_reason"] is None
+    assert closed["state"] == "closed"
+    assert closed["closed_at"] == closed_at.isoformat()
+    assert closed["closure_reason"] == "failed"
+    assert_all_timestamps_utc({"items": items})
 
 
 @pytest.mark.component

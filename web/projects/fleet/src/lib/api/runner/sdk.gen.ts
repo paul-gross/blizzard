@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { GetPmItemsApiChunksChunkIdPmItemsGetData, GetPmItemsApiChunksChunkIdPmItemsGetErrors, GetPmItemsApiChunksChunkIdPmItemsGetResponses, HealthApiHealthGetData, HealthApiHealthGetResponses, HeartbeatApiHeartbeatPostData, HeartbeatApiHeartbeatPostErrors, HeartbeatApiHeartbeatPostResponses, ListLeasesApiLeasesGetData, ListLeasesApiLeasesGetResponses, PatchRunnerApiRunnerPatchData, PatchRunnerApiRunnerPatchErrors, PatchRunnerApiRunnerPatchResponses, ReadWorkspacePromptApiWorkspacePromptGetData, ReadWorkspacePromptApiWorkspacePromptGetResponses, ReadyApiReadyGetData, ReadyApiReadyGetResponses, RecordAskApiLeasesLeaseIdAsksPostData, RecordAskApiLeasesLeaseIdAsksPostErrors, RecordAskApiLeasesLeaseIdAsksPostResponses, ReplaceWorkspacePromptApiWorkspacePromptPutData, ReplaceWorkspacePromptApiWorkspacePromptPutErrors, ReplaceWorkspacePromptApiWorkspacePromptPutResponses, SessionEndApiLeasesLeaseIdSessionEndPostData, SessionEndApiLeasesLeaseIdSessionEndPostErrors, SessionEndApiLeasesLeaseIdSessionEndPostResponses } from './types.gen';
+import type { GetPmItemsApiChunksChunkIdPmItemsGetData, GetPmItemsApiChunksChunkIdPmItemsGetErrors, GetPmItemsApiChunksChunkIdPmItemsGetResponses, GetTranscriptApiLeasesLeaseIdTranscriptGetData, GetTranscriptApiLeasesLeaseIdTranscriptGetErrors, GetTranscriptApiLeasesLeaseIdTranscriptGetResponses, HealthApiHealthGetData, HealthApiHealthGetResponses, HeartbeatApiHeartbeatPostData, HeartbeatApiHeartbeatPostErrors, HeartbeatApiHeartbeatPostResponses, ListLeasesApiLeasesGetData, ListLeasesApiLeasesGetResponses, PatchRunnerApiRunnerPatchData, PatchRunnerApiRunnerPatchErrors, PatchRunnerApiRunnerPatchResponses, ReadWorkspacePromptApiWorkspacePromptGetData, ReadWorkspacePromptApiWorkspacePromptGetResponses, ReadyApiReadyGetData, ReadyApiReadyGetResponses, RecordAskApiLeasesLeaseIdAsksPostData, RecordAskApiLeasesLeaseIdAsksPostErrors, RecordAskApiLeasesLeaseIdAsksPostResponses, ReplaceWorkspacePromptApiWorkspacePromptPutData, ReplaceWorkspacePromptApiWorkspacePromptPutErrors, ReplaceWorkspacePromptApiWorkspacePromptPutResponses, SessionEndApiLeasesLeaseIdSessionEndPostData, SessionEndApiLeasesLeaseIdSessionEndPostErrors, SessionEndApiLeasesLeaseIdSessionEndPostResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -47,7 +47,7 @@ export const heartbeatApiHeartbeatPost = <ThrowOnError extends boolean = false>(
 /**
  * List Leases
  *
- * Every active lease, derived at read time (issue #28) — local store only.
+ * Active leases, then recently-closed ones, derived at read time (issue #28/#29).
  */
 export const listLeasesApiLeasesGet = <ThrowOnError extends boolean = false>(options?: Options<ListLeasesApiLeasesGetData, ThrowOnError>): RequestResult<ListLeasesApiLeasesGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListLeasesApiLeasesGetResponses, unknown, ThrowOnError>({ url: '/api/leases', ...options });
 
@@ -71,6 +71,13 @@ export const recordAskApiLeasesLeaseIdAsksPost = <ThrowOnError extends boolean =
  * Record a lease's session-end, stamped with the injected clock (D-055/D-082).
  */
 export const sessionEndApiLeasesLeaseIdSessionEndPost = <ThrowOnError extends boolean = false>(options: Options<SessionEndApiLeasesLeaseIdSessionEndPostData, ThrowOnError>): RequestResult<SessionEndApiLeasesLeaseIdSessionEndPostResponses, SessionEndApiLeasesLeaseIdSessionEndPostErrors, ThrowOnError> => (options.client ?? client).post<SessionEndApiLeasesLeaseIdSessionEndPostResponses, SessionEndApiLeasesLeaseIdSessionEndPostErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/session-end', ...options });
+
+/**
+ * Get Transcript
+ *
+ * The lease's parsed transcript — 404 iff no lease with this id ever existed.
+ */
+export const getTranscriptApiLeasesLeaseIdTranscriptGet = <ThrowOnError extends boolean = false>(options: Options<GetTranscriptApiLeasesLeaseIdTranscriptGetData, ThrowOnError>): RequestResult<GetTranscriptApiLeasesLeaseIdTranscriptGetResponses, GetTranscriptApiLeasesLeaseIdTranscriptGetErrors, ThrowOnError> => (options.client ?? client).get<GetTranscriptApiLeasesLeaseIdTranscriptGetResponses, GetTranscriptApiLeasesLeaseIdTranscriptGetErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/transcript', ...options });
 
 /**
  * Ready

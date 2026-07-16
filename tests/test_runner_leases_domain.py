@@ -51,20 +51,20 @@ def _lease_record(**overrides: object) -> LeaseRecord:
 
 
 # --------------------------------------------------------------------------- #
-# derive_lease_state — pure, all five states + precedence
+# derive_lease_state — pure, all six states + precedence
 # --------------------------------------------------------------------------- #
 
 
 @pytest.mark.unit
 def test_derive_lease_state_running_when_alive_and_fresh() -> None:
     lease = _lease_record()
-    assert derive_lease_state(lease, is_parked=False, is_alive=True, is_stale=False) == "running"
+    assert derive_lease_state(lease, is_closed=False, is_parked=False, is_alive=True, is_stale=False) == "running"
 
 
 @pytest.mark.unit
 def test_derive_lease_state_stale_when_alive_but_heartbeat_old() -> None:
     lease = _lease_record()
-    assert derive_lease_state(lease, is_parked=False, is_alive=True, is_stale=True) == "stale"
+    assert derive_lease_state(lease, is_closed=False, is_parked=False, is_alive=True, is_stale=True) == "stale"
 
 
 @pytest.mark.unit
@@ -72,25 +72,25 @@ def test_derive_lease_state_exited_when_process_not_alive() -> None:
     """A dead pid is ADVANCE's exit-is-done, not a stall (D-055) — it derives exited
     even when the (stale) heartbeat check would also fire, since exit is checked first."""
     lease = _lease_record()
-    assert derive_lease_state(lease, is_parked=False, is_alive=False, is_stale=True) == "exited"
+    assert derive_lease_state(lease, is_closed=False, is_parked=False, is_alive=False, is_stale=True) == "exited"
 
 
 @pytest.mark.unit
 def test_derive_lease_state_spawning_when_pid_unset() -> None:
     lease = _lease_record(pid=None, process_start_time=None)
-    assert derive_lease_state(lease, is_parked=False, is_alive=False, is_stale=False) == "spawning"
+    assert derive_lease_state(lease, is_closed=False, is_parked=False, is_alive=False, is_stale=False) == "spawning"
 
 
 @pytest.mark.unit
 def test_derive_lease_state_spawning_when_session_unset() -> None:
     lease = _lease_record(session_id=None)
-    assert derive_lease_state(lease, is_parked=False, is_alive=True, is_stale=False) == "spawning"
+    assert derive_lease_state(lease, is_closed=False, is_parked=False, is_alive=True, is_stale=False) == "spawning"
 
 
 @pytest.mark.unit
 def test_derive_lease_state_parked_when_dormant_on_a_question() -> None:
     lease = _lease_record()
-    assert derive_lease_state(lease, is_parked=True, is_alive=True, is_stale=False) == "parked"
+    assert derive_lease_state(lease, is_closed=False, is_parked=True, is_alive=True, is_stale=False) == "parked"
 
 
 @pytest.mark.unit
@@ -99,7 +99,7 @@ def test_derive_lease_state_parked_wins_over_stale() -> None:
     clock is stopped for a dormant lease, so a growing heartbeat age is expected, not
     a stall (design/runner/loop.md, [ask-answer.md])."""
     lease = _lease_record()
-    assert derive_lease_state(lease, is_parked=True, is_alive=True, is_stale=True) == "parked"
+    assert derive_lease_state(lease, is_closed=False, is_parked=True, is_alive=True, is_stale=True) == "parked"
 
 
 @pytest.mark.unit
@@ -108,7 +108,36 @@ def test_derive_lease_state_spawning_wins_over_an_ancient_heartbeat() -> None:
     heartbeat baseline reads as stale — the mint→spawn window has no live worker to
     stall yet (D-092)."""
     lease = _lease_record(pid=None, process_start_time=None, session_id=None)
-    assert derive_lease_state(lease, is_parked=False, is_alive=False, is_stale=True) == "spawning"
+    assert derive_lease_state(lease, is_closed=False, is_parked=False, is_alive=False, is_stale=True) == "spawning"
+
+
+@pytest.mark.unit
+def test_derive_lease_state_closed_when_closure_fact_exists() -> None:
+    lease = _lease_record()
+    assert derive_lease_state(lease, is_closed=True, is_parked=False, is_alive=True, is_stale=False) == "closed"
+
+
+@pytest.mark.unit
+def test_derive_lease_state_closed_wins_over_alive_pid_reuse() -> None:
+    """Precedence: a closed lease's pid may have been reused by an unrelated
+    process, so ``is_alive=True`` can be a false positive. Closure is the terminal
+    fact and must win, or a finished agent would misread as still ``running``."""
+    lease = _lease_record()
+    assert derive_lease_state(lease, is_closed=True, is_parked=False, is_alive=True, is_stale=False) == "closed"
+
+
+@pytest.mark.unit
+def test_derive_lease_state_closed_wins_over_stale() -> None:
+    lease = _lease_record()
+    assert derive_lease_state(lease, is_closed=True, is_parked=False, is_alive=True, is_stale=True) == "closed"
+
+
+@pytest.mark.unit
+def test_derive_lease_state_closed_wins_over_parked() -> None:
+    """Precedence: closed outranks even parked — the highest-precedence live state — the
+    same way parked outranks stale."""
+    lease = _lease_record()
+    assert derive_lease_state(lease, is_closed=True, is_parked=True, is_alive=True, is_stale=False) == "closed"
 
 
 # --------------------------------------------------------------------------- #
@@ -232,3 +261,87 @@ def test_list_active_reads_parked_lease_ids_once_not_per_lease(tmp_path) -> None
 
     assert len(activities) == 2
     assert store.parked_lease_ids_calls == 1
+
+
+# --------------------------------------------------------------------------- #
+# LocalLeaseService.list_recent() — active + recent-closed (issue #29)
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.component
+def test_list_recent_appends_closed_leases_after_active(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _seed_lease(store, chunk="ch_1", lease="lease_1")
+    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    _seed_lease(store, chunk="ch_2", lease="lease_2")
+    store.record_spawn("lease_2", pid=200, process_start_time="start-200", session_id="sess-b", spawned_at=_NOW)
+    closed_at = _NOW + timedelta(minutes=5)
+    store.record_closure(
+        lease_id="lease_2", chunk_id="ch_2", node_id="nd_build", reason="transitioned", closed_at=closed_at
+    )
+    probe = FakeProbe(alive={(100, "start-100")})
+    service = LocalLeaseService(store, FixedClock(_NOW), probe)
+
+    activities = service.list_recent()
+
+    assert [a.lease.lease_id for a in activities] == ["lease_1", "lease_2"]
+    active, closed = activities
+    assert active.state == "running"
+    assert active.closed_at is None
+    assert active.closure_reason is None
+    assert closed.state == "closed"
+    assert closed.closed_at == closed_at
+    assert closed.closure_reason == "transitioned"
+
+
+@pytest.mark.component
+def test_list_recent_active_lease_not_crowded_out_by_newer_closed_leases(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """The rejected-design bug: a single newest-N-overall read would let
+    recently-closed leases crowd a long-running active agent out of the panel.
+    Pinned here with ``recent_limit=1`` — the active lease is older than both
+    closed ones and must still appear."""
+    store = _store(tmp_path)
+    old_active_at = _NOW - timedelta(hours=2)
+    _seed_lease(store, chunk="ch_active", lease="lease_active", created_at=old_active_at)
+    store.record_spawn(
+        "lease_active", pid=100, process_start_time="start-100", session_id="sess-active", spawned_at=old_active_at
+    )
+    _seed_lease(store, chunk="ch_closed_1", lease="lease_closed_1", created_at=_NOW)
+    store.record_closure(
+        lease_id="lease_closed_1", chunk_id="ch_closed_1", node_id="nd_build", reason="failed", closed_at=_NOW
+    )
+    _seed_lease(store, chunk="ch_closed_2", lease="lease_closed_2", created_at=_NOW)
+    newer_closed_at = _NOW + timedelta(minutes=1)
+    store.record_closure(
+        lease_id="lease_closed_2",
+        chunk_id="ch_closed_2",
+        node_id="nd_build",
+        reason="failed",
+        closed_at=newer_closed_at,
+    )
+    probe = FakeProbe(alive={(100, "start-100")})
+    service = LocalLeaseService(store, FixedClock(_NOW), probe, recent_limit=1)
+
+    activities = service.list_recent()
+
+    assert [a.lease.lease_id for a in activities] == ["lease_active", "lease_closed_2"]
+
+
+@pytest.mark.component
+def test_list_recent_closed_activity_carries_no_environment_binding(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """A closed lease's bindings are always released by the time closure is recorded
+    (``bindings_for_chunk`` returns only *unreleased* bindings, issue #29) — the
+    read model must be honest about that rather than pretending the join resolves, so
+    ``environment_id``/``workdir`` come back ``None`` even though a binding once existed."""
+    store = _store(tmp_path)
+    _seed_lease(store, chunk="ch_1", lease="lease_1")
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_release(chunk_id="ch_1", environment_id="e1", released_at=_NOW)
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
+    service = LocalLeaseService(store, FixedClock(_NOW), FakeProbe())
+
+    activities = service.list_recent()
+
+    assert len(activities) == 1
+    assert activities[0].environment_id is None
+    assert activities[0].workdir is None

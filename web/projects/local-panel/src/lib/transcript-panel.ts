@@ -1,0 +1,272 @@
+import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import type { runnerApi } from 'fleet';
+
+import { injectTranscriptQuery } from './transcript.query';
+
+/**
+ * `02:41:36 UTC` from an ISO-8601 instant, or `—` when absent/unparsable.
+ *
+ * This is the panel's only *absolute* time-of-day rendering (`agent-row.ts`
+ * deliberately renders *relative* ages instead, to sidestep clock questions
+ * entirely — `bzh:utc-instants`). Rendered in UTC rather than the viewer's
+ * local zone and labeled as such: an operator can be anywhere, but the wire is
+ * UTC end to end, so a fixed, explicitly-labeled zone reads the same turn the
+ * same way regardless of who is looking, instead of silently matching
+ * whichever browser happens to be open.
+ */
+function formatTurnTimestamp(iso: string | null): string {
+  if (iso === null) return '—';
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return '—';
+  return `${new Date(ms).toISOString().slice(11, 19)} UTC`;
+}
+
+/**
+ * The right pane's content (issue #29 slice C) — one lease's parsed transcript,
+ * turn by turn, driven by {@link injectTranscriptQuery}. Standalone, `OnPush`,
+ * self-contained: `local-panel.ts` only ever passes it {@link leaseId} and never
+ * branches on the read itself — every degraded/empty case below is this
+ * component's own concern.
+ *
+ * Eight read states, kept visually and testably distinct (`data-testid` per row)
+ * so an operator, or a test, can never mistake one for another — this is the
+ * state design the mockup has no precedent for (it only ever models a
+ * synthetic, always-populated transcript):
+ *
+ * - **no selection** — `leaseId()` is `null`; the query is never even enabled.
+ * - **loading** — the read is in flight (`isPending()`).
+ * - **query error** — a genuine transport fault (network/`503`); `isError()`.
+ * - **`reason: "spawning"`** — the lease exists but has no `session_id` yet
+ *   (the agent hasn't started). Lease-keyed URLs make this expressible instead
+ *   of collapsing into a 404.
+ * - **`reason: "not_found"`** — a session id is known but no transcript file is
+ *   on disk (not yet flushed, cleaned up, or a closed lease whose file rotated
+ *   away). This is a **normal** state of a healthy agent, not a
+ *   fault — hence `--label-dim`, never `--red`.
+ * - **`reason: "unreadable"`** — the file exists but could not be parsed
+ *   (permissions, corruption) — a genuine fault, `--red`.
+ * - **unknown** — `available: false` with a `reason` outside the three above
+ *   (or an unresolved read the earlier branches didn't already catch); the
+ *   `@default` fallback the not-found case used to also catch, given its own
+ *   row so the two are never mistaken for each other.
+ * - **turns** — the parsed list, plus a truncation banner when the server
+ *   capped the read (truncation must be visible, never silent).
+ *
+ * `spawning`/`not_found` are deliberately **not** colored as errors: training an
+ * operator to see red for a normal lifecycle state teaches them to ignore red.
+ * Only a genuine fault (`isError()`, `unreadable`) is `--red`.
+ */
+@Component({
+  selector: 'fleet-transcript-panel',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: `
+    @if (leaseId() === null) {
+      <p class="status" data-testid="transcript-empty">SELECT AN AGENT</p>
+    } @else if (transcriptQuery.isPending()) {
+      <p class="status" data-testid="transcript-loading">LOADING TRANSCRIPT…</p>
+    } @else if (transcriptQuery.isError()) {
+      <p class="status error" data-testid="transcript-error">TRANSCRIPT UNAVAILABLE — RUNNER LOCAL API UNREACHABLE</p>
+    } @else if (!transcript()?.available) {
+      @switch (transcript()?.reason) {
+        @case ('spawning') {
+          <p class="status spawning" data-testid="transcript-spawning">NO TRANSCRIPT YET — AGENT STARTING</p>
+        }
+        @case ('unreadable') {
+          <p class="status error" data-testid="transcript-unreadable">TRANSCRIPT UNREADABLE</p>
+        }
+        @case ('not_found') {
+          <p class="status" data-testid="transcript-not-found">
+            NO TRANSCRIPT ON DISK · SESSION {{ transcript()?.session_id ?? '—' }}
+          </p>
+        }
+        @default {
+          <p class="status" data-testid="transcript-unknown">TRANSCRIPT STATE UNKNOWN</p>
+        }
+      }
+    } @else {
+      <div class="turns" data-testid="transcript-turns">
+        @if (transcript()?.truncated) {
+          <p class="banner" data-testid="transcript-truncated">TRUNCATED — SHOWING THE MOST RECENT TURNS</p>
+        }
+        @for (turn of transcript()?.turns ?? []; track turn.index) {
+          <div class="turn" [class]="'k-' + turn.kind" data-testid="transcript-turn">
+            <span class="t">{{ formatTurnTimestamp(turn.timestamp) }}</span>
+            <span class="g"><span class="tick"></span></span>
+            <span class="b">
+              @switch (turn.kind) {
+                @case ('tool') {
+                  <details class="tool-call">
+                    <summary class="tc-head">
+                      <span class="tc-name">{{ turn.tool_name }} <b>{{ turn.tool_input }}</b></span>
+                    </summary>
+                    <div class="tc-out">{{ turn.tool_output ?? 'running…' }}</div>
+                  </details>
+                }
+                @case ('env') {
+                  <div class="who">env</div>
+                  <div class="tx">{{ turn.text }}</div>
+                }
+                @default {
+                  <div class="who">assistant</div>
+                  <div class="tx">{{ turn.text }}</div>
+                }
+              }
+              @if (turn.truncated) {
+                <div class="trunc-note">⋯ truncated</div>
+              }
+            </span>
+          </div>
+        }
+      </div>
+    }
+  `,
+  styles: `
+    :host {
+      display: block;
+      height: 100%;
+      position: relative;
+      font-family: var(--mono);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+    .status {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      white-space: nowrap;
+      color: var(--label-dim);
+      font-size: 11px;
+      letter-spacing: 0.12em;
+    }
+    .status.error {
+      color: var(--red);
+    }
+    .status.spawning {
+      color: var(--cyan);
+    }
+    .banner {
+      color: var(--amber-hi);
+      font-size: 10.5px;
+      letter-spacing: 0.1em;
+      padding: 5px 8px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(0, 0, 0, 0.25);
+    }
+    .turns {
+      padding: 4px 0 12px;
+    }
+    .turn {
+      display: grid;
+      grid-template-columns: 56px 16px 1fr;
+      gap: 8px;
+      padding: 4px 10px 4px 8px;
+      border-bottom: 1px solid var(--line);
+    }
+    .turn .t {
+      color: var(--label-dim);
+      font-size: 9.5px;
+      padding-top: 2px;
+    }
+    .turn .g {
+      position: relative;
+    }
+    .turn .g::before {
+      content: '';
+      position: absolute;
+      left: 6px;
+      top: 0;
+      bottom: -1px;
+      width: 1px;
+      background: var(--line);
+    }
+    .turn .g .tick {
+      position: absolute;
+      left: 3px;
+      top: 5px;
+      width: 7px;
+      height: 7px;
+      background: var(--panel-deep);
+      border: 1px solid var(--label-dim);
+      z-index: 1;
+    }
+    .turn.k-tool .g .tick {
+      background: var(--green-dim);
+      border-color: var(--green);
+    }
+    .turn.k-env .g .tick {
+      background: var(--cyan-dim);
+      border-color: var(--cyan);
+    }
+    .turn .b {
+      min-width: 0;
+      font-size: 11px;
+      line-height: 1.55;
+    }
+    .turn .who {
+      font-size: 8.5px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--label);
+      margin-bottom: 1px;
+    }
+    .turn.k-env .who {
+      color: var(--cyan);
+    }
+    .turn .tx {
+      color: var(--text);
+      white-space: pre-wrap;
+    }
+    .turn.k-env .tx {
+      color: var(--label);
+      font-size: 10.5px;
+    }
+    .trunc-note {
+      color: var(--amber-dim);
+      font-size: 9.5px;
+      margin-top: 2px;
+    }
+    .tool-call {
+      border: 1px solid var(--line);
+      border-left: 2px solid var(--green-dim);
+      background: rgba(0, 0, 0, 0.3);
+      padding: 2px 6px;
+    }
+    .tool-call .tc-head {
+      cursor: pointer;
+      list-style: none;
+    }
+    .tool-call .tc-head::-webkit-details-marker {
+      display: none;
+    }
+    .tool-call .tc-name {
+      color: var(--green);
+      font-size: 10.5px;
+    }
+    .tool-call .tc-name b {
+      color: var(--amber);
+      font-weight: normal;
+    }
+    .tool-call .tc-out {
+      margin-top: 3px;
+      padding: 3px 6px;
+      background: #000;
+      border: 1px solid var(--line);
+      color: var(--label);
+      font-size: 10px;
+      white-space: pre-wrap;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+  `,
+})
+export class TranscriptPanel {
+  /** The selected lease's id, or `null` when nothing is selected (issue #29 C1). */
+  readonly leaseId = input<string | null>(null);
+
+  protected readonly transcriptQuery = injectTranscriptQuery(this.leaseId);
+
+  protected readonly transcript = computed<runnerApi.TranscriptResponse | undefined>(() => this.transcriptQuery.data());
+
+  protected readonly formatTurnTimestamp = formatTurnTimestamp;
+}

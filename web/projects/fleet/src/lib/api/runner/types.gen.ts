@@ -81,7 +81,7 @@ export type HeartbeatResponse = {
 /**
  * LeaseListResponse
  *
- * Every active lease, derived at read time (issue #28).
+ * Active leases, then recently-closed ones — the panel's list (issue #28/#29).
  */
 export type LeaseListResponse = {
     /**
@@ -93,13 +93,22 @@ export type LeaseListResponse = {
 /**
  * LeaseView
  *
- * One active lease with its joined binding facts and derived state (issue #28).
+ * One lease — active or recently-closed — with its joined binding facts and
+ * derived state (issue #28; closed leases added issue #29).
  */
 export type LeaseView = {
     /**
      * Chunk Id
      */
     chunk_id: string;
+    /**
+     * Closed At
+     */
+    closed_at: string | null;
+    /**
+     * Closure Reason
+     */
+    closure_reason: string | null;
     /**
      * Created At
      */
@@ -143,7 +152,7 @@ export type LeaseView = {
     /**
      * State
      */
-    state: 'running' | 'stale' | 'parked' | 'spawning' | 'exited';
+    state: 'running' | 'stale' | 'parked' | 'spawning' | 'exited' | 'closed';
     /**
      * Workdir
      */
@@ -298,6 +307,78 @@ export type SessionEndResponse = {
      * Recorded
      */
     recorded: boolean;
+};
+
+/**
+ * TranscriptResponse
+ *
+ * A lease's parsed transcript — always 200 when the lease exists.
+ */
+export type TranscriptResponse = {
+    /**
+     * Available
+     */
+    available: boolean;
+    /**
+     * Lease Id
+     */
+    lease_id: string;
+    /**
+     * Reason
+     */
+    reason: 'spawning' | 'not_found' | 'unreadable' | null;
+    /**
+     * Session Id
+     */
+    session_id: string | null;
+    /**
+     * Truncated
+     */
+    truncated?: boolean;
+    /**
+     * Turns
+     */
+    turns?: Array<TurnView>;
+};
+
+/**
+ * TurnView
+ *
+ * One collapsed conversation turn on the wire.
+ */
+export type TurnView = {
+    /**
+     * Index
+     */
+    index: number;
+    /**
+     * Kind
+     */
+    kind: 'env' | 'asst' | 'tool';
+    /**
+     * Text
+     */
+    text: string;
+    /**
+     * Timestamp
+     */
+    timestamp: string | null;
+    /**
+     * Tool Input
+     */
+    tool_input: string | null;
+    /**
+     * Tool Name
+     */
+    tool_name: string | null;
+    /**
+     * Tool Output
+     */
+    tool_output: string | null;
+    /**
+     * Truncated
+     */
+    truncated: boolean;
 };
 
 /**
@@ -502,6 +583,36 @@ export type SessionEndApiLeasesLeaseIdSessionEndPostResponses = {
 };
 
 export type SessionEndApiLeasesLeaseIdSessionEndPostResponse = SessionEndApiLeasesLeaseIdSessionEndPostResponses[keyof SessionEndApiLeasesLeaseIdSessionEndPostResponses];
+
+export type GetTranscriptApiLeasesLeaseIdTranscriptGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+    };
+    query?: never;
+    url: '/api/leases/{lease_id}/transcript';
+};
+
+export type GetTranscriptApiLeasesLeaseIdTranscriptGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetTranscriptApiLeasesLeaseIdTranscriptGetError = GetTranscriptApiLeasesLeaseIdTranscriptGetErrors[keyof GetTranscriptApiLeasesLeaseIdTranscriptGetErrors];
+
+export type GetTranscriptApiLeasesLeaseIdTranscriptGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: TranscriptResponse;
+};
+
+export type GetTranscriptApiLeasesLeaseIdTranscriptGetResponse = GetTranscriptApiLeasesLeaseIdTranscriptGetResponses[keyof GetTranscriptApiLeasesLeaseIdTranscriptGetResponses];
 
 export type ReadyApiReadyGetData = {
     body?: never;

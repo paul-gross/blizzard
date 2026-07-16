@@ -67,6 +67,20 @@ class LeaseRecord:
 
 
 @dataclass(frozen=True)
+class ClosedLeaseRecord:
+    """A lease joined with its closure fact — the panel's recent-history read (issue #29).
+
+    ``reason`` is the closure vocabulary already written by ``record_closure``
+    (``runner/loop/steps.py``): ``transitioned`` | ``reaped`` | ``failed`` | ``escalated``
+    | ``parked`` | ``released``.
+    """
+
+    lease: LeaseRecord
+    reason: str
+    closed_at: datetime
+
+
+@dataclass(frozen=True)
 class EnvBindingRecord:
     """A chunk→env binding fact (D-021/D-063)."""
 
@@ -133,6 +147,27 @@ class IReadRunnerStore(Protocol):
         The flusher drives a buffered completion's apply-response against this: an
         already-closed lease means the completion applied on an earlier flush whose
         ack was lost (D-090) — the re-flush is a no-op past the ack.
+        """
+        ...
+
+    def lease(self, lease_id: str) -> LeaseRecord | None:
+        """The lease by id, regardless of closure — the transcript read (issue #29).
+
+        Distinct from :meth:`active_lease`, which filters to unclosed leases *by
+        design* (the flusher's ack-idempotency check above): a transcript outlives
+        its lease, so this read must span closed ones too.
+        """
+        ...
+
+    def list_closed_leases(self, limit: int) -> list[ClosedLeaseRecord]:
+        """The most recently closed leases, newest first — the panel's recent-history
+        read (issue #29).
+
+        One SQL join (``leases`` ⋈ ``lease_closures``, ordered by ``closed_at`` desc,
+        capped at ``limit``) — no N+1. ``limit`` is a **list-length affordance**, not a
+        retention policy: it bounds how many rows the panel shows, not how long a
+        closure fact or its ``.jsonl`` transcript lives on disk (undecided, out of
+        scope). Does not touch :meth:`list_active_leases`, REAP's own read.
         """
         ...
 

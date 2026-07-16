@@ -1,4 +1,4 @@
-"""The runner-local active-lease list — ``GET /api/leases`` (issue #28).
+"""The runner-local lease list — ``GET /api/leases`` (issue #28; widened issue #29).
 
 The panel's backing route: an active lease *is* an active agent, so this is
 "which agents are working, on what, on which node, and is that node healthy" —
@@ -6,6 +6,14 @@ answered entirely from the local sqlite store and the process probe. **Hub-free*
 by design (design/runner/web-app.md): the machine panel is precisely the part of
 the app that must not depend on the hub, so this route gains no hub call, no forge
 call, no title — those arrive separately, by a strictly severable read.
+
+Issue #29 widens the route to active leases **plus** recently-closed
+ones (:meth:`LocalLeaseService.list_recent`) so a finished agent's transcript stays
+reachable from the panel rather than vanishing the moment it closes. Response
+*shape* is unchanged (``LeaseListResponse.items``); ``LeaseView`` gains
+``closed_at``/``closure_reason`` and ``state`` gains the sixth ``"closed"`` value.
+This is a deliberate widening of the route's *meaning*, not just its body — see
+``bzh:sweep-release-only-tiers``.
 
 Read-only over its wiring (``bzh:controller-read-only``): the edge holds only the
 composition-root-wired :class:`LocalLeaseService`, no repository at all — it maps
@@ -42,16 +50,18 @@ def _view(activity: LeaseActivity) -> LeaseView:
         created_at=iso_utc(lease.created_at),
         last_heartbeat_at=iso_utc(activity.last_heartbeat_at) if activity.last_heartbeat_at is not None else None,
         state=activity.state,
+        closed_at=iso_utc(activity.closed_at) if activity.closed_at is not None else None,
+        closure_reason=activity.closure_reason,
     )
 
 
 @router.get("/leases", response_model=LeaseListResponse)
 def list_leases(request: Request) -> LeaseListResponse:
-    """Every active lease, derived at read time (issue #28) — local store only."""
+    """Active leases, then recently-closed ones, derived at read time (issue #28/#29)."""
     service: LocalLeaseService | None = getattr(request.app.state, "leases", None)
     if service is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="lease service not wired — start via `blizzard runner host`",
         )
-    return LeaseListResponse(items=[_view(activity) for activity in service.list_active()])
+    return LeaseListResponse(items=[_view(activity) for activity in service.list_recent()])

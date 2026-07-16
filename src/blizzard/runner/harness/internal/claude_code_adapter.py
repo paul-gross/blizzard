@@ -41,6 +41,7 @@ from blizzard.runner.harness.adapter import (
     WorkerHandle,
     WorkerPreamble,
 )
+from blizzard.runner.harness.spawn_cwd import resolve_spawn_cwd
 from blizzard.wire.envelope import NodeEnvelope
 
 _log = get_logger("blizzard.runner.harness")
@@ -91,7 +92,11 @@ class ClaudeCodeAdapter:
         # workspace's shared context (CLAUDE.md/AGENTS.md, .winter/, every repo and env)
         # like an interactive agent there; the held env(s) are named in the preamble
         # prompt instead. Falls back to the first env's workdir when no root is supplied.
-        workdir = preamble.workspace_root or preamble.environments[0].workdir
+        # `resolve_spawn_cwd` is the rule's one owner (issue #29) — the transcript
+        # locator is its second caller. `preamble.environments` was checked non-empty
+        # above, so the fallback is always a real workdir here; `| None` on the return
+        # type is for that second caller, whose fallback can legitimately be absent.
+        workdir = resolve_spawn_cwd(preamble.workspace_root, preamble.environments[0].workdir)
         cmd = [self._binary, "-p", "--output-format", "json", "--model", self._model]
         if session_id:
             cmd += ["--session-id", session_id]

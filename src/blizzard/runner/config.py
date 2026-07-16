@@ -41,6 +41,9 @@ ENV_HARNESS_PERMISSION_MODE = "BZ_HARNESS_PERMISSION_MODE"
 ENV_BASE_BRANCH = "BZ_BASE_BRANCH"
 ENV_GATES = "BZ_RUNNER_GATES"  # comma-separated node names this runner gates (D-032/D-073)
 ENV_WORKSPACE_PROMPT = "BZ_WORKSPACE_PROMPT"  # the runner-owned workspace prompt, inline (issue #17)
+# Where the coding harness writes session transcripts (issue #29); empty defaults to
+# `~/.claude/projects`, resolved once at the composition root (`runner/app.py`), never here.
+ENV_TRANSCRIPTS_ROOT = "BZ_TRANSCRIPTS_ROOT"
 
 # Reconciliation-loop defaults (design/runner/loop.md). The runner is machine-level
 # and single-workspace (D-019); these seam the loop to the hub, the workspace it
@@ -104,6 +107,17 @@ class RunnerConfig:
     #: runtime override (local API, no restart) lives in the store, not here.
     workspace_prompt: str = ""
     workspace_prompt_file: str = ""
+    #: Where the coding harness writes session transcripts (issue #29). Empty (the
+    #: fresh-scaffold default) means ``~/.claude/projects`` — resolved once at the
+    #: composition root (``runner/app.py``), never inside the transcript adapter.
+    #: Seeded from ``BZ_TRANSCRIPTS_ROOT`` at ``runner init`` and then read from
+    #: ``blizzard-runner.toml`` — **not** re-read from the environment live. That is
+    #: safe only because the service orchestrator's per-env launch command deletes
+    #: ``blizzard-runner.toml`` before every ``init`` (workspace
+    #: ``.winter/config/winter-service-tmux/config.toml``), so a changed env var
+    #: takes effect on the next service start; a bare process restart without that
+    #: delete would keep the stale value.
+    transcripts_root: str = ""
 
     @property
     def config_path(self) -> Path:
@@ -174,6 +188,7 @@ class RunnerConfig:
             # replaces it at runtime through the local API. Seeded from the environment so a
             # service's `blizzard runner init` can inject a default without hand-editing.
             workspace_prompt=os.environ.get(ENV_WORKSPACE_PROMPT, ""),
+            transcripts_root=os.environ.get(ENV_TRANSCRIPTS_ROOT, ""),
         )
 
     def to_toml(self) -> str:
@@ -207,6 +222,9 @@ class RunnerConfig:
             "# Empty = table-only injection. Replace at runtime via PUT /api/workspace-prompt.\n"
             f"workspace_prompt = {workspace_prompt}\n"
             f"workspace_prompt_file = {workspace_prompt_file}\n"
+            "\n# Where the coding harness writes session transcripts (issue #29);\n"
+            "# empty = ~/.claude/projects.\n"
+            f'transcripts_root = "{self.transcripts_root}"\n'
         )
 
     @classmethod
@@ -239,6 +257,7 @@ class RunnerConfig:
             gates=tuple(str(g) for g in raw.get("gates", ())),
             workspace_prompt=str(raw.get("workspace_prompt", "")),
             workspace_prompt_file=str(raw.get("workspace_prompt_file", "")),
+            transcripts_root=str(raw.get("transcripts_root", "")),
         )
 
 

@@ -32,6 +32,7 @@ from blizzard.runner.store.repository import EnvBindingRecord, IReadRunnerStore,
 
 __all__ = [
     "HEARTBEAT_STALENESS_THRESHOLD",
+    "RECENT_LEASE_LIMIT",
     "IProcessProbe",
     "LeaseActivity",
     "LeaseState",
@@ -48,9 +49,18 @@ __all__ = [
 #: reaped as stalled (D-078). ~1h; the open-question constant (decisions/open-questions.md).
 HEARTBEAT_STALENESS_THRESHOLD = timedelta(hours=1)
 
-#: The panel's derived state (design/runner/loop.md, issue #28) — one of five, computed
-#: at read time and never stored (``bzh:facts-not-status``).
-LeaseState = Literal["running", "stale", "parked", "spawning", "exited"]
+#: The panel's recently-closed-lease list length (issue #29) — a
+#: **list-length affordance**, not a retention policy: it bounds how many closed rows
+#: :meth:`LocalLeaseService.list_recent` returns, not how long a closure fact or its
+#: transcript lives on disk (a separate, undecided product question). Mirrors
+#: :data:`HEARTBEAT_STALENESS_THRESHOLD` as a documented module constant rather than a
+#: config knob, and is injectable the same way (``LocalLeaseService(..., recent_limit=…)``).
+#: ``MAX_AGENTS`` is ~4, so 20 closed leases covers several hours of fleet activity.
+RECENT_LEASE_LIMIT = 20
+
+#: The panel's derived state (design/runner/loop.md, issue #28; ``closed`` added issue #29)
+#: — one of six, computed at read time and never stored (``bzh:facts-not-status``).
+LeaseState = Literal["running", "stale", "parked", "spawning", "exited", "closed"]
 
 
 def is_heartbeat_stale(store: IReadRunnerStore, lease: LeaseRecord, now: datetime) -> bool:
@@ -97,7 +107,11 @@ class LeaseActivity:
     :class:`LeaseRecord` alongside what the store never stores. ``environment_id`` /
     ``workdir`` come from the chunk's binding join; ``last_heartbeat_at`` is the newest
     heartbeat, or ``None`` if the lease has never beaten (the Phase 3 wire model maps
-    this facts-plus-derivation shape onto ``LeaseView``).
+    this facts-plus-derivation shape onto ``LeaseView``). ``closed_at`` / ``closure_reason``
+    (issue #29) are ``None`` iff the lease is active — a closed lease also carries
+    ``environment_id is None`` and ``workdir is None``, because its bindings are always
+    released by the time closure is recorded (``bindings_for_chunk`` returns only
+    *unreleased* bindings); there is no fact left to reconstruct them from.
     """
 
     lease: LeaseRecord
@@ -105,30 +119,46 @@ class LeaseActivity:
     environment_id: str | None
     workdir: str | None
     last_heartbeat_at: datetime | None
+    closed_at: datetime | None
+    closure_reason: str | None
 
 
-def derive_lease_state(lease: LeaseRecord, *, is_parked: bool, is_alive: bool, is_stale: bool) -> LeaseState:
+def derive_lease_state(
+    lease: LeaseRecord, *, is_closed: bool, is_parked: bool, is_alive: bool, is_stale: bool
+) -> LeaseState:
     """Derive a lease's state from precomputed facts — pure, no store, no I/O.
 
-    Precedence (design/runner/loop.md, issue #28) — order is the point:
+    Precedence (design/runner/loop.md, issue #28; ``closed`` added issue #29) — order is
+    the point:
 
-    1. **parked** — a park fact with no later resume ([ask-answer.md]); the reap clock
+    1. **closed** — a closure fact exists ([ask-answer.md]-adjacent: ``record_closure``,
+       D-078). **Highest precedence**, checked before ``is_alive``: a closed lease's
+       ``pid`` may have been reused by an unrelated process, so a live-pid probe can
+       false-positive and claim a finished agent is still running. Closure is the
+       terminal fact and must win over everything else, the same way ``parked`` already
+       wins over ``stale`` below.
+    2. **parked** — a park fact with no later resume ([ask-answer.md]); the reap clock
        is stopped, so a parked-and-stale lease still reads ``parked``, never ``stale``.
-    2. **spawning** — ``pid``/``session_id`` unset: minted at FILL, spawn-return not yet
+    3. **spawning** — ``pid``/``session_id`` unset: minted at FILL, spawn-return not yet
        recorded (D-092); a spawning lease has no meaningful heartbeat, so this wins over
        ``is_stale`` regardless of how old its heartbeat baseline would compute.
-    3. **exited** — a live-pid check came back false; exit is the done-declaration
+    4. **exited** — a live-pid check came back false; exit is the done-declaration
        (D-055), awaiting ADVANCE's judgement, not dead.
-    4. **stale** — alive, but the caller's staleness read (REAP's own predicate, via
+    5. **stale** — alive, but the caller's staleness read (REAP's own predicate, via
        :func:`is_heartbeat_stale` / :func:`_staleness_exceeded`) says the heartbeat is
        too old.
-    5. **running** — otherwise.
+    6. **running** — otherwise.
 
-    ``is_alive`` and ``is_stale`` are facts the caller (:class:`LocalLeaseService`)
-    resolved beforehand — a process-probe read and a heartbeat read, respectively —
-    exactly the seam :func:`is_heartbeat_stale` already draws between the store read
-    and the pure comparison.
+    ``is_closed``, ``is_alive``, and ``is_stale`` are facts the caller
+    (:class:`LocalLeaseService`) resolved beforehand — a closure-fact read, a
+    process-probe read, and a heartbeat read, respectively — exactly the seam
+    :func:`is_heartbeat_stale` already draws between the store read and the pure
+    comparison. :meth:`LocalLeaseService.list_active` always passes ``is_closed=False``
+    (its source read, ``list_active_leases``, is unclosed *by definition*), so this
+    addition is zero blast radius on the existing five-state path.
     """
+    if is_closed:
+        return "closed"
     if is_parked:
         return "parked"
     if lease.pid is None or lease.session_id is None:
@@ -170,11 +200,13 @@ class LocalLeaseService:
         clock: IClock,
         process: IProcessProbe,
         stale_after: timedelta = HEARTBEAT_STALENESS_THRESHOLD,
+        recent_limit: int = RECENT_LEASE_LIMIT,
     ) -> None:
         self._store = store
         self._clock = clock
         self._process = process
         self._stale_after = stale_after
+        self._recent_limit = recent_limit
 
     def list_active(self) -> list[LeaseActivity]:
         """Every active lease, joined with its binding and derived state.
@@ -193,6 +225,7 @@ class LocalLeaseService:
             baseline = last_heartbeat or lease.created_at
             state = derive_lease_state(
                 lease,
+                is_closed=False,
                 is_parked=lease.lease_id in parked,
                 is_alive=self._is_alive(lease),
                 is_stale=_staleness_exceeded(baseline, now, threshold=self._stale_after),
@@ -205,9 +238,47 @@ class LocalLeaseService:
                     environment_id=binding.environment_id if binding else None,
                     workdir=binding.workdir if binding else None,
                     last_heartbeat_at=last_heartbeat,
+                    closed_at=None,
+                    closure_reason=None,
                 )
             )
         return activities
+
+    def list_recent(self) -> list[LeaseActivity]:
+        """Active leases, then the most recently closed — the panel's list (issue #29).
+
+        Ordering is server-owned (one owner) so the UI just renders: every active
+        lease first (:meth:`list_active`'s own order — unbounded, so a long-running
+        agent can never be crowded out), then up to ``recent_limit`` closed leases,
+        newest-closed first (:meth:`IReadRunnerStore.list_closed_leases`'s own order).
+        A single ``list_recent(limit)`` read merging both would let recently-closed
+        leases crowd an older active one out of a shared cap — this keeps the active
+        side unbounded-correct and only the closed side bounded.
+        """
+        return self.list_active() + self._list_closed()
+
+    def _list_closed(self) -> list[LeaseActivity]:
+        """The recent-closed half of :meth:`list_recent` — no probe, no heartbeat read.
+
+        ``closed`` wins :func:`derive_lease_state`'s precedence unconditionally, so the
+        process-liveness and staleness reads :meth:`list_active` makes would be wasted
+        I/O here — and the pid read would be actively misleading (a closed lease's pid
+        may have been reused by an unrelated process). ``environment_id``/``workdir``
+        are ``None``: a closed lease's bindings are always released by the time closure
+        is recorded, so there is no unreleased binding left to join (issue #29).
+        """
+        return [
+            LeaseActivity(
+                lease=record.lease,
+                state=derive_lease_state(record.lease, is_closed=True, is_parked=False, is_alive=False, is_stale=False),
+                environment_id=None,
+                workdir=None,
+                last_heartbeat_at=None,
+                closed_at=record.closed_at,
+                closure_reason=record.reason,
+            )
+            for record in self._store.list_closed_leases(self._recent_limit)
+        ]
 
     def _is_alive(self, lease: LeaseRecord) -> bool:
         if lease.pid is None:

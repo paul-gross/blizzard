@@ -94,7 +94,7 @@
         "type": "object"
       },
       "LeaseListResponse": {
-        "description": "Every active lease, derived at read time (issue #28).",
+        "description": "Active leases, then recently-closed ones \u2014 the panel's list (issue #28/#29).",
         "properties": {
           "items": {
             "default": [],
@@ -109,11 +109,33 @@
         "type": "object"
       },
       "LeaseView": {
-        "description": "One active lease with its joined binding facts and derived state (issue #28).",
+        "description": "One lease \u2014 active or recently-closed \u2014 with its joined binding facts and\nderived state (issue #28; closed leases added issue #29).",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
             "type": "string"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At"
+          },
+          "closure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closure Reason"
           },
           "created_at": {
             "title": "Created At",
@@ -189,7 +211,8 @@
               "stale",
               "parked",
               "spawning",
-              "exited"
+              "exited",
+              "closed"
             ],
             "title": "State",
             "type": "string"
@@ -219,7 +242,9 @@
           "workdir",
           "created_at",
           "last_heartbeat_at",
-          "state"
+          "state",
+          "closed_at",
+          "closure_reason"
         ],
         "title": "LeaseView",
         "type": "object"
@@ -441,6 +466,149 @@
         "title": "SessionEndResponse",
         "type": "object"
       },
+      "TranscriptResponse": {
+        "description": "A lease's parsed transcript \u2014 always 200 when the lease exists.",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "lease_id": {
+            "title": "Lease Id",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "spawning",
+                  "not_found",
+                  "unreadable"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "turns": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TurnView"
+            },
+            "title": "Turns",
+            "type": "array"
+          }
+        },
+        "required": [
+          "lease_id",
+          "session_id",
+          "available",
+          "reason"
+        ],
+        "title": "TranscriptResponse",
+        "type": "object"
+      },
+      "TurnView": {
+        "description": "One collapsed conversation turn on the wire.",
+        "properties": {
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "env",
+              "asst",
+              "tool"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "timestamp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timestamp"
+          },
+          "tool_input": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Input"
+          },
+          "tool_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Name"
+          },
+          "tool_output": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Output"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "index",
+          "kind",
+          "timestamp",
+          "text",
+          "tool_name",
+          "tool_input",
+          "tool_output",
+          "truncated"
+        ],
+        "title": "TurnView",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -629,7 +797,7 @@
     },
     "/api/leases": {
       "get": {
-        "description": "Every active lease, derived at read time (issue #28) \u2014 local store only.",
+        "description": "Active leases, then recently-closed ones, derived at read time (issue #28/#29).",
         "operationId": "list_leases_api_leases_get",
         "responses": {
           "200": {
@@ -740,6 +908,49 @@
           }
         },
         "summary": "Session End",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/leases/{lease_id}/transcript": {
+      "get": {
+        "description": "The lease's parsed transcript \u2014 404 iff no lease with this id ever existed.",
+        "operationId": "get_transcript_api_leases__lease_id__transcript_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "title": "Lease Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Transcript",
         "tags": [
           "runner"
         ]

@@ -25,6 +25,8 @@ function lease(overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseVie
     created_at: '2026-07-16T11:00:00.000Z',
     last_heartbeat_at: '2026-07-16T11:59:26.000Z', // -34s from REF
     state: 'running',
+    closed_at: null,
+    closure_reason: null,
     ...overrides,
   };
 }
@@ -89,9 +91,57 @@ describe('AgentRow', () => {
     expect(l2).toContain('sess-77');
   });
 
-  it('has no (select) output and no role="button" — #29\'s territory, not phase 6\'s', () => {
-    // Structural guard: the component declares no output named `select`.
-    expect(Object.getOwnPropertyNames(AgentRow.prototype)).not.toContain('select');
+  describe('selection (issue #29 C1)', () => {
+    /**
+     * Like {@link render}, but returns the fixture too so a test can subscribe
+     * to the `selectLease` output or flip the `selected` input mid-test.
+     */
+    async function renderRow(agent: runnerApi.LeaseView) {
+      activeStubs.push(stubRunnerClient(() => ({ items: [] })));
+      await TestBed.configureTestingModule({
+        imports: [AgentRow],
+        providers: [
+          provideZonelessChangeDetection(),
+          provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        ],
+      }).compileComponents();
+      const fixture = TestBed.createComponent(AgentRow);
+      fixture.componentRef.setInput('agent', agent);
+      await settle(fixture);
+      return fixture;
+    }
+
+    it('is a keyboard-reachable button by role, with the stable data-lease-id hook kept alongside', async () => {
+      const el = await render(lease());
+      const row = el.querySelector('[data-testid="agent-row"]');
+      expect(row?.getAttribute('role')).toBe('button');
+      expect(row?.getAttribute('tabindex')).toBe('0');
+      expect(row?.getAttribute('data-lease-id')).toBe('L-903');
+    });
+
+    it('emits (selectLease) with the row\'s lease_id on click, Enter, and Space', async () => {
+      const fixture = await renderRow(lease());
+      const emitted: string[] = [];
+      fixture.componentInstance.selectLease.subscribe((leaseId) => emitted.push(leaseId));
+      const row = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="agent-row"]') as HTMLElement;
+
+      row.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      row.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true }));
+
+      expect(emitted).toEqual(['L-903', 'L-903', 'L-903']);
+    });
+
+    it('adds the selected class when the selected input is true, and omits it otherwise', async () => {
+      const fixture = await renderRow(lease());
+      const row = () => (fixture.nativeElement as HTMLElement).querySelector('[data-testid="agent-row"]');
+
+      expect(row()?.classList.contains('selected')).toBe(false);
+
+      fixture.componentRef.setInput('selected', true);
+      await settle(fixture);
+      expect(row()?.classList.contains('selected')).toBe(true);
+    });
   });
 
   it.each([
@@ -100,11 +150,31 @@ describe('AgentRow', () => {
     ['parked', 'st-parked'],
     ['spawning', 'st-spawning'],
     ['exited', 'st-exited'],
+    ['closed', 'st-closed'],
   ] as const)('renders the %s state with its %s class', async (state, cls) => {
     const el = await render(lease({ state }));
     const stEl = el.querySelector('[data-testid="agent-state"]');
     expect(stEl?.classList.contains(cls)).toBe(true);
     expect(stEl?.textContent?.trim()).toBe(state.toUpperCase());
+  });
+
+  describe('closed rows (issue #29 slice C)', () => {
+    it('renders the closure reason on the .l2 line', async () => {
+      const el = await render(lease({ state: 'closed', closed_at: '2026-07-16T11:59:00.000Z', closure_reason: 'failed' }));
+      expect(el.querySelector('[data-testid="agent-closure"]')?.textContent).toBe('closed · failed');
+    });
+
+    it('renders no closure hook for a non-closed row', async () => {
+      const el = await render(lease());
+      expect(el.querySelector('[data-testid="agent-closure"]')).toBeNull();
+    });
+
+    it('renders "—" for the heartbeat age on a closed row, even with a stale-looking last_heartbeat_at', async () => {
+      const el = await render(
+        lease({ state: 'closed', closed_at: '2026-07-16T11:59:00.000Z', closure_reason: 'reaped', last_heartbeat_at: '2026-07-16T08:00:00.000Z' }),
+      );
+      expect(el.querySelector('[data-testid="agent-hb-age"]')?.textContent?.trim()).toBe('—');
+    });
   });
 
   describe('heartbeat age', () => {

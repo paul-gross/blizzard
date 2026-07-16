@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 
 import { AgentRow } from './agent-row';
 import { injectRunnerLeasesQuery } from './leases.query';
+import { TranscriptPanel } from './transcript-panel';
 
 /**
  * The runner's machine-local panel — the runner app's own view, added on top of
@@ -20,11 +21,27 @@ import { injectRunnerLeasesQuery } from './leases.query';
  * - `isPending()` — the first read hasn't resolved yet;
  * - `isError()` — the read failed and there is no cached data to fall back on;
  * - resolved with an empty list — no active leases, the loop is idle.
+ *
+ * Two-pane shell: the lease list is the left pane; {@link selectedLeaseId}
+ * tracks which row (if any) is current, fed by each {@link AgentRow}'s
+ * `(selectLease)` output and reflected back onto every row via `[selected]` so
+ * exactly one row is ever marked current. The right pane is
+ * {@link TranscriptPanel} (issue #29 slice C) — it owns the transcript read and
+ * every empty/loading/error state on its own; this shell only ever passes it
+ * {@link selectedLeaseId} and never branches on the read itself.
+ *
+ * **Closed rows** (issue #29 slice C): `GET /api/leases` now returns
+ * active leases followed by recently-closed ones, in that server-decided order
+ * (`LocalLeaseService.list_recent()` — one owner of the ordering). This list
+ * renders them as the *same* {@link AgentRow}, not a second pane or a grouped
+ * session browser — {@link firstClosedIndex} finds where the closed block
+ * starts (purely to draw one subtle divider) but never reorders or filters
+ * anything the server already decided.
  */
 @Component({
   selector: 'fleet-local-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [AgentRow],
+  imports: [AgentRow, TranscriptPanel],
   template: `
     <div class="lp" data-testid="local-panel">
       <header class="lp-header">
@@ -38,19 +55,31 @@ import { injectRunnerLeasesQuery } from './leases.query';
         </div>
       </header>
       <section class="body">
-        @if (leasesQuery.isPending()) {
-          <p class="status" data-testid="loading-state">LOADING…</p>
-        } @else if (leasesQuery.isError()) {
-          <p class="status error" data-testid="error-state">LEASES UNAVAILABLE — RUNNER LOCAL API UNREACHABLE</p>
-        } @else if (leases().length === 0) {
-          <p class="status empty" data-testid="empty-state">NO ACTIVITY — RUNNER IDLE</p>
-        } @else {
-          <div class="rows" data-testid="lease-rows">
-            @for (lease of leases(); track lease.lease_id) {
-              <fleet-agent-row [agent]="lease" />
-            }
-          </div>
-        }
+        <div class="lease-pane" data-testid="lease-pane">
+          @if (leasesQuery.isPending()) {
+            <p class="status" data-testid="loading-state">LOADING…</p>
+          } @else if (leasesQuery.isError()) {
+            <p class="status error" data-testid="error-state">LEASES UNAVAILABLE — RUNNER LOCAL API UNREACHABLE</p>
+          } @else if (leases().length === 0) {
+            <p class="status empty" data-testid="empty-state">NO ACTIVITY — RUNNER IDLE</p>
+          } @else {
+            <div class="rows" data-testid="lease-rows">
+              @for (lease of leases(); track lease.lease_id; let i = $index) {
+                @if (i === firstClosedIndex() && firstClosedIndex() > 0) {
+                  <div class="divider" data-testid="closed-divider"></div>
+                }
+                <fleet-agent-row
+                  [agent]="lease"
+                  [selected]="lease.lease_id === selectedLeaseId()"
+                  (selectLease)="selectedLeaseId.set($event)"
+                />
+              }
+            </div>
+          }
+        </div>
+        <div class="transcript-pane" data-testid="transcript-pane">
+          <fleet-transcript-panel [leaseId]="selectedLeaseId()" />
+        </div>
       </section>
     </div>
   `,
@@ -116,6 +145,20 @@ import { injectRunnerLeasesQuery } from './leases.query';
     .body {
       flex: 1;
       min-height: 0;
+      display: flex;
+      flex-direction: row;
+      overflow: hidden;
+    }
+    .lease-pane {
+      flex: 0 0 340px;
+      min-width: 0;
+      position: relative;
+      overflow-y: auto;
+      border-right: 1px solid var(--bezel);
+    }
+    .transcript-pane {
+      flex: 1;
+      min-width: 0;
       position: relative;
       overflow-y: auto;
     }
@@ -136,6 +179,11 @@ import { injectRunnerLeasesQuery } from './leases.query';
       display: flex;
       flex-direction: column;
     }
+    .divider {
+      height: 1px;
+      background: var(--bezel-hi);
+      margin: 4px 0;
+    }
   `,
 })
 export class LocalPanel {
@@ -144,6 +192,22 @@ export class LocalPanel {
 
   protected readonly leasesQuery = injectRunnerLeasesQuery();
 
-  /** The active leases; empty until the first read resolves. */
+  /** The active + recently-closed leases, server-ordered; empty until the first read resolves. */
   protected readonly leases = computed(() => this.leasesQuery.data() ?? []);
+
+  /**
+   * The index of the first `closed` row in {@link leases} (`-1` when there is
+   * none), used only to draw one subtle divider between the active block and
+   * the closed block (issue #29 slice C) — never to reorder or filter,
+   * both of which the server (`list_recent()`) already did.
+   */
+  protected readonly firstClosedIndex = computed(() => this.leases().findIndex((lease) => lease.state === 'closed'));
+
+  /**
+   * The `lease_id` of the row currently marked selected, or `null` when no
+   * row has been picked yet. Fed by every {@link AgentRow}'s `(selectLease)`
+   * output; reflected back onto each row via `[selected]`, and passed straight
+   * through to {@link TranscriptPanel} (issue #29).
+   */
+  protected readonly selectedLeaseId = signal<string | null>(null);
 }

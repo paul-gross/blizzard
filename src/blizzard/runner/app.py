@@ -9,6 +9,8 @@ build the app without a migrated database.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import FastAPI
 
 from blizzard import __version__
@@ -26,6 +28,7 @@ from blizzard.runner.api.leases import router as leases_router
 from blizzard.runner.api.pm_items import router as pm_items_router
 from blizzard.runner.api.readiness import router as readiness_router
 from blizzard.runner.api.session_end import router as session_end_router
+from blizzard.runner.api.transcripts import router as transcripts_router
 from blizzard.runner.api.workspace_prompt import router as workspace_prompt_router
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.leases import LocalLeaseService
@@ -38,6 +41,9 @@ from blizzard.runner.loop.process import LinuxProcessProbe
 from blizzard.runner.runtime import migration_runner
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 from blizzard.runner.store.repository import IWriteRunnerStore
+from blizzard.runner.transcripts.internal.jsonl_transcript_repository import JsonlTranscriptRepository
+from blizzard.runner.transcripts.repository import TranscriptErrorFactory
+from blizzard.runner.transcripts.service import LocalTranscriptService
 
 
 def create_app(
@@ -48,6 +54,7 @@ def create_app(
     harness: IHarnessAdapter | None = None,
     runner_store: IWriteRunnerStore | None = None,
     leases: LocalLeaseService | None = None,
+    transcripts: LocalTranscriptService | None = None,
 ) -> FastAPI:
     """Build a fully wired runner app from resolved config.
 
@@ -58,6 +65,10 @@ def create_app(
 
     ``leases`` is the store-backed, hub-free lease-derivation service (issue #28)
     wired the same way — optional so the store-free paths leave ``GET /api/leases``
+    answering 503 rather than pretending.
+
+    ``transcripts`` is the store- and filesystem-backed transcript read (issue #29),
+    wired the same way — optional so the store-free paths leave the transcript route
     answering 503 rather than pretending.
     """
     log = get_logger("blizzard.runner")
@@ -75,6 +86,8 @@ def create_app(
     app.state.clock = SystemClock() if runner_store is not None else None
     # The panel's derived-lease-state read (issue #28) — hub-free by construction.
     app.state.leases = leases
+    # The panel's transcript read (issue #29) — hub-free, filesystem-backed.
+    app.state.transcripts = transcripts
 
     # API routers first, so /api/* always wins over the web mount at /.
     app.include_router(health_router)
@@ -83,6 +96,7 @@ def create_app(
     app.include_router(session_end_router)
     app.include_router(asks_router)
     app.include_router(leases_router)
+    app.include_router(transcripts_router)
     # The PM-item pass-through proxy (D-084): a build worker reads its issue through
     # this route, which forwards to the hub — the worker never crosses a layer.
     app.include_router(pm_items_router)
@@ -131,6 +145,15 @@ def build_hosted_app(config: RunnerConfig) -> FastAPI:
     # The panel's derived-lease-state read (issue #28) — ``stale_after`` is left at its
     # default (``HEARTBEAT_STALENESS_THRESHOLD``) so the panel and REAP never desync.
     leases = LocalLeaseService(store=runner_store, clock=SystemClock(), process=LinuxProcessProbe())
+    # The panel's transcript read (issue #29). ``transcripts_root`` empty means
+    # ``~/.claude/projects`` (Claude Code's own default) — resolved here, once, never
+    # inside the adapter (``config.py``'s standing comment).
+    projects_root = config.transcripts_root or str(Path.home() / ".claude" / "projects")
+    error_factory = TranscriptErrorFactory(get_logger("blizzard.runner.transcripts"))
+    transcript_repository = JsonlTranscriptRepository(projects_root, error_factory)
+    transcripts = LocalTranscriptService(
+        store=runner_store, transcripts=transcript_repository, workspace_root=config.workspace_root
+    )
     return create_app(
         config,
         readiness=readiness,
@@ -138,11 +161,10 @@ def build_hosted_app(config: RunnerConfig) -> FastAPI:
         harness=harness,
         runner_store=runner_store,
         leases=leases,
+        transcripts=transcripts,
     )
 
 
 def create_app_for_export() -> FastAPI:
     """Build the app with throwaway config for OpenAPI export (no store, no dirs)."""
-    from pathlib import Path
-
     return create_app(RunnerConfig(root=Path("."), db_url="sqlite://"))

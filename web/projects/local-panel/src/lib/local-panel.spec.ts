@@ -203,6 +203,138 @@ describe('LocalPanel', () => {
     }
   });
 
+  // The row-select shell (issue #29 C1) plus the real transcript panel it now
+  // drives (issue #29 slice C). `PM_ITEMS_ROUTE`/`/api/leases` stub every read
+  // the panel needs; transcript reads are stubbed per-test below.
+  describe('selection (issue #29)', () => {
+    it('shows the SELECT AN AGENT placeholder before anything is selected', async () => {
+      stub = stubRunnerClient((method, path) => (method === 'GET' && path === '/api/leases' ? { items: [] } : {}));
+      await setUp();
+      const fixture = TestBed.createComponent(LocalPanel);
+      await settle(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector('[data-testid="transcript-empty"]')?.textContent).toContain('SELECT AN AGENT');
+    });
+
+    it('marks a row selected on click and drives the transcript panel off that selection', async () => {
+      stub = stubRunnerClient((method, path) => {
+        if (method === 'GET' && path === '/api/leases') {
+          return { items: [LEASE(), LEASE({ lease_id: 'L-905', chunk_id: 'C-126' })] };
+        }
+        if (method === 'GET' && path === '/api/leases/L-905/transcript') {
+          return { lease_id: 'L-905', session_id: null, available: false, reason: 'spawning', truncated: false, turns: [] };
+        }
+        return {};
+      });
+      await setUp();
+      const fixture = TestBed.createComponent(LocalPanel);
+      await settle(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+
+      const rows = el.querySelectorAll('[data-testid="agent-row"]');
+      expect(rows[0].classList.contains('selected')).toBe(false);
+      expect(rows[1].classList.contains('selected')).toBe(false);
+
+      (rows[1] as HTMLElement).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await settle(fixture);
+
+      const rowsAfter = el.querySelectorAll('[data-testid="agent-row"]');
+      expect(rowsAfter[0].classList.contains('selected')).toBe(false);
+      expect(rowsAfter[1].classList.contains('selected')).toBe(true);
+      // The placeholder is gone; the transcript panel took over on the selection.
+      expect(el.querySelector('[data-testid="transcript-empty"]')).toBeNull();
+      expect(el.querySelector('[data-testid="transcript-spawning"]')?.textContent).toContain('AGENT STARTING');
+      expect(stub.forRoute('/api/leases/L-905/transcript', 'GET')).toHaveLength(1);
+    });
+
+    it('moves the selected class to the newly-clicked row — exactly one row selected at a time', async () => {
+      stub = stubRunnerClient((method, path) =>
+        method === 'GET' && path === '/api/leases'
+          ? { items: [LEASE(), LEASE({ lease_id: 'L-905', chunk_id: 'C-126' })] }
+          : {},
+      );
+      await setUp();
+      const fixture = TestBed.createComponent(LocalPanel);
+      await settle(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+      const rows = () => el.querySelectorAll('[data-testid="agent-row"]');
+
+      (rows()[0] as HTMLElement).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await settle(fixture);
+      expect(rows()[0].classList.contains('selected')).toBe(true);
+      expect(rows()[1].classList.contains('selected')).toBe(false);
+
+      (rows()[1] as HTMLElement).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await settle(fixture);
+      expect(rows()[0].classList.contains('selected')).toBe(false);
+      expect(rows()[1].classList.contains('selected')).toBe(true);
+    });
+  });
+
+  // ★ Closed rows (issue #29 slice C) — one list, closed leases below
+  // active ones in server order, with a single divider drawn between the blocks.
+  describe('closed leases', () => {
+    it('renders a closed lease as the same fleet-agent-row, below the active ones, with one divider', async () => {
+      stub = stubRunnerClient((method, path) =>
+        method === 'GET' && path === '/api/leases'
+          ? {
+              items: [
+                LEASE({ lease_id: 'L-901', chunk_id: 'C-125', state: 'running' }),
+                LEASE({
+                  lease_id: 'L-899',
+                  chunk_id: 'C-118',
+                  state: 'closed',
+                  closed_at: '2026-07-16T11:30:00+00:00',
+                  closure_reason: 'failed',
+                  environment_id: null,
+                  workdir: null,
+                }),
+              ],
+            }
+          : {},
+      );
+      await setUp();
+      const fixture = TestBed.createComponent(LocalPanel);
+      await settle(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+
+      const rows = el.querySelectorAll('[data-testid="agent-row"]');
+      expect(rows).toHaveLength(2);
+      expect(rows[0].getAttribute('data-lease-id')).toBe('L-901');
+      expect(rows[1].getAttribute('data-lease-id')).toBe('L-899');
+      expect(rows[1].textContent).toContain('CLOSED');
+      expect(rows[1].textContent).toContain('closed · failed');
+      expect(el.querySelectorAll('[data-testid="closed-divider"]')).toHaveLength(1);
+    });
+
+    it('draws no divider when every lease is active', async () => {
+      stub = stubRunnerClient((method, path) =>
+        method === 'GET' && path === '/api/leases' ? { items: [LEASE()] } : {},
+      );
+      await setUp();
+      const fixture = TestBed.createComponent(LocalPanel);
+      await settle(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelectorAll('[data-testid="closed-divider"]')).toHaveLength(0);
+    });
+
+    it('draws no divider when every lease is closed — nothing above the block to divide from', async () => {
+      stub = stubRunnerClient((method, path) =>
+        method === 'GET' && path === '/api/leases'
+          ? { items: [LEASE({ state: 'closed', closed_at: '2026-07-16T11:30:00+00:00', closure_reason: 'transitioned' })] }
+          : {},
+      );
+      await setUp();
+      const fixture = TestBed.createComponent(LocalPanel);
+      await settle(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelectorAll('[data-testid="closed-divider"]')).toHaveLength(0);
+    });
+  });
+
   // Two agents on one chunk is a real shape (a chunk's build and review leases can
   // both be active), and it is the case that proves the "one query per *distinct*
   // chunk id" claim is TanStack cache-key dedup rather than an artifact of every

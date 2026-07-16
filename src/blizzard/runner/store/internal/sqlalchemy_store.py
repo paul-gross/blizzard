@@ -20,6 +20,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.runner.store.repository import (
     AskRecord,
     BufferedFact,
+    ClosedLeaseRecord,
     EnvBindingRecord,
     IWriteRunnerStore,
     LeaseRecord,
@@ -122,6 +123,24 @@ class SqlAlchemyRunnerStore:
         )
         rows = self._all(stmt)
         return self._row_to_lease(rows[0]) if rows else None
+
+    def lease(self, lease_id: str) -> LeaseRecord | None:
+        stmt = self._lease_select().where(leases.c.lease_id == lease_id)
+        rows = self._all(stmt)
+        return self._row_to_lease(rows[0]) if rows else None
+
+    def list_closed_leases(self, limit: int) -> list[ClosedLeaseRecord]:
+        stmt = (
+            self._lease_select()
+            .add_columns(lease_closures.c.reason, lease_closures.c.closed_at)
+            .join(lease_closures, lease_closures.c.lease_id == leases.c.lease_id)
+            .order_by(lease_closures.c.closed_at.desc())
+            .limit(limit)
+        )
+        return [
+            ClosedLeaseRecord(lease=self._row_to_lease(r), reason=str(r.reason), closed_at=r.closed_at)
+            for r in self._all(stmt)
+        ]
 
     def latest_heartbeat(self, lease_id: str) -> datetime | None:
         stmt = select(func.max(heartbeats.c.beat_at)).where(heartbeats.c.lease_id == lease_id)

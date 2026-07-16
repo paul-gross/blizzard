@@ -122,6 +122,28 @@ def test_workspace_prompt_env_seeds_scaffold(tmp_path: Path, monkeypatch: pytest
 
 
 @pytest.mark.unit
+def test_transcripts_root_defaults_empty_and_round_trips(tmp_path: Path) -> None:
+    # Empty on a fresh scaffold — resolved to ~/.claude/projects at the composition
+    # root (issue #29), never here; a configured value round-trips through to_toml.
+    root = tmp_path / "runner"
+    root.mkdir()
+    assert RunnerConfig.scaffold(root).transcripts_root == ""
+
+    edited = RunnerConfig(
+        root=root, db_url=RunnerConfig.default_db_url(root), transcripts_root="/custom/claude/projects"
+    )
+    (root / "blizzard-runner.toml").write_text(edited.to_toml())
+    reloaded = RunnerConfig.load(root)
+    assert reloaded.transcripts_root == "/custom/claude/projects"
+
+
+@pytest.mark.unit
+def test_transcripts_root_env_seeds_scaffold(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BZ_TRANSCRIPTS_ROOT", "/seeded/claude/projects")
+    assert RunnerConfig.scaffold(tmp_path).transcripts_root == "/seeded/claude/projects"
+
+
+@pytest.mark.unit
 def test_missing_workspace_prompt_file_raises(tmp_path: Path) -> None:
     from blizzard.runner.config import ConfigError
 

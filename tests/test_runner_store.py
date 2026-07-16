@@ -6,7 +6,7 @@ assert the SQL derivations the loop relies on, against a real tmp sqlite store.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -57,6 +57,67 @@ def test_minted_lease_is_active_until_closed(tmp_path):  # type: ignore[no-untyp
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
     assert store.list_active_leases() == []
     assert store.active_lease_for_chunk("ch_1") is None
+
+
+@pytest.mark.component
+def test_lease_spans_closure_where_active_lease_does_not(tmp_path):  # type: ignore[no-untyped-def]
+    """``lease()`` (issue #29) is the closure-spanning read ``active_lease()`` is *not*
+    — a transcript outlives its lease, so the read that serves it must too."""
+    store = _store(tmp_path)
+    _mint(store)
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
+
+    assert store.active_lease("lease_1") is None
+    closed = store.lease("lease_1")
+    assert closed is not None
+    assert closed.lease_id == "lease_1"
+
+
+@pytest.mark.component
+def test_lease_returns_none_for_an_unknown_id(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    assert store.lease("no-such-lease") is None
+
+
+@pytest.mark.component
+def test_list_closed_leases_orders_newest_first_and_respects_limit(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _mint(store, chunk="ch_1", lease="lease_1")
+    _mint(store, chunk="ch_2", lease="lease_2")
+    _mint(store, chunk="ch_3", lease="lease_3")
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW)
+    store.record_closure(
+        lease_id="lease_2",
+        chunk_id="ch_2",
+        node_id="nd_build",
+        reason="failed",
+        closed_at=_NOW + timedelta(minutes=5),
+    )
+    store.record_closure(
+        lease_id="lease_3",
+        chunk_id="ch_3",
+        node_id="nd_build",
+        reason="escalated",
+        closed_at=_NOW + timedelta(minutes=10),
+    )
+
+    closed = store.list_closed_leases(limit=20)
+    assert [c.lease.lease_id for c in closed] == ["lease_3", "lease_2", "lease_1"]
+    assert closed[0].reason == "escalated"
+    assert closed[0].closed_at == _NOW + timedelta(minutes=10)
+
+    limited = store.list_closed_leases(limit=2)
+    assert [c.lease.lease_id for c in limited] == ["lease_3", "lease_2"]
+
+
+@pytest.mark.component
+def test_list_closed_leases_excludes_active_leases(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _mint(store, chunk="ch_1", lease="lease_1")
+    _mint(store, chunk="ch_2", lease="lease_2")
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="reaped", closed_at=_NOW)
+
+    assert [c.lease.lease_id for c in store.list_closed_leases(limit=20)] == ["lease_1"]
 
 
 @pytest.mark.unit

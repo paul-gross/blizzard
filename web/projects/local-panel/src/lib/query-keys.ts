@@ -15,3 +15,11 @@ export const runnerLeasesKey = ['runner', 'leases'] as const;
 export function runnerChunkPmItemsKey(chunkId: string): readonly unknown[] {
   return ['runner', 'chunk', chunkId, 'pm-items'];
 }
+
+/**
+ * One lease's transcript read (issue #29), keyed by lease id — switching the
+ * selected row is a distinct cache entry, never invalidated by the leases poll.
+ */
+export function runnerTranscriptKey(leaseId: string): readonly unknown[] {
+  return ['runner', 'lease', leaseId, 'transcript'];
+}

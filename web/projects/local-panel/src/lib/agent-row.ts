@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import type { runnerApi } from 'fleet';
 
 import { injectChunkTitleQuery } from './chunk-title.query';
@@ -40,15 +40,29 @@ function formatHeartbeatAge(deltaMs: number): string {
  * empty items, a per-pointer forge failure) collapses to "render nothing extra";
  * the row itself, and the panel around it, are never aware anything failed.
  *
- * `data-lease-id` is a stable hook for #29 to select a row by; deliberately no
- * `(select)` output or `role="button"` yet — an affordance with no target is dead
- * code until #29 gives it one.
+ * `data-lease-id` remains a stable hook for the e2e tier to select a row by
+ * (`bzh:sweep-release-only-tiers` — `data-*` is the sanctioned e2e seam). The row is itself the
+ * selection affordance for #29: `role="button"` + `tabindex="0"` make it a
+ * keyboard-reachable target, `(click)`/Enter/Space all emit {@link selectLease}
+ * with this row's `lease_id`, and the `selected` input lets a container mark
+ * it current via `[class.selected]`. #29's transcript panel is the consumer;
+ * this row only ever emits its own identity, never reaches for the panel.
  */
 @Component({
   selector: 'fleet-agent-row',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="lease c-row" data-testid="agent-row" [attr.data-lease-id]="agent().lease_id">
+    <div
+      class="lease c-row"
+      data-testid="agent-row"
+      [attr.data-lease-id]="agent().lease_id"
+      [class.selected]="selected()"
+      role="button"
+      tabindex="0"
+      (click)="onSelect()"
+      (keydown.enter)="onSelect($event)"
+      (keydown.space)="onSelect($event)"
+    >
       <div class="l1">
         <span class="lid">
           {{ agent().lease_id }} <small>· {{ agent().chunk_id }} · epoch {{ agent().epoch }}</small>
@@ -68,6 +82,9 @@ function formatHeartbeatAge(deltaMs: number): string {
       <div class="l2">
         node <b>{{ agent().node_name }}</b> · env <b>{{ agent().environment_id ?? '—' }}</b> · pid
         <b>{{ agent().pid ?? '—' }}</b> · session <b>{{ agent().session_id ?? '—' }}</b>
+        @if (closureLabel(); as label) {
+          · <span data-testid="agent-closure">{{ label }}</span>
+        }
       </div>
     </div>
   `,
@@ -80,6 +97,17 @@ function formatHeartbeatAge(deltaMs: number): string {
     .lease {
       padding: 5px 8px;
       border-bottom: 1px solid var(--line);
+      cursor: pointer;
+    }
+    .lease:hover {
+      background: var(--panel-deep);
+    }
+    .lease.selected {
+      background: var(--bezel-hi);
+    }
+    .lease:focus-visible {
+      outline: 1px solid var(--cyan);
+      outline-offset: -1px;
     }
     .l1 {
       display: flex;
@@ -121,6 +149,9 @@ function formatHeartbeatAge(deltaMs: number): string {
     .st-exited {
       color: var(--label-dim);
     }
+    .st-closed {
+      color: var(--label-dim);
+    }
     .hb-age {
       width: 46px;
       text-align: right;
@@ -159,6 +190,24 @@ export class AgentRow {
   /** The lease this row renders, incl. the server-derived `state` (issue #28). */
   readonly agent = input.required<runnerApi.LeaseView>();
 
+  /** Whether a container considers this row the current selection (issue #29). */
+  readonly selected = input(false);
+
+  /**
+   * Emits this row's `lease_id` on click, Enter, or Space (issue #29). Named
+   * `selectLease`, matching `board-shell.ts`'s `selectChunk` — the house
+   * convention for a row-select output — rather than the native `select`
+   * DOM event name.
+   */
+  readonly selectLease = output<string>();
+
+  /** Emits {@link selectLease}; `event` is only present for the keyboard bindings, where it is
+   * prevented so Space doesn't also scroll the page. */
+  protected onSelect(event?: Event): void {
+    event?.preventDefault();
+    this.selectLease.emit(this.agent().lease_id);
+  }
+
   /**
    * The severable title read (issue #28, decision 1) — one query per row, keyed
    * on this row's own `chunk_id`. Never awaited, never branched on for
@@ -185,13 +234,23 @@ export class AgentRow {
   /** The first pm-item's title, or empty when unresolved/failed/absent. */
   protected readonly titleText = computed<string>(() => this.titleQuery.data()?.items?.[0]?.title ?? '');
 
-  /** `st-running` / `st-stale` / `st-parked` / `st-spawning` / `st-exited`. */
+  /** `st-running` / `st-stale` / `st-parked` / `st-spawning` / `st-exited` / `st-closed`. */
   protected readonly stateClass = computed(() => `st-${this.agent().state}`);
 
   protected readonly stateLabel = computed(() => this.agent().state.toUpperCase());
 
   protected readonly isStale = computed(() => this.agent().state === 'stale');
   protected readonly isParked = computed(() => this.agent().state === 'parked');
+
+  /**
+   * `closed · failed` etc. — the closure fact's `reason` (issue #29 slice C),
+   * rendered alongside node/env/pid/session on `.l2`; empty for any
+   * non-closed row (`closure_reason` is `null` iff active).
+   */
+  protected readonly closureLabel = computed<string>(() => {
+    const reason = this.agent().closure_reason;
+    return reason ? `closed · ${reason}` : '';
+  });
 
   /**
    * `-34s` / `-12m` / `-1h04m` from `last_heartbeat_at` vs `Date.now()`.
@@ -201,6 +260,11 @@ export class AgentRow {
    * would claim a heartbeat fact that doesn't exist yet, so this renders `—`
    * instead. The backend's own `created_at` fallback (`derive_lease_state`) is a
    * *reaping* rule, not a heartbeat fact, and must not leak into this label.
+   *
+   * A `closed` row renders `—` for the same reason (issue #29 slice C): a
+   * last-beat age on a finished agent implies staleness that no longer means
+   * anything, and a closed lease's `pid` may have been reused, so trusting
+   * anything liveness-shaped about it is wrong.
    *
    * Liveness is decided where both instants share one clock — the hub, via the
    * server-derived `state` this row already renders (`agent-state`, D-105 admits a
@@ -214,6 +278,7 @@ export class AgentRow {
    * leaving the adjacent `state` to carry the meaning instead of guessing.
    */
   protected readonly heartbeatAge = computed<string>(() => {
+    if (this.agent().state === 'closed') return '—';
     const lastHeartbeatAt = this.agent().last_heartbeat_at;
     if (lastHeartbeatAt === null) return '—';
     const beatMs = Date.parse(lastHeartbeatAt);
