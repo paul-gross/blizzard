@@ -135,6 +135,34 @@ _RESUME_SWEEP = _select(_RESUME_POINTS, _RESUME_CI_SUBSET)
 _ABANDON_SWEEP = _select(_ABANDON_POINTS, _ABANDON_CI_SUBSET)
 
 
+def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every family prefix in the registry yields a non-empty CI-profile selection.
+
+    ``_select`` only asserts a *named* CI-subset point still exists (catching a rename) — it
+    never asserts the converse. The three named subsets (``_CI_SUBSET`` / ``_RESUME_CI_SUBSET`` /
+    ``_ABANDON_CI_SUBSET``) are closed allowlists, so a new point added to an already-partitioned
+    family (a fourth ``resume.*`` boundary, a second ``abandon.*`` one) is silently absent from
+    CI: those families are unreachable by the generic sweep, so the new point gets zero coverage,
+    with no failure to say so. This makes the "a new family never ships with zero CI coverage"
+    claim (see ``_ABANDON_CI_SUBSET`` above) mechanical rather than aspirational.
+
+    Forces the CI profile via ``monkeypatch`` rather than trusting the ambient environment, so
+    this assertion holds whether it is run standalone or under ``mise run crash-sweep-ci`` — a
+    fast, registry-only computation, not a sweep run, independent of ``crash_env`` and
+    ``BLIZZARD_CRASH_SWEEP``.
+    """
+    monkeypatch.setenv("BLIZZARD_CRASH_SWEEP_CI", "1")
+    families = {p.split(".", 1)[0] for p in _ALL_POINTS}
+    assert families, "the crash-point registry is empty — nothing to partition"
+    ci_selected = (
+        set(_select(_GENERIC_POINTS, _CI_SUBSET))
+        | set(_select(_RESUME_POINTS, _RESUME_CI_SUBSET))
+        | set(_select(_ABANDON_POINTS, _ABANDON_CI_SUBSET))
+    )
+    uncovered = {family for family in families if not any(p.startswith(f"{family}.") for p in ci_selected)}
+    assert not uncovered, f"registry families with zero CI-subset coverage: {sorted(uncovered)}"
+
+
 def _is_hub_point(point: str) -> bool:
     """Deliver points fire inside the hub's synchronous coordinator; the rest in the runner."""
     return point.startswith("deliver.")

@@ -144,9 +144,11 @@ BLIZZARD_CRASH_SWEEP=1 uv run pytest \
   tests/crash/test_kill9_sweep.py::test_graceful_restart_resumes_in_flight_session
 ```
 
-The full sweep — the same recovery asserted at all 25 crash-point-registry
-boundaries, including a `kill -9` *mid-RESUME* at each graceful-restart boundary
-(`test_kill9_at_resume_crash_point`) — is `mise run crash-sweep`, and the tag
+The full sweep — the same recovery asserted at every boundary the crash-point
+registry enumerates (`discover_crash_points`; see `bzh:crash-point-registry`), including
+a `kill -9` *mid-RESUME* at each graceful-restart boundary
+(`test_kill9_at_resume_crash_point`) and mid-abandon at each detach boundary
+(`test_kill9_at_abandon_crash_point`) — is `mise run crash-sweep`, and the tag
 `release` workflow runs it in CI. The unit files themselves are guarded by
 `tests/test_systemd_units.py`, which holds their `ExecStart` to the real shipped
 entry points and asserts the `Restart=` and boot-enable directives this contract

@@ -60,7 +60,12 @@ class FakeHub:
     seq without re-applying, mirroring the hub's idempotency contract.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, default_runner_id: str = "r1") -> None:
+        # The runner id the unscripted `get_chunk` fallback's route reports as holding the
+        # chunk. `make_context` sets this to match whatever `LoopConfig.runner_id` the context
+        # is actually wired to (default or explicit), so "the route is ours" stays true by
+        # construction rather than by two literals happening to agree (blizzard#38).
+        self.default_runner_id = default_runner_id
         self.queue: list[QueuePeekEntry] = []
         self.claim_outcome: RouteClaimOutcome | None = None
         self.apply_responses: list[ApplyResponse] = []
@@ -137,7 +142,7 @@ class FakeHub:
             status=ChunkStatus.DELIVERING,
             current_node_id="deliver",
             latest_epoch=1,
-            route=RouteView(runner_id="r1", workspace_id="ws1", environment_ids=[]),
+            route=RouteView(runner_id=self.default_runner_id, workspace_id="ws1", environment_ids=[]),
         )
 
     def get_question(self, question_id: str) -> QuestionView:
@@ -268,6 +273,11 @@ def make_context(
     config: LoopConfig | None = None,
 ) -> LoopContext:
     """Assemble a :class:`LoopContext` from a real store and injected fakes."""
+    resolved_config = config if config is not None else LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1)
+    # Derived, not duplicated (blizzard#38): the fake's unscripted `get_chunk` route always
+    # reports the runner this context is actually for, so a test that passes a custom
+    # `LoopConfig(runner_id=...)` can never have every lease silently read as reassigned.
+    hub.default_runner_id = resolved_config.runner_id
     _hub: IHubClient = hub
     _provider: IWorkspaceProvider = provider
     _harness: IHarnessAdapter = harness
@@ -281,7 +291,7 @@ def make_context(
         harness=_harness,
         process=_probe,
         worktree_git=_wt,
-        config=config if config is not None else LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1),
+        config=resolved_config,
     )
 
 

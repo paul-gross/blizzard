@@ -25,11 +25,11 @@ import pytest
 
 from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.loop.steps import pull
+from blizzard.runner.loop.steps import pull, reap
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.store.repository import NewLease
 from blizzard.wire.chunk import ChunkDetail, RouteView
-from blizzard.wire.facts import LEASE_MINTED
+from blizzard.wire.facts import ESCALATION_RECORDED, LEASE_MINTED
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -66,6 +66,25 @@ def _seed_running_lease(  # type: ignore[no-untyped-def]
         )
     )
     store.record_spawn(lease, pid=pid, process_start_time=start, session_id=session, spawned_at=_NOW)
+    store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+
+
+def _seed_orphan_lease(store, *, chunk="ch_1", lease="lease_1", retries_max=0):  # type: ignore[no-untyped-def]
+    """A lease minted but never spawned (a crash in FILL's mint->spawn window) — REAP's own
+    orphan case, with no retry budget left so the very first reap attempt exhausts it."""
+    store.record_lease(
+        NewLease(
+            lease_id=lease,
+            chunk_id=chunk,
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=1,
+            runner_id="r1",
+            retries_max=retries_max,
+            created_at=_NOW,
+        )
+    )
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
 
@@ -256,6 +275,58 @@ def test_pull_abandons_before_it_flushes(tmp_path):  # type: ignore[no-untyped-d
     # And the abandon's effects (kill + release + close) are already in place.
     assert probe.killed == [100]
     assert provider.released == ["e1"]
+    assert store.active_lease("lease_1") is None
+
+
+# --------------------------------------------------------------------------- #
+# REAP races ahead of PULL's own detach sweep (blizzard#38 slice 5)
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.unit
+def test_reap_abandons_instead_of_escalating_a_detached_chunk(tmp_path):  # type: ignore[no-untyped-def]
+    """Tick order is REAP -> RESUME -> PULL -> FILL -> ADVANCE, so a lease whose retry budget
+    REAP exhausts can reach the requeue-or-escalate decision *before* PULL's own
+    ``_release_detached`` ever gets to ask the hub about it this tick. If the hub already
+    detached this chunk (the operator released it to ``ready``), escalating anyway would post
+    an ``escalation.recorded`` fact this same tick's flush cannot retract — flipping the chunk
+    back to ``needs_human`` behind the operator's back, and PULL cannot un-post a fact once
+    flushed. REAP's exhausted-budget path must re-ask the same ownership question and abandon
+    in place instead of escalating — the identical outcome PULL would reach later this tick,
+    just without the intervening false escalation."""
+    store = _store(tmp_path)
+    _seed_orphan_lease(store, retries_max=0)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = _detached_chunk()  # the operator detached it before this tick started
+    provider = FakeProvider({"e1": "/ws/e1"})
+    probe = FakeProbe()
+    ctx = _ctx(store, hub, provider=provider, probe=probe)
+
+    reap(ctx)
+
+    assert store.pending_outbound() == []  # no escalation.recorded fact posted
+    assert provider.released == ["e1"]  # abandoned — envs released, same as PULL's own detach path
+    assert store.active_lease("lease_1") is None  # lease closed
+    assert store.latest_epoch("ch_1") == 1  # no requeue, no new lease minted
+
+
+@pytest.mark.unit
+def test_reap_still_escalates_an_exhausted_lease_that_is_still_ours(tmp_path):  # type: ignore[no-untyped-def]
+    """The companion case: an exhausted-budget lease whose chunk the hub still routes here
+    escalates exactly as before — the new ownership check must not suppress a genuine
+    escalation, only one that would race ahead of a detach."""
+    store = _store(tmp_path)
+    _seed_orphan_lease(store, retries_max=0)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = _routed_chunk(status=ChunkStatus.RUNNING)  # still ours
+    provider = FakeProvider({"e1": "/ws/e1"})
+    probe = FakeProbe()
+    ctx = _ctx(store, hub, provider=provider, probe=probe)
+
+    reap(ctx)
+
+    pending = store.pending_outbound()
+    assert len(pending) == 1 and pending[0].kind == ESCALATION_RECORDED
     assert store.active_lease("lease_1") is None
 
 

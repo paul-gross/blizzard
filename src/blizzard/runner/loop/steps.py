@@ -106,13 +106,20 @@ _CP_RESUME_BEFORE = crashpoint("resume.before-reattach", "entered RESUME with ma
 _CP_RESUME_AFTER_KILL = crashpoint("resume.after-kill.before-reattach", "survivor killed; session not yet re-attached")
 _CP_RESUME_AFTER = crashpoint("resume.after-reattach", "session re-attached under the same lease; intent cleared")
 
-# ABANDON — the reassigned/detached release (`_abandon_reassigned`), reached from either RESUME
-# (a chunk reassigned/detached while the runner was down) or, since D-088's live-tick detach,
-# PULL's `_release_detached` (a chunk reassigned/detached while the runner was up). A crash here
-# leaves a lease with a dead pid and (per D-069) a heartbeat fresh at crash time, so the startup
-# scan marks it for resume, not stall — RESUME then re-asks the hub, finds it still not ours, and
-# re-runs this same abandon idempotently (killing an already-dead pid is a no-op; `_release_all`
-# and `record_closure` are re-runnable), and the chunk lands exactly once.
+# ABANDON — the reassigned/detached release (`_abandon_reassigned`), reached from RESUME (a chunk
+# reassigned/detached while the runner was down), PULL's `_release_detached` (reassigned/detached
+# while the runner was up, since D-088's live-tick detach), or REAP's `_fail_attempt` escalate
+# guard (an exhausted-retries lease the hub already moved elsewhere, since blizzard#38). A crash
+# here leaves a lease with a dead pid, environments not yet released, and no closure recorded, so
+# the lease is still active at the next startup. That next tick's recovery differs by how the
+# lease got here: a lease `mark_crash_resume_intents` marks for resume — session-bearing, not
+# parked/pending-submission/session-ended, and not stale-heartbeat as measured at crash time —
+# is re-asked by RESUME, finds it still not ours, and re-runs this same abandon idempotently. A
+# lease in one of those skipped states gets no resume intent, so RESUME never revisits it — but
+# PULL's own `_release_detached` re-scans *every* active lease each tick, unconditional on those
+# states, and reaches the identical re-ask; it is the stronger recovery story of the two, and the
+# one that actually covers every path into this function (killing an already-dead pid is a
+# no-op; `_release_all` and `record_closure` are re-runnable), and the chunk lands exactly once.
 _CP_ABANDON_AFTER_KILL = crashpoint(
     "abandon.after-kill.before-release", "detached worker killed; environments not yet released"
 )
@@ -194,13 +201,13 @@ def reap(ctx: LoopContext) -> None:
             continue
         if lease.pid is None or lease.session_id is None:
             _log.info("reaping unspawned lease", lease_id=lease.lease_id, chunk_id=lease.chunk_id)
-            _fail_attempt(ctx, lease, reason=_REAPED)
+            _fail_attempt(ctx, lease, reason=_REAPED, via="reap")
             continue
         if not ctx.process.is_alive(lease.pid, lease.process_start_time or ""):
             continue  # exited — ADVANCE's (exit-is-done, D-055)
         if _is_heartbeat_stale(ctx.store, lease, now):
             _log.info("reaping stalled worker", lease_id=lease.lease_id, chunk_id=lease.chunk_id, pid=lease.pid)
-            _fail_attempt(ctx, lease, reason=_REAPED)
+            _fail_attempt(ctx, lease, reason=_REAPED, via="reap")
         # A live, beating worker runs on.
     _CP_REAP_AFTER.reached()
 
@@ -376,7 +383,7 @@ def _resume_marked_lease(ctx: LoopContext, lease: LeaseRecord) -> None:
     if detail.status == ChunkStatus.RUNNING and ours:
         _resume_in_place(ctx, lease)
     else:
-        _abandon_reassigned(ctx, lease)
+        _abandon_reassigned(ctx, lease, via="resume")
 
 
 def _resume_in_place(ctx: LoopContext, lease: LeaseRecord) -> None:
@@ -412,7 +419,7 @@ def _resume_in_place(ctx: LoopContext, lease: LeaseRecord) -> None:
         _log.warning(
             "marked lease has no warm env/session — abandoning", chunk_id=lease.chunk_id, lease_id=lease.lease_id
         )
-        _abandon_reassigned(ctx, lease, killed=True)
+        _abandon_reassigned(ctx, lease, killed=True, via="resume")
         return
     # The resume-with-message → record_spawn gap is the un-armable spawn-record window (see the
     # docstring): the same one SPAWN and answer-resume carry, not a new one this step introduces.
@@ -435,24 +442,27 @@ def _resume_in_place(ctx: LoopContext, lease: LeaseRecord) -> None:
     )
 
 
-def _abandon_reassigned(ctx: LoopContext, lease: LeaseRecord, *, killed: bool = False) -> None:
+def _abandon_reassigned(ctx: LoopContext, lease: LeaseRecord, *, killed: bool = False, via: str) -> None:
     """Release a chunk the hub reassigned or detached (D-088) — reached from restart-resume or a live tick.
 
     No epoch bump and no requeue: the chunk is another runner's now (or detached to ``ready``),
     so re-asserting authority over it would be wrong — the runner learns of the detach, whether
     over its own restart or on a live tick, and does exactly what D-088 asks: kill the worker,
     release the environments. The lease is closed ``released`` (not a failed attempt — it never
-    gets to run) and the intent is cleared."""
+    gets to run) and the intent is cleared. ``via`` names which caller reached the ownership
+    check that led here (``"resume"`` — restart-resume, ``"pull"`` — a live tick's
+    :func:`_release_detached`, ``"reap"`` — an escalation REAP suppressed in favor of this
+    abandon, see :func:`_fail_attempt`) so the log line below does not overclaim a single cause."""
     now = ctx.clock.now()
     if lease.pid is not None and not killed:
         ctx.process.kill(lease.pid)
-    _CP_ABANDON_AFTER_KILL.reached()  # worker killed; envs not yet released — recovery is RESUME's own path
+    _CP_ABANDON_AFTER_KILL.reached()  # worker killed; envs not yet released — recovery is the next tick's re-scan
     _release_all(ctx, lease.chunk_id)
     ctx.store.record_closure(
         lease_id=lease.lease_id, chunk_id=lease.chunk_id, node_id=lease.node_id, reason=_RELEASED, closed_at=now
     )
     ctx.store.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
-    _log.info("abandoned reassigned/detached chunk on restart", chunk_id=lease.chunk_id, lease_id=lease.lease_id)
+    _log.info("abandoned reassigned/detached chunk", chunk_id=lease.chunk_id, lease_id=lease.lease_id, via=via)
 
 
 # --------------------------------------------------------------------------- #
@@ -519,22 +529,35 @@ def _release_detached(ctx: LoopContext) -> None:
     :func:`_abandon_reassigned`: kill the worker, release every environment, close the lease
     ``released`` with no epoch bump, no requeue fact, no retry consumed.
 
-    Runs before the flush, deliberately: killing the detached chunk's worker as early in the tick
-    as possible is the only lever the runner has on the late-write window — between the detach and
-    the chunk's re-claim by some runner, this runner's already-buffered facts for the chunk can
-    still flush and be accepted; only a new lease's floor closes that (D-035/D-044). Killing the
-    worker before the flush narrows the window but cannot purge the buffer:
+    Runs before the flush, deliberately: killing the detached chunk's worker as early **within
+    this step** as possible is the best lever the runner has on the late-write window — between
+    the detach and the chunk's re-claim by some runner, this runner's already-buffered facts for
+    the chunk can still flush and be accepted; only a new lease's floor closes that (D-035/D-044).
+    It is not the earliest point in the *tick* — REAP and RESUME both precede PULL, and REAP's own
+    failed-attempt path (:func:`_fail_attempt`) makes the same ownership check before escalating,
+    so a detach discovered there is abandoned on the spot rather than left for this pass to find.
+    Killing the worker before the flush narrows the window but cannot purge the buffer:
     ``bzh:invariant-checker`` requires a gapless outbound-buffer sequence, so deleting buffered
     facts to close it would trade a durable invariant for a window the fence closes anyway. This is
     requeue's existing window (D-067 releases the route with no bump too) — not engineered around
     here."""
     for lease in ctx.store.list_active_leases():
-        try:
-            detail = ctx.hub.get_chunk(lease.chunk_id)
-        except HubClientError:
-            continue  # hub unreachable — last-known directive holds (D-012); keep working
-        if detail.route is None or detail.route.runner_id != ctx.config.runner_id:
-            _abandon_reassigned(ctx, lease)
+        if _reassigned_or_detached(ctx, lease):
+            _abandon_reassigned(ctx, lease, via="pull")
+
+
+def _reassigned_or_detached(ctx: LoopContext, lease: LeaseRecord) -> bool:
+    """True iff the hub no longer routes ``lease``'s chunk to this runner (D-088).
+
+    Unreachable hub → ``False``: last-known directive holds (D-012) — a transport failure is
+    never read as a detach. Shared by :func:`_release_detached` (a live-tick sweep over every
+    active lease) and :func:`_fail_attempt`'s escalate guard (a single lease, checked only on
+    the exhausted-retries path) — the same ownership question, asked at two different rates."""
+    try:
+        detail = ctx.hub.get_chunk(lease.chunk_id)
+    except HubClientError:
+        return False  # hub unreachable — last-known directive holds (D-012); keep working
+    return detail.route is None or detail.route.runner_id != ctx.config.runner_id
 
 
 def flush_outbound(ctx: LoopContext) -> None:
@@ -623,7 +646,7 @@ def _flush_decision(ctx: LoopContext, fact: BufferedFact) -> bool:
         return True  # already parked on an earlier flush whose ack was lost (D-045)
     if response.outcome == ApplyOutcome.FAILURE:
         _log.warning("decision rejected on flush", chunk_id=lease.chunk_id, detail=response.detail or "")
-        _fail_attempt(ctx, lease, reason=_FAILED)
+        _fail_attempt(ctx, lease, reason=_FAILED, via="pull")
         return True
     ctx.store.record_closure(
         lease_id=lease.lease_id,
@@ -643,7 +666,7 @@ def _consume_apply_response(ctx: LoopContext, lease: LeaseRecord, response: Appl
         # attempt failed; requeue or escalate. The chunk never advanced and never
         # entered the merge queue (the hub fenced it before any write, D-007).
         _log.warning("completion rejected on flush", chunk_id=lease.chunk_id, detail=response.detail or "")
-        _fail_attempt(ctx, lease, reason=_FAILED)
+        _fail_attempt(ctx, lease, reason=_FAILED, via="pull")
         return
     now = ctx.clock.now()
     ctx.store.record_closure(
@@ -880,7 +903,7 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
     choice = ctx.harness.parse_verdict(output)
     if choice is None:
         _log.warning("verdict-less judgement — failing attempt", chunk_id=lease.chunk_id, lease_id=lease.lease_id)
-        _fail_attempt(ctx, lease, reason=_FAILED)
+        _fail_attempt(ctx, lease, reason=_FAILED, via="advance")
         return
     _CP_ADV_AFTER_JUDGE.reached()
 
@@ -1080,8 +1103,19 @@ def _spawn_attempt(
     _CP_SPAWN_AFTER_SPAWN.reached()
 
 
-def _fail_attempt(ctx: LoopContext, lease: LeaseRecord, *, reason: str) -> None:
-    """Close a failed attempt, then requeue at the node or escalate per the budget (D-078/D-009)."""
+def _fail_attempt(ctx: LoopContext, lease: LeaseRecord, *, reason: str, via: str) -> None:
+    """Close a failed attempt, then requeue at the node or escalate per the budget (D-078/D-009).
+
+    The exhausted-retries branch checks ownership before escalating (blizzard#38). Tick order is
+    REAP -> RESUME -> PULL -> FILL -> ADVANCE, and PULL's own detach sweep
+    (:func:`_release_detached`) is what abandons a lease the hub no longer routes here — but a
+    caller earlier in the tick (REAP, chiefly) can reach an exhausted retry budget on such a
+    lease first. Escalating anyway would buffer an ``escalation.recorded`` fact this same tick's
+    PULL cannot retract once flushed — unlike the requeue branch, whose fresh, routeless lease is
+    itself caught and abandoned by that later PULL pass, an escalation is a one-way door. So this
+    branch re-asks the same ownership question :func:`_release_detached` asks and, if the chunk is
+    no longer ours, abandons in place (:func:`_abandon_reassigned`) instead of escalating — the
+    same outcome PULL would reach later this tick, without the intervening false escalation."""
     now = ctx.clock.now()
     if lease.pid is not None:
         ctx.process.kill(lease.pid)  # best-effort hygiene; the epoch fence is the guarantee
@@ -1094,11 +1128,14 @@ def _fail_attempt(ctx: LoopContext, lease: LeaseRecord, *, reason: str) -> None:
             lease_id=lease.lease_id, chunk_id=lease.chunk_id, node_id=lease.node_id, reason=reason, closed_at=now
         )
         _requeue(ctx, lease)
-    else:
-        ctx.store.record_closure(
-            lease_id=lease.lease_id, chunk_id=lease.chunk_id, node_id=lease.node_id, reason=_ESCALATED, closed_at=now
-        )
-        _escalate(ctx, lease)
+        return
+    if _reassigned_or_detached(ctx, lease):
+        _abandon_reassigned(ctx, lease, killed=True, via=via)
+        return
+    ctx.store.record_closure(
+        lease_id=lease.lease_id, chunk_id=lease.chunk_id, node_id=lease.node_id, reason=_ESCALATED, closed_at=now
+    )
+    _escalate(ctx, lease)
 
 
 def _adopt_interrupted_claim(ctx: LoopContext, chunk_id: str) -> None:
