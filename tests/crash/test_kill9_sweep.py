@@ -277,7 +277,11 @@ def _ingest_hanging_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: s
     number = issue.json()["number"]
     ingested = hub.post("/api/chunks", json={"pointers": [{"provider": "github", "url": f"{REPO}/issues/{number}"}]})
     assert ingested.status_code == 201, ingested.text
-    return ingested.json()["chunk_id"]
+    chunk_id = ingested.json()["chunk_id"]
+    # Ingest rests not-ready (D-103) — promote so the resume scenarios claim it as before.
+    assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+    assert hub.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
+    return chunk_id
 
 
 def _runner_store(runner_dir: Path) -> tuple[SqlAlchemyRunnerStore, Engine]:
