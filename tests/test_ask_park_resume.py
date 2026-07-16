@@ -55,7 +55,9 @@ def _seed_exited_lease(store):  # type: ignore[no-untyped-def]
             created_at=_NOW,
         )
     )
-    store.record_spawn("lease_1", pid=_HANDLE_PID, process_start_time=_HANDLE_START, session_id="sess-a")
+    store.record_spawn(
+        "lease_1", pid=_HANDLE_PID, process_start_time=_HANDLE_START, session_id="sess-a", spawned_at=_NOW
+    )
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
 
 

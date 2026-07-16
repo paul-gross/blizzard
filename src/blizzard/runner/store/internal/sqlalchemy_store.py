@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
-from sqlalchemy import Engine, and_, func, select
+from sqlalchemy import Engine, and_, func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 
 from blizzard.foundation.logging import get_logger
@@ -30,11 +30,13 @@ from blizzard.runner.store.repository import (
 from blizzard.runner.store.schema import (
     asks,
     binding_releases,
+    daemon_liveness,
     env_bindings,
     heartbeats,
     hub_control,
     lease_closures,
     lease_context,
+    lease_spawns,
     leases,
     outbound_buffer,
     park_facts,
@@ -235,8 +237,24 @@ class SqlAlchemyRunnerStore:
         return {str(r.lease_id) for r in self._all(stmt)}
 
     def session_ended_lease_ids(self) -> set[str]:
-        stmt = select(session_ends.c.lease_id).distinct()
+        newest_spawn = (
+            select(lease_spawns.c.lease_id, func.max(lease_spawns.c.spawned_at).label("spawned_at"))
+            .group_by(lease_spawns.c.lease_id)
+            .subquery()
+        )
+        stmt = (
+            select(session_ends.c.lease_id)
+            .select_from(session_ends.outerjoin(newest_spawn, newest_spawn.c.lease_id == session_ends.c.lease_id))
+            # No spawn fact = a lease minted before 0010: fall back to the unscoped reading, which
+            # over-reports "declared done" and so can only suppress a resume, never invent one.
+            .where(or_(newest_spawn.c.spawned_at.is_(None), session_ends.c.ended_at >= newest_spawn.c.spawned_at))
+            .distinct()
+        )
         return {str(r.lease_id) for r in self._all(stmt)}
+
+    def last_daemon_liveness(self) -> datetime | None:
+        rows = self._all(select(func.max(daemon_liveness.c.alive_at).label("alive_at")))
+        return rows[0].alive_at if rows and rows[0].alive_at is not None else None
 
     # --- writes -------------------------------------------------------------
 
@@ -266,14 +284,32 @@ class SqlAlchemyRunnerStore:
             "lease minted", lease_id=lease.lease_id, chunk_id=lease.chunk_id, node=lease.node_name, epoch=lease.epoch
         )
 
-    def record_spawn(self, lease_id: str, *, pid: int, process_start_time: str, session_id: str) -> None:
+    def record_spawn(
+        self, lease_id: str, *, pid: int, process_start_time: str, session_id: str, spawned_at: datetime
+    ) -> None:
         with self._begin() as conn:
             conn.execute(
                 leases.update()
                 .where(leases.c.lease_id == lease_id)
                 .values(pid=pid, process_start_time=process_start_time, session_id=session_id)
             )
+            # One transaction with the in-place pid rewrite: the spawn generation and the process
+            # it describes are one fact, and a crash between them would leave the two disagreeing.
+            conn.execute(lease_spawns.insert().values(lease_id=lease_id, spawned_at=spawned_at))
         _log.info("worker spawned", lease_id=lease_id, pid=pid, session_id=session_id)
+
+    def record_daemon_liveness(self, *, runner_id: str, alive_at: datetime) -> None:
+        with self._begin() as conn:
+            existing = conn.execute(
+                select(daemon_liveness.c.runner_id).where(daemon_liveness.c.runner_id == runner_id)
+            ).one_or_none()
+            if existing is None:
+                conn.execute(daemon_liveness.insert().values(runner_id=runner_id, alive_at=alive_at))
+            else:
+                conn.execute(
+                    daemon_liveness.update().where(daemon_liveness.c.runner_id == runner_id).values(alive_at=alive_at)
+                )
+        _log.debug("daemon liveness stamped", runner_id=runner_id)
 
     def record_binding(self, *, chunk_id: str, environment_id: str, workdir: str, bound_at: datetime) -> None:
         with self._begin() as conn:

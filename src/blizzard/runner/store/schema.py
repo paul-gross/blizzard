@@ -119,6 +119,27 @@ lease_context = Table(
     Column("recorded_at", DateTime, nullable=False),
 )
 
+# --- Lease spawns (the spawn generation of each attempt — issue #13) ----------
+#
+# 0002's `leases` is frozen and `record_spawn` rewrites its pid/session in place, so
+# the lease alone cannot say *when* its current process was spawned. A lease outlives
+# its sessions — the ask/answer and resume paths re-spawn under the same lease_id and
+# session_id (`_resume_if_answered`, `_resume_in_place`) — so a per-lease fact that is
+# true "forever after" cannot be read as true "of the process running now".
+#
+# Append-only, one row per spawn: the newest `spawned_at` for a lease is its current
+# spawn generation. Startup crash-recovery scopes the session-end check to it, so a
+# session-end left by an *earlier* session of the same lease no longer reads as "this
+# process declared done" and permanently suppresses its resume.
+
+lease_spawns = Table(
+    "lease_spawns",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("lease_id", String, nullable=False),  # the attempt this process was spawned for
+    Column("spawned_at", DateTime, nullable=False),  # injected-clock stamp of the spawn-return
+)
+
 # --- Lease closures (a lease is closed iff a closure fact exists — facts-not-status) -
 #
 # Append-only: an active lease is one with no closure. `reason` distinguishes a
@@ -291,4 +312,25 @@ workspace_prompt = Table(
     Column("workspace_id", String, primary_key=True),
     Column("prompt", Text, nullable=False),
     Column("updated_at", DateTime, nullable=False),
+)
+
+# --- Daemon liveness (when the runner was last known alive — issue #13) -------
+#
+# The crash-time reference startup recovery classifies against. A worker's staleness
+# is "was it still working *when the daemon died*" — but a restart only has the clock
+# at recovery, and `now - last_heartbeat` silently measures `downtime + idle-at-crash`.
+# An outage longer than the staleness threshold would then read every in-flight lease
+# as stalled, defeating the reboot case #13 exists for.
+#
+# The tick stamps this each pass (~30s), so after a crash the last row is when the
+# daemon was last alive — crash time, accurate to one tick. One upserted row per
+# runner, mirroring ``hub_control``'s shape. No row means "never ticked": recovery
+# falls back to the wall clock, which is the pre-#13 reading and only reachable on a
+# store that has never run a tick (so it has no in-flight leases to misjudge).
+
+daemon_liveness = Table(
+    "daemon_liveness",
+    metadata,
+    Column("runner_id", String, primary_key=True),
+    Column("alive_at", DateTime, nullable=False),  # injected-clock stamp of the newest tick
 )

@@ -50,7 +50,7 @@ def test_minted_lease_is_active_until_closed(tmp_path):  # type: ignore[no-untyp
 def test_spawn_facts_populate_pid_and_session(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _mint(store)
-    store.record_spawn("lease_1", pid=999, process_start_time="12345", session_id="sess-a")
+    store.record_spawn("lease_1", pid=999, process_start_time="12345", session_id="sess-a", spawned_at=_NOW)
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None
     assert (lease.pid, lease.process_start_time, lease.session_id) == (999, "12345", "sess-a")

@@ -277,9 +277,18 @@ def mark_crash_resume_intents(store: IWriteRunnerStore, *, process: IProcessProb
     * it recorded **no session-end** — the ``SessionEnd`` hook never fired, so the worker did
       not declare done. A dead pid *with* a session-end is a clean exit ADVANCE judges (the
       acceptance split this issue turns on);
-    * its heartbeat is **not stale** — it was actively working when killed. A worker already
-      stalled at crash time is left to today's reap/verdict-less-fail path and retried per the
-      node's ``retries`` (unchanged) — resuming a wedged session would only wedge it again.
+    * its heartbeat is **not stale** *as measured at crash time* — it was actively working when
+      killed. A worker already stalled at crash time is left to today's reap/verdict-less-fail
+      path and retried per the node's ``retries`` (unchanged) — resuming a wedged session would
+      only wedge it again.
+
+    Staleness is measured against :meth:`last_daemon_liveness` — when the daemon was last known
+    alive — not against the clock at recovery. The question is whether the worker had stopped
+    working *before the daemon died*, and ``now - last_heartbeat`` cannot answer it: at startup
+    that is ``downtime + idle-at-crash``, so any outage past the threshold would read every
+    in-flight lease as stalled and skip it — silently degrading exactly the reboot/OOM cases
+    this issue exists for into the fresh-retry path it exists to prevent. ``now`` remains the
+    fallback for a store that never ticked, which by construction holds no in-flight lease.
 
     Parked (dormant on a question, resumed by its answer) and pending-submission (outcome
     already elicited, awaiting flush) leases are skipped for the same reasons the graceful
@@ -291,6 +300,9 @@ def mark_crash_resume_intents(store: IWriteRunnerStore, *, process: IProcessProb
     parked = store.parked_lease_ids()
     pending = store.pending_submission_lease_ids()
     ended = store.session_ended_lease_ids()
+    # _as_utc: sqlite hands the stamp back naive, and it is about to be subtracted from.
+    last_alive = store.last_daemon_liveness()
+    crashed_at = _as_utc(last_alive) if last_alive is not None else now
     marked = 0
     for lease in store.list_active_leases():
         if lease.pid is None or lease.session_id is None:
@@ -301,7 +313,7 @@ def mark_crash_resume_intents(store: IWriteRunnerStore, *, process: IProcessProb
             continue  # declared done (SessionEnd fired) — ADVANCE judges it (exit-is-done, D-055)
         if process.is_alive(lease.pid, lease.process_start_time or ""):
             continue  # orphaned-but-alive — re-adopted via its live heartbeat, never re-spawned
-        if _is_heartbeat_stale(store, lease, now):
+        if _is_heartbeat_stale(store, lease, crashed_at):
             continue  # stalled at crash time — reaped & retried per the node's budget, unchanged
         store.record_resume_intent(lease_id=lease.lease_id, marked_at=now)
         marked += 1
@@ -399,6 +411,7 @@ def _resume_in_place(ctx: LoopContext, lease: LeaseRecord) -> None:
         pid=pid,
         process_start_time=ctx.process.start_time(pid) or "",
         session_id=lease.session_id,  # unchanged — same session under the same lease (D-082)
+        spawned_at=now,
     )
     ctx.store.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
     _CP_RESUME_AFTER.reached()  # pid recorded, intent cleared — a crash here re-runs RESUME as a no-op
@@ -1008,7 +1021,11 @@ def _spawn_attempt(
     )
     handle = ctx.harness.spawn(envelope, preamble, session_hint=str(uuid.uuid4()))
     ctx.store.record_spawn(
-        lease_id, pid=handle.pid, process_start_time=handle.process_start_time, session_id=handle.session_id
+        lease_id,
+        pid=handle.pid,
+        process_start_time=handle.process_start_time,
+        session_id=handle.session_id,
+        spawned_at=now,
     )
     _CP_SPAWN_AFTER_SPAWN.reached()
 
@@ -1187,6 +1204,7 @@ def _resume_if_answered(ctx: LoopContext, lease: LeaseRecord) -> None:
         pid=pid,
         process_start_time=ctx.process.start_time(pid) or "",
         session_id=lease.session_id or "",
+        spawned_at=now,
     )
     ctx.store.record_park_resume(lease_id=lease.lease_id, question_id=park.question_id, resumed_at=now)
     ctx.store.enqueue_outbound(

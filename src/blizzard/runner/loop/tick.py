@@ -23,6 +23,11 @@ _log = get_logger("blizzard.runner.loop")
 def tick(ctx: LoopContext) -> None:
     """Run one reconciliation pass. Idempotent; safe to call on startup and per-timer."""
     _log.debug("tick start", runner_id=ctx.config.runner_id)
+    # Stamp liveness first, so the newest stamp is when the daemon was last known alive —
+    # the crash-time reference the next startup's recovery scan classifies staleness against
+    # (issue #13). Recorded before the steps, not after, so a pass that dies mid-step still
+    # leaves the beat that proves the daemon reached it.
+    ctx.store.record_daemon_liveness(runner_id=ctx.config.runner_id, alive_at=ctx.clock.now())
     reap(ctx)
     resume(ctx)
     pull(ctx)
