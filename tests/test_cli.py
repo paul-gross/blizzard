@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 from blizzard.cli.main import blizzard
@@ -52,6 +53,68 @@ def test_runner_init(tmp_path: Path) -> None:
     result = CliRunner().invoke(blizzard, ["runner", "init", root])
     assert result.exit_code == 0, result.output
     assert (tmp_path / "runner" / "blizzard-runner.toml").exists()
+
+
+# The runtime-dir env fallback (issue #39). Each daemon's dir-taking verbs resolve
+# --dir > $BZ_<daemon>_DIR > cwd, so winter's per-env band can aim one feature env at a
+# chosen runtime root. Parametrized over both daemons: the two CLIs are parallel, and a
+# fallback wired on one but not the other is exactly the drift worth catching.
+_DAEMONS = [("hub", "BZ_HUB_DIR", "blizzard-hub.toml"), ("runner", "BZ_RUNNER_DIR", "blizzard-runner.toml")]
+
+
+@pytest.mark.parametrize(("daemon", "env_var", "config_name"), _DAEMONS)
+def test_dir_resolves_from_env_when_flag_absent(daemon: str, env_var: str, config_name: str, tmp_path: Path) -> None:
+    root = tmp_path / "runtime"
+    cli = CliRunner()
+    assert cli.invoke(blizzard, [daemon, "init", str(root)], env={env_var: None}).exit_code == 0
+
+    # No --dir: the env names the runtime root, and `migrate` finds the store there.
+    result = cli.invoke(blizzard, [daemon, "migrate"], env={env_var: str(root)})
+    assert result.exit_code == 0, result.output
+    assert "migrated" in result.output
+
+
+@pytest.mark.parametrize(("daemon", "env_var", "config_name"), _DAEMONS)
+def test_dir_flag_beats_env(daemon: str, env_var: str, config_name: str, tmp_path: Path) -> None:
+    root = tmp_path / "runtime"
+    cli = CliRunner()
+    assert cli.invoke(blizzard, [daemon, "init", str(root)], env={env_var: None}).exit_code == 0
+
+    # The env names a dir that was never initialized, so this only succeeds if --dir wins.
+    result = cli.invoke(blizzard, [daemon, "migrate", "--dir", str(root)], env={env_var: str(tmp_path / "unused")})
+    assert result.exit_code == 0, result.output
+    assert "migrated" in result.output
+
+
+@pytest.mark.parametrize(("daemon", "env_var", "config_name"), _DAEMONS)
+def test_dir_defaults_to_cwd_when_neither_set(
+    daemon: str, env_var: str, config_name: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cli = CliRunner()
+    assert cli.invoke(blizzard, [daemon, "init", str(tmp_path)], env={env_var: None}).exit_code == 0
+    monkeypatch.chdir(tmp_path)
+
+    # Neither rung set: unchanged behavior — `.` is the runtime root.
+    result = cli.invoke(blizzard, [daemon, "migrate"], env={env_var: None})
+    assert result.exit_code == 0, result.output
+    assert "migrated" in result.output
+
+
+@pytest.mark.parametrize(("daemon", "env_var", "config_name"), _DAEMONS)
+def test_init_directory_argument_resolves_from_env(daemon: str, env_var: str, config_name: str, tmp_path: Path) -> None:
+    # `init`'s positional DIRECTORY honors the same variable, so a band-aimed env
+    # scaffolds the root it names rather than the cwd.
+    root = tmp_path / "runtime"
+    result = CliRunner().invoke(blizzard, [daemon, "init"], env={env_var: str(root)})
+    assert result.exit_code == 0, result.output
+    assert (root / config_name).exists()
+
+
+@pytest.mark.parametrize(("daemon", "env_var", "config_name"), _DAEMONS)
+def test_dir_help_names_the_env_fallback(daemon: str, env_var: str, config_name: str) -> None:
+    result = CliRunner().invoke(blizzard, [daemon, "migrate", "--help"])
+    assert result.exit_code == 0
+    assert f"${env_var}" in result.output
 
 
 def test_stub_verb_reports_not_implemented() -> None:

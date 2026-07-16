@@ -28,6 +28,15 @@ ENV_HUB_URL = "BZ_HUB_URL"
 DEFAULT_HUB_URL = "http://127.0.0.1:8421"
 _CLIENT_TIMEOUT = 15.0
 
+# The runtime root the dir-taking verbs resolve, highest to lowest: an explicit
+# ``--dir`` (or ``init``'s DIRECTORY), then ``BZ_HUB_DIR``, then the cwd. The env rung
+# is what lets winter's per-env band (`[env.<name>.vars]`) aim one feature env at a
+# chosen runtime root — a store snapshot, or a shared dir during an exclusive handoff —
+# without a bespoke command line per invocation (issue #39). Selectable, not shareable:
+# the store is still single-writer, so two live daemons on one `hub.db` remains unsafe.
+ENV_HUB_DIR = "BZ_HUB_DIR"
+DEFAULT_DIR = "."
+
 
 def _hub_url(override: str | None) -> str:
     return override or os.environ.get(ENV_HUB_URL, DEFAULT_HUB_URL)
@@ -46,16 +55,20 @@ def hub(ctx: click.Context) -> None:
 
 
 @hub.command()
-@click.argument("directory", default=".")
+@click.argument("directory", default=DEFAULT_DIR, envvar=ENV_HUB_DIR)
 def init(directory: str) -> None:
-    """Scaffold config + data dir + a migrated store under DIRECTORY. Idempotent."""
+    """Scaffold config + data dir + a migrated store under DIRECTORY. Idempotent.
+
+    DIRECTORY defaults to $BZ_HUB_DIR, then the cwd."""
     config = init_environment(Path(directory))
     revision = migration_runner(config).current_revision()
     click.echo(f"hub runtime ready at {config.root} (store revision {revision})")
 
 
 @hub.command("migrate")
-@click.option("--dir", "directory", default=".", help="Hub runtime directory.")
+@click.option(
+    "--dir", "directory", default=DEFAULT_DIR, envvar=ENV_HUB_DIR, help="Hub runtime directory (overrides $BZ_HUB_DIR)."
+)
 @click.option("--down", default=None, help="Reverse migrations down to this revision (e.g. base).")
 def migrate_cmd(directory: str, down: str | None) -> None:
     """Apply pending store migrations, or reverse with --down <rev>."""
@@ -67,7 +80,9 @@ def migrate_cmd(directory: str, down: str | None) -> None:
 
 
 @hub.command()
-@click.option("--dir", "directory", default=".", help="Hub runtime directory.")
+@click.option(
+    "--dir", "directory", default=DEFAULT_DIR, envvar=ENV_HUB_DIR, help="Hub runtime directory (overrides $BZ_HUB_DIR)."
+)
 @click.option("--host", "host_", default=None, help="Bind host (overrides config).")
 @click.option("--port", type=int, default=None, help="Bind port (overrides config).")
 def host(directory: str, host_: str | None, port: int | None) -> None:

@@ -73,6 +73,28 @@ start; the daemon refuses to start on a revision mismatch, so a forgotten migrat
 fails loudly rather than corrupting state. A graceful `systemctl restart` also
 preserves in-flight work across the upgrade — see the recovery contract below.
 
+## Naming the runtime directory
+
+Every verb that takes a runtime dir — `init`'s positional `DIRECTORY`, and `--dir` on
+`migrate`, `host`, `runner tick`, and `runner pause` — resolves it from three rungs,
+highest to lowest: the explicit flag or argument, then an environment variable, then the
+current working directory.
+
+| Daemon | Variable | Names |
+|--------|----------|-------|
+| hub | `BZ_HUB_DIR` | the hub runtime dir (`blizzard-hub.toml` + `data/hub.db`) |
+| runner | `BZ_RUNNER_DIR` | the runner runtime dir (`blizzard-runner.toml` + `data/runner.db`) |
+
+The units above pass `--dir` explicitly, so they are unaffected. The variable is for
+callers that cannot hand-write a flag at every invocation — an operator shell aimed at a
+deployment, or winter's per-env band pointing one feature env at a store snapshot or at a
+shared runtime dir during an exclusive handoff.
+
+> **Selectable is not shareable.** The store is single-writer, and each daemon migrates
+> on boot. Aiming a second live daemon at a runtime dir a running instance already holds
+> risks lock contention and corruption — this variable chooses a root, it does not make
+> one safe to share.
+
 ## The recovery contract
 
 Two systemd mechanisms combine to deliver the journey's "came back under systemd":

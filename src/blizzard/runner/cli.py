@@ -33,6 +33,15 @@ from blizzard.runner.runtime import ensure_current_revision, init_environment, m
 ENV_TICK_SECONDS = "BZ_RUNNER_TICK_SECONDS"
 DEFAULT_TICK_SECONDS = 30.0
 
+# The runtime root the dir-taking verbs resolve, highest to lowest: an explicit
+# ``--dir`` (or ``init``'s DIRECTORY), then ``BZ_RUNNER_DIR``, then the cwd. The env rung
+# is what lets winter's per-env band (`[env.<name>.vars]`) aim one feature env at a
+# chosen runtime root — a store snapshot, or a shared dir during an exclusive handoff —
+# without a bespoke command line per invocation (issue #39). Selectable, not shareable:
+# the store is still single-writer, so two live daemons on one `runner.db` remains unsafe.
+ENV_RUNNER_DIR = "BZ_RUNNER_DIR"
+DEFAULT_DIR = "."
+
 # Spawn-injected worker identity the heartbeat hook inherits (design/harness-adapters.md).
 ENV_LEASE_ID = "BLIZZARD_LEASE_ID"
 ENV_RUNNER_URL = "BLIZZARD_RUNNER_URL"
@@ -58,16 +67,24 @@ def runner(ctx: click.Context) -> None:
 
 
 @runner.command()
-@click.argument("directory", default=".")
+@click.argument("directory", default=DEFAULT_DIR, envvar=ENV_RUNNER_DIR)
 def init(directory: str) -> None:
-    """Scaffold config + data dir + a migrated store under DIRECTORY. Idempotent."""
+    """Scaffold config + data dir + a migrated store under DIRECTORY. Idempotent.
+
+    DIRECTORY defaults to $BZ_RUNNER_DIR, then the cwd."""
     config = init_environment(Path(directory))
     revision = migration_runner(config).current_revision()
     click.echo(f"runner runtime ready at {config.root} (store revision {revision})")
 
 
 @runner.command("migrate")
-@click.option("--dir", "directory", default=".", help="Runner runtime directory.")
+@click.option(
+    "--dir",
+    "directory",
+    default=DEFAULT_DIR,
+    envvar=ENV_RUNNER_DIR,
+    help="Runner runtime directory (overrides $BZ_RUNNER_DIR).",
+)
 @click.option("--down", default=None, help="Reverse migrations down to this revision (e.g. base).")
 def migrate_cmd(directory: str, down: str | None) -> None:
     """Apply pending store migrations, or reverse with --down <rev>."""
@@ -79,7 +96,13 @@ def migrate_cmd(directory: str, down: str | None) -> None:
 
 
 @runner.command()
-@click.option("--dir", "directory", default=".", help="Runner runtime directory.")
+@click.option(
+    "--dir",
+    "directory",
+    default=DEFAULT_DIR,
+    envvar=ENV_RUNNER_DIR,
+    help="Runner runtime directory (overrides $BZ_RUNNER_DIR).",
+)
 @click.option("--host", "host_", default=None, help="Bind host (overrides config).")
 @click.option("--port", type=int, default=None, help="Bind port (overrides config).")
 def host(directory: str, host_: str | None, port: int | None) -> None:
@@ -143,7 +166,13 @@ def host(directory: str, host_: str | None, port: int | None) -> None:
 
 
 @runner.command("tick")
-@click.option("--dir", "directory", default=".", help="Runner runtime directory.")
+@click.option(
+    "--dir",
+    "directory",
+    default=DEFAULT_DIR,
+    envvar=ENV_RUNNER_DIR,
+    help="Runner runtime directory (overrides $BZ_RUNNER_DIR).",
+)
 def tick_cmd(directory: str) -> None:
     """Run ONE synchronous reconciliation tick (REAP → PULL → FILL → ADVANCE).
 
@@ -283,7 +312,13 @@ def status() -> None:
 
 
 @runner.command()
-@click.option("--dir", "directory", default=".", help="Runner runtime directory.")
+@click.option(
+    "--dir",
+    "directory",
+    default=DEFAULT_DIR,
+    envvar=ENV_RUNNER_DIR,
+    help="Runner runtime directory (overrides $BZ_RUNNER_DIR).",
+)
 @click.option("--by", "by", default="operator", help="Who is pausing (recorded on the fact).")
 def pause(directory: str, by: str) -> None:
     """Declarative control: pause the runner — it stops claiming new work; in-flight chunks run on (D-043).
