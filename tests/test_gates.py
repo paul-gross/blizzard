@@ -317,3 +317,83 @@ def test_requeue_on_a_non_escalated_chunk_is_409(tmp_path: Path) -> None:
     _claim_and_lease(hub, chunk_id)  # running, not escalated
     resp = hub.client.post(f"/api/chunks/{chunk_id}/requeues")
     assert resp.status_code == 409
+
+
+# --------------------------------------------------------------------------- #
+# Detach (D-088)
+# --------------------------------------------------------------------------- #
+
+
+def test_detach_a_claimed_chunk_re_derives_ready_and_reenters_the_queue(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, _ = _ingest(hub, _PLAIN_YAML)
+    _claim_and_lease(hub, chunk_id)
+    # The release fact must post-date the route creation; advance the test clock past the tie.
+    hub.clock.advance(timedelta(seconds=1))
+    resp = hub.client.post(f"/api/chunks/{chunk_id}/detach")
+    assert resp.status_code == 202, resp.text
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
+    # The detached chunk re-enters the ready queue, claimable at its current node.
+    peek = hub.client.get("/api/queue/peek").json()
+    assert any(e["chunk_id"] == chunk_id for e in peek["entries"])
+
+
+def test_detach_an_unknown_chunk_is_404(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    resp = hub.client.post("/api/chunks/does-not-exist/detach")
+    assert resp.status_code == 404
+
+
+def test_detach_a_ready_unclaimed_chunk_is_409(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, _ = _ingest(hub, _PLAIN_YAML)  # promoted (ready), never claimed -> no live route
+    resp = hub.client.post(f"/api/chunks/{chunk_id}/detach")
+    assert resp.status_code == 409
+
+
+def test_detach_twice_is_409_the_second_time(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, _ = _ingest(hub, _PLAIN_YAML)
+    _claim_and_lease(hub, chunk_id)
+    first = hub.client.post(f"/api/chunks/{chunk_id}/detach")
+    assert first.status_code == 202, first.text
+    # The route is already released; detach is deliberately not silently idempotent.
+    second = hub.client.post(f"/api/chunks/{chunk_id}/detach")
+    assert second.status_code == 409
+
+
+def test_detach_an_escalated_chunk_succeeds_and_the_escalation_survives(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, _ = _ingest(hub, _PLAIN_YAML)
+    _claim_and_lease(hub, chunk_id)
+    esc = hub.client.post(
+        f"/api/chunks/{chunk_id}/escalations",
+        json={"epoch": 1, "runner_id": "r1", "takeover_command": "cd env && claude --resume s"},
+    )
+    assert esc.status_code == 202
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "needs_human"
+
+    resp = hub.client.post(f"/api/chunks/{chunk_id}/detach")
+    assert resp.status_code == 202, resp.text
+    # The runner is released, but detach is not requeue: the escalation stays open.
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "needs_human"
+
+
+def test_detach_publishes_chunk_changed_and_queue_changed(tmp_path: Path) -> None:
+    """The board learns of a detach live, as it does of a requeue (D-088, D-067).
+
+    Both events matter and for different reasons: ``chunk-changed`` carries the chunk's
+    re-derived status to any open detail view, and ``queue-changed`` tells the queue view a
+    new entry is claimable — a detached chunk re-enters the ready queue."""
+    hub = build_hub(tmp_path)
+    chunk_id, _ = _ingest(hub, _PLAIN_YAML)
+    _claim_and_lease(hub, chunk_id)
+    hub.clock.advance(timedelta(seconds=1))
+    before = len(hub.events.snapshot())
+
+    assert hub.client.post(f"/api/chunks/{chunk_id}/detach").status_code == 202
+
+    published = hub.events.snapshot()[before:]
+    assert [e.type for e in published] == ["chunk-changed", "queue-changed"]
+    # chunk-changed carries the *re-derived* status, not the pre-detach one.
+    assert f'"chunk_id": "{chunk_id}", "status": "ready"' in published[0].framed()

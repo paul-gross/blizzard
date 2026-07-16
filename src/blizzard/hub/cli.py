@@ -29,10 +29,6 @@ DEFAULT_HUB_URL = "http://127.0.0.1:8421"
 _CLIENT_TIMEOUT = 15.0
 
 
-def _stub(verb: str) -> None:
-    raise click.ClickException(f"`blizzard hub {verb}` is not yet implemented (scaffold stub).")
-
-
 def _hub_url(override: str | None) -> str:
     return override or os.environ.get(ENV_HUB_URL, DEFAULT_HUB_URL)
 
@@ -286,9 +282,27 @@ def requeue(chunk_id: str, hub_url: str | None) -> None:
 
 @hub.command()
 @click.argument("chunk_id")
-def detach(chunk_id: str) -> None:
-    """Forcibly release a chunk from its runner (D-088)."""
-    _stub("detach")
+@click.option("--hub-url", default=None, help=f"Hub API base URL (default ${ENV_HUB_URL} or {DEFAULT_HUB_URL}).")
+def detach(chunk_id: str, hub_url: str | None) -> None:
+    """Forcibly release CHUNK from its runner (D-088).
+
+    A pure client of the hub API: ``POST /api/chunks/{id}/detach``. The chunk re-derives
+    ready and is re-claimable at its current node; the holding runner releases it on its
+    next tick. 409 when the chunk has no live route to release."""
+    url = f"{_hub_url(hub_url).rstrip('/')}/api/chunks/{chunk_id}/detach"
+    try:
+        resp = httpx.post(url, timeout=_CLIENT_TIMEOUT)
+    except httpx.HTTPError as exc:
+        raise _api_error("POST /chunks/{id}/detach", exc) from exc
+    if resp.status_code == httpx.codes.CONFLICT:
+        raise click.ClickException(resp.json().get("detail", "chunk has no live route"))
+    if resp.status_code == httpx.codes.NOT_FOUND:
+        raise click.ClickException(f"no such chunk {chunk_id}")
+    try:
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise _api_error("POST /chunks/{id}/detach", exc) from exc
+    click.echo(f"detached {chunk_id} — released from its runner, re-claimable at its current node")
 
 
 @hub.command()

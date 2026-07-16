@@ -1650,6 +1650,40 @@ export type SubmitDecisionApiChunksChunkIdDecisionsPostResponses = {
 
 export type SubmitDecisionApiChunksChunkIdDecisionsPostResponse = SubmitDecisionApiChunksChunkIdDecisionsPostResponses[keyof SubmitDecisionApiChunksChunkIdDecisionsPostResponses];
 
+export type DetachChunkApiChunksChunkIdDetachPostData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/detach';
+};
+
+export type DetachChunkApiChunksChunkIdDetachPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DetachChunkApiChunksChunkIdDetachPostError = DetachChunkApiChunksChunkIdDetachPostErrors[keyof DetachChunkApiChunksChunkIdDetachPostErrors];
+
+export type DetachChunkApiChunksChunkIdDetachPostResponses = {
+    /**
+     * Response Detach Chunk Api Chunks  Chunk Id  Detach Post
+     *
+     * Successful Response
+     */
+    202: {
+        [key: string]: string;
+    };
+};
+
+export type DetachChunkApiChunksChunkIdDetachPostResponse = DetachChunkApiChunksChunkIdDetachPostResponses[keyof DetachChunkApiChunksChunkIdDetachPostResponses];
+
 export type GetEnvelopeApiChunksChunkIdEnvelopeGetData = {
     body?: never;
     path: {

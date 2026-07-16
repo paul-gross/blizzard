@@ -136,6 +136,53 @@ def test_promote_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# `blizzard hub detach`
+# --------------------------------------------------------------------------- #
+
+
+def test_detach_posts_to_the_chunk_and_reports_released(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The verb POSTs to the chunk's detach sub-resource and echoes the release line (D-088)."""
+    calls: list[str] = []
+
+    def fake_post(url: str, *, timeout: float) -> _FakeResponse:
+        calls.append(url)
+        return _FakeResponse(202, {"chunk_id": "ch_42"})
+
+    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["detach", "ch_42"], env={"BZ_HUB_URL": "http://hub.local:8421"})
+
+    assert result.exit_code == 0, result.output
+    assert calls == ["http://hub.local:8421/api/chunks/ch_42/detach"]
+    assert "detached ch_42" in result.output
+
+
+def test_detach_maps_a_conflict_with_the_servers_detail(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A 409 (no live route) surfaces the server's own detail text, not a hardcoded fallback."""
+
+    def fake_post(url: str, *, timeout: float) -> _FakeResponse:
+        return _FakeResponse(409, {"detail": "chunk ch_42 has no live route"})
+
+    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["detach", "ch_42"])
+
+    assert result.exit_code != 0
+    assert "chunk ch_42 has no live route" in result.output
+
+
+def test_detach_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A 404 (no such chunk) is a named error, not a stack trace."""
+
+    def fake_post(url: str, *, timeout: float) -> _FakeResponse:
+        return _FakeResponse(404)
+
+    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["detach", "ch_nope"])
+
+    assert result.exit_code != 0
+    assert "ch_nope" in result.output
+
+
+# --------------------------------------------------------------------------- #
 # `blizzard runner pause`
 # --------------------------------------------------------------------------- #
 

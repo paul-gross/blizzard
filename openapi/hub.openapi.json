@@ -2404,6 +2404,53 @@
         ]
       }
     },
+    "/api/chunks/{chunk_id}/detach": {
+      "post": {
+        "description": "Forcibly release a chunk from its runner without touching any escalation (D-088).",
+        "operationId": "detach_chunk_api_chunks__chunk_id__detach_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Detach Chunk Api Chunks  Chunk Id  Detach Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Detach Chunk",
+        "tags": [
+          "chunks"
+        ]
+      }
+    },
     "/api/chunks/{chunk_id}/envelope": {
       "get": {
         "description": "The chunk's current node envelope, idempotent \u2014 the lost-apply re-read (D-090).",

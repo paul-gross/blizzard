@@ -30,7 +30,7 @@ from blizzard.runner.loop.worktree import GitArtifact, IWorktreeGit
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 from blizzard.runner.store.repository import IWriteRunnerStore
 from blizzard.runner.store.schema import metadata as runner_metadata
-from blizzard.wire.chunk import ChunkDetail
+from blizzard.wire.chunk import ChunkDetail, RouteView
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeConfig, NodeEnvelope
@@ -125,7 +125,10 @@ class FakeHub:
         if self.down:
             raise HubClientError("fake hub is down")
         # Default a hub-node-held chunk to `delivering` (the merge queue is still
-        # working) unless a test scripts a terminal state.
+        # working) with its route still ours — the common case, since a test that
+        # seeds a lease this fake never claimed still owns a live route in reality
+        # (nothing has told the hub otherwise) — unless a test scripts something else,
+        # e.g. a released/reassigned route (D-088).
         if chunk_id in self.chunks:
             return self.chunks[chunk_id]
         return ChunkDetail(
@@ -134,6 +137,7 @@ class FakeHub:
             status=ChunkStatus.DELIVERING,
             current_node_id="deliver",
             latest_epoch=1,
+            route=RouteView(runner_id="r1", workspace_id="ws1", environment_ids=[]),
         )
 
     def get_question(self, question_id: str) -> QuestionView:

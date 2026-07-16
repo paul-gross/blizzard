@@ -21,6 +21,7 @@ from blizzard.hub.api.questions import question_view
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.artifacts import ArtifactRow, GitCommitArtifact, from_row, store_key
 from blizzard.hub.domain.decisions import NotEscalated
+from blizzard.hub.domain.detach import NotRouted
 from blizzard.hub.domain.envelope import build_node_envelope
 from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.ingest import IngestConflict
@@ -339,6 +340,22 @@ def requeue_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_se
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
     services.events.publish_queue_changed()  # requeue can re-admit the chunk to the queue (D-067)
+    return {"chunk_id": chunk_id}
+
+
+@router.post("/chunks/{chunk_id}/detach", status_code=status.HTTP_202_ACCEPTED)
+def detach_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> dict[str, str]:
+    """Forcibly release a chunk from its runner without touching any escalation (D-088)."""
+    chunk = services.chunks.get(chunk_id)
+    if chunk is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+    try:
+        services.detach.detach(chunk)
+    except NotRouted as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
+    services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
+    services.events.publish_queue_changed()  # a detached chunk re-enters the ready queue (D-088)
     return {"chunk_id": chunk_id}
 
 
