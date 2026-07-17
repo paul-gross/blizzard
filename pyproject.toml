@@ -64,6 +64,10 @@ blizzard-export-openapi = "blizzard.tools.openapi:main"
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
+    # Parallelizes the default unit+component suite (`-n auto` in the gate and
+    # `mise run test`). The upper tiers (service, e2e, crash, journey) stay
+    # serial — they self-manage daemons, ports, and fixture workspaces.
+    "pytest-xdist>=3.6.0",
     "ruff>=0.8.0",
     "pyright>=1.1.380",
     # The e2e browser tier (blizzard-harness verification/blizzard.md): scenario 6

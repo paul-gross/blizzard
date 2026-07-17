@@ -6,8 +6,8 @@ description = "Install dependencies"
 run = "uv sync"
 
 [tasks.test]
-description = "Run tests"
-run = "uv run pytest"
+description = "Run the default unit + component suite, parallelized (pytest-xdist)"
+run = "uv run pytest -n auto"
 
 [tasks.e2e]
 description = "Run the standing e2e smoke suite (verification.md) — six full-stack scenarios (happy-path build→review→deliver, review-fail cycle, retries-exhausted escalation, ask/answer, human gate, and the browser-driven board) self-managed over forge+hub+runner + a minted blizzard-mock fixture; needs the sibling blizzard-mock worktree provisioned (winter provision <env>), and the browser scenario also needs Chromium (uv run playwright install chromium) — it skips cleanly without it"

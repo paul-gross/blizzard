@@ -67,7 +67,7 @@ uv sync                                        # install (bzh:python-toolchain)
 uv run ruff format --check .                   # format
 uv run ruff check .                            # lint
 uv run pyright                                 # typecheck
-uv run pytest                                  # unit + component tiers
+uv run pytest -n auto                          # unit + component tiers, parallel
 uv run blizzard-export-openapi --out-dir openapi && git diff --exit-code openapi/   # spec drift
 # frontend (once web/ lands): cd web && npm ci && npm run lint && npm run test && npm run generate:client && git diff --exit-code web/
 ```

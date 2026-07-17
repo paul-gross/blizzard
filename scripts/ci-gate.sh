@@ -26,8 +26,8 @@ step "pyright"
 uv run pyright
 
 # --- Python tests: unit + component tiers -----------------------------------
-step "pytest (unit + component tiers)"
-uv run pytest
+step "pytest (unit + component tiers, parallel)"
+uv run pytest -n auto
 
 # --- OpenAPI spec drift (bzh:generated-client, the Python half) --------------
 # Regenerate the committed specs and fail on any difference. The frontend's
@@ -49,8 +49,25 @@ echo "OK: committed OpenAPI specs match the exporter."
 # `npm run test` (vitest), and `npm run generate:client` (openapi-ts codegen of
 # the committed client). Guarded so its absence is a green no-op today.
 if [ -f "$WEB_DIR/package.json" ]; then
+  # `npm ci` wipes node_modules and reinstalls even when nothing changed —
+  # minutes on a cold cache. The install is a pure function of the lockfile, so
+  # a stamp of its hash (written only after a successful install, and gone
+  # whenever node_modules is) makes the skip exactly as trustworthy as the
+  # install it skips. Stale node_modules without a lockfile change can't
+  # happen via npm; if a tree is corrupted some other way, delete
+  # $WEB_DIR/node_modules to force a reinstall.
+  step "npm ci ($WEB_DIR) — skipped when node_modules already matches the lockfile"
+  LOCK_HASH="$(sha256sum "$WEB_DIR/package-lock.json" | cut -d' ' -f1)"
+  STAMP="$WEB_DIR/node_modules/.package-lock-hash"
+  if [ -f "$STAMP" ] && [ "$(cat "$STAMP")" = "$LOCK_HASH" ]; then
+    echo "OK: node_modules matches package-lock.json — skipping npm ci."
+  else
+    ( cd "$WEB_DIR" && npm ci )
+    printf '%s' "$LOCK_HASH" > "$STAMP"
+  fi
+
   step "eslint ($WEB_DIR)"
-  ( cd "$WEB_DIR" && npm ci && npm run lint )
+  ( cd "$WEB_DIR" && npm run lint )
 
   step "vitest ($WEB_DIR)"
   ( cd "$WEB_DIR" && npm run test )
