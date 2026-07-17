@@ -8,6 +8,7 @@ import { BoardHeader } from './board-header';
 const chunk = (id: string, status: ChunkSummary['status']): ChunkSummary => ({
   chunk_id: id,
   graph_id: 'gr_1',
+  model: 'claude-opus-4-8',
   status,
   current_node_id: 'nd_build',
   pm_pointers: [],

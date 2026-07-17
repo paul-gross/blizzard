@@ -232,6 +232,10 @@ export type ChunkDetail = {
      */
     latest_epoch: number | null;
     /**
+     * Model
+     */
+    model: string;
+    /**
      * Open Prs
      */
     open_prs?: Array<PrView>;
@@ -246,6 +250,34 @@ export type ChunkDetail = {
     questions?: Array<QuestionView>;
     route?: RouteView | null;
     status: ChunkStatus;
+};
+
+/**
+ * ChunkGraphUpdateRequest
+ *
+ * Repin a not-ready chunk's workflow graph (issue #27) — the target graph's id.
+ */
+export type ChunkGraphUpdateRequest = {
+    /**
+     * Graph Id
+     */
+    graph_id: string;
+};
+
+/**
+ * ChunkGraphView
+ *
+ * A chunk's current graph selection — the read/write shape issue #27's board editor uses.
+ */
+export type ChunkGraphView = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Graph Id
+     */
+    graph_id: string;
 };
 
 /**
@@ -316,6 +348,34 @@ export type ChunkIngestResponse = {
 };
 
 /**
+ * ChunkModelUpdateRequest
+ *
+ * Repin a not-ready chunk's model selection (issue #27).
+ */
+export type ChunkModelUpdateRequest = {
+    /**
+     * Model
+     */
+    model: string;
+};
+
+/**
+ * ChunkModelView
+ *
+ * A chunk's current model selection — the read/write shape issue #27's board editor uses.
+ */
+export type ChunkModelView = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Model
+     */
+    model: string;
+};
+
+/**
  * ChunkPauseRequest
  *
  * Set or clear a chunk's operator pause brake — records who flipped it (issue #46).
@@ -365,6 +425,10 @@ export type ChunkSummary = {
      * Graph Id
      */
     graph_id: string;
+    /**
+     * Model
+     */
+    model: string;
     /**
      * Pm Pointers
      */
@@ -1819,6 +1883,36 @@ export type ReportEscalationApiChunksChunkIdEscalationsPostResponses = {
 
 export type ReportEscalationApiChunksChunkIdEscalationsPostResponse = ReportEscalationApiChunksChunkIdEscalationsPostResponses[keyof ReportEscalationApiChunksChunkIdEscalationsPostResponses];
 
+export type SetChunkGraphApiChunksChunkIdGraphPostData = {
+    body: ChunkGraphUpdateRequest;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/graph';
+};
+
+export type SetChunkGraphApiChunksChunkIdGraphPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SetChunkGraphApiChunksChunkIdGraphPostError = SetChunkGraphApiChunksChunkIdGraphPostErrors[keyof SetChunkGraphApiChunksChunkIdGraphPostErrors];
+
+export type SetChunkGraphApiChunksChunkIdGraphPostResponses = {
+    /**
+     * Successful Response
+     */
+    202: ChunkGraphView;
+};
+
+export type SetChunkGraphApiChunksChunkIdGraphPostResponse = SetChunkGraphApiChunksChunkIdGraphPostResponses[keyof SetChunkGraphApiChunksChunkIdGraphPostResponses];
+
 export type GroupChunksApiChunksChunkIdGroupPostData = {
     body: ChunkGroupRequest;
     path: {
@@ -1882,6 +1976,36 @@ export type ReportLeaseApiChunksChunkIdLeasesPostResponses = {
 };
 
 export type ReportLeaseApiChunksChunkIdLeasesPostResponse = ReportLeaseApiChunksChunkIdLeasesPostResponses[keyof ReportLeaseApiChunksChunkIdLeasesPostResponses];
+
+export type SetChunkModelApiChunksChunkIdModelPostData = {
+    body: ChunkModelUpdateRequest;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/model';
+};
+
+export type SetChunkModelApiChunksChunkIdModelPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SetChunkModelApiChunksChunkIdModelPostError = SetChunkModelApiChunksChunkIdModelPostErrors[keyof SetChunkModelApiChunksChunkIdModelPostErrors];
+
+export type SetChunkModelApiChunksChunkIdModelPostResponses = {
+    /**
+     * Successful Response
+     */
+    202: ChunkModelView;
+};
+
+export type SetChunkModelApiChunksChunkIdModelPostResponse = SetChunkModelApiChunksChunkIdModelPostResponses[keyof SetChunkModelApiChunksChunkIdModelPostResponses];
 
 export type PauseChunkApiChunksChunkIdPausePostData = {
     body: ChunkPauseRequest;

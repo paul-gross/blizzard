@@ -377,6 +377,13 @@ recovery contract"), so a chunk still marked paused when the runner comes back i
 (re-)parked, not respawned. The claim is kept exactly as it would be if the pause had
 landed on a live tick; only a chunk that was *not* paused resumes in place on restart.
 
+### Editing a not-ready chunk's build config
+
+While a chunk rests `not_ready` — minted but not yet promoted into the queue — its
+pinned **graph** and **model** are editable, both from the chunk detail dock and via
+`POST /api/chunks/{id}/graph` / `POST /api/chunks/{id}/model`. Once the chunk leaves
+`not_ready` (promoted, claimed, running, or later) both edits are refused with `409`.
+
 ## The recovery contract
 
 Two systemd mechanisms combine to deliver the journey's "came back under systemd":

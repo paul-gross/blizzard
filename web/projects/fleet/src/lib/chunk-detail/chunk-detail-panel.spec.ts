@@ -8,6 +8,7 @@ import { ChunkDetailPanel, type PmItemsState } from './chunk-detail-panel';
 const ISSUE_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01issue00000000000000000000',
   graph_id: 'gr_1',
+  model: 'claude-opus-4-8',
   status: 'running',
   current_node_id: 'nd_build',
   latest_epoch: 1,
@@ -21,6 +22,7 @@ const ISSUE_DETAIL: ChunkDetail = {
 const REVIEW_FAIL_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01review0000000000000000000',
   graph_id: 'gr_1',
+  model: 'claude-opus-4-8',
   status: 'running',
   current_node_id: 'nd_build',
   latest_epoch: 2,
@@ -56,6 +58,7 @@ const REVIEW_FAIL_DETAIL: ChunkDetail = {
 const NAMED_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01named000000000000000000000',
   graph_id: 'gr_1',
+  model: 'claude-opus-4-8',
   status: 'running',
   current_node_id: 'nd_review',
   current_node_name: 'review',
@@ -103,6 +106,7 @@ const NAMED_DETAIL: ChunkDetail = {
 const WAITING_QUESTION_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01ask00000000000000000000000',
   graph_id: 'gr_1',
+  model: 'claude-opus-4-8',
   status: 'waiting_on_human',
   current_node_id: 'nd_build',
   latest_epoch: 1,
@@ -127,6 +131,7 @@ const WAITING_QUESTION_DETAIL: ChunkDetail = {
 const WAITING_DECISION_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01gate0000000000000000000000',
   graph_id: 'gr_1',
+  model: 'claude-opus-4-8',
   status: 'waiting_on_human',
   current_node_id: 'nd_gate',
   latest_epoch: 1,
@@ -151,6 +156,7 @@ const WAITING_DECISION_DETAIL: ChunkDetail = {
 const ESCALATED_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01esc00000000000000000000000',
   graph_id: 'gr_1',
+  model: 'claude-opus-4-8',
   status: 'needs_human',
   current_node_id: 'nd_build',
   latest_epoch: 3,
@@ -166,6 +172,7 @@ const ESCALATED_DETAIL: ChunkDetail = {
 const ROUTED_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01routed000000000000000000',
   graph_id: 'gr_1',
+  model: 'claude-opus-4-8',
   status: 'running',
   current_node_id: 'nd_build',
   latest_epoch: 1,
@@ -180,6 +187,19 @@ const ROUTED_DETAIL: ChunkDetail = {
 const ESCALATED_ROUTED_DETAIL: ChunkDetail = {
   ...ESCALATED_DETAIL,
   route: { runner_id: 'rn_02', workspace_id: 'ws_01', environment_ids: [] },
+};
+
+// A not_ready chunk — the one window issue #27's graph/model edit is open.
+const NOT_READY_DETAIL: ChunkDetail = {
+  chunk_id: 'ch_01ready000000000000000000000',
+  graph_id: 'gr_default',
+  model: 'claude-opus-4-8',
+  status: 'not_ready',
+  current_node_id: null,
+  latest_epoch: null,
+  pm_pointers: [],
+  history: [],
+  artifacts: [],
 };
 
 describe('ChunkDetailPanel', () => {
@@ -698,6 +718,108 @@ describe('ChunkDetailPanel', () => {
     expect(el.querySelector('[data-testid="detail-id"]')?.textContent?.trim()).toBe('ch_…0000');
     expect(el.querySelector('[data-testid="detail-id"]')?.getAttribute('title')).toBe(ISSUE_DETAIL.chunk_id);
     expect(el.querySelector('[data-testid="detail-pointer"]')?.textContent?.trim()).toBe('widget#42');
+  });
+
+  // --- Graph / model edit (issue #27) -----------------------------------------
+
+  it('shows the chunk’s current graph and model as plain facts for a running chunk', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', { ...ROUTED_DETAIL, model: 'claude-sonnet-4-5' });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="graph-value"]')?.textContent?.trim()).toBe('gr_1');
+    expect(el.querySelector('[data-testid="model-value"]')?.textContent?.trim()).toBe('claude-sonnet-4-5');
+  });
+
+  it('offers the graph and model edit inputs for a not_ready chunk', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', NOT_READY_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="graph-input"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="graph-submit"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="model-input"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="model-submit"]')).not.toBeNull();
+  });
+
+  it('withholds the graph and model edit inputs once the chunk has left not_ready', async () => {
+    for (const status of ['ready', 'running', 'delivering', 'waiting_on_human', 'needs_human', 'paused', 'stopped', 'done'] as const) {
+      const fixture = TestBed.createComponent(ChunkDetailPanel);
+      fixture.componentRef.setInput('detail', { ...NOT_READY_DETAIL, status });
+      await fixture.whenStable();
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector('[data-testid="graph-input"]'), status).toBeNull();
+      expect(el.querySelector('[data-testid="model-input"]'), status).toBeNull();
+      // The current values still read, even with editing withheld.
+      expect(el.querySelector('[data-testid="graph-value"]'), status).not.toBeNull();
+    }
+  });
+
+  it('emits editGraph with the typed graph id when Set is activated', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', NOT_READY_DETAIL);
+    let emitted: { chunkId: string; graphId: string } | undefined;
+    fixture.componentInstance.editGraph.subscribe((event) => (emitted = event));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const input = el.querySelector<HTMLInputElement>('[data-testid="graph-input"]')!;
+    input.value = 'gr_alt';
+    el.querySelector<HTMLButtonElement>('[data-testid="graph-submit"]')?.click();
+
+    expect(emitted).toEqual({ chunkId: NOT_READY_DETAIL.chunk_id, graphId: 'gr_alt' });
+  });
+
+  it('does not emit editGraph for a blank graph id', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', NOT_READY_DETAIL);
+    let emitted = false;
+    fixture.componentInstance.editGraph.subscribe(() => (emitted = true));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="graph-submit"]')?.click();
+    expect(emitted).toBe(false);
+  });
+
+  it('emits editModel with the typed model when Set is activated', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', NOT_READY_DETAIL);
+    let emitted: { chunkId: string; model: string } | undefined;
+    fixture.componentInstance.editModel.subscribe((event) => (emitted = event));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const input = el.querySelector<HTMLInputElement>('[data-testid="model-input"]')!;
+    input.value = 'claude-sonnet-4-5';
+    el.querySelector<HTMLButtonElement>('[data-testid="model-submit"]')?.click();
+
+    expect(emitted).toEqual({ chunkId: NOT_READY_DETAIL.chunk_id, model: 'claude-sonnet-4-5' });
+  });
+
+  it('does not emit editModel for a blank model', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', NOT_READY_DETAIL);
+    let emitted = false;
+    fixture.componentInstance.editModel.subscribe(() => (emitted = true));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="model-submit"]')?.click();
+    expect(emitted).toBe(false);
+  });
+
+  it('surfaces a graph/model edit error passed down from the container in the shared notice', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', NOT_READY_DETAIL);
+    fixture.componentRef.setInput('actionError', 'chunk ch_01ready000000000000000000000 has already left not_ready');
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('left not_ready');
   });
 
   // --- The work-item column (issue #24) --------------------------------------

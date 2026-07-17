@@ -3,11 +3,14 @@ import { ChangeDetectionStrategy, Component, computed, effect, input, output, si
 import { injectHubChunkDetailQuery } from '../chunks/chunk-detail.query';
 import { injectHubChunkPmItemsQuery } from '../chunks/chunk-pm-items.query';
 import { injectDetachChunkMutation } from '../chunks/detach.mutations';
+import { injectSetChunkGraphMutation, injectSetChunkModelMutation } from '../chunks/edit.mutations';
 import { injectAnswerQuestionMutation, injectResolveDecisionMutation } from '../chunks/human.mutations';
 import { injectChunkPauseMutation } from '../chunks/pause.mutations';
 import {
   type AnswerQuestionEvent,
   ChunkDetailPanel,
+  type EditGraphEvent,
+  type EditModelEvent,
   type PmItemsState,
   type ResolveDecisionEvent,
 } from './chunk-detail-panel';
@@ -33,11 +36,13 @@ function errorMessage(error: unknown, fallback: string): string {
  *
  * Reactive over the selected `chunkId`: the query re-keys and disables itself while
  * nothing is open, so no request fires for the empty board. Answering, resolving,
- * detaching, or pausing/resuming invalidates the chunk and the fleet list, and the SSE
- * stream corroborates. Every operator action's 404/409 is read off its mutation's
- * `onError` and held in the shared `actionError` for the panel to show — issue #42's
- * "report, don't swallow" requirement, which issue #46's pause/resume follows rather
- * than reinvent — and clears on the next attempt or the moment a different chunk opens.
+ * detaching, pausing/resuming, or editing the graph/model invalidates the chunk and the
+ * fleet list, and the SSE stream corroborates. Every operator action's 404/409 (422 for
+ * a blank model) is read off its mutation's `onError` and held in the shared
+ * `actionError` for the panel to show — issue #42's "report, don't swallow"
+ * requirement, which issue #46's pause/resume and issue #27's graph/model edits both
+ * follow rather than reinvent — and clears on the next attempt or the moment a
+ * different chunk opens.
  */
 @Component({
   selector: 'fleet-chunk-detail',
@@ -55,6 +60,8 @@ function errorMessage(error: unknown, fallback: string): string {
         (detach)="onDetach($event)"
         (pauseChunk)="onPause($event)"
         (resumeChunk)="onResume($event)"
+        (editGraph)="onEditGraph($event)"
+        (editModel)="onEditModel($event)"
       />
     } @else {
       <p class="rest" data-testid="chunk-detail-empty">
@@ -96,6 +103,8 @@ export class ChunkDetail {
   private readonly resolveMutation = injectResolveDecisionMutation();
   private readonly detachMutation = injectDetachChunkMutation();
   private readonly pauseMutation = injectChunkPauseMutation();
+  private readonly editGraphMutation = injectSetChunkGraphMutation();
+  private readonly editModelMutation = injectSetChunkModelMutation();
 
   /** The open chunk's last operator-action failure, or `null`. Reset on every new
    * attempt and whenever a different chunk opens (issue #42). Shared by every action
@@ -150,6 +159,22 @@ export class ChunkDetail {
     this.pauseMutation.mutate(
       { chunkId, paused: false },
       { onError: (error) => this.actionError.set(errorMessage(error, 'Resume failed.')) },
+    );
+  }
+
+  protected onEditGraph(event: EditGraphEvent): void {
+    this.actionError.set(null);
+    this.editGraphMutation.mutate(
+      { chunkId: event.chunkId, graphId: event.graphId },
+      { onError: (error) => this.actionError.set(errorMessage(error, 'Set graph failed.')) },
+    );
+  }
+
+  protected onEditModel(event: EditModelEvent): void {
+    this.actionError.set(null);
+    this.editModelMutation.mutate(
+      { chunkId: event.chunkId, model: event.model },
+      { onError: (error) => this.actionError.set(errorMessage(error, 'Set model failed.')) },
     );
   }
 }

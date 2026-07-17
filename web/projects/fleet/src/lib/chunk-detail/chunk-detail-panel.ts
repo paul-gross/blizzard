@@ -49,6 +49,18 @@ export interface ResolveDecisionEvent {
   readonly chunkId: string;
 }
 
+/** Emitted when the operator repins a not-ready chunk's graph from the dock (issue #27). */
+export interface EditGraphEvent {
+  readonly chunkId: string;
+  readonly graphId: string;
+}
+
+/** Emitted when the operator repins a not-ready chunk's model from the dock (issue #27). */
+export interface EditModelEvent {
+  readonly chunkId: string;
+  readonly model: string;
+}
+
 /**
  * The chunk detail dock (MVP criterion 9/11) — everything known about the
  * selected chunk, filling the centre column under the board without reflowing it.
@@ -73,7 +85,17 @@ export interface ResolveDecisionEvent {
  *
  * - **the work item** — the chunk's PM pointers, each a link out to the forge (the
  *   board cards deliberately carry none), the issue title and body pass-through
- *   (issue #24), and the chunk's own facts: status, node, agent, attempts;
+ *   (issue #24), and the chunk's own facts: status, node, agent, attempts, and its
+ *   pinned **graph** and **model** — each editable inline, text-input-and-Set, the
+ *   same shape the open-question Answer control already uses, while the chunk sits
+ *   `not_ready` (issue #27). The edit row is gated on {@link editable} — the fact,
+ *   not a confirm — so the control simply disappears once the chunk leaves
+ *   `not_ready` rather than staying up to fail a 409, mirroring how Pause and Detach
+ *   already withhold themselves from a refusal the server would answer with one.
+ *   No graph picker: the hub exposes no `list` route over graphs (only `POST
+ *   /api/graphs` to mint one), so the graph edit takes a graph id by hand, same as
+ *   the model edit takes a model name by hand — both plain text, no listing to pick
+ *   from either;
  * - **node history**, oldest-first: every edge the chunk took with the judgement
  *   that chose it, so the review-fail loop back to build reads as a visible
  *   `review → build (fail)` step;
@@ -85,12 +107,14 @@ export interface ResolveDecisionEvent {
  *   criterion 12), or an **escalation's** copyable **takeover command**.
  *
  * Presentational only: it holds the detail input and emits `dismiss`, `answerQuestion`,
- * `resolveDecision`, `detach`, `pauseChunk`, and `resumeChunk` (each operator verb
- * guarded by a `confirm()`, the one browser affordance this panel already reaches for —
- * see `copyTakeover`); the data client (the mutations those events drive, and the error
- * any of them surfaces back down as `actionError`) lives in the container. All color
- * comes from the design-token layer, never hard-coded, and every text size from that
- * layer's type scale.
+ * `resolveDecision`, `detach`, `pauseChunk`, `resumeChunk`, `editGraph`, and
+ * `editModel` (the route-releasing and worker-killing verbs guarded by a `confirm()`,
+ * the one browser affordance this panel already reaches for — see `copyTakeover`; the
+ * graph/model edits are not — repinning either before the chunk has run costs nothing
+ * to undo, unlike detach or pause); the data client (the mutations those events drive,
+ * and the error any of them surfaces back down as `actionError`) lives in the
+ * container. All color comes from the design-token layer, never hard-coded, and every
+ * text size from that layer's type scale.
  */
 @Component({
   selector: 'fleet-chunk-detail-panel',
@@ -242,6 +266,57 @@ export interface ResolveDecisionEvent {
             <dd data-testid="fact-agent">{{ agent() }}</dd>
             <dt>Attempts</dt>
             <dd data-testid="fact-attempts">{{ attempts() }}</dd>
+            <!-- Graph and model are always shown; the edit row only while the chunk is
+                 still not_ready (issue #27) — the same shape as the open-question
+                 answer control, gated on the fact rather than confirmed. -->
+            <dt>Graph</dt>
+            <dd data-testid="fact-graph">
+              <span data-testid="graph-value" [title]="detail().graph_id">{{ detail().graph_id }}</span>
+              @if (editable()) {
+                <span class="edit-row">
+                  <input
+                    #graphInput
+                    class="edit-input"
+                    type="text"
+                    data-testid="graph-input"
+                    placeholder="New graph id…"
+                    [attr.aria-label]="'Set graph for chunk ' + detail().chunk_id"
+                  />
+                  <button
+                    type="button"
+                    class="act"
+                    data-testid="graph-submit"
+                    (click)="submitGraph(graphInput.value); graphInput.value = ''"
+                  >
+                    Set
+                  </button>
+                </span>
+              }
+            </dd>
+            <dt>Model</dt>
+            <dd data-testid="fact-model">
+              <span data-testid="model-value">{{ detail().model }}</span>
+              @if (editable()) {
+                <span class="edit-row">
+                  <input
+                    #modelInput
+                    class="edit-input"
+                    type="text"
+                    data-testid="model-input"
+                    placeholder="New model…"
+                    [attr.aria-label]="'Set model for chunk ' + detail().chunk_id"
+                  />
+                  <button
+                    type="button"
+                    class="act"
+                    data-testid="model-submit"
+                    (click)="submitModel(modelInput.value); modelInput.value = ''"
+                  >
+                    Set
+                  </button>
+                </span>
+              }
+            </dd>
           </dl>
         </section>
         <section class="d-sec" aria-label="Node history">
@@ -635,6 +710,27 @@ export interface ResolveDecisionEvent {
       outline: 1px solid var(--cyan);
       outline-offset: 0;
     }
+    /* The graph/model edit row (issue #27) — the same input-plus-act shape as
+       .answer-row, scaled down to sit inside a .kv fact cell. */
+    .edit-row {
+      display: flex;
+      gap: 4px;
+      margin-top: 3px;
+    }
+    .edit-input {
+      flex: 1;
+      min-width: 0;
+      font-family: inherit;
+      font-size: var(--fs-xs);
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid var(--line);
+      color: var(--text);
+      padding: 2px 4px;
+    }
+    .edit-input:focus-visible {
+      outline: 1px solid var(--cyan);
+      outline-offset: 0;
+    }
     .escalation {
       border: 1px solid var(--red-dim);
       background: color-mix(in srgb, var(--red) 6%, transparent);
@@ -894,6 +990,14 @@ export class ChunkDetailPanel {
    * `resumeChunk` for symmetry with `pauseChunk`. */
   readonly resumeChunk = output<string>();
 
+  /** Emitted when the operator sets a not-ready chunk's graph from the facts column
+   * (issue #27). No confirm — see the class doc. */
+  readonly editGraph = output<EditGraphEvent>();
+
+  /** Emitted when the operator sets a not-ready chunk's model from the facts column
+   * (issue #27). No confirm — see the class doc. */
+  readonly editModel = output<EditModelEvent>();
+
   /** The chunk's short name — the same identity its board card carries. */
   protected readonly shortId = computed<string>(() => shortChunkId(this.detail().chunk_id));
 
@@ -971,11 +1075,32 @@ export class ChunkDetailPanel {
    * half of the switch. */
   protected readonly pausable = computed<boolean>(() => !NOT_PAUSABLE.has(this.detail().status));
 
+  /** Whether the chunk's graph and model may be edited — `not_ready` only (issue #27):
+   * `EditService` refuses both edits 409 the moment a chunk is promoted, claimed, or
+   * later, so the facts column withholds the edit row rather than let an operator
+   * hit that refusal. Unlike {@link pausable}, there is no separate fact to key this
+   * on — `not_ready` is itself the whole window. */
+  protected readonly editable = computed<boolean>(() => this.detail().status === 'not_ready');
+
   /** Emit an answer for a question — no-op on an empty answer. */
   protected submitAnswer(questionId: string, answer: string): void {
     const trimmed = answer.trim();
     if (!trimmed) return;
     this.answerQuestion.emit({ questionId, answer: trimmed, chunkId: this.detail().chunk_id });
+  }
+
+  /** Emit a graph repin — no-op on a blank id (issue #27). */
+  protected submitGraph(graphId: string): void {
+    const trimmed = graphId.trim();
+    if (!trimmed) return;
+    this.editGraph.emit({ chunkId: this.detail().chunk_id, graphId: trimmed });
+  }
+
+  /** Emit a model repin — no-op on a blank name (issue #27). */
+  protected submitModel(model: string): void {
+    const trimmed = model.trim();
+    if (!trimmed) return;
+    this.editModel.emit({ chunkId: this.detail().chunk_id, model: trimmed });
   }
 
   /** Emit a resolution for the open gate decision. */
