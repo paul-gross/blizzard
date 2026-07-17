@@ -22,7 +22,7 @@ from blizzard.hub.domain.work import DEFAULT_MODEL, ChunkStatus
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.context import LoopConfig
-from blizzard.runner.loop.hub import HubClientError
+from blizzard.runner.loop.hub import HubClientError, RouteClaimOutcome
 from blizzard.runner.loop.steps import advance, fill, mark_resume_intents, pull, reap, resume
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.store.repository import NewLease
@@ -37,6 +37,7 @@ from blizzard.wire.facts import (
 )
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekEntry
+from blizzard.wire.route import RouteClaimPausedDenial
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -1045,3 +1046,45 @@ def test_a_chunk_paused_on_a_locally_paused_runner_resumes_for_neither_brake_alo
     lease = store.active_lease("lease_1")
     assert lease is not None and lease.epoch == 1 and lease.session_id == "sess-a" and lease.pid == 4321
     assert store.attempt_count("ch_1", "nd_build") == 1
+
+
+# --------------------------------------------------------------------------- #
+# The hub backstops the advisory brake above with an outright claim denial
+# (issue #44) — closing the tick-window gap between a hub pause landing and the
+# runner's next PULL mirroring it.
+# --------------------------------------------------------------------------- #
+
+
+def test_fill_stops_on_hub_denial_in_the_tick_window_race(tmp_path):  # type: ignore[no-untyped-def]
+    """The motivating race: the hub pauses the runner *after* PULL last mirrored
+    ``paused=False``, but *before* FILL's claim lands — the exact tick-window gap
+    issue #44 closes. FILL's own locally-mirrored copy of the brake still says "go",
+    yet the hub refuses the claim with a distinct denial rather than granting it."""
+    ctx, hub, store = _ctx_with_a_claimable_chunk(tmp_path, paused=False)
+    pull(ctx)  # mirrors paused=False — the runner has not yet observed the pause
+    assert store.hub_paused("r1") is False
+
+    # The pause lands at the hub in the window between this PULL and FILL's claim.
+    hub.claim_outcome = RouteClaimOutcome(denied_paused=RouteClaimPausedDenial(chunk_id="ch_1", runner_id="r1"))
+
+    fill(ctx)
+
+    assert len(hub.claims) == 1  # local cache said "go" — the claim was actually attempted
+    assert store.list_active_leases() == []  # but the hub refused it
+    assert store.held_environment_ids() == []  # the binding was released, not left dangling
+
+
+def test_fill_denial_logs_distinctly_from_a_race_conflict(tmp_path):  # type: ignore[no-untyped-def]
+    ctx, hub, _store = _ctx_with_a_claimable_chunk(tmp_path, paused=False)
+    pull(ctx)
+    hub.claim_outcome = RouteClaimOutcome(denied_paused=RouteClaimPausedDenial(chunk_id="ch_1", runner_id="r1"))
+
+    with capture_logs() as logs:
+        fill(ctx)
+
+    denied = [e for e in logs if e["event"] == "route claim denied — runner paused at the hub"]
+    lost_race = [e for e in logs if e["event"] == "route claim lost the race"]
+    assert len(denied) == 1
+    assert denied[0]["chunk_id"] == "ch_1"
+    assert denied[0]["runner_id"] == "r1"
+    assert lost_race == []  # the two outcomes are logged legibly apart, not conflated

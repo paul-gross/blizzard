@@ -20,15 +20,16 @@ from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
 from blizzard.wire.facts import RunnerFactAck, RunnerFactBatch
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekResponse
-from blizzard.wire.route import RouteClaim, RouteClaimConflict, RouteClaimResponse
+from blizzard.wire.route import RouteClaim, RouteClaimConflict, RouteClaimPausedDenial, RouteClaimResponse
 
 
 class HubClientError(RuntimeError):
     """A hub call failed at the transport level (unreachable, 5xx, malformed body).
 
-    A 409 route conflict is **not** an error — it is an expected race outcome
-    returned as :class:`RouteClaimOutcome`. This type is only raised for genuine
-    transport failures the loop treats as "hub unreachable, try next tick".
+    A 409 route conflict and a 403 paused-runner denial are **not** errors — they
+    are expected, distinguishable claim outcomes returned as
+    :class:`RouteClaimOutcome`. This type is only raised for genuine transport
+    failures the loop treats as "hub unreachable, try next tick".
     """
 
 
@@ -49,10 +50,15 @@ class ChunkNotFoundError(HubClientError):
 
 @dataclass(frozen=True)
 class RouteClaimOutcome:
-    """The result of a route claim: exactly one of ``claimed`` / ``conflict`` set."""
+    """The result of a route claim: exactly one of ``claimed`` / ``conflict`` /
+    ``denied_paused`` set. ``denied_paused`` (issue #44) is distinguished from
+    ``conflict`` in the loop: a conflict is a race this claim lost, a paused denial
+    means the hub refused it before any race — this runner's own pause brake,
+    read authoritatively at the hub rather than off this runner's last-mirrored copy."""
 
     claimed: RouteClaimResponse | None = None
     conflict: RouteClaimConflict | None = None
+    denied_paused: RouteClaimPausedDenial | None = None
 
     @property
     def won(self) -> bool:
@@ -67,7 +73,8 @@ class IHubClient(Protocol):
         ...
 
     def claim_route(self, claim: RouteClaim) -> RouteClaimOutcome:
-        """``POST /api/routes`` — claim work; 409 loses the race."""
+        """``POST /api/routes`` — claim work; 409 loses the race, 403 means the hub
+        registry already has this runner paused (issue #44)."""
         ...
 
     def submit_completion(self, chunk_id: str, submission: CompletionSubmission) -> ApplyResponse:

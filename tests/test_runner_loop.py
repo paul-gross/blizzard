@@ -175,6 +175,31 @@ def test_fill_conflict_releases_and_does_not_bind(tmp_path):  # type: ignore[no-
     assert provider.released == ["e1"]  # released the acquired-but-unclaimed env
     assert store.held_environment_ids() == []
     assert store.list_active_leases() == []
+
+
+@pytest.mark.unit
+def test_fill_paused_denial_releases_and_stops_filling(tmp_path):  # type: ignore[no-untyped-def]
+    """A 403 (issue #44) is a distinct outcome from a 409 conflict: the hub's registry
+    already has this runner paused, so the claim was refused outright rather than lost
+    to another runner — FILL releases the binding and stops trying further slots this
+    tick rather than keep racing claims the hub will refuse the same way."""
+    from blizzard.runner.loop.hub import RouteClaimOutcome
+    from blizzard.wire.route import RouteClaimPausedDenial
+
+    store = _store(tmp_path)
+    hub = FakeHub()
+    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.claim_outcome = RouteClaimOutcome(denied_paused=RouteClaimPausedDenial(chunk_id="ch_1", runner_id="r1"))
+    provider = FakeProvider({"e1": "/ws/e1"})
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe())
+
+    fill(ctx)
+
+    assert len(hub.claims) == 1  # the claim was actually attempted
+    assert provider.released == ["e1"]  # released the acquired-but-unclaimed env
+    assert store.held_environment_ids() == []
+    assert store.list_active_leases() == []
     assert harness.spawns == []
 
 

@@ -878,8 +878,13 @@ def fill(ctx: LoopContext) -> None:
     FILL is where work is claimed. Open agent slots are
     ``MAX_AGENTS - active_leases``; for each, peek the ready queue, acquire the
     chunk's environments (all-or-nothing), and POST the complete route. A 409 is
-    race-second-place — release the bindings and move on. The winning claim carries
-    the first node envelope, so the worker starts without a second round-trip.
+    race-second-place — release the bindings and move on. A 403 (issue #44) is a
+    different shape: the hub's registry already has this runner paused and refused
+    the claim outright, closing the gap between a hub pause landing and this
+    runner's next pull mirroring it — release the binding and stop filling this tick
+    rather than keep racing claims the hub will refuse the same way. The winning
+    claim carries the first node envelope, so the worker starts without a second
+    round-trip.
 
     The pause brake has two independent surfaces and FILL claims nothing while
     **either** is set: the hub's flag (mirrored locally by PULL) and this runner's own
@@ -1027,6 +1032,17 @@ def _fill_one(ctx: LoopContext) -> bool:
         outcome = ctx.hub.claim_route(claim)
     except HubClientError:
         _release_binding(ctx, entry.chunk_id, acquired)  # claim not sent — undo the local binding
+        return False
+    if outcome.denied_paused is not None:
+        # The hub's registry already has us paused — a distinct outcome from losing
+        # the exactly-once race (issue #44): this claim was refused outright, not
+        # beaten. Stop filling this tick rather than burn the remaining slots on
+        # claims the hub will refuse the same way; PULL mirrors the flag locally on
+        # its next pull.
+        _log.info(
+            "route claim denied — runner paused at the hub", chunk_id=entry.chunk_id, runner_id=ctx.config.runner_id
+        )
+        _release_binding(ctx, entry.chunk_id, acquired)
         return False
     if outcome.conflict is not None or outcome.claimed is None:
         _log.info("route claim lost the race", chunk_id=entry.chunk_id)
@@ -1533,6 +1549,13 @@ def _reclaim_interrupted(ctx: LoopContext, chunk_id: str, bindings: list[EnvBind
         outcome = ctx.hub.claim_route(claim)
     except HubClientError:
         return  # hub unreachable — the binding is durable; retry next tick
+    if outcome.denied_paused is not None:
+        # Same distinct outcome as FILL's own claim (issue #44) — the hub's registry
+        # already has this runner paused, so the reclaim was refused outright rather
+        # than lost to another runner.
+        _log.info("interrupted claim denied — runner paused at the hub", chunk_id=chunk_id)
+        _release_all(ctx, chunk_id)
+        return
     if outcome.conflict is not None or outcome.claimed is None:
         _log.info("interrupted claim lost the race — releasing binding", chunk_id=chunk_id)
         _release_all(ctx, chunk_id)

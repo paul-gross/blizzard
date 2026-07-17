@@ -369,7 +369,8 @@ export const readyApiReadyGet = <ThrowOnError extends boolean = false>(options?:
 /**
  * Claim Route
  *
- * Claim a chunk; 409 if already claimed, else the first node envelope.
+ * Claim a chunk; 403 if the runner is paused at the hub, 409 if already claimed,
+ * else the first node envelope.
  */
 export const claimRouteApiRoutesPost = <ThrowOnError extends boolean = false>(options: Options<ClaimRouteApiRoutesPostData, ThrowOnError>): RequestResult<ClaimRouteApiRoutesPostResponses, ClaimRouteApiRoutesPostErrors, ThrowOnError> => (options.client ?? client).post<ClaimRouteApiRoutesPostResponses, ClaimRouteApiRoutesPostErrors, ThrowOnError>({
     url: '/api/routes',

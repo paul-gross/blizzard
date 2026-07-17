@@ -21,7 +21,7 @@ from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
 from blizzard.wire.facts import EscalationReport, LeaseMintReport, RunnerFactAck, RunnerFactBatch
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekResponse
-from blizzard.wire.route import RouteClaim, RouteClaimConflict, RouteClaimResponse
+from blizzard.wire.route import RouteClaim, RouteClaimConflict, RouteClaimPausedDenial, RouteClaimResponse
 from blizzard.wire.runner import RunnerRegistrationRequest, RunnerView
 
 _log = get_logger("blizzard.runner.hub")
@@ -46,6 +46,8 @@ class HttpHubClient:
             raise self._wrap(exc, "POST /routes") from exc
         if resp.status_code == httpx.codes.CONFLICT:
             return RouteClaimOutcome(conflict=RouteClaimConflict.model_validate(resp.json()))
+        if resp.status_code == httpx.codes.FORBIDDEN:
+            return RouteClaimOutcome(denied_paused=RouteClaimPausedDenial.model_validate(resp.json()))
         self._raise_for_status(resp, "POST /routes")
         return RouteClaimOutcome(claimed=RouteClaimResponse.model_validate(resp.json()))
 

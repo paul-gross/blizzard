@@ -105,7 +105,7 @@ def build_services(
         graphs=graph_store,
         ingest=IngestService(chunks=chunk_store, clock=clock),
         promote=PromoteService(chunks=chunk_store, clock=clock),
-        claim=ClaimService(chunks=chunk_store, clock=clock),
+        claim=ClaimService(chunks=chunk_store, registry=registry_store, clock=clock),
         apply=ApplyService(chunks=chunk_store, coordinator=coordinator, clock=clock),
         decisions=DecisionService(chunks=chunk_store, clock=clock),
         requeue=RequeueService(chunks=chunk_store, clock=clock),

@@ -79,6 +79,24 @@ def test_claim_route_409_is_conflict_not_error() -> None:
 
 
 @pytest.mark.unit
+def test_claim_route_403_is_a_paused_denial_not_a_conflict() -> None:
+    """A distinct outcome from the 409 race loss (issue #44): the hub's registry has
+    this runner paused and refused the claim outright."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            403, json={"chunk_id": "ch_1", "runner_id": "r1", "detail": "runner is paused at the hub"}
+        )
+
+    outcome = _client(handler).claim_route(
+        RouteClaim(chunk_id="ch_1", runner_id="r1", workspace_id="ws1", environment_ids=["e1"])
+    )
+    assert not outcome.won
+    assert outcome.conflict is None
+    assert outcome.denied_paused is not None and outcome.denied_paused.runner_id == "r1"
+
+
+@pytest.mark.unit
 def test_submit_completion_returns_apply_response() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/api/chunks/ch_1/completions"

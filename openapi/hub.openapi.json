@@ -3611,7 +3611,7 @@
     },
     "/api/routes": {
       "post": {
-        "description": "Claim a chunk; 409 if already claimed, else the first node envelope.",
+        "description": "Claim a chunk; 403 if the runner is paused at the hub, 409 if already claimed,\nelse the first node envelope.",
         "operationId": "claim_route_api_routes_post",
         "requestBody": {
           "content": {

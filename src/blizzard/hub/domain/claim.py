@@ -6,6 +6,18 @@ that already has a live route loses with a :class:`ClaimConflict` (surfaced 409)
 and the winning claim's result carries the chunk's first node envelope so the runner
 starts working without a second round-trip.
 
+A claim from a runner the registry marks paused is refused before the race is even
+run, with the distinct :class:`ClaimDeniedPaused` (surfaced 403) — not a race loss,
+not an epoch fence, but the hub's own arbiter enforcing its pause brake rather than
+trusting the runner to have already read it back on pull (issue #44). The check reads
+:class:`~blizzard.hub.domain.registry.RunnerRegistration.hub_paused`, itself derived
+from the same ``runner_pause_facts`` the registry appends — no second source of
+truth — and only that brake: a *locally*-paused-only runner (``locally_paused``) is
+the runner's own restraint, not something the hub denies (issue #43 is that
+mechanism). The denial stops only new claims; a route already held, and every
+transition/completion/decision against it, is untouched (``bzh:facts-not-status`` —
+pause is read at claim time, never persisted onto the chunk or the route).
+
 The single-claim guarantee is the hub's single-writer property: the daemon
 is the fleet's one arbiter, so the load-facts → check-live-route →
 record-route sequence must run as an atomic compare-and-set. FastAPI serves sync
@@ -29,6 +41,7 @@ from blizzard.foundation.clock import IClock
 from blizzard.hub.domain.envelope import build_node_envelope
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import Graph
+from blizzard.hub.domain.registry import IReadRunnerRegistry
 from blizzard.hub.domain.work import Chunk, IWriteChunkRepository, current_node_id, latest_epoch
 from blizzard.wire.envelope import NodeEnvelope
 
@@ -41,6 +54,19 @@ class ClaimConflict(Exception):
         self.held_by_runner_id = held_by_runner_id
 
 
+class ClaimDeniedPaused(Exception):
+    """The claiming runner is paused at the hub registry — refused before any race (issue #44).
+
+    Distinct from :class:`ClaimConflict`: this runner did not lose to another claimant,
+    it was never eligible to claim in the first place. Closes the gap between a hub
+    pause landing and the runner's next pull mirroring it — the hub is the arbiter and
+    stops the claim itself rather than trusting the runner to have already adhered."""
+
+    def __init__(self, *, runner_id: str) -> None:
+        super().__init__(f"runner {runner_id} is paused at the hub")
+        self.runner_id = runner_id
+
+
 @dataclass(frozen=True)
 class ClaimResult:
     """A won claim — the route fact plus the chunk's first node envelope."""
@@ -50,10 +76,11 @@ class ClaimResult:
 
 
 class ClaimService:
-    """Claim a chunk for a runner, exactly-one-wins."""
+    """Claim a chunk for a runner, exactly-one-wins, and paused-runners-need-not-apply."""
 
-    def __init__(self, *, chunks: IWriteChunkRepository, clock: IClock) -> None:
+    def __init__(self, *, chunks: IWriteChunkRepository, registry: IReadRunnerRegistry, clock: IClock) -> None:
         self._chunks = chunks
+        self._registry = registry
         self._clock = clock
         # Serializes the check-live-route → record-route CAS across concurrent claims
         # on one hub daemon. One ClaimService per hub, so one lock guards every
@@ -69,6 +96,13 @@ class ClaimService:
         workspace_id: str,
         environment_ids: list[str],
     ) -> ClaimResult:
+        # Checked before the lock: a paused runner is refused regardless of whether it
+        # would have won the race, so there is nothing here for the CAS to serialize.
+        # An unregistered runner (`get_runner` returns None) cannot have been paused —
+        # `FleetService.set_paused` requires a known runner — so it is not denied.
+        registration = self._registry.get_runner(runner_id)
+        if registration is not None and registration.hub_paused:
+            raise ClaimDeniedPaused(runner_id=runner_id)
         with self._claim_lock:
             return self._claim_locked(
                 chunk, graph, runner_id=runner_id, workspace_id=workspace_id, environment_ids=environment_ids
