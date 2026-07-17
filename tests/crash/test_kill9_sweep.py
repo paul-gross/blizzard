@@ -377,7 +377,7 @@ def _await_committed(runner_dir: Path, chunk_id: str, landed_file: str, *, timeo
 
 
 def test_graceful_restart_resumes_in_flight_session(crash_env: CrashEnv, tmp_path: Path) -> None:
-    """A graceful runner restart re-attaches to its in-flight session in place (issue #12, D-082).
+    """A graceful runner restart re-attaches to its in-flight session in place (issue #12).
 
     The build worker commits and then hangs; a graceful stop (SIGTERM) marks its lease with a
     resume-intent, and the restart RESUMEs the *same* session — same lease/epoch/session, only
@@ -448,7 +448,7 @@ def _session_ends(runner_dir: Path) -> set[str]:
 
 
 def test_kill9_runner_resumes_in_flight_session(crash_env: CrashEnv, tmp_path: Path) -> None:
-    """An involuntary ``kill -9`` mid-build (no graceful marker) still re-attaches the session (issue #13, D-082).
+    """An involuntary ``kill -9`` mid-build (no graceful marker) still re-attaches the session (issue #13).
 
     The graceful scenario's twin, crashed instead of stopped: the build worker commits then hangs,
     and a ``kill -9`` of the whole tree — the runner *and* its in-flight worker, a faithful reboot —
@@ -579,7 +579,7 @@ def test_kill9_at_resume_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
 
 
 # --------------------------------------------------------------------------- #
-# Live detach recovery (blizzard#38, D-088) — the abandon crash point
+# Live detach recovery (blizzard#38) — the abandon crash point
 # --------------------------------------------------------------------------- #
 
 
@@ -699,7 +699,7 @@ def test_kill9_at_abandon_crash_point(crash_env: CrashEnv, tmp_path: Path, point
     A live operator detach is the new way this window is reached (blizzard#38 slice 5):
     the chunk is claimed and hung mid-flight, the operator detaches it via the real hub endpoint,
     and the armed runner's next PULL discovers the detach, kills the hung worker, and self-SIGKILLs
-    at ``point`` before the environments are released. The claim under test (plan.md §2 property 4)
+    at ``point`` before the environments are released. The claim under test
     is that this is recovered by the **same** path restart-resume already carries: the dead pid's
     heartbeat is fresh at crash time, so the startup scan marks it for resume rather than reaping
     it as stalled; RESUME then re-asks the hub, finds the chunk still not ours, and re-runs the

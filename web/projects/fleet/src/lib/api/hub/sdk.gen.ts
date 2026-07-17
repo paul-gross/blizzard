@@ -246,7 +246,7 @@ export const listOpenQuestionsApiQuestionsGet = <ThrowOnError extends boolean = 
 /**
  * Ask Question
  *
- * Land a ``question.asked`` row — the chunk parks ``waiting_on_human`` ([ask-answer.md]).
+ * Land a ``question.asked`` row — the chunk parks ``waiting_on_human``.
  */
 export const askQuestionApiQuestionsPost = <ThrowOnError extends boolean = false>(options: Options<AskQuestionApiQuestionsPostData, ThrowOnError>): RequestResult<AskQuestionApiQuestionsPostResponses, AskQuestionApiQuestionsPostErrors, ThrowOnError> => (options.client ?? client).post<AskQuestionApiQuestionsPostResponses, AskQuestionApiQuestionsPostErrors, ThrowOnError>({
     url: '/api/questions',
@@ -267,7 +267,7 @@ export const getQuestionApiQuestionsQuestionIdGet = <ThrowOnError extends boolea
 /**
  * Answer Question
  *
- * Answer a question first-write-wins; 409 carries the winning answer ([ask-answer.md]).
+ * Answer a question first-write-wins; 409 carries the winning answer.
  */
 export const answerQuestionApiQuestionsQuestionIdAnswerPost = <ThrowOnError extends boolean = false>(options: Options<AnswerQuestionApiQuestionsQuestionIdAnswerPostData, ThrowOnError>): RequestResult<AnswerQuestionApiQuestionsQuestionIdAnswerPostResponses, AnswerQuestionApiQuestionsQuestionIdAnswerPostErrors, ThrowOnError> => (options.client ?? client).post<AnswerQuestionApiQuestionsQuestionIdAnswerPostResponses, AnswerQuestionApiQuestionsQuestionIdAnswerPostErrors, ThrowOnError>({
     url: '/api/questions/{question_id}/answer',

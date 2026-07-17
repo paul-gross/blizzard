@@ -1,7 +1,7 @@
 """The client verbs that wrap the hub's ingest + the runner's own declarative pause
 (mixed tier — marked per test, not file-wide; see below).
 
-``blizzard hub ingest`` (wraps ``POST /api/chunks``, D-047) is a pure client of the hub's
+``blizzard hub ingest`` (wraps ``POST /api/chunks``) is a pure client of the hub's
 API, driven here with ``httpx.post`` stubbed: the request it builds, the success line, the
 mapped error statuses — no live hub. These (plus ``promote``/``detach``, the same shape)
 are **unit** tier: one verb driven in isolation with its only collaborator stubbed.
@@ -11,7 +11,7 @@ are **unit** tier: one verb driven in isolation with its only collaborator stubb
 pause brake. The tests that drive them against a **live** daemon on a **real unix socket**
 (``_serve_local_api``) are **component** tier — a real server, a real store, and the CLI
 wired together, doubled only at the hub seam (``_no_hub``) — because the socket transport
-and its hub-independence are exactly what is under test (D-068, design/cli.md:18); a
+and its hub-independence are exactly what is under test; a
 stubbed transport would assert nothing about either. The two tests that never bring up a
 live daemon (no daemon serving; the flag-conflict validation) stay **unit**.
 """
@@ -375,7 +375,7 @@ def test_pause_patches_the_runners_own_local_api(tmp_path: Path, monkeypatch: py
 
 @pytest.mark.component
 def test_pause_succeeds_with_the_hub_unreachable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The whole point (design/cli.md:18): the local brake does not depend on the hub.
+    """The whole point: the local brake does not depend on the hub.
 
     `_no_hub` makes any hub call an error, so this passing *is* the assertion — there is no
     hub in this test at all, and the verb still works.

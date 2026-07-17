@@ -50,7 +50,7 @@ def test_open_pr_creates_a_pr_and_targets_the_base_branch() -> None:
     assert handle.repo == "acme/widget"
     assert handle.number == 1
     assert handle.url.endswith("/pull/1")
-    # The PR's base is the request's base_branch (the main->master fix, D-060), not a default.
+    # The PR's base is the request's base_branch (the main->master fix), not a default.
     assert double.forge_state["pulls"][1]["base"] == "master"  # type: ignore[attr-defined]
 
 

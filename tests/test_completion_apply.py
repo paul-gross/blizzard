@@ -1,7 +1,7 @@
 """Completion apply — the epoch fence, terminal rejection, and bad choices (component tier).
 
 The happy path and idempotent replay are covered by ``test_delivery_loop``; this file
-pins the rejection edges (``bzh:facts-not-status`` / D-007 / D-072).
+pins the rejection edges (``bzh:facts-not-status``).
 """
 
 from __future__ import annotations
@@ -44,10 +44,10 @@ nodes:
 
 
 # A spike -> deliver graph: one read-only work node that `produces` an asset and no
-# code, routing into the same hub deliver node a code chunk uses (workflow-engine.md:
-# "a chunk whose whole purpose is a review or a spike simply ends with assets instead
-# of branch pointers", and the graph still "ends in a deliver node"). It is the non-code
-# terminal — MVP criterion 10's 2nd sentence — reached hermetically at the apply tier.
+# code, routing into the same hub deliver node a code chunk uses — a chunk whose whole
+# purpose is a review or a spike simply ends with assets instead of branch pointers, and
+# the graph still ends in a deliver node. It is the non-code terminal — MVP criterion
+# 10's 2nd sentence — reached hermetically at the apply tier.
 _SPIKE_DELIVER_YAML = """
 name: default-delivery
 entry: spike
@@ -131,7 +131,7 @@ def test_non_code_chunk_completes_with_only_asset_artifacts(tmp_path: Path) -> N
     """A spike chunk carrying only an asset reaches ``done`` — no code lands (criterion 10, 2nd sentence).
 
     The sibling apply tests (and every other completing-chunk test) end in a git deliver
-    that lands branch pointers; this pins the *non-code* half of D-026: a node-step that
+    that lands branch pointers; this pins the *non-code* half: a node-step that
     ``produces`` an asset and no git commit routes into the deliver node, which lands
     nothing (no forge call, no PR) yet still finalizes the chunk terminal — so the chunk
     completes carrying only its asset. The full-rails equivalent is

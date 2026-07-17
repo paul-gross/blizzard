@@ -3,7 +3,7 @@
 Each step is driven directly against a real tmp store with fakes at the seams
 (``bzh:steppable-loop``): FILL claims and spawns (buffering ``lease.minted``), ADVANCE
 judges an exited worker and **buffers** its completion, PULL's flusher delivers the
-buffer and drives the apply-response (store-and-forward, D-069), a hub-node hold polls
+buffer and drives the apply-response (store-and-forward), a hub-node hold polls
 to release, REAP expires an orphan and a stalled-but-alive worker, and the retry budget
 requeues then escalates. The full happy path is exercised as a sequence of ticks.
 """
@@ -148,7 +148,7 @@ def test_fill_reports_lease_mint_to_hub(tmp_path):  # type: ignore[no-untyped-de
 
     fill(ctx)
 
-    # The lease.minted rides the outbound buffer (store-and-forward, D-069); PULL's
+    # The lease.minted rides the outbound buffer (store-and-forward); PULL's
     # flusher reports it up to POST /events, so it is not pushed inline at spawn.
     buffered = [b for b in store.pending_outbound() if b.kind == LEASE_MINTED]
     assert len(buffered) == 1
@@ -360,7 +360,7 @@ def test_advance_review_harvests_findings_asset_from_assessment(tmp_path):  # ty
     )
 
     advance(ctx)  # buffers the completion (with the harvested findings asset)
-    pull(ctx)  # the flusher delivers it to the hub (store-and-forward, D-069)
+    pull(ctx)  # the flusher delivers it to the hub (store-and-forward)
 
     _, submission = hub.completions[0]
     findings = [a for a in submission.artifacts if a.name == "review-findings"]

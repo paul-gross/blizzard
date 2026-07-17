@@ -1,7 +1,7 @@
 """Ask-and-exit park/resume in the reconciliation loop (unit tier) — MVP criterion 7.
 
 Drives the loop steps directly against a real tmp runner store with fakes at the seams
-(``bzh:steppable-loop``) to pin the runner half of the protocol ([ask-answer.md]):
+(``bzh:steppable-loop``) to pin the runner half of the ask-and-exit protocol:
 
 * an exited worker holding an unforwarded ask **parks** — ADVANCE forwards the
   ``question.asked`` up the outbound buffer, records the park fact, and elicits **no**
@@ -115,7 +115,7 @@ def test_exited_worker_with_open_ask_parks_without_a_verdict(tmp_path):  # type:
 
     # Parked: the reap clock is stopped and the chunk derives waiting_on_human (at the hub).
     assert store.parked_lease_ids() == {"lease_1"}
-    # The question was forwarded up the outbound buffer (store-and-forward, D-069).
+    # The question was forwarded up the outbound buffer (store-and-forward).
     buffered = [f for f in store.pending_outbound() if f.kind == QUESTION_ASKED]
     assert len(buffered) == 1
     assert '"question_id": "qn_1"' in buffered[0].payload

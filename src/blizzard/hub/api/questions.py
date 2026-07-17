@@ -1,4 +1,4 @@
-"""Question routes — the hub half of the ask/answer rendezvous ([ask-answer.md]).
+"""Question routes — the hub half of the ask/answer rendezvous.
 
 ``POST /questions`` lands the durable question row a runner forwards (the chunk
 derives ``waiting_on_human``); ``POST /questions/{id}/answer`` writes the answer
@@ -46,7 +46,7 @@ def question_view(row: QuestionRow) -> QuestionView:
 
 @router.post("/questions", status_code=status.HTTP_201_CREATED)
 def ask_question(fact: QuestionAsked, services: Annotated[HubServices, Depends(get_services)]) -> dict[str, str]:
-    """Land a ``question.asked`` row — the chunk parks ``waiting_on_human`` ([ask-answer.md])."""
+    """Land a ``question.asked`` row — the chunk parks ``waiting_on_human``."""
     if services.chunks.get(fact.chunk_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {fact.chunk_id}")
     services.questions.record_asked(fact)
@@ -59,7 +59,7 @@ def ask_question(fact: QuestionAsked, services: Annotated[HubServices, Depends(g
 def answer_question(
     question_id: str, request: AnswerRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> object:
-    """Answer a question first-write-wins; 409 carries the winning answer ([ask-answer.md])."""
+    """Answer a question first-write-wins; 409 carries the winning answer."""
     if services.chunks.get_question(question_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown question {question_id}")
     outcome = services.questions.answer(question_id, answer=request.answer, answered_by=request.answered_by)
@@ -71,7 +71,8 @@ def answer_question(
         answered_at=iso_utc(outcome.answered_at),
     )
     if not outcome.won:
-        # A racing second answer — the loser is told who already answered (D-045 kin).
+        # A racing second answer — the loser is told who already answered (the same
+        # first-write-wins pattern as a gate decision).
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=result.model_dump())
     # The winning answer row alone flips the chunk out of waiting_on_human.
     winner = services.chunks.get_question(question_id)

@@ -3,8 +3,7 @@
 How a colocated blizzard machine — one hub and one supervisor (runner) side by
 side — is installed under systemd, and the contract that makes it survive a crash
 or a reboot with nothing lost and nothing worked twice. This is the operator
-reference for the journey clause in the product spec
-(`blizzard-discovery` `product/mvp.md`):
+reference for the following journey:
 
 > At some point in the night the machine rebooted. It didn't matter: the
 > supervisor and the colocated hub came back under systemd, the supervisor reaped
@@ -54,7 +53,7 @@ sudo -u blizzard /opt/blizzard/venv/bin/blizzard-runner init /var/lib/blizzard/r
 #    its PM work sources are declared in blizzard-hub.toml's [[pm_source]] blocks
 #    (init scaffolds a commented-out example — see "Configuring PM work sources"
 #    below); the runner's workspace/harness bindings live in its own config.toml,
-#    written by `init` and edited in place (no credentials — D-084).
+#    written by `init` and edited in place (no credentials).
 
 # 5. Install and enable both units. `enable` is what starts them at boot; `--now`
 #    starts them immediately too.
@@ -124,7 +123,7 @@ shared runtime dir during an exclusive handoff.
 
 ## Configuring PM work sources
 
-The hub's PM pass-through (D-047, MVP criterion 1) reads every chunk's PM item through a
+The hub's PM pass-through reads every chunk's PM item through a
 **configured PM work source** — a named, credentialed binding to one forge repo, declared
 as an `[[pm_source]]` table in `blizzard-hub.toml`. This is a separate seam from the
 delivery forge above: `BZ_FORGE_URL`/`BZ_FORGE_TOKEN` in the hub's env file control where
@@ -280,7 +279,7 @@ sudo -u blizzard /opt/blizzard/venv/bin/blizzard-runner start --dir /var/lib/bli
 `--runner-url` (or `$BZ_RUNNER_URL`) points a local verb at the TCP door instead — for a
 shell that cannot see the runtime dir, or cannot open the socket. Passing both `--dir` and
 `--runner-url` explicitly is an error; an explicit flag beats either variable, and if both
-arrive from the environment the socket wins (D-068's default transport). Note the two are
+arrive from the environment the socket wins (the default transport). Note the two are
 different namespaces: `$BZ_RUNNER_URL` is this operator setting, while
 `BLIZZARD_RUNNER_URL` in the table above is spawn-injected worker identity the runner
 mints per worker — setting one does not affect the other.

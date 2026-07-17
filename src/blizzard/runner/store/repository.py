@@ -104,7 +104,7 @@ class BufferedFact:
 
 @dataclass(frozen=True)
 class AskRecord:
-    """The worker's local open-ask fact ([ask-answer.md]).
+    """The worker's local open-ask fact.
 
     Recorded by the runner's local API when ``blizzard runner ask`` fires, before the
     worker exits. ``question_id`` is runner-minted so the answer can be polled back by
@@ -122,7 +122,7 @@ class AskRecord:
 
 @dataclass(frozen=True)
 class ParkRecord:
-    """A lease's park on a question — dormant, no live worker ([ask-answer.md])."""
+    """A lease's park on a question — dormant, no live worker."""
 
     lease_id: str
     chunk_id: str
@@ -175,8 +175,8 @@ class IReadRunnerStore(Protocol):
         """The lease's most recent heartbeat stamp, or ``None`` if it never beat.
 
         REAP's stall signal: a live worker whose last beat is older than the
-        conservative staleness threshold has stopped making tool calls (design/
-        runner/loop.md). ``None`` falls back to the lease's own creation instant.
+        conservative staleness threshold has stopped making tool calls. ``None``
+        falls back to the lease's own creation instant.
         """
         ...
 
@@ -190,7 +190,7 @@ class IReadRunnerStore(Protocol):
         ...
 
     def held_environment_ids(self) -> list[str]:
-        """Every env id whose binding has no release fact (D-062's ``held_ids``)."""
+        """Every env id whose binding has no release fact (the provider's ``held_ids``)."""
         ...
 
     def bindings_for_chunk(self, chunk_id: str) -> list[EnvBindingRecord]:
@@ -223,7 +223,7 @@ class IReadRunnerStore(Protocol):
         ...
 
     def parked_lease_ids(self) -> set[str]:
-        """Leases dormant on a question — a park fact with no later resume ([ask-answer.md]).
+        """Leases dormant on a question — a park fact with no later resume.
 
         REAP skips these (the reap clock is stopped — no live worker to stall) and
         ADVANCE polls them for an answer rather than eliciting a verdict."""
@@ -319,7 +319,7 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         ...
 
     def record_binding(self, *, chunk_id: str, environment_id: str, workdir: str, bound_at: datetime) -> None:
-        """Persist a chunk→env binding fact (written with the route claim, D-080/D-083)."""
+        """Persist a chunk→env binding fact (written with the route claim)."""
         ...
 
     def record_heartbeat(self, *, lease_id: str, beat_at: datetime) -> None:
@@ -355,15 +355,15 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         session_id: str | None,
         asked_at: datetime,
     ) -> None:
-        """Persist the worker's local open-ask fact ([ask-answer.md])."""
+        """Persist the worker's local open-ask fact."""
         ...
 
     def record_park(self, *, lease_id: str, chunk_id: str, question_id: str, parked_at: datetime) -> None:
-        """Park a lease on a question — dormant, its env bindings held ([ask-answer.md])."""
+        """Park a lease on a question — dormant, its env bindings held."""
         ...
 
     def record_park_resume(self, *, lease_id: str, question_id: str, resumed_at: datetime) -> None:
-        """End a lease's park — the answer arrived and the session was resumed ([ask-answer.md])."""
+        """End a lease's park — the answer arrived and the session was resumed."""
         ...
 
     def set_hub_paused(self, runner_id: str, *, paused: bool, at: datetime) -> None:

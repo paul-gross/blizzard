@@ -44,7 +44,7 @@ describe('injectRunnerLeasesQuery', () => {
 
   afterEach(() => stub?.restore());
 
-  it('is namespaced under runner (D-097 fleet/local split)', () => {
+  it('is namespaced under runner (fleet/local split)', () => {
     expect(runnerLeasesKey).toEqual(['runner', 'leases']);
   });
 

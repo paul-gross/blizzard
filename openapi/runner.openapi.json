@@ -819,7 +819,7 @@
     },
     "/api/leases/{lease_id}/asks": {
       "post": {
-        "description": "Record a worker's ask against its lease, minting the question id ([ask-answer.md]).",
+        "description": "Record a worker's ask against its lease, minting the question id.",
         "operationId": "record_ask_api_leases__lease_id__asks_post",
         "parameters": [
           {

@@ -1,21 +1,21 @@
 """Hub service tier — the real hub against the mock runner + mock forge (verification/blizzard.md).
 
 The **hub** daemon's HTTP API is exercised from outside the process, with its counterparts
-mocked (``implementation/mocking.md``, "the hub → run it against the mock runner"): the
+mocked ("the hub → run it against the mock runner"): the
 **mock runner** (a levered driver) issues the runner-role calls — register, peek, claim,
 complete — and the **mock forge** backs the work-source seam the chunk is ingested from.
 Every assertion is made over the wire against the running hub:
 
 * **claim + completion** — the mock runner claims a ready chunk (receiving the first node
   envelope over the wire) and submits an epoch-fenced completion; the hub applies it and
-  advances the chunk to the next node (``next`` observed over the wire, D-036).
+  advances the chunk to the next node (``next`` observed over the wire).
 * **stale-epoch rejection** — with the runner's ``stale_epoch`` lever armed, the completion
   carries a zombie fence; the hub rejects it (``failure``, "stale epoch") and does **not**
   advance.
 * **queue shaping** — grouping folds two ready chunks into one plural-pointer survivor and
   a reorder moves it to the top; ``GET /api/queue/peek`` reflects both.
 * **SSE contract** — ``GET /api/events/stream`` serves a valid ``text/event-stream`` an
-  ``EventSource`` connects to (the reserved comment), D-067.
+  ``EventSource`` connects to (the reserved comment).
 
 sqlite only, no tokens, no network. Reproduce — from a provisioned feature env — with::
 

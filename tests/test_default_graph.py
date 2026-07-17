@@ -1,4 +1,4 @@
-"""The packaged default graph (unit tier) — D-081.
+"""The packaged default graph (unit tier).
 
 The hub ships a default graph every chunk pins at ingest. This proves it
 loads, inlines its prompt file references, and passes mint-time validation

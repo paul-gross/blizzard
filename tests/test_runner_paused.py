@@ -242,7 +242,7 @@ def test_in_flight_chunk_runs_on_while_locally_paused(tmp_path):  # type: ignore
 # The local brake reaches every spawn site, not just FILL's claim (issue #45)
 # --------------------------------------------------------------------------- #
 #
-# The hub brake keeps its D-043 claims-only meaning — checked in FILL alone. The local
+# The hub brake keeps its claims-only meaning — checked in FILL alone. The local
 # brake also blocks restart-resume, an answer-resume, and every ``_spawn_attempt`` caller
 # (ADVANCE's next-node, a requeue, a claim-adopt/reclaim) via the shared
 # ``_spawn_suppressed`` gate, always reached before its primitive's first mutation.
@@ -904,8 +904,8 @@ def test_pull_rejection_at_exhausted_retries_defers_escalation_while_locally_pau
     Of the three, ADVANCE's is provably unreachable while locally paused (the judgement
     gate returns before its ``_fail_attempt`` can be reached at all), and REAP's orphan
     case is covered above. This is PULL's: a completion buffered just before the operator
-    paused is flushed during the pause, the hub rejects it as stale (a zombie fenced at
-    D-007), and the exhausted budget lands it on the escalate branch — the one-way door
+    paused is flushed during the pause, the hub rejects it as stale (a zombie fenced),
+    and the exhausted budget lands it on the escalate branch — the one-way door
     that must not open while the runner is paused.
     """
     store = _store(tmp_path)

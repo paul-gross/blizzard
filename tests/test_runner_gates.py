@@ -1,4 +1,4 @@
-"""Runner-side human gates — the loop's gate paths (unit tier, D-032/D-045).
+"""Runner-side human gates — the loop's gate paths (unit tier).
 
 Two behaviours, driven against a real tmp store with fakes at the seams
 (``bzh:steppable-loop``): a **runner-config gate** submits a decision in place of a

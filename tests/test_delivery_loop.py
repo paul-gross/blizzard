@@ -2,7 +2,7 @@
 
 One chunk travels the whole hub lifecycle over the HTTP surface —
 ingest -> peek -> claim -> completion -> deliver -> done — with the forge behind an
-in-process fake. This is the hub half of the P6 exit criterion (verification.md); the
+in-process fake. This is the hub half of the P6 exit criterion; the
 full cross-daemon loop (real runner, real fixture workspace, real mock forge) is the
 ``e2e`` acceptance test, skipped without the live stack.
 """

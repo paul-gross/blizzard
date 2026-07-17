@@ -11,7 +11,7 @@ Two things derive over the registry, never stored as columns:
 * **paused** — the operator's brake: pause/resume facts append and ``paused``
   derives from the newest one, exactly as a graph's enabled-ness does. The runner
   reads it back on its outbound pull and adheres — pausing stops new leases, in-flight
-  chunks run on ([loop.md]).
+  chunks run on.
 
 :class:`FleetService` is the domain service the routes delegate to
 (``bzh:controller-read-only``); it holds the write registry repository and the injected
@@ -32,7 +32,7 @@ from blizzard.foundation.store.utc import as_utc
 
 _log = get_logger("blizzard.hub.registry")
 
-#: Liveness staleness threshold (D-070 open-question constant, decisions/open-questions.md).
+#: Liveness staleness threshold — a chosen constant, not derived from a formula.
 #: The runner-level heartbeat is deliberately much slower than the machine-local worker
 #: heartbeat; a runner unheard-from for longer than this reads offline on the board. The
 #: runner's reconciliation tick (~30s) refreshes it many times over inside this window.
@@ -41,7 +41,7 @@ STALE_AFTER = timedelta(minutes=5)
 
 @dataclass(frozen=True)
 class RunnerRegistration:
-    """A fleet-registry row with its two **derived** brakes (D-019/D-043, issue #43).
+    """A fleet-registry row with its two **derived** brakes (issue #43).
 
     They are separate concepts, so they are separate fields rather than one ``paused``:
 
@@ -99,7 +99,7 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
         ...
 
     def touch_last_seen(self, runner_id: str, *, at: datetime) -> bool:
-        """Refresh a registered runner's ``last_seen_at`` (the heartbeat, D-070).
+        """Refresh a registered runner's ``last_seen_at`` (the heartbeat).
 
         Returns False if the runner is unknown — a heartbeat before registration."""
         ...

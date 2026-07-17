@@ -51,7 +51,7 @@ def check_runner_store(engine: Engine) -> list[Violation]:
     violations: list[Violation] = []
     with engine.connect() as conn:
         # runner:one-live-lease-per-chunk — a live lease is one with no closure fact
-        # (``bzh:facts-not-status``); at most one per chunk (MAX_AGENTS math, D-082).
+        # (``bzh:facts-not-status``); at most one per chunk (MAX_AGENTS math).
         closed = select(runner.lease_closures.c.lease_id)
         live = select(runner.leases.c.chunk_id).where(runner.leases.c.lease_id.notin_(closed))
         per_chunk = Counter(row[0] for row in conn.execute(live))
@@ -149,7 +149,7 @@ def check_hub_store(engine: Engine) -> list[Violation]:
                 )
 
         # hub:route-seq-unique — per-chunk route ``seq`` is unique across
-        # ``route_created`` + ``route_released`` combined (D-088, issue #41): the two
+        # ``route_created`` + ``route_released`` combined (issue #41): the two
         # tables share one counter so a created/released pair is totally ordered even
         # at a same-instant timestamp tie (``work.newest_live_route``). A duplicate
         # means two route events raced past ``ChunkStore._next_route_seq`` uncaught —

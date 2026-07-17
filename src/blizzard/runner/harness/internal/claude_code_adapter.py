@@ -9,12 +9,12 @@ Implements :class:`~blizzard.runner.harness.adapter.IHarnessAdapter` against the
   and its start time are stamped from the parent right after launch.
 * **judge** — ``<binary> -p --output-format json --resume <sid> <prompt>`` run
   synchronously, returning the raw reply for :meth:`parse_verdict` (the two-phase
-  judgement elicitation, D-038). Kill-then-resume: never run against a live process.
+  judgement elicitation). Kill-then-resume: never run against a live process.
 * **resume_with_message** — the fire-and-forget resume (answer delivery / CI, P7).
 * **resume_command** — the literal interactive takeover command for the escalation
   record.
 * **parse_verdict** — extract the ``<Choice>{name}</Choice>`` from the harness-native
-  output; missing/unparseable → ``None`` (a failure to the core, D-009).
+  output; missing/unparseable → ``None`` (a failure to the core).
 
 In verification ``binary`` points at the ``blizzard-mock`` ``mock-claude-code``
 façade (the prompt is a behavior script it ``exec``s), so the seam is exercised
@@ -180,10 +180,10 @@ class ClaudeCodeAdapter:
         env["BLIZZARD_SESSION_ID"] = session_id
         env["BLIZZARD_CHUNK_ID"] = envelope.chunk_id
         # Runner-minted identity the PostToolUse heartbeat hook inherits (per process
-        # tree, so a sibling worker cannot misattribute a beat — design/harness-adapters.md).
+        # tree, so a sibling worker cannot misattribute a beat).
         env["BLIZZARD_LEASE_ID"] = preamble.lease_id
         env["BLIZZARD_RUNNER_URL"] = preamble.local_api_url
-        # The ask channel ([ask-answer.md]): the worker records an undecidable choice by
+        # The ask channel: the worker records an undecidable choice by
         # running ``blizzard runner ask`` against the local API above, then exits. Real
         # Claude Code invokes it per the node-prompt convention; the blizzard-mock façade
         # shells out to whatever ``BLIZZARD_RUNNER_ASK_CMD`` names, so wiring the real

@@ -3,9 +3,9 @@
 The runner reports ``escalation.recorded`` up when a node's retries exhaust;
 this pins the hub behavior that fact drives:
 
-* the chunk derives **needs_human** (highest live precedence after terminal, D-067);
+* the chunk derives **needs_human** (highest live precedence after terminal);
 * the open escalation surfaces the **takeover command** so the parked session is
-  resumable — the pasteable ``cd <workdir> && <harness resume>`` (harness-adapters.md);
+  resumable — the pasteable ``cd <workdir> && <harness resume>``;
 * a later **lease mint** (a requeue/takeover) **closes it by supersession** — no
   resolution fact — flipping the chunk back off needs_human.
 """

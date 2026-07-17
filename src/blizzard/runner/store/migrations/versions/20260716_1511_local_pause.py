@@ -1,10 +1,10 @@
 """local pause facts — the runner's own brake, distinct from the hub's (runner store tree)
 
-Issue #43 lands the runner's half of the pause control (``PATCH /runner``, D-043 applied
-locally): the operator tells *this* runner to stop claiming and it adheres without the
-hub knowing or being reachable ([api.md]). Unlike ``hub_control`` (0006), which upserts a
-mirror of a hub-owned value, these are locally-minted facts: pause/start facts append and
-the flag derives from the newest, the same shape as the hub's own
+Issue #43 lands the runner's half of the pause control (``PATCH /runner``, the same
+declarative pattern applied locally): the operator tells *this* runner to stop claiming
+and it adheres without the hub knowing or being reachable. Unlike ``hub_control``
+(0006), which upserts a mirror of a hub-owned value, these are locally-minted facts:
+pause/start facts append and the flag derives from the newest, the same shape as the hub's own
 ``runner_pause_facts``. Effective paused is the OR of the two brakes.
 
 Each revision in this tree creates a subset of the current ``schema`` metadata's tables

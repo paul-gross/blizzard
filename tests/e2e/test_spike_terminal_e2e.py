@@ -4,9 +4,9 @@ The sibling e2e scenarios all end in a git deliver that lands **code**: their ch
 build a change, so the deliver node merges branch pointers onto bare ``main``. This
 scenario covers the other half of criterion 10 — *"A chunk whose purpose is non-code
 work (a review, a spike) completes with only asset artifacts"* — end to end on the real
-rails. Per the engine design (``blizzard-discovery:/design/workflow-engine.md``): *"A
-chunk whose whole purpose is a review or a spike simply ends with assets instead of
-branch pointers"*, and the graph still *"ends in a deliver node"* — the uniform terminal.
+rails: a chunk whose whole purpose is a review or a spike simply ends with assets
+instead of branch pointers, and the graph still ends in a deliver node — the uniform
+terminal.
 
 One chunk travels a **spike** node whose worker does read-only investigation (no commit,
 so nothing is pushed and ``_push_and_collect_artifacts`` yields no git-commit artifact)
@@ -78,7 +78,7 @@ def _graph_yaml() -> str:
     Named ``default-delivery`` so the hub's lazy ``ensure_default`` (POST /chunks) pins
     this pre-minted graph by name instead of the packaged prose default. The
     spike ``produces`` a ``spike-notes`` asset and routes into the same hub ``deliver``
-    node a code chunk uses (workflow-engine.md: the graph ends in a deliver node). With
+    node a code chunk uses (the graph ends in a deliver node). With
     no branch pointers to land, the deliver is an empty land: no PR, no ``main`` move,
     but a terminal ``delivery.landed`` fact — so the chunk reaches ``done`` carrying only
     its produced asset.

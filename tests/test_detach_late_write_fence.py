@@ -1,4 +1,4 @@
-"""The late-write fence after a detach (issue #38, D-088 acceptance criterion).
+"""The late-write fence after a detach (issue #38 acceptance criterion).
 
 The issue's explicit criterion: "A detached runner's late completion for that chunk
 is rejected by the lease floor and does not resurrect the route." Detach relies on
@@ -12,7 +12,7 @@ The scenario is ordered deliberately: the fence only bites once a **new** lease
 exists. Between the detach and a fresh runner's claim+lease, the chunk's latest
 epoch is unchanged, so a late write at the old epoch would *not* yet be stale. Only
 after another runner claims the now-ready chunk and mints its own lease (raising the
-floor per D-035/D-044) does runner A's old-epoch completion become a zombie write.
+floor) does runner A's old-epoch completion become a zombie write.
 """
 
 from __future__ import annotations

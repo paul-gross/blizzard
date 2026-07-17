@@ -1,6 +1,6 @@
 """The runner-local declarative control endpoint — ``PATCH /api/runner`` (issue #43).
 
-The runner's own half of the pause brake, and the D-043 declarative pattern applied
+The runner's own half of the pause brake, and the declarative pattern applied
 locally: pause/start is *state on the runner singleton*, not a directive queue. Two
 independent surfaces carry a pause and this is the machine-local one —
 
@@ -8,8 +8,8 @@ independent surfaces carry a pause and this is the machine-local one —
   blocks every spawn site (FILL's claim, restart-resume, an answer-resume, ADVANCE's
   next-node, a requeue or claim-adopt respawn, and ADVANCE's judgement resume), defers
   REAP's kill of a stalled worker, and defers escalation at an exhausted retry budget —
-  and is reachable with the hub down: the operator contract's standing requirement
-  ([api.md]). Pause/start facts append and the flag derives from the newest.
+  and is reachable with the hub down: the operator contract's standing requirement.
+  Pause/start facts append and the flag derives from the newest.
 * **hub** (``PATCH /runners/{id}`` at the hub, mirrored here by PULL) — the fleet-level
   brake. Untouched by this route; clear it where it was set (``blizzard hub resume``).
 

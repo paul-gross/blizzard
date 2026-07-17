@@ -8,7 +8,7 @@ the domain sees only :class:`~blizzard.hub.domain.work.Chunk`,
 Facts only (``bzh:facts-not-status``): every write appends a row that happened, and
 status is **derived** by :func:`~blizzard.hub.domain.work.derive_chunk_status` over
 :meth:`load_facts` — never read from a column. The transition-and-artifacts write is
-one transaction (D-036 atomicity). Timestamps arrive already stamped from the
+one transaction (atomicity). Timestamps arrive already stamped from the
 injected clock (``bzh:injected-clock``); the store never calls ``datetime.now``
 except to source the ULID instant of a surrogate route id.
 """
@@ -500,7 +500,7 @@ class ChunkStore:
         transition_id: str,
         at: datetime,
     ) -> bool:
-        """Land the terminal delivery **atomically and idempotently** (D-030/crash recovery).
+        """Land the terminal delivery **atomically and idempotently** (crash recovery).
 
         The hub lease, the ``delivery.landed`` fact, the terminal transition, and the
         route release are written in **one transaction**, so a ``kill -9`` mid-delivery
@@ -808,7 +808,7 @@ class ChunkStore:
     @staticmethod
     def _next_route_seq(conn: Connection, chunk_id: str) -> int:
         """The next value of the per-chunk ``route_created``/``route_released`` seq
-        counter (D-088; see ``work.newest_live_route``) — one past the current max
+        counter (see ``work.newest_live_route``) — one past the current max
         across both tables for this chunk, so a created/released pair is totally
         ordered by real write order even when their timestamps tie.
 

@@ -29,9 +29,8 @@ function formatTurnTimestamp(iso: string | null): string {
  * component's own concern.
  *
  * Eight read states, kept visually and testably distinct (`data-testid` per row)
- * so an operator, or a test, can never mistake one for another — this is the
- * state design the mockup has no precedent for (it only ever models a
- * synthetic, always-populated transcript):
+ * so an operator, or a test, can never mistake one for another — each is a real
+ * state a live transcript read can be in, not just the populated case:
  *
  * - **no selection** — `leaseId()` is `null`; the query is never even enabled.
  * - **loading** — the read is in flight (`isPending()`).

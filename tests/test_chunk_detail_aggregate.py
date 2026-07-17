@@ -5,7 +5,7 @@ derived status, the route, the PM pointers, the full transition history (with th
 judgement choice on each edge), the inline artifact store (git-commit refs and asset
 content), the open gate decision, and any escalation. This test drives a build→gate
 scenario and asserts every piece is present — the additive completeness deliverable 4
-guards (design/hub/web-app.md chunk detail).
+guards.
 """
 
 from __future__ import annotations
@@ -91,7 +91,7 @@ def test_detail_carries_the_full_aggregate(tmp_path: Path) -> None:
     assert detail["status"] == "waiting_on_human"
     assert detail["latest_epoch"] == 1
 
-    # Route (runner/workspace/envs, D-021) and PM pointers.
+    # Route (runner/workspace/envs) and PM pointers.
     assert detail["route"]["runner_id"] == "r1"
     assert detail["route"]["environment_ids"] == ["e1", "e2"]
     assert [p["ref"] for p in detail["pm_pointers"]] == [_POINTER["ref"]]
@@ -112,7 +112,7 @@ def test_detail_carries_the_full_aggregate(tmp_path: Path) -> None:
     assert step["to_node_name"] == "approve-gate"
     assert step["choice_name"] == "pass"
 
-    # Inline artifact store — the git-commit reference (the hub stores the pointer, D-012),
+    # Inline artifact store — the git-commit reference (the hub stores the pointer),
     # with the forge branch link derived from the chunk's issue-shaped pointer.
     assert len(detail["artifacts"]) == 1
     art = detail["artifacts"][0]

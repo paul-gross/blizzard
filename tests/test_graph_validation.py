@@ -1,4 +1,4 @@
-"""Graph mint-time validation (unit tier) — the D-071 rules.
+"""Graph mint-time validation (unit tier) — the graph validation rules.
 
 Errors reject; warnings mint flagged. The fused choice/edge shape makes "every
 choice has an edge" structurally unrepresentable, so these tests pin what remains:

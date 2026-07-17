@@ -76,8 +76,8 @@ def _runner_app(tmp_path: Path) -> TestClient:
 def test_proxy_forwards_the_read_to_the_hub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The route forwards to the hub's pm-items route and returns the items verbatim.
 
-    ``title`` is carried by the shared ``PmItemsView`` wire model (D-084's pass-through
-    point), so it rides through this proxy untouched with no proxy-side code change."""
+    ``title`` is carried by the shared ``PmItemsView`` wire model's pass-through
+    point, so it rides through this proxy untouched with no proxy-side code change."""
     seen: list[str] = []
 
     def fake_get(url: str, *, timeout: float) -> _FakeHubResponse:
@@ -103,7 +103,7 @@ def test_proxy_carries_a_degraded_entry_through_rather_than_500ing(
     The hub degrades a per-pointer forge failure to an ``error`` entry rather than failing the
     whole read; the proxy re-validates that payload through ``PmItemsView``. A wire model that
     rejected a null ``title`` here would turn a harmless degrade into a proxy ``502``/``500`` —
-    the exact blinding D-084 forbids — so the degrade is pinned at the proxy, not just the hub."""
+    the exact blinding the wire model forbids — so the degrade is pinned at the proxy, not just the hub."""
     degraded: dict[str, object] = {
         "items": [
             {

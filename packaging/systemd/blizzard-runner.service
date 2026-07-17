@@ -1,10 +1,10 @@
 # The blizzard-runner daemon — the supervisor: the stateless REAP -> PULL -> FILL
-# -> ADVANCE reconciliation loop behind a local API (glossary "supervisor",
-# design/cli.md, D-061). Installed as the runner half of the colocated
-# single-machine pair (product/mvp.md journey); the hub half is
+# -> ADVANCE reconciliation loop behind a local API (glossary "supervisor").
+# Installed as the runner half of the colocated
+# single-machine pair; the hub half is
 # blizzard-hub.service. Setup + the reboot-recovery contract: docs/deployment.md.
 [Unit]
-Description=Blizzard runner — the supervisor loop + local API (blizzard-runner, D-061)
+Description=Blizzard runner — the supervisor loop + local API (blizzard-runner)
 Documentation=https://github.com/paul-gross/blizzard/blob/master/docs/deployment.md
 # Colocated ordering: prefer the hub up first, but the runner reaches the hub
 # outbound-only and keeps working while the hub is unreachable,
@@ -42,7 +42,7 @@ WorkingDirectory=/var/lib/blizzard/runner
 # the marked worker first so it never runs two processes on one session. A `kill -9`
 # during the re-attach itself still degrades to the ordinary crash contract above (REAP
 # requeues) — the recovery boundaries are the crash-point sweep's, not a stronger claim than
-# it arms; see design/runner/loop.md and steps.py `_resume_in_place`.
+# it arms; see steps.py `_resume_in_place`.
 Restart=always
 RestartSec=2
 

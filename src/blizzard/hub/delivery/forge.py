@@ -2,9 +2,9 @@
 
 The deliver node's landing operation, behind an interface owned at the domain
 (``bzh:dependency-inversion``): the coordinator lands a chunk's branch artifacts
-one repo at a time (strict FIFO, D-057), and the reference binding performs a real
-merge into the bare origin the fixture workspace pushed to (a single git truth —
-``verification.md``). The reference stack binds the mock forge in tests and GitHub
+one repo at a time (strict FIFO), and the reference binding performs a real
+merge into the bare origin the fixture workspace pushed to (a single git truth).
+The reference stack binds the mock forge in tests and GitHub
 in production (``bzh:pluggable-seams``).
 
 Two modes: ``merge-to-main`` merges directly; ``open-pr`` opens a PR the
@@ -79,7 +79,7 @@ class IForgeDelivery(Protocol):
         ...
 
     def open_pr(self, request: LandingRequest) -> PrHandle:
-        """Open a PR for one repo's branch (open-pr mode — D-059)."""
+        """Open a PR for one repo's branch (open-pr mode)."""
         ...
 
     def check_pr(self, handle: PrHandle) -> PrState:

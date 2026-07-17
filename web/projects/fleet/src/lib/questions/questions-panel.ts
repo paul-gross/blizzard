@@ -4,7 +4,7 @@ import { shortChunkId } from '../chunk-id';
 import { injectHubQuestionsQuery } from './questions.query';
 
 /**
- * The open-questions panel (D-052, MVP criterion 7) — every agent ask across the
+ * The open-questions panel (MVP criterion 7) — every agent ask across the
  * fleet, in the right rail. A parked chunk's question is the one thing on this
  * board that blocks a worker on a human, so it is surfaced fleet-wide rather than
  * only inside the chunk nobody has selected yet; clicking an ask opens its chunk,

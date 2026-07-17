@@ -46,7 +46,7 @@ def _failure(detail: str) -> ApplyResponse:
 
 @dataclass(frozen=True)
 class ResolutionResult:
-    """The outcome of a resolution attempt (first-write-wins, D-045)."""
+    """The outcome of a resolution attempt (first-write-wins)."""
 
     resolved: bool  # True on the winning write; False when already resolved
     choice: str
@@ -143,7 +143,7 @@ class RequeueService:
 def _artifact_row(
     chunk_id: str, node_id: str, node_name: str, epoch: int, artifact: SubmittedArtifact, clock: IClock
 ) -> ArtifactRow:
-    """Compress a submitted artifact into its storage row (mirrors the apply path, D-036)."""
+    """Compress a submitted artifact into its storage row (mirrors the apply path)."""
     is_commit = artifact.kind is ArtifactKind.GIT_COMMIT
     data = f"{artifact.branch_name}:{artifact.commit_hash}" if is_commit else (artifact.content or "")
     return ArtifactRow(

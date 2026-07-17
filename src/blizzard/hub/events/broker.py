@@ -1,6 +1,6 @@
 """The hub event broker — the live SSE re-broadcast seam.
 
-Fact names double as event names (``events.md``): the hub re-broadcasts landed facts
+Fact names double as event names: the hub re-broadcasts landed facts
 over ``GET /api/events/stream`` so the board and runners keep live views current. This
 is the **real** in-process fan-out (P7, ORCHESTRATION.md — no cross-process bus): each
 mutating route publishes a typed event here, every event carries a **monotonic id**,
@@ -120,7 +120,7 @@ class EventBroker:
         return self.publish(QUEUE_CHANGED, {})
 
     def publish_runner_changed(self, runner_id: str) -> int:
-        """A runner's registry state changed (registered / liveness / paused, D-070)."""
+        """A runner's registry state changed (registered / liveness / paused)."""
         return self.publish(RUNNER_CHANGED, {"runner_id": runner_id})
 
     # --- subscription (called from the async SSE handler) -------------------

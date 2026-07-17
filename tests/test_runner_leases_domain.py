@@ -97,7 +97,7 @@ def test_derive_lease_state_parked_when_dormant_on_a_question() -> None:
 def test_derive_lease_state_parked_wins_over_stale() -> None:
     """Precedence: a lease that is both parked and stale derives parked — the reap
     clock is stopped for a dormant lease, so a growing heartbeat age is expected, not
-    a stall (design/runner/loop.md, [ask-answer.md])."""
+    a stall."""
     lease = _lease_record()
     assert derive_lease_state(lease, is_closed=False, is_parked=True, is_alive=True, is_stale=True) == "parked"
 

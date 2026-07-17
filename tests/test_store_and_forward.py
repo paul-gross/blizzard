@@ -1,4 +1,4 @@
-"""Store-and-forward idempotency at the hub (D-069/D-090, component tier).
+"""Store-and-forward idempotency at the hub (component tier).
 
 The runner→hub push is store-and-forward always: every fact rides the outbound buffer
 with a per-runner monotonic seq, and a replay — after a lost ack or an outage backlog
@@ -138,7 +138,7 @@ def test_escalation_fact_rides_events_and_derives_needs_human(tmp_path: Path) ->
         },
     ).json()
     assert push["applied"] == [2]
-    # An open escalation with no later lease mint derives needs_human (domain/events.md).
+    # An open escalation with no later lease mint derives needs_human.
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "needs_human"
 
     replay = hub.client.post(

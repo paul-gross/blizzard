@@ -8,10 +8,10 @@ import { TranscriptPanel } from './transcript-panel';
  * The runner's machine-local panel — the runner app's own view, added on top of
  * the shared fleet views. Its critical path is `GET /api/leases` (issue
  * #28): every active lease, each rendered as a {@link AgentRow}. Hub-free by
- * design (`design/runner/web-app.md`: "the machine panel is precisely the part
- * of the app that must not depend on the hub") — the query polls the runner's
+ * design — the machine panel is precisely the part
+ * of the app that must not depend on the hub — the query polls the runner's
  * own local API on a 5s floor, no SSE. The local surface (held environments,
- * open asks, escalations — design/cli.md `blizzard runner status`) lands on
+ * open asks, escalations — `blizzard runner status`) lands on
  * this shell as those features arrive. Color comes from the shared
  * design-token layer (`fleet` library, design/tokens.css), never hard-coded hex.
  *

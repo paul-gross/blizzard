@@ -51,7 +51,7 @@ describe('RunnerPanel', () => {
 
   afterEach(() => stub.restore());
 
-  it('renders each runner with its liveness and paused state (D-070/D-043)', async () => {
+  it('renders each runner with its liveness and paused state', async () => {
     const fixture = TestBed.createComponent(RunnerPanel);
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;

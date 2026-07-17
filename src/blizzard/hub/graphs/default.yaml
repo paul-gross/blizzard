@@ -4,8 +4,8 @@
 # human gate. Promoted from the P6 walking-skeleton `build -> deliver` slice to the
 # full MVP graph (milestone:mvp): build hands to a cold-eyes review node, review
 # either passes to delivery or fails the work back into build carrying its findings
-# asset (design/workflow-engine.md review node). Insert an `approve-gate` human node
-# ahead of `deliver` (design/hub/sample-graph.yaml) to dial HITL back up — graphs are
+# asset (the review node). Insert an `approve-gate` human node
+# ahead of `deliver` to dial HITL back up — graphs are
 # immutable, so that is a re-mint, not an edit.
 #
 # Conforms to the canonical authoring schema:

@@ -1,12 +1,12 @@
-"""Board browser e2e — scenario 6 of the standing e2e smoke (verification.md).
+"""Board browser e2e — scenario 6 of the standing e2e smoke.
 
 The browser half of the e2e tier (blizzard-harness ``verification/blizzard.md`` test
 tiers): a **real Chromium**, driven by Playwright, over the **served mission-control
-board** (``blizzard hub host`` mounts the built Angular app at ``/``, D-096) wired to
+board** (``blizzard hub host`` mounts the built Angular app at ``/``) wired to
 the same live stack the sibling in-process scenarios drive — the real forge, the real
 hub, and the real runner reconciliation loop over a minted ``blizzard-mock`` fixture,
 every seam real, no tokens and no network. It proves the operator surface end to end
-(MVP criterion 11, D-048/D-097):
+(MVP criterion 11):
 
 0. **Promote from the board.** Ingest rests a chunk not-ready: it renders in the
    board's backlog column and no runner may claim it. Promoting it from its card makes it
@@ -16,10 +16,10 @@ every seam real, no tokens and no network. It proves the operator surface end to
    ``FleetLiveUpdates`` spine invalidates the TanStack reads, and the chunk's status
    chip **flips in place** — ``waiting_on_human`` → ``done`` — with no navigation. The
    fleet **runner strip** lights up ``online`` when the runner registers (its per-pull
-   liveness heartbeat, D-070).
+   liveness heartbeat).
 2. **Detail dock.** Selecting a card fills the bottom chunk-detail dock, which renders
    the **node history** (the edges the chunk took) and the **artifact store** (the
-   build's ``git_commit`` reference and the review's findings asset), D-036. The dock is
+   build's ``git_commit`` reference and the review's findings asset). The dock is
    permanently mounted at a fixed height, so filling or clearing it leaves the board's
    geometry **pixel-identical** — issue #21's criteria, and the one claim in this file
    that only a laying-out browser can prove.
@@ -29,11 +29,11 @@ every seam real, no tokens and no network. It proves the operator surface end to
    the grouped survivor, with its plural pointers, is what the runner claims, and it is
    claimed **first** because it was moved to the top.
 4. **Answer from the board.** A parked chunk's open question is answered from the detail
-   dock; the holding runner resumes the dormant session and the chunk lands (D-052,
-   MVP criterion 7).
+   dock; the holding runner resumes the dormant session and the chunk lands
+   (MVP criterion 7).
 5. **Pause brake from the board.** Pausing the runner from the fleet strip stops new
    claims — a still-ready chunk is *not* claimed across several ticks — and resuming it
-   lets the claim resume (D-043/D-012, MVP criterion 11).
+   lets the claim resume (MVP criterion 11).
 
 It is the **e2e tier**: it needs the full live stack, the sibling ``blizzard-mock``
 worktree, a local winter source, and an installed Chromium, so it is **skipped unless
@@ -329,7 +329,7 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 queue_row(chunk_c).get_by_test_id("queue-select").check()
                 page.get_by_test_id("group-selected").click()
 
-                # C is merged away (ephemeral, D-047) — it vanishes from the board live —
+                # C is merged away (ephemeral) — it vanishes from the board live —
                 # and B survives carrying the union of PM pointers (plural, "+1").
                 expect(page.get_by_test_id("queue-row")).to_have_count(2)
                 expect(queue_row(chunk_c)).to_have_count(0)

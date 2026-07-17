@@ -1,4 +1,4 @@
-"""Concurrent allocation of the route-event ``seq`` counter (D-088, issue #41).
+"""Concurrent allocation of the route-event ``seq`` counter (issue #41).
 
 ``ChunkStore._next_route_seq`` is read-then-insert, not an atomic increment. Two
 concurrent writers for the same chunk must not both compute the same next value — that

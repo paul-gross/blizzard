@@ -73,7 +73,7 @@ def _stub(verb: str) -> None:
 # always *has* a value: it defaults to "." and takes $BZ_RUNNER_DIR, which winter's per-env
 # band exports ambiently across a whole feature env — so "is it set?" cannot mean "did the
 # operator choose it?". An explicit flag beats an ambient variable; only a genuine tie on
-# the command line is ambiguous. Both from the environment resolves to the socket, D-068's
+# the command line is ambiguous. Both from the environment resolves to the socket, the
 # default transport.
 _SOURCE_RANK = {
     ParameterSource.COMMANDLINE: 2,
@@ -101,7 +101,7 @@ def _local_api_client(directory: str, runner_url: str | None) -> tuple[httpx.Cli
 
     sock = socket_path_for(Path(directory))
     if not sock.exists():
-        # D-068: no degraded read path — an absent socket is a daemon-not-running diagnostic,
+        # No degraded read path — an absent socket is a daemon-not-running diagnostic,
         # never a reason to fall back to reading the store.
         raise click.ClickException(
             f"no runner daemon is serving at {sock} — start one with `blizzard runner host --dir {directory}`"
@@ -112,7 +112,7 @@ def _local_api_client(directory: str, runner_url: str | None) -> tuple[httpx.Cli
 
 
 def _set_local_paused(*, paused: bool, by: str, directory: str, runner_url: str | None) -> None:
-    """PATCH the runner singleton's own pause brake — the D-043 pattern applied locally."""
+    """PATCH the runner singleton's own pause brake — the declarative pattern applied locally."""
     client, where = _local_api_client(directory, runner_url)
     verb = "pause" if paused else "start"
     try:
@@ -193,10 +193,10 @@ def host(directory: str, host_: str | None, port: int | None) -> None:
     interval = float(os.environ.get(ENV_TICK_SECONDS, DEFAULT_TICK_SECONDS))
     driver = PeriodicDriver(config, interval_seconds=interval)
 
-    # Two doors onto the one app (D-068, issue #43): the unix socket the CLI's local verbs
+    # Two doors onto the one app (issue #43): the unix socket the CLI's local verbs
     # address, and the TCP port the browser and the worker hooks address. Bound up front so
     # a clash fails startup loudly; served by a single `Server` below, which is what keeps
-    # the shutdown path (and its D-082 marking) exactly as it was.
+    # the shutdown path (and its resume-intent marking) exactly as it was.
     try:
         sockets = bind_listeners(config)
     except ListenerError as exc:
@@ -229,12 +229,12 @@ def host(directory: str, host_: str | None, port: int | None) -> None:
     if hasattr(server, "install_signal_handlers"):
         server.install_signal_handlers = lambda: None  # type: ignore[method-assign]
 
-    # Ungraceful-restart recovery (#13, D-082): a `kill -9` / OOM / reboot never ran the
+    # Ungraceful-restart recovery (#13): a `kill -9` / OOM / reboot never ran the
     # graceful shutdown marker below, so before the loop starts we detect the sessions killed
     # mid-work — dead pid, no recorded session-end, heartbeat not stale — and mark them for the
     # same startup RESUME the first tick runs. The mark is the only ungraceful-specific step;
     # everything downstream is the graceful path's machinery (kill-first, unchanged epoch, the
-    # D-088 ownership fence). A clean `blizzard runner init` has no leases, so this is a no-op.
+    # abandon-if-reassigned ownership fence). A clean `blizzard runner init` has no leases, so this is a no-op.
     resumable = mark_crash_resume_intents_on_startup(config)
     if resumable:
         click.echo(f"marked {resumable} crash-interrupted lease(s) for restart-resume")
@@ -317,7 +317,7 @@ def session_end() -> None:
     when the worker's Claude session exits, and it posts to ``BLIZZARD_RUNNER_URL`` for
     the lease in ``BLIZZARD_LEASE_ID`` — both inherited from the spawn environment, so no
     arguments. The fact is the "declared done" signal
-    (exit-is-done, D-055) startup crash-recovery reads to tell a clean exit from a worker
+    (exit-is-done) startup crash-recovery reads to tell a clean exit from a worker
     killed mid-work. It fails **soft**, like the heartbeat: a hook must never break
     the worker's exit, so a missing identity or an unreachable runner is reported to stderr
     and the command still exits 0.
@@ -346,7 +346,7 @@ def ask(prompt: str, options: str | None) -> None:
     A pure client of the runner's local API: the worker runs this on an
     undecidable choice, and it posts the question for the lease in ``BLIZZARD_LEASE_ID``
     to ``BLIZZARD_RUNNER_URL`` — both inherited from the spawn environment, so no
-    identity arguments (design/harness-adapters.md, [ask-answer.md]). The ask is a
+    identity arguments. The ask is a
     durable runner-store fact before this returns and the worker ends its turn.
     """
     lease_id = os.environ.get(ENV_LEASE_ID)

@@ -117,7 +117,7 @@ class GroupService:
 
         The survivor and every merged chunk must be ``ready`` (unacquired) — grouping is
         not batching and never reshapes running work. The merged
-        chunks' PM pointers are appended to the survivor (union, D-076), and each merged
+        chunks' PM pointers are appended to the survivor (union), and each merged
         chunk records a ``chunk.grouped`` fact, becoming ephemeral.
         """
         survivor = self._require_ready_chunk(survivor_id)

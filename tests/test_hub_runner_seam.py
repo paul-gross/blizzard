@@ -1,4 +1,4 @@
-"""The hub<->runner seam, end to end at the component tier (issue #38, D-088, slice 6).
+"""The hub<->runner seam, end to end at the component tier (issue #38, slice 6).
 
 Slice 2 (the hub endpoint) and slice 4 (the runner PULL step) each mock the other
 side — the hub's tests never call a runner, and the runner's tests drive a

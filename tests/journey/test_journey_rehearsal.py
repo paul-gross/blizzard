@@ -1,9 +1,9 @@
 """The capstone: the MVP acceptance journey as one committed, repeatable rehearsal.
 
-This is ``blizzard-discovery:/product/mvp.md`` — *the* acceptance journey — driven end
-to end over the real fleet, faithfully mock-bound. It is the whole story in one test,
-not a slice: five issues in, a night of autonomous work with a reboot in the middle, and
-the morning-after assertions taken verbatim from the journey prose.
+This is *the* MVP acceptance journey — driven end to end over the real fleet, faithfully
+mock-bound. It is the whole story in one test, not a slice: five issues in, a night of
+autonomous work with a reboot in the middle, and the morning-after assertions taken
+verbatim from the journey prose.
 
 **The setup (journey ¶1).** Five issues are filed across the fixture workspace's two
 repos (``toy-api`` + ``toy-web``) at the mock forge and ingested *by id* — each mints a
@@ -106,7 +106,7 @@ WEB_REPO = "toy-web"
 
 def _pm_sources(forge_port: int) -> tuple[PmSourceConfig, ...]:
     """Two ``[[pm_source]]`` bindings — one per fixture repo — since the
-    journey files issues across both. This is the case that proves the D-109
+    journey files issues across both. This is the case that proves the
     repo-matching resolver: a first-entry shim would fetch half these issues from the
     wrong repo the moment two sources are configured (the Phase 1 finale's ``alpha#7``
     lying-label bug)."""
@@ -182,7 +182,7 @@ else:  # clean / review-fail: a real change in each repo (append so a re-build c
 
 # The fail-edge addendum, inlined onto build's re-entry prompt (same namespace: ``repos`` /
 # ``_commit`` / ``pathlib`` are already bound). Its committed marker reaches bare ``main``
-# ONLY if the findings threaded back through the envelope (criterion 9, D-089).
+# ONLY if the findings threaded back through the envelope (criterion 9).
 _REVIEW_ADDENDUM = """\
 for repo in repos:
     pathlib.Path(repo, "REVIEW_ADDRESSED.md").write_text("addressed the review findings\\n")

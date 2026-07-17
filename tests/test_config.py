@@ -1,4 +1,4 @@
-"""Runtime config — the store URL is the single portability knob (D-095, ``bzh:sql-portable``).
+"""Runtime config — the store URL is the single portability knob (``bzh:sql-portable``).
 
 Both daemons scaffold a sqlite default under the data dir and read any store URL
 back verbatim: a postgres URL is accepted with no code branch on the backend, and
@@ -228,7 +228,7 @@ def test_pm_source_duplicate_name_raises(tmp_path: Path) -> None:
 @pytest.mark.unit
 def test_pm_source_duplicate_provider_and_repo_raises(tmp_path: Path) -> None:
     # Two names for one (provider, repo) would let the same item be ingested twice
-    # under two identities — this is what holds D-093 up.
+    # under two identities — this is what holds pointer identity uniqueness up.
     root = tmp_path / "hub"
     root.mkdir()
     (root / "blizzard-hub.toml").write_text(
@@ -242,7 +242,7 @@ def test_pm_source_duplicate_provider_and_repo_raises(tmp_path: Path) -> None:
 
 @pytest.mark.unit
 def test_pm_source_name_with_a_colon_raises(tmp_path: Path) -> None:
-    # hub/cli.py's ingest token partitions on the first colon (D-107's open question).
+    # hub/cli.py's ingest token partitions on the first colon.
     root = tmp_path / "hub"
     root.mkdir()
     (root / "blizzard-hub.toml").write_text(

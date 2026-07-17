@@ -176,7 +176,7 @@ const ROUTED_DETAIL: ChunkDetail = {
 };
 
 // A needs_human chunk that also still carries its live route — detach releases the
-// runner without touching the open escalation (D-088; issue #42's not-requeue AC).
+// runner without touching the open escalation (issue #42's not-requeue AC).
 const ESCALATED_ROUTED_DETAIL: ChunkDetail = {
   ...ESCALATED_DETAIL,
   route: { runner_id: 'rn_02', workspace_id: 'ws_01', environment_ids: [] },
@@ -381,7 +381,7 @@ describe('ChunkDetailPanel', () => {
     expect(closed).toBe(true);
   });
 
-  // --- Detach (D-088, issue #42) ---------------------------------------------
+  // --- Detach (issue #42) ---------------------------------------------
 
   it('shows no Detach action for a chunk with no live route', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);

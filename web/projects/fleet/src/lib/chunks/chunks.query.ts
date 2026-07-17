@@ -5,7 +5,7 @@ import { hubChunksKey } from '../query-keys';
 
 /**
  * Hub `GET /api/chunks` read — the fleet chunk list (derived status + current
- * node, D-004), through TanStack Query and the generated hub client.
+ * node), through TanStack Query and the generated hub client.
  * Like the health read this is real plumbing: the request is the
  * openapi-ts SDK call (never hand-written fetch, bzh:generated-client) and it hits
  * the daemon the app is served from. Returns the typed `ChunkSummary[]`; an empty

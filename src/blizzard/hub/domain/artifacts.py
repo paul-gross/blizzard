@@ -68,7 +68,7 @@ class ArtifactRow:
     ``data`` is keyed by ``kind``: ``git_commit`` -> ``<branch>:<commit>``; ``asset``
     -> the raw content. ``repo`` is a ``git_commit``-only sibling column, not encoded
     in ``data``. The ``{node}`` component of the store key is the node *name*
-    (``bzh:facts-not-status`` / D-036); ``node_id`` here is the exact provenance.
+    (``bzh:facts-not-status``); ``node_id`` here is the exact provenance.
     """
 
     kind: ArtifactKind

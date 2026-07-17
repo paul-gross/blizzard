@@ -3,7 +3,7 @@
 A worker's Claude Code ``SessionEnd`` hook runs ``blizzard runner session-end`` when its
 session exits naturally, which posts here with the lease id it inherited from the spawn
 environment (``BLIZZARD_LEASE_ID``). The daemon appends a durable session-end fact — the
-"declared done" signal (exit-is-done, D-055) — that startup crash-recovery reads to tell a
+"declared done" signal (exit-is-done) — that startup crash-recovery reads to tell a
 worker killed mid-work (no fact, resume) from one that cleanly exited (fact, judge) after an
 involuntary restart. The CLI is a pure
 client; it never opens the store itself.

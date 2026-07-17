@@ -1,4 +1,4 @@
-"""The runner's spawn-preamble composition (issue #17, D-063).
+"""The runner's spawn-preamble composition (issue #17).
 
 A worker is spawned at the winter workspace root, so — unlike an interactive agent —
 it has no cwd that implicitly names *which* environment(s) it holds. The runner closes

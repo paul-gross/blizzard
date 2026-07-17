@@ -6,8 +6,8 @@ All ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``); the do
 only :class:`~blizzard.hub.domain.registry.RunnerRegistration`.
 
 Facts only, status derived (``bzh:facts-not-status``): neither brake is a column on the
-registration. ``hub_paused`` derives from the newest ``runner_pause_facts`` row (D-043,
-the D-039 pattern) and ``locally_paused`` from the newest ``runner_local_pause_facts`` row
+registration. ``hub_paused`` derives from the newest ``runner_pause_facts`` row
+and ``locally_paused`` from the newest ``runner_local_pause_facts`` row
 — two independent fact streams with two different authors (issue #43): the fleet sets the
 first here, the runner reports the second up through its outbound buffer.
 

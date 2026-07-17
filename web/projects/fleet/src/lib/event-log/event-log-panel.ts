@@ -51,7 +51,7 @@ function summarize(event: LoggedEvent): string {
 
 /**
  * The Event log panel (issue #25) — a scrolling, newest-first feed of recent fleet
- * events with a running count, per `mission-control.html` (`#log-panel`).
+ * events with a running count.
  *
  * Presentational: it holds no transport and opens no stream of its own. It reads the
  * bounded feed {@link FleetLiveUpdates} already tees off the board's single SSE
@@ -147,7 +147,7 @@ function summarize(event: LoggedEvent): string {
 export class EventLogPanel {
   private readonly live = inject(FleetLiveUpdates);
 
-  /** The feed newest-first, each frame shaped into its display row (mockup reverses too). */
+  /** The feed newest-first, each frame shaped into its display row. */
   protected readonly rows = computed<readonly LogRow[]>(() =>
     this.live
       .log()

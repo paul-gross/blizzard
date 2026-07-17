@@ -5,7 +5,7 @@ import { runnerChunkPmItemsKey } from './query-keys';
 
 /**
  * Runner `GET /api/chunks/{chunk_id}/pm-items` read — the layered pass-through
- * (D-084: panel → its own runner → hub → vendor, with the hub's credentials) that
+ * (panel → its own runner → hub → vendor, with the hub's credentials) that
  * carries the issue title layered onto a lease row (issue #28). This is a strictly
  * **severable, volatile** read, never the panel's critical path: the leases route
  * (`leases.query.ts`) is hub-free and this is not, so its failure must never touch
@@ -22,7 +22,7 @@ import { runnerChunkPmItemsKey } from './query-keys';
  *
  * One query per distinct `chunk_id`, deduped by TanStack's cache key — not batched.
  * The decisive property is isolation: one row's failing title can never blind
- * another row, or the list (mirrors the hub's own per-pointer degrade, D-084).
+ * another row, or the list (mirrors the hub's own per-pointer degrade).
  *
  * The caller must never branch on `isError()`/`isPending()` here — read `data()`
  * optimistically and render whatever arrived, or nothing. `chunk_id` is what a row

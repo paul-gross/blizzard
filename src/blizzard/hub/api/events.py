@@ -1,11 +1,11 @@
 """The hub live-event stream — ``GET /api/events/stream`` (SSE), and ``POST /api/events``.
 
 The hub re-broadcasts landed facts over Server-Sent Events; the board and each runner
-subscribe outbound to keep live views streaming (tech-stack.md — live updates are
-hand-rolled ``EventSource`` → RxJS → signals, *not* the generated client, so the stream
+subscribe outbound to keep live views streaming (live updates are hand-rolled
+``EventSource`` → RxJS → signals, *not* the generated client, so the stream
 route is excluded from the OpenAPI schema).
 
-Live fan-out (D-067, P7): a connecting subscriber registers with the
+Live fan-out (P7): a connecting subscriber registers with the
 :class:`~blizzard.hub.events.broker.EventBroker`, replays the buffered tail newer than
 its ``Last-Event-ID`` (so a reconnect resumes without a gap), then streams every fresh
 event live until it disconnects. A periodic keepalive comment keeps intermediaries from

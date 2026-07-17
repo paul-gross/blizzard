@@ -1,4 +1,4 @@
-"""Runner restart-resume — the graceful-restart re-attach (issue #12, D-082, unit tier).
+"""Runner restart-resume — the graceful-restart re-attach (issue #12, unit tier).
 
 A graceful ``blizzard-runner`` shutdown marks every in-flight lease for restart-resume, and
 the startup RESUME step re-attaches each marked session **in place** — same lease/epoch/

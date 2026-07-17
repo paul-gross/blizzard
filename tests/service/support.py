@@ -94,7 +94,7 @@ def require_winter_source() -> Path:
     return src
 
 
-# The scripted build node: the prompt is the program (mocking.md). It commits a file to the
+# The scripted build node: the prompt is the program. It commits a file to the
 # toy-api worktree; the runner discovers the commit and pushes it to the bare file:// origin.
 BUILD_SCRIPT = (
     "import subprocess, pathlib\n"

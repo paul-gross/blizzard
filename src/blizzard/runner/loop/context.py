@@ -20,8 +20,9 @@ from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.loop.worktree import IWorktreeGit
 from blizzard.runner.store.repository import IWriteRunnerStore
 
-#: The retry budget a node with no ``retries.max`` falls back to (D-078 open-question
-#: constant): an execution-attempt cap of 2 before escalation to needs-human.
+#: The retry budget a node with no ``retries.max`` falls back to (a chosen constant,
+#: not derived from a formula): an execution-attempt cap of 2 before escalation to
+#: needs-human.
 DEFAULT_RETRIES_MAX = 2
 
 

@@ -7,10 +7,10 @@ never a ``server_default`` (``bzh:injected-clock``); portable-SQL surface only
 (``bzh:sql-portable``).
 
 The loop mints a lease, binds an environment, buffers each hub-bound fact for the
-flusher (store-and-forward, D-069), records a heartbeat per worker tool call
-(progress detection, design/runner/loop.md), and — for the ask/answer protocol
-([ask-answer.md]) — records the local open-ask fact and the chunk's park/resume
-around it. All the same facts-only pattern.
+flusher (store-and-forward), records a heartbeat per worker tool call
+(progress detection), and — for the ask/answer protocol — records the local
+open-ask fact and the chunk's park/resume around it. All the same facts-only
+pattern.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ from blizzard.foundation.store.utc import UtcDateTime
 
 metadata = MetaData()
 
-# --- Leases (the machine's execution right now — D-023/D-035) ---------------
+# --- Leases (the machine's execution right now) -----------------------------
 #
 # The lease carries the pid + process start time, recorded by the spawn wrapper
 # from inside the child: pid alone is ambiguous across reuse, so REAP
@@ -48,7 +48,7 @@ leases = Table(
     Column("created_at", UtcDateTime, nullable=False),
 )
 
-# --- Environment bindings (chunk -> env ids, from the provider — D-021/D-062) -
+# --- Environment bindings (chunk -> env ids, from the provider) -------------
 
 env_bindings = Table(
     "env_bindings",
@@ -60,11 +60,12 @@ env_bindings = Table(
     Column("bound_at", UtcDateTime, nullable=False),
 )
 
-# --- Outbound buffer (store-and-forward, per-runner monotonic seq — D-069) ---
+# --- Outbound buffer (store-and-forward, per-runner monotonic seq) ----------
 #
 # Every hub-bound fact is written here at mint, stamped with a monotonic sequence,
 # even when the hub is reachable: one flusher drains it in FIFO order, so a lease
-# fact always precedes the completion minted under it (D-044 made structural). A
+# fact always precedes the completion minted under it — a structural guarantee of
+# the FIFO drain, not a runtime check. A
 # semantic rejection still advances the ack — rejection is an outcome, not a
 # delivery failure. ``acked_at`` NULL means still pending. ``lease_id`` correlates a
 # buffered fact back to its attempt: the flusher drives a completion's apply-response
@@ -87,11 +88,11 @@ outbound_buffer = Table(
 #
 # A worker heartbeats as a side effect of working: every tool call fires a
 # ``PostToolUse`` hook that runs ``blizzard runner heartbeat``, which posts to the
-# runner's local API and appends a row here (design/runner/loop.md, design/
-# harness-adapters.md). Append-only (``bzh:facts-not-status``): the *last* heartbeat
-# for a lease is ``max(beat_at)``. REAP reads it to catch a stalled-but-alive worker
-# — one whose pid is live but whose heartbeat has gone stale. The heartbeat never
-# travels to the hub (domain/events.md): ``stalled`` is a runner-local derivation.
+# runner's local API and appends a row here. Append-only (``bzh:facts-not-status``):
+# the *last* heartbeat for a lease is ``max(beat_at)``. REAP reads it to catch a
+# stalled-but-alive worker — one whose pid is live but whose heartbeat has gone
+# stale. The heartbeat never travels to the hub: ``stalled`` is a runner-local
+# derivation.
 
 heartbeats = Table(
     "heartbeats",
@@ -105,8 +106,8 @@ heartbeats = Table(
 #
 # The walking-skeleton revision's `leases` table is frozen; the node a lease attempts (and the retry budget
 # the node carries) is the one fact the reconciliation loop needs that it does not
-# hold. Written once per lease at mint. Append-only, one row per lease (D-082 — a
-# lease is one node-step attempt).
+# hold. Written once per lease at mint. Append-only, one row per lease — a
+# lease is one node-step attempt.
 
 lease_context = Table(
     "lease_context",
@@ -146,7 +147,7 @@ lease_spawns = Table(
 # Append-only: an active lease is one with no closure. `reason` distinguishes a
 # clean node transition (`transitioned`) from an execution-attempt failure that
 # counts against the node's retries (`reaped`, `failed`) and a retries-exhausted
-# escalation (`escalated`, D-078/D-009).
+# escalation (`escalated`).
 
 lease_closures = Table(
     "lease_closures",
@@ -159,7 +160,7 @@ lease_closures = Table(
     Column("closed_at", UtcDateTime, nullable=False),
 )
 
-# --- Binding releases (a binding is released iff a release fact exists — D-062/D-083) -
+# --- Binding releases (a binding is released iff a release fact exists) --
 #
 # An env binding rides the chunk's tenure; it is freed only when the chunk leaves
 # the runner (terminal, stop, detach). `release()` is a no-op mark at the provider,
@@ -175,7 +176,7 @@ binding_releases = Table(
     Column("released_at", UtcDateTime, nullable=False),
 )
 
-# --- Asks (the worker's local open-ask fact — [ask-answer.md]) ---------------
+# --- Asks (the worker's local open-ask fact) ---------------------------------
 #
 # ``blizzard runner ask`` hits the runner's local API before the worker exits, so
 # the ask is durable by the time the process ends — that is how ADVANCE tells "parked
@@ -196,7 +197,7 @@ asks = Table(
     Column("asked_at", UtcDateTime, nullable=False),
 )
 
-# --- Park / resume (the chunk's dormancy on a question — [ask-answer.md]) ----
+# --- Park / resume (the chunk's dormancy on a question) ----------------------
 #
 # A lease is *parked* while a park_fact references it with no later park_resume: the
 # worker asked and exited (ask-and-exit), so there is no live worker — REAP must not
@@ -223,13 +224,13 @@ park_resumes = Table(
     Column("resumed_at", UtcDateTime, nullable=False),
 )
 
-# --- Resume intent (the restart resume marker — D-082) -----------------------
+# --- Resume intent (the restart resume marker) -------------------------------
 #
 # A restart marks every active, non-parked, session-bearing lease with a resume-intent, then
 # the startup RESUME step routes each marked lease to a same-lease resume — kill any survivor,
 # then resume the session in place under the **unchanged** ``lease_id``/``epoch``/``session_id``
 # (only ``pid``/``process_start_time`` are rewritten). This is the fourth sibling of the resume
-# family (spawn / judgement / answer, D-082): it is explicitly not a retry (new lease/epoch/
+# family (spawn / judgement / answer): it is explicitly not a retry (new lease/epoch/
 # session), so it consumes no retry budget.
 #
 # Two paths write the intent. A **graceful** shutdown (SIGTERM: ``systemctl restart``/stop)
@@ -260,13 +261,13 @@ resume_clears = Table(
     Column("cleared_at", UtcDateTime, nullable=False),
 )
 
-# --- Session-end signal (the durable "declared done" fact — D-055/D-082) -----
+# --- Session-end signal (the durable "declared done" fact) -------------------
 #
 # The graceful marker (above) fires *before* the daemon exits; an ungraceful ``kill -9``
 # / OOM / reboot never runs shutdown code, so startup crash-recovery cannot rely on a
 # marker at all. This table is the signal it *can* rely on: the Claude Code ``SessionEnd``
 # hook posts ``blizzard runner session-end`` when a worker's session exits naturally, so a
-# row here means the worker **declared done** (exit-is-done, D-055). A worker killed
+# row here means the worker **declared done** (exit-is-done). A worker killed
 # mid-work never runs the hook, so it has no row — and that *absence*, paired with a dead
 # pid, is how startup tells a crash to resume (:func:`mark_crash_resume_intents`) from a
 # clean exit ADVANCE should judge. Append-only, machine-local (never travels to the hub),
@@ -280,11 +281,11 @@ session_ends = Table(
     Column("ended_at", UtcDateTime, nullable=False),  # injected-clock stamp of the session's exit
 )
 
-# --- Hub control mirror (the declarative pause brake read on PULL — D-043/D-012) --
+# --- Hub control mirror (the declarative pause brake read on PULL) -----------
 #
-# The fleet operator's pause brake lives at the hub (registry ``paused``, D-043); the
+# The fleet operator's pause brake lives at the hub (registry ``paused``); the
 # runner reads it on its outbound PULL and mirrors it here, then FILL adheres — paused
-# stops new claims, in-flight chunks run on ([loop.md]). Mirroring it in the store keeps
+# stops new claims, in-flight chunks run on. Mirroring it in the store keeps
 # the read a machine-local, crash-safe fact: FILL never calls the hub itself, and the
 # last-known directive holds while the hub is unreachable. One upserted row per
 # runner; ``paused`` is the value, ``updated_at`` when PULL last refreshed it.
@@ -299,9 +300,10 @@ hub_control = Table(
 
 # --- Local pause facts (the runner's own brake — issue #43) -------------------
 #
-# The runner's half of the pause control (``PATCH /runner``, D-043 applied locally): the
+# The runner's half of the pause control (``PATCH /runner``, the same declarative-brake
+# pattern applied locally): the
 # operator tells *this* runner to stop claiming, and it adheres without the hub knowing
-# or being reachable — the operator contract's standing requirement ([api.md]). Distinct
+# or being reachable — the operator contract's standing requirement. Distinct
 # from ``hub_control`` above in both concept and shape: that mirrors a hub-owned value,
 # so it upserts; this is a locally-minted fact, so pause/start facts **append** and the
 # flag derives from the newest, exactly like the hub's own
@@ -324,7 +326,7 @@ local_pause_facts = Table(
 # source is config (``blizzard-runner.toml``, loaded at ``host`` startup); this table
 # is the *runtime* override the local API writes (``PUT /api/workspace-prompt``), so a
 # replacement takes effect on subsequent spawns with no restart. One upserted row per
-# workspace (the runner is single-workspace — D-019), mirroring ``hub_control``'s shape.
+# workspace (the runner is single-workspace), mirroring ``hub_control``'s shape.
 # A present row (including an empty ``prompt``) is a deliberate override that wins over
 # the static config; no row means "never overridden — fall back to config".
 

@@ -11,7 +11,7 @@ interface StatCell {
 }
 
 /**
- * The mission-control titlebar (D-097) — the brand, the fleet's live counts, and
+ * The mission-control titlebar — the brand, the fleet's live counts, and
  * the hub connection state. It spans the whole window above the three columns, so
  * it lives here rather than inside {@link BoardShell}: a header nested in the board
  * column would only span that column, leaving the rails to start above it.

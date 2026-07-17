@@ -252,7 +252,7 @@ describe('AgentRow', () => {
     });
   });
 
-  describe('issue title (issue #28 phase 7, D-084 pass-through)', () => {
+  describe('issue title (issue #28 phase 7, pass-through)', () => {
     it('renders chips + title once the pm-items read resolves — success case', async () => {
       const el = await render(lease(), (method, path) =>
         method === 'GET' && path === '/api/chunks/C-125/pm-items'
@@ -403,7 +403,7 @@ describe('AgentRow', () => {
       expect(rowText(fixture.nativeElement as HTMLElement)).toBe(baseline);
     });
 
-    it('shows the label chip alone, not the title, on a per-pointer forge degrade (D-084: label survives, title/body go null)', async () => {
+    it('shows the label chip alone, not the title, on a per-pointer forge degrade (label survives, title/body go null)', async () => {
       const el = await render(lease(), (method, path) =>
         method === 'GET' && path === '/api/chunks/C-125/pm-items'
           ? {

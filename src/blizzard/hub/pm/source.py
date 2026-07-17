@@ -8,7 +8,7 @@ it against a real forge — the ``blizzard-mock`` forge in tests, GitHub in prod
 one instance per configured ``[[pm_source]]``, pinned to its own repo and
 carrying its own credentialed client.
 
-D-110 grows the seam beyond ``fetch``: a binding also owns parsing its own ingest-token
+The seam reaches beyond ``fetch``: a binding also owns parsing its own ingest-token
 form, rendering the board-legible label, and deriving the pointer's/a branch's browser
 address — grammar that used to live in the domain-layer ``pm/label.py`` module (a
 ``bzh:domain-core`` violation once there was more than one provider). The
@@ -16,20 +16,19 @@ address — grammar that used to live in the domain-layer ``pm/label.py`` module
 seam slot: the hub builds one binding per declared source, and an empty registry is a
 legal hub with no PM reach.
 
-D-111 gives ``parse`` its production caller: ``POST /chunks`` takes source-native
+``parse``'s production caller is ``POST /chunks``: it takes source-native
 tokens, and :meth:`IPmSourceRegistry.resolve` walks the configured bindings, returning
 the first pointer one claims. Exactly one binding can ever claim a token — config
 rejects a duplicate ``name`` and a duplicate ``(provider, repo)`` — so ``parse``
 returns ``None`` for "not my token" rather than raising: the registry loops cleanly over
-every binding, and the route is what raises/reports when nothing claims it (422, D-109).
+every binding, and the route is what raises/reports when nothing claims it (422).
 
 ``fetch`` returns a small domain :class:`PmItem`; the edge maps it onto a wire
 :class:`~blizzard.wire.chunk.PmItemEntry` with the pointer, its label, and a ``fetched_at``.
 
-D-107 gives the pointer its own ``source`` name, so finding a pointer's binding is a
-plain registry lookup (``registry.get(pointer.source)``) — the D-109 repo-matching
-``owns`` this seam carried through Phase 2, while the pointer had no source name of
-its own, is retired.
+The pointer carries its own ``source`` name, so finding a pointer's binding is a
+plain registry lookup (``registry.get(pointer.source)``) — the older repo-matching
+that owned this seam while the pointer had no source name of its own is retired.
 """
 
 from __future__ import annotations

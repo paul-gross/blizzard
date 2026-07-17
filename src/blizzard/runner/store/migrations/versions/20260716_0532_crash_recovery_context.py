@@ -1,7 +1,7 @@
 """spawn-generation + daemon-liveness fact tables (runner store tree)
 
-The two facts startup crash-recovery needs to *interpret* what it finds (issue #13,
-D-055/D-082). 0009 gave the scan its signals; this gives them the context that makes
+The two facts startup crash-recovery needs to *interpret* what it finds (issue #13).
+0009 gave the scan its signals; this gives them the context that makes
 them readable at recovery time:
 
 * ``lease_spawns`` — when the lease's current process was spawned. A lease outlives its

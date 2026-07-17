@@ -18,13 +18,13 @@ import {
  * shared fleet library over live reads from the generated client (TanStack Query)
  * and the hub's SSE stream:
  *
- * The window is the mockup's three columns under a full-width titlebar
+ * The window is three columns under a full-width titlebar
  * ({@link BoardHeader} — the brand, the live fleet counts, and the hub connection):
  *
  * - the **left rail** holds {@link QueuePanel}, which shapes the ready queue
  *   (prioritize + group), over {@link EventLogPanel}'s live feed;
  * - the **centre** stacks {@link BoardShell} — every chunk in its derived-status
- *   column (D-004) — over the {@link ChunkDetail} dock. The dock is always mounted:
+ *   column — over the {@link ChunkDetail} dock. The dock is always mounted:
  *   selecting a card fills it (the work item, node history, artifacts, and the
  *   human-loop actions) and deselecting clears it to a rest state, so the board
  *   never resizes or reflows;
@@ -32,7 +32,7 @@ import {
  *   (MVP criterion 11), over {@link QuestionsPanel}, the fleet's open agent asks —
  *   clicking one opens its chunk in the dock, where it is answered;
  * - the {@link FleetLiveUpdates} spine subscribes to `GET /api/events/stream` and
- *   invalidates the reads on every hub fact, so the whole board streams live (D-097).
+ *   invalidates the reads on every hub fact, so the whole board streams live.
  */
 @Component({
   selector: 'app-root',
@@ -68,7 +68,7 @@ import {
       height: 100%;
     }
     /* The titlebar spans the window, and the three columns fill everything under
-       it (the mockup's 330px / 1fr / 330px main grid). The layout is height-capped
+       it (a 330px / 1fr / 330px main grid). The layout is height-capped
        to the viewport and every panel scrolls its own body, so the page itself
        never scrolls — an operator's board does not move under them. */
     .layout {
@@ -82,7 +82,7 @@ import {
       flex: 1;
       min-height: 0;
       display: grid;
-      /* The mockup's 330px rails, but allowed to give ground on a narrow window:
+      /* 330px rails, but allowed to give ground on a narrow window:
          held rigid they starve the board, which is the column that matters. */
       grid-template-columns: minmax(260px, 330px) 1fr minmax(260px, 330px);
       gap: 6px;

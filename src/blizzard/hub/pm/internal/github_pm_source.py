@@ -7,15 +7,15 @@ here. One instance per configured ``[[pm_source]]``: pinned to its own
 ``repo``, its own ``web_base`` (an origin, e.g. ``https://github.com``), and carrying
 its own credentialed client — never the delivery forge's.
 
-D-107 gives the pointer its own ``source`` name and an opaque ``ref`` (this binding's
+The pointer carries its own ``source`` name and an opaque ``ref`` (this binding's
 own item token — a GitHub issue number): ``fetch``/``label``/``web_url`` trust
 ``pointer.ref`` directly rather than re-deriving it from a URL, unlike the Phase 1/2
 shape this binding grew from (``pm/label.py``'s issue-URL grammar, now gone).
 
-D-111 gives ``parse`` its production caller and, with it, the URL grammar `cli.py`'s
-own ``_ISSUE_URL_RE`` used to carry (a config-blind guess that a source's name equals
-its repo tail): the same regex now lives here, checked against *this binding's own
-configured* ``repo`` — the hub's own configuration, not a client-side heuristic.
+``parse``'s production caller is ``POST /chunks``, via the registry's ``resolve``. The
+URL grammar `cli.py` used to carry (a config-blind guess that a source's name equals
+its repo tail) now lives here instead, checked against *this binding's own configured*
+``repo`` — the hub's own configuration, not a client-side heuristic.
 """
 
 from __future__ import annotations

@@ -6,7 +6,7 @@ target node, the chunk, its artifacts, and the executing epoch (``bzh:domain-cor
 ``bzh:domain-takes-objects``). It is a pure function: the same inputs always
 produce the same envelope, so it unit-tests with zero store.
 
-Two engine rules live here, both D-038:
+Two engine rules live here:
 
 * the **pre-prompt** is the node's base prompt plus the inlined arrival addendum of
   the edge the chunk took to reach the node (the ``fail -> build`` addendum carries
@@ -63,8 +63,8 @@ def _judgement_prompt(node: Node) -> str | None:
     elicitation tail (``select exactly one and output <Choice>{name}</Choice>``) is
     appended by the runner from ``node.choices`` (carried on the envelope config) when
     it delivers the judgement into the session — the runner renders it harness-inert
-    (``#``-prefixed) so a mock behavior *script* still ``exec``s cleanly (D-042,
-    runner ``steps._elicitation_tail``). Baking a prose tail here too would both
+    (``#``-prefixed) so a mock behavior *script* still ``exec``s cleanly (runner
+    ``steps._elicitation_tail``). Baking a prose tail here too would both
     duplicate it and break the mock's ``exec``. ``None`` at a node with no worker
     judgement (a hub node or a human gate carries no verdict elicitation).
     """

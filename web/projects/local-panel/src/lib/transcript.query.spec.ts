@@ -44,7 +44,7 @@ describe('injectTranscriptQuery', () => {
 
   afterEach(() => stub?.restore());
 
-  it('is namespaced under runner, lease id, transcript (D-097 fleet/local split)', () => {
+  it('is namespaced under runner, lease id, transcript (fleet/local split)', () => {
     expect(runnerTranscriptKey('L-903')).toEqual(['runner', 'lease', 'L-903', 'transcript']);
   });
 

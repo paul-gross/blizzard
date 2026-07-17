@@ -2,12 +2,9 @@
  * Blizzard mission-control scrollbars.
  *
  * The OS default scrollbar is a light, chunky intrusion into a dark bezelled
- * board. The discovery mockups styled their scroll containers 6px wide with a
- * `--bezel` thumb (blizzard-discovery: discovery/mockups/mission-control.html);
- * that treatment never crossed into the app, so every panel scrolled in the
- * platform's chrome instead of the board's. This restores it — globally rather
- * than per-panel, so a new scroll container inherits the aesthetic instead of
- * re-declaring it.
+ * board. This styles every scroll container 6px wide with a `--bezel` thumb
+ * instead — globally rather than per-panel, so a new scroll container
+ * inherits the aesthetic instead of re-declaring it.
  *
  * A global stylesheet (listed in each app's build `styles`), because component
  * styles are view-encapsulated and these pseudo-elements must reach scroll

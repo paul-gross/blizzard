@@ -1,6 +1,6 @@
 """The ask/answer rendezvous at the hub (component tier) — MVP criterion 7.
 
-Pins the hub half of the protocol ([ask-answer.md]) against a fully-wired store:
+Pins the hub half of the protocol against a fully-wired store:
 
 * a forwarded ``question.asked`` (both the batched ``POST /events`` path the runner
   uses and the typed ``POST /questions`` route) lands a durable row, and the chunk

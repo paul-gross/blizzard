@@ -10,9 +10,8 @@ The fact inputs (:class:`ChunkFacts`) are the domain-object form of the hub-stor
 rows in :mod:`blizzard.hub.store.schema`; a read repository hydrates them (the
 :class:`IReadChunkRepository` seam), and the domain derives from the objects.
 
-Precedence is **first match wins**, top to bottom, exactly as
-``design/domain/events.md`` specifies — a chunk matching several rows has exactly
-one status. ``waiting_on_human`` (open ask / open decision) sits between
+Precedence is **first match wins**, top to bottom — a chunk matching several rows has
+exactly one status. ``waiting_on_human`` (open ask / open decision) sits between
 ``needs_human`` and ``delivering``: a chunk parks there on an open **question**
 (``question.asked`` with no ``question.answered`` — ask/answer, MVP criterion 7) or
 an open **decision** (a gate's ``decision.submitted`` no resolution flips off —
@@ -164,7 +163,7 @@ class TransitionFact:
 class EscalationFact:
     """An ``escalation.recorded`` fact — retries exhausted / dead worker.
 
-    Carries the runner-composed **takeover command** (D-035/harness-adapters.md): the
+    Carries the runner-composed **takeover command**: the
     literal ``cd <workdir> && <harness resume>`` a human pastes to enter the parked
     session. It is surfaced on the chunk detail so ``needs_human`` is actionable; the
     status derivation itself keys only on ``(epoch, recorded_at)`` supersession.
@@ -177,7 +176,7 @@ class EscalationFact:
 
 @dataclass(frozen=True)
 class QuestionFact:
-    """A ``question.asked`` row and whether it has been answered ([ask-answer.md]).
+    """A ``question.asked`` row and whether it has been answered.
 
     Open/answered is **derived**: a question is open exactly while no
     ``question.answered`` row exists, and an open question is the fact the chunk's
@@ -197,11 +196,12 @@ class DecisionFact:
     """A gate's ``decision.submitted`` row and whether a transition references it.
 
     Kin to :class:`QuestionFact`: the chunk derives ``waiting_on_human`` from an
-    **open** decision — one no transition resolves — exactly the D-037 pending pattern.
-    ``resolved`` is computed by the hydrating repository (a transition carrying this
-    ``decision_id``) so the derivation reads a plain boolean. This is the input shape
-    the gates track writes decision facts against (``design/domain/work.md``); until it
-    lands, :attr:`ChunkFacts.decisions` is empty and no chunk derives a gate park.
+    **open** decision — one no transition resolves — the same open/unresolved pending
+    pattern an open question follows. ``resolved`` is computed by the hydrating
+    repository (a transition carrying this ``decision_id``) so the derivation reads a
+    plain boolean. This is the input shape the gates track writes decision facts
+    against; until it lands, :attr:`ChunkFacts.decisions` is empty and no chunk derives
+    a gate park.
     """
 
     decision_id: str
@@ -230,7 +230,7 @@ class DecisionRow:
 
     Resolution and resolving-transition state are **derived**: ``resolved_choice`` is
     set once a resolution row exists, and ``transitioned`` is true once a transition
-    references this decision (the runner has advanced the chunk, D-027). The holding
+    references this decision (the runner has advanced the chunk). The holding
     runner acts on a decision that is resolved but not yet transitioned.
     """
 
@@ -284,12 +284,12 @@ def derive_chunk_status(facts: ChunkFacts) -> ChunkStatus:
         return ChunkStatus.STOPPED
     if facts.delivery_landed or facts.pr_closed:
         # ``pr.closed`` is the open-pr mode's terminal fact (merged or closed-without-merge,
-        # both terminal — D-065), the counterpart to ``delivery.landed`` for merge-to-main.
+        # both terminal), the counterpart to ``delivery.landed`` for merge-to-main.
         return ChunkStatus.DONE
     if _has_open_escalation(facts):
         return ChunkStatus.NEEDS_HUMAN
     if _is_waiting_on_human(facts):
-        # An open question (ask-answer.md) or an open decision (gate, D-045); the
+        # An open question or an open decision (gate); the
         # reap clock is stopped and the answer/resolution flips it back.
         return ChunkStatus.WAITING_ON_HUMAN
     if _newest_transition_enters_hub_node(facts):
@@ -316,7 +316,7 @@ def open_escalation(facts: ChunkFacts) -> EscalationFact | None:
     Requeue/takeover close an escalation by **supersession** — a later lease mint or a
     later ``requeue.recorded`` fact, never a resolution fact — so an escalation
     stays open exactly while nothing was recorded after it. When open, its
-    ``takeover_command`` is the resume command a human pastes (harness-adapters.md); the
+    ``takeover_command`` is the resume command a human pastes; the
     board surfaces it on the ``needs_human`` chunk.
     """
     if not facts.escalations:
@@ -330,12 +330,12 @@ def open_escalation(facts: ChunkFacts) -> EscalationFact | None:
 
 
 def _is_waiting_on_human(facts: ChunkFacts) -> bool:
-    """An open question or an open decision parks the chunk (ask-answer.md/D-045)."""
+    """An open question or an open decision parks the chunk."""
     return bool(open_questions(facts)) or has_open_decision(facts)
 
 
 def open_questions(facts: ChunkFacts) -> list[QuestionFact]:
-    """The chunk's unanswered questions, oldest first ([ask-answer.md]).
+    """The chunk's unanswered questions, oldest first.
 
     A question is open exactly while no ``question.answered`` row exists; an
     answer flips it out of ``waiting_on_human``. The list is what the chunk detail and
@@ -355,7 +355,7 @@ def open_decision(facts: ChunkFacts) -> DecisionFact | None:
     A decision is open while it carries no resolution row — the person has not yet
     picked a choice. Once resolved, ``waiting_on_human`` drops away (the chunk's route
     is still live, so it derives ``running`` until the holding runner records the
-    resolving transition, D-027). Pending-ness is thus derived, never stored.
+    resolving transition). Pending-ness is thus derived, never stored.
     """
     unresolved = [d for d in facts.decisions if not d.resolved]
     if not unresolved:
@@ -367,7 +367,7 @@ def awaiting_external_merge(facts: ChunkFacts) -> bool:
     """A ``delivering`` chunk parked on an open PR — ``pr.opened`` without ``pr.closed``.
 
     Not a distinct status: the chunk derives ``delivering`` (its newest transition still
-    enters the deliver hub node, environments held — D-066). This is the board **detail**
+    enters the deliver hub node, environments held). This is the board **detail**
     that distinguishes an open-pr park from an in-flight merge.
     """
     return bool(facts.pr_opened) and not facts.pr_closed
@@ -442,7 +442,7 @@ def newest_transition(facts: ChunkFacts) -> TransitionFact | None:
 def transition_history(facts: ChunkFacts) -> list[TransitionFact]:
     """The chunk's accepted transitions in the order they were recorded (oldest first).
 
-    The chronological walk the board renders (D-036, MVP criterion 11): each entry is
+    The chronological walk the board renders (MVP criterion 11): each entry is
     one node-step's edge — where it came from, the choice taken, where it went — so the
     review-fail loop back to ``build`` reads as a visible step in the timeline. Ordered
     by ``(recorded_at, epoch)``, the same key :func:`newest_transition` selects the tail
@@ -469,12 +469,12 @@ def latest_epoch(facts: ChunkFacts) -> int | None:
     return max(lease.epoch for lease in facts.leases)
 
 
-# --- Question rows (the ask/answer rendezvous — questions.md) ----------------
+# --- Question rows (the ask/answer rendezvous) -------------------------------
 
 
 @dataclass(frozen=True)
 class QuestionRow:
-    """A durable question row with its derived answer state ([ask-answer.md]).
+    """A durable question row with its derived answer state.
 
     The full surfacing shape behind ``blizzard hub status`` and the chunk detail's
     open-questions list. Open/answered is **derived**: a question is answered
@@ -499,7 +499,7 @@ class QuestionRow:
 
 @dataclass(frozen=True)
 class AnswerOutcome:
-    """The result of an answer write — first-write-wins CAS ([ask-answer.md]).
+    """The result of an answer write — first-write-wins CAS.
 
     ``won`` is True for the write that landed the row; a later writer gets ``won=False``
     with the **winning** row's ``answer``/``answered_by`` so the loser is told who
@@ -522,7 +522,7 @@ class IReadChunkRepository(Protocol):
     def get(self, chunk_id: str) -> Chunk | None: ...
     def load_facts(self, chunk_id: str) -> ChunkFacts | None: ...
     def get_question(self, question_id: str) -> QuestionRow | None:
-        """One question row with its derived answer state, or None ([ask-answer.md])."""
+        """One question row with its derived answer state, or None."""
         ...
 
     def list_open_questions(self) -> list[QuestionRow]:
@@ -574,7 +574,7 @@ class IReadChunkRepository(Protocol):
 
     def find_decision(self, chunk_id: str, *, node_id: str, epoch: int) -> DecisionRow | None:
         """The decision already open for a (chunk, node, epoch) — the idempotency probe
-        for a re-submitted runner-config gate decision (a lost-ack replay, D-045)."""
+        for a re-submitted runner-config gate decision (a lost-ack replay)."""
         ...
 
     def decision_for_chunk(self, chunk_id: str) -> DecisionRow | None:
@@ -599,7 +599,7 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
 
     def record_lease(self, chunk_id: str, *, epoch: int, runner_id: str, at: datetime) -> None: ...
     def set_runner_high_water(self, runner_id: str, *, seq: int, at: datetime) -> None:
-        """Advance a runner's applied-seq high-water mark (upsert, D-069)."""
+        """Advance a runner's applied-seq high-water mark (upsert)."""
         ...
 
     def record_route(self, route: Route, *, at: datetime) -> None: ...
@@ -639,13 +639,13 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         at: datetime,
     ) -> bool:
         """Land the terminal delivery atomically and idempotently — one transaction, a
-        no-op if already landed (D-030/crash recovery). Returns True iff it wrote."""
+        no-op if already landed (crash recovery). Returns True iff it wrote."""
         ...
 
     def record_pr_opened(
         self, chunk_id: str, *, repo: str, number: int, url: str, commit_hash: str, at: datetime
     ) -> None:
-        """Record a ``pr.opened`` park fact (open-pr mode, D-059) — no terminal, envs held.
+        """Record a ``pr.opened`` park fact (open-pr mode) — no terminal, envs held.
 
         Idempotent per (chunk, repo): a racing second write for a repo already carrying a
         ``pr.opened`` fact is a harmless no-op, not a duplicate row — the deliver node runs
@@ -697,7 +697,7 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         options: list[str],
         asked_at: datetime,
     ) -> None:
-        """Land a ``question.asked`` row — the chunk derives ``waiting_on_human`` ([ask-answer.md]).
+        """Land a ``question.asked`` row — the chunk derives ``waiting_on_human``.
 
         Runner-authored, forwarded up the outbound buffer; the row is the durable
         rendezvous the answer keys off. Idempotent by ``question_id`` (a store-and-forward
@@ -705,7 +705,7 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         ...
 
     def answer_question(self, question_id: str, *, answer: str, answered_by: str, at: datetime) -> AnswerOutcome:
-        """First-write-wins CAS on the answer row ([ask-answer.md]).
+        """First-write-wins CAS on the answer row.
 
         Exactly one answer row ever exists: the first write wins (``won=True``); a
         racing second write loses (``won=False``) and is handed the winning row. This
@@ -713,7 +713,7 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         ...
 
     def record_answer_delivered(self, *, question_id: str, chunk_id: str, at: datetime) -> None:
-        """Record an ``answer.delivered`` fact — the resume-with-answer ran ([ask-answer.md]).
+        """Record an ``answer.delivered`` fact — the resume-with-answer ran.
 
         Board detail (the session was reconstituted around the answer); the status
         already flipped at ``question.answered``, so no status derives from this."""
@@ -740,7 +740,7 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
 
     def record_decision_resolution(self, decision_id: str, *, choice: str, resolved_by: str, at: datetime) -> bool:
         """First-write-wins CAS: record the person's choice, or return ``False`` if
-        the decision was already resolved (the loser is told who won, D-045)."""
+        the decision was already resolved (the loser is told who won)."""
         ...
 
     def record_requeue(self, chunk_id: str, *, at: datetime) -> None:

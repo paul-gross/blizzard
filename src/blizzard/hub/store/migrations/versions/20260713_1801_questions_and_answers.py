@@ -1,6 +1,6 @@
 """questions, answers, and answer-deliveries (hub store tree)
 
-P7 lands the ask/answer rendezvous (MVP criterion 7, [ask-answer.md]): a worker's
+P7 lands the ask/answer rendezvous (MVP criterion 7): a worker's
 ``blizzard runner ask`` becomes a durable ``questions`` row the chunk parks on, its
 answer a ``question_answers`` row whose primary-key CAS makes answering
 first-write-wins, and the resume-with-answer an ``answer_deliveries`` fact (board

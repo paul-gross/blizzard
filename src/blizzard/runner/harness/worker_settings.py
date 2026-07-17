@@ -13,7 +13,7 @@ The file ships with the runner and is versioned with it — nothing is materiali
 a project repo (repos know nothing about the fleet), and a human's own ``claude``
 session in the same worktree carries no fleet hooks. ``blizzard runner init`` writes it
 into the runtime directory; :func:`worker_settings_document` is the single source of
-its content. Future worker hooks (the ``AskUserQuestion`` deny, D-038) join the same
+its content. Future worker hooks (the ``AskUserQuestion`` deny) join the same
 document without touching the adapter.
 """
 

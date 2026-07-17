@@ -1,9 +1,8 @@
 """Runner-reported fact intake — lease mints and escalations.
 
-The runner mints facts locally and reports the fleet-visible ones up to the hub
-(``design/domain/events.md``): ``lease.minted`` (every node-step attempt, D-035/D-044)
-and ``escalation.recorded`` (retries exhausted, D-009). Two landing points share the
-same domain writes:
+The runner mints facts locally and reports the fleet-visible ones up to the hub:
+``lease.minted`` (every node-step attempt) and ``escalation.recorded`` (retries
+exhausted). Two landing points share the same domain writes:
 
 * :class:`RunnerFactsService` — the direct, single-fact intake behind the typed
   ``POST /chunks/{id}/leases`` and ``/chunks/{id}/escalations`` routes.
@@ -134,7 +133,7 @@ class FactIngestService:
             return True
         if kind == QUESTION_ASKED:
             # The chunk derives waiting_on_human from the landed row; the runner
-            # authored the question_id so it can poll the answer back ([ask-answer.md]).
+            # authored the question_id so it can poll the answer back.
             self._chunks.record_question(
                 question_id=str(payload["question_id"]),
                 chunk_id=str(payload["chunk_id"]),
@@ -178,7 +177,8 @@ def _parse_at(value: object, fallback: datetime) -> datetime:
 
     Coerces a naive result to UTC (``bzh:utc-instants``): a runner's outbound buffer
      can still hold — and later deliver — a pre-fix naive stamp minted before its
-    own upgrade, since D-069 replays whatever it already buffered rather than re-minting.
+    own upgrade, since the store-and-forward replay resends whatever it already
+    buffered rather than re-minting.
     """
     if isinstance(value, str):
         try:

@@ -2,7 +2,7 @@
 
 A build worker commits its work to a branch in a leased repo worktree; the runner
 must push that branch to the ``file://`` origin the forge fronts **before** it
-submits the completion (design/runner/loop.md ADVANCE), and it must name the
+submits the completion (in ADVANCE), and it must name the
 ``git_commit`` artifact (repo, branch, commit) in that submission. The worker does
 not report the pointer out-of-band, so the runner derives it by inspecting the
 leased environment: any repo worktree whose HEAD is ahead of the base branch is a

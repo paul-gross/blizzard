@@ -167,8 +167,8 @@ def _parse_pm_sources(raw_sources: object) -> tuple[PmSourceConfig, ...]:
         repo = str(entry["repo"])
         token_env = str(entry["token_env"])
         if ":" in name:
-            # hub/cli.py's ingest-token grammar partitions on the first colon (D-107's
-            # open question) — a colon in a source name breaks that split.
+            # hub/cli.py's ingest-token grammar partitions on the first colon —
+            # a colon in a source name breaks that split.
             raise ConfigError(f"[[pm_source]] name {name!r} must not contain ':'")
         if name in seen_names:
             raise ConfigError(f"duplicate [[pm_source]] name {name!r}")
@@ -176,7 +176,8 @@ def _parse_pm_sources(raw_sources: object) -> tuple[PmSourceConfig, ...]:
         provider_repo = (provider, repo)
         if provider_repo in seen_provider_repo:
             # Two names for one (provider, repo) would let the same item be ingested
-            # twice under two identities — this is what holds D-093 up, not a nicety.
+            # twice under two identities — this is what holds pointer identity uniqueness
+            # up, not a nicety.
             raise ConfigError(f"duplicate [[pm_source]] (provider, repo) {provider_repo!r} across two names")
         seen_provider_repo.add(provider_repo)
         if provider not in _KNOWN_PM_PROVIDERS:

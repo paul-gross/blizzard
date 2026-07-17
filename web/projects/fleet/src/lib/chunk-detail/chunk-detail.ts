@@ -23,7 +23,7 @@ function errorMessage(error: unknown): string {
 
 /**
  * The chunk detail **container** — owns the reactive detail query and the
- * human-loop mutations (answer a question, resolve a gate decision — D-042/D-052),
+ * human-loop mutations (answer a question, resolve a gate decision),
  * and renders the presentational {@link ChunkDetailPanel} over them. It stays
  * mounted in the bottom dock and shows a rest state until a card is selected; the
  * panel stays presentational and every server call goes through the generated

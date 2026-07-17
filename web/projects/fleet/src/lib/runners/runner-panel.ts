@@ -5,11 +5,11 @@ import { injectHubRunnersQuery } from './runners.query';
 import { injectRunnerPauseMutation } from './runners.mutations';
 
 /**
- * The runner panel (D-019/D-043/D-070) — the fleet registry in the board's right
- * rail: each registered runner with its derived **liveness** (`online` vs the
+ * The runner panel — the fleet registry in the board's right rail: each
+ * registered runner with its derived **liveness** (`online` vs the
  * staleness threshold), last-seen time, and **paused** state, plus a pause/resume
  * toggle — the operator's brake, declarative state the runner reads on its
- * outbound pull (D-012).
+ * outbound pull.
  *
  * A container: it owns the registry query and the pause mutation, through the
  * generated client (bzh:generated-client); the live-update service re-reads on
@@ -256,7 +256,7 @@ export class RunnerPanel {
    * A compact "seen 12s ago" liveness label from `last_seen_at`.
    *
    * Liveness is decided where both instants share one clock — the hub, via `online`
-   * (`derive_online` compares `last_seen_at` against the hub's own clock, D-070); this
+   * (`derive_online` compares `last_seen_at` against the hub's own clock); this
    * label is decoration computed against the *browser's* clock, and a browser's clock
    * must never make a correctness call. A small negative age (`-60s <= age < 0`) is
    * benign browser-vs-hub skew — `last_seen_at` is hub-stamped and an unsynced laptop

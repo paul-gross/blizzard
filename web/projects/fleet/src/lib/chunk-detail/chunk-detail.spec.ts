@@ -129,7 +129,7 @@ describe('ChunkDetail container', () => {
     expect(el.querySelector('[data-testid="issue-message"]')?.textContent).toContain('seen it too');
   });
 
-  // --- Detach (D-088, issue #42) ---------------------------------------------
+  // --- Detach (issue #42) ---------------------------------------------
 
   it('fires the detach client call for a routed chunk once the operator confirms', async () => {
     const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);

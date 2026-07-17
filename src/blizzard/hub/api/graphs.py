@@ -1,7 +1,7 @@
 """Graph routes — ``POST /api/graphs``.
 
 Mint a workflow graph from a YAML definition: parse it, validate (errors reject 422
-with a :class:`GraphValidationReport`, warnings flag — D-071), reify immutable.
+with a :class:`GraphValidationReport`, warnings flag), reify immutable.
 The controller stays read-only over the store (``bzh:controller-read-only``): it
 resolves the YAML into a :class:`GraphDoc` and delegates the validate-reify-persist
 to :class:`~blizzard.hub.domain.graph_authoring.GraphMintService`.

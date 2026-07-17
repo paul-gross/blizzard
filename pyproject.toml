@@ -27,8 +27,8 @@ dependencies = [
     # Structured logging, per blizzard-harness standards/logging.md
     # (bzh:structlog-logging).
     "structlog>=24.0.0",
-    # Workflow-graph definitions are authored in YAML (design/hub/graph-schema.md,
-    # D-071); the hub parses the POST /graphs body and the packaged default graph.
+    # Workflow-graph definitions are authored in YAML; the hub parses the
+    # POST /graphs body and the packaged default graph.
     "pyyaml>=6.0",
 ]
 
@@ -45,7 +45,7 @@ packages = ["src/blizzard"]
 # The frontend build output is a wheel-embedded asset CI fills, and those built
 # files are gitignored (only the placeholder index.html is tracked). `artifacts`
 # un-ignores the whole static tree so the real bundles ship in the wheel too. The
-# packaged default workflow graph (YAML + prompt files, D-081) rides along too, so
+# packaged default workflow graph (YAML + prompt files) rides along too, so
 # a fresh hub mints it with no authoring.
 artifacts = ["src/blizzard/static/**/*", "src/blizzard/hub/graphs/**/*"]
 
@@ -57,7 +57,7 @@ blizzard-hub = "blizzard.hub.cli:hub"
 blizzard-runner = "blizzard.runner.cli:runner"
 # OpenAPI export: dumps the hub and runner specs to a stable path. The frontend's
 # openapi-ts client generation and CI's client-drift check both consume it
-# (build.md D-100, bzh:generated-client).
+# (bzh:generated-client).
 blizzard-export-openapi = "blizzard.tools.openapi:main"
 
 [dependency-groups]

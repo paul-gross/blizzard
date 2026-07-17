@@ -100,7 +100,7 @@ def mark_resume_intents_on_shutdown(config: RunnerConfig) -> int:
 
 
 def mark_crash_resume_intents_on_startup(config: RunnerConfig) -> int:
-    """Detect crash-orphaned sessions at daemon startup and mark them for resume (#13, D-082).
+    """Detect crash-orphaned sessions at daemon startup and mark them for resume (#13).
 
     The ungraceful counterpart of :func:`mark_resume_intents_on_shutdown`: an involuntary
     ``kill -9`` / OOM / reboot never ran the shutdown marker, so ``host`` calls this once
@@ -118,7 +118,7 @@ def mark_crash_resume_intents_on_startup(config: RunnerConfig) -> int:
 
 
 class PeriodicDriver:
-    """A background thread that ticks the loop on an interval (design/runner/loop.md ~30s).
+    """A background thread that ticks the loop on an interval (~30s).
 
     Owns its own ``httpx.Client`` for the driver's lifetime. A tick that raises is
     logged and swallowed so one bad pass never kills the daemon — the loop holds no

@@ -1,4 +1,4 @@
-"""Artifact storage-model round trip (unit tier) — the D-036 compression.
+"""Artifact storage-model round trip (unit tier) — the flat-row compression.
 
 Every typed artifact must compress losslessly to its flat storage row and
 uncompress back to the same variant. Also pins the store key ``{node}.{name}.{epoch}``.

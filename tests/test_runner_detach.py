@@ -1,4 +1,4 @@
-"""A live runner learns its chunk was detached (issue #38, D-088).
+"""A live runner learns its chunk was detached (issue #38).
 
 ``_release_detached``, folded into PULL between ``_sync_registry`` and the flush, asks the
 hub — per active lease, on every tick — whether this runner still holds the chunk's route,

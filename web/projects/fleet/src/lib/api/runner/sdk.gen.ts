@@ -54,7 +54,7 @@ export const listLeasesApiLeasesGet = <ThrowOnError extends boolean = false>(opt
 /**
  * Record Ask
  *
- * Record a worker's ask against its lease, minting the question id ([ask-answer.md]).
+ * Record a worker's ask against its lease, minting the question id.
  */
 export const recordAskApiLeasesLeaseIdAsksPost = <ThrowOnError extends boolean = false>(options: Options<RecordAskApiLeasesLeaseIdAsksPostData, ThrowOnError>): RequestResult<RecordAskApiLeasesLeaseIdAsksPostResponses, RecordAskApiLeasesLeaseIdAsksPostErrors, ThrowOnError> => (options.client ?? client).post<RecordAskApiLeasesLeaseIdAsksPostResponses, RecordAskApiLeasesLeaseIdAsksPostErrors, ThrowOnError>({
     url: '/api/leases/{lease_id}/asks',

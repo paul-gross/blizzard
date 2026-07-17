@@ -3,9 +3,9 @@
 Exercises :class:`~blizzard.hub.pm.internal.github_pm_source.GitHubPmSource`'s
 ``{source, ref}`` pointer handling and vendor-native read against the GitHub-REST
 double — the same choice of a local double over a ``blizzard-mock`` dev dependency
-recorded in ``tests.support`` — plus the D-108 factory that builds one credentialed
-client per configured source, the D-110 label/web-base rendering the binding owns, and
-the D-111 ``parse``/registry ``resolve`` that give it its production caller.
+recorded in ``tests.support`` — plus the factory that builds one credentialed
+client per configured source, the label/web-base rendering the binding owns, and
+the ``parse``/registry ``resolve`` that give it its production caller.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ def test_fetch_reads_issue_body_and_comments() -> None:
 
 
 def test_label_renders_source_name_hash_ref() -> None:
-    """D-110: the label is ``{name}#{ref}`` — the source's own configured name, not a
+    """The label is ``{name}#{ref}`` — the source's own configured name, not a
     provider short-code."""
     source = GitHubPmSource(github_double(), name="widget", repo="acme/widget", web_base="https://x")
     pointer = PmPointer(source="widget", ref="12")
@@ -194,7 +194,7 @@ def test_factory_over_an_empty_source_list_is_a_legal_empty_registry() -> None:
 
 
 def test_registry_get_picks_the_named_binding_over_real_adapters() -> None:
-    """D-107/D-108: resolution is a plain name lookup — ``registry.get(pointer.source)`` —
+    """Resolution is a plain name lookup — ``registry.get(pointer.source)`` —
     never registration order. Proven against the real adapters that ship, not
     ``FakePmSource``."""
     alpha = GitHubPmSource(github_double(), name="alpha", repo="acme/alpha", web_base="https://x")
@@ -229,8 +229,9 @@ def test_resolve_tries_every_binding_and_returns_the_first_claim() -> None:
 
 
 def test_resolve_over_a_url_naming_a_source_whose_name_is_not_its_repo_tail() -> None:
-    """The regression D-111 exists to fix, proven at the registry (the resolver a
-    hub route actually calls), not just the binding directly."""
+    """The regression this guards against: a source whose name isn't its repo tail
+    must still resolve at the registry (the resolver a hub route actually calls), not
+    just the binding directly."""
     bz = GitHubPmSource(github_double(), name="bz", repo="paul-gross/blizzard", web_base="https://github.com")
     registry = PmSourceRegistry({"bz": bz})
 

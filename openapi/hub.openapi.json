@@ -2,7 +2,7 @@
   "components": {
     "schemas": {
       "AnswerRequest": {
-        "description": "The body of ``POST /questions/{id}/answer`` \u2014 the human's answer ([ask-answer.md]).",
+        "description": "The body of ``POST /questions/{id}/answer`` \u2014 the human's answer.",
         "properties": {
           "answer": {
             "title": "Answer",
@@ -21,7 +21,7 @@
         "type": "object"
       },
       "AnswerResult": {
-        "description": "The answer write's outcome \u2014 first-write-wins CAS ([ask-answer.md]).\n\n``won`` is True for the write that landed the row; the loser gets ``won=False`` with\nthe **winning** row so it can be told who already answered (the 409 body).",
+        "description": "The answer write's outcome \u2014 first-write-wins CAS.\n\n``won`` is True for the write that landed the row; the loser gets ``won=False`` with\nthe **winning** row so it can be told who already answered (the 409 body).",
         "properties": {
           "answer": {
             "title": "Answer",
@@ -110,7 +110,7 @@
         "type": "string"
       },
       "ArtifactView": {
-        "description": "One entry of a chunk's inline artifact store.\n\n``key`` is the store key ``{node}.{artifact-name}.{epoch}`` \u2014 append-only, so\nevery re-run's entry is retained and latest-by-epoch resolution is the reader's.\n``content`` carries an **asset's** text verbatim (a review's findings\ndocument); the ``repo``/``branch_name``/``commit_hash`` trio carries a\n``git_commit`` artifact's pinned reference (the hub stores the reference, never the\ncode \u2014 D-012).\n\n``branch_url`` is the forge ``tree`` URL for the produced branch, resolved server-side\nfrom the chunk's issue-shaped PM pointer so the board can link a ``git_commit``\nto the branch on the forge; null when no forge web base is derivable \u2014 the row then\nshows the branch name without a link (no broken link).",
+        "description": "One entry of a chunk's inline artifact store.\n\n``key`` is the store key ``{node}.{artifact-name}.{epoch}`` \u2014 append-only, so\nevery re-run's entry is retained and latest-by-epoch resolution is the reader's.\n``content`` carries an **asset's** text verbatim (a review's findings\ndocument); the ``repo``/``branch_name``/``commit_hash`` trio carries a\n``git_commit`` artifact's pinned reference (the hub stores the reference, never the\ncode).\n\n``branch_url`` is the forge ``tree`` URL for the produced branch, resolved server-side\nfrom the chunk's issue-shaped PM pointer so the board can link a ``git_commit``\nto the branch on the forge; null when no forge web base is derivable \u2014 the row then\nshows the branch name without a link (no broken link).",
         "properties": {
           "branch_name": {
             "anyOf": [
@@ -256,7 +256,7 @@
         "type": "object"
       },
       "ChunkDetail": {
-        "description": "The chunk aggregate in full \u2014 the board's chunk view and envelope feed.\n\nCarries the chunk's **transition history** and its inline **artifact store** so the\nweb app can render every node it visited, the review that failed once and looped\nback to build, and the artifacts \u2014 the branch pointers merged and the review notes\n(product/mvp.md, MVP criterion 9/11).",
+        "description": "The chunk aggregate in full \u2014 the board's chunk view and envelope feed.\n\nCarries the chunk's **transition history** and its inline **artifact store** so the\nweb app can render every node it visited, the review that failed once and looped\nback to build, and the artifacts \u2014 the branch pointers merged and the review notes.",
         "properties": {
           "artifacts": {
             "default": [],
@@ -436,7 +436,7 @@
         "type": "object"
       },
       "ChunkIngestRequest": {
-        "description": "Ingest by source-native token \u2014 specific items always, batch fine.\n\nEach token is resolved against the configured PM sources' own grammar\n(``IPmSource.parse``): ``{name}:{ref}``, ``{name}#{ref}``, or the item's own URL.\nTokens only \u2014 no pre-resolved ``{source, ref}`` shape travels alongside them; the\ntwo intake shapes would reintroduce the same config-blind guess D-111 removes.",
+        "description": "Ingest by source-native token \u2014 specific items always, batch fine.\n\nEach token is resolved against the configured PM sources' own grammar\n(``IPmSource.parse``): ``{name}:{ref}``, ``{name}#{ref}``, or the item's own URL.\nTokens only \u2014 no pre-resolved ``{source, ref}`` shape travels alongside them; a\nsecond intake shape would reintroduce exactly the config-blind guess that\nresolving against the configured sources removes.",
         "properties": {
           "tokens": {
             "items": {
@@ -1397,7 +1397,7 @@
         "type": "object"
       },
       "QuestionAsked": {
-        "description": "A ``question.asked`` fact the runner forwards to the hub ([ask-answer.md]).\n\n``question_id`` is runner-minted (``qn_<ulid>``) so the runner can poll the answer\nback by it; ``epoch`` is the parked lease's fence, ``session_id`` the dormant\nsession to resume around the answer, and ``options`` the choices the board renders.",
+        "description": "A ``question.asked`` fact the runner forwards to the hub.\n\n``question_id`` is runner-minted (``qn_<ulid>``) so the runner can poll the answer\nback by it; ``epoch`` is the parked lease's fence, ``session_id`` the dormant\nsession to resume around the answer, and ``options`` the choices the board renders.",
         "properties": {
           "asked_at": {
             "title": "Asked At",
@@ -1822,7 +1822,7 @@
         "type": "object"
       },
       "RunnerFactAck": {
-        "description": "The hub's per-batch acknowledgement against its high-water mark.\n\n``high_water`` is the runner's new mark after this batch; ``applied`` and\n``already_applied`` partition the pushed seqs so the runner can ack its buffer\n(a semantic rejection still acks \u2014 rejection is an outcome, not a delivery\nfailure, D-069). ``rejected`` names seqs the hub refused for a non-idempotency\nreason (an unknown kind), which the runner surfaces rather than silently drops.",
+        "description": "The hub's per-batch acknowledgement against its high-water mark.\n\n``high_water`` is the runner's new mark after this batch; ``applied`` and\n``already_applied`` partition the pushed seqs so the runner can ack its buffer\n(a semantic rejection still acks \u2014 rejection is an outcome, not a delivery\nfailure). ``rejected`` names seqs the hub refused for a non-idempotency\nreason (an unknown kind), which the runner surfaces rather than silently drops.",
         "properties": {
           "already_applied": {
             "default": [],
@@ -3046,7 +3046,7 @@
         ]
       },
       "post": {
-        "description": "Land a ``question.asked`` row \u2014 the chunk parks ``waiting_on_human`` ([ask-answer.md]).",
+        "description": "Land a ``question.asked`` row \u2014 the chunk parks ``waiting_on_human``.",
         "operationId": "ask_question_api_questions_post",
         "requestBody": {
           "content": {
@@ -3135,7 +3135,7 @@
     },
     "/api/questions/{question_id}/answer": {
       "post": {
-        "description": "Answer a question first-write-wins; 409 carries the winning answer ([ask-answer.md]).",
+        "description": "Answer a question first-write-wins; 409 carries the winning answer.",
         "operationId": "answer_question_api_questions__question_id__answer_post",
         "parameters": [
           {

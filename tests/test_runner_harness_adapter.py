@@ -3,7 +3,7 @@
 ``parse_verdict`` is exercised in isolation over the harness-native JSON envelope and
 its failure modes (``bzh:`` unit tier). The component test drives the adapter against
 a real fake-harness binary that mimics ``mock-claude-code``'s CLI surface — spawn
-launches a real process (its pid + start time stamped, D-092) in the acquired
+launches a real process (its pid + start time stamped) in the acquired
 workdir, and the judgement resume's output is parsed into a choice. The real
 ``mock-claude-code`` façade is bound in the e2e (``blizzard:e2e``).
 """

@@ -1,24 +1,24 @@
 # The blizzard-hub daemon — the fleet's HTTP API + SSE + embedded web app, one
 # binary is the whole hub deployment. Installed as the
-# hub half of the colocated single-machine pair (product/mvp.md journey); the
+# hub half of the colocated single-machine pair; the
 # runner half is blizzard-runner.service. Setup + the reboot-recovery contract
 # this unit implements: docs/deployment.md.
 [Unit]
-Description=Blizzard hub — fleet API, SSE, and mission-control board (blizzard-hub, D-061)
+Description=Blizzard hub — fleet API, SSE, and mission-control board (blizzard-hub)
 Documentation=https://github.com/paul-gross/blizzard/blob/master/docs/deployment.md
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=exec
-# Offline schema reconcile before the daemon opens the store (D-099,
-# bzh:manual-migrations): the daemon refuses to start on a revision mismatch, so
+# Offline schema reconcile before the daemon opens the store
+# (bzh:manual-migrations): the daemon refuses to start on a revision mismatch, so
 # reconciling here first makes a wheel upgrade + reboot self-healing rather than a
 # crash loop. A no-op when the store is already at head.
 ExecStartPre=/opt/blizzard/venv/bin/blizzard-hub migrate --dir /var/lib/blizzard/hub
 ExecStart=/opt/blizzard/venv/bin/blizzard-hub host --dir /var/lib/blizzard/hub
-# The forge base URL/token and PM credentials live ONLY at the hub (D-047/D-084,
-# criterion 1) — never on a runner. `-` makes the file optional so an unconfigured
+# The forge base URL/token and PM credentials live ONLY at the hub —
+# never on a runner. `-` makes the file optional so an unconfigured
 # host still boots and names the gap.
 EnvironmentFile=-/etc/blizzard/hub.env
 User=blizzard

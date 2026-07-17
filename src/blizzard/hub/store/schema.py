@@ -37,7 +37,7 @@ from blizzard.foundation.store.utc import UtcDateTime
 
 metadata = MetaData()
 
-# --- Workflow graphs (immutable definitions, reified — D-033/D-071) ---------
+# --- Workflow graphs (immutable definitions, reified) -------------------------
 
 graphs = Table(
     "graphs",
@@ -86,7 +86,7 @@ graph_edges = Table(
     Column("prompt_addendum", Text, nullable=True),  # inlined arrival context
 )
 
-# --- Chunks and their PM pointers (chunk.minted — D-024/D-047) --------------
+# --- Chunks and their PM pointers (chunk.minted) ------------------------------
 
 chunks = Table(
     "chunks",
@@ -105,7 +105,7 @@ chunk_pm_pointers = Table(
     Column("ref", String, nullable=False),
 )
 
-# --- Movement record (transition.recorded — D-027/D-036) --------------------
+# --- Movement record (transition.recorded) ------------------------------------
 
 transitions = Table(
     "transitions",
@@ -121,7 +121,7 @@ transitions = Table(
     Column("recorded_at", UtcDateTime, nullable=False),
 )
 
-# --- Artifacts (the chunk artifact store — D-036) ---------------------------
+# --- Artifacts (the chunk artifact store) --------------------------------------
 
 artifacts = Table(
     "artifacts",
@@ -138,7 +138,7 @@ artifacts = Table(
     Column("produced_at", UtcDateTime, nullable=False),
 )
 
-# --- Lease facts (lease.minted, runner-reported — D-044) --------------------
+# --- Lease facts (lease.minted, runner-reported) -------------------------------
 
 lease_facts = Table(
     "lease_facts",
@@ -150,7 +150,7 @@ lease_facts = Table(
     Column("minted_at", UtcDateTime, nullable=False),
 )
 
-# --- Routes (route.created / route.released — D-021/D-080/D-088) ------------
+# --- Routes (route.created / route.released) ----------------------------------
 
 route_created = Table(
     "route_created",
@@ -160,7 +160,7 @@ route_created = Table(
     Column("runner_id", String, nullable=False),
     Column("workspace_id", String, nullable=False),
     Column("created_at", UtcDateTime, nullable=False),
-    # The monotonic route-event tiebreak (D-088; see work.newest_live_route) — a
+    # The monotonic route-event tiebreak (see work.newest_live_route) — a
     # per-chunk counter shared with route_released.seq, assigned in real write order.
     Column("seq", Integer, nullable=False),
 )
@@ -184,7 +184,7 @@ route_released = Table(
     Column("seq", Integer, nullable=False),
 )
 
-# --- Delivery landing facts (per-repo, then whole-chunk — D-030/D-091) ------
+# --- Delivery landing facts (per-repo, then whole-chunk) ----------------------
 
 delivery_repo_landed = Table(
     "delivery_repo_landed",
@@ -204,7 +204,7 @@ delivery_landed = Table(
     Column("landed_at", UtcDateTime, nullable=False),  # terminal: all repos landed
 )
 
-# --- Open-PR delivery facts (pr.opened / pr.closed — D-059/D-065) -----------
+# --- Open-PR delivery facts (pr.opened / pr.closed) ---------------------------
 #
 # The ``open-pr`` deliver mode: instead of merging, the coordinator opens a PR
 # per repo and PARKS the chunk — it records ``pr.opened`` here but writes NO terminal
@@ -282,19 +282,19 @@ escalations = Table(
     Column("recorded_at", UtcDateTime, nullable=False),
 )
 
-# --- Questions and answers (the ask/answer rendezvous — questions.md) --------
+# --- Questions and answers (the ask/answer rendezvous) ----------------------
 #
 # A worker facing an undecidable choice runs ``blizzard runner ask`` and exits; the
 # runner forwards the question here, where it becomes a durable row (question.asked).
 # Open/answered is derived: a question is open exactly while no answer row
 # exists. The answer is first-write-wins CAS — the ``question_answers`` primary key
 # IS the question id, so the second concurrent writer's insert fails and the loser is
-# told the winning answer ([ask-answer.md]).
+# told the winning answer.
 
 questions = Table(
     "questions",
     metadata,
-    Column("question_id", String, primary_key=True),  # qn_<ulid> (runner-minted, D-075)
+    Column("question_id", String, primary_key=True),  # qn_<ulid> (runner-minted)
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),  # the parked chunk
     Column("node_id", String, nullable=True),  # the node the worker parked at
     Column("session_id", String, nullable=True),  # the dormant session to resume around the answer
@@ -332,10 +332,10 @@ answer_deliveries = Table(
 # A gate parks a chunk on an open Decision — a durable multiple-choice row a person
 # resolves. The decision is written either by the hub when a
 # transition lands on a human-judged node (a *graph* gate) or by the runner in place
-# of a transition for a node it was configured to gate (a *runner-config* gate,
-# D-032). Resolved-ness is DERIVED (bzh:facts-not-status): a decision with a row in
+# of a transition for a node it was configured to gate (a *runner-config* gate).
+# Resolved-ness is DERIVED (bzh:facts-not-status): a decision with a row in
 # ``decision_resolutions`` is resolved; the resolving Transition the holding runner
-# records later carries the same ``decision_id`` (transitions.decision_id, D-027).
+# records later carries the same ``decision_id`` (transitions.decision_id).
 
 decisions = Table(
     "decisions",
@@ -353,18 +353,18 @@ decision_resolutions = Table(
     "decision_resolutions",
     metadata,
     # decision_id is the PK — the first write wins the CAS; a second resolution is
-    # rejected and told who already resolved (D-045, like an answer).
+    # rejected and told who already resolved (like an answer).
     Column("decision_id", String, ForeignKey("decisions.decision_id"), primary_key=True),
     Column("choice", String, nullable=False),  # the picked choice name — routes the resolving transition
     Column("resolved_by", String, nullable=False),
     Column("resolved_at", UtcDateTime, nullable=False),
 )
 
-# --- Requeue facts (close needs_human by supersession — D-067) --------------
+# --- Requeue facts (close needs_human by supersession) ------------------------
 #
 # ``blizzard hub requeue <chunk>`` appends this fact to close an open escalation by
 # supersession (never a resolution fact): an escalation stays open only while no later
-# lease mint AND no later requeue supersedes it (domain/work.md open_escalation). The
+# lease mint AND no later requeue supersedes it. The
 # requeue also releases the route so the chunk re-derives ``ready`` and re-enters FILL
 # at its current node — a fresh attempt.
 
@@ -376,7 +376,7 @@ requeues = Table(
     Column("requeued_at", UtcDateTime, nullable=False),  # supersedes an earlier escalation
 )
 
-# --- Store-and-forward high-water mark (per-runner idempotency — D-069) ------
+# --- Store-and-forward high-water mark (per-runner idempotency) ---------------
 #
 # The hub's dedup memory for the runner→hub fact push (POST /events): the greatest
 # per-runner sequence number it has already applied. A pushed fact with seq ≤ mark
@@ -393,8 +393,8 @@ runner_high_water = Table(
 
 # --- Queue shaping: ready-queue ordering ----------------------
 #
-# Ready-queue ordering is an explicit hub-side property (design/hub/web-app.md
-# Prioritize): the operator moves a ready chunk to a position, and GET /queue/peek
+# Ready-queue ordering is an explicit hub-side property (the board's Prioritize
+# control): the operator moves a ready chunk to a position, and GET /queue/peek
 # honours it. Facts append, order derives: each reorder appends ONE row —
 # the moved chunk's new float ``position``, computed between its target neighbours —
 # and a chunk's effective position is its newest such fact, or its ``minted_at``
@@ -410,13 +410,13 @@ queue_positions = Table(
     Column("set_at", UtcDateTime, nullable=False),
 )
 
-# --- Queue shaping: grouping (chunk.grouped — D-048/D-076/D-047) -------------
+# --- Queue shaping: grouping (chunk.grouped) -----------------------------------
 #
 # Group N unacquired (ready) chunks into one surviving chunk: the survivor absorbs the
-# union of their PM pointers (plural pointers per D-076, appended to chunk_pm_pointers),
+# union of their PM pointers (pointers become plural, appended to chunk_pm_pointers),
 # and each merged-away chunk records a ``chunk.grouped`` fact naming the survivor. A
 # grouped chunk is EPHEMERAL: it is removed from every listing rather than
-# deriving a status (domain/events.md), exactly like a discard — the PM item lives on
+# deriving a status, exactly like a discard — the PM item lives on
 # as a pointer on the survivor.
 
 chunk_grouped = Table(
@@ -428,14 +428,14 @@ chunk_grouped = Table(
     Column("grouped_at", UtcDateTime, nullable=False),
 )
 
-# --- The fleet registry (runner.registered / paused / resumed — D-019/D-070/D-043) --
+# --- The fleet registry (runner.registered / paused / resumed) ----------------
 #
 # Runners register on startup (runner_id + workspace_id) and appear on the board. The
 # registration row is an upsert: ``last_seen_at`` is a refreshed timestamp (not a fact),
 # bumped by the register call and the dedicated heartbeat; liveness derives from
-# it against a staleness threshold (never a stored column, D-004). Operational state is
+# it against a staleness threshold (never a stored column). Operational state is
 # declarative and append-only: pause/resume facts land in ``runner_pause_facts`` and
-# ``paused`` derives from the newest one (D-043, the D-039 pattern) — the runner reads it
+# ``paused`` derives from the newest one — the runner reads it
 # back on its outbound pull and adheres (paused = no new claims; in-flight runs on).
 
 runner_registrations = Table(

@@ -1,4 +1,4 @@
-"""Offline store administration for the hub (D-099, ``bzh:manual-migrations``).
+"""Offline store administration for the hub (``bzh:manual-migrations``).
 
 The ``init`` / ``migrate`` verbs run while the daemon is **down**: they are the
 only carve-out to "only a daemon opens its own store". Everything here is

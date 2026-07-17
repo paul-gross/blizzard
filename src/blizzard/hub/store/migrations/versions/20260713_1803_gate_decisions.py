@@ -1,15 +1,16 @@
 """human-gate decisions, resolutions, and requeue facts (hub store tree)
 
-The P7W2 human-loop tables (design/domain/work.md Decision, D-045/D-032/D-067):
+The P7W2 human-loop tables (the Decision concept, covering gate decisions and requeue
+supersession):
 
 * ``decisions`` — a gate's open parking row: the node, its choice set, and the
   parked step's epoch. Written by the hub when a transition lands on a human-judged
   node (a *graph* gate) or by the runner in place of a transition for a node it was
   configured to gate (a *runner-config* gate).
 * ``decision_resolutions`` — the person's picked choice, first-write-wins on the
-  decision_id primary key (D-045, like an answer).
-* ``requeues`` — closes an open escalation by supersession (``blizzard hub requeue``,
-  D-067), never a resolution fact.
+  decision_id primary key (like an answer).
+* ``requeues`` — closes an open escalation by supersession (``blizzard hub requeue``),
+  never a resolution fact.
 
 The tables are defined once in ``blizzard.hub.store.schema`` (the metadata Alembic
 targets); this revision creates exactly its own subset in FK-dependency order, so a

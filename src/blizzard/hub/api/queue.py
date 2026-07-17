@@ -1,7 +1,7 @@
 """Queue routes — peek, reorder, and group.
 
 ``GET /queue/peek`` is the read-only ready-queue peek a runner's FILL step does before
-claiming; ready is a **derived** status (a minted chunk with no live route, D-004) and
+claiming; ready is a **derived** status (a minted chunk with no live route) and
 the queue's order is an explicit hub-side property. ``POST /queue/reorder`` is
 the board's Prioritize control, and ``POST /chunks/{id}/group`` is the Group control —
 both shape the ready queue without executing work. Controllers stay read-only over the

@@ -1,24 +1,24 @@
 """The runner daemon's listeners: a unix socket and a TCP port over the one ASGI app (issue #43).
 
-D-068 settles the local API on **HTTP over a unix domain socket** — the socket under the
+The local API settles on **HTTP over a unix domain socket** — the socket under the
 state dir, filesystem permissions as access control — with localhost TCP as an opt-in. The
 socket is what the CLI's local verbs address (found from the runtime dir alone, no port
-registry, and no listening port for anything to push into — D-012). TCP is what the
+registry, and no listening port to stand open). TCP is what the
 browser addresses, because a browser cannot open a unix socket and the runner serves its
-web app same-origin with ``/api/*`` ([web-app.md]). Both are the *same* app and the same
-route table — two doors, not two APIs (D-068: "HTTP semantics keep this route table as
-written").
+web app same-origin with ``/api/*``. Both are the *same* app and the same
+route table — two doors, not two APIs: HTTP semantics keep this route table as written
+regardless of which one is dialed in on.
 
-Today both listeners are always on: TCP is not yet the opt-in D-068 describes, because the
+Today both listeners are always on: TCP is not yet the opt-in described above, because the
 worker hooks still inherit ``BLIZZARD_RUNNER_URL`` as a TCP URL. Making TCP opt-in is its
 own change; this module exists so the socket lands without disturbing anything speaking TCP.
 
 Sockets are bound **here** rather than handed to uvicorn as ``Config(uds=…)`` for two
-reasons: uvicorn's own uds branch chmods the socket ``0o666``, which would leave D-068's
-"filesystem permissions as access control" resting entirely on the parent directory; and
+reasons: uvicorn's own uds branch chmods the socket ``0o666``, which would leave
+filesystem permissions as access control resting entirely on the parent directory; and
 pre-bound sockets let one ``uvicorn.Server`` serve both (``run(sockets=[...])`` creates a
 listener per socket under a single ``should_exit``), which keeps the daemon's one-server
-shutdown — and the D-082 resume-marking that runs after it returns — undisturbed.
+shutdown — and the resume-marking that runs after it returns — undisturbed.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ from blizzard.runner.config import RunnerConfig
 
 _log = structlog.get_logger(__name__)
 
-# The socket's own mode: owner-only. D-068 makes filesystem permissions the access control,
+# The socket's own mode: owner-only. Filesystem permissions are the access control,
 # and the containing state dir is only as tight as systemd's StateDirectoryMode (0750 by
 # default) — which would still admit the whole group. 0600 pins it to the daemon's user.
 SOCKET_MODE = 0o600

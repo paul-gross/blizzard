@@ -1,4 +1,4 @@
-"""Offline store administration for the runner (D-099, ``bzh:manual-migrations``).
+"""Offline store administration for the runner (``bzh:manual-migrations``).
 
 The ``init`` / ``migrate`` verbs run while the daemon is **down** — the only
 carve-out to "only a daemon opens its own store". Deterministic and

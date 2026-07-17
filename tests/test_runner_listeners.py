@@ -1,6 +1,6 @@
 """The runner's two listeners: the unix socket and the TCP port (unit tier).
 
-D-068 makes filesystem permissions the socket's access control, so the mode is a security
+Filesystem permissions are the socket's access control, so the mode is a security
 property and is asserted, not assumed. The stale-socket path matters because `kill -9` is
 a supported operation: a crashed runner leaves its socket file
 behind, and bind() would fail on it forever if nothing cleared it — but a file a *live*
@@ -45,7 +45,7 @@ def test_binds_both_a_socket_and_a_tcp_port(tmp_path: Path) -> None:
 
 @pytest.mark.unit
 def test_socket_is_owner_only(tmp_path: Path) -> None:
-    """D-068's access control is the filesystem, so 0600 is the control — not decoration.
+    """The access control is the filesystem, so 0600 is the control — not decoration.
 
     uvicorn's own uds branch would chmod this 0666; binding it ourselves is what avoids
     that, and this is the assertion that keeps it that way.

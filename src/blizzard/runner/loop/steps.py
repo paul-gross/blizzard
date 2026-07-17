@@ -7,12 +7,12 @@ crash mid-tick followed by a restart re-runs the tick harmlessly, and
 startup recovery is just REAP running first.
 
 The dead-worker split: a **session-bearing** worker whose
-process has *exited* is a *done declaration* (exit-is-done, D-055) and belongs to
+process has *exited* is a *done declaration* (exit-is-done) and belongs to
 ADVANCE — its judgement reply, or its absence, tells a done from a crash.
 REAP handles the residue ADVANCE structurally cannot judge: a lease whose worker
 never reached spawn-return (no pid/session — killed mid-FILL), and a **stalled-but-
 alive** worker whose heartbeat has gone stale (a live pid that stopped making tool
-calls, so it stopped beating — D-069). Both the verdict-less-exit failure (ADVANCE)
+calls, so it stopped beating). Both the verdict-less-exit failure (ADVANCE)
 and the reaped orphan/stall (REAP) route through one ``requeue-or-escalate`` decision
 keyed on the node's retry budget. Liveness is heartbeat-freshness for a
 live pid, plus (pid, start_time) to survive pid reuse.
@@ -82,7 +82,7 @@ _REAPED = "reaped"
 _FAILED = "failed"
 _ESCALATED = "escalated"
 _PARKED = "parked"  # a runner-config gate: the node-step completed, the chunk parks on a decision
-_RELEASED = "released"  # the chunk was found reassigned/detached/unknown — abandon, no requeue (D-088/blizzard#9)
+_RELEASED = "released"  # the chunk was found reassigned/detached/unknown — abandon, no requeue (blizzard#9)
 
 #: The message RESUME delivers into a marked session on a restart. Framed
 #: as a ``#``-prefixed comment so it is inert whether the session is real-harness prose or a
@@ -123,7 +123,7 @@ _CP_RESUME_AFTER = crashpoint("resume.after-reattach", "session re-attached unde
 
 # ABANDON — the reassigned/detached release (`_abandon_reassigned`), reached from RESUME (a chunk
 # reassigned/detached while the runner was down), PULL's `_release_detached` (reassigned/detached
-# while the runner was up, since D-088's live-tick detach), or REAP's `_fail_attempt` escalate
+# while the runner was up, caught by its live-tick detach check), or REAP's `_fail_attempt` escalate
 # guard (an exhausted-retries lease the hub already moved elsewhere, since blizzard#38). A crash
 # here leaves a lease with a dead pid, environments not yet released, and no closure recorded, so
 # the lease is still active at the next startup. That next tick's recovery differs by how the
@@ -181,7 +181,7 @@ _CP_FLUSH_AFTER_APPLY = crashpoint("flush.after-apply-response", "apply-response
 def reap(ctx: LoopContext) -> None:
     """Expire leases whose worker is gone or **stalled**.
 
-    Three cases end an attempt here (each a failed execution attempt, D-078 —
+    Three cases end an attempt here (each a failed execution attempt —
     requeue or escalate):
 
     * **orphan** — a lease with no recorded pid/session: minted at FILL but never
@@ -229,15 +229,15 @@ def reap(ctx: LoopContext) -> None:
     for lease in ctx.store.list_active_leases():
         if lease.lease_id in parked:
             # Dormant on a question (ask-and-exit): no live worker to stall, so the
-            # reap clock is stopped — a parked chunk is never reaped for inactivity
-            # ([ask-answer.md]). The answer's arrival resumes it (ADVANCE).
+            # reap clock is stopped — a parked chunk is never reaped for inactivity.
+            # The answer's arrival resumes it (ADVANCE).
             continue
         if lease.pid is None or lease.session_id is None:
             _log.info("reaping unspawned lease", lease_id=lease.lease_id, chunk_id=lease.chunk_id)
             _fail_attempt(ctx, lease, reason=_REAPED, via="reap")
             continue
         if not ctx.process.is_alive(lease.pid, lease.process_start_time or ""):
-            continue  # exited — ADVANCE's (exit-is-done, D-055)
+            continue  # exited — ADVANCE's (exit-is-done)
         if is_heartbeat_stale(ctx.store, lease, now):
             if local_paused:
                 # Do not kill a live worker while the runner's own brake is on — pause is
@@ -254,7 +254,7 @@ def reap(ctx: LoopContext) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# RESUME — the restart re-attach: graceful marking (#12) + crash detection (#13), D-082
+# RESUME — the restart re-attach: graceful marking (#12) + crash detection (#13)
 # --------------------------------------------------------------------------- #
 
 
@@ -269,8 +269,8 @@ def mark_resume_intents(store: IWriteRunnerStore, *, now: datetime) -> int:
     the one RESUME step.
 
     Marks an **active, non-parked, session-bearing** lease: a parked lease is dormant on a
-    question (its own resume is the answer, [ask-answer.md]); a lease with a pending completion/
-    decision has its verdict already elicited (its node-step is done, awaiting flush, D-069); a
+    question (its own resume is the answer); a lease with a pending completion/
+    decision has its verdict already elicited (its node-step is done, awaiting flush); a
     lease with no pid/session never reached spawn-return (REAP's residue — nothing to resume).
     Returns the number marked. Store-only — no hub, no process probe — so shutdown stays cheap
     and reachable even when the hub is down.
@@ -298,7 +298,7 @@ def mark_resume_intents(store: IWriteRunnerStore, *, now: datetime) -> int:
 
 
 def mark_crash_resume_intents(store: IWriteRunnerStore, *, process: IProcessProbe, now: datetime) -> int:
-    """Detect crash-orphaned sessions at startup and mark them for same-lease resume (#13, D-082).
+    """Detect crash-orphaned sessions at startup and mark them for same-lease resume (#13).
 
     The **ungraceful** sibling of :func:`mark_resume_intents`. A ``kill -9`` / OOM / reboot
     never runs the graceful shutdown marker, so the next startup has to find the interrupted
@@ -308,7 +308,7 @@ def mark_crash_resume_intents(store: IWriteRunnerStore, *, process: IProcessProb
     Run once by the ``host`` command before the loop starts, symmetric with the graceful marker
     in its shutdown ``finally``; the first tick's :func:`resume` then consumes the marks, so the
     ungraceful path reuses every fence the graceful one already carries — kill-first, the
-    unchanged epoch, and the D-088 abandon-if-reassigned ownership check.
+    unchanged epoch, and the abandon-if-reassigned ownership check.
 
     A session-bearing lease is crash-resumable — and marked here — iff **all** hold:
 
@@ -353,7 +353,7 @@ def mark_crash_resume_intents(store: IWriteRunnerStore, *, process: IProcessProb
         if lease.lease_id in parked or lease.lease_id in pending:
             continue  # dormant on a question / outcome already elicited — not a crash to resume
         if lease.lease_id in ended:
-            continue  # declared done (SessionEnd fired) — ADVANCE judges it (exit-is-done, D-055)
+            continue  # declared done (SessionEnd fired) — ADVANCE judges it (exit-is-done)
         if process.is_alive(lease.pid, lease.process_start_time or ""):
             continue  # orphaned-but-alive — re-adopted via its live heartbeat, never re-spawned
         if is_heartbeat_stale(store, lease, crashed_at):
@@ -485,13 +485,13 @@ def _resume_in_place(ctx: LoopContext, lease: LeaseRecord) -> None:
 
 
 def _abandon_reassigned(ctx: LoopContext, lease: LeaseRecord, *, killed: bool = False, via: str) -> None:
-    """Release a chunk the hub reassigned, detached, or no longer knows about (D-088/blizzard#9) —
+    """Release a chunk the hub reassigned, detached, or no longer knows about (blizzard#9) —
     reached from restart-resume or a live tick.
 
     No epoch bump and no requeue: the chunk is another runner's now (or detached to ``ready``, or
     gone outright — a 404 at the hub, e.g. after a store reset), so re-asserting authority over it
     would be wrong — the runner learns of it, whether over its own restart or on a live tick, and
-    does exactly what D-088 asks: kill the worker, release the environments. The lease is closed
+    does exactly what losing ownership requires: kill the worker, release the environments. The lease is closed
     ``released`` (not a failed attempt — it never gets to run) and the intent is cleared. ``via``
     names which caller reached the ownership check that led here (``"resume"`` — restart-resume,
     ``"pull"`` — a live tick's :func:`_release_detached`, ``"reap"`` — an escalation REAP
@@ -515,11 +515,11 @@ def _abandon_reassigned(ctx: LoopContext, lease: LeaseRecord, *, killed: bool = 
 
 
 def pull(ctx: LoopContext) -> None:
-    """Exchange facts with the hub (outbound-only, D-012): sync the registry, learn of any
+    """Exchange facts with the hub (outbound-only): sync the registry, learn of any
     detach/reassignment, drain the buffer.
 
     Three outbound exchanges happen here. First :func:`_sync_registry` registers the runner
-    (idempotent — refreshing its ``last_seen_at`` liveness, D-070) and reads its declarative
+    (idempotent — refreshing its ``last_seen_at`` liveness) and reads its declarative
     pause brake back, mirroring it locally so FILL adheres. Then :func:`_release_detached`
     asks the hub, per active lease, whether this runner still holds the route — the same
     ownership question restart-resume already asks — and abandons any lease it no longer holds,
@@ -562,7 +562,7 @@ def _release_detached(ctx: LoopContext) -> None:
     half of restart-resume's ownership check (:func:`_resume_marked_lease`).
 
     For every active lease, ask the hub who holds the chunk's route now. Unreachable hub →
-    ``continue``: keep working, the last-known directive holds (D-012, the same rule
+    ``continue``: keep working, the last-known directive holds (the same rule
     :func:`_sync_registry` follows) — do not crash, do not abandon on a transport failure. Ours
     and still routed here → leave it alone, whatever its derived status: a live runner legitimately
     holds an active lease while the chunk derives ``delivering``, ``waiting_on_human``, or
@@ -583,8 +583,8 @@ def _release_detached(ctx: LoopContext) -> None:
     Killing the worker before the flush narrows the window but cannot purge the buffer:
     ``bzh:invariant-checker`` requires a gapless outbound-buffer sequence, so deleting buffered
     facts to close it would trade a durable invariant for a window the fence closes anyway. This is
-    requeue's existing window (D-067 releases the route with no bump too) — not engineered around
-    here."""
+    requeue's existing window (requeue already releases the route with no bump too) — not engineered
+    around here."""
     for lease in ctx.store.list_active_leases():
         if _reassigned_or_detached(ctx, lease):
             _abandon_reassigned(ctx, lease, via="pull")
@@ -650,8 +650,8 @@ def _flush_completion(ctx: LoopContext, fact: BufferedFact) -> bool:
     """Submit a buffered completion and drive its apply-response.
 
     Idempotent by construction: the hub's completion apply is epoch-idempotent (a
-    re-applied completion returns its original outcome without a second transition,
-    D-090), and the runner acts on the response only while the lease is still active —
+    re-applied completion returns its original outcome without a second transition),
+    and the runner acts on the response only while the lease is still active —
     a re-flush after a lost ack finds the lease closed and simply clears the buffer.
     """
     payload = json.loads(fact.payload)
@@ -681,7 +681,7 @@ def _flush_decision(ctx: LoopContext, fact: BufferedFact) -> bool:
     envelope to continue into, so the flush just closes the lease (the node-step is
     done) and holds the environments. Idempotent by construction: the hub's decision
     apply is natural-key idempotent (a re-submitted decision at the same (node, epoch)
-    returns the parked outcome without a second row, D-045), and a re-flush past a lost
+    returns the parked outcome without a second row), and a re-flush past a lost
     ack finds the lease closed and clears the buffer.
     """
     payload = json.loads(fact.payload)
@@ -715,7 +715,7 @@ def _consume_apply_response(ctx: LoopContext, lease: LeaseRecord, response: Appl
     if response.outcome == ApplyOutcome.FAILURE:
         # A semantic rejection — a stale-epoch (zombie) or terminal completion. The
         # attempt failed; requeue or escalate. The chunk never advanced and never
-        # entered the merge queue (the hub fenced it before any write, D-007).
+        # entered the merge queue (the hub fenced it before any write).
         _log.warning("completion rejected on flush", chunk_id=lease.chunk_id, detail=response.detail or "")
         _fail_attempt(ctx, lease, reason=_FAILED, via="pull")
         return
@@ -735,7 +735,7 @@ def _consume_apply_response(ctx: LoopContext, lease: LeaseRecord, response: Appl
 def fill(ctx: LoopContext) -> None:
     """Keep the fleet busy: peek → acquire → claim-by-route → bind → spawn.
 
-    Since D-080, FILL is where work is claimed. Open agent slots are
+    FILL is where work is claimed. Open agent slots are
     ``MAX_AGENTS - active_leases``; for each, peek the ready queue, acquire the
     chunk's environments (all-or-nothing), and POST the complete route. A 409 is
     race-second-place — release the bindings and move on. The winning claim carries
@@ -746,14 +746,14 @@ def fill(ctx: LoopContext) -> None:
     local flag (``PATCH /runner``, issue #43), which the operator sets machine-locally and
     which therefore holds with the hub unreachable. In-flight chunks are untouched under
     either — FILL only ever stops *new* claims — but since issue #45 the two brakes'
-    reach beyond FILL diverges: the hub brake keeps its D-043 claims-only meaning (checked
+    reach beyond FILL diverges: the hub brake keeps its claims-only meaning (checked
     here alone), while the local brake also blocks every other spawn site (restart-resume,
     an answer-resume, ADVANCE's next-node, a requeue or claim-adopt respawn, and ADVANCE's
     judgement resume) via :func:`_spawn_suppressed`, its one shared home, and defers
     escalation (:func:`_fail_attempt`'s exhausted-budget branch) the same way REAP's own
     kill of a stalled worker is deferred — a locally-paused runner starts no process and
     hands nothing off as unrecoverable while it waits. So a hub-only pause still drains the
-    fleet the way it always has ([loop.md]); a local pause spawns nothing, anywhere, while
+    fleet the way it always has; a local pause spawns nothing, anywhere, while
     leaving every lease, route, and retry budget exactly as it was.
 
     Recovery runs first: :func:`_reconcile_interrupted_claims` reconciles any binding
@@ -909,7 +909,7 @@ def advance(ctx: LoopContext) -> None:
     Two responsibilities: (a) a session-bearing worker whose process has exited is a
     done declaration — resume it with the judgement prompt, parse the ``<Choice>``,
     push its artifacts, and **buffer** the epoch-fenced completion (the flusher in
-    PULL delivers it and drives the apply-response, D-069) — unless this operator gates
+    PULL delivers it and drives the apply-response) — unless this operator gates
     the node by name, in which case it buffers a **decision** instead; (b) a
     chunk the runner holds with no active lease is driven by :func:`_advance_held_chunk`
     — a hub node polled for its terminal outcome, or a gate whose decision the
@@ -971,10 +971,10 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
     if lease.session_id is None:
         return  # not spawned — REAP's residue (guarded by the caller too)
 
-    # Ask-and-exit ([ask-answer.md]): a worker that exited holding an unforwarded ask
+    # Ask-and-exit: a worker that exited holding an unforwarded ask
     # parked on a question — forward it and park, no verdict, no retry consumed. This is
-    # what D-009 turns on: an exit with an open ask is a park; an exit with neither is a
-    # failure. The park fact stops REAP's clock and makes the chunk derive waiting_on_human.
+    # what tells a park from a failure: an exit with an open ask is a park; an exit with
+    # neither is a failure. The park fact stops REAP's clock and makes the chunk derive waiting_on_human.
     # Not a spawn, so it proceeds regardless of the local brake.
     ask = ctx.store.unforwarded_ask(lease.lease_id)
     if ask is not None:
@@ -1028,7 +1028,7 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
     # 2b. Harvest the node's asset artifacts: a node that `produces` a name no
     #     pushed git commit covers (the review node's `findings`) emits the worker's
     #     assessment as that asset's content, which a fail judgement carries back into
-    #     the build envelope latest-by-epoch (design/workflow-engine.md review node).
+    #     the build envelope latest-by-epoch.
     artifacts += _collect_asset_artifacts(envelope, artifacts, ctx.harness.parse_assessment(output))
 
     # 3. Buffer the completion — one atomic, epoch-fenced write, delivered by
@@ -1227,7 +1227,7 @@ def _spawn_attempt(
         )
     )
     # The lease is a hub-bound fact: buffer it so the flusher reports it up to
-    # POST /events, ahead of any completion minted under it (FIFO, D-069). It is the
+    # POST /events, ahead of any completion minted under it (FIFO). It is the
     # fence input the hub's completion check consumes — the runner's mint keeps the
     # hub's latest epoch in lockstep across a build -> review chunk, and a requeue's mint
     # closes an escalation by supersession.
@@ -1411,7 +1411,7 @@ def _escalate(ctx: LoopContext, lease: LeaseRecord) -> None:
 
     The escalation rides the outbound buffer as an ``escalation.recorded`` fact,
     flushed to the hub's POST /events, where the fleet derives ``needs_human``
-    (an open escalation with no later lease mint — domain/events.md). It carries the
+    (an open escalation with no later lease mint). It carries the
     pasteable takeover command — ``cd <workdir> && <harness resume>`` composed from the
     adapter's session surface — so a human resumes the
     parked session in the agent's own warm worktrees; a requeue's later lease mint
@@ -1432,9 +1432,9 @@ def _escalate(ctx: LoopContext, lease: LeaseRecord) -> None:
 def _park_on_ask(ctx: LoopContext, lease: LeaseRecord, ask: AskRecord) -> None:
     """Park the chunk on a question: forward it to the hub and stop the reap clock.
 
-    The worker asked and exited, so there is no live worker to judge or reap ([ask-
-    answer.md]): the question rides the outbound buffer up to the hub (store-and-forward,
-    D-069), where it becomes the durable row the chunk derives ``waiting_on_human`` from,
+    The worker asked and exited, so there is no live worker to judge or reap: the
+    question rides the outbound buffer up to the hub (store-and-forward), where it
+    becomes the durable row the chunk derives ``waiting_on_human`` from,
     and the local park fact keeps REAP off the dormant lease and ADVANCE from re-parking
     or eliciting a verdict. The env bindings stay held so the session is warm for
     the resume. No retry is consumed — a park is not a failed attempt.
@@ -1471,7 +1471,7 @@ def _resume_if_answered(ctx: LoopContext, lease: LeaseRecord) -> None:
 
     Gated by the local brake (issue #45) **before the poll** — a paused runner makes no hub
     poll at all. A suppressed resume leaves the park open; the answer is picked up once the
-    brake clears (no retry consumed either way, D-009).
+    brake clears (no retry consumed either way).
     """
     if _spawn_suppressed(ctx, via="answer-resume", chunk_id=lease.chunk_id, lease_id=lease.lease_id):
         return
@@ -1489,11 +1489,11 @@ def _resume_if_answered(ctx: LoopContext, lease: LeaseRecord) -> None:
         _log.warning("answered park with no bound env — cannot resume", chunk_id=lease.chunk_id)
         return
 
-    # The resume prompt reconstitutes the agent around the answer ([ask-answer.md]). The
+    # The resume prompt reconstitutes the agent around the answer. The
     # human framing rides a leading comment line and the answer itself is the payload, so
     # the agent reads "who answered" as context and acts on the answer body — a shape the
     # blizzard-mock façade (prompt-is-program) executes directly, and a real harness reads
-    # as ordinary resume text (the exact prose is unpinned, D-061).
+    # as ordinary resume text (the exact prose is unpinned).
     who = question.answered_by or "operator"
     message = f"# Answer from {who}. Continue.\n{question.answer}"
     pid = ctx.harness.resume_with_message(bindings[0].workdir, lease.session_id or "", message)

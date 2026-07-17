@@ -1,11 +1,11 @@
-"""The ask/answer domain rule ([ask-answer.md] / domain/questions.md).
+"""The ask/answer domain rule.
 
 The one genuinely new primitive: a worker facing an undecidable choice asks and the
 chunk parks — ``waiting_on_human`` — until the answer arrives and the dormant session
 is resumed around it. This service owns the hub half: landing the durable question
 row a runner forwards, and applying the **first-write-wins CAS** answer (the store's
 answer-row primary key is the fence; the loser is told who won). Open/answered is
-never stored — it derives from the answer row's presence (D-004, ``bzh:facts-not-status``).
+never stored — it derives from the answer row's presence (``bzh:facts-not-status``).
 
 The controllers stay read-only over the store (``bzh:controller-read-only``); the
 service holds the write chunk repository and stamps landing times from the injected
@@ -26,7 +26,7 @@ _log = get_logger("blizzard.hub.questions")
 
 
 class QuestionService:
-    """Land questions and answers at the hub ([ask-answer.md])."""
+    """Land questions and answers at the hub."""
 
     def __init__(self, *, chunks: IWriteChunkRepository, clock: IClock) -> None:
         self._chunks = chunks
@@ -48,7 +48,7 @@ class QuestionService:
         _log.info("question landed", question_id=fact.question_id, chunk_id=fact.chunk_id)
 
     def answer(self, question_id: str, *, answer: str, answered_by: str) -> AnswerOutcome:
-        """Apply the answer first-write-wins ([ask-answer.md]); the CAS lives in the store."""
+        """Apply the answer first-write-wins; the CAS lives in the store."""
         outcome = self._chunks.answer_question(
             question_id, answer=answer, answered_by=answered_by, at=self._clock.now()
         )

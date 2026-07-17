@@ -7,7 +7,7 @@ import { type SseHandle, type SseStatus, SseService } from './sse.service';
 /** The hub's SSE stream endpoint (deliberately not in OpenAPI — native EventSource). */
 export const HUB_EVENT_STREAM_URL = '/api/events/stream';
 
-/** The named event types the hub broadcasts (events.md, D-067). */
+/** The named event types the hub broadcasts. */
 export const HUB_EVENT_TYPES = [
   'chunk-changed',
   'question-asked',

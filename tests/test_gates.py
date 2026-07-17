@@ -20,8 +20,8 @@ pytestmark = pytest.mark.component
 
 _POINTER = {"source": "default", "ref": "7"}
 
-# build (worker) -> approve-gate (human) -> deliver (hub). The gate is the D-032 shape
-# from the design sample graph, reduced to the minimum this suite drives.
+# build (worker) -> approve-gate (human) -> deliver (hub). The gate is the sample-graph
+# shape, reduced to the minimum this suite drives.
 _GATE_YAML = """
 name: default-delivery
 entry: build

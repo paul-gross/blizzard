@@ -38,7 +38,7 @@ export interface ResolveDecisionEvent {
 }
 
 /**
- * The chunk detail dock (D-036, MVP criterion 9/11) — everything known about the
+ * The chunk detail dock (MVP criterion 9/11) — everything known about the
  * selected chunk, filling the centre column under the board without reflowing it.
  *
  * A header carries the chunk's identity in the board's own vocabulary (the short
@@ -63,8 +63,8 @@ export interface ResolveDecisionEvent {
  *   `{node}.{artifact-name}.{epoch}`, with an **asset's** findings text inline and a
  *   **git_commit's** pinned `repo @ commit` reference; above it, whatever the chunk
  *   waits on a human for: an open **question** with an inline **Answer** action (MVP
- *   criterion 7, D-052), an open gate **decision** as **choice buttons** (D-042, MVP
- *   criterion 12), or an **escalation's** copyable **takeover command** (D-009).
+ *   criterion 7), an open gate **decision** as **choice buttons** (MVP
+ *   criterion 12), or an **escalation's** copyable **takeover command**.
  *
  * Presentational only: it holds the detail input and emits `dismiss`, `answerQuestion`,
  * `resolveDecision`, and `detach` (guarded by a `confirm()`, the one browser affordance
@@ -603,7 +603,7 @@ export interface ResolveDecisionEvent {
       font-size: var(--fs-sm);
     }
     /* One row per edge the chunk took: the attempt it happened on, the step itself,
-       and the judgement that chose it — the mockup's history rows. */
+       and the judgement that chose it. */
     .timeline {
       list-style: none;
       margin: 0;
@@ -820,7 +820,7 @@ export class ChunkDetailPanel {
   /** Emitted when the operator resolves an open gate decision. */
   readonly resolveDecision = output<ResolveDecisionEvent>();
 
-  /** Emitted with the chunk id when the operator confirms Detach (D-088, issue #42). */
+  /** Emitted with the chunk id when the operator confirms Detach (issue #42). */
   readonly detach = output<string>();
 
   /** The chunk's short name — the same identity its board card carries. */
@@ -841,7 +841,7 @@ export class ChunkDetailPanel {
 
   /**
    * How many attempts the chunk has taken. The epoch is incremented per work
-   * attempt (D-011), so the latest epoch *is* the attempt count — a chunk that has
+   * attempt, so the latest epoch *is* the attempt count — a chunk that has
    * never been worked has no epoch yet and reads `—` rather than a misleading `0`.
    */
   protected readonly attempts = computed<string>(() => {
@@ -870,7 +870,7 @@ export class ChunkDetailPanel {
   protected readonly escalation = computed<EscalationView | null>(() => this.detail().escalation ?? null);
 
   /** The chunk's live route, if any — Detach shows only while this is non-null
-   * (D-088, issue #42): a chunk with no live route has nothing to release. */
+   * (issue #42): a chunk with no live route has nothing to release. */
   protected readonly route = computed<RouteView | null>(() => this.detail().route ?? null);
 
   /** Emit an answer for a question — no-op on an empty answer. */

@@ -2,8 +2,8 @@
 
 The **runner** daemon's reconciliation loop is exercised from outside, driven one real
 ``run_single_tick`` at a time (the steppable driver, ``bzh:steppable-loop``) against a
-**mock hub** run as its own subprocess — the counterpart mocked (``implementation/
-mocking.md``, "the runner → run it against the mock hub"). The mock hub's levers
+**mock hub** run as its own subprocess — the counterpart mocked
+("the runner → run it against the mock hub"). The mock hub's levers
 manufacture the rare states a real hub could only be contrived into, so the tick's
 resilience logic is asserted directly:
 
@@ -129,7 +129,7 @@ def test_unreachable_hub_buffers_the_completion_then_lands_on_recovery(tmp_path:
         assert _pending_outbound(config) == 0, "the outbound buffer did not drain after recovery"
 
     # The runner pushed the mock harness's commit to the bare origin (the artifact-push half
-    # of ADVANCE, D-026) — on the work branch. Unlike e2e, the mock hub fakes the deliver
+    # of ADVANCE) — on the work branch. Unlike e2e, the mock hub fakes the deliver
     # node, so the commit is not merged to main; it is reachable across the origin's refs.
     reachable = _git_bare(origin_bare, "log", "--all", "--name-only", "--format=")
     assert "LANDED.md" in reachable.split(), "the mock harness's commit never reached the bare origin"

@@ -9,8 +9,8 @@ forge seam (:class:`~blizzard.hub.delivery.forge.IForgeDelivery`).
 Within a chunk, repos land **serially, best-effort**: each land is a per-repo
 fact, a redelivery skips the already-landed repos (reconciliation), and delivery
 completes only when every repo has landed — then a terminal ``delivery.landed`` fact
-flips the derived status to ``done`` and the route is released (environments freed,
-D-066). A conflict on the unlanded remainder routes intra-graph to the chunk's entry
+flips the derived status to ``done`` and the route is released (environments freed).
+A conflict on the unlanded remainder routes intra-graph to the chunk's entry
 node in the MVP, partial lands retained for the redelivery reconcile.
 
 The strict-FIFO, one-chunk-at-a-time queue is, in the walking skeleton, the
@@ -125,7 +125,7 @@ class MergeQueueCoordinator:
         return DeliverResult(outcome=DeliverOutcome.LANDED, landed_repos=landed)
 
     def _open_prs(self, chunk: Chunk, deliver_node: Node, *, epoch: int, pointers: list[ArtifactRow]) -> DeliverResult:
-        """Open a PR per repo and **park** the chunk (open-pr mode — D-059).
+        """Open a PR per repo and **park** the chunk (open-pr mode).
 
         The counterpart to the merge path: instead of landing, the coordinator opens a PR
         for each repo's branch and records a ``pr.opened`` fact — writing **no** terminal

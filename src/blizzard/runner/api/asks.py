@@ -1,7 +1,7 @@
-"""The runner-local ask endpoint — ``POST /api/leases/{lease_id}/asks`` ([ask-answer.md]).
+"""The runner-local ask endpoint — ``POST /api/leases/{lease_id}/asks``.
 
 A worker facing an undecidable choice runs ``blizzard runner ask`` and ends its turn
-(ask-and-exit, D-010/D-015). That verb is a pure client of this endpoint: it
+(ask-and-exit). That verb is a pure client of this endpoint: it
 posts the question with the lease id it inherited from the spawn environment
 (``BLIZZARD_LEASE_ID``), and the daemon records the ask fact **before** the worker
 exits — which is how ADVANCE later tells "parked on a question" from "died without a
@@ -43,7 +43,7 @@ class AskResponse(BaseModel):
 
 @router.post("/leases/{lease_id}/asks", response_model=AskResponse, status_code=status.HTTP_201_CREATED)
 def record_ask(lease_id: str, request_body: AskRequest, request: Request) -> AskResponse:
-    """Record a worker's ask against its lease, minting the question id ([ask-answer.md])."""
+    """Record a worker's ask against its lease, minting the question id."""
     store: IWriteRunnerStore | None = getattr(request.app.state, "runner_store", None)
     clock: IClock | None = getattr(request.app.state, "clock", None)
     if store is None or clock is None:

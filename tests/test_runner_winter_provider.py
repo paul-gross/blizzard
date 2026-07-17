@@ -2,7 +2,7 @@
 
 The allocation contract is unit-tested with fake winter/git sub-seams: pick
 from the pool minus the held set, all-or-nothing refusal, the full reset-on-acquire
-sequence (D-021: standalones once per pass, then fetch → forced base checkout →
+sequence (standalones once per pass, then fetch → forced base checkout →
 disconnect → membership reconcile → clean → service teardown → reprovision), the
 orchestrator probe, and mid-reset failure attribution. The component tests drive the
 **real** ``winter`` CLI + git against a minimal real workspace over ``file://``

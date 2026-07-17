@@ -1,4 +1,4 @@
-"""Gate/requeue status derivation — pure functions over facts (unit tier, D-045/D-067).
+"""Gate/requeue status derivation — pure functions over facts (unit tier).
 
 These pin the ``waiting_on_human`` branch and requeue supersession as pure queries over
 an in-memory :class:`ChunkFacts` — no store, no tokens (``bzh:domain-takes-objects``).

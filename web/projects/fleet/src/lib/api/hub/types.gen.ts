@@ -7,7 +7,7 @@ export type ClientOptions = {
 /**
  * AnswerRequest
  *
- * The body of ``POST /questions/{id}/answer`` — the human's answer ([ask-answer.md]).
+ * The body of ``POST /questions/{id}/answer`` — the human's answer.
  */
 export type AnswerRequest = {
     /**
@@ -23,7 +23,7 @@ export type AnswerRequest = {
 /**
  * AnswerResult
  *
- * The answer write's outcome — first-write-wins CAS ([ask-answer.md]).
+ * The answer write's outcome — first-write-wins CAS.
  *
  * ``won`` is True for the write that landed the row; the loser gets ``won=False`` with
  * the **winning** row so it can be told who already answered (the 409 body).
@@ -92,7 +92,7 @@ export type ArtifactKind = 'git_commit' | 'asset';
  * ``content`` carries an **asset's** text verbatim (a review's findings
  * document); the ``repo``/``branch_name``/``commit_hash`` trio carries a
  * ``git_commit`` artifact's pinned reference (the hub stores the reference, never the
- * code — D-012).
+ * code).
  *
  * ``branch_url`` is the forge ``tree`` URL for the produced branch, resolved server-side
  * from the chunk's issue-shaped PM pointer so the board can link a ``git_commit``
@@ -194,8 +194,7 @@ export type CheckResult = {
  *
  * Carries the chunk's **transition history** and its inline **artifact store** so the
  * web app can render every node it visited, the review that failed once and looped
- * back to build, and the artifacts — the branch pointers merged and the review notes
- * (product/mvp.md, MVP criterion 9/11).
+ * back to build, and the artifacts — the branch pointers merged and the review notes.
  */
 export type ChunkDetail = {
     /**
@@ -292,8 +291,9 @@ export type ChunkGroupResponse = {
  *
  * Each token is resolved against the configured PM sources' own grammar
  * (``IPmSource.parse``): ``{name}:{ref}``, ``{name}#{ref}``, or the item's own URL.
- * Tokens only — no pre-resolved ``{source, ref}`` shape travels alongside them; the
- * two intake shapes would reintroduce the same config-blind guess D-111 removes.
+ * Tokens only — no pre-resolved ``{source, ref}`` shape travels alongside them; a
+ * second intake shape would reintroduce exactly the config-blind guess that
+ * resolving against the configured sources removes.
  */
 export type ChunkIngestRequest = {
     /**
@@ -960,7 +960,7 @@ export type PrView = {
 /**
  * QuestionAsked
  *
- * A ``question.asked`` fact the runner forwards to the hub ([ask-answer.md]).
+ * A ``question.asked`` fact the runner forwards to the hub.
  *
  * ``question_id`` is runner-minted (``qn_<ulid>``) so the runner can poll the answer
  * back by it; ``epoch`` is the parked lease's fence, ``session_id`` the dormant
@@ -1268,7 +1268,7 @@ export type RunnerFact = {
  * ``high_water`` is the runner's new mark after this batch; ``applied`` and
  * ``already_applied`` partition the pushed seqs so the runner can ack its buffer
  * (a semantic rejection still acks — rejection is an outcome, not a delivery
- * failure, D-069). ``rejected`` names seqs the hub refused for a non-idempotency
+ * failure). ``rejected`` names seqs the hub refused for a non-idempotency
  * reason (an unknown kind), which the runner surfaces rather than silently drops.
  */
 export type RunnerFactAck = {

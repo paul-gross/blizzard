@@ -6,12 +6,12 @@ credentialed clients live behind each entry's adapter, built at the composition 
 reach — the pass-through routes degrade per-chunk/per-pointer rather than refusing to
 start.
 
-D-107 gives the pointer its own ``source`` name, so finding a pointer's binding is a
-plain lookup — ``registry.get(pointer.source)`` — rather than the D-109 repo-matching
-``resolve_source`` this module carried through Phase 2, while the pointer itself named
-no source. That resolver is retired with it.
+The pointer carries its own ``source`` name, so finding a pointer's binding is a
+plain lookup — ``registry.get(pointer.source)`` — rather than the older repo-matching
+``resolve_source`` this module carried while the pointer itself named no source. That
+resolver is retired with it.
 
-D-111 adds :meth:`resolve`, the intake-side counterpart: an ingest **token** (as
+:meth:`resolve` is the intake-side counterpart: an ingest **token** (as
 opposed to an already-resolved pointer's ``source`` name) is tried against every
 configured binding's own :meth:`~blizzard.hub.pm.source.IPmSource.parse` in turn, first
 claim wins. Config guarantees at most one claim (a unique ``name``, and no two sources

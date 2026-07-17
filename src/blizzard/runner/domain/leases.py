@@ -58,7 +58,7 @@ HEARTBEAT_STALENESS_THRESHOLD = timedelta(hours=1)
 #: ``MAX_AGENTS`` is ~4, so 20 closed leases covers several hours of fleet activity.
 RECENT_LEASE_LIMIT = 20
 
-#: The panel's derived state (design/runner/loop.md, issue #28; ``closed`` added issue #29)
+#: The panel's derived state (issue #28; ``closed`` added issue #29)
 #: — one of six, computed at read time and never stored (``bzh:facts-not-status``).
 LeaseState = Literal["running", "stale", "parked", "spawning", "exited", "closed"]
 
@@ -128,16 +128,16 @@ def derive_lease_state(
 ) -> LeaseState:
     """Derive a lease's state from precomputed facts — pure, no store, no I/O.
 
-    Precedence (design/runner/loop.md, issue #28; ``closed`` added issue #29) — order is
+    Precedence (issue #28; ``closed`` added issue #29) — order is
     the point:
 
-    1. **closed** — a closure fact exists ([ask-answer.md]-adjacent: ``record_closure``,
-       D-078). **Highest precedence**, checked before ``is_alive``: a closed lease's
+    1. **closed** — a closure fact exists (``record_closure``).
+       **Highest precedence**, checked before ``is_alive``: a closed lease's
        ``pid`` may have been reused by an unrelated process, so a live-pid probe can
        false-positive and claim a finished agent is still running. Closure is the
        terminal fact and must win over everything else, the same way ``parked`` already
        wins over ``stale`` below.
-    2. **parked** — a park fact with no later resume ([ask-answer.md]); the reap clock
+    2. **parked** — a park fact with no later resume; the reap clock
        is stopped, so a parked-and-stale lease still reads ``parked``, never ``stale``.
     3. **spawning** — ``pid``/``session_id`` unset: minted at FILL, spawn-return not yet
        recorded; a spawning lease has no meaningful heartbeat, so this wins over

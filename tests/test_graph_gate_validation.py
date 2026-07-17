@@ -1,4 +1,4 @@
-"""Human-gate mint validation (unit tier, D-032/D-041/D-071).
+"""Human-gate mint validation (unit tier).
 
 A ``judged_by: human`` node validates at mint with **no judgement prompt** — the person
 judges, so there is no verdict to elicit. Its choices are

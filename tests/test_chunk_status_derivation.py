@@ -1,4 +1,4 @@
-"""Chunk status derivation (unit tier) — the D-067 precedence, facts only.
+"""Chunk status derivation (unit tier) — the status precedence ladder, facts only.
 
 The derivation is a pure function of :class:`ChunkFacts`, so these tests build the
 facts directly — no store, no tokens (``bzh:facts-not-status`` / ``bzh:domain-takes-objects``).
@@ -88,7 +88,7 @@ def test_detached_route_with_no_other_facts_re_derives_ready() -> None:
 
 def test_detached_route_with_an_open_escalation_still_derives_needs_human() -> None:
     # Detach releases the route only; it does not supersede the escalation (that is
-    # requeue's job, D-067), so a detached, still-escalated chunk stays needs_human.
+    # requeue's job), so a detached, still-escalated chunk stays needs_human.
     facts = _detached_route(escalations=[EscalationFact(epoch=1, recorded_at=_at(3))])
     assert derive_chunk_status(facts) is ChunkStatus.NEEDS_HUMAN
 
@@ -228,7 +228,7 @@ def test_escalation_closed_by_later_lease_is_no_longer_needs_human() -> None:
 
 
 def test_open_question_is_waiting_on_human_over_a_live_route() -> None:
-    # An open ask parks the chunk (ask-answer.md): a live route would derive running,
+    # An open ask parks the chunk: a live route would derive running,
     # but the unanswered question wins the higher-precedence waiting_on_human slot.
     facts = ChunkFacts(
         minted=True,
@@ -270,7 +270,7 @@ def test_resolved_decision_no_longer_waits() -> None:
 
 
 def test_needs_human_wins_over_an_open_question() -> None:
-    # Precedence (events.md): needs_human sits above waiting_on_human.
+    # Precedence: needs_human sits above waiting_on_human.
     facts = ChunkFacts(
         minted=True,
         routes_created=[RouteCreatedFact(created_at=_at(1))],

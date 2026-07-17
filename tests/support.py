@@ -128,7 +128,7 @@ class FakePmSource:
 
     def parse(self, token: str) -> PmPointer | None:
         """``{name}:{ref}`` or ``{name}#{ref}``; ``None`` otherwise — this
-        fake carries no URL grammar (the real binding's own concern, D-110) and, unlike
+        fake carries no URL grammar (the real binding's own concern) and, unlike
         the real GitHub adapter, does not require a numeric ``ref`` — tests key fakes on
         whatever ref shape is convenient."""
         for sep_char in (":", "#"):

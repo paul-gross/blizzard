@@ -1,4 +1,4 @@
-"""Prefixed-ULID id minting (unit tier) — the D-075 id convention.
+"""Prefixed-ULID id minting (unit tier) — the id convention.
 
 Pins the two properties the id scheme promises: a type-evident prefix, and lexical
 creation-ordering (a later mint sorts after an earlier one).

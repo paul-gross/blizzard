@@ -3,12 +3,12 @@
 Implements :class:`~blizzard.runner.environments.provider.IWorkspaceProvider` by
 driving the **real** winter CLI against a workspace root — in verification the
 ``blizzard-mock`` fixture workspace (a real winter workspace over bare ``file://``
-origins, implementation/verification.md). The pool is the provider's static config;
+origins). The pool is the provider's static config;
 which envs are held it learns from the ``held_ids`` the runner passes in
  — it keeps no allocation state of its own.
 
-``acquire`` picks a free env and performs a **full reset-to-base** (reset-on-acquire,
-D-021): refresh standalones once per pass, then per env fetch → forced base checkout →
+``acquire`` picks a free env and performs a **full reset-to-base** (reset-on-acquire):
+refresh standalones once per pass, then per env fetch → forced base checkout →
 disconnect → membership reconcile → untracked-file clean → service teardown →
 reprovision. The forced-checkout-then-disconnect ordering is the point: running
 ``winter ws init`` against a previous tenant's stale feature-branch tracking re-infers

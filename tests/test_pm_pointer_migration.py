@@ -4,7 +4,7 @@ Exercises the backfill on a store migrated to the runner-local-pause revision (t
 revision immediately before the pointer reshape), seeded with rows in the
 **pre-reshape** shape: an issue-shaped GitHub URL (backfills to the
 repo tail plus the issue number) and a non-issue-shaped row (survives verbatim into
-``ref``, D-107's lossless branch). Also exercises ``downgrade()``'s canonicalizing
+``ref``, the lossless branch). Also exercises ``downgrade()``'s canonicalizing
 reverse.
 
 Seeded with literal SQL against the pre-reshape shape rather than
@@ -153,7 +153,7 @@ def test_down_then_up_returns_the_identical_source_ref_rows(tmp_path: Path) -> N
 
     ``downgrade()`` cannot restore the original bytes, so byte-exactness is not the bar.
     The bar is that the *pointer identity* — the ``(source, ref)`` the whole system keys
-    on (D-093 uniqueness, D-076 dedup, the registry lookup) — survives a down-then-up
+    on (uniqueness, dedup, the registry lookup) — survives a down-then-up
     cycle unchanged. It does because the forward rule reads only the repo tail and the
     issue number, and the placeholder-owner reconstruction preserves both; the owner it
     fabricates is the one segment the forward rule already discards. Without this, a

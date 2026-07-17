@@ -89,7 +89,7 @@ class RunnerConfig:
     runner_id: str = DEFAULT_RUNNER_ID
     workspace_id: str = DEFAULT_WORKSPACE_ID
     workspace_root: str = ""  # the winter workspace the provider drives; required to FILL
-    workspace_envs: tuple[str,...] = DEFAULT_ENV_POOL  # the provider's static env pool
+    workspace_envs: tuple[str, ...] = DEFAULT_ENV_POOL  # the provider's static env pool
     harness_binary: str = DEFAULT_HARNESS_BINARY  # mock-claude-code in tests, `claude` in prod
     harness_permission_mode: str | None = None  # `claude -p --permission-mode` (headless); None omits it
     worker_settings_path: str | None = None  # the runner-owned worker hook file (P7)

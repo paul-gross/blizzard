@@ -31,7 +31,7 @@ from blizzard.wire.envelope import NodeEnvelope
 
 @dataclass(frozen=True)
 class WorkerPreamble:
-    """The runner's machine-local preamble prepended to the envelope (D-063, issue #17).
+    """The runner's machine-local preamble prepended to the envelope (issue #17).
 
     The held environments with their workdirs, the minted lease id, and the runner's
     local-API URL — never sent to the hub; all machine-local execution truth.

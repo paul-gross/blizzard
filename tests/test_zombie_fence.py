@@ -1,8 +1,8 @@
 """Zombie fencing — a reaped lease cannot deliver (criterion 3, component tier).
 
 A worker whose lease was reaped may still be alive and may still submit — the epoch
-fence, not the kill, is what guarantees it cannot deliver (design/runner/loop.md,
-D-007). When a reap requeues the chunk, the successor mints a **fresh epoch** and
+fence, not the kill, is what guarantees it cannot deliver. When a reap requeues the
+chunk, the successor mints a **fresh epoch** and
 reports it up. This test proves at the hub that the zombie's late (or
 buffered-then-flushed) completion, carrying the old epoch, is rejected before any
 write: it neither records a transition (the chunk does not advance) nor reaches the

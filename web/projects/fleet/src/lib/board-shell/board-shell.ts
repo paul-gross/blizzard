@@ -13,13 +13,13 @@ export interface BoardCard {
   readonly node: string;
   /** The raw `nd_` ULID, kept reachable as the node label's tooltip. */
   readonly nodeId: string;
-  /** The chunk's PM work item — the server-derived `{source}#{ref}` label (D-107/D-110),
+  /** The chunk's PM work item — the server-derived `{source}#{ref}` label,
    * empty when no pointer names a configured source. Plural pointers join with a space. */
   readonly pointerLabel: string;
 }
 
 /**
- * The mission-control chunk board (D-097) — the five status columns and their
+ * The mission-control chunk board — the five status columns and their
  * cards, filling the centre column above the chunk detail. The titlebar is not
  * here: it spans all three columns, so {@link BoardHeader} owns it.
  *
@@ -163,8 +163,8 @@ export interface BoardCard {
       font-size: var(--fs-md);
       color: var(--label-dim);
     }
-    /* The DONE column carries the mockup's green treatment (flow-board.html): a
-       green header label + head accent, and green card accents, all from tokens. */
+    /* The DONE column carries a green treatment: a green header label + head
+       accent, and green card accents, all from tokens. */
     .b-col[data-col='done'] .b-col-head {
       border-bottom-color: var(--green-dim);
     }
@@ -242,7 +242,7 @@ export interface BoardCard {
       outline-offset: 1px;
     }
     /* The card's identity line: the chunk's short name, with the node it currently
-       sits at pushed to the far right — the mockup's tile head.
+       sits at pushed to the far right.
 
        Every line here holds to one line and ellipsises instead of wrapping. A board
        column is narrow, and a wrapped card is worse than a clipped one twice over: it

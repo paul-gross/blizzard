@@ -10,7 +10,7 @@ on a reviewer catching a raw ``.isoformat()`` by eye.
    by being nested — for a call to ``.isoformat()``. Scoped to ``src/blizzard/`` rather
    than just the ``api/`` packages: a wire payload can be minted at any boundary that
    crosses to the hub or a TS consumer, not only inside a router (e.g. the runner's
-   outbound-buffer payloads, D-069). ``foundation/store/utc.py`` is excluded — it is
+   store-and-forward outbound-buffer payloads). ``foundation/store/utc.py`` is excluded — it is
    ``iso_utc``'s own implementation, the one legitimate owner of a raw ``.isoformat()``
    call.
 2. **Schema guard** — every ``DateTime``-family column in both store ``MetaData`` objects

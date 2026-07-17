@@ -1,4 +1,4 @@
-"""The ask/answer wire shapes ([ask-answer.md] / domain/questions.md).
+"""The ask/answer wire shapes.
 
 The rendezvous spans the two daemons deliberately: the runner
 forwards a ``question.asked`` up to the hub — as a batched ``POST /events`` fact and,
@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 
 class QuestionAsked(BaseModel):
-    """A ``question.asked`` fact the runner forwards to the hub ([ask-answer.md]).
+    """A ``question.asked`` fact the runner forwards to the hub.
 
     ``question_id`` is runner-minted (``qn_<ulid>``) so the runner can poll the answer
     back by it; ``epoch`` is the parked lease's fence, ``session_id`` the dormant
@@ -32,14 +32,14 @@ class QuestionAsked(BaseModel):
 
 
 class AnswerRequest(BaseModel):
-    """The body of ``POST /questions/{id}/answer`` — the human's answer ([ask-answer.md])."""
+    """The body of ``POST /questions/{id}/answer`` — the human's answer."""
 
     answer: str
     answered_by: str = "operator"
 
 
 class AnswerResult(BaseModel):
-    """The answer write's outcome — first-write-wins CAS ([ask-answer.md]).
+    """The answer write's outcome — first-write-wins CAS.
 
     ``won`` is True for the write that landed the row; the loser gets ``won=False`` with
     the **winning** row so it can be told who already answered (the 409 body)."""

@@ -1,7 +1,7 @@
 """Store-migration behaviour for both daemon trees (unit tier).
 
 Covers the three guarantees the scaffold owes the migration policy
-(``bzh:manual-migrations``, D-099): ``init`` is idempotent, ``migrate`` goes up
+(``bzh:manual-migrations``): ``init`` is idempotent, ``migrate`` goes up
 and down, and a daemon refuses to start on a revision mismatch — naming its exact
 migrate command.
 """

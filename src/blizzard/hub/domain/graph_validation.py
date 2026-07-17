@@ -42,7 +42,7 @@ class ValidationResult:
 
 
 def validate_graph(doc: GraphDoc) -> ValidationResult:
-    """Validate a parsed graph definition against the D-071 rules."""
+    """Validate a parsed graph definition against its structural rules."""
     errors: list[str] = []
     warnings: list[str] = []
 

@@ -9,7 +9,7 @@ parseable verdict twice** — a clean exit whose judgement resume yields no
 so the node's budget is exhausted and the runner **escalates**:
 
 * the chunk derives **needs_human** — an open ``escalation.recorded`` with no later
-  lease mint (domain/events.md), flushed up the runner's outbound buffer to
+  lease mint, flushed up the runner's outbound buffer to
   ``POST /api/events`` and dispatched to ``record_escalation``;
 * the open escalation surfaces the runner-composed **takeover command** — the
   pasteable ``cd <workdir> && <harness> --resume <session>``;

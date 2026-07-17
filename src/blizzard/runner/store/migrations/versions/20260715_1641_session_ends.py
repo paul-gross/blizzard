@@ -1,6 +1,6 @@
 """session-end signal fact table (runner store tree)
 
-The ungraceful-restart counterpart to ``resume_intents`` (issue #13, D-055/D-082):
+The ungraceful-restart counterpart to ``resume_intents`` (issue #13):
 ``session_ends`` records the durable "the worker declared done" fact the Claude Code
 ``SessionEnd`` hook posts on a natural session exit. A ``kill -9`` / OOM / reboot never
 runs that hook, so a killed-mid-work lease has no row — and startup crash-recovery reads

@@ -1,4 +1,4 @@
-"""Runner crash-resume — the ungraceful-restart re-attach (issue #13, D-055/D-082, unit tier).
+"""Runner crash-resume — the ungraceful-restart re-attach (issue #13, unit tier).
 
 An involuntary ``kill -9`` / OOM / reboot never runs the graceful shutdown marker, so startup
 must detect the sessions killed mid-work itself: :func:`mark_crash_resume_intents` marks an

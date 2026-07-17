@@ -1,13 +1,12 @@
-"""The acceptance loop — scenario 1 of the standing e2e smoke (verification.md).
+"""The acceptance loop — scenario 1 of the standing e2e smoke.
 
 ONE chunk travels the whole default lifecycle — ingest -> acquire -> mock-scripted
 commit -> **review (scripted PASS)** -> deliver -> landed in the bare origin — and the
 assertion holds at **both ends**: the commit is reachable from the bare origin's
 ``main`` (git truth) *and* the hub's facts derive the chunk ``done`` (fleet truth).
-This is the P6 exit criterion of ``blizzard-discovery:/implementation/verification.md``,
-extended in P7 (wave 1) to travel the full ``build -> review -> deliver`` default
-shape — the review node is the new stop, and here it
-passes on the first cold-eyes look, so the chunk lands without a re-build. The two
+This is the P6 exit criterion, extended in P7 (wave 1) to travel the full
+``build -> review -> deliver`` default shape — the review node is the new stop, and
+here it passes on the first cold-eyes look, so the chunk lands without a re-build. The two
 sibling e2e scenarios cover the review **fail** cycle (test_review_cycle_e2e) and the
 retries-exhausted **escalation** to ``needs_human`` (test_escalation_e2e); the three
 run together as ``mise run e2e``.
@@ -94,7 +93,7 @@ PM_TOKEN_ENV = "BZ_PM_TOKEN_TOYAPI"
 # harness in the acquired env dir (which holds the repo worktrees as children), so it
 # targets the ``toy-api`` worktree explicitly, writing a file and making a real commit
 # on the env's branch. The runner then discovers that commit (HEAD ahead of base) and
-# pushes it (design/runner/loop.md ADVANCE).
+# pushes it (the loop's ADVANCE step).
 _BUILD_SCRIPT = (
     "import subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
@@ -122,7 +121,7 @@ _REVIEW_JUDGEMENT = "verdict('pass', 'cold-eyes review: the committed change is 
 # The pass-through scenario's distinctive PM item — a body + a comment whose exact text
 # is asserted on the bare origin's main, so its presence there proves it travelled the
 # whole layered pass-through (worker -> runner proxy -> hub -> forge) and back into the
-# committed, landed change (MVP criterion 1, D-047/D-084).
+# committed, landed change (MVP criterion 1).
 _PM_BODY = "PASSTHROUGH-BODY: the widget flake reproduces under load"
 _PM_COMMENT = "PASSTHROUGH-COMMENT: attached a failing repro in the linked gist"
 
@@ -331,7 +330,7 @@ def _terminate(proc: subprocess.Popen[str]) -> None:
 
 
 def test_acceptance_loop_one_chunk_ingest_to_landed(tmp_path: Path) -> None:
-    """One chunk travels the whole lifecycle and derives ``done`` (verification.md)."""
+    """One chunk travels the whole lifecycle and derives ``done``."""
     bin_dir = _mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
@@ -424,7 +423,7 @@ def _runner_config(runner_dir: Path, workspace: Path, bin_dir: Path, hub_port: i
         harness_binary=str(bin_dir / "mock-claude-code"),
         # The mock façade has no permission gate and rejects an unknown ``--permission-mode``
         # flag, so it must be omitted (``None``) — the real adapter default's own contract
-        # (``bypassPermissions``, D-092): None omits the flag so the mock is unaffected.
+        # (``bypassPermissions``): None omits the flag so the mock is unaffected.
         harness_permission_mode=None,
         base_branch="main",
     )

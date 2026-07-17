@@ -2,8 +2,8 @@
 
 Implements :class:`~blizzard.hub.delivery.forge.IForgeDelivery` against the
 GitHub-shaped forge — the ``blizzard-mock`` forge in tests (fronting the fixture
-workspace's bare origins, so a merge is a *real* merge into bare ``main`` —
-``verification.md``), GitHub in production. Confined to ``internal/`` (adapter
+workspace's bare origins, so a merge is a *real* merge into bare ``main``),
+GitHub in production. Confined to ``internal/`` (adapter
 placement, ``bzh:dependency-inversion``); ``httpx`` lives only here.
 
 ``land`` (the P6 walking-skeleton operation) opens a PR for the pointer's branch and
@@ -45,7 +45,7 @@ class GitHubForgeDelivery:
     def __init__(self, client: httpx.Client, *, default_owner: str = "") -> None:
         self._client = client
         # A produced ``git_commit`` artifact names its repo by the worktree directory
-        # name alone (design/runner/environments.md — e.g. ``toy-api``), but a forge
+        # name alone (e.g. ``toy-api``), but a forge
         # addresses a repo as ``owner/name``. When a bare (owner-less) repo arrives,
         # qualify it with the configured forge owner so the two-segment ``/repos/{o}/{r}``
         # route resolves; an already-qualified ``owner/name`` passes through untouched.

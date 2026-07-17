@@ -96,7 +96,7 @@ def host(directory: str, host_: str | None, port: int | None) -> None:
     except RevisionMismatchError as exc:
         raise click.ClickException(str(exc)) from exc
     # Composition can still reject the config (an ``[[pm_source]]`` naming an unset
-    # ``token_env`` fails here, at boot, by design — D-108). Surface it as the same
+    # ``token_env`` fails here, at boot, by design). Surface it as the same
     # clean CLI error the config-load and migration guards above raise, not a
     # traceback; and build before announcing, so we never claim to serve and then die.
     try:
@@ -155,7 +155,7 @@ def status(url: str | None) -> None:
 def answer(question_id: str, answer_text: str, answered_by: str, url: str | None) -> None:
     """Answer an open question (first-write-wins CAS at the hub).
 
-    Writes the answer where the question row lives ([ask-answer.md]); the runner picks
+    Writes the answer where the question row lives; the runner picks
     it up and resumes the dormant session. A racing second answer loses and is told who
     already answered."""
     base = _hub_url(url)
@@ -183,7 +183,7 @@ def answer(question_id: str, answer_text: str, answered_by: str, url: str | None
 @hub.command()
 @click.option("--hub-url", default=None, help=f"Hub API base URL (default ${ENV_HUB_URL} or {DEFAULT_HUB_URL}).")
 def decisions(hub_url: str | None) -> None:
-    """List open decisions awaiting a human (gate surfacing, D-052)."""
+    """List open decisions awaiting a human (gate surfacing)."""
     try:
         resp = httpx.get(f"{_hub_url(hub_url).rstrip('/')}/api/decisions", timeout=_CLIENT_TIMEOUT)
         resp.raise_for_status()
@@ -204,7 +204,7 @@ def decisions(hub_url: str | None) -> None:
 @click.option("--by", "resolved_by", default="operator", help="Who is resolving (recorded on the resolution).")
 @click.option("--hub-url", default=None, help=f"Hub API base URL (default ${ENV_HUB_URL} or {DEFAULT_HUB_URL}).")
 def decide(decision_id: str, choice: str, resolved_by: str, hub_url: str | None) -> None:
-    """Resolve an open decision by picking CHOICE (first-write-wins, D-045)."""
+    """Resolve an open decision by picking CHOICE (first-write-wins)."""
     url = f"{_hub_url(hub_url).rstrip('/')}/api/decisions/{decision_id}/resolution"
     try:
         resp = httpx.post(url, json={"choice": choice, "resolved_by": resolved_by}, timeout=_CLIENT_TIMEOUT)
@@ -230,7 +230,7 @@ def _parse_pointer(token: str) -> str:
 
     The CLI carries no grammar of its own any more: the hub resolves every token
     against its configured PM sources' own ``parse`` (``{name}:{ref}``,
-    ``{name}#{ref}``, or the item's own URL — D-110/D-111), so a token travels
+    ``{name}#{ref}``, or the item's own URL), so a token travels
     through verbatim. The one thing that survives here is the deprecated
     ``github:<rest>`` prefix: it warns on stderr and passes ``rest`` on its own
     merits rather than silently accepting a provider tag the pointer no longer

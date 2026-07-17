@@ -18,7 +18,7 @@ export const LANES: readonly Lane[] = [
 ];
 
 /**
- * Every chunk status folded onto its board lane (D-004) — the single owner of that
+ * Every chunk status folded onto its board lane — the single owner of that
  * fold, because the board and the titlebar both render it and must not disagree.
  *
  * The transient `delivering` shows under RUNNING and the terminal `stopped` under

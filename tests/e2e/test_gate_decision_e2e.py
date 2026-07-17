@@ -1,7 +1,7 @@
 """Human-gate decision park→decide→deliver — scenario 5 of the e2e smoke — MVP criterion 12.
 
-The other half of the human loop, end to end over the real stack (design/workflow-engine.md,
-D-045/D-032): a graph whose ``build`` node passes into a **human gate ahead of deliver**.
+The other half of the human loop, end to end over the real stack: a graph whose
+``build`` node passes into a **human gate ahead of deliver**.
 The build worker makes a real commit and its verdict transitions the chunk *into* the
 gate; the hub opens an **open Decision** carrying the build's artifacts and the chunk
 derives **waiting_on_human** — the runner holds its warm environments, spawning nothing.
@@ -11,7 +11,7 @@ records the resolving transition along the ``approve`` edge, and the hub's deliv
 lands the build commit on the bare origin's ``main`` — the chunk reaches **done**.
 
 This is the "sample-gate variant": the packaged ``build -> review -> deliver`` default with
-a human ``approve-gate`` minted between the work and delivery (design sample graph, D-032).
+a human ``approve-gate`` minted between the work and delivery (the sample graph).
 Reuses the acceptance loop's live-stack scaffolding (forge/hub/runner harnesses, fixture
 mint, port helpers). Skipped unless ``BLIZZARD_E2E=1`` with the sibling ``blizzard-mock``
 worktree provisioned — exactly like the sibling scenarios.

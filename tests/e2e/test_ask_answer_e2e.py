@@ -1,6 +1,6 @@
 """Ask/answer park→resume round trip — scenario 4 of the e2e smoke — MVP criterion 7.
 
-The one genuinely new primitive, end to end over the real stack ([ask-answer.md]): a
+The one genuinely new primitive, end to end over the real stack: a
 build worker hits an undecidable choice, runs the **real** ``blizzard runner ask``
 (shelled out by the ``mock-claude-code`` façade via ``BLIZZARD_RUNNER_ASK_CMD``, wired
 through the runner's spawn env), and **exits**. The chunk parks — its forwarded
@@ -252,7 +252,7 @@ def test_ask_parks_then_answer_resumes_session_to_done(tmp_path: Path) -> None:
             session_id = question["session_id"]
             assert question["options"] == ["rest", "graphql"]
 
-            # The reap clock is stopped while parked ([ask-answer.md] / D-009): drive several
+            # The reap clock is stopped while parked: drive several
             # more full ticks and prove the park is inert — REAP never reaps the dormant lease,
             # ADVANCE never re-elicits, and no retry is consumed. Observable proof: the chunk
             # stays waiting_on_human and the SAME single question stays open (a consumed retry

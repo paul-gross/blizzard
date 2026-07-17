@@ -1,7 +1,7 @@
 """The hub-client seam — the runner's outbound edge to the hub HTTP API.
 
 The runner is operator-directed and talks to the hub outbound-only: it peeks the
-ready queue, claims a route (acquisition, D-080), submits node-step completions,
+ready queue, claims a route (acquisition), submits node-step completions,
 re-reads the idempotent envelope, and polls a chunk's derived
 status to learn a hub node's terminal outcome. This Protocol is the seam;
 the httpx adapter under ``internal/`` is the reference binding, and loop tests
@@ -91,7 +91,7 @@ class IHubClient(Protocol):
         ...
 
     def get_question(self, question_id: str) -> QuestionView:
-        """``GET /api/questions/{id}`` — the runner's answer poll ([ask-answer.md]).
+        """``GET /api/questions/{id}`` — the runner's answer poll.
 
         A parked chunk's runner polls its forwarded question by id; once ``answered`` is
         true the answer is delivered by resuming the dormant session around it."""

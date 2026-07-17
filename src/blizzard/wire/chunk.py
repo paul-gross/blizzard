@@ -1,7 +1,7 @@
 """Chunk ingest, views, and the PM pass-through.
 
-Ingest wraps one or more source-native **tokens** into chunks (``POST /chunks``,
-D-111) — ``{name}:{ref}``, ``{name}#{ref}``, or the item's own URL; the hub resolves
+Ingest wraps one or more source-native **tokens** into chunks (``POST /chunks``)
+— ``{name}:{ref}``, ``{name}#{ref}``, or the item's own URL; the hub resolves
 each against its configured PM sources (``IPmSourceRegistry.resolve``) and 422s a
 token none of them claims, naming the token and the configured sources. A
 resolved pointer already held by a live chunk is rejected **409** with the existing
@@ -47,8 +47,9 @@ class ChunkIngestRequest(BaseModel):
 
     Each token is resolved against the configured PM sources' own grammar
     (``IPmSource.parse``): ``{name}:{ref}``, ``{name}#{ref}``, or the item's own URL.
-    Tokens only — no pre-resolved ``{source, ref}`` shape travels alongside them; the
-    two intake shapes would reintroduce the same config-blind guess D-111 removes."""
+    Tokens only — no pre-resolved ``{source, ref}`` shape travels alongside them; a
+    second intake shape would reintroduce exactly the config-blind guess that
+    resolving against the configured sources removes."""
 
     tokens: list[str]
 
@@ -132,7 +133,7 @@ class ArtifactView(BaseModel):
     ``content`` carries an **asset's** text verbatim (a review's findings
     document); the ``repo``/``branch_name``/``commit_hash`` trio carries a
     ``git_commit`` artifact's pinned reference (the hub stores the reference, never the
-    code — D-012).
+    code).
 
     ``branch_url`` is the forge ``tree`` URL for the produced branch, resolved server-side
     from the chunk's issue-shaped PM pointer so the board can link a ``git_commit``
@@ -175,8 +176,7 @@ class ChunkDetail(BaseModel):
 
     Carries the chunk's **transition history** and its inline **artifact store** so the
     web app can render every node it visited, the review that failed once and looped
-    back to build, and the artifacts — the branch pointers merged and the review notes
-    (product/mvp.md, MVP criterion 9/11)."""
+    back to build, and the artifacts — the branch pointers merged and the review notes."""
 
     chunk_id: str
     graph_id: str
@@ -193,7 +193,7 @@ class ChunkDetail(BaseModel):
     decision: DecisionView | None = None
     history: list[TransitionView] = []
     artifacts: list[ArtifactView] = []
-    # The chunk's open questions ([ask-answer.md], MVP criterion 7): a ``waiting_on_human``
+    # The chunk's open questions: a ``waiting_on_human``
     # chunk carries the ask a human answers with ``blizzard hub answer``.
     questions: list[QuestionView] = []
     # Open-pr delivery: a ``delivering`` chunk whose deliver node opened a

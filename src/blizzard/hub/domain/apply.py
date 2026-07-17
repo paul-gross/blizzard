@@ -1,16 +1,16 @@
 """Completion apply — the advancement checkpoint.
 
 ``POST /chunks/{id}/completions`` submits one node-step's completion; this rule
-applies it. The write is **atomic** (the transition and its artifacts land together,
-D-036), **epoch-fenced** (a submission whose epoch is not the chunk's latest is
-rejected before anything is written — a zombie's work never lands, D-007), and
-**idempotent** (a re-applied completion — the lost-response replay, D-090 — returns
+applies it. The write is **atomic** (the transition and its artifacts land together),
+**epoch-fenced** (a submission whose epoch is not the chunk's latest is
+rejected before anything is written — a zombie's work never lands), and
+**idempotent** (a re-applied completion — the lost-response replay — returns
 the same outcome without a second transition).
 
 The apply-response is what lets the runner continue in place: a runner node
 returns the next envelope; a hub node (deliver) is taken over by the coordinator and
 returns ``hub_node_taken``; the reserved terminal returns ``done``; a human gate
-parks the chunk on an open **Decision** (``parked_at_gate``, D-045). Ordering matters
+parks the chunk on an open **Decision** (``parked_at_gate``). Ordering matters
 — the idempotency probe runs **before** the terminal check, so replaying the very
 completion that delivered the chunk still returns its original outcome rather than a
 spurious ``failure``.
@@ -186,7 +186,7 @@ class ApplyService:
         if to_node.executor is Executor.HUB:
             # Run the coordinator on BOTH the fresh apply and the idempotent replay
             # (``run_coordinator`` is ignored here): delivery is itself idempotent and
-            # resumable (``finalize_delivery`` + the per-repo skip, D-091), so a completion
+            # resumable (``finalize_delivery`` + the per-repo skip), so a completion
             # re-flushed after a mid-delivery hub crash RESUMES the interrupted delivery
             # rather than wedging the chunk at ``delivering`` — the deliver-crash recovery.
             self._coordinator.deliver(chunk, graph, to_node, epoch=submission.epoch)

@@ -1,9 +1,8 @@
 import { readFileSync } from 'node:fs';
 
 // The design-token stylesheet is the single owner of the mission-control color
-// layer (ported verbatim from the discovery mockup's `:root` block, D-097). This
-// test asserts the stylesheet is present and carries the load-bearing tokens with
-// their exact values, so an accidental edit or drop is caught. Read from disk
+// layer. This test asserts the stylesheet is present and carries the load-bearing
+// tokens with their exact values, so an accidental edit or drop is caught. Read from disk
 // (relative to the workspace root the runner runs from) rather than imported —
 // the build pipeline turns a `.css` import into a lazy chunk, not a string.
 const TOKENS_PATH = 'projects/fleet/src/lib/design/tokens.css';

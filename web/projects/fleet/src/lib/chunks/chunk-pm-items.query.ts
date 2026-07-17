@@ -14,7 +14,7 @@ import { hubChunkPmItemsKey } from '../query-keys';
  * pass an accessor — the query re-keys as the selection changes and disables itself
  * (`enabled`) while nothing is open, so no forge read fires for the empty board. Unlike
  * the chunk aggregate this does **not** poll: the read reaches an external forge (rate
- * limits, D-047) and the issue is stable for the life of an open dock, so it fetches
+ * limits) and the issue is stable for the life of an open dock, so it fetches
  * once on selection and caches. The request is the generated openapi-ts SDK call
  * (bzh:generated-client), hitting the daemon the app is served from.
  */

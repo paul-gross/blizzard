@@ -6,7 +6,7 @@ Codex as they mature, all behind one small adapter (:mod:`.adapter`). Adapters s
 deterministic core (``bzh:deterministic-shell``). Reference bindings live under
 ``internal/`` (``bzh:pluggable-seams``); in verification the binding is the
 ``blizzard-mock`` mock-claude-code façade, which makes real commits from a scripted
-prompt (``verification.md``).
+prompt.
 """
 
 from __future__ import annotations

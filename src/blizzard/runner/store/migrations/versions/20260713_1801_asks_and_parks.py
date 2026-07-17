@@ -1,8 +1,8 @@
 """asks and park/resume fact tables (runner store tree)
 
-P7 lands the ask/answer protocol's machine-local facts ([ask-answer.md]): ``asks``
+P7 lands the ask/answer protocol's machine-local facts: ``asks``
 (the worker's local open-ask fact ``blizzard runner ask`` records before the worker
-exits — how ADVANCE tells a park from a verdict-less death, D-009), and
+exits — how ADVANCE tells a park from a verdict-less death), and
 ``park_facts``/``park_resumes`` (the chunk's dormancy on a question and the
 resume-with-answer that ends it). Before this the runner had no home for an ask, so a
 parked worker's exit was indistinguishable from a crash.

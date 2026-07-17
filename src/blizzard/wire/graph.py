@@ -1,7 +1,7 @@
 """Graph mint request and views.
 
 ``POST /graphs`` takes a YAML definition, validates it (errors reject, warnings
-flag — D-071), inlines every file reference, and mints an immutable graph.
+flag), inlines every file reference, and mints an immutable graph.
 The request carries the YAML text; the response is a :class:`GraphView`. An invalid
 definition returns **422** with a :class:`GraphValidationReport`.
 """

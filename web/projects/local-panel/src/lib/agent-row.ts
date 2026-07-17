@@ -7,10 +7,10 @@ import { injectChunkTitleQuery } from './chunk-title.query';
 const SKEW_TOLERANCE_MS = 60_000;
 
 /**
- * Formats a millisecond age as the mockup's `.hb-age` shorthand (`-34s` / `-12m` /
- * `-1h04m`, `runner-panel.html`). Only ever called with a `deltaMs` already inside
- * the bounded skew tolerance (see {@link AgentRow.heartbeatAge}), so a small negative
- * input — genuine browser-vs-hub clock skew, never more than the tolerance — floors
+ * Formats a millisecond age as the `.hb-age` shorthand (`-34s` / `-12m` /
+ * `-1h04m`). Only ever called with a `deltaMs` already inside the bounded skew
+ * tolerance (see {@link AgentRow.heartbeatAge}), so a small negative input —
+ * genuine browser-vs-hub clock skew, never more than the tolerance — floors
  * at zero rather than rendering a confusing double-negative age.
  */
 function formatHeartbeatAge(deltaMs: number): string {
@@ -24,15 +24,15 @@ function formatHeartbeatAge(deltaMs: number): string {
 }
 
 /**
- * One active lease — presentational, `OnPush`. Shaped like the mockup's `.lease`
- * row (`runner-panel.html`): lease id + chunk id + epoch on the first line, the
- * derived `state` right-aligned with its heartbeat age; node/env/pid/session on
- * the last. `chunk_id` is the row's identity — always rendered, never conditional
+ * One active lease — presentational, `OnPush`. Shaped like a `.lease` row:
+ * lease id + chunk id + epoch on the first line, the derived `state`
+ * right-aligned with its heartbeat age; node/env/pid/session on the last.
+ * `chunk_id` is the row's identity — always rendered, never conditional
  * on anything below.
  *
  * The issue title is layered on top (issue #28, decision 1) via
- * {@link injectChunkTitleQuery} — a severable, volatile read (D-084's PM
- * pass-through). Per the mockup's chip+title shape (`runner-panel.html:542`),
+ * {@link injectChunkTitleQuery} — a severable, volatile read (the PM
+ * pass-through's own). Per the chip+title shape,
  * `chunk_id` alone is what the row *is*; chips/title are decoration that
  * *arrived*, so this template never branches on the title query's
  * `isError()`/`isPending()` — it reads `data()?.items` optimistically and renders
@@ -256,7 +256,7 @@ export class AgentRow {
    * `-34s` / `-12m` / `-1h04m` from `last_heartbeat_at` vs `Date.now()`.
    *
    * `spawning` leases have never heartbeat (`last_heartbeat_at` is `null` until the
-   * first beat lands, D-092) — rendering `-0s`, or an age computed off `created_at`,
+   * first beat lands) — rendering `-0s`, or an age computed off `created_at`,
    * would claim a heartbeat fact that doesn't exist yet, so this renders `—`
    * instead. The backend's own `created_at` fallback (`derive_lease_state`) is a
    * *reaping* rule, not a heartbeat fact, and must not leak into this label.
@@ -267,7 +267,7 @@ export class AgentRow {
    * anything liveness-shaped about it is wrong.
    *
    * Liveness is decided where both instants share one clock — the hub, via the
-   * server-derived `state` this row already renders (`agent-state`, D-105 admits a
+   * server-derived `state` this row already renders (`agent-state` admits a
    * Tailnet-reachable browser, so "same machine, no skew" isn't a given); this
    * label is decoration computed against the *browser's* clock, and a browser's
    * clock must never make a correctness call (`bzh:utc-instants`). A small negative

@@ -1,4 +1,4 @@
-"""pointer identity ``{provider, url}`` -> ``{source, ref}`` (hub store tree, D-107)
+"""pointer identity ``{provider, url}`` -> ``{source, ref}`` (hub store tree)
 
 A PM pointer stops carrying a raw ``{provider, url}`` pair and instead names a
 configured ``[[pm_source]]`` plus that source's own item reference: ``{source, ref}``.
@@ -14,13 +14,13 @@ head-of-tree and will keep moving, so importing it here would silently change wh
 revision does on a future checkout. A migration's meaning must not depend on when it is
 read.
 
-**Backfill rule (config-free, deterministic — D-099's rehearsability):** this revision
+**Backfill rule (config-free, deterministic — rehearsable):** this revision
 reads no configuration file, so re-running it on the same bytes at two times gives the
 same rows.
 
 - ``provider == "github"`` and ``url`` is issue-shaped (``.../{owner}/{repo}/issues/{n}``)
   -> ``source = repo`` (the repo **tail**, not ``owner/repo`` — e.g. ``blizzard`` for
-  ``paul-gross/blizzard``; source names are conventionally the repo tail, D-108), and
+  ``paul-gross/blizzard``; source names are conventionally the repo tail), and
   ``ref = str(n)``. This is what lands the live rows on the configured name ``blizzard``
   rendering ``blizzard#26``.
 - anything else -> ``source = provider``, ``ref = url`` verbatim — lossless; nothing

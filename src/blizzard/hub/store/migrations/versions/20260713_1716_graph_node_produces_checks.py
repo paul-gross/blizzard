@@ -2,8 +2,8 @@
 
 Adds the ``graph_nodes.produces`` and ``graph_nodes.checks`` columns (P7): each a
 JSON-encoded ``list[str]`` round-tripping a node's authored ``produces`` (the artifact
-names it emits — the review node's ``review-findings`` asset, D-026) and ``checks`` (the
-deterministic commands the worker runs in-session, D-077). Before this, the walking
+names it emits — the review node's ``review-findings`` asset) and ``checks`` (the
+deterministic commands the worker runs in-session). Before this, the walking
 skeleton's graph store dropped both on mint and reified them as ``[]``, so a review node
 reloaded from the store carried no ``produces`` — and the runner therefore never emitted
 the findings asset a review *fail* is meant to carry back into build. Persisting them

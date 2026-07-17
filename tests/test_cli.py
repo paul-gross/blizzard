@@ -1,7 +1,7 @@
 """CLI smoke — the verb surface exists and the real verbs work (unit tier).
 
 The scaffold implements ``init`` / ``migrate`` / ``host`` for real; the remaining
-design/cli.md verbs are present as self-naming stubs. This exercises the wiring,
+verbs are present as self-naming stubs. This exercises the wiring,
 not the daemon runtime (``host`` blocks on a server and is not driven here).
 """
 

@@ -3,11 +3,11 @@
 Two shapes land the same fleet-visible runner-minted facts, and they coexist:
 
 * The **batched store-and-forward push** — :class:`RunnerFactBatch` to ``POST
-  /api/events`` — is the canonical intake (domain/events.md): every hub-bound fact
+  /api/events`` — is the canonical intake: every hub-bound fact
   rides the runner's outbound buffer stamped with a **per-runner monotonic sequence
   number**, and the hub applies it idempotently against a per-runner **high-water
   mark** (a seq ≤ mark is already-applied and re-acked without re-applying — the
-  replay after a lost ack or an outage backlog drain, D-069). The reconciliation loop
+  replay after a lost ack or an outage backlog drain). The reconciliation loop
   reports every ``lease.minted`` / ``escalation.recorded`` this way.
 * The **per-fact typed bodies** — :class:`LeaseMintReport` / :class:`EscalationReport`
   to ``POST /chunks/{id}/leases`` and ``/chunks/{id}/escalations`` — are the direct,
@@ -16,7 +16,7 @@ Two shapes land the same fleet-visible runner-minted facts, and they coexist:
 
 Completions do **not** ride either fact route: they carry the chunk's next-node
 envelope in their reply, so they keep their own ``POST /chunks/{id}/completions`` route
-(already epoch-idempotent, D-090).
+(already epoch-idempotent).
 """
 
 from __future__ import annotations
@@ -25,10 +25,10 @@ from typing import Any
 
 from pydantic import BaseModel
 
-# Fact kinds the batched /events push accepts (domain/events.md ``noun.verb`` names).
+# Fact kinds the batched /events push accepts (``noun.verb`` names).
 LEASE_MINTED = "lease.minted"
 ESCALATION_RECORDED = "escalation.recorded"
-# The ask/answer pair the runner forwards up ([ask-answer.md]): question.asked lands
+# The ask/answer pair the runner forwards up: question.asked lands
 # the durable question row (the chunk derives waiting_on_human), answer.delivered
 # records that the resume-with-answer ran (board detail, status already flipped).
 QUESTION_ASKED = "question.asked"
@@ -87,7 +87,7 @@ class RunnerFactAck(BaseModel):
     ``high_water`` is the runner's new mark after this batch; ``applied`` and
     ``already_applied`` partition the pushed seqs so the runner can ack its buffer
     (a semantic rejection still acks — rejection is an outcome, not a delivery
-    failure, D-069). ``rejected`` names seqs the hub refused for a non-idempotency
+    failure). ``rejected`` names seqs the hub refused for a non-idempotency
     reason (an unknown kind), which the runner surfaces rather than silently drops.
     """
 
