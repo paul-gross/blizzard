@@ -528,12 +528,37 @@ class ChunkStore:
     def record_pr_opened(
         self, chunk_id: str, *, repo: str, number: int, url: str, commit_hash: str, at: datetime
     ) -> None:
-        with self._engine.begin() as conn:
-            conn.execute(
-                insert(s.delivery_pr_opened).values(
-                    chunk_id=chunk_id, repo=repo, pr_number=number, pr_url=url, commit_hash=commit_hash, opened_at=at
+        # Idempotent per (chunk, repo) at the DB layer (``uq_delivery_pr_opened_chunk_repo``),
+        # not just the coordinator's DB-backed skip-set read: the deliver node runs on both a
+        # fresh apply and an idempotent replay (D-090), and a racing second insert for the
+        # same repo collides on the unique constraint — caught here and discarded as the
+        # harmless duplicate it is, mirroring the ``question_answers`` CAS below. The row's
+        # own FK (``chunk_id``) and five NOT NULLs can raise the same ``IntegrityError`` on a
+        # genuine violation — SQLite has FK enforcement off, but ``bzh:sql-portable`` runs the
+        # same schema against postgres, where it does fire — so the re-select below (mirroring
+        # the CAS's own read-back) confirms the (chunk_id, repo) row actually exists before
+        # discarding the exception; an absent row re-raises rather than masking the violation.
+        try:
+            with self._engine.begin() as conn:
+                conn.execute(
+                    insert(s.delivery_pr_opened).values(
+                        chunk_id=chunk_id,
+                        repo=repo,
+                        pr_number=number,
+                        pr_url=url,
+                        commit_hash=commit_hash,
+                        opened_at=at,
+                    )
                 )
-            )
+        except IntegrityError:
+            with self._engine.connect() as conn:
+                exists = conn.execute(
+                    select(s.delivery_pr_opened.c.id).where(
+                        s.delivery_pr_opened.c.chunk_id == chunk_id, s.delivery_pr_opened.c.repo == repo
+                    )
+                ).first()
+            if exists is None:
+                raise
 
     def finalize_pr_delivery(
         self,

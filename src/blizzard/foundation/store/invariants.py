@@ -160,6 +160,20 @@ def check_hub_store(engine: Engine) -> list[Violation]:
                     Violation("hub:per-repo-land-idempotent", f"chunk {chunk_id} repo {repo} landed {n} times")
                 )
 
+        # hub:pr-opened-idempotent — at most one pr.opened fact per (chunk, repo): a
+        # racing redelivery is caught by ``uq_delivery_pr_opened_chunk_repo`` at the store
+        # layer (0014_hub_pr_opened_idempotent), so a duplicate here means that guard
+        # failed to hold.
+        pr_opens = Counter(
+            (row[0], row[1])
+            for row in conn.execute(select(hub.delivery_pr_opened.c.chunk_id, hub.delivery_pr_opened.c.repo))
+        )
+        for (chunk_id, repo), n in pr_opens.items():
+            if n > 1:
+                violations.append(
+                    Violation("hub:pr-opened-idempotent", f"chunk {chunk_id} repo {repo} has {n} pr.opened facts")
+                )
+
         # hub:no-double-delivery — at most one whole-chunk delivery.landed terminal fact.
         landed = Counter(row[0] for row in conn.execute(select(hub.delivery_landed.c.chunk_id)))
         for chunk_id, n in landed.items():

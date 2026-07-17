@@ -55,7 +55,7 @@ mise run service-test          # the service tier — a running daemon vs. its m
 mise run e2e                   # the standing e2e smoke suite — six full-stack scenarios (see below)
 
 blizzard hub init ./hub-data   # scaffold config + data dir + migrated DB (idempotent)
-blizzard hub migrate           # apply pending store migrations (--down <rev> reverses)
+blizzard hub migrate           # apply pending store migrations (--down <rev> reverses schema; some revisions are lossy — see the revision's docstring)
 blizzard hub host --dir ./hub-data   # serve; bare `blizzard hub` defaults to host
 
 blizzard-export-openapi --out-dir openapi   # dump hub + runner OpenAPI specs

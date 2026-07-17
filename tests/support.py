@@ -17,6 +17,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+from sqlalchemy import Engine
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -274,6 +275,7 @@ class HubHarness:
     forge: FakeForge
     pm: PmSourceRegistry
     clock: FixedClock
+    engine: Engine
     events: EventBroker = field(default_factory=EventBroker)
 
 
@@ -304,7 +306,13 @@ def build_hub(
     services = build_services(engine, forge=forge, events=events, pm=pm_registry, clock=clock, base_branch=base_branch)
     app = create_app(config, services=services)
     return HubHarness(
-        client=TestClient(app), services=services, forge=forge, pm=pm_registry, clock=clock, events=events
+        client=TestClient(app),
+        services=services,
+        forge=forge,
+        pm=pm_registry,
+        clock=clock,
+        engine=engine,
+        events=events,
     )
 
 

@@ -13,6 +13,8 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.foundation.store.invariants import check_hub_store
+from blizzard.hub.store.internal.chunk_store import ChunkStore
 from tests.support import FakeForge, build_hub, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
@@ -165,6 +167,44 @@ def test_check_delivery_finalizes_after_an_external_merge(tmp_path: Path) -> Non
     again = hub.client.post(f"/api/chunks/{chunk_id}/check-delivery")
     assert again.json()["finalized"] is False
     assert again.json()["status"] == "done"
+
+
+def test_pr_opened_write_is_idempotent_per_chunk_and_repo(tmp_path: Path) -> None:
+    """Pins issue #10: the deliver node runs on both a fresh apply and an idempotent
+    replay (D-090), and the coordinator's DB-backed ``open_prs`` skip-set (a store read
+    each call, not an in-memory cache) has a narrow read-then-write race between two such
+    overlapping runs. This drives the store write the coordinator makes directly, past the
+    skip-set, the way that race would — the ``pr.opened`` write itself must be idempotent
+    per (chunk, repo), or the board double-lists the PR.
+
+    This pins the *store's* idempotency, not the coordinator's read-then-write race
+    itself, and would not notice if the coordinator stopped calling this path — there is
+    no coordinator-level seam exercising the race directly.
+    """
+    forge = FakeForge()
+    hub = build_hub(tmp_path, forge=forge)
+    chunk_id = _ingest(hub)
+    _deliver(hub, chunk_id)
+
+    # A second write for the same (chunk, repo) — what a racing overlapping deliver run
+    # would produce past the skip-set. ``HubServices.chunks`` is read-only
+    # (``bzh:repository-split``), so this builds a write-capable store directly on the
+    # same db_url, mirroring ``test_pr_opened_migration.py``, rather than reaching through
+    # the read seam.
+    store = ChunkStore(hub.engine, hub.clock)
+    store.record_pr_opened(
+        chunk_id,
+        repo="acme/widget",
+        number=1,
+        url="http://forge/acme/widget/pull/1",
+        commit_hash="abc123",
+        at=hub.clock.now(),
+    )
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert [(p["repo"], p["number"]) for p in detail["open_prs"]] == [("acme/widget", 1)]  # listed once, not twice
+
+    assert check_hub_store(hub.engine) == []
 
 
 def test_check_delivery_finalizes_a_close_without_merge(tmp_path: Path) -> None:

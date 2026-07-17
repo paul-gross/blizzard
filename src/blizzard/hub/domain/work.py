@@ -619,7 +619,13 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
     def record_pr_opened(
         self, chunk_id: str, *, repo: str, number: int, url: str, commit_hash: str, at: datetime
     ) -> None:
-        """Record a ``pr.opened`` park fact (open-pr mode, D-059) — no terminal, envs held (D-066)."""
+        """Record a ``pr.opened`` park fact (open-pr mode, D-059) — no terminal, envs held (D-066).
+
+        Idempotent per (chunk, repo): a racing second write for a repo already carrying a
+        ``pr.opened`` fact is a harmless no-op, not a duplicate row — the deliver node runs
+        on both a fresh apply and an idempotent replay (D-090), and this is the actual close
+        of the coordinator's read-then-write race on its DB-backed skip-set (a store read
+        each call, not an in-memory cache)."""
         ...
 
     def finalize_pr_delivery(

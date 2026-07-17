@@ -30,6 +30,7 @@ from sqlalchemy import (
     String,
     Table,
     Text,
+    UniqueConstraint,
 )
 
 from blizzard.foundation.store.utc import UtcDateTime
@@ -217,6 +218,13 @@ delivery_pr_opened = Table(
     Column("pr_url", String, nullable=False),  # the PR's html url — surfaced on the board
     Column("commit_hash", String, nullable=False),  # the authoritative head the PR carries (D-060)
     Column("opened_at", UtcDateTime, nullable=False),
+    # A ``pr.opened`` write is idempotent per (chunk, repo) (0014_hub_pr_opened_idempotent):
+    # the coordinator's deliver node runs on both a fresh apply and an idempotent replay
+    # (D-090), and its DB-backed ``open_prs`` skip-set (a store read each call, not an
+    # in-memory cache) has a narrow race between that read and the write. This constraint
+    # is the actual close of that race — the store adapter's ``record_pr_opened`` treats a
+    # collision as a harmless duplicate write, not an error.
+    UniqueConstraint("chunk_id", "repo", name="uq_delivery_pr_opened_chunk_repo"),
 )
 
 delivery_pr_closed = Table(

@@ -67,13 +67,38 @@ If the wheel is installed somewhere other than `/opt/blizzard/venv`, edit the
 `ExecStart`/`ExecStartPre` paths to match `command -v blizzard-hub` — systemd
 requires an absolute path there.
 
-**Upgrades self-heal the store.** To adopt a new wheel, `pip install` it into the
-venv and `systemctl restart` the units — no manual migration step. Each unit's
-`ExecStartPre` runs `… migrate` before the daemon opens its store, so a wheel that
-ships a new schema revision (D-099) reconciles the on-disk store to head on the next
-start; the daemon refuses to start on a revision mismatch, so a forgotten migration
-fails loudly rather than corrupting state. A graceful `systemctl restart` also
-preserves in-flight work across the upgrade — see the recovery contract below.
+**Upgrades self-heal the store — for an additive or backfill revision.** To adopt a new
+wheel, `pip install` it into the venv and `systemctl restart` the units — no manual
+migration step. Each unit's `ExecStartPre` runs `… migrate` before the daemon opens its
+store, so a wheel that ships a new schema revision (D-099) reconciles the on-disk store
+to head on the next start; the daemon refuses to start on a revision mismatch, so a
+forgotten migration fails loudly rather than corrupting state. A graceful `systemctl
+restart` also preserves in-flight work across the upgrade — see the recovery contract
+below. That loud-failure guarantee is the whole safety story for a revision whose
+`upgrade()` only adds or backfills; it is not for a **destructive** one, whose
+`upgrade()` deletes rows outright — see "The 0014 upgrade note" below for the one
+revision so far that does.
+
+### The 0014 upgrade note
+
+**`0014_hub_pr_opened_idempotent` is the first migration in either store whose
+`upgrade()` deletes rows** (`0003`/`0005` are the only other destructive revisions in
+either tree, and both only drop columns). Closing a coordinator read-then-write race
+(issue #10) with a unique constraint on `(chunk_id, repo)` first requires a store
+carrying the race's duplicate rows to no longer carry them, so `upgrade()` deletes every
+`delivery_pr_opened` row but the earliest per `(chunk_id, repo)` before adding the
+constraint. `downgrade()` only drops the constraint back — it does not restore the
+deleted rows; they are gone for good.
+
+In practice this only ever removes true duplicates (a redundant `pr.opened` fact for a
+PR the forge had already deduplicated to one), so no chunk loses a fact a human or the
+board ever relied on distinguishing. But because the delete is unconditional and
+irreversible, **copy the hub's store file before restarting into a wheel carrying this
+migration** — `cp <hub-dir>/data/hub.db <hub-dir>/data/hub.db.pre-0014` for the sqlite
+default, or the equivalent for a configured postgres `db_url` (`bzh:sql-portable`) —
+the same caution any one-way migration deserves, and not something `migrate`'s
+revision-mismatch guard can catch after the fact, since the delete is exactly what
+reaching that revision means.
 
 ## Naming the runtime directory
 
