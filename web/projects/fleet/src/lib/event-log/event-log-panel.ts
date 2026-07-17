@@ -88,12 +88,12 @@ function summarize(event: LoggedEvent): string {
       flex-direction: column;
       min-height: 0;
       font-family: var(--mono);
-      font-size: 12px;
+      font-size: var(--fs-base);
       font-variant-numeric: tabular-nums;
       color: var(--text);
     }
     .lbl {
-      font-size: 9px;
+      font-size: var(--fs-label);
       letter-spacing: 0.18em;
       text-transform: uppercase;
       color: var(--label);
@@ -118,7 +118,7 @@ function summarize(event: LoggedEvent): string {
     }
     .none {
       color: var(--label-dim);
-      font-size: 10px;
+      font-size: var(--fs-xs);
       padding: 6px 8px;
     }
     .rows {
@@ -132,7 +132,7 @@ function summarize(event: LoggedEvent): string {
       gap: 6px;
       padding: 2px 8px;
       border-bottom: 1px solid var(--line);
-      font-size: 10.5px;
+      font-size: var(--fs-sm);
       line-height: 1.5;
     }
     .ev .t {

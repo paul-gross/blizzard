@@ -71,10 +71,22 @@ and **committed**. Regenerate with `npm run generate:client`; the CI drift check
 re-exports the specs, regenerates, and fails on any git diff. Do not edit the
 generated files, and do not lint them (they are eslint-ignored).
 
-## The design tokens (the mission-control aesthetic)
+## The design layer (the mission-control aesthetic)
 
-`projects/fleet/src/lib/design/tokens.css` is the single owner of the color and
-type layer — the `:root` custom-property block ported verbatim from
-`blizzard-discovery:discovery/mockups/mission-control.html`. It is listed first
-in each app's build `styles` so `:root` reaches every component. Fleet views
-resolve color through `var(--…)`, never hard-coded hex.
+`projects/fleet/src/lib/design/` holds two **global** stylesheets — both listed
+ahead of each app's own in its build `styles`, because component styles are
+view-encapsulated and these must reach every component:
+
+| Sheet | Owns |
+|-------|------|
+| `tokens.css` | The color and type layer — the `:root` custom-property block. |
+| `scrollbars.css` | The board's slim scrollbars, so every scroll container inherits them instead of re-declaring them. |
+
+`tokens.css` is the **single owner** of both layers. Its palette is ported verbatim
+from `blizzard-discovery:discovery/mockups/mission-control.html`; its `--fs-*` type
+scale is the mockup's steps raised ~30% (the mockup sized its text for a screenshot).
+Views resolve color through `var(--…)` and size text through `--fs-*` — never a
+hard-coded hex, and never a bare px. That includes tinting: a translucent wash is
+`color-mix(in srgb, var(--red) 12%, transparent)`, not a re-typed `rgba(240, 92, 108,
+0.12)` — re-typing a token's channels means retuning the token silently leaves the
+tint behind on the old hue.

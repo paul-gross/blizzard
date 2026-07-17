@@ -1,7 +1,7 @@
 import { DestroyRef, EnvironmentInjector, Injectable, type Signal, effect, inject, signal } from '@angular/core';
 import { QueryClient } from '@tanstack/angular-query-experimental';
 
-import { hubChunkKey, hubChunksKey, hubQueueKey, hubRunnersKey } from '../query-keys';
+import { hubChunkKey, hubChunksKey, hubQuestionsKey, hubQueueKey, hubRunnersKey } from '../query-keys';
 import { type SseHandle, type SseStatus, SseService } from './sse.service';
 
 /** The hub's SSE stream endpoint (deliberately not in OpenAPI — native EventSource). */
@@ -158,6 +158,12 @@ export class FleetLiveUpdates {
         break;
       case 'question-asked':
       case 'question-answered':
+        // The fleet-wide ask list too: the right rail surfaces an ask on a chunk
+        // nobody has selected, so it cannot ride on the chunk's own detail read.
+        invalidate(hubQuestionsKey);
+        invalidate(hubChunksKey);
+        if (data.chunk_id) invalidate(hubChunkKey(data.chunk_id));
+        break;
       case 'decision-opened':
       case 'decision-resolved':
         invalidate(hubChunksKey);

@@ -231,7 +231,7 @@ describe('AgentRow', () => {
     });
 
     // bzh:utc-instants — the bounded-tolerance region agent-row.ts must mirror from
-    // runner-strip.ts's seenLabel: a positive age (above), a small negative age
+    // runner-panel.ts's seenLabel: a positive age (above), a small negative age
     // (benign browser-vs-hub skew, reads as "-0s"), and a large negative age (not
     // skew — falls through to "—" rather than a confident "-0s").
     it('reads a small browser-vs-hub skew (last_heartbeat_at up to 60s in the future) as "-0s"', async () => {

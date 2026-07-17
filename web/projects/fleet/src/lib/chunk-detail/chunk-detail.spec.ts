@@ -117,14 +117,11 @@ describe('ChunkDetail container', () => {
     expect(calls[0].body).toMatchObject({ choice: 'approve' });
   });
 
-  it('fetches the chunk’s PM items through the generated client and renders them on the Issue tab (issue #24)', async () => {
+  it('fetches the chunk’s PM items through the generated client and renders them in the work-item column (issue #24)', async () => {
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_gate');
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
-
-    el.querySelector<HTMLButtonElement>('[data-testid="tab-issue"]')?.click();
-    await settle(fixture);
 
     // It went through the real pass-through route (bzh:generated-client), no hand-written fetch.
     expect(stub.forRoute('/api/chunks/ch_gate/pm-items', 'GET')).toHaveLength(1);

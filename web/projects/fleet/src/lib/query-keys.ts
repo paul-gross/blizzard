@@ -8,6 +8,7 @@ export const hubHealthKey = ['hub', 'health'] as const;
 export const hubChunksKey = ['hub', 'chunks'] as const;
 export const hubQueueKey = ['hub', 'queue'] as const;
 export const hubRunnersKey = ['hub', 'runners'] as const;
+export const hubQuestionsKey = ['hub', 'questions'] as const;
 
 /** One chunk's full aggregate, keyed by id. */
 export function hubChunkKey(chunkId: string | null): readonly unknown[] {

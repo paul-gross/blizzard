@@ -117,11 +117,11 @@ function formatHeartbeatAge(deltaMs: number): string {
     }
     .lid {
       color: var(--amber);
-      font-size: 12px;
+      font-size: var(--fs-base);
     }
     .lid small {
       color: var(--label);
-      font-size: 9.5px;
+      font-size: var(--fs-label);
     }
     .st-wrap {
       display: flex;
@@ -130,7 +130,7 @@ function formatHeartbeatAge(deltaMs: number): string {
       flex: none;
     }
     .st {
-      font-size: 9px;
+      font-size: var(--fs-label);
       letter-spacing: 0.14em;
       text-transform: uppercase;
     }
@@ -155,7 +155,7 @@ function formatHeartbeatAge(deltaMs: number): string {
     .hb-age {
       width: 46px;
       text-align: right;
-      font-size: 10px;
+      font-size: var(--fs-xs);
       color: var(--label);
     }
     .hb-age.stale {
@@ -166,7 +166,7 @@ function formatHeartbeatAge(deltaMs: number): string {
     }
     .ttl {
       color: var(--text);
-      font-size: 10.5px;
+      font-size: var(--fs-sm);
       margin-top: 2px;
       white-space: nowrap;
       overflow: hidden;
@@ -177,7 +177,7 @@ function formatHeartbeatAge(deltaMs: number): string {
     }
     .l2 {
       color: var(--label);
-      font-size: 10px;
+      font-size: var(--fs-xs);
       margin-top: 2px;
     }
     .l2 b {
@@ -272,7 +272,7 @@ export class AgentRow {
    * label is decoration computed against the *browser's* clock, and a browser's
    * clock must never make a correctness call (`bzh:utc-instants`). A small negative
    * delta (up to {@link SKEW_TOLERANCE_MS}) is benign browser-vs-hub clock skew, so
-   * it reads as `-0s`, same as `seenLabel` in `runner-strip.ts`. Past that bound it
+   * it reads as `-0s`, same as `seenLabel` in `runner-panel.ts`. Past that bound it
    * is not skew — it is the naive-timestamp failure the rule exists to catch — so
    * this falls through to the same `—` the "never heartbeat yet" case renders,
    * leaving the adjacent `state` to carry the meaning instead of guessing.

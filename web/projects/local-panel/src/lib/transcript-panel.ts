@@ -126,7 +126,7 @@ function formatTurnTimestamp(iso: string | null): string {
       height: 100%;
       position: relative;
       font-family: var(--mono);
-      font-size: 12px;
+      font-size: var(--fs-base);
       font-variant-numeric: tabular-nums;
     }
     .status {
@@ -136,7 +136,7 @@ function formatTurnTimestamp(iso: string | null): string {
       transform: translate(-50%, -50%);
       white-space: nowrap;
       color: var(--label-dim);
-      font-size: 11px;
+      font-size: var(--fs-sm);
       letter-spacing: 0.12em;
     }
     .status.error {
@@ -147,7 +147,7 @@ function formatTurnTimestamp(iso: string | null): string {
     }
     .banner {
       color: var(--amber-hi);
-      font-size: 10.5px;
+      font-size: var(--fs-sm);
       letter-spacing: 0.1em;
       padding: 5px 8px;
       border-bottom: 1px solid var(--line);
@@ -165,7 +165,7 @@ function formatTurnTimestamp(iso: string | null): string {
     }
     .turn .t {
       color: var(--label-dim);
-      font-size: 9.5px;
+      font-size: var(--fs-label);
       padding-top: 2px;
     }
     .turn .g {
@@ -200,11 +200,11 @@ function formatTurnTimestamp(iso: string | null): string {
     }
     .turn .b {
       min-width: 0;
-      font-size: 11px;
+      font-size: var(--fs-sm);
       line-height: 1.55;
     }
     .turn .who {
-      font-size: 8.5px;
+      font-size: var(--fs-label);
       letter-spacing: 0.16em;
       text-transform: uppercase;
       color: var(--label);
@@ -219,11 +219,11 @@ function formatTurnTimestamp(iso: string | null): string {
     }
     .turn.k-env .tx {
       color: var(--label);
-      font-size: 10.5px;
+      font-size: var(--fs-sm);
     }
     .trunc-note {
       color: var(--amber-dim);
-      font-size: 9.5px;
+      font-size: var(--fs-label);
       margin-top: 2px;
     }
     .tool-call {
@@ -241,7 +241,7 @@ function formatTurnTimestamp(iso: string | null): string {
     }
     .tool-call .tc-name {
       color: var(--green);
-      font-size: 10.5px;
+      font-size: var(--fs-sm);
     }
     .tool-call .tc-name b {
       color: var(--amber);
@@ -253,7 +253,7 @@ function formatTurnTimestamp(iso: string | null): string {
       background: #000;
       border: 1px solid var(--line);
       color: var(--label);
-      font-size: 10px;
+      font-size: var(--fs-xs);
       white-space: pre-wrap;
       max-height: 200px;
       overflow-y: auto;

@@ -372,13 +372,18 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 # "select a chunk" prompt here. This is the one assertion in the suite
                 # that needs a real layout: the unit tier runs in jsdom, which does not
                 # lay out, so it cannot see the board move. Geometry is compared exactly
-                # — the dock owns a fixed grid track, so the board's box is invariant.
+                # — the board and the dock split the centre column on fixed flex ratios
+                # from a zero basis, so their boxes do not answer to their content.
                 expect(page.get_by_test_id("chunk-detail-empty")).to_be_visible()
                 board_at_rest = page.get_by_test_id("board").bounding_box()
 
                 col_cards("waiting").first.click()
                 expect(page.get_by_test_id("chunk-detail")).to_be_visible()
-                expect(page.get_by_test_id("detail-id")).to_have_text(chunk_b)
+                # The dock names the chunk the way the board does — the short name
+                # (`ch_…` + the ULID's last four), with the full id kept reachable as
+                # its title rather than spelled out across the header.
+                expect(page.get_by_test_id("detail-id")).to_have_text(f"ch_…{chunk_b[-4:]}")
+                expect(page.get_by_test_id("detail-id")).to_have_attribute("title", chunk_b)
                 assert page.get_by_test_id("board").bounding_box() == board_at_rest, (
                     "selecting a chunk moved or resized the board — the dock is not holding its track"
                 )

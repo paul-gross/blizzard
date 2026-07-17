@@ -474,33 +474,77 @@ describe('ChunkDetailPanel', () => {
     confirmSpy.mockRestore();
   });
 
-  // --- The Issue tab (issue #24) --------------------------------------------
+  // --- The chunk's own facts -------------------------------------------------
 
-  async function openIssueTab(pmItems: PmItemsState) {
+  it('states the chunk facts, naming the runner holding its route as the agent', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', { ...ROUTED_DETAIL, current_node_name: 'build' });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const fact = (key: string) => el.querySelector(`[data-testid="fact-${key}"]`)?.textContent?.trim();
+    expect(fact('status')).toBe('running');
+    expect(fact('node')).toBe('build');
+    // The same route the header's Detach control acts on, read here as a plain fact.
+    expect(fact('agent')).toBe('rn_01');
+    expect(fact('attempts')).toBe('1');
+  });
+
+  it('reads attempts as em-dash, not 0, for a chunk no runner has ever worked', async () => {
+    // The epoch is bumped per work attempt, so a never-worked chunk has no epoch at
+    // all. Printing `0` would state a fact the hub has not asserted — that it was
+    // tried zero times — where `—` says the honest thing: nothing has run yet.
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', { ...ROUTED_DETAIL, latest_epoch: null, route: null });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="fact-attempts"]')?.textContent?.trim()).toBe('—');
+    // Nothing holds it, so there is no agent and no Detach control to release one.
+    expect(el.querySelector('[data-testid="fact-agent"]')?.textContent?.trim()).toBe('—');
+    expect(el.querySelector('[data-testid="detach-chunk"]')).toBeNull();
+  });
+
+  it('names the chunk and its work item the way the board card does', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', ISSUE_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    // The short name, with the full ULID kept reachable rather than spelled out.
+    expect(el.querySelector('[data-testid="detail-id"]')?.textContent?.trim()).toBe('ch_…0000');
+    expect(el.querySelector('[data-testid="detail-id"]')?.getAttribute('title')).toBe(ISSUE_DETAIL.chunk_id);
+    expect(el.querySelector('[data-testid="detail-pointer"]')?.textContent?.trim()).toBe('widget#42');
+  });
+
+  // --- The work-item column (issue #24) --------------------------------------
+
+  async function renderWithPmItems(pmItems: PmItemsState) {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
     fixture.componentRef.setInput('pmItems', pmItems);
     await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-    el.querySelector<HTMLButtonElement>('[data-testid="tab-issue"]')?.click();
-    await fixture.whenStable();
-    return el;
+    return fixture.nativeElement as HTMLElement;
   }
 
-  it('keeps the issue content on its own tab — chunk detail is not replaced (AC3)', async () => {
+  it('shows the issue content beside chunk detail, never replacing it (AC3)', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
-    // Detail is the default tab: the chunk detail sections render, the Issue pane does not.
-    expect(el.querySelector('[data-testid="issue-pane"]')).toBeNull();
+
+    // Three columns, all mounted at once: the work item does not cost the operator
+    // sight of where the chunk has been or what it produced. Asserted through the
+    // regions' labels rather than their CSS classes — a restyle that reshapes the
+    // wrapper changes nothing about that guarantee.
+    expect(el.querySelector('[aria-label="Work item"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="issue-pane"]')).not.toBeNull();
     expect(el.querySelector('[aria-label="Node history"]')).not.toBeNull();
-    // The Issue tab badges the pointer count from the chunk aggregate.
-    expect(el.querySelector('[data-testid="issue-count"]')?.textContent).toContain('1');
+    expect(el.querySelector('[aria-label="Artifacts and asks"]')).not.toBeNull();
   });
 
-  it('renders the issue description and messages on the Issue tab (AC2)', async () => {
-    const el = await openIssueTab({
+  it('renders the issue description and messages in the work-item column (AC2)', async () => {
+    const el = await renderWithPmItems({
       status: 'success',
       items: [
         {
@@ -520,12 +564,14 @@ describe('ChunkDetailPanel', () => {
     expect(el.querySelector('[data-testid="issue-body"]')?.textContent).toContain('reproduces under load');
     const messages = [...el.querySelectorAll('[data-testid="issue-message"]')].map((m) => m.textContent?.trim());
     expect(messages).toEqual(['seen it too', 'repro attached']);
-    // The chunk-detail sections are hidden while the Issue tab is open — a tab, not a merge.
-    expect(el.querySelector('[aria-label="Node history"]')).toBeNull();
+    // The issue's own link out to the forge lives here — the board cards carry none.
+    expect(el.querySelector<HTMLAnchorElement>('[data-testid="issue-label"]')?.getAttribute('href')).toBe(
+      'https://github.com/acme/widget/issues/42',
+    );
   });
 
   it('shows one entry per pointer for a grouped chunk (AC4)', async () => {
-    const el = await openIssueTab({
+    const el = await renderWithPmItems({
       status: 'success',
       items: [
         { source: 'widget', ref: '42', label: 'widget#42', web_url: 'https://github.com/acme/widget/issues/42', fetched_at: 't', body: 'first', comments: [] },
@@ -539,13 +585,13 @@ describe('ChunkDetailPanel', () => {
   });
 
   it('shows an empty state when the chunk has no linked issue (AC4)', async () => {
-    const el = await openIssueTab({ status: 'success', items: [] });
+    const el = await renderWithPmItems({ status: 'success', items: [] });
     expect(el.querySelector('[data-testid="issue-empty"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="issue-item"]')).toBeNull();
   });
 
   it('degrades a single unreachable pointer to an inline notice (AC5)', async () => {
-    const el = await openIssueTab({
+    const el = await renderWithPmItems({
       status: 'success',
       items: [
         { source: 'widget', ref: '42', label: 'widget#42', web_url: 'https://github.com/acme/widget/issues/42', fetched_at: 't', body: 'reachable', comments: [] },
@@ -558,7 +604,7 @@ describe('ChunkDetailPanel', () => {
   });
 
   it('shows a visible notice when the whole forge read fails (AC5)', async () => {
-    const el = await openIssueTab({ status: 'error', items: [] });
+    const el = await renderWithPmItems({ status: 'error', items: [] });
     expect(el.querySelector('[data-testid="issue-error"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="issue-body"]')).toBeNull();
   });

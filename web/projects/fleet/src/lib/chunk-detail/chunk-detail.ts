@@ -73,7 +73,7 @@ function errorMessage(error: unknown): string {
       border-top: 1px solid var(--bezel);
       background: linear-gradient(180deg, var(--panel) 0%, var(--panel-deep) 100%);
       color: var(--label-dim);
-      font-size: 11px;
+      font-size: var(--fs-sm);
       letter-spacing: 0.12em;
     }
   `,

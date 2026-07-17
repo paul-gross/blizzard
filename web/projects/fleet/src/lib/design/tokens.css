@@ -31,4 +31,24 @@
   --label-dim: #3c4d63;
   --text: #b8c6d8;
   --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* The titlebar's brushed-metal gradient — the one piece of chrome the mockup drew
+   * inline in its `header` rule rather than as a `:root` custom property. It is named
+   * here so the header resolves it like every other color instead of re-typing hex. */
+  --header-hi: #0d1526;
+  --header-lo: #080d18;
+
+  /*
+   * The type scale. The mockup sized its text for a screenshot — 9px engraved
+   * labels and an 11px body read as unusably small on a real display, so the
+   * board scales the mockup's steps up by ~30% while keeping its proportions.
+   * Every rule sizes text through these six steps and never a bare px, so the
+   * whole board's legibility is one edit here rather than a sweep of the views.
+   */
+  --fs-label: 11px; /* engraved uppercase labels (.lbl) — the mockup's 9px */
+  --fs-xs: 12px; /* dense secondary text — node names, counts, badges */
+  --fs-sm: 13px; /* list rows: event log, history, artifacts */
+  --fs-base: 15px; /* body copy and controls */
+  --fs-md: 16px; /* card ids, column counts, runner names */
+  --fs-lg: 19px; /* the brand and header values */
 }

@@ -7,14 +7,18 @@
  * the hub and runner SDKs share operation names (e.g. `healthApiHealthGet`).
  */
 
+export { BoardHeader } from './lib/board-header/board-header';
 export { BoardShell } from './lib/board-shell/board-shell';
+export { shortChunkId } from './lib/chunk-id';
+export { LANES, STATUS_LANE, laneFor, type Lane } from './lib/chunk-lanes';
 export type { BoardCard } from './lib/board-shell/board-shell';
 export { ChunkDetailPanel } from './lib/chunk-detail/chunk-detail-panel';
 export type { AnswerQuestionEvent, ResolveDecisionEvent } from './lib/chunk-detail/chunk-detail-panel';
 export { ChunkDetail } from './lib/chunk-detail/chunk-detail';
 export { EventLogPanel } from './lib/event-log/event-log-panel';
 export { QueuePanel } from './lib/queue/queue-panel';
-export { RunnerStrip } from './lib/runners/runner-strip';
+export { RunnerPanel } from './lib/runners/runner-panel';
+export { QuestionsPanel } from './lib/questions/questions-panel';
 
 export {
   SseService,
@@ -46,12 +50,14 @@ export type { ReorderVars, GroupVars } from './lib/queue/queue.mutations';
 export { injectHubRunnersQuery } from './lib/runners/runners.query';
 export { injectRunnerPauseMutation } from './lib/runners/runners.mutations';
 export type { RunnerPauseVars } from './lib/runners/runners.mutations';
+export { injectHubQuestionsQuery } from './lib/questions/questions.query';
 
 export {
   hubHealthKey,
   hubChunksKey,
   hubQueueKey,
   hubRunnersKey,
+  hubQuestionsKey,
   hubChunkKey,
 } from './lib/query-keys';
 

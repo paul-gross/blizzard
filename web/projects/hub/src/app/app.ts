@@ -1,11 +1,13 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import {
+  BoardHeader,
   BoardShell,
   ChunkDetail,
   EventLogPanel,
   FleetLiveUpdates,
+  QuestionsPanel,
   QueuePanel,
-  RunnerStrip,
+  RunnerPanel,
   injectHubChunksQuery,
   injectHubHealthQuery,
   injectPromoteChunkMutation,
@@ -16,38 +18,48 @@ import {
  * shared fleet library over live reads from the generated client (TanStack Query)
  * and the hub's SSE stream:
  *
+ * The window is the mockup's three columns under a full-width titlebar
+ * ({@link BoardHeader} — the brand, the live fleet counts, and the hub connection):
+ *
+ * - the **left rail** holds {@link QueuePanel}, which shapes the ready queue
+ *   (prioritize + group), over {@link EventLogPanel}'s live feed;
+ * - the **centre** stacks {@link BoardShell} — every chunk in its derived-status
+ *   column (D-004) — over the {@link ChunkDetail} dock. The dock is always mounted:
+ *   selecting a card fills it (the work item, node history, artifacts, and the
+ *   human-loop actions) and deselecting clears it to a rest state, so the board
+ *   never resizes or reflows;
+ * - the **right rail** holds {@link RunnerPanel}, the registry with pause/resume
+ *   (MVP criterion 11), over {@link QuestionsPanel}, the fleet's open agent asks —
+ *   clicking one opens its chunk in the dock, where it is answered;
  * - the {@link FleetLiveUpdates} spine subscribes to `GET /api/events/stream` and
- *   invalidates the reads on every hub fact, so the board streams live (D-097);
- * - {@link BoardShell} renders every chunk in its derived-status column (D-004);
- *   the {@link ChunkDetail} dock is always mounted beneath the board at a fixed
- *   height — selecting a card fills it (node history, artifacts, and the human-loop
- *   actions: answer a question, resolve a gate, copy a takeover) and deselecting
- *   clears it back to a rest state, so the board columns never resize or reflow;
- * - {@link QueuePanel} shapes the ready queue (prioritize + group); {@link RunnerStrip}
- *   shows the registry with pause/resume — the two operator controls (MVP criterion 11);
- * - {@link EventLogPanel} renders the live event feed under the queue in the left rail.
+ *   invalidates the reads on every hub fact, so the whole board streams live (D-097).
  */
 @Component({
   selector: 'app-root',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BoardShell, ChunkDetail, EventLogPanel, QueuePanel, RunnerStrip],
+  imports: [BoardHeader, BoardShell, ChunkDetail, EventLogPanel, QuestionsPanel, QueuePanel, RunnerPanel],
   template: `
     <div class="layout">
-      <div class="workspace">
-        <div class="rail">
+      <fleet-board-header [connection]="connection()" [chunks]="chunks()" />
+      <main class="main">
+        <div class="col rail-left">
           <fleet-queue-panel class="rail-queue" />
           <fleet-event-log-panel class="rail-log" />
         </div>
-        <fleet-board-shell
-          class="board"
-          [connection]="connection()"
-          [chunks]="chunks()"
-          (selectChunk)="selected.set($event)"
-          (promote)="promoteChunk.mutate({ chunkId: $event })"
-        />
-      </div>
-      <fleet-chunk-detail class="dock" [chunkId]="selected()" (dismiss)="selected.set(null)" />
-      <fleet-runner-strip class="runners" />
+        <div class="col col-center">
+          <fleet-board-shell
+            class="board"
+            [chunks]="chunks()"
+            (selectChunk)="selected.set($event)"
+            (promote)="promoteChunk.mutate({ chunkId: $event })"
+          />
+          <fleet-chunk-detail class="dock" [chunkId]="selected()" (dismiss)="selected.set(null)" />
+        </div>
+        <div class="col rail-right">
+          <fleet-runner-panel />
+          <fleet-questions-panel (selectChunk)="selected.set($event)" />
+        </div>
+      </main>
     </div>
   `,
   styles: `
@@ -55,50 +67,59 @@ import {
       display: block;
       height: 100%;
     }
-    /* Three rows: the workspace (board + rail) takes all remaining height, the
-       chunk-detail dock owns a fixed track, and the runner strip sits below.
-       Pinning the dock's height to the grid track — not to the dock element —
-       makes it authoritative regardless of component style-insertion order, so
-       filling or clearing the dock can never resize the 1fr board row. */
+    /* The titlebar spans the window, and the three columns fill everything under
+       it (the mockup's 330px / 1fr / 330px main grid). The layout is height-capped
+       to the viewport and every panel scrolls its own body, so the page itself
+       never scrolls — an operator's board does not move under them. */
     .layout {
-      display: grid;
-      grid-template-rows: 1fr clamp(220px, 34vh, 440px) auto;
-      height: 100%;
-      min-height: 0;
-    }
-    .workspace {
-      display: grid;
-      grid-template-columns: minmax(240px, 300px) 1fr;
-      min-height: 0;
-    }
-    .board {
-      min-width: 0;
-    }
-    .rail {
-      min-width: 0;
-      min-height: 0;
       display: flex;
       flex-direction: column;
-      border-right: 1px solid var(--bezel);
+      height: 100%;
+      min-height: 0;
+      overflow: hidden;
     }
-    /* The ready queue takes its natural height (shrinking if it must); the event log
-       fills the rest of the rail and scrolls its own feed. */
+    .main {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      /* The mockup's 330px rails, but allowed to give ground on a narrow window:
+         held rigid they starve the board, which is the column that matters. */
+      grid-template-columns: minmax(260px, 330px) 1fr minmax(260px, 330px);
+      gap: 6px;
+      padding: 6px;
+    }
+    .col {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-height: 0;
+      min-width: 0;
+    }
+    /* The rails run the full height of the workspace, from the titlebar to the
+       bottom of the window; the ready queue takes the larger share and the event
+       log the rest, each scrolling its own body. */
     .rail-queue {
-      flex: 0 1 auto;
+      flex: 1.35;
       min-height: 0;
       overflow-y: auto;
     }
     .rail-log {
-      flex: 1 1 0;
+      flex: 1;
       min-height: 0;
     }
-    /* Chunk detail docks along the bottom, spanning the full width beneath the
-       board and rail. It is a permanently mounted layout-level row — not a
-       workspace column — filling its fixed grid track (see .layout above), so it
-       reserves the same space whether empty or filled: selecting or clearing it
-       never resizes or shifts the board. */
-    .dock {
+    /* The centre column stacks the board over the chunk detail, so the detail sits
+       to the right of the rails rather than spanning the window beneath them. Both
+       are permanently mounted and hold their share of the column, so selecting or
+       clearing a chunk never resizes or reflows the board. */
+    .board {
+      flex: 1.15;
       min-height: 0;
+      min-width: 0;
+    }
+    .dock {
+      flex: 1;
+      min-height: 0;
+      min-width: 0;
     }
   `,
 })

@@ -90,7 +90,7 @@ import { TranscriptPanel } from './transcript-panel';
       background: var(--bg);
       color: var(--text);
       font-family: var(--mono);
-      font-size: 12px;
+      font-size: var(--fs-base);
       font-variant-numeric: tabular-nums;
     }
     .lp {
@@ -99,7 +99,7 @@ import { TranscriptPanel } from './transcript-panel';
       height: 100%;
     }
     .lbl {
-      font-size: 9px;
+      font-size: var(--fs-label);
       letter-spacing: 0.18em;
       text-transform: uppercase;
       color: var(--label);
@@ -110,7 +110,7 @@ import { TranscriptPanel } from './transcript-panel';
       align-items: stretch;
       height: 40px;
       border-bottom: 1px solid var(--bezel);
-      background: linear-gradient(180deg, #0d1526, #080d18);
+      background: linear-gradient(180deg, var(--header-hi), var(--header-lo));
     }
     .brand {
       display: flex;
@@ -119,13 +119,13 @@ import { TranscriptPanel } from './transcript-panel';
       padding: 0 14px;
       border-right: 1px solid var(--line);
       color: var(--amber-hi);
-      font-size: 15px;
+      font-size: var(--fs-lg);
       letter-spacing: 0.28em;
       text-transform: uppercase;
     }
     .brand small {
       color: var(--label);
-      font-size: 9px;
+      font-size: var(--fs-label);
       letter-spacing: 0.18em;
     }
     .spacer {
@@ -140,7 +140,7 @@ import { TranscriptPanel } from './transcript-panel';
     }
     .conn .v {
       color: var(--cyan);
-      font-size: 15px;
+      font-size: var(--fs-lg);
     }
     .body {
       flex: 1;
@@ -169,7 +169,7 @@ import { TranscriptPanel } from './transcript-panel';
       transform: translate(-50%, -50%);
       white-space: nowrap;
       color: var(--label-dim);
-      font-size: 11px;
+      font-size: var(--fs-sm);
       letter-spacing: 0.12em;
     }
     .status.error {

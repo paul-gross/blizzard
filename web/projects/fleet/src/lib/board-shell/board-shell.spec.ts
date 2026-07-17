@@ -2,6 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
 import type { ChunkSummary } from '../api/hub';
+import { shortChunkId } from '../chunk-id';
 import { BoardShell } from './board-shell';
 
 describe('BoardShell', () => {
@@ -47,15 +48,6 @@ describe('BoardShell', () => {
 
     card?.querySelector<HTMLButtonElement>('[data-testid="promote-chunk"]')?.click();
     expect(promoted).toBe('ch_01notready00000000000000000');
-  });
-
-  it('reflects the connection input in the header', async () => {
-    const fixture = TestBed.createComponent(BoardShell);
-    fixture.componentRef.setInput('connection', 'ok');
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    expect(el.querySelector('[data-testid="conn"]')?.textContent).toContain('ok');
   });
 
   it('renders one card per non-ready chunk, in its derived-status column, showing status + current node', async () => {
@@ -121,7 +113,7 @@ describe('BoardShell', () => {
     expect(node?.getAttribute('title')).toBe('nd_01KXHKVCWZ1000000000000000');
   });
 
-  it('renders one linked chip per PM pointer, keeping the short chunk id visible', async () => {
+  it('names the PM work item as plain text — a card carries no competing link', async () => {
     const chunks: ChunkSummary[] = [
       {
         chunk_id: 'ch_01running000000000000000000',
@@ -140,12 +132,14 @@ describe('BoardShell', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    const chips = el.querySelectorAll<HTMLAnchorElement>('[data-testid="pm-chip"]');
-    expect(chips).toHaveLength(2);
-    expect(chips[0].textContent?.trim()).toBe('blizzard#8');
-    expect(chips[0].getAttribute('href')).toBe('https://github.com/paul-gross/blizzard/issues/8');
+    // Both pointers read on the one work-item line; the whole card is a single click
+    // target for opening the chunk, so nothing inside it is an anchor competing for
+    // that click — the link out to the forge lives in the detail panel.
+    const item = el.querySelector('[data-testid="pm-chip"]');
+    expect(item?.textContent?.trim()).toBe('blizzard#8 widget#9');
+    expect(el.querySelectorAll('[data-testid="chunk-card"] a')).toHaveLength(0);
     // The short chunk id stays visible as the stable handle.
-    expect(el.querySelector('[data-testid="chunk-id"]')?.textContent).toContain('ch_01running');
+    expect(el.querySelector('[data-testid="chunk-id"]')?.textContent).toContain('ch_…0000');
   });
 
   it('degrades to the short chunk id when a chunk has no labeled pointer', async () => {
@@ -170,6 +164,13 @@ describe('BoardShell', () => {
     expect(el.querySelectorAll('[data-testid="pm-chip"]')).toHaveLength(0);
     expect(el.querySelectorAll('[data-testid="chunk-card"]')).toHaveLength(2);
     const running = el.querySelector('[data-col="running"] [data-testid="chunk-card"]');
-    expect(running?.querySelector('[data-testid="chunk-id"]')?.textContent).toContain('ch_01running');
+    expect(running?.querySelector('[data-testid="chunk-id"]')?.textContent).toContain('ch_…');
+  });
+
+  it('names a chunk by its ULID tail, where the entropy that tells chunks apart lives', () => {
+    // A leading slice would print the same timestamp prefix on every card minted in
+    // the same millisecond-ish window; the tail is what actually discriminates them.
+    expect(shortChunkId('ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9')).toBe('ch_…3YJ9');
+    expect(shortChunkId('ch_01KXKVVF1J3D6H6VYZ3XYN3YAB')).toBe('ch_…3YAB');
   });
 });

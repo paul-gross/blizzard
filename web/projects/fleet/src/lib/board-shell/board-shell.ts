@@ -1,45 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
 import type { ChunkStatus, ChunkSummary } from '../api/hub';
-
-/** The board columns, left → right: the not-ready backlog, then dispatch → done. */
-interface BoardColumn {
-  readonly key: string;
-  readonly label: string;
-}
-
-const COLUMNS: readonly BoardColumn[] = [
-  { key: 'notready', label: 'NOT READY' },
-  { key: 'running', label: 'RUNNING' },
-  { key: 'waiting', label: 'WAIT/HUMAN' },
-  { key: 'needs', label: 'NEEDS HUMAN' },
-  { key: 'done', label: 'DONE' },
-];
-
-/**
- * Map a chunk's derived status (D-004) onto its board column. The transient
- * `delivering` shows under RUNNING, and terminal `stopped` shows under DONE.
- * `not_ready` chunks — freshly ingested and held from the fleet (D-103) — get their
- * own leftmost backlog column, visibly distinct from `ready` chunks, which map to no
- * board column (`null`): the ready queue lives in the left rail (fleet-queue-panel),
- * so a ready chunk shows there and never also as a board card (issue #22).
- */
-const STATUS_COLUMN: Record<ChunkStatus, string | null> = {
-  not_ready: 'notready',
-  ready: null,
-  running: 'running',
-  delivering: 'running',
-  waiting_on_human: 'waiting',
-  needs_human: 'needs',
-  stopped: 'done',
-  done: 'done',
-};
-
-/** One linked PM-pointer chip — the server-derived `{source}#{ref}` label (D-107/D-110). */
-export interface PointerChip {
-  readonly label: string;
-  readonly url: string;
-}
+import { shortChunkId } from '../chunk-id';
+import { LANES, STATUS_LANE } from '../chunk-lanes';
 
 /** One rendered board card — the derived-status view of a chunk. */
 export interface BoardCard {
@@ -50,33 +13,26 @@ export interface BoardCard {
   readonly node: string;
   /** The raw `nd_` ULID, kept reachable as the node label's tooltip. */
   readonly nodeId: string;
-  readonly pointers: readonly PointerChip[];
+  /** The chunk's PM work item — the server-derived `{source}#{ref}` label (D-107/D-110),
+   * empty when no pointer names a configured source. Plural pointers join with a space. */
+  readonly pointerLabel: string;
 }
 
 /**
- * The mission-control board shell — header, the empty four-column board grid,
- * and an empty-state message (D-097). This is the shared fleet view the hub app
- * renders; it lives once here so the runner app can compose it too. Presentational
- * only: it holds no data and no data client — chunks, counts, and live wiring land
- * on top of this shell as the board features arrive. All color comes from the
- * design-token layer (design/tokens.css), never hard-coded hex.
+ * The mission-control chunk board (D-097) — the five status columns and their
+ * cards, filling the centre column above the chunk detail. The titlebar is not
+ * here: it spans all three columns, so {@link BoardHeader} owns it.
+ *
+ * This is the shared fleet view the hub app renders; it lives once here so the
+ * runner app can compose it too. Presentational only: it holds no data client.
+ * All color comes from the design-token layer (design/tokens.css), never
+ * hard-coded hex, and every text size from that layer's type scale.
  */
 @Component({
   selector: 'fleet-board-shell',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="mc" data-testid="board-shell">
-      <header class="mc-header">
-        <div class="brand">
-          blizzard<small>fleet hub · mission control</small>
-        </div>
-        <div class="spacer"></div>
-        <div class="conn" data-testid="conn">
-          <span class="lbl">Hub</span>
-          <span class="v">{{ connection() }}</span>
-        </div>
-      </header>
-
       <section class="panel board-panel" aria-label="Chunk board">
         <div class="panel-head">
           <span class="lbl">Chunk board · workflow build → review → deliver</span>
@@ -92,34 +48,27 @@ export interface BoardCard {
               <div class="b-col-body">
                 @for (card of cardsFor(col.key); track card.chunkId) {
                   <div class="card" data-testid="chunk-card" [attr.data-status]="card.status">
-                    @if (card.pointers.length > 0) {
-                      <div class="chips">
-                        @for (p of card.pointers; track p.url) {
-                          <a
-                            class="chip"
-                            data-testid="pm-chip"
-                            [href]="p.url"
-                            target="_blank"
-                            rel="noreferrer"
-                            [attr.title]="p.url"
-                            >{{ p.label }}</a
-                          >
-                        }
-                      </div>
-                    }
                     <button
                       type="button"
                       class="card-open"
                       [attr.aria-label]="'Open chunk ' + card.shortId"
                       (click)="selectChunk.emit(card.chunkId)"
                     >
-                      <div class="card-id" data-testid="chunk-id">{{ card.shortId }}</div>
-                      <div class="card-meta">
-                        <span class="st" data-testid="chunk-status">{{ card.status }}</span>
+                      <span class="tid">
+                        <span class="card-id" data-testid="chunk-id">{{ card.shortId }}</span>
                         <span class="nd" data-testid="chunk-node" [attr.title]="card.nodeId || null">{{
                           card.node
                         }}</span>
-                      </div>
+                      </span>
+                      <!-- The pointer label is plain text here, not a link: a card is a
+                           target for opening the chunk, and an anchor inside it competes
+                           for the same click. The detail panel owns the link out to the PM. -->
+                      @if (card.pointerLabel) {
+                        <span class="iss" data-testid="pm-chip" [title]="card.pointerLabel">{{
+                          card.pointerLabel
+                        }}</span>
+                      }
+                      <span class="st" data-testid="chunk-status" [title]="card.status">{{ card.status }}</span>
                     </button>
                     @if (card.status === 'not_ready') {
                       <button
@@ -148,62 +97,24 @@ export interface BoardCard {
     :host {
       display: block;
       height: 100%;
-      background: var(--bg);
+      min-height: 0;
       color: var(--text);
       font-family: var(--mono);
-      font-size: 12px;
+      font-size: var(--fs-base);
       font-variant-numeric: tabular-nums;
     }
     .mc {
       display: flex;
       flex-direction: column;
       height: 100%;
+      min-height: 0;
     }
     .lbl {
-      font-size: 9px;
+      font-size: var(--fs-label);
       letter-spacing: 0.18em;
       text-transform: uppercase;
       color: var(--label);
       text-shadow: 0 1px 0 rgba(0, 0, 0, 0.9);
-    }
-    .mc-header {
-      flex: none;
-      display: flex;
-      align-items: stretch;
-      height: 40px;
-      border-bottom: 1px solid var(--bezel);
-      background: linear-gradient(180deg, #0d1526, #080d18);
-    }
-    .brand {
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      padding: 0 14px;
-      border-right: 1px solid var(--line);
-      color: var(--amber-hi);
-      font-size: 15px;
-      letter-spacing: 0.28em;
-      text-transform: uppercase;
-    }
-    .brand small {
-      color: var(--label);
-      font-size: 9px;
-      letter-spacing: 0.18em;
-    }
-    .spacer {
-      flex: 1;
-      border-right: 1px solid var(--line);
-    }
-    .conn {
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      padding: 0 14px;
-    }
-    .conn .v {
-      color: var(--cyan);
-      font-size: 15px;
-      line-height: 1.1;
     }
     .panel {
       background: linear-gradient(180deg, var(--panel) 0%, var(--panel-deep) 100%);
@@ -214,7 +125,6 @@ export interface BoardCard {
     }
     .board-panel {
       flex: 1;
-      margin: 6px;
       position: relative;
     }
     .panel-head {
@@ -250,7 +160,7 @@ export interface BoardCard {
       flex: none;
     }
     .b-col-head .n {
-      font-size: 13px;
+      font-size: var(--fs-md);
       color: var(--label-dim);
     }
     /* The DONE column carries the mockup's green treatment (flow-board.html): a
@@ -280,7 +190,7 @@ export interface BoardCard {
       color: var(--amber-hi);
       padding: 1px 6px;
       font: inherit;
-      font-size: 9px;
+      font-size: var(--fs-label);
       letter-spacing: 0.14em;
       cursor: pointer;
     }
@@ -308,28 +218,10 @@ export interface BoardCard {
       flex-direction: column;
       gap: 3px;
       width: 100%;
-      overflow-wrap: anywhere;
+      min-width: 0;
     }
     .card:hover {
       border-color: var(--cyan);
-    }
-    .chips {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 3px;
-    }
-    .chip {
-      border: 1px solid var(--line);
-      padding: 0 4px;
-      color: var(--amber-hi);
-      font-size: 9px;
-      letter-spacing: 0.08em;
-      text-decoration: none;
-    }
-    .chip:hover,
-    .chip:focus-visible {
-      border-color: var(--amber);
-      outline: none;
     }
     .card-open {
       border: 0;
@@ -337,8 +229,9 @@ export interface BoardCard {
       padding: 0;
       display: flex;
       flex-direction: column;
-      gap: 3px;
+      gap: 2px;
       width: 100%;
+      min-width: 0;
       text-align: left;
       font: inherit;
       color: inherit;
@@ -348,26 +241,51 @@ export interface BoardCard {
       outline: 1px solid var(--cyan);
       outline-offset: 1px;
     }
-    .card-id {
-      color: var(--cyan);
-      font-size: 11px;
-      letter-spacing: 0.04em;
-    }
-    .card-meta {
+    /* The card's identity line: the chunk's short name, with the node it currently
+       sits at pushed to the far right — the mockup's tile head.
+
+       Every line here holds to one line and ellipsises instead of wrapping. A board
+       column is narrow, and a wrapped card is worse than a clipped one twice over: it
+       breaks a value mid-token (a chunk name split across two lines is unreadable and
+       unsearchable) and it makes cards in the same column different heights, so the
+       column stops scanning as a list. The full value stays reachable in the detail. */
+    .tid {
       display: flex;
       justify-content: space-between;
+      align-items: baseline;
       gap: 6px;
+      min-width: 0;
     }
-    .card-meta .st {
-      color: var(--amber-hi);
-      font-size: 9px;
+    .card-id {
+      color: var(--amber);
+      font-size: var(--fs-md);
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+    }
+    .tid .nd {
+      color: var(--label);
+      font-size: var(--fs-label);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .iss,
+    .st {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .iss {
+      color: var(--cyan);
+      font-size: var(--fs-xs);
+    }
+    .st {
+      color: var(--label);
+      font-size: var(--fs-label);
       letter-spacing: 0.14em;
       text-transform: uppercase;
-    }
-    .card-meta .nd {
-      color: var(--label-dim);
-      font-size: 9px;
-      letter-spacing: 0.1em;
     }
     .empty {
       position: absolute;
@@ -375,16 +293,13 @@ export interface BoardCard {
       top: 55%;
       transform: translate(-50%, -50%);
       color: var(--label-dim);
-      font-size: 11px;
+      font-size: var(--fs-sm);
       letter-spacing: 0.12em;
       pointer-events: none;
     }
   `,
 })
 export class BoardShell {
-  /** A short connection/health status shown in the header (e.g. `ok`, `offline`). */
-  readonly connection = input('—');
-
   /** The fleet chunk list (derived status + current node); empty when the fleet is idle. */
   readonly chunks = input<readonly ChunkSummary[]>([]);
 
@@ -394,27 +309,27 @@ export class BoardShell {
   /** Emitted with a chunk id when a not-ready card's Promote is clicked (D-103). */
   readonly promote = output<string>();
 
-  protected readonly columns = COLUMNS;
+  protected readonly columns = LANES;
 
   /** Every chunk rendered as a board card, grouped into its status column. */
   private readonly cards = computed<Map<string, BoardCard[]>>(() => {
-    const grouped = new Map<string, BoardCard[]>(COLUMNS.map((c) => [c.key, []]));
+    const grouped = new Map<string, BoardCard[]>(LANES.map((lane) => [lane.key, []]));
     for (const chunk of this.chunks()) {
-      const column = STATUS_COLUMN[chunk.status];
+      const column = STATUS_LANE[chunk.status];
       // Ready chunks belong to the left rail (fleet-queue-panel), not the board —
       // a null column skips them so they never double-show as a board card (issue #22).
       if (!column) continue;
       grouped.get(column)?.push({
         chunkId: chunk.chunk_id,
-        shortId: chunk.chunk_id.slice(0, 12),
+        shortId: shortChunkId(chunk.chunk_id),
         status: chunk.status,
         node: chunk.current_node_name ?? chunk.current_node_id ?? '—',
         nodeId: chunk.current_node_id ?? '',
-        // Only labeled pointers render as chips — a pointer naming no configured
-        // source has a null label/web_url and the card leans on the short id instead.
-        pointers: (chunk.pm_pointers ?? []).flatMap((p) =>
-          p.label && p.web_url ? [{ label: p.label, url: p.web_url }] : [],
-        ),
+        // Only labeled pointers show — a pointer naming no configured source has a
+        // null label and the card leans on the short id instead.
+        pointerLabel: (chunk.pm_pointers ?? [])
+          .flatMap((p) => (p.label ? [p.label] : []))
+          .join(' '),
       });
     }
     return grouped;

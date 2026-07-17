@@ -5,7 +5,7 @@ import { vi } from 'vitest';
 
 import { settle } from '../testing/settle';
 import { type HubClientStub, stubHubClient } from '../testing/stub-hub-client';
-import { RunnerStrip } from './runner-strip';
+import { RunnerPanel } from './runner-panel';
 
 const NOW = new Date().toISOString();
 // One runner per pause state: none, the fleet's brake, the runner's own, and both
@@ -29,7 +29,7 @@ const RUNNERS = {
   ],
 };
 
-describe('RunnerStrip', () => {
+describe('RunnerPanel', () => {
   let stub: HubClientStub;
 
   beforeEach(async () => {
@@ -41,7 +41,7 @@ describe('RunnerStrip', () => {
       return {};
     });
     await TestBed.configureTestingModule({
-      imports: [RunnerStrip],
+      imports: [RunnerPanel],
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
@@ -52,7 +52,7 @@ describe('RunnerStrip', () => {
   afterEach(() => stub.restore());
 
   it('renders each runner with its liveness and paused state (D-070/D-043)', async () => {
-    const fixture = TestBed.createComponent(RunnerStrip);
+    const fixture = TestBed.createComponent(RunnerPanel);
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
@@ -62,7 +62,7 @@ describe('RunnerStrip', () => {
   });
 
   it('distinguishes the hub brake, the runner\'s own, and both (#43)', async () => {
-    const fixture = TestBed.createComponent(RunnerStrip);
+    const fixture = TestBed.createComponent(RunnerPanel);
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
     const badges = (id: string) => ({
@@ -77,7 +77,7 @@ describe('RunnerStrip', () => {
   });
 
   it('offers to pause a locally-paused runner at the hub — the board cannot clear its own brake', async () => {
-    const fixture = TestBed.createComponent(RunnerStrip);
+    const fixture = TestBed.createComponent(RunnerPanel);
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
@@ -88,7 +88,7 @@ describe('RunnerStrip', () => {
   });
 
   it('pauses an online runner via the client call', async () => {
-    const fixture = TestBed.createComponent(RunnerStrip);
+    const fixture = TestBed.createComponent(RunnerPanel);
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
@@ -102,7 +102,7 @@ describe('RunnerStrip', () => {
   });
 
   it('resumes a paused runner via the client call', async () => {
-    const fixture = TestBed.createComponent(RunnerStrip);
+    const fixture = TestBed.createComponent(RunnerPanel);
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
@@ -116,7 +116,7 @@ describe('RunnerStrip', () => {
   });
 });
 
-describe('RunnerStrip seenLabel (bzh:utc-instants)', () => {
+describe('RunnerPanel seenLabel (bzh:utc-instants)', () => {
   // Liveness is decided on the hub's clock (`online`); this label is decoration
   // computed against the browser's clock, so `Date.now()` is pinned rather than the
   // wall clock, and `last_seen_at` is placed relative to it.
@@ -131,7 +131,7 @@ describe('RunnerStrip seenLabel (bzh:utc-instants)', () => {
     };
     stub = stubHubClient((method, path) => (method === 'GET' && path === '/api/runners' ? runners : {}));
     return TestBed.configureTestingModule({
-      imports: [RunnerStrip],
+      imports: [RunnerPanel],
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
@@ -139,7 +139,7 @@ describe('RunnerStrip seenLabel (bzh:utc-instants)', () => {
     })
       .compileComponents()
       .then(async () => {
-        const fixture = TestBed.createComponent(RunnerStrip);
+        const fixture = TestBed.createComponent(RunnerPanel);
         await settle(fixture);
         return fixture.nativeElement as HTMLElement;
       });

@@ -71,12 +71,12 @@ import { injectGroupChunksMutation, injectReorderQueueMutation } from './queue.m
     :host {
       display: block;
       font-family: var(--mono);
-      font-size: 12px;
+      font-size: var(--fs-base);
       font-variant-numeric: tabular-nums;
       color: var(--text);
     }
     .lbl {
-      font-size: 9px;
+      font-size: var(--fs-label);
       letter-spacing: 0.18em;
       text-transform: uppercase;
       color: var(--label);
@@ -104,7 +104,7 @@ import { injectGroupChunksMutation, injectReorderQueueMutation } from './queue.m
       color: var(--text);
       cursor: pointer;
       padding: 2px 7px;
-      font-size: 10px;
+      font-size: var(--fs-xs);
     }
     .act.primary {
       color: var(--cyan);
@@ -118,7 +118,7 @@ import { injectGroupChunksMutation, injectReorderQueueMutation } from './queue.m
     }
     .none {
       color: var(--label-dim);
-      font-size: 10px;
+      font-size: var(--fs-xs);
       padding: 6px 8px;
     }
     .rows {
@@ -141,19 +141,19 @@ import { injectGroupChunksMutation, injectReorderQueueMutation } from './queue.m
     }
     .pos {
       color: var(--label-dim);
-      font-size: 11px;
+      font-size: var(--fs-sm);
       min-width: 1.5em;
       text-align: right;
     }
     .qid {
       color: var(--cyan);
-      font-size: 11px;
+      font-size: var(--fs-sm);
       overflow: hidden;
       text-overflow: ellipsis;
     }
     .ptr {
       color: var(--label-dim);
-      font-size: 10px;
+      font-size: var(--fs-xs);
       overflow: hidden;
       text-overflow: ellipsis;
     }
