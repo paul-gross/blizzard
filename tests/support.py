@@ -16,11 +16,13 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
+import sqlalchemy as sa
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub.app import create_app
 from blizzard.hub.composition import HubServices, build_services
 from blizzard.hub.config import HubConfig, PmSourceConfig
@@ -465,3 +467,54 @@ def report_lease(hub: HubHarness, chunk_id: str, *, epoch: int, seq: int, runner
     )
     assert resp.status_code == 200, resp.text
     return resp.json()
+
+
+# --- Migration-test scaffolding --------------------------------------------------
+#
+# ``graphs``/``chunks`` carry no revision-pinned shape — no migration in the hub tree
+# has reshaped either — so, unlike a revision's own frozen table-under-test (which must
+# stay local to that test: a revision pinned in time must not import a shape that has
+# since moved on), this ladder and these two parent-row seeds are identical every time
+# a migration test needs a store at some past revision. Shared here so each migration
+# test file stops hand-rolling both (see ``test_pm_pointer_migration.py``'s ``_GRAPHS``/
+# ``_CHUNKS``, byte-identical to these).
+
+_GRAPHS = sa.Table(
+    "graphs",
+    sa.MetaData(),
+    sa.Column("graph_id", sa.String, primary_key=True),
+    sa.Column("name", sa.String, nullable=False),
+    sa.Column("entry_node_id", sa.String, nullable=False),
+    sa.Column("definition_yaml", sa.Text, nullable=False),
+    sa.Column("created_at", sa.DateTime, nullable=False),
+)
+
+_CHUNKS = sa.Table(
+    "chunks",
+    sa.MetaData(),
+    sa.Column("chunk_id", sa.String, primary_key=True),
+    sa.Column("graph_id", sa.String, nullable=False),
+    sa.Column("minted_at", sa.DateTime, nullable=False),
+)
+
+
+def migrate_to(tmp_path: Path, revision: str) -> tuple[MigrationRunner, Engine]:
+    """A hub store migrated to ``revision``, ready for a test's own revision-pinned seed
+    rows. The returned runner is the same handle a test upgrades onward from (e.g. to
+    ``"head"``) once its seed is in place."""
+    db_url = f"sqlite:///{tmp_path / 'hub.db'}"
+    runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
+    runner.upgrade(revision)
+    return runner, create_engine_from_url(db_url)
+
+
+def seed_graph(conn: sa.Connection, graph_id: str, *, at: datetime) -> None:
+    """Seed one ``graphs`` parent row — the FK a seeded chunk needs, at any revision."""
+    conn.execute(
+        sa.insert(_GRAPHS).values(graph_id=graph_id, name="g", entry_node_id="nd_1", definition_yaml="", created_at=at)
+    )
+
+
+def seed_chunk(conn: sa.Connection, chunk_id: str, *, graph_id: str, at: datetime) -> None:
+    """Seed one ``chunks`` parent row — the FK a seeded route/pointer/etc. needs."""
+    conn.execute(sa.insert(_CHUNKS).values(chunk_id=chunk_id, graph_id=graph_id, minted_at=at))

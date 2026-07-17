@@ -114,6 +114,32 @@ def test_reclaimed_after_release_is_running_again() -> None:
     assert derive_chunk_status(facts) is ChunkStatus.RUNNING
 
 
+def test_same_instant_detach_takes_effect() -> None:
+    """Issue #41: a release recorded after the create in real write order — its
+    ``seq`` is higher — wins a same-instant tie, so the chunk derives out of
+    ``running`` even though ``created_at == released_at``."""
+    facts = ChunkFacts(
+        minted=True,
+        promoted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1), seq=1)],
+        routes_released=[RouteReleasedFact(released_at=_at(1), seq=2)],
+    )
+    assert derive_chunk_status(facts) is ChunkStatus.READY
+
+
+def test_same_instant_reclaim_still_derives_running() -> None:
+    """Issue #41's other half: a fresh ``route.created`` recorded after a prior release
+    in real write order — its ``seq`` is higher than that release's — must still win
+    the tie, so no live route is lost (generalizes
+    ``test_reclaimed_after_release_is_running_again`` to the same-instant case)."""
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1), seq=1), RouteCreatedFact(created_at=_at(2), seq=3)],
+        routes_released=[RouteReleasedFact(released_at=_at(2), seq=2)],
+    )
+    assert derive_chunk_status(facts) is ChunkStatus.RUNNING
+
+
 def test_newest_transition_into_hub_node_is_delivering() -> None:
     facts = ChunkFacts(
         minted=True,

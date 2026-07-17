@@ -148,6 +148,24 @@ def check_hub_store(engine: Engine) -> list[Violation]:
                     )
                 )
 
+        # hub:route-seq-unique — per-chunk route ``seq`` is unique across
+        # ``route_created`` + ``route_released`` combined (D-088, issue #41): the two
+        # tables share one counter so a created/released pair is totally ordered even
+        # at a same-instant timestamp tie (``work.newest_live_route``). A duplicate
+        # means two route events raced past ``ChunkStore._next_route_seq`` uncaught —
+        # exactly the tie #41 closed, reopened.
+        route_seqs = Counter(
+            (row[0], row[1]) for row in conn.execute(select(hub.route_created.c.chunk_id, hub.route_created.c.seq))
+        )
+        route_seqs.update(
+            (row[0], row[1]) for row in conn.execute(select(hub.route_released.c.chunk_id, hub.route_released.c.seq))
+        )
+        for (chunk_id, seq), n in route_seqs.items():
+            if n > 1:
+                violations.append(
+                    Violation("hub:route-seq-unique", f"chunk {chunk_id} seq {seq} used by {n} route events")
+                )
+
         # hub:per-repo-land-idempotent — at most one landed fact per (chunk, repo):
         # a redelivery skips already-landed repos (D-091), so a duplicate is a double land.
         repo_lands = Counter(

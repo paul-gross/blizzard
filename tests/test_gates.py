@@ -333,8 +333,9 @@ def test_detach_a_claimed_chunk_re_derives_ready_and_reenters_the_queue(tmp_path
     hub = build_hub(tmp_path)
     chunk_id, _ = _ingest(hub, _PLAIN_YAML)
     _claim_and_lease(hub, chunk_id)
-    # The release fact must post-date the route creation; advance the test clock past the tie.
-    hub.clock.advance(timedelta(seconds=1))
+    # No clock.advance: the route creation and the release land at the same fixed
+    # instant. The route-event seq tiebreak (issue #41), not the timestamp, is what
+    # decides the tie — see test_detach_at_a_same_instant_tie_still_takes_effect.
     resp = hub.client.post(f"/api/chunks/{chunk_id}/detach")
     assert resp.status_code == 202, resp.text
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
@@ -393,7 +394,7 @@ def test_detach_publishes_chunk_changed_and_queue_changed(tmp_path: Path) -> Non
     hub = build_hub(tmp_path)
     chunk_id, _ = _ingest(hub, _PLAIN_YAML)
     _claim_and_lease(hub, chunk_id)
-    hub.clock.advance(timedelta(seconds=1))
+    # No clock.advance: the route creation and the release tie on timestamp (issue #41).
     before = len(hub.events.snapshot())
 
     assert hub.client.post(f"/api/chunks/{chunk_id}/detach").status_code == 202
@@ -402,3 +403,25 @@ def test_detach_publishes_chunk_changed_and_queue_changed(tmp_path: Path) -> Non
     assert [e.type for e in published] == ["chunk-changed", "queue-changed"]
     # chunk-changed carries the *re-derived* status, not the pre-detach one.
     assert f'"chunk_id": "{chunk_id}", "status": "ready"' in published[0].framed()
+
+
+def test_reclaim_at_a_same_instant_tie_still_derives_running(tmp_path: Path) -> None:
+    """The other half of issue #41's tie: a fresh claim landing at the exact instant of
+    a prior release must not lose the live route. Detach releases the route, and —
+    with no ``clock.advance`` — the re-claim lands at the identical fixed instant; the
+    route-event seq tiebreak, not the timestamp, is what keeps this a live route
+    (generalizes ``test_reclaimed_after_release_is_running_again``, which pins the same
+    guarantee at the domain-unit tier)."""
+    hub = build_hub(tmp_path)
+    chunk_id, _ = _ingest(hub, _PLAIN_YAML)
+    _claim_and_lease(hub, chunk_id)
+    assert hub.client.post(f"/api/chunks/{chunk_id}/detach").status_code == 202
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
+
+    # No clock.advance: this claim's route.created ties the just-written route.released.
+    reclaim = hub.client.post(
+        "/api/routes",
+        json={"chunk_id": chunk_id, "runner_id": "r2", "workspace_id": "w2", "environment_ids": ["e"]},
+    )
+    assert reclaim.status_code == 201, reclaim.text
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "running"

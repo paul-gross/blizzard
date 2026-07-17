@@ -7,14 +7,16 @@ commit -> deliver -> land loop derives every chunk status from
 this revision creates exactly this revision's subset in FK-dependency order, so a
 later revision that adds tables to the same metadata does not get re-created here.
 
-``chunk_pm_pointers`` is the one exception (as of ``0013_pm_pointer_source_ref``):
-importing it from ``schema.py`` here would mean this revision's *historical* shape
+``chunk_pm_pointers``, ``route_created``, and ``route_released`` are the exceptions
+(as of ``0013_pm_pointer_source_ref`` and ``0015_route_seq_tiebreak`` respectively):
+importing them from ``schema.py`` here would mean this revision's *historical* shape
 silently follows whatever ``schema.py`` says today — exactly the bug 0013's own
 docstring names and refuses to repeat. This revision instead declares its own frozen
-``{provider, url}`` literal for it, so upgrading from ``base`` always recreates the
-column shape this revision actually shipped with; 0013 is the one revision that
-reshapes it from there. The frozen literal still declares the ``chunk_id`` foreign key
-to ``chunks.chunk_id`` (via a same-MetaData resolution stub, not a live import — see
+literal for each — ``{provider, url}`` for pointers, no ``seq`` column for the two
+route tables — so upgrading from ``base`` always recreates the column shape this
+revision actually shipped with; 0013 and 0014 are the revisions that reshape them
+from there. The frozen literals still declare their ``chunk_id`` foreign key to
+``chunks.chunk_id`` (via a same-MetaData resolution stub, not a live import — see
 below) so a fresh store's schema matches ``schema.py``'s declared FK
 (``bzh:sql-portable``: postgres is the same schema under a different URL).
 
@@ -29,6 +31,7 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
+from blizzard.foundation.store.utc import UtcDateTime
 from blizzard.hub.store.schema import (
     artifacts,
     chunk_stopped,
@@ -41,9 +44,7 @@ from blizzard.hub.store.schema import (
     graph_nodes,
     graphs,
     lease_facts,
-    route_created,
     route_environments,
-    route_released,
     transitions,
 )
 
@@ -74,6 +75,24 @@ _chunk_pm_pointers = sa.Table(
     sa.Column("provider", sa.String, nullable=False),
     sa.Column("url", sa.String, nullable=False),
 )
+# This revision's own frozen shape — no ``seq`` column — reshaped by 0014's route-event
+# tiebreak. Not imported from schema.py (see the module docstring).
+_route_created = sa.Table(
+    "route_created",
+    _frozen_metadata,
+    sa.Column("route_id", sa.String, primary_key=True),
+    sa.Column("chunk_id", sa.String, sa.ForeignKey("chunks.chunk_id"), nullable=False),
+    sa.Column("runner_id", sa.String, nullable=False),
+    sa.Column("workspace_id", sa.String, nullable=False),
+    sa.Column("created_at", UtcDateTime, nullable=False),
+)
+_route_released = sa.Table(
+    "route_released",
+    _frozen_metadata,
+    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
+    sa.Column("chunk_id", sa.String, sa.ForeignKey("chunks.chunk_id"), nullable=False),
+    sa.Column("released_at", UtcDateTime, nullable=False),
+)
 
 # Parents before children so the FK constraints resolve.
 _TABLES = [
@@ -86,9 +105,9 @@ _TABLES = [
     transitions,
     artifacts,
     lease_facts,
-    route_created,
+    _route_created,
     route_environments,
-    route_released,
+    _route_released,
     delivery_repo_landed,
     delivery_landed,
     chunk_stopped,

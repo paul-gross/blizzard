@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
-from sqlalchemy import Engine, insert, select
+from sqlalchemy import Connection, Engine, func, insert, select, update
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.clock import IClock
@@ -47,6 +47,7 @@ from blizzard.hub.domain.work import (
     RouteReleasedFact,
     TransitionFact,
     derive_chunk_status,
+    newest_live_route,
 )
 from blizzard.hub.store import schema as s
 
@@ -103,11 +104,11 @@ class ChunkStore:
                 for e in conn.execute(select(s.escalations).where(s.escalations.c.chunk_id == chunk_id)).all()
             ]
             routes_created = [
-                RouteCreatedFact(created_at=r.created_at)
+                RouteCreatedFact(created_at=r.created_at, seq=r.seq)
                 for r in conn.execute(select(s.route_created).where(s.route_created.c.chunk_id == chunk_id)).all()
             ]
             routes_released = [
-                RouteReleasedFact(released_at=r.released_at)
+                RouteReleasedFact(released_at=r.released_at, seq=r.seq)
                 for r in conn.execute(select(s.route_released).where(s.route_released.c.chunk_id == chunk_id)).all()
             ]
             answered = {
@@ -179,28 +180,33 @@ class ChunkStore:
     def route_of(self, chunk_id: str) -> Route | None:
         """The chunk's live route, or ``None`` if its newest release has caught up to it.
 
-        Tie semantics: the ``released_at >= created_at`` comparison below uses ``>=``,
-        so a *release* wins a same-instant tie against the newest ``route.created`` —
-        this is what lets a same-instant detach's own gate see "no route" immediately.
-        :func:`blizzard.hub.domain.work._has_live_route` derives the same live/not-live
-        question for chunk status and deliberately uses the opposite tie-break (``>``,
-        a *reclaim* wins ties there) — see that function's docstring for why the two
-        are not reconciled to one winner.
+        Delegates the tie-break to :func:`~blizzard.hub.domain.work.newest_live_route`
+        — the same function :func:`~blizzard.hub.domain.work._has_live_route` calls for
+        chunk-status derivation — so route liveness has exactly one answer at a
+        same-instant tie (issue #41) rather than two independently-maintained
+        comparisons that can drift apart.
         """
         with self._engine.connect() as conn:
+            # (created_at, seq) desc — must stay in lockstep with the key
+            # newest_live_route orders by; that function, not this query, owns it.
             created = conn.execute(
                 select(s.route_created)
                 .where(s.route_created.c.chunk_id == chunk_id)
-                .order_by(s.route_created.c.created_at.desc())
+                .order_by(s.route_created.c.created_at.desc(), s.route_created.c.seq.desc())
             ).first()
             if created is None:
                 return None
+            # (released_at, seq) desc — see the order_by above; same owner.
             released = conn.execute(
-                select(s.route_released.c.released_at)
+                select(s.route_released.c.released_at, s.route_released.c.seq)
                 .where(s.route_released.c.chunk_id == chunk_id)
-                .order_by(s.route_released.c.released_at.desc())
+                .order_by(s.route_released.c.released_at.desc(), s.route_released.c.seq.desc())
             ).first()
-            if released is not None and released.released_at >= created.created_at:
+            routes_released = (
+                [RouteReleasedFact(released_at=released.released_at, seq=released.seq)] if released else []
+            )
+            routes_created = [RouteCreatedFact(created_at=created.created_at, seq=created.seq)]
+            if newest_live_route(routes_created, routes_released) is None:
                 return None
             env_ids = [
                 e.environment_id
@@ -412,6 +418,7 @@ class ChunkStore:
                     runner_id=route.runner_id,
                     workspace_id=route.workspace_id,
                     created_at=at,
+                    seq=self._next_route_seq(conn, route.chunk_id),
                 )
             )
             for env_id in route.environment_ids:
@@ -419,7 +426,11 @@ class ChunkStore:
 
     def record_route_released(self, chunk_id: str, *, at: datetime) -> None:
         with self._engine.begin() as conn:
-            conn.execute(insert(s.route_released).values(chunk_id=chunk_id, released_at=at))
+            conn.execute(
+                insert(s.route_released).values(
+                    chunk_id=chunk_id, released_at=at, seq=self._next_route_seq(conn, chunk_id)
+                )
+            )
 
     def record_transition(
         self,
@@ -522,7 +533,11 @@ class ChunkStore:
                     recorded_at=at,
                 )
             )
-            conn.execute(insert(s.route_released).values(chunk_id=chunk_id, released_at=at))
+            conn.execute(
+                insert(s.route_released).values(
+                    chunk_id=chunk_id, released_at=at, seq=self._next_route_seq(conn, chunk_id)
+                )
+            )
             return True
 
     def record_pr_opened(
@@ -615,7 +630,11 @@ class ChunkStore:
                     recorded_at=at,
                 )
             )
-            conn.execute(insert(s.route_released).values(chunk_id=chunk_id, released_at=at))
+            conn.execute(
+                insert(s.route_released).values(
+                    chunk_id=chunk_id, released_at=at, seq=self._next_route_seq(conn, chunk_id)
+                )
+            )
             return True
 
     def record_escalation(self, chunk_id: str, *, epoch: int, takeover_command: str, at: datetime) -> None:
@@ -785,6 +804,56 @@ class ChunkStore:
     @staticmethod
     def _grouped_ids(conn) -> set[str]:  # type: ignore[no-untyped-def]
         return {r.chunk_id for r in conn.execute(select(s.chunk_grouped.c.chunk_id)).all()}
+
+    @staticmethod
+    def _next_route_seq(conn: Connection, chunk_id: str) -> int:
+        """The next value of the per-chunk ``route_created``/``route_released`` seq
+        counter (D-088; see ``work.newest_live_route``) — one past the current max
+        across both tables for this chunk, so a created/released pair is totally
+        ordered by real write order even when their timestamps tie.
+
+        This is read-then-insert, not an atomic increment, so two concurrent callers
+        for the same chunk must not both compute the same next value. A per-table
+        ``UniqueConstraint`` on ``seq`` cannot close that: the counter is shared
+        *across* ``route_created`` and ``route_released``, and a constraint scoped to
+        one table cannot see a conflicting insert into the other.
+
+        Instead this locks the chunk's own row in ``chunks`` — every route write for
+        this chunk already holds a chunk row to lock, since a route can't exist
+        without one — with a no-op ``UPDATE`` rather than ``SELECT ... FOR UPDATE``.
+        ``FOR UPDATE`` is the more obvious primitive, but sqlite has no row-level
+        locking and silently drops it, and a plain ``SELECT`` (locked or not) only
+        takes sqlite's SHARED read lock, which does *not* block a second concurrent
+        SHARED reader — so two callers can both read the same stale max before either
+        has written, race and all, with no error from either side. An ``UPDATE``,
+        even a no-op one, forces sqlite to acquire its whole-database write lock
+        immediately rather than only when the eventual ``INSERT`` runs, closing that
+        window; on postgres the same ``UPDATE`` takes the row-exclusive lock ``FOR
+        UPDATE`` would have, so the second caller's lock acquisition blocks until the
+        first's transaction commits its insert, then it re-reads the now-committed
+        max. One portable statement serializes both dialects instead of two different
+        primitives per dialect (``bzh:sql-portable``). Verified directly: racing this
+        allocator from two threads against a real sqlite store never commits a
+        duplicate seq (``tests/test_route_seq_concurrency.py``); postgres is checked
+        by compiling the lock statement for the postgres dialect and asserting the
+        expected row lock, since no live postgres server is available to this suite.
+
+        Tradeoff: a route write now holds a write lock on ``chunks`` for the length of
+        its transaction, so two route writes for the *same* chunk serialize instead of
+        interleaving. Route writes are low-frequency and per-chunk, so this is judged
+        cheap next to what it buys: the alternative considered (a per-table unique
+        constraint) does not enforce the invariant at all, and a full restructure to
+        one ``route_events`` table (kind discriminator + seq) is likely the sounder
+        long-term shape but too large to fold into this fix — a candidate follow-up.
+        """
+        conn.execute(update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(chunk_id=chunk_id))
+        created_max = conn.execute(
+            select(func.max(s.route_created.c.seq)).where(s.route_created.c.chunk_id == chunk_id)
+        ).scalar()
+        released_max = conn.execute(
+            select(func.max(s.route_released.c.seq)).where(s.route_released.c.chunk_id == chunk_id)
+        ).scalar()
+        return max(created_max or 0, released_max or 0) + 1
 
     @staticmethod
     def _question_row(q, answer) -> QuestionRow:  # type: ignore[no-untyped-def]

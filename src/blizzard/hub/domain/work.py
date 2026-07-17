@@ -76,16 +76,23 @@ class Chunk:
 
 @dataclass(frozen=True)
 class RouteCreatedFact:
-    """A ``route.created`` fact — the claim (D-021/D-080)."""
+    """A ``route.created`` fact — the claim (D-021/D-080).
+
+    ``seq`` is the monotonic route-event tiebreak (see :func:`_has_live_route`): a
+    per-chunk counter shared with :class:`RouteReleasedFact`, assigned in real write
+    order. Defaults to ``0`` for callers (mostly tests) that don't construct a tie.
+    """
 
     created_at: datetime
+    seq: int = 0
 
 
 @dataclass(frozen=True)
 class RouteReleasedFact:
-    """A ``route.released`` fact — forcible detach (D-088)."""
+    """A ``route.released`` fact — forcible detach (D-088). ``seq`` — see :class:`RouteCreatedFact`."""
 
     released_at: datetime
+    seq: int = 0
 
 
 @dataclass(frozen=True)
@@ -377,27 +384,46 @@ def _newest_transition_enters_hub_node(facts: ChunkFacts) -> bool:
     return transition is not None and transition.to_node_executor is Executor.HUB
 
 
-def _has_live_route(facts: ChunkFacts) -> bool:
-    """A ``route.created`` with no later ``route.released`` (D-088).
+def newest_live_route(
+    routes_created: list[RouteCreatedFact], routes_released: list[RouteReleasedFact]
+) -> RouteCreatedFact | None:
+    """The newest ``route.created`` fact still live, or ``None`` if released (D-088).
 
-    Tie semantics (worth naming so the next reader doesn't have to rediscover it):
-    on a same-instant ``created``/``released`` pair this uses strict ``>``, so a tie
-    reads as still-live — a *reclaim* wins ties, because a fresh ``route.created``
-    stamped at the exact instant of a prior release must still derive ``running``
-    (see ``test_reclaimed_after_release_is_running_again``). This is the opposite
-    tie-break from :meth:`ChunkStore.route_of`, which uses ``>=`` so a *release*
-    wins ties (the gate a same-instant detach relies on). The two are not aligned
-    to a single winner: doing so would silently break whichever direction lost, and
-    a plain-timestamp fact model cannot tell "created after released" from "released
-    after created" when the instants coincide — there is no sequence/epoch tiebreak
-    for routes the way :func:`newest_transition` has one for transitions. Under
-    :class:`~blizzard.foundation.clock.SystemClock` a same-instant tie is not
-    reachable in practice, so this divergence is accepted rather than forced.
+    The single tie-break both :func:`_has_live_route` and :meth:`ChunkStore.route_of`
+    resolve against, so route liveness has exactly one answer at a same-instant tie
+    (issue #41 — the two used to disagree, one via ``>`` and the other via ``>=`` on
+    ``created_at``/``released_at`` alone). Ordered by ``(timestamp, seq)``, the same
+    shape :func:`newest_transition` uses for ``(recorded_at, epoch)``: ``seq`` is a
+    per-chunk counter shared across both fact kinds, assigned in real write order, so
+    it breaks a timestamp tie the way the timestamp itself cannot.
+
+    This resolves both directions correctly rather than picking a fixed winner:
+
+    - A same-instant **detach** records its ``route.released`` *after* the route's
+      ``route.created`` in real write order, so its ``seq`` is higher — the release
+      outranks the create and the route reads not-live (the gate a same-instant
+      detach's own 409 check relies on).
+    - A same-instant **re-claim** records a fresh ``route.created`` *after* the prior
+      release in real write order, so its ``seq`` is higher than that release's — the
+      new create outranks the old release and the route reads live (see
+      ``test_reclaimed_after_release_is_running_again``, which this must not break).
+
+    Under :class:`~blizzard.foundation.clock.SystemClock` a same-instant tie is not
+    reachable in practice (microsecond resolution); ``seq`` only matters under a
+    :class:`~blizzard.foundation.clock.FixedClock`, which is where the tie was found.
     """
-    if not facts.routes_created:
-        return False
-    newest_created = max(facts.routes_created, key=lambda r: r.created_at)
-    return not any(rel.released_at > newest_created.created_at for rel in facts.routes_released)
+    if not routes_created:
+        return None
+    newest_created = max(routes_created, key=lambda r: (r.created_at, r.seq))
+    key = (newest_created.created_at, newest_created.seq)
+    if any((rel.released_at, rel.seq) > key for rel in routes_released):
+        return None
+    return newest_created
+
+
+def _has_live_route(facts: ChunkFacts) -> bool:
+    """A ``route.created`` with no later ``route.released`` (D-088). See :func:`newest_live_route`."""
+    return newest_live_route(facts.routes_created, facts.routes_released) is not None
 
 
 def newest_transition(facts: ChunkFacts) -> TransitionFact | None:

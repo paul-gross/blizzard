@@ -160,6 +160,9 @@ route_created = Table(
     Column("runner_id", String, nullable=False),
     Column("workspace_id", String, nullable=False),
     Column("created_at", UtcDateTime, nullable=False),
+    # The monotonic route-event tiebreak (D-088; see work.newest_live_route) — a
+    # per-chunk counter shared with route_released.seq, assigned in real write order.
+    Column("seq", Integer, nullable=False),
 )
 
 route_environments = Table(
@@ -176,6 +179,9 @@ route_released = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("released_at", UtcDateTime, nullable=False),
+    # See route_created.seq — the same per-chunk counter, so a created/released pair
+    # tied on timestamp is still totally ordered by real write order.
+    Column("seq", Integer, nullable=False),
 )
 
 # --- Delivery landing facts (per-repo, then whole-chunk — D-030/D-091) ------

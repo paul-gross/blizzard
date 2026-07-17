@@ -5,13 +5,20 @@ injects each kind of corruption and asserts the matching invariant is named. Thi
 library the kill-9 sweep asserts after every armed crash — here it is exercised without
 subprocesses so the default gate covers it.
 
-One check is a partial exception to "inject the corruption on a head-migrated store":
-``hub:pr-opened-idempotent`` guards a violation ``uq_delivery_pr_opened_chunk_repo``
-(0014_hub_pr_opened_idempotent) now makes impossible to *write* on a head-migrated
-store — a raw two-insert seed the way every sibling check above does it dies on the
-constraint instead of producing a violation. That test seeds a store migrated only to
-0013 (the schema this checker's query still reads), the same shape
-``test_pr_opened_migration.py`` seeds to exercise the migration itself.
+Every corruption is injected on a **head-migrated** store, because that is the only
+shape the checker is contracted to read: it runs against real stores, and a daemon
+refuses to start on a revision mismatch (``bzh:manual-migrations``), so a store it
+ever sees is at head.
+
+``hub:pr-opened-idempotent`` needs one extra step to honor that. The violation it
+guards is one ``uq_delivery_pr_opened_chunk_repo`` (0014_hub_pr_opened_idempotent)
+makes impossible to *write* at head — a raw two-insert seed the way every sibling
+check does it dies on the constraint instead of producing a violation. So that test
+drops the constraint on an otherwise head-shaped store (via the same
+``batch_alter_table`` 0014 adds it with) and then seeds the duplicate: the check is
+defense in depth *behind* the constraint, and this is what proves it still fires if
+the constraint is ever absent. Seeding an older revision instead would leave the
+store missing columns that other checks in the same pass read.
 """
 
 from __future__ import annotations
@@ -20,14 +27,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-import sqlalchemy as sa
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 from sqlalchemy import insert
 
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.invariants import check_hub_store, check_runner_store
-from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import init_environment as init_hub
-from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema as hub
 from blizzard.runner.runtime import init_environment as init_runner
 from blizzard.runner.store import schema as runner
@@ -35,21 +41,7 @@ from blizzard.runner.store import schema as runner
 pytestmark = pytest.mark.component
 
 _NOW = datetime(2026, 7, 14, tzinfo=UTC)
-_BEFORE_PR_OPENED_CONSTRAINT = "0013_hub_pm_pointer_source_ref"  # the head just before the unique constraint
-
-# The pre-0014 shape: no unique constraint, so two rows for the same (chunk_id, repo)
-# are legal to seed — mirrors ``test_pr_opened_migration.py``'s ``_OLD_PR_OPENED``.
-_OLD_PR_OPENED = sa.Table(
-    "delivery_pr_opened",
-    sa.MetaData(),
-    sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
-    sa.Column("chunk_id", sa.String, nullable=False),
-    sa.Column("repo", sa.String, nullable=False),
-    sa.Column("pr_number", sa.Integer, nullable=False),
-    sa.Column("pr_url", sa.String, nullable=False),
-    sa.Column("commit_hash", sa.String, nullable=False),
-    sa.Column("opened_at", sa.DateTime, nullable=False),
-)
+_PR_OPENED_UNIQUE = "uq_delivery_pr_opened_chunk_repo"  # added by 0014_hub_pr_opened_idempotent
 
 
 def _runner_engine(tmp_path: Path):
@@ -126,17 +118,20 @@ def test_duplicate_repo_land_is_a_violation(tmp_path: Path) -> None:
 
 
 def test_duplicate_pr_opened_is_a_violation(tmp_path: Path) -> None:
-    """Seeded pre-0014 (see the module docstring): ``uq_delivery_pr_opened_chunk_repo``
-    only exists from 0014 on, so a store migrated to head can no longer produce this
-    violation by a raw duplicate insert — it would raise ``IntegrityError`` instead."""
-    db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-    runner_ = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
-    runner_.upgrade(_BEFORE_PR_OPENED_CONSTRAINT)
-    engine = create_engine_from_url(db_url)
+    """Head-migrated, then the constraint dropped (see the module docstring):
+    ``uq_delivery_pr_opened_chunk_repo`` makes this duplicate unwritable at head, so the
+    check behind it is only observable with the constraint gone. The store stays
+    head-shaped, so every other check in the same pass still reads its own columns."""
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        batch_op = Operations(MigrationContext.configure(conn))
+        with batch_op.batch_alter_table("delivery_pr_opened") as batch:
+            batch.drop_constraint(_PR_OPENED_UNIQUE, type_="unique")
+
     with engine.begin() as conn:
         for pk in (1, 2):
             conn.execute(
-                sa.insert(_OLD_PR_OPENED).values(
+                insert(hub.delivery_pr_opened).values(
                     id=pk,
                     chunk_id="ch_1",
                     repo="acme/widget",
@@ -148,6 +143,21 @@ def test_duplicate_pr_opened_is_a_violation(tmp_path: Path) -> None:
             )
     slugs = {v.invariant for v in check_hub_store(engine)}
     assert "hub:pr-opened-idempotent" in slugs
+
+
+def test_duplicate_route_seq_across_tables_is_a_violation(tmp_path: Path) -> None:
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(
+            insert(hub.route_created).values(
+                route_id="rt_1", chunk_id="ch_1", runner_id="r", workspace_id="w", created_at=_NOW, seq=1
+            )
+        )
+        # Same chunk, same seq as the create above — the exact race #41's tiebreak
+        # closed: two route writes both computed seq=1 for chunk ch_1.
+        conn.execute(insert(hub.route_released).values(chunk_id="ch_1", released_at=_NOW, seq=1))
+    slugs = {v.invariant for v in check_hub_store(engine)}
+    assert "hub:route-seq-unique" in slugs
 
 
 def test_transition_epoch_beyond_latest_lease_is_a_violation(tmp_path: Path) -> None:
