@@ -101,10 +101,11 @@ reaching that revision means.
 
 ## Naming the runtime directory
 
-Every verb that takes a runtime dir — `init`'s positional `DIRECTORY`, and `--dir` on
-`migrate`, `host`, `runner tick`, `runner pause`, and `runner start` — resolves it from
-three rungs, highest to lowest: the explicit flag or argument, then an environment
-variable, then the current working directory.
+Every verb that takes a runtime dir resolves it from three rungs, highest to lowest: the
+explicit flag or argument, then an environment variable, then the current working
+directory. `init` and `host` accept a positional `DIRECTORY` as well as `--dir`; passing
+both requires they agree, and a genuine command-line conflict exits non-zero naming both
+values. `migrate`, `runner tick`, `runner pause`, and `runner start` take `--dir` only.
 
 | Daemon | Variable | Names |
 |--------|----------|-------|

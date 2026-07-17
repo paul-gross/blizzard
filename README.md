@@ -21,7 +21,7 @@ Install the wheel and bring the hub up — sqlite store, embedded board, no Node
 ```bash
 pip install https://github.com/paul-gross/blizzard/releases/download/v0.1.0-rc.1/blizzard-0.1.0rc1-py3-none-any.whl
 blizzard hub init .          # scaffold config + data dir + migrated sqlite store
-blizzard hub host --dir .    # serve the API + embedded mission-control board
+blizzard hub host .          # serve the API + embedded mission-control board
 ```
 
 Then open <http://127.0.0.1:8421/> — the default port from the `blizzard-hub.toml` that `blizzard hub init` scaffolds.

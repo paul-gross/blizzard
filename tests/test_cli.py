@@ -119,6 +119,69 @@ def test_dir_help_names_the_env_fallback(daemon: str, env_var: str, config_name:
     assert f"${env_var}" in result.output
 
 
+# `host` accepting a positional DIRECTORY like `init` does (issue #3). Each case drives
+# `host` against an *uninitialized* runtime dir: the daemon can't be driven to a live
+# `uvicorn.run`/`server.run` from a unit test (it blocks), but the config-load guard fails
+# fast, before serving, naming the exact directory it resolved — so it proves resolution
+# without starting anything. The conflict case never reaches that guard at all.
+@pytest.mark.parametrize(("daemon", "env_var", "config_name"), _DAEMONS)
+def test_host_accepts_positional_directory(daemon: str, env_var: str, config_name: str, tmp_path: Path) -> None:
+    root = tmp_path / "runtime"
+    result = CliRunner().invoke(blizzard, [daemon, "host", str(root)], env={env_var: None})
+    assert result.exit_code != 0
+    assert str(root) in result.output
+    assert "serving blizzard" not in result.output
+
+
+@pytest.mark.parametrize(("daemon", "env_var", "config_name"), _DAEMONS)
+def test_host_dir_option_still_works(daemon: str, env_var: str, config_name: str, tmp_path: Path) -> None:
+    root = tmp_path / "runtime"
+    result = CliRunner().invoke(blizzard, [daemon, "host", "--dir", str(root)], env={env_var: None})
+    assert result.exit_code != 0
+    assert str(root) in result.output
+    assert "serving blizzard" not in result.output
+
+
+@pytest.mark.parametrize(("daemon", "env_var", "config_name"), _DAEMONS)
+def test_host_positional_and_dir_option_agreeing(daemon: str, env_var: str, config_name: str, tmp_path: Path) -> None:
+    root = tmp_path / "runtime"
+    result = CliRunner().invoke(blizzard, [daemon, "host", str(root), "--dir", str(root)], env={env_var: None})
+    assert result.exit_code != 0
+    assert str(root) in result.output
+    assert "disagree" not in result.output
+
+
+@pytest.mark.parametrize(("daemon", "env_var", "config_name"), _DAEMONS)
+def test_host_positional_and_dir_option_conflict(daemon: str, env_var: str, config_name: str, tmp_path: Path) -> None:
+    positional = tmp_path / "positional"
+    flagged = tmp_path / "flagged"
+    result = CliRunner().invoke(blizzard, [daemon, "host", str(positional), "--dir", str(flagged)], env={env_var: None})
+    assert result.exit_code != 0
+    assert str(positional) in result.output
+    assert str(flagged) in result.output
+    assert "disagree" in result.output
+
+
+@pytest.mark.parametrize(("daemon", "env_var", "config_name"), _DAEMONS)
+def test_host_positional_beats_ambient_env_dir(daemon: str, env_var: str, config_name: str, tmp_path: Path) -> None:
+    # --dir carries its own envvar fallback, so a bare ambient $BZ_<daemon>_DIR is a
+    # ParameterSource.ENVIRONMENT value for dir_option — not a command-line one — and
+    # resolve_host_directory's conflict check only fires on a command-line tie. A
+    # positional disagreeing with the ambient env therefore wins outright, silently.
+    positional = tmp_path / "positional"
+    ambient = tmp_path / "ambient"
+    result = CliRunner().invoke(blizzard, [daemon, "host", str(positional)], env={env_var: str(ambient)})
+    assert result.exit_code != 0
+    assert str(positional) in result.output
+    assert "disagree" not in result.output
+
+
+def test_hub_host_help_shows_directory_argument() -> None:
+    result = CliRunner().invoke(blizzard, ["hub", "host", "--help"])
+    assert result.exit_code == 0
+    assert "DIRECTORY" in result.output
+
+
 def test_stub_verb_reports_not_implemented() -> None:
     # `runner status` is still a scaffold stub (ingest and the declarative pause are
     # implemented in this wave); a stub names itself.

@@ -18,8 +18,9 @@ from pathlib import Path
 import click
 import httpx
 import uvicorn
-from click.core import ParameterSource
 
+from blizzard.cli.host_directory import resolve_host_directory
+from blizzard.cli.param_rank import source_rank
 from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.config import ConfigError, RunnerConfig, socket_path_for
@@ -69,28 +70,17 @@ def _stub(verb: str) -> None:
 
 # The local verbs address the runner's own API through one of its two doors: the
 # socket under `--dir` (the default — no port, found from the runtime dir alone) or the TCP
-# listener named by `--runner-url`. Ranked by where each value came from, because `--dir`
-# always *has* a value: it defaults to "." and takes $BZ_RUNNER_DIR, which winter's per-env
-# band exports ambiently across a whole feature env — so "is it set?" cannot mean "did the
-# operator choose it?". An explicit flag beats an ambient variable; only a genuine tie on
-# the command line is ambiguous. Both from the environment resolves to the socket, the
-# default transport.
-_SOURCE_RANK = {
-    ParameterSource.COMMANDLINE: 2,
-    ParameterSource.ENVIRONMENT: 1,
-    ParameterSource.DEFAULT: 0,
-}
-
-
-def _rank(source: ParameterSource | None) -> int:
-    return _SOURCE_RANK.get(source, 0) if source is not None else 0
-
-
+# listener named by `--runner-url`. Ranked by where each value came from (`param_rank.py`),
+# because `--dir` always *has* a value: it defaults to "." and takes $BZ_RUNNER_DIR, which
+# winter's per-env band exports ambiently across a whole feature env — so "is it set?"
+# cannot mean "did the operator choose it?". An explicit flag beats an ambient variable;
+# only a genuine tie on the command line is ambiguous. Both from the environment resolves
+# to the socket, the default transport.
 def _local_api_client(directory: str, runner_url: str | None) -> tuple[httpx.Client, str]:
     """A client of the runner's local API, over the socket or TCP — never the store, never the hub."""
     ctx = click.get_current_context()
-    dir_rank = _rank(ctx.get_parameter_source("directory"))
-    url_rank = _rank(ctx.get_parameter_source("runner_url")) if runner_url is not None else -1
+    dir_rank = source_rank(ctx.get_parameter_source("directory"))
+    url_rank = source_rank(ctx.get_parameter_source("runner_url")) if runner_url is not None else -1
 
     if dir_rank == 2 and url_rank == 2:
         raise click.UsageError(
@@ -170,17 +160,22 @@ def migrate_cmd(directory: str, down: str | None) -> None:
 
 
 @runner.command()
+@click.argument("directory", required=False, default=None)
 @click.option(
     "--dir",
-    "directory",
+    "dir_option",
     default=DEFAULT_DIR,
     envvar=ENV_RUNNER_DIR,
     help="Runner runtime directory (overrides $BZ_RUNNER_DIR).",
 )
 @click.option("--host", "host_", default=None, help="Bind host (overrides config).")
 @click.option("--port", type=int, default=None, help="Bind port (overrides config).")
-def host(directory: str, host_: str | None, port: int | None) -> None:
-    """Become the blizzard-runner daemon: the reconciliation loop + the local API."""
+def host(directory: str | None, dir_option: str, host_: str | None, port: int | None) -> None:
+    """Become the blizzard-runner daemon: the reconciliation loop + the local API.
+
+    DIRECTORY (positional) and --dir are equivalent — pass one; giving both requires
+    they agree. Defaults to $BZ_RUNNER_DIR, then the cwd."""
+    directory = resolve_host_directory(directory, dir_option)
     try:
         config = RunnerConfig.load(Path(directory), host=host_, port=port)
     except ConfigError as exc:

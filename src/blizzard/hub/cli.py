@@ -17,6 +17,7 @@ import click
 import httpx
 import uvicorn
 
+from blizzard.cli.host_directory import resolve_host_directory
 from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.hub.app import build_hosted_app
 from blizzard.hub.config import ConfigError, HubConfig
@@ -80,13 +81,22 @@ def migrate_cmd(directory: str, down: str | None) -> None:
 
 
 @hub.command()
+@click.argument("directory", required=False, default=None)
 @click.option(
-    "--dir", "directory", default=DEFAULT_DIR, envvar=ENV_HUB_DIR, help="Hub runtime directory (overrides $BZ_HUB_DIR)."
+    "--dir",
+    "dir_option",
+    default=DEFAULT_DIR,
+    envvar=ENV_HUB_DIR,
+    help="Hub runtime directory (overrides $BZ_HUB_DIR).",
 )
 @click.option("--host", "host_", default=None, help="Bind host (overrides config).")
 @click.option("--port", type=int, default=None, help="Bind port (overrides config).")
-def host(directory: str, host_: str | None, port: int | None) -> None:
-    """Become the blizzard-hub daemon: HTTP API + SSE + the embedded web app."""
+def host(directory: str | None, dir_option: str, host_: str | None, port: int | None) -> None:
+    """Become the blizzard-hub daemon: HTTP API + SSE + the embedded web app.
+
+    DIRECTORY (positional) and --dir are equivalent — pass one; giving both requires
+    they agree. Defaults to $BZ_HUB_DIR, then the cwd."""
+    directory = resolve_host_directory(directory, dir_option)
     try:
         config = HubConfig.load(Path(directory), host=host_, port=port)
     except ConfigError as exc:
