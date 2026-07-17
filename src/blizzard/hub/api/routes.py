@@ -1,4 +1,4 @@
-"""Route routes — ``POST /api/routes`` (D-021/D-080).
+"""Route routes — ``POST /api/routes``.
 
 The claim: acquisition is the birth of a complete route fact. The hub accepts
 exactly one claim per chunk; a losing claim gets **409** (:class:`RouteClaimConflict`)
@@ -25,7 +25,7 @@ router = APIRouter(prefix="/api", tags=["routes"])
 
 @router.post("/routes", response_model=RouteClaimResponse, status_code=status.HTTP_201_CREATED)
 def claim_route(claim: RouteClaim, services: Annotated[HubServices, Depends(get_services)]) -> object:
-    """Claim a chunk; 409 if already claimed, else the first node envelope (D-080)."""
+    """Claim a chunk; 409 if already claimed, else the first node envelope."""
     chunk = services.chunks.get(claim.chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {claim.chunk_id}")
@@ -44,7 +44,7 @@ def claim_route(claim: RouteClaim, services: Annotated[HubServices, Depends(get_
         conflict = RouteClaimConflict(chunk_id=claim.chunk_id, held_by_runner_id=exc.held_by_runner_id)
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=conflict.model_dump())
     services.events.publish_chunk_changed(chunk.chunk_id, "running")
-    services.events.publish_queue_changed()  # the claim removed the chunk from the ready queue (D-080)
+    services.events.publish_queue_changed()  # the claim removed the chunk from the ready queue
     return RouteClaimResponse(
         chunk_id=result.route.chunk_id,
         runner_id=result.route.runner_id,

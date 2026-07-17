@@ -1,12 +1,12 @@
 """open-PR delivery facts — pr.opened / pr.closed (hub store tree)
 
-The ``open-pr`` deliver-mode facts (design/workflow-engine.md, D-059/D-065):
+The ``open-pr`` deliver-mode facts:
 
 * ``delivery_pr_opened`` — the coordinator's park record: a PR was opened for a repo's
-  branch, no terminal transition written, environments held (D-066).
+  branch, no terminal transition written, environments held.
 * ``delivery_pr_closed`` — the terminal fact a poll or ``POST /chunks/{id}/check-delivery``
   writes when the PR reaches a terminal state; ``merged`` distinguishes the two dispositions
-  and ``landed_commit`` carries the merge commit where one exists (D-065).
+  and ``landed_commit`` carries the merge commit where one exists.
 
 ``delivery_pr_opened`` is the one exception (as of ``20260716_2206_hub_pr_opened_idempotent``):
 importing it from ``schema.py`` here would mean this revision's *historical* shape

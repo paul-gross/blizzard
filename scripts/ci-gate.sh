@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The local equivalent of the PR-to-master merge gate (implementation/build.md).
+# The local equivalent of the PR-to-master merge gate.
 #
 # Runs exactly the checks the `pr` GitHub Actions workflow runs, in one command,
 # so an agent or human can reproduce the gate before pushing:

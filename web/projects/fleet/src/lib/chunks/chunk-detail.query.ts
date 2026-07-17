@@ -8,7 +8,7 @@ import { hubChunkKey } from '../query-keys';
  * status, current node, **transition history** (every node it visited, including the
  * review that failed once and looped back to build), and its inline **artifact store**
  * (the merged branch pointers and the review-findings notes). This is the surface
- * MVP criterion 9/11 renders (product/mvp.md).
+ * MVP criterion 9/11 renders.
  *
  * Reactive over the selected chunk id: pass an accessor (a signal getter) — the query
  * re-keys and re-fetches as the selection changes, and disables itself (`enabled`)

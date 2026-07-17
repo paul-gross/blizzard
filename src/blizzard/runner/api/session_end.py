@@ -5,7 +5,7 @@ session exits naturally, which posts here with the lease id it inherited from th
 environment (``BLIZZARD_LEASE_ID``). The daemon appends a durable session-end fact — the
 "declared done" signal (exit-is-done, D-055) — that startup crash-recovery reads to tell a
 worker killed mid-work (no fact, resume) from one that cleanly exited (fact, judge) after an
-involuntary restart (design/runner/loop.md, design/harness-adapters.md). The CLI is a pure
+involuntary restart. The CLI is a pure
 client; it never opens the store itself.
 
 Recorded unconditionally, like the heartbeat — a fact, not a status: the lease may already
@@ -37,7 +37,7 @@ class SessionEndResponse(BaseModel):
 
 @router.post("/leases/{lease_id}/session-end", response_model=SessionEndResponse)
 def session_end(lease_id: str, request: Request) -> SessionEndResponse:
-    """Record a lease's session-end, stamped with the injected clock (D-055/D-082)."""
+    """Record a lease's session-end, stamped with the injected clock."""
     store: IWriteRunnerStore | None = getattr(request.app.state, "runner_store", None)
     clock: IClock | None = getattr(request.app.state, "clock", None)
     if store is None or clock is None:

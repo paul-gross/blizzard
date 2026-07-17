@@ -1,4 +1,4 @@
-"""The chunk detail carries the whole aggregate the board renders (D-036) — component tier.
+"""The chunk detail carries the whole aggregate the board renders — component tier.
 
 ``GET /chunks/{id}`` is the board's chunk view and the envelope feed: it must carry the
 derived status, the route, the PM pointers, the full transition history (with the
@@ -96,13 +96,13 @@ def test_detail_carries_the_full_aggregate(tmp_path: Path) -> None:
     assert detail["route"]["environment_ids"] == ["e1", "e2"]
     assert [p["ref"] for p in detail["pm_pointers"]] == [_POINTER["ref"]]
 
-    # Board-legible identity (D-075/D-110): the current node's human name and the
+    # Board-legible identity: the current node's human name and the
     # pointer's `{source}#{number}` label are resolved server-side onto the detail.
     assert detail["current_node_id"] == nodes["approve-gate"]
     assert detail["current_node_name"] == "approve-gate"
     assert detail["pm_pointers"][0]["label"] == "default#7"
 
-    # Full transition history with the judgement choice on the edge (D-027/D-036), and the
+    # Full transition history with the judgement choice on the edge, and the
     # nodes' human graph names resolved onto each edge so the timeline reads build -> gate.
     assert len(detail["history"]) == 1
     step = detail["history"][0]
@@ -113,13 +113,13 @@ def test_detail_carries_the_full_aggregate(tmp_path: Path) -> None:
     assert step["choice_name"] == "pass"
 
     # Inline artifact store — the git-commit reference (the hub stores the pointer, D-012),
-    # with the forge branch link derived from the chunk's issue-shaped pointer (D-075).
+    # with the forge branch link derived from the chunk's issue-shaped pointer.
     assert len(detail["artifacts"]) == 1
     art = detail["artifacts"][0]
     assert art["kind"] == "git_commit"
     assert (art["repo"], art["branch_name"], art["commit_hash"]) == ("acme/widget", "feature/widget", "abc123")
     assert art["branch_url"] == "http://forge.local/acme/widget/tree/feature/widget"
 
-    # The open gate decision with its choices (D-045).
+    # The open gate decision with its choices.
     assert detail["decision"]["node_name"] == "approve-gate"
     assert {c["name"] for c in detail["decision"]["choices"]} == {"approve", "reject"}

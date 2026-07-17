@@ -1,4 +1,4 @@
-"""The ``blizzard`` CLI — one binary, verbs namespaced by target (D-061).
+"""The ``blizzard`` CLI — one binary, verbs namespaced by target.
 
 ``blizzard runner <cmd>`` hits the runner's local API, ``blizzard hub <cmd>`` hits
 the hub's HTTP API, and each noun's ``host`` verb *becomes* that daemon. A pure

@@ -9,7 +9,7 @@ independent surfaces carry a pause and this is the machine-local one —
   next-node, a requeue or claim-adopt respawn, and ADVANCE's judgement resume), defers
   REAP's kill of a stalled worker, and defers escalation at an exhausted retry budget —
   and is reachable with the hub down: the operator contract's standing requirement
-  ([api.md]). Pause/start facts append and the flag derives from the newest (D-004/D-039).
+  ([api.md]). Pause/start facts append and the flag derives from the newest.
 * **hub** (``PATCH /runners/{id}`` at the hub, mirrored here by PULL) — the fleet-level
   brake. Untouched by this route; clear it where it was set (``blizzard hub resume``).
 
@@ -85,7 +85,7 @@ def patch_runner(request_body: RunnerControlPatch, request: Request) -> RunnerCo
             detail="runner store not wired — start via `blizzard runner host`",
         )
     now = clock.now()
-    # The brake and the report the board reads it from are one write (D-069): the hub can
+    # The brake and the report the board reads it from are one write: the hub can
     # only render what it holds, so a brake it is never told about would leave a runner
     # rendered as claiming after it has stopped — and PULL only mirrors hub→runner, so
     # nothing would ever repair it. The buffer delivers whenever the hub is next reachable,

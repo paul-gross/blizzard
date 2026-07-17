@@ -1,7 +1,7 @@
-"""SSE emission across the fact lifecycle (D-067) — asserted via TestClient stream reads.
+"""SSE emission across the fact lifecycle — asserted via TestClient stream reads.
 
 Every hub fact that changes a chunk's derived state re-broadcasts a typed event on the
-live stream (design/domain/events.md): a forwarded ask emits ``question-asked``, an
+live stream: a forwarded ask emits ``question-asked``, an
 answer ``question-answered``; a graph gate opening emits ``decision-opened`` and its
 resolution ``decision-resolved``. Each test drives the wired hub, then reads the replayed
 buffer off ``GET /api/events/stream`` — a real stream read, deterministic because the

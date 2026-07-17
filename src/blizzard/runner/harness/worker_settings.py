@@ -1,11 +1,11 @@
-"""The runner-owned worker hook file (design/harness-adapters.md).
+"""The runner-owned worker hook file.
 
 Hook delivery is spawn-scoped and adapter-owned: the Claude Code adapter passes this
 settings file on the command line (``claude -p --settings <file>``), carrying the
 worker hook set. The ``PostToolUse`` hook fires ``blizzard runner heartbeat`` on every
-tool call — progress detection with no agent cooperation (D-069). The ``SessionEnd`` hook
+tool call — progress detection with no agent cooperation. The ``SessionEnd`` hook
 fires ``blizzard runner session-end`` when the session exits, recording the "declared done"
-signal startup crash-recovery reads after an involuntary restart (D-055/D-082). Both verbs
+signal startup crash-recovery reads after an involuntary restart. Both verbs
 take their identity from the spawn environment (``BLIZZARD_LEASE_ID`` /
 ``BLIZZARD_RUNNER_URL``), so the hook commands need no arguments.
 
@@ -24,7 +24,7 @@ from typing import Any
 
 #: The command a worker's PostToolUse hook runs — a pure client of the local API.
 HEARTBEAT_HOOK_COMMAND = "blizzard runner heartbeat"
-#: The command a worker's SessionEnd hook runs — the "declared done" signal (D-055/D-082).
+#: The command a worker's SessionEnd hook runs — the "declared done" signal.
 SESSION_END_HOOK_COMMAND = "blizzard runner session-end"
 
 

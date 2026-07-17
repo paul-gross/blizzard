@@ -3,9 +3,9 @@
 Implements :class:`~blizzard.runner.environments.provider.IWorkspaceProvider` by
 driving the **real** winter CLI against a workspace root — in verification the
 ``blizzard-mock`` fixture workspace (a real winter workspace over bare ``file://``
-origins, implementation/verification.md). The pool is the provider's static config
-(D-019); which envs are held it learns from the ``held_ids`` the runner passes in
-(D-062) — it keeps no allocation state of its own.
+origins, implementation/verification.md). The pool is the provider's static config;
+which envs are held it learns from the ``held_ids`` the runner passes in
+ — it keeps no allocation state of its own.
 
 ``acquire`` picks a free env and performs a **full reset-to-base** (reset-on-acquire,
 D-021): refresh standalones once per pass, then per env fetch → forced base checkout →
@@ -100,12 +100,12 @@ class WinterWorkspaceProvider:
         return acquired
 
     def release(self, environment_id: str) -> None:
-        # No-op mark (D-062): cleaning defers to the next acquire; the hold is a
+        # No-op mark: cleaning defers to the next acquire; the hold is a
         # runner-store fact, never the provider's to clear.
         _log.info("released environment (no-op mark)", environment_id=environment_id)
 
     def _prepare(self, env: str) -> Path:
-        """Reset-on-acquire: return the env fully reset to base and working (D-021)."""
+        """Reset-on-acquire: return the env fully reset to base and working."""
         workdir = self._workspace_root / env
         run = self._winter.run
         root = self._workspace_root

@@ -9,7 +9,7 @@ import {
 } from '../api/hub';
 import { hubChunkKey, hubChunksKey } from '../query-keys';
 
-/** Answer a chunk's open question — the board's counterpart of `blizzard hub answer` (D-052). */
+/** Answer a chunk's open question — the board's counterpart of `blizzard hub answer`. */
 export interface AnswerVars {
   readonly questionId: string;
   readonly answer: string;
@@ -41,7 +41,7 @@ export function injectAnswerQuestionMutation() {
   }));
 }
 
-/** Resolve a chunk's open gate decision — the board's choice buttons (D-042/D-052). */
+/** Resolve a chunk's open gate decision — the board's choice buttons. */
 export interface ResolveVars {
   readonly decisionId: string;
   readonly choice: string;
@@ -51,7 +51,7 @@ export interface ResolveVars {
 
 /**
  * `POST /api/decisions/{id}/resolution` — a person picks one choice, first-write-wins
- * CAS (D-045), through the generated client (bzh:generated-client). The holding runner
+ * CAS, through the generated client (bzh:generated-client). The holding runner
  * records the resolving transition over its pull; here we re-read the chunk and the list.
  */
 export function injectResolveDecisionMutation() {

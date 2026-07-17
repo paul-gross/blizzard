@@ -89,7 +89,7 @@ def list_open_questions(services: Annotated[HubServices, Depends(get_services)])
 
 @router.get("/questions/{question_id}", response_model=QuestionView)
 def get_question(question_id: str, services: Annotated[HubServices, Depends(get_services)]) -> QuestionView:
-    """One question with its derived answer state — the runner's answer poll (D-004)."""
+    """One question with its derived answer state — the runner's answer poll."""
     row = services.chunks.get_question(question_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown question {question_id}")

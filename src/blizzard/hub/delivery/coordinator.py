@@ -1,19 +1,19 @@
-"""The deliver hub-node coordinator (D-030/D-079/D-091) — the merge queue.
+"""The deliver hub-node coordinator — the merge queue.
 
 Delivery is a **hub-executed node**: when a transition lands on it, the hub's
 singleton coordinator authors the step's exit transition under a lease and epoch it
-mints itself (D-079). It never holds code — the chunk's branch artifacts were pushed
-to the forge before submission (D-026), so the coordinator lands them through the
+mints itself. It never holds code — the chunk's branch artifacts were pushed
+to the forge before submission, so the coordinator lands them through the
 forge seam (:class:`~blizzard.hub.delivery.forge.IForgeDelivery`).
 
-Within a chunk, repos land **serially, best-effort** (D-091): each land is a per-repo
+Within a chunk, repos land **serially, best-effort**: each land is a per-repo
 fact, a redelivery skips the already-landed repos (reconciliation), and delivery
 completes only when every repo has landed — then a terminal ``delivery.landed`` fact
 flips the derived status to ``done`` and the route is released (environments freed,
 D-066). A conflict on the unlanded remainder routes intra-graph to the chunk's entry
-node in the MVP (D-086), partial lands retained for the redelivery reconcile.
+node in the MVP, partial lands retained for the redelivery reconcile.
 
-The strict-FIFO, one-chunk-at-a-time queue (D-057) is, in the walking skeleton, the
+The strict-FIFO, one-chunk-at-a-time queue is, in the walking skeleton, the
 synchronous single-writer daemon itself: :meth:`deliver` runs to completion for one
 chunk before the next apply proceeds. A standing background singleton bolts onto this
 same method without reshaping it.
@@ -39,7 +39,7 @@ _HUB_RUNNER_ID = "hub"
 # Delivery runs synchronously inside the completion-apply request, so an armed point
 # SIGKILLs the hub daemon mid-delivery; the runner's completion stays buffered (the POST
 # failed) and re-flushes idempotently after the hub restarts, while the per-repo lands
-# reconcile (D-091). These bracket each per-repo land and the terminal fact.
+# reconcile. These bracket each per-repo land and the terminal fact.
 _CP_DELIVER_BEFORE_REPO = crashpoint("deliver.before-repo-land", "about to land a repo; not yet merged/recorded")
 _CP_DELIVER_AFTER_REPO = crashpoint("deliver.after-repo-land", "repo landed and recorded; remainder pending")
 _CP_DELIVER_BEFORE_TERMINAL = crashpoint("deliver.before-terminal", "all repos landed; terminal fact not written")
@@ -47,11 +47,11 @@ _CP_DELIVER_AFTER_TERMINAL = crashpoint("deliver.after-terminal", "terminal fact
 
 
 class DeliverOutcome(StrEnum):
-    """The terminal outcome of one deliver-node execution (D-086)."""
+    """The terminal outcome of one deliver-node execution."""
 
     LANDED = "landed"
     CONFLICT = "conflict"
-    PR_OPENED = "pr-opened"  # open-pr mode: PRs opened, chunk parked awaiting external merge (D-059)
+    PR_OPENED = "pr-opened"  # open-pr mode: PRs opened, chunk parked awaiting external merge
 
 
 @dataclass(frozen=True)
@@ -62,7 +62,7 @@ class DeliverResult:
 
 
 class MergeQueueCoordinator:
-    """Executes the deliver hub node for one chunk (D-030/D-091)."""
+    """Executes the deliver hub node for one chunk."""
 
     def __init__(
         self, *, chunks: IWriteChunkRepository, forge: IForgeDelivery, clock: IClock, base_branch: str = "main"
@@ -70,7 +70,7 @@ class MergeQueueCoordinator:
         self._chunks = chunks
         self._forge = forge
         self._clock = clock
-        # The branch every PR/merge targets (D-060). ``main`` matches the verification forge's
+        # The branch every PR/merge targets. ``main`` matches the verification forge's
         # bare origins; a real GitHub forge whose default branch differs (e.g. ``master``) sets
         # this at the composition root from ``BZ_FORGE_BASE_BRANCH``.
         self._base_branch = base_branch
@@ -89,7 +89,7 @@ class MergeQueueCoordinator:
         for row in pointers:
             repo = row.repo or ""
             if repo in already_landed:
-                continue  # reconciliation — a prior partial land, skipped (D-091)
+                continue  # reconciliation — a prior partial land, skipped
             _CP_DELIVER_BEFORE_REPO.reached()
             result = self._forge.land(_landing_request(row, self._base_branch))
             if result.disposition is LandingDisposition.CONFLICT:
@@ -108,7 +108,7 @@ class MergeQueueCoordinator:
         now = self._clock.now()
         _CP_DELIVER_BEFORE_TERMINAL.reached()
         # One atomic, idempotent write: the hub lease, delivery.landed, the terminal
-        # transition, and the route release land together (D-036), so a mid-delivery
+        # transition, and the route release land together, so a mid-delivery
         # ``kill -9`` never leaves the chunk landed-but-not-terminal, and a redelivery
         # after a crash re-enters harmlessly (finalize is a no-op once landed).
         self._chunks.finalize_delivery(
@@ -130,18 +130,18 @@ class MergeQueueCoordinator:
         The counterpart to the merge path: instead of landing, the coordinator opens a PR
         for each repo's branch and records a ``pr.opened`` fact — writing **no** terminal
         transition and **no** route release, so the chunk derives ``delivering`` (awaiting an
-        external merge) with its environments held (D-066). A redelivery skips repos that
+        external merge) with its environments held. A redelivery skips repos that
         already have a ``pr.opened`` fact (reconciliation, mirroring ``landed_repos``); the
         forge's ``open_pr`` additionally reuses an existing PR for the head, closing the
         crash window between the forge create and the fact write. A poll or the on-demand
-        ``check-delivery`` route later detects the merge and terminates the chunk (D-065).
+        ``check-delivery`` route later detects the merge and terminates the chunk.
         """
         already_open = {pr.repo for pr in self._chunks.open_prs(chunk.chunk_id)}
         opened: list[str] = []
         for row in pointers:
             repo = row.repo or ""
             if repo in already_open:
-                continue  # reconciliation — a PR was already opened for this repo (D-059)
+                continue  # reconciliation — a PR was already opened for this repo
             handle = self._forge.open_pr(_landing_request(row, self._base_branch))
             self._chunks.record_pr_opened(
                 chunk.chunk_id,
@@ -171,7 +171,7 @@ class MergeQueueCoordinator:
             at=now,
             artifacts=[],
         )
-        # Route retained: the conflict routes back into the runner's warm environments (D-066).
+        # Route retained: the conflict routes back into the runner's warm environments.
         return DeliverResult(
             outcome=DeliverOutcome.CONFLICT,
             landed_repos=sorted(self._chunks.landed_repos(chunk.chunk_id)),

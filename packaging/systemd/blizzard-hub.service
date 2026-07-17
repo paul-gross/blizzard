@@ -1,5 +1,5 @@
 # The blizzard-hub daemon — the fleet's HTTP API + SSE + embedded web app, one
-# binary is the whole hub deployment (design/cli.md, D-061). Installed as the
+# binary is the whole hub deployment. Installed as the
 # hub half of the colocated single-machine pair (product/mvp.md journey); the
 # runner half is blizzard-runner.service. Setup + the reboot-recovery contract
 # this unit implements: docs/deployment.md.

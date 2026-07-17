@@ -1,4 +1,4 @@
-"""The event broker and the SSE stream (D-067) — typed emission + live fan-out (component tier)."""
+"""The event broker and the SSE stream — typed emission + live fan-out (component tier)."""
 
 from __future__ import annotations
 

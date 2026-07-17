@@ -1,6 +1,6 @@
 """Lease wire bodies — the runner panel's read model (issue #28).
 
-The runner-local, hub-free surface (design/runner/api.md): ``GET /api/leases`` lists
+The runner-local, hub-free surface: ``GET /api/leases`` lists
 every active lease with its derived state (``bzh:facts-not-status``) — an active
 lease *is* an active agent. Modeled on ``wire/runner.py``'s ``RunnerView``/
 ``RunnerListResponse`` shape.

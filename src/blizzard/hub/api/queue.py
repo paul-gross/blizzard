@@ -1,8 +1,8 @@
-"""Queue routes — peek, reorder, and group (D-080/D-048).
+"""Queue routes — peek, reorder, and group.
 
 ``GET /queue/peek`` is the read-only ready-queue peek a runner's FILL step does before
 claiming; ready is a **derived** status (a minted chunk with no live route, D-004) and
-the queue's order is an explicit hub-side property (D-048). ``POST /queue/reorder`` is
+the queue's order is an explicit hub-side property. ``POST /queue/reorder`` is
 the board's Prioritize control, and ``POST /chunks/{id}/group`` is the Group control —
 both shape the ready queue without executing work. Controllers stay read-only over the
 store and delegate the writes to the queue-shaping domain services
@@ -47,7 +47,7 @@ def _entries(ready: list[Chunk]) -> list[QueuePeekEntry]:
 
 @router.get("/queue/peek", response_model=QueuePeekResponse)
 def peek_queue(services: Annotated[HubServices, Depends(get_services)]) -> QueuePeekResponse:
-    """The hub-ordered ready queue, read-only (D-080) — honours reorder + grouping (D-048)."""
+    """The hub-ordered ready queue, read-only — honours reorder + grouping."""
     return QueuePeekResponse(entries=_entries(services.queue.ordered_ready()))
 
 
@@ -55,7 +55,7 @@ def peek_queue(services: Annotated[HubServices, Depends(get_services)]) -> Queue
 def reorder_queue(
     request: QueueReorderRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> QueueReorderResponse:
-    """Move a ready chunk to a queue position — the board's Prioritize control (D-048)."""
+    """Move a ready chunk to a queue position — the board's Prioritize control."""
     try:
         services.queue.reorder(request.chunk_id, to_index=request.position)
     except ChunkNotFound as exc:
@@ -72,7 +72,7 @@ def group_chunks(
     request: ChunkGroupRequest,
     services: Annotated[HubServices, Depends(get_services)],
 ) -> object:
-    """Merge unacquired chunks into ``chunk_id`` — the board's Group control (D-048/D-076)."""
+    """Merge unacquired chunks into ``chunk_id`` — the board's Group control."""
     try:
         survivor = services.group.group(chunk_id, request.merge_chunk_ids)
     except ChunkNotFound as exc:

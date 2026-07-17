@@ -1,12 +1,12 @@
 """The Claude Code adapter binding (``bzh:pluggable-seams``).
 
 Implements :class:`~blizzard.runner.harness.adapter.IHarnessAdapter` against the
-``claude`` non-interactive CLI (design/harness-adapters.md):
+``claude`` non-interactive CLI:
 
 * **spawn** — ``<binary> -p --output-format json --session-id <sid> --settings
   <worker-settings> <prompt>`` launched headless (fire-and-forget). Claude honors
   the pre-assigned ``--session-id``, so the returned session id is the hint; the pid
-  and its start time are stamped from the parent right after launch (D-092).
+  and its start time are stamped from the parent right after launch.
 * **judge** — ``<binary> -p --output-format json --resume <sid> <prompt>`` run
   synchronously, returning the raw reply for :meth:`parse_verdict` (the two-phase
   judgement elicitation, D-038). Kill-then-resume: never run against a live process.
@@ -25,7 +25,7 @@ Confined to ``internal/`` (``bzh:dependency-inversion``).
 
 The first positional of ``judge`` / ``resume_with_message`` / ``resume_command`` is
 the **working directory** — the provider-returned workdir the runner resolves from
-the chunk→env binding (design/runner/environments.md) and supplies for the op.
+the chunk→env binding and supplies for the op.
 """
 
 from __future__ import annotations
@@ -73,10 +73,10 @@ class ClaudeCodeAdapter:
     ) -> None:
         self._binary = binary
         self._settings_path = settings_path
-        # The model passed to every ``claude`` spawn (D-092). Pinned so a worker never
+        # The model passed to every ``claude`` spawn. Pinned so a worker never
         # falls through to the operator's ambient default; defaults to Opus.
         self._model = model
-        # The headless permission mode passed to ``claude -p`` (D-092). A non-interactive
+        # The headless permission mode passed to ``claude -p``. A non-interactive
         # worker has no one to approve tool use, so ``default`` mode blocks every edit and
         # non-trivial bash — the worker can inspect but never build. A workspace-isolated
         # runner sets ``bypassPermissions`` so the sandboxed worktree worker can edit,
@@ -149,7 +149,7 @@ class ClaudeCodeAdapter:
         return name or None
 
     def parse_assessment(self, output: str) -> str:
-        """The reply text following ``</Choice>`` — the worker's prose assessment (D-077)."""
+        """The reply text following ``</Choice>`` — the worker's prose assessment."""
         text = self._result_text(output)
         close = text.find(_CHOICE_CLOSE)
         if close == -1:

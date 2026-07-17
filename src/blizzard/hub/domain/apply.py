@@ -1,4 +1,4 @@
-"""Completion apply — the advancement checkpoint (D-027/D-036/D-072/D-090).
+"""Completion apply — the advancement checkpoint.
 
 ``POST /chunks/{id}/completions`` submits one node-step's completion; this rule
 applies it. The write is **atomic** (the transition and its artifacts land together,
@@ -7,7 +7,7 @@ rejected before anything is written — a zombie's work never lands, D-007), and
 **idempotent** (a re-applied completion — the lost-response replay, D-090 — returns
 the same outcome without a second transition).
 
-The apply-response is what lets the runner continue in place (D-072): a runner node
+The apply-response is what lets the runner continue in place: a runner node
 returns the next envelope; a hub node (deliver) is taken over by the coordinator and
 returns ``hub_node_taken``; the reserved terminal returns ``done``; a human gate
 parks the chunk on an open **Decision** (``parked_at_gate``, D-045). Ordering matters
@@ -15,10 +15,10 @@ parks the chunk on an open **Decision** (``parked_at_gate``, D-045). Ordering ma
 completion that delivered the chunk still returns its original outcome rather than a
 spurious ``failure``.
 
-Human gates cut two ways here (D-045). A transition **into** a human-judged node opens
+Human gates cut two ways here. A transition **into** a human-judged node opens
 a decision and parks (the graph gate). A transition **out of** one is only legal as
-the **resolving transition** — a completion carrying the resolved decision's id
-(D-027); a plain worker transition out of a gate is rejected (human signoff required).
+the **resolving transition** — a completion carrying the resolved decision's id;
+a plain worker transition out of a gate is rejected (human signoff required).
 """
 
 from __future__ import annotations
@@ -48,7 +48,7 @@ def _failure(detail: str) -> ApplyResponse:
 
 
 class ApplyService:
-    """Apply a node-step completion to a chunk, fenced and idempotent (D-072)."""
+    """Apply a node-step completion to a chunk, fenced and idempotent."""
 
     def __init__(
         self,
@@ -66,7 +66,7 @@ class ApplyService:
         if from_node is None:
             return _failure(f"no node {submission.from_node_id} in graph {graph.graph_id}")
 
-        # Idempotent replay first (D-090): a completion already applied at this
+        # Idempotent replay first: a completion already applied at this
         # (node, epoch) returns its original outcome — even once the chunk is terminal.
         # This covers both an ordinary transition and a gate-resolving one (same key).
         replayed = self._chunks.accepted_transition_target(
@@ -75,7 +75,7 @@ class ApplyService:
         if replayed is not None:
             return self._respond(chunk, graph, from_node, submission, to_node_id=replayed, run_coordinator=False)
 
-        # A completion carrying a decision id is a gate-resolving transition (D-045) —
+        # A completion carrying a decision id is a gate-resolving transition —
         # graph gate (human node) or runner-config gate (worker node): validate and
         # record it against the resolved decision, marking that decision transitioned.
         if submission.decision_id is not None:
@@ -119,7 +119,7 @@ class ApplyService:
     def _apply_gate_resolution(
         self, chunk: Chunk, graph: Graph, gate_node: Node, submission: CompletionSubmission
     ) -> ApplyResponse:
-        """Advance a chunk past a resolved gate — the resolving transition (D-027/D-045).
+        """Advance a chunk past a resolved gate — the resolving transition.
 
         The runner picks the resolution up on PULL and submits this to record the
         transition along the chosen edge, referencing the decision (which marks it
@@ -159,7 +159,7 @@ class ApplyService:
             epoch=submission.epoch,
             runner_id=submission.runner_id,
             at=self._clock.now(),
-            artifacts=[],  # the decision's artifacts already landed (D-045)
+            artifacts=[],  # the decision's artifacts already landed
             decision_id=submission.decision_id,
         )
         return self._respond(
@@ -196,7 +196,7 @@ class ApplyService:
             )
         if to_node.judged_by is JudgedBy.HUMAN:
             # A transition INTO a human-judged node opens a graph gate: park on a decision
-            # carrying the node's choice set (D-045). Only on the real apply, never a replay.
+            # carrying the node's choice set. Only on the real apply, never a replay.
             if run_coordinator:
                 self._open_graph_gate_decision(chunk, to_node, epoch=submission.epoch)
             return ApplyResponse(outcome=ApplyOutcome.PARKED_AT_GATE, detail=f"parked at gate `{to_node.name}`")
@@ -217,7 +217,7 @@ class ApplyService:
         The node's own choices become the decision's; no artifacts are attached (they
         arrived with the transition into the gate). A replay of the arriving transition
         never reaches here (run_coordinator=False), and the natural-key probe guards a
-        double-open in any other path (D-045)."""
+        double-open in any other path."""
         if self._chunks.find_decision(chunk.chunk_id, node_id=gate_node.node_id, epoch=epoch) is not None:
             return
         self._chunks.record_decision(

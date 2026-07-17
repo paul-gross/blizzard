@@ -20,7 +20,7 @@ which arms each on the restart process. The registry is partitioned accordingly.
 
 The ``abandon.*`` family is a second exception, for the same reason: the boundary is
 reached only when the hub reassigns or detaches a chunk out from under an active
-lease (D-088), which the plain ``build -> deliver`` scenario never triggers. It is
+lease, which the plain ``build -> deliver`` scenario never triggers. It is
 swept by its own dedicated scenario (``test_kill9_at_abandon_crash_point``), which
 detaches a running chunk mid-flight via the real hub endpoint and proves the crash
 recovers through RESUME, not through REAP's retry path (blizzard#38 slice 5).
@@ -185,7 +185,7 @@ def _ingest_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str) -> s
     ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{number}"]})
     assert ingested.status_code == 201, ingested.text
     chunk_id = ingested.json()["chunk_id"]
-    # Ingest rests not-ready (D-103) — promote so the sweep's scenarios claim it as before.
+    # Ingest rests not-ready — promote so the sweep's scenarios claim it as before.
     assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
     assert hub.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
     return chunk_id
@@ -323,7 +323,7 @@ def _ingest_hanging_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: s
     ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{number}"]})
     assert ingested.status_code == 201, ingested.text
     chunk_id = ingested.json()["chunk_id"]
-    # Ingest rests not-ready (D-103) — promote so the resume scenarios claim it as before.
+    # Ingest rests not-ready — promote so the resume scenarios claim it as before.
     assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
     assert hub.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
     return chunk_id
@@ -647,7 +647,7 @@ def _ingest_abandon_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: s
     ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{number}"]})
     assert ingested.status_code == 201, ingested.text
     chunk_id = ingested.json()["chunk_id"]
-    assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # rests not-ready otherwise (D-103)
+    assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # rests not-ready otherwise
     return chunk_id
 
 
@@ -696,7 +696,7 @@ def _wait_for_closure(runner_dir: Path, lease_id: str, *, timeout: float = 30.0)
 def test_kill9_at_abandon_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
     """A ``kill -9`` right after the abandon's kill (worker dead, envs still held) still recovers.
 
-    A live operator detach (D-088) is the new way this window is reached (blizzard#38 slice 5):
+    A live operator detach is the new way this window is reached (blizzard#38 slice 5):
     the chunk is claimed and hung mid-flight, the operator detaches it via the real hub endpoint,
     and the armed runner's next PULL discovers the detach, kills the hung worker, and self-SIGKILLs
     at ``point`` before the environments are released. The claim under test (plan.md §2 property 4)
@@ -736,7 +736,7 @@ def test_kill9_at_abandon_crash_point(crash_env: CrashEnv, tmp_path: Path, point
         assert pid_before is not None
         assert _session_ends(runner_dir) == set(), "the hung worker must not have declared done yet"
 
-        # The operator detaches the running chunk (D-088) — a live route release, not a requeue.
+        # The operator detaches the running chunk — a live route release, not a requeue.
         detached = hub.post(f"/api/chunks/{chunk_id}/detach")
         assert detached.status_code == 202, detached.text
         assert hub.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready", "detach did not release the route"

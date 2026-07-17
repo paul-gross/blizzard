@@ -1,6 +1,6 @@
 """Git reset-on-acquire plumbing for the winter binding (package-private).
 
-Reset-on-acquire (D-021, design/runner/environments.md) drives winter's cross-repo
+Reset-on-acquire drives winter's cross-repo
 verbs for everything winter can express — fetch, forced base checkout, disconnect.
 What remains here is the one step winter has no verb for: removing the previous
 tenant's **untracked** files (``winter ws checkout --force`` hard-resets tracked

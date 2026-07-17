@@ -68,7 +68,7 @@ class ChunkStore:
         with self._engine.connect() as conn:
             row = conn.execute(select(s.chunks).where(s.chunks.c.chunk_id == chunk_id)).one_or_none()
             if row is None or chunk_id in self._grouped_ids(conn):
-                return None  # a grouped-away chunk is ephemeral — gone from every read (D-047)
+                return None  # a grouped-away chunk is ephemeral — gone from every read
             return self._chunk(conn, row)
 
     def load_facts(self, chunk_id: str) -> ChunkFacts | None:
@@ -228,7 +228,7 @@ class ChunkStore:
         with self._engine.connect() as conn:
             grouped = self._grouped_ids(conn)
             rows = conn.execute(select(s.chunks).order_by(s.chunks.c.minted_at.desc())).all()
-            # A grouped-away chunk is ephemeral: removed from every listing (D-047/D-048).
+            # A grouped-away chunk is ephemeral: removed from every listing.
             return [self._chunk(conn, row) for row in rows if row.chunk_id not in grouped]
 
     def list_ready(self) -> list[Chunk]:
@@ -258,7 +258,7 @@ class ChunkStore:
             ]
         for chunk_id in chunk_ids:
             if chunk_id in grouped:
-                continue  # the pointer moved to the survivor; the grouped chunk is gone (D-047)
+                continue  # the pointer moved to the survivor; the grouped chunk is gone
             if self._status(chunk_id) not in _TERMINAL:
                 return chunk_id
         return None
@@ -382,7 +382,7 @@ class ChunkStore:
 
     def record_promote(self, chunk_id: str, *, at: datetime) -> None:
         # Idempotent by chunk_id: a chunk already promoted keeps its first row, so a
-        # double promote (board click, CLI retry) is a harmless no-op (D-103).
+        # double promote (board click, CLI retry) is a harmless no-op.
         with self._engine.begin() as conn:
             if self._exists(conn, s.chunk_promoted, chunk_id):
                 return
@@ -545,7 +545,7 @@ class ChunkStore:
     ) -> None:
         # Idempotent per (chunk, repo) at the DB layer (``uq_delivery_pr_opened_chunk_repo``),
         # not just the coordinator's DB-backed skip-set read: the deliver node runs on both a
-        # fresh apply and an idempotent replay (D-090), and a racing second insert for the
+        # fresh apply and an idempotent replay, and a racing second insert for the
         # same repo collides on the unique constraint — caught here and discarded as the
         # harmless duplicate it is, mirroring the ``question_answers`` CAS below. The row's
         # own FK (``chunk_id``) and five NOT NULLs can raise the same ``IntegrityError`` on a
@@ -588,7 +588,7 @@ class ChunkStore:
         transition_id: str,
         at: datetime,
     ) -> bool:
-        """Terminate an open-pr delivery **atomically and idempotently** (D-065).
+        """Terminate an open-pr delivery **atomically and idempotently**.
 
         The open-pr counterpart to :meth:`finalize_delivery`: the per-repo ``pr.closed``
         facts, the hub lease, the terminal transition, and the route release are written
@@ -758,7 +758,7 @@ class ChunkStore:
                 select(s.decision_resolutions.c.decision_id).where(s.decision_resolutions.c.decision_id == decision_id)
             ).one_or_none()
             if existing is not None:
-                return False  # first-write-wins: the loser is told who won (D-045)
+                return False  # first-write-wins: the loser is told who won
             conn.execute(
                 insert(s.decision_resolutions).values(
                     decision_id=decision_id, choice=choice, resolved_by=resolved_by, resolved_at=at
@@ -771,12 +771,12 @@ class ChunkStore:
             conn.execute(insert(s.requeues).values(chunk_id=chunk_id, requeued_at=at))
 
     def record_queue_position(self, chunk_id: str, *, position: float, at: datetime) -> None:
-        """Append the moved chunk's new ready-queue position; order derives (D-048/D-004)."""
+        """Append the moved chunk's new ready-queue position; order derives."""
         with self._engine.begin() as conn:
             conn.execute(insert(s.queue_positions).values(chunk_id=chunk_id, position=position, set_at=at))
 
     def add_pm_pointers(self, chunk_id: str, pointers: list[PmPointer], *, at: datetime) -> None:
-        """Fold pointers into the survivor of a group, de-duped by (source, ref) (D-076)."""
+        """Fold pointers into the survivor of a group, de-duped by (source, ref)."""
         with self._engine.begin() as conn:
             existing = {
                 (p.source, p.ref)
@@ -795,7 +795,7 @@ class ChunkStore:
                 existing.add((pointer.source, pointer.ref))
 
     def record_grouped(self, chunk_id: str, *, grouped_into: str, at: datetime) -> None:
-        """Record ``chunk.grouped`` — the merged-away chunk is ephemeral now (D-048/D-047)."""
+        """Record ``chunk.grouped`` — the merged-away chunk is ephemeral now."""
         with self._engine.begin() as conn:
             conn.execute(insert(s.chunk_grouped).values(chunk_id=chunk_id, grouped_into=grouped_into, grouped_at=at))
 

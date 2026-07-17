@@ -35,7 +35,7 @@ describe('QueuePanel', () => {
 
   afterEach(() => stub.restore());
 
-  it('fires the reorder client call with position 0 on move-to-top (D-048)', async () => {
+  it('fires the reorder client call with position 0 on move-to-top', async () => {
     const fixture = TestBed.createComponent(QueuePanel);
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
@@ -53,7 +53,7 @@ describe('QueuePanel', () => {
     expect(calls[0].body).toEqual({ chunk_id: 'ch_mid', position: 0 });
   });
 
-  it('groups multi-selected chunks into the top-most survivor (D-047)', async () => {
+  it('groups multi-selected chunks into the top-most survivor', async () => {
     const fixture = TestBed.createComponent(QueuePanel);
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;

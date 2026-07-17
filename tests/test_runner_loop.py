@@ -97,7 +97,7 @@ def test_fill_claims_acquires_binds_and_spawns(tmp_path):  # type: ignore[no-unt
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None and lease.pid == 100 and lease.session_id == "sess-a"
     assert store.held_environment_ids() == ["e1"]
-    # The spawn buffered a lease.minted fact for the flusher (D-044), naming the lease
+    # The spawn buffered a lease.minted fact for the flusher, naming the lease
     # and carrying its epoch — the fence input the hub consumes.
     buffered = store.pending_outbound()
     assert [b.kind for b in buffered] == [LEASE_MINTED]
@@ -133,7 +133,7 @@ def test_spawn_preamble_carries_lease_and_local_api(tmp_path):  # type: ignore[n
 
 @pytest.mark.unit
 def test_fill_reports_lease_mint_to_hub(tmp_path):  # type: ignore[no-untyped-def]
-    """Every node-step spawn reports its lease.minted so the hub's fence tracks it (D-044)."""
+    """Every node-step spawn reports its lease.minted so the hub's fence tracks it."""
     store = _store(tmp_path)
     hub = FakeHub()
     hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
@@ -196,7 +196,7 @@ def test_fill_env_bound_skips(tmp_path):  # type: ignore[no-untyped-def]
 
 @pytest.mark.unit
 def test_fill_preparation_failure_skips_without_claiming(tmp_path):  # type: ignore[no-untyped-def]
-    """A reset-on-acquire step failure (D-021) aborts the fill — no bind, no claim, no spawn."""
+    """A reset-on-acquire step failure aborts the fill — no bind, no claim, no spawn."""
     store = _store(tmp_path)
     hub = FakeHub()
     hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
@@ -254,7 +254,7 @@ def test_advance_buffers_completion_then_flush_enters_hub_node(tmp_path):  # typ
 
     advance(ctx)  # probe reports the worker dead (empty alive set) -> exit-is-done
 
-    # The branch is pushed and the completion is BUFFERED — not yet submitted (D-069).
+    # The branch is pushed and the completion is BUFFERED — not yet submitted.
     assert wt.pushed == [("/ws/e1/toy-api", "e1")]
     assert hub.completions == []
     buffered = [b for b in store.pending_outbound() if b.kind == "completion.submitted"]
@@ -312,7 +312,7 @@ def test_flush_next_spawns_next_node_in_place(tmp_path):  # type: ignore[no-unty
     assert lease is not None and lease.node_name == "review" and lease.epoch == 2  # fresh epoch, same env
     assert store.held_environment_ids() == ["e1"]
     # The review node-step's fresh epoch is buffered for the flusher to report up so the
-    # hub's fence advances (D-044) — it rides the store-and-forward buffer, not an inline push.
+    # hub's fence advances — it rides the store-and-forward buffer, not an inline push.
     review_mints = [
         b for b in store.pending_outbound() if b.kind == LEASE_MINTED and json.loads(b.payload)["epoch"] == 2
     ]
@@ -321,7 +321,7 @@ def test_flush_next_spawns_next_node_in_place(tmp_path):  # type: ignore[no-unty
 
 @pytest.mark.unit
 def test_advance_review_harvests_findings_asset_from_assessment(tmp_path):  # type: ignore[no-untyped-def]
-    """A node that `produces` a name no git commit covers emits the assessment as an asset (D-026)."""
+    """A node that `produces` a name no git commit covers emits the assessment as an asset."""
     from blizzard.hub.domain.artifacts import ArtifactKind
     from tests.runner_fakes import make_envelope
 
@@ -408,7 +408,7 @@ def test_advance_skips_running_worker(tmp_path):  # type: ignore[no-untyped-def]
 
 
 # --------------------------------------------------------------------------- #
-# Store-and-forward across an outage (D-069)
+# Store-and-forward across an outage
 # --------------------------------------------------------------------------- #
 
 
@@ -547,7 +547,7 @@ def test_reap_orphan_requeues(tmp_path):  # type: ignore[no-untyped-def]
 
 @pytest.mark.unit
 def test_reap_stalled_but_alive_worker(tmp_path):  # type: ignore[no-untyped-def]
-    """A live worker whose heartbeat has gone stale is reaped as stalled (D-078)."""
+    """A live worker whose heartbeat has gone stale is reaped as stalled."""
     store = _store(tmp_path)
     _seed_running_lease(store)  # created_at = _NOW, pid 100 alive
     store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)
@@ -572,7 +572,7 @@ def test_reap_stalled_but_alive_worker(tmp_path):  # type: ignore[no-untyped-def
 
 @pytest.mark.unit
 def test_reap_leaves_fresh_beating_worker(tmp_path):  # type: ignore[no-untyped-def]
-    """A live worker inside the staleness window is left running (design/runner/loop.md)."""
+    """A live worker inside the staleness window is left running."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)
@@ -597,7 +597,7 @@ def test_reap_leaves_fresh_beating_worker(tmp_path):  # type: ignore[no-untyped-
 
 @pytest.mark.unit
 def test_reap_leaves_exited_worker_for_advance(tmp_path):  # type: ignore[no-untyped-def]
-    """An exited (dead-pid) worker is ADVANCE's exit-is-done, not REAP's (D-055)."""
+    """An exited (dead-pid) worker is ADVANCE's exit-is-done, not REAP's."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     later = _NOW + HEARTBEAT_STALENESS_THRESHOLD + timedelta(minutes=5)  # heartbeat is stale
@@ -639,7 +639,7 @@ def test_retries_exhausted_escalates_and_holds_envs(tmp_path):  # type: ignore[n
     assert len(escalations) == 1
     assert store.held_environment_ids() == ["e1"]  # envs held for takeover
     assert provider.released == []
-    # The buffered escalation.recorded carries the pasteable takeover command (D-009/D-035);
+    # The buffered escalation.recorded carries the pasteable takeover command;
     # the flusher reports it up to POST /events, where the fleet derives needs_human.
     payload = json.loads(escalations[0].payload)
     assert payload["chunk_id"] == "ch_1"

@@ -3,13 +3,13 @@
 Drives the full ``build -> review -> deliver`` graph through the real hub API over a
 tmp store, proving the P7 workflow-engine additions end to end at the hub seam:
 
-* a **review node** routes ``pass -> deliver`` and ``fail -> build`` (design/workflow-engine.md);
+* a **review node** routes ``pass -> deliver`` and ``fail -> build``;
 * a review **fail** carries its ``review-findings`` **asset** artifact back into the
-  build node's next envelope, latest-by-epoch (D-026/D-089);
-* the fail edge's **prompt_addendum** (D-071) is appended to build's re-entry prompt;
+  build node's next envelope, latest-by-epoch;
+* the fail edge's **prompt_addendum** is appended to build's re-entry prompt;
 * the runner-reported **lease.minted** facts (``POST /chunks/{id}/leases``) advance the
   hub's epoch fence in lockstep, so a chunk visiting a second runner node is not
-  rejected as stale (D-044) — the keystone that makes a multi-runner-node graph work.
+  rejected as stale — the keystone that makes a multi-runner-node graph work.
 
 The prompts here are inline prose (POST /graphs stores them verbatim); the scripted
 mock-harness end-to-end variant is the e2e tier (test_acceptance_loop is the standing
@@ -106,7 +106,7 @@ def _mint_and_claim(hub) -> tuple[str, dict[str, str]]:  # type: ignore[no-untyp
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
     )
     assert claim.status_code == 201, claim.text
-    # The claim is pure acquisition (D-024) — it does not mint the lease (D-044). The
+    # The claim is pure acquisition — it does not mint the lease. The
     # runner mints its build lease and reports it up, so the hub's fence starts at 1.
     _report_lease(hub, chunk_id, epoch=1)
     return chunk_id, node_ids
@@ -140,9 +140,9 @@ def test_review_fail_carries_findings_and_addendum_back_into_build(tmp_path: Pat
     assert to_build["outcome"] == "next"
     env = to_build["next_envelope"]
     assert env["node"]["node_name"] == "build"
-    # The fail edge's prompt_addendum (D-071) is appended to build's base prompt.
+    # The fail edge's prompt_addendum is appended to build's base prompt.
     assert _ADDENDUM in env["prompt"]
-    # The findings asset (D-026) rides back into build's envelope, latest-by-epoch.
+    # The findings asset rides back into build's envelope, latest-by-epoch.
     findings = [a for a in env["artifacts"] if a["name"] == "review-findings"]
     assert len(findings) == 1
     assert findings[0]["kind"] == "asset"
@@ -156,7 +156,7 @@ def test_chunk_detail_exposes_the_review_fail_loop_and_findings_asset(tmp_path: 
     This is the product surface behind MVP criterion 9/11 ("the hub's record shows every
     transition"; "every chunk's node history, artifacts … render"). Without it the
     review-fail cycle threads correctly through the envelope but is invisible to any
-    reader after the fact — exactly the gap a cold verification found (D-036)."""
+    reader after the fact — exactly the gap a cold verification found."""
     hub = build_hub(tmp_path)
     chunk_id, nodes = _mint_and_claim(hub)
 
@@ -197,7 +197,7 @@ def test_chunk_detail_exposes_the_review_fail_loop_and_findings_asset(tmp_path: 
     assert findings[0]["content"] == _FINDINGS
     assert findings[0]["key"] == "review.review-findings.2"
 
-    # The build's git-commit artifact carries its pinned reference, not code (D-012).
+    # The build's git-commit artifact carries its pinned reference, not code.
     commit = [a for a in detail["artifacts"] if a["kind"] == "git_commit"]
     assert len(commit) == 1
     assert commit[0]["repo"] == "acme/widget"
@@ -239,12 +239,12 @@ def test_review_cycle_second_pass_delivers_and_lands(tmp_path: Path) -> None:
 
     assert delivered["outcome"] == "hub_node_taken"
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
-    # The deliver node landed the latest build commit through the forge (D-030).
+    # The deliver node landed the latest build commit through the forge.
     assert [r.commit_hash for r in hub.forge.landed] == ["c2"]
 
 
 def test_review_completion_without_lease_report_is_stale(tmp_path: Path) -> None:
-    """Without the runner reporting review's fresh lease, its epoch is stale (D-007/D-044).
+    """Without the runner reporting review's fresh lease, its epoch is stale.
 
     This is the negative that motivates the lease-report route: the hub's fence only
     advances on a recorded lease mint, so a second-node completion under an

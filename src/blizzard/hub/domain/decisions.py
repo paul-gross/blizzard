@@ -1,19 +1,19 @@
-"""Human-gate domain rules (D-045/D-032/D-067) — decisions and requeue closure.
+"""Human-gate domain rules — decisions and requeue closure.
 
 Two services carry this wave's human-loop writes; both hold the **write** chunk
 repository (``bzh:controller-read-only``) and stamp time from the injected clock:
 
 * :class:`DecisionService` — the runner-config gate (``POST /chunks/{id}/decisions``)
   and resolution (``POST /decisions/{id}/resolution``). A runner submits a decision in
-  place of a transition for a node it was configured to gate (D-032): the choice set is
+  place of a transition for a node it was configured to gate: the choice set is
   the node's own (the hub owns the graph), and the step's artifacts commit atomically
-  with the decision (D-036). Resolution is first-write-wins, like an answer (D-045). The
+  with the decision. Resolution is first-write-wins, like an answer. The
   *graph* gate — opening a decision when a transition lands on a human-judged node — is
   the apply rule's job (:mod:`blizzard.hub.domain.apply`), not this service.
 * :class:`RequeueService` — ``POST /chunks/{id}/requeues`` closes an open escalation by
-  supersession (D-067): a ``requeue.recorded`` fact supersedes the escalation and the
+  supersession: a ``requeue.recorded`` fact supersedes the escalation and the
   route is released, so the chunk re-derives ``ready`` and re-enters FILL at its current
-  node — a fresh attempt (design/cli.md). Never a resolution fact.
+  node — a fresh attempt. Never a resolution fact.
 """
 
 from __future__ import annotations
@@ -58,21 +58,21 @@ class NotEscalated(Exception):
 
 
 class DecisionService:
-    """Open runner-config gate decisions and resolve them (D-032/D-045)."""
+    """Open runner-config gate decisions and resolve them."""
 
     def __init__(self, *, chunks: IWriteChunkRepository, clock: IClock) -> None:
         self._chunks = chunks
         self._clock = clock
 
     def submit(self, chunk: Chunk, graph: Graph, submission: DecisionSubmission) -> ApplyResponse:
-        """Runner-config gate: park the chunk on a decision instead of transitioning (D-032)."""
+        """Runner-config gate: park the chunk on a decision instead of transitioning."""
         node = graph.node_by_id(submission.from_node_id)
         if node is None:
             return _failure(f"no node {submission.from_node_id} in graph {graph.graph_id}")
         if not node.choices:
             return _failure(f"node {node.name} has no choices to gate")
 
-        # Idempotent replay (D-045): a decision already open at this (node, epoch) — a
+        # Idempotent replay: a decision already open at this (node, epoch) — a
         # lost-ack re-submission — returns the parked outcome without a second row.
         if self._chunks.find_decision(chunk.chunk_id, node_id=node.node_id, epoch=submission.epoch) is not None:
             return ApplyResponse(outcome=ApplyOutcome.PARKED_AT_GATE, detail=f"parked at gate `{node.name}`")
@@ -102,7 +102,7 @@ class DecisionService:
         return ApplyResponse(outcome=ApplyOutcome.PARKED_AT_GATE, detail=f"parked at gate `{node.name}`")
 
     def resolve(self, decision_id: str, *, choice: str, resolved_by: str) -> ResolutionResult | None:
-        """Record a person's choice, first-write-wins (D-045). ``None`` if no such decision."""
+        """Record a person's choice, first-write-wins. ``None`` if no such decision."""
         decision = self._chunks.get_decision(decision_id)
         if decision is None:
             return None
@@ -114,14 +114,14 @@ class DecisionService:
         )
         if won:
             return ResolutionResult(resolved=True, choice=choice, resolved_by=resolved_by)
-        # Lost the CAS — report the winner so the loser is told who resolved (D-045).
+        # Lost the CAS — report the winner so the loser is told who resolved.
         current = self._chunks.get_decision(decision_id)
         assert current is not None and current.resolved_choice is not None
         return ResolutionResult(resolved=False, choice=current.resolved_choice, resolved_by=current.resolved_by or "")
 
 
 class RequeueService:
-    """Close an open escalation by supersession — ``blizzard hub requeue`` (D-067)."""
+    """Close an open escalation by supersession — ``blizzard hub requeue``."""
 
     def __init__(self, *, chunks: IWriteChunkRepository, clock: IClock) -> None:
         self._chunks = chunks
@@ -136,7 +136,7 @@ class RequeueService:
         if facts is None or open_escalation(facts) is None:
             raise NotEscalated(f"chunk {chunk_id} is not escalated (needs_human)")
         now = self._clock.now()
-        self._chunks.record_requeue(chunk_id, at=now)  # supersedes the escalation (D-067)
+        self._chunks.record_requeue(chunk_id, at=now)  # supersedes the escalation
         self._chunks.record_route_released(chunk_id, at=now)  # -> ready, re-leasable at its current node
 
 

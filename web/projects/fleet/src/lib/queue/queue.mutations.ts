@@ -9,7 +9,7 @@ import {
 } from '../api/hub';
 import { hubChunksKey, hubQueueKey } from '../query-keys';
 
-/** Move a ready chunk to a queue position (0 = top) — the board's Prioritize control (D-048). */
+/** Move a ready chunk to a queue position (0 = top) — the board's Prioritize control. */
 export interface ReorderVars {
   readonly chunkId: string;
   readonly position: number;
@@ -38,7 +38,7 @@ export function injectReorderQueueMutation() {
   }));
 }
 
-/** Group unacquired chunks into a survivor — the board's Group control (D-047/D-048). */
+/** Group unacquired chunks into a survivor — the board's Group control. */
 export interface GroupVars {
   readonly survivorId: string;
   readonly mergeChunkIds: readonly string[];
@@ -47,7 +47,7 @@ export interface GroupVars {
 /**
  * `POST /api/chunks/{chunk_id}/group` — merge the named unacquired chunks into the
  * survivor (path param), whose PM pointers become the union; the merged-away chunks
- * are discarded (D-047). Re-peeks the queue and re-reads the list on success.
+ * are discarded. Re-peeks the queue and re-reads the list on success.
  */
 export function injectGroupChunksMutation() {
   const queryClient = inject(QueryClient);

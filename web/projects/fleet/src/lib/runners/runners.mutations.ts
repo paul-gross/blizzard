@@ -8,14 +8,14 @@ import {
 } from '../api/hub';
 import { hubRunnersKey } from '../query-keys';
 
-/** Toggle a runner's operator brake (D-043): pause stops new leases, resume clears it. */
+/** Toggle a runner's operator brake: pause stops new leases, resume clears it. */
 export interface RunnerPauseVars {
   readonly runnerId: string;
   readonly paused: boolean;
 }
 
 /**
- * `POST /api/runners/{id}/pause|resume` — the operator brake (D-043), routed to the
+ * `POST /api/runners/{id}/pause|resume` — the operator brake, routed to the
  * pause or resume verb by the desired `paused` state, through the generated client
  * (bzh:generated-client). Re-reads the registry on success; the stream also fires
  * `runner-changed`. `by` defaults to `operator` server-side.

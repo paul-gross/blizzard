@@ -1,25 +1,25 @@
-"""The PM work-source seam (D-047/D-084/D-108/D-110) — a vendor-native pass-through read.
+"""The PM work-source seam — a vendor-native pass-through read.
 
 The hub reads a chunk's PM item (issue body + comment thread) straight from the
-forge on demand and **never stores its contents** (D-047): the pointer is the
+forge on demand and **never stores its contents**: the pointer is the
 durable referent, the item is fetched fresh. The domain owns this Protocol
 (``bzh:dependency-inversion``); a vendor-shaped adapter under ``internal/`` implements
 it against a real forge — the ``blizzard-mock`` forge in tests, GitHub in production —
-one instance per configured ``[[pm_source]]`` (D-108), pinned to its own repo and
+one instance per configured ``[[pm_source]]``, pinned to its own repo and
 carrying its own credentialed client.
 
 D-110 grows the seam beyond ``fetch``: a binding also owns parsing its own ingest-token
 form, rendering the board-legible label, and deriving the pointer's/a branch's browser
 address — grammar that used to live in the domain-layer ``pm/label.py`` module (a
 ``bzh:domain-core`` violation once there was more than one provider). The
-:class:`IPmSourceRegistry` (D-108) replaces the single ``pm_source: IPmSource | None``
+:class:`IPmSourceRegistry` replaces the single ``pm_source: IPmSource | None``
 seam slot: the hub builds one binding per declared source, and an empty registry is a
 legal hub with no PM reach.
 
 D-111 gives ``parse`` its production caller: ``POST /chunks`` takes source-native
 tokens, and :meth:`IPmSourceRegistry.resolve` walks the configured bindings, returning
 the first pointer one claims. Exactly one binding can ever claim a token — config
-rejects a duplicate ``name`` and a duplicate ``(provider, repo)`` (D-108) — so ``parse``
+rejects a duplicate ``name`` and a duplicate ``(provider, repo)`` — so ``parse``
 returns ``None`` for "not my token" rather than raising: the registry loops cleanly over
 every binding, and the route is what raises/reports when nothing claims it (422, D-109).
 
@@ -42,7 +42,7 @@ from blizzard.hub.domain.work import PmPointer
 
 @dataclass(frozen=True)
 class PmItem:
-    """A pass-through PM item — title, body, and comment bodies, vendor-native (D-047)."""
+    """A pass-through PM item — title, body, and comment bodies, vendor-native."""
 
     body: str
     title: str = ""
@@ -54,12 +54,12 @@ class PmSourceError(Exception):
 
 
 class IPmSource(Protocol):
-    """One configured, credentialed PM binding (D-047/D-108/D-110)."""
+    """One configured, credentialed PM binding."""
 
     def parse(self, token: str) -> PmPointer | None:
         """This source's own ingest-token form into a pointer, or ``None`` when
         ``token`` is not shaped for this source — the registry's :meth:`resolve`
-        (D-111) tries each configured source in turn and 422s when none claims it."""
+         tries each configured source in turn and 422s when none claims it."""
         ...
 
     def fetch(self, pointer: PmPointer) -> PmItem:
@@ -82,7 +82,7 @@ class IPmSource(Protocol):
 
 
 class IPmSourceRegistry(Protocol):
-    """The hub's configured PM sources, looked up by their declared ``name`` (D-108)."""
+    """The hub's configured PM sources, looked up by their declared ``name``."""
 
     def get(self, name: str) -> IPmSource | None:
         """The binding declared under ``name``, or ``None`` when none is configured."""
@@ -94,7 +94,7 @@ class IPmSourceRegistry(Protocol):
 
     def resolve(self, token: str) -> PmPointer | None:
         """The first configured binding's :meth:`IPmSource.parse` of ``token`` that
-        claims it, or ``None`` when none do (D-111). Exactly one binding can ever
+        claims it, or ``None`` when none do. Exactly one binding can ever
         claim a token — config rejects a duplicate ``name`` (unambiguous
         ``name:ref``/``name#ref``) and a duplicate ``(provider, repo)`` (a URL maps to
         at most one source) — so which binding is tried first never matters."""

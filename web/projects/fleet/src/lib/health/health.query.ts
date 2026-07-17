@@ -4,8 +4,8 @@ import { healthApiHealthGet } from '../api/hub';
 import { hubHealthKey } from '../query-keys';
 
 /**
- * Hub `/api/health` read, through TanStack Query and the generated hub client
- * (D-097/D-100). This is the plumbing proof for the read path: request/response
+ * Hub `/api/health` read, through TanStack Query and the generated hub client.
+ * This is the plumbing proof for the read path: request/response
  * reads go through the query cache, and the request itself is the openapi-ts
  * client's typed SDK call — never hand-written fetch (bzh:generated-client). No
  * fake data; the query hits the daemon the app is served from.

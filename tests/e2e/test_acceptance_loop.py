@@ -6,7 +6,7 @@ assertion holds at **both ends**: the commit is reachable from the bare origin's
 ``main`` (git truth) *and* the hub's facts derive the chunk ``done`` (fleet truth).
 This is the P6 exit criterion of ``blizzard-discovery:/implementation/verification.md``,
 extended in P7 (wave 1) to travel the full ``build -> review -> deliver`` default
-shape (design/workflow-engine.md) — the review node is the new stop, and here it
+shape — the review node is the new stop, and here it
 passes on the first cold-eyes look, so the chunk lands without a re-build. The two
 sibling e2e scenarios cover the review **fail** cycle (test_review_cycle_e2e) and the
 retries-exhausted **escalation** to ``needs_human`` (test_escalation_e2e); the three
@@ -86,7 +86,7 @@ REPO = f"{OWNER}/{REPO_NAME}"
 FIXTURE_ENV = "e2e"
 RUNNER_ENV = "e1"
 
-# The env var every scenario's ``[[pm_source]]`` (D-108/D-109) names as its credential —
+# The env var every scenario's ``[[pm_source]]`` names as its credential —
 # a dummy value suffices, since the mock forge checks no token.
 PM_TOKEN_ENV = "BZ_PM_TOKEN_TOYAPI"
 
@@ -107,15 +107,15 @@ _BUILD_SCRIPT = (
     "    check=True,\n"
     ")\n"
 )
-# The judgement-resume prompt: also arrives as code (D-038). It emits the tagged
+# The judgement-resume prompt: also arrives as code. It emits the tagged
 # ``<Choice>pass</Choice>`` the runner's adapter parses into the completion choice.
 _JUDGEMENT_SCRIPT = "verdict('pass', 'the mock harness committed the change; checks are green')\n"
 
-# The review node (design/workflow-engine.md): a fresh-session cold-eyes read that
+# The review node: a fresh-session cold-eyes read that
 # produces a ``review-findings`` asset and, here, PASSES on the first look — so the
 # build commit travels straight to deliver with no re-build. The review base turn is a
 # no-op (``pass``); the verdict is elicited on the judgement resume, whose assessment
-# (the text after ``</Choice>``) becomes the produced asset's content (D-026/D-077).
+# (the text after ``</Choice>``) becomes the produced asset's content.
 _REVIEW_SCRIPT = "pass\n"
 _REVIEW_JUDGEMENT = "verdict('pass', 'cold-eyes review: the committed change is clean; ready to deliver')\n"
 
@@ -155,9 +155,9 @@ def _graph_yaml() -> str:
     """The scripted ``default-delivery`` graph — ``build -> review -> deliver``.
 
     Named ``default-delivery`` so the hub's lazy ``ensure_default`` (POST /chunks)
-    reuses this pre-minted graph by name (D-081) instead of minting the packaged
+    reuses this pre-minted graph by name instead of minting the packaged
     prose graph — the packaged prompts are LLM prose the mock cannot ``exec``. Mirrors
-    the packaged default's shape (design/hub/graph-schema.md): a runner build, a
+    the packaged default's shape: a runner build, a
     fresh-session runner review that ``produces`` findings, and a hub deliver node.
     """
     import yaml
@@ -287,7 +287,7 @@ def _hub(hub_dir: Path, forge_port: int, port: int) -> Iterator[httpx.Client]:
     }
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
-    # Declare the one PM source every scenario ingests against (D-108/D-109) — since
+    # Declare the one PM source every scenario ingests against — since
     # Phase 2, ingest 422s a pointer no configured source claims.
     write_pm_sources(
         hub_dir,
@@ -390,7 +390,7 @@ def test_acceptance_loop_one_chunk_ingest_to_landed(tmp_path: Path) -> None:
         )
         assert ingested.status_code == 201, ingested.text
         chunk_id = ingested.json()["chunk_id"]
-        assert hub.get(f"/api/chunks/{chunk_id}").json()["status"] == "not_ready"  # rests not-ready (D-103)
+        assert hub.get(f"/api/chunks/{chunk_id}").json()["status"] == "not_ready"  # rests not-ready
         assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
         assert hub.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
 
@@ -531,7 +531,7 @@ def _runner_api(config: RunnerConfig) -> Iterator[None]:
 
 
 def test_build_worker_reads_pm_item_through_the_passthrough(tmp_path: Path) -> None:
-    """The build worker fetches its issue body + comments through the runner->hub proxy (D-084).
+    """The build worker fetches its issue body + comments through the runner->hub proxy.
 
     Criterion 1's pass-through half, end to end: the chunk's issue carries a distinctive
     body and comment; the build node reads them with the *real* ``blizzard runner pm-items``
@@ -580,7 +580,7 @@ def test_build_worker_reads_pm_item_through_the_passthrough(tmp_path: Path) -> N
         commented = forge.post(f"/repos/{REPO}/issues/{issue_number}/comments", json={"body": _PM_COMMENT})
         assert commented.status_code == 201, commented.text
 
-        # Ingest by {source, ref} (D-107) — the source names the configured binding, and
+        # Ingest by {source, ref} — the source names the configured binding, and
         # the ref is this binding's own opaque item token (the issue number); the fetch
         # goes through the hub's own forge base URL regardless.
         ingested = hub.post(
@@ -589,7 +589,7 @@ def test_build_worker_reads_pm_item_through_the_passthrough(tmp_path: Path) -> N
         )
         assert ingested.status_code == 201, ingested.text
         chunk_id = ingested.json()["chunk_id"]
-        assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # ready for the runner (D-103)
+        assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # ready for the runner
 
         # Sanity: the hub's own pass-through returns the body + comment (the runner's proxy
         # forwards to exactly this route) — one entry per pointer.

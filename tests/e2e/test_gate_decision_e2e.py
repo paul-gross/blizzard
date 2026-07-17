@@ -74,8 +74,8 @@ _JUDGEMENT_SCRIPT = "verdict('pass', 'built and committed; awaiting human sign-o
 def _graph_yaml() -> str:
     """The sample-gate variant — ``build -> approve-gate (human) -> deliver``.
 
-    Named ``default-delivery`` so the hub's lazy ``ensure_default`` reuses it by name
-    (D-081). The ``approve-gate`` node is a runner node judged ``by: human`` (D-032): a
+    Named ``default-delivery`` so the hub's lazy ``ensure_default`` reuses it by name.
+    The ``approve-gate`` node is a runner node judged ``by: human``: a
     transition into it parks the chunk on a decision; only the resolving transition
     (carrying the decision id) may leave it.
     """
@@ -180,7 +180,7 @@ def test_graph_gate_parks_a_decision_then_decide_delivers(tmp_path: Path) -> Non
         )
         assert ingested.status_code == 201, ingested.text
         chunk_id = ingested.json()["chunk_id"]
-        assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # ready for the runner (D-103)
+        assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # ready for the runner
 
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         fenced = dict(os.environ)
@@ -197,7 +197,7 @@ def test_graph_gate_parks_a_decision_then_decide_delivers(tmp_path: Path) -> Non
         assert {c["name"] for c in decision["choices"]} == {"approve", "reject"}
         decision_id = decision["decision_id"]
         # The open decision carries the build's work: the git-commit artifact landed on the
-        # chunk with the transition into the gate (D-036), so deliver has something to merge.
+        # chunk with the transition into the gate, so deliver has something to merge.
         assert any(a["kind"] == "git_commit" for a in detail["artifacts"]), (
             f"the gated decision does not carry the build artifact: {detail['artifacts']}"
         )

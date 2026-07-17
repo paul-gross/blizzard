@@ -1,6 +1,6 @@
 """resume intent fact tables (runner store tree)
 
-The graceful-restart resume marker (D-082): ``resume_intents`` (the mark a graceful
+The graceful-restart resume marker: ``resume_intents`` (the mark a graceful
 ``blizzard-runner`` shutdown writes for every active, non-parked, session-bearing lease)
 and ``resume_clears`` (the RESUME step's record that it has resumed — or abandoned — the
 marked lease). Together they let a runner spin down and back up and re-attach to its own

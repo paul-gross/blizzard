@@ -33,7 +33,7 @@ class QuestionService:
         self._clock = clock
 
     def record_asked(self, fact: QuestionAsked) -> None:
-        """Land a ``question.asked`` row — the chunk derives ``waiting_on_human`` (D-004)."""
+        """Land a ``question.asked`` row — the chunk derives ``waiting_on_human``."""
         self._chunks.record_question(
             question_id=fact.question_id,
             chunk_id=fact.chunk_id,
@@ -64,7 +64,7 @@ def _parse(value: str, clock: IClock) -> datetime:
     """Read an ISO-8601 instant, falling back to now on a malformed stamp.
 
     Coerces a naive result to UTC (``bzh:utc-instants``): a legacy runner still
-    buffering pre-fix payloads (D-069) can deliver a naive ``asked_at`` string even
+    buffering pre-fix payloads can deliver a naive ``asked_at`` string even
     after this fix lands, since the outbound buffer replays whatever it already holds.
     """
     try:

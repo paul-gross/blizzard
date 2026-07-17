@@ -1,7 +1,7 @@
 """Offline store administration for the hub (D-099, ``bzh:manual-migrations``).
 
 The ``init`` / ``migrate`` verbs run while the daemon is **down**: they are the
-only carve-out to "only a daemon opens its own store" (D-023). Everything here is
+only carve-out to "only a daemon opens its own store". Everything here is
 deterministic and store-only — no model calls, no server. ``init`` is idempotent;
 ``ensure_current_revision`` is the guard the daemon calls at startup to refuse to
 run on a schema mismatch.

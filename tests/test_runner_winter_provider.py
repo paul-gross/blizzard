@@ -1,6 +1,6 @@
 """The winter workspace provider — allocation logic (unit) and the real CLI drive (component).
 
-The allocation contract (D-062) is unit-tested with fake winter/git sub-seams: pick
+The allocation contract is unit-tested with fake winter/git sub-seams: pick
 from the pool minus the held set, all-or-nothing refusal, the full reset-on-acquire
 sequence (D-021: standalones once per pass, then fetch → forced base checkout →
 disconnect → membership reconcile → clean → service teardown → reprovision), the

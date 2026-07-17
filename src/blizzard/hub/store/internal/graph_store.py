@@ -5,10 +5,10 @@ Implements :class:`~blizzard.hub.domain.graph.IWriteGraphRepository` over the
 ``sqlalchemy`` usage is confined here (``bzh:dependency-inversion``); the domain
 sees only reified :class:`~blizzard.hub.domain.graph.Graph` objects.
 
-Graphs are immutable (D-033): :meth:`mint` is insert-only, and there is no update
+Graphs are immutable: :meth:`mint` is insert-only, and there is no update
 path. ``enabled`` is not a stored column in the walking skeleton — every minted
-graph is enabled, so ``get_enabled_by_name`` returns the newest graph of that name
-(D-081); the metadata-fact derivation (D-039) bolts on in P7.
+graph is enabled, so ``get_enabled_by_name`` returns the newest graph of that name;
+the metadata-fact derivation bolts on in P7.
 """
 
 from __future__ import annotations

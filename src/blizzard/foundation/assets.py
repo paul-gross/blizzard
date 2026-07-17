@@ -1,4 +1,4 @@
-"""Locating the wheel-embedded frontend assets (D-061).
+"""Locating the wheel-embedded frontend assets.
 
 The compiled Angular apps live under ``blizzard/static/<app>`` inside the
 package, so they ship in the one wheel and are found the same way whether the

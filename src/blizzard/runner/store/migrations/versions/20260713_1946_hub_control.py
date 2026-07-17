@@ -1,6 +1,6 @@
 """hub control mirror — the declarative pause brake read on PULL (runner store tree)
 
-P7W3 lands the runner's local mirror of the hub's declarative pause brake (D-043/D-012):
+P7W3 lands the runner's local mirror of the hub's declarative pause brake:
 ``hub_control`` holds the last ``paused`` value PULL read back from the hub registry, so
 FILL adheres (no new claims while paused; in-flight chunks run on) without calling the
 hub itself and keeps the last-known directive while the hub is unreachable.

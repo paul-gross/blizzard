@@ -42,11 +42,11 @@ __all__ = [
     "is_heartbeat_stale",
 ]
 
-#: REAP's staleness threshold (design/runner/loop.md). Deliberately **conservative**:
+#: REAP's staleness threshold. Deliberately **conservative**:
 #: heartbeats ride tool calls, so the threshold is bounded below by the longest tool
 #: call a healthy worker makes — one long test run must never read as a stall. A live
 #: worker whose last heartbeat is older than this has stopped making tool calls and is
-#: reaped as stalled (D-078). ~1h; the open-question constant (decisions/open-questions.md).
+#: reaped as stalled. ~1h; the open-question constant.
 HEARTBEAT_STALENESS_THRESHOLD = timedelta(hours=1)
 
 #: The panel's recently-closed-lease list length (issue #29) — a
@@ -140,10 +140,10 @@ def derive_lease_state(
     2. **parked** — a park fact with no later resume ([ask-answer.md]); the reap clock
        is stopped, so a parked-and-stale lease still reads ``parked``, never ``stale``.
     3. **spawning** — ``pid``/``session_id`` unset: minted at FILL, spawn-return not yet
-       recorded (D-092); a spawning lease has no meaningful heartbeat, so this wins over
+       recorded; a spawning lease has no meaningful heartbeat, so this wins over
        ``is_stale`` regardless of how old its heartbeat baseline would compute.
-    4. **exited** — a live-pid check came back false; exit is the done-declaration
-       (D-055), awaiting ADVANCE's judgement, not dead.
+    4. **exited** — a live-pid check came back false; exit is the done-declaration,
+       awaiting ADVANCE's judgement, not dead.
     5. **stale** — alive, but the caller's staleness read (REAP's own predicate, via
        :func:`is_heartbeat_stale` / :func:`_staleness_exceeded`) says the heartbeat is
        too old.

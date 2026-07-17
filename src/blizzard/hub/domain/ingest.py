@@ -1,15 +1,14 @@
-"""Chunk ingest — wrap PM pointers into a chunk (D-047/D-093).
+"""Chunk ingest — wrap PM pointers into a chunk.
 
 The ``POST /chunks`` domain rule: a caller submits one or more ``{source, ref}``
-(D-107) pointers and the hub mints a chunk pinned to the configured default graph
-(D-081).
-Contents are never stored — only the pointer (D-047).
+ pointers and the hub mints a chunk pinned to the configured default graph.
+Contents are never stored — only the pointer.
 
-**Batch = one chunk (D-076).** The wire response carries a single ``chunk_id``, so a
+**Batch = one chunk.** The wire response carries a single ``chunk_id``, so a
 multi-pointer request mints one chunk holding all its pointers; per-pointer fan-out
 (a response of many ids) is a P7 wire change, not a walking-skeleton shape. Before
 minting, every pointer is checked for a live holder — a pointer already held by a
-non-terminal chunk rejects the whole ingest ``409`` (D-093); re-ingest is legal once
+non-terminal chunk rejects the whole ingest ``409``; re-ingest is legal once
 every prior holder is terminal.
 
 Holds the *write* chunk repository (``bzh:controller-read-only``); the route
@@ -25,7 +24,7 @@ from blizzard.hub.domain.work import Chunk, IWriteChunkRepository, PmPointer
 
 
 class IngestConflict(Exception):
-    """A submitted pointer is already held by a live chunk (D-093) — the 409 carrier."""
+    """A submitted pointer is already held by a live chunk — the 409 carrier."""
 
     def __init__(self, *, existing_chunk_id: str, pointer: PmPointer) -> None:
         super().__init__(f"pointer {pointer.source}#{pointer.ref} already held by live chunk {existing_chunk_id}")
@@ -34,7 +33,7 @@ class IngestConflict(Exception):
 
 
 class IngestService:
-    """Mint a chunk from PM pointers, pinned to the default graph (D-047/D-081)."""
+    """Mint a chunk from PM pointers, pinned to the default graph."""
 
     def __init__(self, *, chunks: IWriteChunkRepository, clock: IClock) -> None:
         self._chunks = chunks

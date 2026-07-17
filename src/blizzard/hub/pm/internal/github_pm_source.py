@@ -3,7 +3,7 @@
 Implements :class:`~blizzard.hub.pm.source.IPmSource` against a GitHub REST v3
 surface — the ``blizzard-mock`` forge in tests, GitHub in production. Confined to
 ``internal/`` (adapter placement, ``bzh:dependency-inversion``); ``httpx`` is used only
-here. One instance per configured ``[[pm_source]]`` (D-108): pinned to its own
+here. One instance per configured ``[[pm_source]]``: pinned to its own
 ``repo``, its own ``web_base`` (an origin, e.g. ``https://github.com``), and carrying
 its own credentialed client — never the delivery forge's.
 
@@ -32,7 +32,7 @@ _log = get_logger("blizzard.hub.pm")
 
 # A GitHub-shaped issue reference — {owner}/{repo}/issues/{number} — with or without a
 # leading scheme://host and with or without the REST /repos/ prefix, so both the full
-# browser URL and the schemeless shorthand resolve the same way (D-111).
+# browser URL and the schemeless shorthand resolve the same way.
 _ISSUE_URL_RE = re.compile(r"(?:^|/)(?:repos/)?(?P<owner>[^/:#]+)/(?P<repo>[^/:#]+)/issues/(?P<number>\d+)/?$")
 
 
@@ -46,7 +46,7 @@ class GitHubPmSource:
         self._web_base = web_base.rstrip("/")
 
     def parse(self, token: str) -> PmPointer | None:
-        """This source's own ingest-token forms (D-107/D-111) into a pointer, or
+        """This source's own ingest-token forms into a pointer, or
         ``None`` when ``token`` isn't shaped for this source: ``{name}:{number}``,
         ``{name}#{number}``, or the item's own issue URL — full
         (``https://github.com/{owner}/{repo}/issues/{n}``) or schemeless
@@ -79,7 +79,7 @@ class GitHubPmSource:
         )
 
     def label(self, pointer: PmPointer) -> str | None:
-        """``{name}#{ref}`` (D-110) — always renders; ``ref`` is opaque here (D-107)."""
+        """``{name}#{ref}`` — always renders; ``ref`` is opaque here."""
         return f"{self._name}#{pointer.ref}"
 
     def web_url(self, pointer: PmPointer) -> str | None:

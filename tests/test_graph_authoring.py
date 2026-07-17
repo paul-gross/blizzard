@@ -1,4 +1,4 @@
-"""Graph reification (unit tier) — the doc -> immutable graph compile (D-033/D-071)."""
+"""Graph reification (unit tier) — the doc -> immutable graph compile."""
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ def test_reify_mints_ids_and_splits_choices_into_edges() -> None:
     assert targets == {"review", "build"}
 
     # The deliver hub node authors no judgement, so it carries no edges — its
-    # machinery outcomes (landed/conflict) are applied by the coordinator (D-086).
+    # machinery outcomes (landed/conflict) are applied by the coordinator.
     assert deliver.choices == []
     assert graph.edges_from(deliver.node_id) == []
 

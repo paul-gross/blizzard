@@ -3,7 +3,7 @@
 A worker whose lease was reaped may still be alive and may still submit — the epoch
 fence, not the kill, is what guarantees it cannot deliver (design/runner/loop.md,
 D-007). When a reap requeues the chunk, the successor mints a **fresh epoch** and
-reports it up (D-082/D-044). This test proves at the hub that the zombie's late (or
+reports it up. This test proves at the hub that the zombie's late (or
 buffered-then-flushed) completion, carrying the old epoch, is rejected before any
 write: it neither records a transition (the chunk does not advance) nor reaches the
 merge queue (nothing lands at the forge) — and the legitimate successor still lands.
@@ -21,7 +21,7 @@ pytestmark = pytest.mark.component
 
 _POINTER = {"source": "default", "ref": "3"}
 
-# A build -> deliver graph named `default-delivery`, reused by name on ingest (D-081),
+# A build -> deliver graph named `default-delivery`, reused by name on ingest,
 # so the fence reaches the deliver hub node in one build pass — decoupled from the
 # packaged default graph's build -> review -> deliver shape.
 _BUILD_DELIVER_YAML = """
@@ -77,7 +77,7 @@ def test_reaped_lease_completion_is_fenced_and_cannot_deliver(tmp_path: Path) ->
     # The first lease (epoch 1) is minted, then reaped for a stall; the requeue mints a
     # fresh successor lease (epoch 2). Both mints are reported up through POST /events.
     report_lease(hub, chunk_id, epoch=1, seq=1)  # the lease that will be reaped
-    report_lease(hub, chunk_id, epoch=2, seq=2)  # the successor's fresh epoch (D-082)
+    report_lease(hub, chunk_id, epoch=2, seq=2)  # the successor's fresh epoch
 
     # The zombie — the reaped worker — flushes its completion carrying the OLD epoch.
     zombie = hub.client.post(f"/api/chunks/{chunk_id}/completions", json=_completion(build_node_id, epoch=1))

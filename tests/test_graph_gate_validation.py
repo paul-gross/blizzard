@@ -1,7 +1,7 @@
 """Human-gate mint validation (unit tier, D-032/D-041/D-071).
 
 A ``judged_by: human`` node validates at mint with **no judgement prompt** — the person
-judges, so there is no verdict to elicit (design/workflow-engine.md). Its choices are
+judges, so there is no verdict to elicit. Its choices are
 the ordinary fused entries. These pin that a gate graph mints, and that a gate carrying
 a judgement prompt is rejected.
 """

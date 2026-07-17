@@ -3,7 +3,7 @@
 The panel's backing route: an active lease *is* an active agent, so this is
 "which agents are working, on what, on which node, and is that node healthy" —
 answered entirely from the local sqlite store and the process probe. **Hub-free**
-by design (design/runner/web-app.md): the machine panel is precisely the part of
+by design: the machine panel is precisely the part of
 the app that must not depend on the hub, so this route gains no hub call, no forge
 call, no title — those arrive separately, by a strictly severable read.
 

@@ -95,7 +95,7 @@ class RunnerRegistryStore:
 
     @staticmethod
     def _paused(conn, runner_id: str) -> bool:  # type: ignore[no-untyped-def]
-        """Derive the fleet's brake from the newest pause/resume fact (D-043), default False."""
+        """Derive the fleet's brake from the newest pause/resume fact, default False."""
         return RunnerRegistryStore._newest(conn, s.runner_pause_facts, runner_id)
 
     @staticmethod

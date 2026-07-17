@@ -21,7 +21,7 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
 /**
  * Get Pm Items
  *
- * Forward a chunk's PM-items read to the hub — the layered pass-through (D-084).
+ * Forward a chunk's PM-items read to the hub — the layered pass-through.
  */
 export const getPmItemsApiChunksChunkIdPmItemsGet = <ThrowOnError extends boolean = false>(options: Options<GetPmItemsApiChunksChunkIdPmItemsGetData, ThrowOnError>): RequestResult<GetPmItemsApiChunksChunkIdPmItemsGetResponses, GetPmItemsApiChunksChunkIdPmItemsGetErrors, ThrowOnError> => (options.client ?? client).get<GetPmItemsApiChunksChunkIdPmItemsGetResponses, GetPmItemsApiChunksChunkIdPmItemsGetErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/pm-items', ...options });
 
@@ -33,7 +33,7 @@ export const healthApiHealthGet = <ThrowOnError extends boolean = false>(options
 /**
  * Heartbeat
  *
- * Record a lease heartbeat, stamped with the injected clock (D-069).
+ * Record a lease heartbeat, stamped with the injected clock.
  */
 export const heartbeatApiHeartbeatPost = <ThrowOnError extends boolean = false>(options: Options<HeartbeatApiHeartbeatPostData, ThrowOnError>): RequestResult<HeartbeatApiHeartbeatPostResponses, HeartbeatApiHeartbeatPostErrors, ThrowOnError> => (options.client ?? client).post<HeartbeatApiHeartbeatPostResponses, HeartbeatApiHeartbeatPostErrors, ThrowOnError>({
     url: '/api/heartbeat',
@@ -68,7 +68,7 @@ export const recordAskApiLeasesLeaseIdAsksPost = <ThrowOnError extends boolean =
 /**
  * Session End
  *
- * Record a lease's session-end, stamped with the injected clock (D-055/D-082).
+ * Record a lease's session-end, stamped with the injected clock.
  */
 export const sessionEndApiLeasesLeaseIdSessionEndPost = <ThrowOnError extends boolean = false>(options: Options<SessionEndApiLeasesLeaseIdSessionEndPostData, ThrowOnError>): RequestResult<SessionEndApiLeasesLeaseIdSessionEndPostResponses, SessionEndApiLeasesLeaseIdSessionEndPostErrors, ThrowOnError> => (options.client ?? client).post<SessionEndApiLeasesLeaseIdSessionEndPostResponses, SessionEndApiLeasesLeaseIdSessionEndPostErrors, ThrowOnError>({ url: '/api/leases/{lease_id}/session-end', ...options });
 

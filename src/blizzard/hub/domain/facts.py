@@ -1,4 +1,4 @@
-"""Runner-reported fact intake (D-044/D-069) — lease mints and escalations.
+"""Runner-reported fact intake — lease mints and escalations.
 
 The runner mints facts locally and reports the fleet-visible ones up to the hub
 (``design/domain/events.md``): ``lease.minted`` (every node-step attempt, D-035/D-044)
@@ -8,7 +8,7 @@ same domain writes:
 * :class:`RunnerFactsService` — the direct, single-fact intake behind the typed
   ``POST /chunks/{id}/leases`` and ``/chunks/{id}/escalations`` routes.
 * :class:`FactIngestService` — the batched, seq-idempotent store-and-forward push
-  behind ``POST /api/events`` (D-069): every fact rides the runner's outbound buffer
+  behind ``POST /api/events``: every fact rides the runner's outbound buffer
   with a per-runner monotonic seq, and a replay (lost ack, outage backlog) is re-acked
   against the hub's per-runner **high-water mark** without re-applying. This is the
   path the reconciliation loop uses.
@@ -17,12 +17,12 @@ Both hold the **write** chunk repository (``bzh:controller-read-only``) and stam
 landing time from the injected clock (``bzh:injected-clock``); the routes stay
 read-only over the store and delegate here.
 
-Why the hub needs the lease mints: the epoch fence (D-007) checks a completion's epoch
+Why the hub needs the lease mints: the epoch fence checks a completion's epoch
 against the chunk's **latest** lease epoch. A chunk that visits more than one runner
-node (build -> review) mints a fresh epoch per node-step (D-035), so without the runner
+node (build -> review) mints a fresh epoch per node-step, so without the runner
 reporting each mint the hub's latest would stall at the claim's epoch and reject the
 second node's completion as stale. Reporting the mint keeps the two in lockstep, and it
-is also what **closes an escalation by supersession** (D-067): a requeue's fresh lease
+is also what **closes an escalation by supersession**: a requeue's fresh lease
 mint, landing after the escalation, flips ``needs_human`` off with no resolution fact.
 """
 
@@ -50,23 +50,23 @@ _log = get_logger("blizzard.hub.facts")
 
 
 class RunnerFactsService:
-    """Land runner-reported ``lease.minted`` / ``escalation.recorded`` facts (D-044/D-069)."""
+    """Land runner-reported ``lease.minted`` / ``escalation.recorded`` facts."""
 
     def __init__(self, *, chunks: IWriteChunkRepository, clock: IClock) -> None:
         self._chunks = chunks
         self._clock = clock
 
     def record_lease_minted(self, chunk_id: str, *, epoch: int, runner_id: str) -> None:
-        """Land a runner's ``lease.minted`` — advances the fence's latest epoch (D-044)."""
+        """Land a runner's ``lease.minted`` — advances the fence's latest epoch."""
         self._chunks.record_lease(chunk_id, epoch=epoch, runner_id=runner_id, at=self._clock.now())
 
     def record_escalation(self, chunk_id: str, *, epoch: int, takeover_command: str) -> None:
-        """Land a runner's ``escalation.recorded`` — the chunk derives ``needs_human`` (D-009)."""
+        """Land a runner's ``escalation.recorded`` — the chunk derives ``needs_human``."""
         self._chunks.record_escalation(chunk_id, epoch=epoch, takeover_command=takeover_command, at=self._clock.now())
 
 
 class FactIngestService:
-    """Apply a runner's batched pushed facts idempotently against its high-water mark (D-069).
+    """Apply a runner's batched pushed facts idempotently against its high-water mark.
 
     Most facts are chunk-scoped and land through ``chunks``; ``fleet`` is here for the
     runner-scoped ones — a runner reporting a brake it set on itself is about the runner,
@@ -133,7 +133,7 @@ class FactIngestService:
             )
             return True
         if kind == QUESTION_ASKED:
-            # The chunk derives waiting_on_human from the landed row (D-004); the runner
+            # The chunk derives waiting_on_human from the landed row; the runner
             # authored the question_id so it can poll the answer back ([ask-answer.md]).
             self._chunks.record_question(
                 question_id=str(payload["question_id"]),
@@ -157,7 +157,7 @@ class FactIngestService:
             # Runner-scoped and hub-read-only: the runner already stopped claiming before
             # this arrived; landing it is what makes the brake visible on the board. Stamped
             # with the runner's own clock off the payload — when it decided, not when the
-            # buffer drained, which may be an outage later (D-069).
+            # buffer drained, which may be an outage later.
             self._fleet.record_local_pause(
                 runner_id,
                 paused=kind == RUNNER_LOCALLY_PAUSED,
@@ -177,7 +177,7 @@ def _parse_at(value: object, fallback: datetime) -> datetime:
     """Read an ISO-8601 instant off a batched payload, falling back on a malformed stamp.
 
     Coerces a naive result to UTC (``bzh:utc-instants``): a runner's outbound buffer
-    (D-069) can still hold — and later deliver — a pre-fix naive stamp minted before its
+     can still hold — and later deliver — a pre-fix naive stamp minted before its
     own upgrade, since D-069 replays whatever it already buffered rather than re-minting.
     """
     if isinstance(value, str):

@@ -31,7 +31,7 @@ def test_winning_claim_carries_the_first_node_envelope(tmp_path: Path) -> None:
     assert body["environment_ids"] == ["env-a", "env-b"]
     env = body["envelope"]
     assert env["chunk_id"] == chunk_id
-    # The claim does not mint the lease (D-044): the runner reports its epoch via
+    # The claim does not mint the lease: the runner reports its epoch via
     # POST /events, so the claim envelope carries the current epoch (0, no lease yet).
     assert env["epoch"] == 0
     assert env["node"]["node_name"] == "build"
@@ -66,7 +66,7 @@ def test_envelope_reread_is_idempotent(tmp_path: Path) -> None:
     chunk_id = _ingest(hub)
     claimed = hub.client.post("/api/routes", json=_claim_body(chunk_id)).json()["envelope"]
 
-    # The lost-apply recovery read returns the same current-node envelope (D-090).
+    # The lost-apply recovery read returns the same current-node envelope.
     reread = hub.client.get(f"/api/chunks/{chunk_id}/envelope").json()
     assert reread["node"]["node_id"] == claimed["node"]["node_id"]
     assert reread["epoch"] == claimed["epoch"]

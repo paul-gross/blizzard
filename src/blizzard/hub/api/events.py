@@ -12,7 +12,7 @@ event live until it disconnects. A periodic keepalive comment keeps intermediari
 idling the connection out. Ids are monotonic, so the replay-then-live handoff dedupes by
 id — an event caught in both the replay and the live queue is emitted once.
 
-``POST /api/events`` is the runner's store-and-forward fact push (D-069/D-044); every
+``POST /api/events`` is the runner's store-and-forward fact push; every
 landed fact re-broadcasts on the stream under its board vocabulary so the board refreshes
 without polling.
 """
@@ -49,7 +49,7 @@ _KEEPALIVE_SECONDS = 15.0
 def ingest_runner_facts(
     batch: RunnerFactBatch, services: Annotated[HubServices, Depends(get_services)]
 ) -> RunnerFactAck:
-    """Land runner-minted facts, idempotent by per-runner seq high-water (D-069/D-044).
+    """Land runner-minted facts, idempotent by per-runner seq high-water.
 
     The store-and-forward ingest: ``lease.minted`` (the fence input), ``escalation.recorded``,
     ``question.asked``, and ``answer.delivered`` ride the runner's outbound buffer here. A

@@ -1,4 +1,4 @@
-# Tag v* — the release build (implementation/build.md, D-098).
+# Tag v* — the release build.
 #
 # Pushing a `v*` tag IS cutting the milestone build: the full suite runs, the
 # wheel is built with the embedded frontend, and a GitHub Release is published

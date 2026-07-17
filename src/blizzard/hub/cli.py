@@ -1,7 +1,7 @@
-"""``blizzard hub <cmd>`` — the fleet surface (design/cli.md).
+"""``blizzard hub <cmd>`` — the fleet surface.
 
 Client verbs are pure clients of the hub's HTTP API; ``host`` *becomes* the hub
-daemon (D-061). Only ``init`` / ``migrate`` / ``host`` are implemented in the
+daemon. Only ``init`` / ``migrate`` / ``host`` are implemented in the
 scaffold — the rest are stubs that name themselves, present in ``--help`` and
 filled in by the backend builder. This module is CLI top-level glue, so ``echo``
 for user output is fine here (``bzh:structlog-logging``); diagnostics go through
@@ -22,8 +22,8 @@ from blizzard.hub.app import build_hosted_app
 from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.hub.runtime import ensure_current_revision, init_environment, migrate, migration_runner
 
-# The hub the client verbs talk to (design/cli.md): ``BZ_HUB_URL`` overrides the
-# colocated default (band +2). Client verbs are pure API clients (D-023/D-061).
+# The hub the client verbs talk to: ``BZ_HUB_URL`` overrides the
+# colocated default (band +2). Client verbs are pure API clients.
 ENV_HUB_URL = "BZ_HUB_URL"
 DEFAULT_HUB_URL = "http://127.0.0.1:8421"
 _CLIENT_TIMEOUT = 15.0
@@ -112,8 +112,8 @@ def host(directory: str, host_: str | None, port: int | None) -> None:
 def status(url: str | None) -> None:
     """The fleet view: every chunk with its derived status, the runners, and open questions.
 
-    A pure client of the hub API (design/cli.md): ``GET /chunks`` + ``GET /runners`` +
-    ``GET /questions``, the same facts the board renders, in the terminal (D-004)."""
+    A pure client of the hub API: ``GET /chunks`` + ``GET /runners`` +
+    ``GET /questions``, the same facts the board renders, in the terminal."""
     base = _hub_url(url)
     try:
         with httpx.Client(base_url=base, timeout=_CLIENT_TIMEOUT) as client:
@@ -226,13 +226,13 @@ def decide(decision_id: str, choice: str, resolved_by: str, hub_url: str | None)
 
 
 def _parse_pointer(token: str) -> str:
-    """The ingest token the CLI hands the hub (D-111).
+    """The ingest token the CLI hands the hub.
 
     The CLI carries no grammar of its own any more: the hub resolves every token
     against its configured PM sources' own ``parse`` (``{name}:{ref}``,
     ``{name}#{ref}``, or the item's own URL — D-110/D-111), so a token travels
     through verbatim. The one thing that survives here is the deprecated
-    ``github:<rest>`` prefix (D-074): it warns on stderr and passes ``rest`` on its own
+    ``github:<rest>`` prefix: it warns on stderr and passes ``rest`` on its own
     merits rather than silently accepting a provider tag the pointer no longer
     carries."""
     if token.startswith("github:"):
@@ -249,14 +249,14 @@ def _parse_pointer(token: str) -> str:
 @click.argument("pointers", nargs=-1, required=True)
 @click.option("--hub-url", default=None, help=f"Hub API base URL (default ${ENV_HUB_URL} or {DEFAULT_HUB_URL}).")
 def ingest(pointers: tuple[str, ...], hub_url: str | None) -> None:
-    """Ingest PM items by token, minting a chunk (D-047/D-111).
+    """Ingest PM items by token, minting a chunk.
 
     Each POINTER is a source-native token — ``source:ref`` (e.g. ``blizzard:26``),
     ``source#ref``, or a pasted PM item URL; pass one or more — a batch mints one
     chunk carrying every pointer. A pure client of the hub API: ``POST /api/chunks``.
     The hub resolves each token against its configured PM sources and 422s one none
     of them claims, naming the token and what is configured; 409 when a resolved
-    pointer is already held by a live chunk (D-093)."""
+    pointer is already held by a live chunk."""
     tokens = [_parse_pointer(p) for p in pointers]
     url = f"{_hub_url(hub_url).rstrip('/')}/api/chunks"
     try:
@@ -282,7 +282,7 @@ def ingest(pointers: tuple[str, ...], hub_url: str | None) -> None:
 @click.argument("chunk_id")
 @click.option("--hub-url", default=None, help=f"Hub API base URL (default ${ENV_HUB_URL} or {DEFAULT_HUB_URL}).")
 def promote(chunk_id: str, hub_url: str | None) -> None:
-    """Promote a not-ready CHUNK to ready so a runner may claim it (D-103).
+    """Promote a not-ready CHUNK to ready so a runner may claim it.
 
     A pure client of the hub API: ``POST /api/chunks/{id}/promote``. Idempotent — promoting
     an already-ready chunk is a harmless no-op; 404 only when the chunk is unknown."""
@@ -304,7 +304,7 @@ def promote(chunk_id: str, hub_url: str | None) -> None:
 @click.argument("chunk_id")
 @click.option("--hub-url", default=None, help=f"Hub API base URL (default ${ENV_HUB_URL} or {DEFAULT_HUB_URL}).")
 def requeue(chunk_id: str, hub_url: str | None) -> None:
-    """Close an escalation by supersession: requeue CHUNK at its current node (D-067)."""
+    """Close an escalation by supersession: requeue CHUNK at its current node."""
     url = f"{_hub_url(hub_url).rstrip('/')}/api/chunks/{chunk_id}/requeues"
     try:
         resp = httpx.post(url, timeout=_CLIENT_TIMEOUT)
@@ -325,7 +325,7 @@ def requeue(chunk_id: str, hub_url: str | None) -> None:
 @click.argument("chunk_id")
 @click.option("--hub-url", default=None, help=f"Hub API base URL (default ${ENV_HUB_URL} or {DEFAULT_HUB_URL}).")
 def detach(chunk_id: str, hub_url: str | None) -> None:
-    """Forcibly release CHUNK from its runner (D-088).
+    """Forcibly release CHUNK from its runner.
 
     A pure client of the hub API: ``POST /api/chunks/{id}/detach``. The chunk re-derives
     ready and is re-claimable at its current node; the holding runner releases it on its
@@ -351,7 +351,7 @@ def detach(chunk_id: str, hub_url: str | None) -> None:
 @click.option("--by", "by", default="operator", help="Who is pausing (recorded on the fact).")
 @click.option("--hub-url", default=None, help=f"Hub API base URL (default ${ENV_HUB_URL} or {DEFAULT_HUB_URL}).")
 def pause(runner_id: str, by: str, hub_url: str | None) -> None:
-    """Pause a runner — it stops claiming new work; in-flight chunks run on (D-043)."""
+    """Pause a runner — it stops claiming new work; in-flight chunks run on."""
     _set_runner_pause(runner_id, verb="pause", by=by, hub_url=hub_url)
 
 
@@ -360,7 +360,7 @@ def pause(runner_id: str, by: str, hub_url: str | None) -> None:
 @click.option("--by", "by", default="operator", help="Who is resuming (recorded on the fact).")
 @click.option("--hub-url", default=None, help=f"Hub API base URL (default ${ENV_HUB_URL} or {DEFAULT_HUB_URL}).")
 def resume(runner_id: str, by: str, hub_url: str | None) -> None:
-    """Resume a paused runner — it claims work again on its next pull (D-043)."""
+    """Resume a paused runner — it claims work again on its next pull."""
     _set_runner_pause(runner_id, verb="resume", by=by, hub_url=hub_url)
 
 

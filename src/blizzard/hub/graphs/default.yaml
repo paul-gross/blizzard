@@ -1,19 +1,19 @@
-# The default workflow graph — build -> review -> deliver (D-025/D-081).
+# The default workflow graph — build -> review -> deliver.
 #
-# The autonomous-baseline shape (D-014): the canonical review-fail cycle with NO
+# The autonomous-baseline shape: the canonical review-fail cycle with NO
 # human gate. Promoted from the P6 walking-skeleton `build -> deliver` slice to the
 # full MVP graph (milestone:mvp): build hands to a cold-eyes review node, review
 # either passes to delivery or fails the work back into build carrying its findings
 # asset (design/workflow-engine.md review node). Insert an `approve-gate` human node
 # ahead of `deliver` (design/hub/sample-graph.yaml) to dial HITL back up — graphs are
-# immutable, so that is a re-mint, not an edit (D-033/D-040).
+# immutable, so that is a re-mint, not an edit.
 #
-# Conforms to the canonical authoring schema (design/hub/graph-schema.md, D-071):
-# fused choice/edge entries, prompts as file references inlined at mint (D-033),
-# retries escaping to escalation (D-009), the review-fail edge carrying the findings
-# asset + its prompt_addendum back into build (D-026/D-071), and delivery as a
+# Conforms to the canonical authoring schema:
+# fused choice/edge entries, prompts as file references inlined at mint,
+# retries escaping to escalation, the review-fail edge carrying the findings
+# asset + its prompt_addendum back into build, and delivery as a
 # hub-executed node whose machinery outcomes (landed -> done, conflict -> entry) are
-# accepted by default (D-030/D-086). Operational metadata (enabled, auto_migrate,
+# accepted by default. Operational metadata (enabled, auto_migrate,
 # migration_target) is NOT authored here — it is set after mint via PATCH /graphs/{id}.
 
 name: default-delivery
@@ -43,9 +43,9 @@ nodes:
   review:
     executor: runner
     prompt: ./prompts/review.md
-    session: fresh  # cold eyes for review (D-054); the default is resume
+    session: fresh  # cold eyes for review; the default is resume
     produces:
-      - review-findings  # asset artifact — carried back into build on a fail (D-026)
+      - review-findings  # asset artifact — carried back into build on a fail
     judgement:
       prompt: ./prompts/review.judgement.md
       choices:
@@ -54,7 +54,7 @@ nodes:
           to: deliver
         fail:
           description: Review found blocking issues, recorded in the review-findings asset.
-          to: build  # THE LOOP: the findings asset rides this edge back into build (D-026)
+          to: build  # THE LOOP: the findings asset rides this edge back into build
           prompt_addendum: ./prompts/build.from-review.md
     retries:
       max: 2
@@ -64,5 +64,5 @@ nodes:
     executor: hub
     mode: merge-to-main
     # No judgement: accept the deliver machinery defaults — landed -> done (the
-    # reserved terminal) and conflict -> entry (build) in the MVP (D-086). The
-    # conventional cross-graph `merge` graph arrives with epic:migration (D-058).
+    # reserved terminal) and conflict -> entry (build) in the MVP. The
+    # conventional cross-graph `merge` graph arrives with epic:migration.

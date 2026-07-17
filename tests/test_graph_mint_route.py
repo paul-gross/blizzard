@@ -1,4 +1,4 @@
-"""Graph mint route — validate, reify, warn (D-071) (component tier)."""
+"""Graph mint route — validate, reify, warn (component tier)."""
 
 from __future__ import annotations
 
@@ -114,7 +114,7 @@ nodes:
 
 
 def test_mint_round_trips_node_produces_and_checks_through_the_store(tmp_path: Path) -> None:
-    """A node's ``produces``/``checks`` survive a store reload (D-026/D-077).
+    """A node's ``produces``/``checks`` survive a store reload.
 
     The graph store must persist and reify these: a review node reloaded from the store
     with an empty ``produces`` never emits its ``review-findings`` asset, so the review

@@ -43,7 +43,7 @@ class LocalTranscriptService:
         if lease is None:
             return None
         if lease.session_id is None:
-            # Minted at FILL, spawn-return not yet recorded (D-092) — the agent has
+            # Minted at FILL, spawn-return not yet recorded — the agent has
             # not started a session yet. Ordinary, not an error.
             return Transcript(session_id=None, available=False, reason="spawning", turns=[], truncated=False)
 

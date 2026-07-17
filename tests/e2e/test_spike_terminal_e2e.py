@@ -11,7 +11,7 @@ branch pointers"*, and the graph still *"ends in a deliver node"* — the unifor
 One chunk travels a **spike** node whose worker does read-only investigation (no commit,
 so nothing is pushed and ``_push_and_collect_artifacts`` yields no git-commit artifact)
 and ``produces`` a ``spike-notes`` **asset**, whose content is the worker's judgement
-assessment — the text after ``</Choice>`` (D-026/D-077). The spike routes into the hub
+assessment — the text after ``</Choice>``. The spike routes into the hub
 **deliver** node exactly as a code chunk does; because the chunk carries *no* git-commit
 pointers, the merge-queue coordinator lands nothing — it opens no PR and moves no ``main``
 — yet still writes the terminal ``delivery.landed`` fact, so the chunk derives ``done``
@@ -19,7 +19,7 @@ carrying only its asset (``hub/delivery/coordinator.py``: an empty ``pointers`` 
 skips straight to ``_landed``). The assertions pin the criterion at all three truths:
 
 * **fleet truth** — the hub derives the chunk ``done`` (an empty delivery still lands);
-* **hub-durable artifacts (D-026)** — the chunk detail exposes exactly one artifact, the
+* **hub-durable artifacts** — the chunk detail exposes exactly one artifact, the
   ``spike-notes`` asset, and **zero** ``git_commit`` artifacts;
 * **git truth** — no PR is opened at the forge and bare ``main`` is untouched: a non-code
   chunk lands no code.
@@ -67,7 +67,7 @@ pytestmark = [
 _SPIKE_SCRIPT = "pass\n"
 # The spike's judgement: route to the deliver node (``complete -> deliver``) and carry the
 # investigation write-up as the assessment. The text after ``</Choice>`` becomes the
-# ``spike-notes`` asset's content (D-077) — the chunk's whole, terminal output.
+# ``spike-notes`` asset's content — the chunk's whole, terminal output.
 _SPIKE_NOTES = "SPIKE: investigated toy-api; the change is not warranted — no code needed."
 _SPIKE_JUDGEMENT = f"verdict('complete', {_SPIKE_NOTES!r})\n"
 
@@ -76,7 +76,7 @@ def _graph_yaml() -> str:
     """A ``default-delivery`` graph whose only work node is an asset-producing spike.
 
     Named ``default-delivery`` so the hub's lazy ``ensure_default`` (POST /chunks) pins
-    this pre-minted graph by name (D-081) instead of the packaged prose default. The
+    this pre-minted graph by name instead of the packaged prose default. The
     spike ``produces`` a ``spike-notes`` asset and routes into the same hub ``deliver``
     node a code chunk uses (workflow-engine.md: the graph ends in a deliver node). With
     no branch pointers to land, the deliver is an empty land: no PR, no ``main`` move,
@@ -157,7 +157,7 @@ def test_spike_chunk_terminates_with_only_asset_artifacts(tmp_path: Path) -> Non
         )
         assert ingested.status_code == 201, ingested.text
         chunk_id = ingested.json()["chunk_id"]
-        assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # ready for the runner (D-103)
+        assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # ready for the runner
 
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         fenced = dict(os.environ)
@@ -167,7 +167,7 @@ def test_spike_chunk_terminates_with_only_asset_artifacts(tmp_path: Path) -> Non
         # Fleet truth: the chunk reached the terminal (the empty deliver still lands).
         assert status == "done", f"spike chunk did not reach done (last status {status!r})"
 
-        # Hub-durable artifacts (D-026): exactly the spike-notes asset, and no git commit.
+        # Hub-durable artifacts: exactly the spike-notes asset, and no git commit.
         detail = hub.get(f"/api/chunks/{chunk_id}").json()
         artifacts = detail["artifacts"]
         assert [a["kind"] for a in artifacts] == ["asset"], f"expected a single asset artifact, got: {artifacts}"

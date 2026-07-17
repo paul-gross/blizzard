@@ -5,7 +5,7 @@ import { detachChunkApiChunksChunkIdDetachPost } from '../api/hub';
 import { hubChunkKey, hubChunksKey, hubQueueKey } from '../query-keys';
 
 /** Forcibly detach a chunk from its runner — the board's counterpart of
- * `blizzard hub detach` (D-088). Not requeue: it writes no supersession fact and
+ * `blizzard hub detach`. Not requeue: it writes no supersession fact and
  * bumps no epoch, so a `needs_human` chunk detached this way still derives
  * `needs_human` (`src/blizzard/hub/domain/detach.py`). */
 export interface DetachVars {
@@ -13,7 +13,7 @@ export interface DetachVars {
 }
 
 /**
- * `POST /api/chunks/{id}/detach` — release a chunk's live route (D-088), through the
+ * `POST /api/chunks/{id}/detach` — release a chunk's live route, through the
  * generated client (bzh:generated-client). 404 for an unknown chunk and 409 for a
  * chunk with no live route both surface as a thrown error — the caller reports it,
  * nothing here swallows it. On success it re-reads the fleet list, the ready queue,

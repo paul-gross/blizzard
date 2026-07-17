@@ -1,4 +1,4 @@
-"""Human gates on the wired hub — component tier (D-045/D-032/D-067).
+"""Human gates on the wired hub — component tier.
 
 The gate mechanics against a fully-wired hub over a tmp sqlite store (doubles only at
 the forge/PM seams — ``bzh:pluggable-seams``): a graph gate opens a decision on arrival
@@ -95,7 +95,7 @@ def _ingest(hub, yaml_body: str) -> tuple[str, dict]:  # type: ignore[no-untyped
     assert graph.status_code == 201, graph.text
     nodes = {n["name"]: n["node_id"] for n in graph.json()["nodes"]}
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
-    assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # ready to claim (D-103)
+    assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # ready to claim
     return chunk_id, nodes
 
 
@@ -325,7 +325,7 @@ def test_requeue_on_a_non_escalated_chunk_is_409(tmp_path: Path) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Detach (D-088)
+# Detach
 # --------------------------------------------------------------------------- #
 
 
@@ -386,7 +386,7 @@ def test_detach_an_escalated_chunk_succeeds_and_the_escalation_survives(tmp_path
 
 
 def test_detach_publishes_chunk_changed_and_queue_changed(tmp_path: Path) -> None:
-    """The board learns of a detach live, as it does of a requeue (D-088, D-067).
+    """The board learns of a detach live, as it does of a requeue.
 
     Both events matter and for different reasons: ``chunk-changed`` carries the chunk's
     re-derived status to any open detail view, and ``queue-changed`` tells the queue view a

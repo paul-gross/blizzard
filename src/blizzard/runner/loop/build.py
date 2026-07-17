@@ -84,13 +84,13 @@ def run_single_tick(config: RunnerConfig) -> None:
 
 
 def mark_resume_intents_on_shutdown(config: RunnerConfig) -> int:
-    """Mark in-flight leases for restart-resume as the daemon exits gracefully (D-082).
+    """Mark in-flight leases for restart-resume as the daemon exits gracefully.
 
     Store-only — it needs neither the hub nor the workspace provider — so it opens just
     the runner store and delegates the which-leases decision to :func:`mark_resume_intents`.
     Called from the ``host`` command's shutdown path (a graceful SIGTERM lets uvicorn return
     and this run); an ungraceful ``kill -9`` never reaches it, which is the intended scope
-    boundary (design/runner/loop.md)."""
+    boundary."""
     engine = create_engine_from_url(config.db_url)
     store = SqlAlchemyRunnerStore(engine)
     try:
@@ -138,7 +138,7 @@ class PeriodicDriver:
     def stop(self) -> None:
         """Signal the loop to stop and wait for any in-flight tick to finish before returning.
 
-        The join is **unbounded** on purpose: the graceful-shutdown resume marking (D-082) runs
+        The join is **unbounded** on purpose: the graceful-shutdown resume marking runs
         right after this returns and must not race a live tick writing the same store. A tick
         cannot run forever — every seam it touches is timeout-bounded (the hub client's
         ``_HTTP_TIMEOUT``), so the in-flight tick drains in at most about one tick's work and the

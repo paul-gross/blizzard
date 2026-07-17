@@ -1,9 +1,9 @@
-"""Queue shaping — ready-queue reorder and grouping (D-048/D-076/D-047), component tier.
+"""Queue shaping — ready-queue reorder and grouping, component tier.
 
 Drives the real hub over a tmp store: ``GET /queue/peek`` honours the explicit order,
 ``POST /queue/reorder`` moves a ready chunk, and ``POST /chunks/{id}/group`` merges
-unacquired chunks into one surviving chunk. Ordering and grouping are fact-derived
-(D-004), so every assertion reads the derived surface, never a stored column.
+unacquired chunks into one surviving chunk. Ordering and grouping are fact-derived,
+so every assertion reads the derived surface, never a stored column.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ def _ingest(hub: HubHarness, n: int) -> str:
     """Ingest and promote one chunk holding a distinct pointer, advancing the clock.
 
     Queue shaping is ready-only, so the chunk is promoted out of its not-ready resting
-    state (D-103) before it can be peeked, reordered, or grouped."""
+    state before it can be peeked, reordered, or grouped."""
     pointer = {"source": "default", "ref": str(n)}
     resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token(pointer)]})
     assert resp.status_code == 201, resp.text
@@ -52,7 +52,7 @@ def test_reorder_to_top_and_to_a_position(tmp_path: Path) -> None:
     resp = hub.client.post("/api/queue/reorder", json={"chunk_id": c, "position": 0})
     assert resp.status_code == 200, resp.text
     assert [e["chunk_id"] for e in resp.json()["entries"]] == [c, a, b]
-    assert _peek_ids(hub) == [c, a, b]  # the peek honours it (D-048)
+    assert _peek_ids(hub) == [c, a, b]  # the peek honours it
 
     # Move a to the middle (index 1 of the current [c, a, b] with a removed → [c, b]).
     hub.client.post("/api/queue/reorder", json={"chunk_id": a, "position": 1})
@@ -92,10 +92,10 @@ def test_group_merges_pointers_and_discards_the_rest(tmp_path: Path) -> None:
     body = resp.json()
     assert body["chunk_id"] == survivor
     assert sorted(body["merged_chunk_ids"]) == sorted([b, c])
-    # The survivor carries the union of all three pointers (D-076).
+    # The survivor carries the union of all three pointers.
     refs = {p["ref"] for p in body["pm_pointers"]}
     assert refs == {"1", "2", "3"}
-    # The merged-away chunks are ephemeral — gone from the queue and the fleet list (D-047).
+    # The merged-away chunks are ephemeral — gone from the queue and the fleet list.
     assert _peek_ids(hub) == [survivor]
     listed = {row["chunk_id"] for row in hub.client.get("/api/chunks").json()}
     assert listed == {survivor}
@@ -106,9 +106,9 @@ def test_group_is_pointer_union_deduped(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     shared = {"source": "default", "ref": "shared"}
     survivor = hub.client.post("/api/chunks", json={"tokens": [pointer_token(shared)]}).json()["chunk_id"]
-    assert hub.client.post(f"/api/chunks/{survivor}/promote").status_code == 202  # ready to group (D-103)
+    assert hub.client.post(f"/api/chunks/{survivor}/promote").status_code == 202  # ready to group
     hub.clock.advance(timedelta(seconds=1))
-    # A second chunk cannot re-ingest the same live pointer (D-093), so give it its own.
+    # A second chunk cannot re-ingest the same live pointer, so give it its own.
     other = _ingest(hub, 9)
     resp = hub.client.post(f"/api/chunks/{survivor}/group", json={"merge_chunk_ids": [survivor, other]})
     assert resp.status_code == 200, resp.text
@@ -144,7 +144,7 @@ def test_grouped_pointer_reingest_points_at_survivor(tmp_path: Path) -> None:
     survivor, b = _ingest(hub, 1), _ingest(hub, 2)
     hub.client.post(f"/api/chunks/{survivor}/group", json={"merge_chunk_ids": [b]})
     # b's pointer now lives on the survivor (a live chunk), so re-ingesting it is a 409
-    # naming the survivor, not the discarded chunk (D-093/D-047).
+    # naming the survivor, not the discarded chunk.
     resp = hub.client.post(
         "/api/chunks",
         json={"tokens": [pointer_token({"source": "default", "ref": "2"})]},

@@ -2,7 +2,7 @@ import { Injectable, InjectionToken, type Signal, inject, signal } from '@angula
 import { Observable, Subject } from 'rxjs';
 
 /**
- * Hand-rolled SSE transport for the fleet's live views (D-097).
+ * Hand-rolled SSE transport for the fleet's live views.
  *
  * Native `EventSource` -> RxJS -> signals, with reconnect-then-re-GET gap
  * recovery: on a hard drop the service re-opens with exponential backoff and
@@ -16,7 +16,7 @@ import { Observable, Subject } from 'rxjs';
  * the types it wants via {@link SseConnectOptions.events} and reads them off
  * {@link SseHandle.events}. Unnamed frames still surface on {@link SseHandle.messages}.
  *
- * When auth arrives (D-018) the `EventSource` seam swaps to a fetch-based source
+ * When auth arrives the `EventSource` seam swaps to a fetch-based source
  * with no change above this service.
  */
 
@@ -26,7 +26,7 @@ export type SseStatus = 'idle' | 'open' | 'reconnecting' | 'closed';
 /**
  * Factory seam for constructing the underlying `EventSource`. Injected so tests
  * can drive reconnect deterministically with a fake — jsdom ships no
- * `EventSource` — and so the fetch-based transport (D-018) can replace it later.
+ * `EventSource` — and so the fetch-based transport can replace it later.
  */
 export type EventSourceFactory = (url: string) => EventSource;
 export const EVENT_SOURCE_FACTORY = new InjectionToken<EventSourceFactory>('fleet.EVENT_SOURCE_FACTORY', {

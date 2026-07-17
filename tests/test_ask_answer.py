@@ -158,7 +158,7 @@ def test_question_asked_via_events_batch_lands(tmp_path: Path) -> None:
 def test_question_asked_via_events_batch_normalizes_a_naive_asked_at(tmp_path: Path) -> None:
     """Legacy-buffered-payload insurance (issue #28, ``bzh:utc-instants``).
 
-    A runner's outbound buffer (D-069) can still hold — and later deliver — a naive
+    A runner's outbound buffer can still hold — and later deliver — a naive
     ``asked_at`` string minted before the runner's own upgrade; ``_parse_at`` coerces it
     to UTC rather than storing (and later re-emitting) a naive instant.
     """
@@ -217,7 +217,7 @@ def test_answer_first_write_wins_second_gets_409_with_winner(tmp_path: Path) -> 
     assert body["answered_by"] == "alice"
     assert body["answer"] == "rest"
 
-    # The winning answer flips the chunk back out of waiting_on_human (D-004).
+    # The winning answer flips the chunk back out of waiting_on_human.
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "running"
     assert detail["questions"] == []

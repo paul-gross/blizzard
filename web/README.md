@@ -13,7 +13,7 @@ application entrypoints, two shared libraries (D-096 / D-097,
 
 Both apps build as **client-rendered SPAs** (no SSR, no Node at runtime) whose
 output is embedded in the one wheel under `src/blizzard/static/{hub,runner}` and
-served by the daemons alongside `/api` (D-061 / D-096). Change detection is
+served by the daemons alongside `/api`. Change detection is
 **zoneless** from day one; component state is signals; server reads go through
 **TanStack Query**; there is **no Angular Material, no Tailwind, no chart
 library, and no prettier** (eslint owns formatting).

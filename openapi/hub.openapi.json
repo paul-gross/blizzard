@@ -55,7 +55,7 @@
         "type": "object"
       },
       "ApplyOutcome": {
-        "description": "What a completion's apply produced (D-072).",
+        "description": "What a completion's apply produced.",
         "enum": [
           "next",
           "hub_node_taken",
@@ -67,7 +67,7 @@
         "type": "string"
       },
       "ApplyResponse": {
-        "description": "The response to a completion submission (D-072).\n\nExactly one of ``next_envelope`` (when ``outcome == next``) or ``detail`` (on a\nnon-advancing outcome) is meaningful; the ``outcome`` discriminates.",
+        "description": "The response to a completion submission.\n\nExactly one of ``next_envelope`` (when ``outcome == next``) or ``detail`` (on a\nnon-advancing outcome) is meaningful; the ``outcome`` discriminates.",
         "properties": {
           "detail": {
             "anyOf": [
@@ -101,7 +101,7 @@
         "type": "object"
       },
       "ArtifactKind": {
-        "description": "The union discriminator (D-036).",
+        "description": "The union discriminator.",
         "enum": [
           "git_commit",
           "asset"
@@ -110,7 +110,7 @@
         "type": "string"
       },
       "ArtifactView": {
-        "description": "One entry of a chunk's inline artifact store (D-036).\n\n``key`` is the store key ``{node}.{artifact-name}.{epoch}`` \u2014 append-only, so\nevery re-run's entry is retained and latest-by-epoch resolution is the reader's\n(D-089). ``content`` carries an **asset's** text verbatim (a review's findings\ndocument); the ``repo``/``branch_name``/``commit_hash`` trio carries a\n``git_commit`` artifact's pinned reference (the hub stores the reference, never the\ncode \u2014 D-012).\n\n``branch_url`` is the forge ``tree`` URL for the produced branch, resolved server-side\nfrom the chunk's issue-shaped PM pointer (D-075) so the board can link a ``git_commit``\nto the branch on the forge; null when no forge web base is derivable \u2014 the row then\nshows the branch name without a link (no broken link).",
+        "description": "One entry of a chunk's inline artifact store.\n\n``key`` is the store key ``{node}.{artifact-name}.{epoch}`` \u2014 append-only, so\nevery re-run's entry is retained and latest-by-epoch resolution is the reader's.\n``content`` carries an **asset's** text verbatim (a review's findings\ndocument); the ``repo``/``branch_name``/``commit_hash`` trio carries a\n``git_commit`` artifact's pinned reference (the hub stores the reference, never the\ncode \u2014 D-012).\n\n``branch_url`` is the forge ``tree`` URL for the produced branch, resolved server-side\nfrom the chunk's issue-shaped PM pointer so the board can link a ``git_commit``\nto the branch on the forge; null when no forge web base is derivable \u2014 the row then\nshows the branch name without a link (no broken link).",
         "properties": {
           "branch_name": {
             "anyOf": [
@@ -204,7 +204,7 @@
         "type": "object"
       },
       "CheckDeliveryResponse": {
-        "description": "The result of an on-demand ``POST /chunks/{id}/check-delivery`` (D-065).",
+        "description": "The result of an on-demand ``POST /chunks/{id}/check-delivery``.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -237,7 +237,7 @@
         "type": "object"
       },
       "CheckResult": {
-        "description": "One deterministic check's outcome, informing the verdict (D-077).",
+        "description": "One deterministic check's outcome, informing the verdict.",
         "properties": {
           "command": {
             "title": "Command",
@@ -256,7 +256,7 @@
         "type": "object"
       },
       "ChunkDetail": {
-        "description": "The chunk aggregate in full (D-036) \u2014 the board's chunk view and envelope feed.\n\nCarries the chunk's **transition history** and its inline **artifact store** so the\nweb app can render every node it visited, the review that failed once and looped\nback to build, and the artifacts \u2014 the branch pointers merged and the review notes\n(product/mvp.md, MVP criterion 9/11).",
+        "description": "The chunk aggregate in full \u2014 the board's chunk view and envelope feed.\n\nCarries the chunk's **transition history** and its inline **artifact store** so the\nweb app can render every node it visited, the review that failed once and looped\nback to build, and the artifacts \u2014 the branch pointers merged and the review notes\n(product/mvp.md, MVP criterion 9/11).",
         "properties": {
           "artifacts": {
             "default": [],
@@ -389,7 +389,7 @@
         "type": "object"
       },
       "ChunkGroupRequest": {
-        "description": "Merge unacquired chunks into one \u2014 the board's Group control (D-048/D-076).\n\n``merge_chunk_ids`` are the ready chunks folded into the path's survivor chunk; the\nsurvivor absorbs the union of their PM pointers and the merged chunks are discarded as\nephemeral (D-047). Self-references and duplicates are ignored; a non-ready member is\nrejected ``409``.",
+        "description": "Merge unacquired chunks into one \u2014 the board's Group control.\n\n``merge_chunk_ids`` are the ready chunks folded into the path's survivor chunk; the\nsurvivor absorbs the union of their PM pointers and the merged chunks are discarded as\nephemeral. Self-references and duplicates are ignored; a non-ready member is\nrejected ``409``.",
         "properties": {
           "merge_chunk_ids": {
             "items": {
@@ -436,7 +436,7 @@
         "type": "object"
       },
       "ChunkIngestRequest": {
-        "description": "Ingest by source-native token \u2014 specific items always, batch fine (D-047/D-111).\n\nEach token is resolved against the configured PM sources' own grammar\n(``IPmSource.parse``): ``{name}:{ref}``, ``{name}#{ref}``, or the item's own URL.\nTokens only \u2014 no pre-resolved ``{source, ref}`` shape travels alongside them; the\ntwo intake shapes would reintroduce the same config-blind guess D-111 removes.",
+        "description": "Ingest by source-native token \u2014 specific items always, batch fine.\n\nEach token is resolved against the configured PM sources' own grammar\n(``IPmSource.parse``): ``{name}:{ref}``, ``{name}#{ref}``, or the item's own URL.\nTokens only \u2014 no pre-resolved ``{source, ref}`` shape travels alongside them; the\ntwo intake shapes would reintroduce the same config-blind guess D-111 removes.",
         "properties": {
           "tokens": {
             "items": {
@@ -467,7 +467,7 @@
         "type": "object"
       },
       "ChunkStatus": {
-        "description": "The derived chunk statuses (D-067). Never stored \u2014 always a query result.",
+        "description": "The derived chunk statuses. Never stored \u2014 always a query result.",
         "enum": [
           "not_ready",
           "ready",
@@ -482,7 +482,7 @@
         "type": "string"
       },
       "ChunkSummary": {
-        "description": "One row of the fleet chunk list \u2014 derived status + current node (D-004).\n\n``current_node_name`` is the node's human graph name (``build``, ``review``) the\nboard renders in place of the raw ``nd_`` ULID; null when the chunk has no\ncurrent node or its pinned graph cannot resolve the id.",
+        "description": "One row of the fleet chunk list \u2014 derived status + current node.\n\n``current_node_name`` is the node's human graph name (``build``, ``review``) the\nboard renders in place of the raw ``nd_`` ULID; null when the chunk has no\ncurrent node or its pinned graph cannot resolve the id.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -592,7 +592,7 @@
         "type": "object"
       },
       "DecisionChoiceModel": {
-        "description": "One selectable gate outcome \u2014 a button on the board/bot (D-042).",
+        "description": "One selectable gate outcome \u2014 a button on the board/bot.",
         "properties": {
           "description": {
             "title": "Description",
@@ -611,7 +611,7 @@
         "type": "object"
       },
       "DecisionResolutionRequest": {
-        "description": "A person's choice for an open decision \u2014 first-write-wins CAS (D-045).",
+        "description": "A person's choice for an open decision \u2014 first-write-wins CAS.",
         "properties": {
           "choice": {
             "title": "Choice",
@@ -659,7 +659,7 @@
         "type": "object"
       },
       "DecisionSubmission": {
-        "description": "A runner-config gate: submit a decision in place of a transition (D-032/D-036).\n\nCarries the gated step's artifacts and its fencing epoch \u2014 one atomic, epoch-fenced\nwrite, exactly where a worker-judged node would have submitted its transition. The\nnode's choice set is supplied by the hub from the pinned graph, not sent here.",
+        "description": "A runner-config gate: submit a decision in place of a transition.\n\nCarries the gated step's artifacts and its fencing epoch \u2014 one atomic, epoch-fenced\nwrite, exactly where a worker-judged node would have submitted its transition. The\nnode's choice set is supplied by the hub from the pinned graph, not sent here.",
         "properties": {
           "artifacts": {
             "default": [],
@@ -691,7 +691,7 @@
         "type": "object"
       },
       "DecisionView": {
-        "description": "A gate decision in full \u2014 the board's card and the runner's pickup (D-045).\n\n``resolved_choice`` is set once a person has decided; ``transitioned`` is true once\nthe holding runner has recorded the resolving transition. The runner acts on a\ndecision that is resolved but not yet transitioned.",
+        "description": "A gate decision in full \u2014 the board's card and the runner's pickup.\n\n``resolved_choice`` is set once a person has decided; ``transitioned`` is true once\nthe holding runner has recorded the resolving transition. The runner acts on a\ndecision that is resolved but not yet transitioned.",
         "properties": {
           "choices": {
             "default": [],
@@ -776,7 +776,7 @@
         "type": "object"
       },
       "EnvelopeArtifact": {
-        "description": "One artifact carried into a node-step, resolved latest-by-epoch (D-036).",
+        "description": "One artifact carried into a node-step, resolved latest-by-epoch.",
         "properties": {
           "branch_name": {
             "anyOf": [
@@ -848,7 +848,7 @@
         "type": "object"
       },
       "EnvelopeChoice": {
-        "description": "A selectable outcome the worker's judgement may emit (D-042).",
+        "description": "A selectable outcome the worker's judgement may emit.",
         "properties": {
           "description": {
             "title": "Description",
@@ -867,7 +867,7 @@
         "type": "object"
       },
       "EscalationReport": {
-        "description": "A runner's ``escalation.recorded`` \u2014 retries exhausted for the node (D-009).\n\n``takeover_command`` is the literal ``cd <workdir> && <harness resume>`` a human\npastes to enter the parked session (design/harness-adapters.md); ``epoch`` is the\nexhausted attempt's fence, closed by a later lease mint (D-067).",
+        "description": "A runner's ``escalation.recorded`` \u2014 retries exhausted for the node.\n\n``takeover_command`` is the literal ``cd <workdir> && <harness resume>`` a human\npastes to enter the parked session; ``epoch`` is the\nexhausted attempt's fence, closed by a later lease mint.",
         "properties": {
           "epoch": {
             "title": "Epoch",
@@ -891,7 +891,7 @@
         "type": "object"
       },
       "EscalationView": {
-        "description": "An open escalation on a ``needs_human`` chunk (D-009/D-067).\n\nSurfaces the runner-composed takeover command so a human can resume the parked\nsession (design/harness-adapters.md). Present only while the escalation is open \u2014\na later lease mint (requeue/takeover) supersedes it and this drops away (D-067).",
+        "description": "An open escalation on a ``needs_human`` chunk.\n\nSurfaces the runner-composed takeover command so a human can resume the parked\nsession. Present only while the escalation is open \u2014\na later lease mint (requeue/takeover) supersedes it and this drops away.",
         "properties": {
           "epoch": {
             "title": "Epoch",
@@ -910,7 +910,7 @@
         "type": "object"
       },
       "Executor": {
-        "description": "Where a node's step runs (D-030).",
+        "description": "Where a node's step runs.",
         "enum": [
           "runner",
           "hub"
@@ -919,7 +919,7 @@
         "type": "string"
       },
       "GraphMintRequest": {
-        "description": "A graph definition to mint \u2014 the raw YAML body (D-071).",
+        "description": "A graph definition to mint \u2014 the raw YAML body.",
         "properties": {
           "definition_yaml": {
             "title": "Definition Yaml",
@@ -1020,7 +1020,7 @@
         "type": "object"
       },
       "JudgedBy": {
-        "description": "Who renders a node's exit judgement \u2014 the structural gate marker (D-041).",
+        "description": "Who renders a node's exit judgement \u2014 the structural gate marker.",
         "enum": [
           "worker",
           "human"
@@ -1029,7 +1029,7 @@
         "type": "string"
       },
       "LeaseMintReport": {
-        "description": "A runner's ``lease.minted`` \u2014 one node-step attempt's fencing epoch (D-044).",
+        "description": "A runner's ``lease.minted`` \u2014 one node-step attempt's fencing epoch.",
         "properties": {
           "epoch": {
             "title": "Epoch",
@@ -1048,7 +1048,7 @@
         "type": "object"
       },
       "NodeConfig": {
-        "description": "The node's invariant identity for this step (D-025/D-038).",
+        "description": "The node's invariant identity for this step.",
         "properties": {
           "checks": {
             "default": [],
@@ -1125,7 +1125,7 @@
         "type": "object"
       },
       "NodeEnvelope": {
-        "description": "Everything a runner needs to work one node-step (D-089).",
+        "description": "Everything a runner needs to work one node-step.",
         "properties": {
           "artifacts": {
             "default": [],
@@ -1196,7 +1196,7 @@
         "type": "object"
       },
       "OpenDecisionsResponse": {
-        "description": "The fleet's open (unresolved) decisions \u2014 ``blizzard hub decisions`` (D-052).",
+        "description": "The fleet's open (unresolved) decisions \u2014 ``blizzard hub decisions``.",
         "properties": {
           "decisions": {
             "default": [],
@@ -1211,7 +1211,7 @@
         "type": "object"
       },
       "PmItemEntry": {
-        "description": "One pointer's pass-through PM item (D-047/D-074/D-107) \u2014 title, body + comment\nthread, vendor-native.\n\n``label``/``web_url`` are the board-legible pointer label (``blizzard#8``) and its\nbrowser address (D-110) \u2014 both null when no configured source names ``source``. A\nper-pointer forge failure degrades here rather than failing the whole read (D-084):\n``error`` carries the reason and ``title``/``body`` are null, so one unreachable\npointer never blinds the reader to the pointers it did reach.",
+        "description": "One pointer's pass-through PM item \u2014 title, body + comment\nthread, vendor-native.\n\n``label``/``web_url`` are the board-legible pointer label (``blizzard#8``) and its\nbrowser address \u2014 both null when no configured source names ``source``. A\nper-pointer forge failure degrades here rather than failing the whole read:\n``error`` carries the reason and ``title``/``body`` are null, so one unreachable\npointer never blinds the reader to the pointers it did reach.",
         "properties": {
           "body": {
             "anyOf": [
@@ -1298,7 +1298,7 @@
         "type": "object"
       },
       "PmItemsView": {
-        "description": "A chunk's pass-through PM items (D-074/D-084) \u2014 one entry per pointer, order preserved.\n\nEmpty when the chunk holds no pointers \u2014 the board's empty state; a grouped chunk carrying\nmany pointers (D-047) yields one entry per pointer, each fetched fresh and never stored.",
+        "description": "A chunk's pass-through PM items \u2014 one entry per pointer, order preserved.\n\nEmpty when the chunk holds no pointers \u2014 the board's empty state; a grouped chunk carrying\nmany pointers yields one entry per pointer, each fetched fresh and never stored.",
         "properties": {
           "items": {
             "default": [],
@@ -1313,7 +1313,7 @@
         "type": "object"
       },
       "PmPointerModel": {
-        "description": "One ``{source, ref}`` PM pointer (D-107) \u2014 ``source`` names a configured\n``[[pm_source]]``; ``ref`` is that source's own item token.",
+        "description": "One ``{source, ref}`` PM pointer \u2014 ``source`` names a configured\n``[[pm_source]]``; ``ref`` is that source's own item token.",
         "properties": {
           "ref": {
             "title": "Ref",
@@ -1332,7 +1332,7 @@
         "type": "object"
       },
       "PmPointerView": {
-        "description": "A pointer as the views render it (D-107/D-110) \u2014 the raw pair plus its legible\nlabel and browser URL, both rendered by the pointer's configured source binding.\n\n``label`` is the board-legible ``{name}#{ref}`` (e.g. ``blizzard#8``); ``web_url``\nis its browser-openable address. Both null when no configured source names\n``source`` \u2014 the board then leans on the chunk's stable short id instead.",
+        "description": "A pointer as the views render it \u2014 the raw pair plus its legible\nlabel and browser URL, both rendered by the pointer's configured source binding.\n\n``label`` is the board-legible ``{name}#{ref}`` (e.g. ``blizzard#8``); ``web_url``\nis its browser-openable address. Both null when no configured source names\n``source`` \u2014 the board then leans on the chunk's stable short id instead.",
         "properties": {
           "label": {
             "anyOf": [
@@ -1373,7 +1373,7 @@
         "type": "object"
       },
       "PrView": {
-        "description": "An open PR a chunk is parked on in open-pr delivery mode (D-059/D-065).",
+        "description": "An open PR a chunk is parked on in open-pr delivery mode.",
         "properties": {
           "number": {
             "title": "Number",
@@ -1466,7 +1466,7 @@
         "type": "object"
       },
       "QuestionView": {
-        "description": "A question row with its derived answer state \u2014 the surfacing shape (D-004).\n\nBehind ``GET /questions`` (open only), ``GET /questions/{id}`` (the runner's answer\npoll), and the chunk detail's open-questions list. ``answered`` and the answer\nfields derive from the presence of the answer row.",
+        "description": "A question row with its derived answer state \u2014 the surfacing shape.\n\nBehind ``GET /questions`` (open only), ``GET /questions/{id}`` (the runner's answer\npoll), and the chunk detail's open-questions list. ``answered`` and the answer\nfields derive from the presence of the answer row.",
         "properties": {
           "answer": {
             "anyOf": [
@@ -1605,7 +1605,7 @@
         "type": "object"
       },
       "QueuePeekResponse": {
-        "description": "The ready queue as peeked by FILL, in the hub's explicit order (D-048).",
+        "description": "The ready queue as peeked by FILL, in the hub's explicit order.",
         "properties": {
           "entries": {
             "default": [],
@@ -1620,7 +1620,7 @@
         "type": "object"
       },
       "QueueReorderRequest": {
-        "description": "Move a ready chunk to a queue position \u2014 the board's Prioritize control (D-048).\n\n``position`` is the target index in the ready queue, ``0`` being the top; it is\nclamped into range, so ``0`` always means \"to the front\". Ordering is a hub-side\nproperty: the move appends one position fact and the order re-derives (D-004).",
+        "description": "Move a ready chunk to a queue position \u2014 the board's Prioritize control.\n\n``position`` is the target index in the ready queue, ``0`` being the top; it is\nclamped into range, so ``0`` always means \"to the front\". Ordering is a hub-side\nproperty: the move appends one position fact and the order re-derives.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -1702,7 +1702,7 @@
         "type": "object"
       },
       "RouteClaim": {
-        "description": "A complete route fact posted by the claiming runner (D-080).",
+        "description": "A complete route fact posted by the claiming runner.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -1770,7 +1770,7 @@
         "type": "object"
       },
       "RouteView": {
-        "description": "A chunk's route \u2014 where it is being worked (D-021).",
+        "description": "A chunk's route \u2014 where it is being worked.",
         "properties": {
           "environment_ids": {
             "default": [],
@@ -1865,7 +1865,7 @@
         "type": "object"
       },
       "RunnerFactBatch": {
-        "description": "A runner's push of one-or-more buffered facts, ordered by seq (D-069).",
+        "description": "A runner's push of one-or-more buffered facts, ordered by seq.",
         "properties": {
           "facts": {
             "items": {
@@ -1887,7 +1887,7 @@
         "type": "object"
       },
       "RunnerListResponse": {
-        "description": "The fleet registry \u2014 every registered runner with its liveness (D-070).",
+        "description": "The fleet registry \u2014 every registered runner with its liveness.",
         "properties": {
           "runners": {
             "default": [],
@@ -1902,7 +1902,7 @@
         "type": "object"
       },
       "RunnerPauseRequest": {
-        "description": "Set a runner's pause brake \u2014 records who flipped it (D-043).",
+        "description": "Set a runner's pause brake \u2014 records who flipped it.",
         "properties": {
           "by": {
             "default": "operator",
@@ -1914,7 +1914,7 @@
         "type": "object"
       },
       "RunnerRegistrationRequest": {
-        "description": "Register a runner into the fleet \u2014 runner id + workspace binding (D-019).",
+        "description": "Register a runner into the fleet \u2014 runner id + workspace binding.",
         "properties": {
           "runner_id": {
             "title": "Runner Id",
@@ -1952,7 +1952,7 @@
         "type": "object"
       },
       "RunnerView": {
-        "description": "One fleet-registry row \u2014 derived liveness and both brakes (D-004/D-070/D-043).\n\nA runner can be paused by two different parties for two different reasons, so the two\nare reported separately rather than collapsed into one ``paused`` (issue #43): the\nboard shows *which*. A reader that wants \"is it claiming?\" ORs them; since issue #45\nthe two diverge past claiming \u2014 ``hub_paused`` keeps its claims-only meaning, while\n``locally_paused`` alone answers \"is it spawning anything at all?\".",
+        "description": "One fleet-registry row \u2014 derived liveness and both brakes.\n\nA runner can be paused by two different parties for two different reasons, so the two\nare reported separately rather than collapsed into one ``paused`` (issue #43): the\nboard shows *which*. A reader that wants \"is it claiming?\" ORs them; since issue #45\nthe two diverge past claiming \u2014 ``hub_paused`` keeps its claims-only meaning, while\n``locally_paused`` alone answers \"is it spawning anything at all?\".",
         "properties": {
           "hub_paused": {
             "title": "Hub Paused",
@@ -1996,7 +1996,7 @@
         "type": "object"
       },
       "SessionMode": {
-        "description": "Per-node session freshness (D-054).",
+        "description": "Per-node session freshness.",
         "enum": [
           "resume",
           "fresh"
@@ -2005,7 +2005,7 @@
         "type": "string"
       },
       "SubmittedArtifact": {
-        "description": "An artifact committed atomically with the completion (D-036).",
+        "description": "An artifact committed atomically with the completion.",
         "properties": {
           "branch_name": {
             "anyOf": [
@@ -2067,7 +2067,7 @@
         "type": "object"
       },
       "TransitionView": {
-        "description": "One accepted transition in a chunk's history (D-027/D-036).\n\nThe edge a node-step took \u2014 its origin node, the judgement choice that routed it,\nand its destination \u2014 oldest first on the detail. This is what makes the review-fail\nloop legible: a ``review -> build`` entry with ``choice_name = \"fail\"`` is a visible\nstep in the timeline (MVP criterion 9/11).\n\n``from_node_name``/``to_node_name`` are the nodes' human graph names (``build``,\n``review``) the board renders in place of the raw ``nd_`` ULIDs; resolved here so the\ntimeline is legible without reassembly (D-075), null when the pinned graph cannot\nresolve the id.",
+        "description": "One accepted transition in a chunk's history.\n\nThe edge a node-step took \u2014 its origin node, the judgement choice that routed it,\nand its destination \u2014 oldest first on the detail. This is what makes the review-fail\nloop legible: a ``review -> build`` entry with ``choice_name = \"fail\"`` is a visible\nstep in the timeline (MVP criterion 9/11).\n\n``from_node_name``/``to_node_name`` are the nodes' human graph names (``build``,\n``review``) the board renders in place of the raw ``nd_`` ULIDs; resolved here so the\ntimeline is legible without reassembly, null when the pinned graph cannot\nresolve the id.",
         "properties": {
           "choice_name": {
             "anyOf": [
@@ -2186,7 +2186,7 @@
   "paths": {
     "/api/chunks": {
       "get": {
-        "description": "The fleet chunk list \u2014 derived status per chunk (D-004).",
+        "description": "The fleet chunk list \u2014 derived status per chunk.",
         "operationId": "list_chunks_api_chunks_get",
         "responses": {
           "200": {
@@ -2210,7 +2210,7 @@
         ]
       },
       "post": {
-        "description": "Ingest by source-native token (D-047/D-111); 422 on a token no configured source\nclaims (D-108/D-109); 409 on a pointer held by a live chunk (D-093).",
+        "description": "Ingest by source-native token; 422 on a token no configured source\nclaims; 409 on a pointer held by a live chunk.",
         "operationId": "ingest_chunk_api_chunks_post",
         "requestBody": {
           "content": {
@@ -2252,7 +2252,7 @@
     },
     "/api/chunks/{chunk_id}": {
       "get": {
-        "description": "One chunk aggregate in full \u2014 derived status, current node, route (D-036).",
+        "description": "One chunk aggregate in full \u2014 derived status, current node, route.",
         "operationId": "get_chunk_api_chunks__chunk_id__get",
         "parameters": [
           {
@@ -2295,7 +2295,7 @@
     },
     "/api/chunks/{chunk_id}/check-delivery": {
       "post": {
-        "description": "Poll a parked open-pr chunk's PRs; finalize the delivery once all are terminal (D-065).\n\nThe on-demand external-merge detection (the impatient path): for a chunk parked in\n``open-pr`` mode, check every open PR through the forge and, when all have merged or\nclosed, write the terminal facts so the chunk flips to ``done`` and its environments\nrelease. A no-op when the chunk has no open PR or is already finalized.",
+        "description": "Poll a parked open-pr chunk's PRs; finalize the delivery once all are terminal.\n\nThe on-demand external-merge detection (the impatient path): for a chunk parked in\n``open-pr`` mode, check every open PR through the forge and, when all have merged or\nclosed, write the terminal facts so the chunk flips to ``done`` and its environments\nrelease. A no-op when the chunk has no open PR or is already finalized.",
         "operationId": "check_delivery_api_chunks__chunk_id__check_delivery_post",
         "parameters": [
           {
@@ -2338,7 +2338,7 @@
     },
     "/api/chunks/{chunk_id}/completions": {
       "post": {
-        "description": "Apply a node-step's completion atomically; reply carries the next envelope (D-072).",
+        "description": "Apply a node-step's completion atomically; reply carries the next envelope.",
         "operationId": "submit_completion_api_chunks__chunk_id__completions_post",
         "parameters": [
           {
@@ -2391,7 +2391,7 @@
     },
     "/api/chunks/{chunk_id}/decisions": {
       "post": {
-        "description": "Runner-config gate: park the chunk on a decision in place of a transition (D-032/D-045).",
+        "description": "Runner-config gate: park the chunk on a decision in place of a transition.",
         "operationId": "submit_decision_api_chunks__chunk_id__decisions_post",
         "parameters": [
           {
@@ -2444,7 +2444,7 @@
     },
     "/api/chunks/{chunk_id}/detach": {
       "post": {
-        "description": "Forcibly release a chunk from its runner without touching any escalation (D-088).",
+        "description": "Forcibly release a chunk from its runner without touching any escalation.",
         "operationId": "detach_chunk_api_chunks__chunk_id__detach_post",
         "parameters": [
           {
@@ -2491,7 +2491,7 @@
     },
     "/api/chunks/{chunk_id}/envelope": {
       "get": {
-        "description": "The chunk's current node envelope, idempotent \u2014 the lost-apply re-read (D-090).",
+        "description": "The chunk's current node envelope, idempotent \u2014 the lost-apply re-read.",
         "operationId": "get_envelope_api_chunks__chunk_id__envelope_get",
         "parameters": [
           {
@@ -2534,7 +2534,7 @@
     },
     "/api/chunks/{chunk_id}/escalations": {
       "post": {
-        "description": "Land a runner's ``escalation.recorded`` \u2014 the chunk derives ``needs_human`` (D-009).",
+        "description": "Land a runner's ``escalation.recorded`` \u2014 the chunk derives ``needs_human``.",
         "operationId": "report_escalation_api_chunks__chunk_id__escalations_post",
         "parameters": [
           {
@@ -2591,7 +2591,7 @@
     },
     "/api/chunks/{chunk_id}/group": {
       "post": {
-        "description": "Merge unacquired chunks into ``chunk_id`` \u2014 the board's Group control (D-048/D-076).",
+        "description": "Merge unacquired chunks into ``chunk_id`` \u2014 the board's Group control.",
         "operationId": "group_chunks_api_chunks__chunk_id__group_post",
         "parameters": [
           {
@@ -2644,7 +2644,7 @@
     },
     "/api/chunks/{chunk_id}/leases": {
       "post": {
-        "description": "Land a runner's ``lease.minted`` \u2014 keeps the epoch fence in lockstep (D-044).",
+        "description": "Land a runner's ``lease.minted`` \u2014 keeps the epoch fence in lockstep.",
         "operationId": "report_lease_api_chunks__chunk_id__leases_post",
         "parameters": [
           {
@@ -2701,7 +2701,7 @@
     },
     "/api/chunks/{chunk_id}/pm-items": {
       "get": {
-        "description": "Pass-through PM items read (D-047/D-084/D-107) \u2014 one entry per pointer, contents never stored.\n\nEach pointer is resolved to its own binding by name (``pm.get(pointer.source)``), then\nfetched fresh from the forge; a per-pointer resolution or forge failure degrades to an\n``error`` on that entry rather than failing the whole read, so a grouped chunk (D-047)\nstill surfaces the pointers it reached beside a notice for the ones it did not. A chunk\nwith no pointers is an empty list \u2014 the board's empty state \u2014 not a 404. No configured\nPM source at all is a 503 up front \u2014 the request-wide degradation preserved unchanged\nfrom before per-pointer resolution existed.",
+        "description": "Pass-through PM items read \u2014 one entry per pointer, contents never stored.\n\nEach pointer is resolved to its own binding by name (``pm.get(pointer.source)``), then\nfetched fresh from the forge; a per-pointer resolution or forge failure degrades to an\n``error`` on that entry rather than failing the whole read, so a grouped chunk\nstill surfaces the pointers it reached beside a notice for the ones it did not. A chunk\nwith no pointers is an empty list \u2014 the board's empty state \u2014 not a 404. No configured\nPM source at all is a 503 up front \u2014 the request-wide degradation preserved unchanged\nfrom before per-pointer resolution existed.",
         "operationId": "get_pm_items_api_chunks__chunk_id__pm_items_get",
         "parameters": [
           {
@@ -2744,7 +2744,7 @@
     },
     "/api/chunks/{chunk_id}/promote": {
       "post": {
-        "description": "Promote a not-ready chunk to ready so a runner may claim it (D-103).\n\nIdempotent: promoting an already-ready or already-running chunk is a harmless no-op.\n404 only when the chunk is unknown.",
+        "description": "Promote a not-ready chunk to ready so a runner may claim it.\n\nIdempotent: promoting an already-ready or already-running chunk is a harmless no-op.\n404 only when the chunk is unknown.",
         "operationId": "promote_chunk_api_chunks__chunk_id__promote_post",
         "parameters": [
           {
@@ -2791,7 +2791,7 @@
     },
     "/api/chunks/{chunk_id}/requeues": {
       "post": {
-        "description": "Close an escalation by supersession: requeue at the current node (D-067).",
+        "description": "Close an escalation by supersession: requeue at the current node.",
         "operationId": "requeue_chunk_api_chunks__chunk_id__requeues_post",
         "parameters": [
           {
@@ -2838,7 +2838,7 @@
     },
     "/api/decisions": {
       "get": {
-        "description": "The fleet's open (unresolved) decisions \u2014 gate surfacing (D-052).",
+        "description": "The fleet's open (unresolved) decisions \u2014 gate surfacing.",
         "operationId": "list_decisions_api_decisions_get",
         "responses": {
           "200": {
@@ -2860,7 +2860,7 @@
     },
     "/api/decisions/{decision_id}/resolution": {
       "post": {
-        "description": "Resolve an open decision, first-write-wins CAS (D-045).",
+        "description": "Resolve an open decision, first-write-wins CAS.",
         "operationId": "resolve_decision_api_decisions__decision_id__resolution_post",
         "parameters": [
           {
@@ -2913,7 +2913,7 @@
     },
     "/api/events": {
       "post": {
-        "description": "Land runner-minted facts, idempotent by per-runner seq high-water (D-069/D-044).\n\nThe store-and-forward ingest: ``lease.minted`` (the fence input), ``escalation.recorded``,\n``question.asked``, and ``answer.delivered`` ride the runner's outbound buffer here. A\npushed seq at or below the runner's high-water mark is already-applied and re-acked; a\nfresh one is applied and advances the mark. Each freshly-applied fact re-broadcasts on\nthe SSE stream so the board refreshes \u2014 ``chunk-changed`` for every touched chunk, and\n``question-asked`` for a forwarded ask.",
+        "description": "Land runner-minted facts, idempotent by per-runner seq high-water.\n\nThe store-and-forward ingest: ``lease.minted`` (the fence input), ``escalation.recorded``,\n``question.asked``, and ``answer.delivered`` ride the runner's outbound buffer here. A\npushed seq at or below the runner's high-water mark is already-applied and re-acked; a\nfresh one is applied and advances the mark. Each freshly-applied fact re-broadcasts on\nthe SSE stream so the board refreshes \u2014 ``chunk-changed`` for every touched chunk, and\n``question-asked`` for a forwarded ask.",
         "operationId": "ingest_runner_facts_api_events_post",
         "requestBody": {
           "content": {
@@ -2955,7 +2955,7 @@
     },
     "/api/graphs": {
       "post": {
-        "description": "Validate and mint an immutable graph; 422 on validation errors (D-071).",
+        "description": "Validate and mint an immutable graph; 422 on validation errors.",
         "operationId": "mint_graph_api_graphs_post",
         "requestBody": {
           "content": {
@@ -3092,7 +3092,7 @@
     },
     "/api/questions/{question_id}": {
       "get": {
-        "description": "One question with its derived answer state \u2014 the runner's answer poll (D-004).",
+        "description": "One question with its derived answer state \u2014 the runner's answer poll.",
         "operationId": "get_question_api_questions__question_id__get",
         "parameters": [
           {
@@ -3188,7 +3188,7 @@
     },
     "/api/queue/peek": {
       "get": {
-        "description": "The hub-ordered ready queue, read-only (D-080) \u2014 honours reorder + grouping (D-048).",
+        "description": "The hub-ordered ready queue, read-only \u2014 honours reorder + grouping.",
         "operationId": "peek_queue_api_queue_peek_get",
         "responses": {
           "200": {
@@ -3210,7 +3210,7 @@
     },
     "/api/queue/reorder": {
       "post": {
-        "description": "Move a ready chunk to a queue position \u2014 the board's Prioritize control (D-048).",
+        "description": "Move a ready chunk to a queue position \u2014 the board's Prioritize control.",
         "operationId": "reorder_queue_api_queue_reorder_post",
         "requestBody": {
           "content": {
@@ -3273,7 +3273,7 @@
     },
     "/api/routes": {
       "post": {
-        "description": "Claim a chunk; 409 if already claimed, else the first node envelope (D-080).",
+        "description": "Claim a chunk; 409 if already claimed, else the first node envelope.",
         "operationId": "claim_route_api_routes_post",
         "requestBody": {
           "content": {
@@ -3315,7 +3315,7 @@
     },
     "/api/runners": {
       "get": {
-        "description": "The fleet registry \u2014 every runner with derived liveness + paused state (D-070).",
+        "description": "The fleet registry \u2014 every runner with derived liveness + paused state.",
         "operationId": "list_runners_api_runners_get",
         "responses": {
           "200": {
@@ -3335,7 +3335,7 @@
         ]
       },
       "post": {
-        "description": "Register a runner \u2014 runner id + workspace binding (D-019); idempotent upsert.",
+        "description": "Register a runner \u2014 runner id + workspace binding; idempotent upsert.",
         "operationId": "register_runner_api_runners_post",
         "requestBody": {
           "content": {
@@ -3377,7 +3377,7 @@
     },
     "/api/runners/{runner_id}": {
       "get": {
-        "description": "One runner's declarative state \u2014 the runner's own pull read (D-043/D-070).",
+        "description": "One runner's declarative state \u2014 the runner's own pull read.",
         "operationId": "get_runner_api_runners__runner_id__get",
         "parameters": [
           {
@@ -3420,7 +3420,7 @@
     },
     "/api/runners/{runner_id}/heartbeats": {
       "post": {
-        "description": "Refresh a runner's liveness (D-070) \u2014 the slow runner-level heartbeat. Returns 204.",
+        "description": "Refresh a runner's liveness \u2014 the slow runner-level heartbeat. Returns 204.",
         "operationId": "heartbeat_runner_api_runners__runner_id__heartbeats_post",
         "parameters": [
           {
@@ -3456,7 +3456,7 @@
     },
     "/api/runners/{runner_id}/pause": {
       "post": {
-        "description": "Set a runner's pause brake \u2014 no new claims; in-flight chunks run on (D-043).",
+        "description": "Set a runner's pause brake \u2014 no new claims; in-flight chunks run on.",
         "operationId": "pause_runner_api_runners__runner_id__pause_post",
         "parameters": [
           {
@@ -3509,7 +3509,7 @@
     },
     "/api/runners/{runner_id}/resume": {
       "post": {
-        "description": "Clear a runner's pause brake \u2014 it resumes claiming on its next pull (D-043).",
+        "description": "Clear a runner's pause brake \u2014 it resumes claiming on its next pull.",
         "operationId": "resume_runner_api_runners__runner_id__resume_post",
         "parameters": [
           {

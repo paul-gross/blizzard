@@ -1,7 +1,7 @@
 [project]
 name = "blizzard"
 version = "0.1.0"
-description = "Blizzard: the hub, the runner, and the CLI for orchestrating autonomous fleets of coding agents — one repo, one wheel (D-061)."
+description = "Blizzard: the hub, the runner, and the CLI for orchestrating autonomous fleets of coding agents — one repo, one wheel."
 requires-python = ">=3.12"
 # The full dependency superset both daemons, the CLI, and the tooling will need
 # is declared up-front so the parallel component builders (backend, frontend,
@@ -9,7 +9,7 @@ requires-python = ">=3.12"
 # Add a dep only when a component genuinely needs one that is missing here.
 dependencies = [
     # HTTP surface + SSE — both daemons (hub, runner) are FastAPI apps served by
-    # uvicorn; the CLI's client verbs are pure HTTP clients of those APIs (D-023).
+    # uvicorn; the CLI's client verbs are pure HTTP clients of those APIs.
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
     # httpx backs FastAPI's TestClient and the CLI's daemon-API client verbs.
@@ -20,7 +20,7 @@ dependencies = [
     # applied manually through the CLI, never at daemon startup (bzh:manual-migrations).
     "sqlalchemy>=2.0,<3.0",
     "alembic>=1.13.0",
-    # CLI surface — the one `blizzard` binary, verbs namespaced by target (D-061).
+    # CLI surface — the one `blizzard` binary, verbs namespaced by target.
     "click>=8.1.0",
     # Domain models and request/response schemas.
     "pydantic>=2.0.0",
@@ -37,7 +37,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-# The one wheel ships both daemons, the CLI, and the compiled frontend (D-061).
+# The one wheel ships both daemons, the CLI, and the compiled frontend.
 # Everything under src/blizzard rides along, including the embedded frontend
 # assets under src/blizzard/static/{hub,runner} that the CI build fills before
 # `uv build` (see src/blizzard/static/README.md).
@@ -49,8 +49,8 @@ packages = ["src/blizzard"]
 # a fresh hub mints it with no authoring.
 artifacts = ["src/blizzard/static/**/*", "src/blizzard/hub/graphs/**/*"]
 
-# One binary, verbs namespaced by target (D-061). The hyphenated aliases are the
-# systemd / `ps` entry points for the daemon `host` personalities (design/cli.md).
+# One binary, verbs namespaced by target. The hyphenated aliases are the
+# systemd / `ps` entry points for the daemon `host` personalities.
 [project.scripts]
 blizzard = "blizzard.cli.main:blizzard"
 blizzard-hub = "blizzard.hub.cli:hub"

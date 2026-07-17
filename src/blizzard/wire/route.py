@@ -1,4 +1,4 @@
-"""The route claim (D-021/D-080) — how a runner takes work.
+"""The route claim — how a runner takes work.
 
 ``POST /routes`` *is* acquisition: the runner peeks the ready queue, acquires the
 chunk's environments from its workspace provider, and posts the **complete** route
@@ -16,7 +16,7 @@ from blizzard.wire.envelope import NodeEnvelope
 
 
 class RouteClaim(BaseModel):
-    """A complete route fact posted by the claiming runner (D-080)."""
+    """A complete route fact posted by the claiming runner."""
 
     chunk_id: str
     runner_id: str

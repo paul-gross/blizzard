@@ -19,7 +19,7 @@ describe('BoardShell', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="board-shell"]')).toBeTruthy();
-    // Five board columns: the not-ready backlog (D-103) plus the four post-dispatch lanes.
+    // Five board columns: the not-ready backlog plus the four post-dispatch lanes.
     // READY has no column — ready chunks live in the queue rail (issue #22).
     expect(el.querySelectorAll('[data-col]')).toHaveLength(5);
     expect(el.querySelector('[data-col="notready"]')).toBeTruthy();
@@ -27,7 +27,7 @@ describe('BoardShell', () => {
     expect(el.querySelector('[data-testid="empty-state"]')?.textContent).toContain('NO CHUNKS');
   });
 
-  it('renders a not-ready chunk in the backlog column with a Promote action that emits its id (D-103)', async () => {
+  it('renders a not-ready chunk in the backlog column with a Promote action that emits its id', async () => {
     const chunks: ChunkSummary[] = [
       { chunk_id: 'ch_01notready00000000000000000', graph_id: 'gr_1', status: 'not_ready', current_node_id: 'nd_build', pm_pointers: [] },
       { chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', status: 'running', current_node_id: 'nd_build', pm_pointers: [] },

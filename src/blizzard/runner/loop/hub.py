@@ -1,9 +1,9 @@
-"""The hub-client seam — the runner's outbound edge to the hub HTTP API (D-012).
+"""The hub-client seam — the runner's outbound edge to the hub HTTP API.
 
 The runner is operator-directed and talks to the hub outbound-only: it peeks the
-ready queue, claims a route (acquisition, D-080), submits node-step completions
-(D-036), re-reads the idempotent envelope (D-090), and polls a chunk's derived
-status to learn a hub node's terminal outcome (D-066). This Protocol is the seam;
+ready queue, claims a route (acquisition, D-080), submits node-step completions,
+re-reads the idempotent envelope, and polls a chunk's derived
+status to learn a hub node's terminal outcome. This Protocol is the seam;
 the httpx adapter under ``internal/`` is the reference binding, and loop tests
 inject a fake or an ``httpx.MockTransport``-backed client — no live hub needed.
 """
@@ -60,34 +60,34 @@ class RouteClaimOutcome:
 
 
 class IHubClient(Protocol):
-    """The runner's client of the hub API (D-012). Outbound-only."""
+    """The runner's client of the hub API. Outbound-only."""
 
     def peek_queue(self) -> QueuePeekResponse:
-        """``GET /api/queue/peek`` — the hub-ordered ready queue (D-080)."""
+        """``GET /api/queue/peek`` — the hub-ordered ready queue."""
         ...
 
     def claim_route(self, claim: RouteClaim) -> RouteClaimOutcome:
-        """``POST /api/routes`` — claim work; 409 loses the race (D-080)."""
+        """``POST /api/routes`` — claim work; 409 loses the race."""
         ...
 
     def submit_completion(self, chunk_id: str, submission: CompletionSubmission) -> ApplyResponse:
-        """``POST /api/chunks/{id}/completions`` — the atomic, epoch-fenced write (D-036)."""
+        """``POST /api/chunks/{id}/completions`` — the atomic, epoch-fenced write."""
         ...
 
     def submit_decision(self, chunk_id: str, submission: DecisionSubmission) -> ApplyResponse:
-        """``POST /api/chunks/{id}/decisions`` — a runner-config gate parks the chunk (D-032)."""
+        """``POST /api/chunks/{id}/decisions`` — a runner-config gate parks the chunk."""
         ...
 
     def push_facts(self, batch: RunnerFactBatch) -> RunnerFactAck:
-        """``POST /api/events`` — store-and-forward fact push, seq-idempotent (D-069)."""
+        """``POST /api/events`` — store-and-forward fact push, seq-idempotent."""
         ...
 
     def get_envelope(self, chunk_id: str) -> NodeEnvelope:
-        """``GET /api/chunks/{id}/envelope`` — the idempotent envelope re-read (D-090)."""
+        """``GET /api/chunks/{id}/envelope`` — the idempotent envelope re-read."""
         ...
 
     def get_chunk(self, chunk_id: str) -> ChunkDetail:
-        """``GET /api/chunks/{id}`` — the chunk's derived status, polled at a hub node (D-066)."""
+        """``GET /api/chunks/{id}`` — the chunk's derived status, polled at a hub node."""
         ...
 
     def get_question(self, question_id: str) -> QuestionView:
@@ -98,33 +98,33 @@ class IHubClient(Protocol):
         ...
 
     def register_runner(self, runner_id: str, workspace_id: str) -> None:
-        """``POST /api/runners`` — register into the fleet registry (D-019/D-070).
+        """``POST /api/runners`` — register into the fleet registry.
 
         Idempotent upsert: the runner registers on startup and re-registers each pull,
         which refreshes its ``last_seen_at`` — the runner-level liveness heartbeat the
-        board's fleet column derives online/offline from (D-070). Called before the paused
+        board's fleet column derives online/offline from. Called before the paused
         read so the runner is registered by the time it reads its state back."""
         ...
 
     def fetch_runner_paused(self, runner_id: str) -> bool:
-        """``GET /api/runners/{id}`` — the runner's declarative pause brake (D-043).
+        """``GET /api/runners/{id}`` — the runner's declarative pause brake.
 
         Read on the outbound pull and adhered to by FILL (paused = no new claims;
-        in-flight chunks run on). Never a push into the box (D-012)."""
+        in-flight chunks run on). Never a push into the box."""
         ...
 
     def report_lease(self, chunk_id: str, *, epoch: int, runner_id: str) -> None:
-        """``POST /api/chunks/{id}/leases`` — a ``lease.minted`` fact (D-044).
+        """``POST /api/chunks/{id}/leases`` — a ``lease.minted`` fact.
 
         Reported at every node-step spawn so the hub's epoch fence tracks the runner's:
         a chunk that visits a second runner node (review) submits its completion under a
         fresh epoch the hub must already know, and a requeue's mint is what closes an
-        escalation by supersession (D-035/D-067)."""
+        escalation by supersession."""
         ...
 
     def report_escalation(self, chunk_id: str, *, epoch: int, runner_id: str, takeover_command: str) -> None:
-        """``POST /api/chunks/{id}/escalations`` — retries exhausted (D-009).
+        """``POST /api/chunks/{id}/escalations`` — retries exhausted.
 
         Lands the escalation at the hub so the chunk derives ``needs_human`` fleet-wide,
-        carrying the pasteable takeover command (design/harness-adapters.md)."""
+        carrying the pasteable takeover command."""
         ...

@@ -3,7 +3,7 @@
 A graceful ``blizzard-runner`` shutdown marks every in-flight lease for restart-resume, and
 the startup RESUME step re-attaches each marked session **in place** — same lease/epoch/
 session, only the pid rewritten, no retry consumed — or **abandons** a chunk the hub
-reassigned/detached while the runner was down (D-088). These drive the marking hook and the
+reassigned/detached while the runner was down. These drive the marking hook and the
 RESUME step directly against a real tmp store with fakes at the seams (``bzh:steppable-loop``).
 """
 
@@ -235,7 +235,7 @@ def test_resume_abandons_detached_chunk(tmp_path):  # type: ignore[no-untyped-de
     mark_resume_intents(store, now=_NOW)
 
     hub = FakeHub()
-    hub.chunks["ch_1"] = ChunkDetail(  # detached: re-derived ready, route released (D-088)
+    hub.chunks["ch_1"] = ChunkDetail(  # detached: re-derived ready, route released
         chunk_id="ch_1",
         graph_id="gr_1",
         status=ChunkStatus.READY,

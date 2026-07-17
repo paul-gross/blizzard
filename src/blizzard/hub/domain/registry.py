@@ -1,15 +1,15 @@
 """Fleet-registry domain — runner registration, liveness, and the pause brake.
 
-The registry is the fleet's view of its runners (design/domain/fleet.md, D-019): a
+The registry is the fleet's view of its runners: a
 runner registers on startup (runner_id + workspace_id) and appears on the board, its
-``last_seen_at`` refreshed by registration and the dedicated liveness heartbeat (D-070).
-Two things derive over the registry, never stored as columns (D-004):
+``last_seen_at`` refreshed by registration and the dedicated liveness heartbeat.
+Two things derive over the registry, never stored as columns:
 
 * **liveness** — ``last_seen_at`` against a staleness threshold yields online/offline;
   it is time-relative, so it is computed with the injected clock at read time, not on
   the row.
-* **paused** — the operator's brake (D-043): pause/resume facts append and ``paused``
-  derives from the newest one, exactly as a graph's enabled-ness does (D-039). The runner
+* **paused** — the operator's brake: pause/resume facts append and ``paused``
+  derives from the newest one, exactly as a graph's enabled-ness does. The runner
   reads it back on its outbound pull and adheres — pausing stops new leases, in-flight
   chunks run on ([loop.md]).
 
@@ -63,14 +63,14 @@ class RunnerRegistration:
 
 @dataclass(frozen=True)
 class RunnerLiveness:
-    """A registration paired with its clock-relative liveness (D-070)."""
+    """A registration paired with its clock-relative liveness."""
 
     registration: RunnerRegistration
     online: bool
 
 
 def derive_online(last_seen_at: datetime, now: datetime, *, threshold: timedelta) -> bool:
-    """True iff the runner was seen within ``threshold`` of ``now`` (D-004/D-070).
+    """True iff the runner was seen within ``threshold`` of ``now``.
 
     Both operands are coerced to UTC-aware first via :func:`~blizzard.foundation.store.utc.as_utc`
     (idempotent — every store column is ``UtcDateTime``-typed): this is a public pure
@@ -105,7 +105,7 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
         ...
 
     def record_pause(self, runner_id: str, *, paused: bool, at: datetime, by: str) -> None:
-        """Append a fleet pause/resume fact; ``hub_paused`` derives from the newest (D-043)."""
+        """Append a fleet pause/resume fact; ``hub_paused`` derives from the newest."""
         ...
 
     def record_local_pause(self, runner_id: str, *, paused: bool, at: datetime, by: str) -> None:
@@ -114,7 +114,7 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
 
 
 class FleetService:
-    """Register runners, refresh liveness, and set the declarative pause brake (D-043)."""
+    """Register runners, refresh liveness, and set the declarative pause brake."""
 
     def __init__(self, *, registry: IWriteRunnerRegistry, clock: IClock, stale_after: timedelta = STALE_AFTER) -> None:
         self._registry = registry
@@ -122,17 +122,17 @@ class FleetService:
         self._stale_after = stale_after
 
     def register(self, runner_id: str, workspace_id: str) -> bool:
-        """Register (or refresh) a runner; returns True on a first registration (D-019)."""
+        """Register (or refresh) a runner; returns True on a first registration."""
         created = self._registry.upsert_registration(runner_id, workspace_id=workspace_id, at=self._clock.now())
         _log.info("runner registered", runner_id=runner_id, workspace_id=workspace_id, first_time=created)
         return created
 
     def heartbeat(self, runner_id: str) -> bool:
-        """Refresh a runner's liveness (D-070); returns False if it is unregistered."""
+        """Refresh a runner's liveness; returns False if it is unregistered."""
         return self._registry.touch_last_seen(runner_id, at=self._clock.now())
 
     def set_paused(self, runner_id: str, *, paused: bool, by: str) -> bool:
-        """Flip the fleet's brake for a registered runner; returns False if unknown (D-043)."""
+        """Flip the fleet's brake for a registered runner; returns False if unknown."""
         if self._registry.get_runner(runner_id) is None:
             return False
         self._registry.record_pause(runner_id, paused=paused, at=self._clock.now(), by=by)
@@ -149,13 +149,13 @@ class FleetService:
         Unlike ``set_paused`` this does not require a known runner. The fact rides the
         outbound buffer, which replays an outage in FIFO order, so a pause can legitimately
         arrive before the registration that follows it — dropping it would lose the brake
-        exactly when the board most needs it (D-069).
+        exactly when the board most needs it.
         """
         self._registry.record_local_pause(runner_id, paused=paused, at=at, by=by)
         _log.info("runner local pause reported", runner_id=runner_id, paused=paused, by=by)
 
     def get_liveness(self, runner_id: str) -> RunnerLiveness | None:
-        """One runner with its derived liveness — the runner's own pull read (D-043/D-070)."""
+        """One runner with its derived liveness — the runner's own pull read."""
         registration = self._registry.get_runner(runner_id)
         if registration is None:
             return None

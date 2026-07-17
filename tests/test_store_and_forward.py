@@ -6,7 +6,7 @@ drain — must apply **exactly once**. The runner-side buffering-through-an-outa
 covered at the unit tier (``tests/test_runner_loop.py``); this file proves the hub's
 half against the real app: ``POST /events`` re-acks an already-applied seq without
 re-applying it (the per-runner high-water mark), and a re-submitted completion returns
-its original outcome without a second transition or a second land (D-090).
+its original outcome without a second transition or a second land.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ pytestmark = pytest.mark.component
 
 _POINTER = {"source": "default", "ref": "7"}
 
-# A build -> deliver graph named `default-delivery`, reused by name on ingest (D-081),
+# A build -> deliver graph named `default-delivery`, reused by name on ingest,
 # so a build completion reaches the deliver hub node in one pass — decoupled from the
 # packaged default graph's build -> review -> deliver shape.
 _BUILD_DELIVER_YAML = """
@@ -116,7 +116,7 @@ def test_reflushed_completion_applies_exactly_once(tmp_path: Path) -> None:
     assert [r.commit_hash for r in forge.landed] == ["c"]
 
     # The runner's flush ack was lost, so it re-submits the very same completion. The
-    # hub returns the original outcome from the idempotency probe (D-090) — no second
+    # hub returns the original outcome from the idempotency probe — no second
     # transition, and the merge queue does not run again (the forge sees no new land).
     replay = hub.client.post(f"/api/chunks/{chunk_id}/completions", json=_completion(build_node_id, epoch=1))
     assert replay.json()["outcome"] == "hub_node_taken"

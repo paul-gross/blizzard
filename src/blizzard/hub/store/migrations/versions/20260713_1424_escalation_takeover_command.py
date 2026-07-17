@@ -2,7 +2,7 @@
 
 Adds the ``escalations.takeover_command`` column (P7): the runner-composed, pasteable
 ``cd <workdir> && <harness resume>`` a human runs to enter a parked ``needs_human``
-session (design/harness-adapters.md, D-035). The escalation fact already existed
+session. The escalation fact already existed
 (0002); this revision carries the resume command alongside it so the hub can surface
 an actionable takeover on the board.
 

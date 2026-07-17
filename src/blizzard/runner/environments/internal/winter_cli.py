@@ -3,7 +3,7 @@
 The winter binding acquires environments by running the actual ``winter`` CLI
 (``ws init``/``ws fetch``/``ws checkout``/``ws disconnect``/``service down``/
 ``provision``) — winter is the reference workspace binding and its real behavior
-is exactly what verification must *see* (implementation/verification.md).
+is exactly what verification must *see*.
 Two invocation shapes, tried in order:
 
 * the workspace's **own** ``tools/winter-cli`` via ``mise exec -- uv run`` with cwd

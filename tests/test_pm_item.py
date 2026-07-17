@@ -1,4 +1,4 @@
-"""PM pass-through read (D-047/D-084) — body + comments per pointer, never stored (component tier)."""
+"""PM pass-through read — body + comments per pointer, never stored (component tier)."""
 
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ def test_pm_items_reads_body_and_comments_from_the_forge(tmp_path: Path) -> None
 
 
 def test_pm_items_returns_one_entry_per_pointer(tmp_path: Path) -> None:
-    """A grouped chunk carrying many pointers (D-047) yields one entry per pointer, order preserved."""
+    """A grouped chunk carrying many pointers yields one entry per pointer, order preserved."""
     pm = FakePmSource(
         name="widget",
         by_ref={
@@ -60,7 +60,7 @@ def test_pm_items_returns_one_entry_per_pointer(tmp_path: Path) -> None:
 
 
 def test_pm_items_degrades_per_pointer_when_the_forge_is_unreachable(tmp_path: Path) -> None:
-    """One unreachable pointer surfaces as an ``error`` entry; the reachable one still reads (D-084)."""
+    """One unreachable pointer surfaces as an ``error`` entry; the reachable one still reads."""
     pm = FakePmSource(
         name="widget",
         by_ref={"42": PmItem(title="reachable issue", body="reachable", comments=[])},
@@ -75,7 +75,7 @@ def test_pm_items_degrades_per_pointer_when_the_forge_is_unreachable(tmp_path: P
     assert resp.status_code == 200
     ok, failed = resp.json()["items"]
     assert ok["title"] == "reachable issue" and ok["body"] == "reachable" and ok["error"] is None
-    # A per-pointer forge failure nulls title alongside body — never a partial item (D-084).
+    # A per-pointer forge failure nulls title alongside body — never a partial item.
     assert failed["title"] is None
     assert failed["body"] is None and failed["error"] and "43" in failed["error"]
 

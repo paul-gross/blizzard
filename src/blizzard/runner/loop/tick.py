@@ -1,4 +1,4 @@
-"""The tick driver — one pass of REAP → RESUME → PULL → FILL → ADVANCE (design/runner/loop.md).
+"""The tick driver — one pass of REAP → RESUME → PULL → FILL → ADVANCE.
 
 ``tick`` composes the step functions in order; it is the single synchronous pass the
 ``blizzard runner tick`` CLI verb and the periodic daemon driver both call. Because

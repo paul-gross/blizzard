@@ -55,8 +55,8 @@ class FakeHub:
     """A scriptable :class:`IHubClient`: canned queue/claim/apply/envelope/chunk.
 
     ``down`` simulates an unreachable hub — ``submit_completion`` and ``push_facts``
-    raise :class:`HubClientError` so store-and-forward buffering can be exercised
-    (D-069). ``push_facts`` keeps a per-runner high-water mark and re-acks a replayed
+    raise :class:`HubClientError` so store-and-forward buffering can be exercised.
+    ``push_facts`` keeps a per-runner high-water mark and re-acks a replayed
     seq without re-applying, mirroring the hub's idempotency contract. ``not_found``
     simulates a chunk the hub no longer knows about (blizzard#9) — ``get_chunk`` and
     ``get_envelope`` raise :class:`ChunkNotFoundError` for any chunk id it names,
@@ -86,7 +86,7 @@ class FakeHub:
         self.questions: dict[str, QuestionView] = {}
         self.delivered: list[tuple[str, QuestionView]] = []
         self.registered: list[tuple[str, str]] = []  # (runner_id, workspace_id)
-        self.paused = False  # the hub-side pause brake this fake reports back (D-043)
+        self.paused = False  # the hub-side pause brake this fake reports back
         self.down = False
         self.not_found: set[str] = set()  # chunk ids `get_chunk`/`get_envelope` 404 for (blizzard#9)
 
@@ -142,7 +142,7 @@ class FakeHub:
         # working) with its route still ours — the common case, since a test that
         # seeds a lease this fake never claimed still owns a live route in reality
         # (nothing has told the hub otherwise) — unless a test scripts something else,
-        # e.g. a released/reassigned route (D-088).
+        # e.g. a released/reassigned route.
         if chunk_id in self.chunks:
             return self.chunks[chunk_id]
         return ChunkDetail(

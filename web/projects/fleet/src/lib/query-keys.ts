@@ -1,7 +1,7 @@
 /**
  * The TanStack Query keys the fleet reads under, in one place so the live-update
  * service ({@link ./sse/fleet-live}) and the queries agree on what an SSE event
- * invalidates (D-097). Every key is namespaced under `hub` so a blanket
+ * invalidates. Every key is namespaced under `hub` so a blanket
  * gap-recovery invalidation after a reconnect can target the whole tree.
  */
 export const hubHealthKey = ['hub', 'health'] as const;

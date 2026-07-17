@@ -1,6 +1,6 @@
 """initial empty schema (runner store tree)
 
-The initial revision of the runner store's independent Alembic tree (D-099). The
+The initial revision of the runner store's independent Alembic tree. The
 schema is intentionally empty: the runner store is facts-only (``bzh:facts-not-status``),
 and its fact tables land in later revisions as the domain model stabilizes. Both
 ``upgrade`` and ``downgrade`` are real — there is simply nothing to create or drop

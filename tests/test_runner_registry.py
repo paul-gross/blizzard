@@ -1,9 +1,9 @@
 """The fleet registry — register, heartbeat, liveness, and the pause brake (component tier).
 
-Drives the real hub over a tmp store (D-019/D-070/D-043): ``POST /runners`` registers,
+Drives the real hub over a tmp store: ``POST /runners`` registers,
 ``POST /runners/{id}/heartbeats`` refreshes liveness, ``GET /runners`` lists the fleet
 with **derived** online/offline and paused, and ``POST /runners/{id}/pause`` / ``/resume``
-set the operator's brake. Liveness and paused are never stored columns (D-004), so the
+set the operator's brake. Liveness and paused are never stored columns, so the
 assertions drive the clock and read the derived surface.
 """
 
@@ -107,7 +107,7 @@ def test_registry_changes_emit_runner_changed_events(tmp_path: Path) -> None:
 # --------------------------------------------------------------------------- #
 #
 # The hub never sets this one — it arrives as a fact through the runner's outbound buffer
-# (D-069) and the hub only reads it. These assert it lands, that it is genuinely separate
+#  and the hub only reads it. These assert it lands, that it is genuinely separate
 # from the fleet's brake, and that the board is told (the hub can only render what it
 # holds, and a fact that lands invisibly is a runner shown as claiming when it has stopped).
 

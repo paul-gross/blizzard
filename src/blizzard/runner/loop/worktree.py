@@ -1,4 +1,4 @@
-"""The worker-artifact git seam — discover and push what a build produced (D-026).
+"""The worker-artifact git seam — discover and push what a build produced.
 
 A build worker commits its work to a branch in a leased repo worktree; the runner
 must push that branch to the ``file://`` origin the forge fronts **before** it
@@ -18,7 +18,7 @@ from typing import Protocol
 
 @dataclass(frozen=True)
 class GitArtifact:
-    """A produced git-commit pointer discovered in a leased environment (D-026)."""
+    """A produced git-commit pointer discovered in a leased environment."""
 
     repo: str  # the project repo name (the worktree directory name)
     branch_name: str

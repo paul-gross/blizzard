@@ -7,15 +7,15 @@ once and then passes**. It proves the P7 engine additions on the real rails, not
 at the hub API:
 
 * the review node routes the work back into build on ``fail`` and forward to deliver
-  on the second ``pass`` (design/workflow-engine.md);
+  on the second ``pass``;
 * the review node ``produces`` a ``review-findings`` asset, and the fail edge carries
   that finding plus its **prompt_addendum** back into build's re-entry envelope
-  (D-026/D-071/D-089) — the addendum is executable and lands an observable
+   — the addendum is executable and lands an observable
   ``REVIEW_ADDRESSED.md`` commit *only* on the re-entry, so bare-``main`` reachability
   is the git-truth proof the envelope carried it (the hub-API view of the same asset +
   addendum is the component tier, test_review_cycle);
 * the runner-reported ``lease.minted`` facts keep the hub's epoch fence in lockstep
-  across the multiple runner node-steps, so no completion is rejected as stale (D-044);
+  across the multiple runner node-steps, so no completion is rejected as stale;
 * build runs **twice** — the observable proof the cycle happened — and the delivery
   lands both build commits on the bare origin's ``main``.
 
@@ -72,11 +72,11 @@ _BUILD_SCRIPT = (
 )
 _BUILD_JUDGEMENT = "verdict('pass', 'checks are green')\n"
 
-# The fail -> build prompt_addendum (D-071): inlined onto build's re-entry prompt, so it
+# The fail -> build prompt_addendum: inlined onto build's re-entry prompt, so it
 # arrives as code the mock exec's *after* the base build turn (same namespace: `repo`,
 # `subprocess`, `pathlib` are already bound). It commits a distinctive marker file, so
 # REVIEW_ADDRESSED.md reaches bare `main` ONLY if the addendum threaded into the
-# re-entry envelope — git truth that the fail edge carried the findings back (D-089).
+# re-entry envelope — git truth that the fail edge carried the findings back.
 _REVIEW_ADDENDUM = (
     "# re-entry after a failed review — address the findings\n"
     'pathlib.Path(repo, "REVIEW_ADDRESSED.md").write_text("addressed the review findings\\n")\n'
@@ -196,7 +196,7 @@ def test_review_cycle_fails_once_then_delivers(tmp_path: Path) -> None:
         )
         assert ingested.status_code == 201, ingested.text
         chunk_id = ingested.json()["chunk_id"]
-        assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # ready for the runner (D-103)
+        assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # ready for the runner
 
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         config = dataclasses.replace(config, max_agents=1)
@@ -212,7 +212,7 @@ def test_review_cycle_fails_once_then_delivers(tmp_path: Path) -> None:
         # (MVP criterion 9/11): after the cycle it exposes the full transition history —
         # including the review-fail loop back to build — and the review-findings asset
         # content, on the real rails. This is exactly what a cold verification found
-        # missing (D-036): the loop threaded through the envelope but was invisible after.
+        # missing: the loop threaded through the envelope but was invisible after.
         detail = hub.get(f"/api/chunks/{chunk_id}").json()
         history = detail["history"]
         # The review judged fail once, routing review -> build: a visible step in the timeline.

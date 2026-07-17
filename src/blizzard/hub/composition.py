@@ -84,7 +84,7 @@ def build_services(
 ) -> HubServices:
     """Construct and wire every fleet service over a migrated store engine.
 
-    ``base_branch`` is the branch every PR/merge targets (D-060) — ``main`` for the
+    ``base_branch`` is the branch every PR/merge targets — ``main`` for the
     verification forge's bare origins, set to a real repo's default (e.g. ``master``) at
     the ``host`` composition root from ``BZ_FORGE_BASE_BRANCH``.
     """

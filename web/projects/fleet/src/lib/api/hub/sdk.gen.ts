@@ -21,15 +21,15 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
 /**
  * List Chunks
  *
- * The fleet chunk list — derived status per chunk (D-004).
+ * The fleet chunk list — derived status per chunk.
  */
 export const listChunksApiChunksGet = <ThrowOnError extends boolean = false>(options?: Options<ListChunksApiChunksGetData, ThrowOnError>): RequestResult<ListChunksApiChunksGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListChunksApiChunksGetResponses, unknown, ThrowOnError>({ url: '/api/chunks', ...options });
 
 /**
  * Ingest Chunk
  *
- * Ingest by source-native token (D-047/D-111); 422 on a token no configured source
- * claims (D-108/D-109); 409 on a pointer held by a live chunk (D-093).
+ * Ingest by source-native token; 422 on a token no configured source
+ * claims; 409 on a pointer held by a live chunk.
  */
 export const ingestChunkApiChunksPost = <ThrowOnError extends boolean = false>(options: Options<IngestChunkApiChunksPostData, ThrowOnError>): RequestResult<IngestChunkApiChunksPostResponses, IngestChunkApiChunksPostErrors, ThrowOnError> => (options.client ?? client).post<IngestChunkApiChunksPostResponses, IngestChunkApiChunksPostErrors, ThrowOnError>({
     url: '/api/chunks',
@@ -43,14 +43,14 @@ export const ingestChunkApiChunksPost = <ThrowOnError extends boolean = false>(o
 /**
  * Get Chunk
  *
- * One chunk aggregate in full — derived status, current node, route (D-036).
+ * One chunk aggregate in full — derived status, current node, route.
  */
 export const getChunkApiChunksChunkIdGet = <ThrowOnError extends boolean = false>(options: Options<GetChunkApiChunksChunkIdGetData, ThrowOnError>): RequestResult<GetChunkApiChunksChunkIdGetResponses, GetChunkApiChunksChunkIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetChunkApiChunksChunkIdGetResponses, GetChunkApiChunksChunkIdGetErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}', ...options });
 
 /**
  * Check Delivery
  *
- * Poll a parked open-pr chunk's PRs; finalize the delivery once all are terminal (D-065).
+ * Poll a parked open-pr chunk's PRs; finalize the delivery once all are terminal.
  *
  * The on-demand external-merge detection (the impatient path): for a chunk parked in
  * ``open-pr`` mode, check every open PR through the forge and, when all have merged or
@@ -62,7 +62,7 @@ export const checkDeliveryApiChunksChunkIdCheckDeliveryPost = <ThrowOnError exte
 /**
  * Submit Completion
  *
- * Apply a node-step's completion atomically; reply carries the next envelope (D-072).
+ * Apply a node-step's completion atomically; reply carries the next envelope.
  */
 export const submitCompletionApiChunksChunkIdCompletionsPost = <ThrowOnError extends boolean = false>(options: Options<SubmitCompletionApiChunksChunkIdCompletionsPostData, ThrowOnError>): RequestResult<SubmitCompletionApiChunksChunkIdCompletionsPostResponses, SubmitCompletionApiChunksChunkIdCompletionsPostErrors, ThrowOnError> => (options.client ?? client).post<SubmitCompletionApiChunksChunkIdCompletionsPostResponses, SubmitCompletionApiChunksChunkIdCompletionsPostErrors, ThrowOnError>({
     url: '/api/chunks/{chunk_id}/completions',
@@ -76,7 +76,7 @@ export const submitCompletionApiChunksChunkIdCompletionsPost = <ThrowOnError ext
 /**
  * Submit Decision
  *
- * Runner-config gate: park the chunk on a decision in place of a transition (D-032/D-045).
+ * Runner-config gate: park the chunk on a decision in place of a transition.
  */
 export const submitDecisionApiChunksChunkIdDecisionsPost = <ThrowOnError extends boolean = false>(options: Options<SubmitDecisionApiChunksChunkIdDecisionsPostData, ThrowOnError>): RequestResult<SubmitDecisionApiChunksChunkIdDecisionsPostResponses, SubmitDecisionApiChunksChunkIdDecisionsPostErrors, ThrowOnError> => (options.client ?? client).post<SubmitDecisionApiChunksChunkIdDecisionsPostResponses, SubmitDecisionApiChunksChunkIdDecisionsPostErrors, ThrowOnError>({
     url: '/api/chunks/{chunk_id}/decisions',
@@ -90,21 +90,21 @@ export const submitDecisionApiChunksChunkIdDecisionsPost = <ThrowOnError extends
 /**
  * Detach Chunk
  *
- * Forcibly release a chunk from its runner without touching any escalation (D-088).
+ * Forcibly release a chunk from its runner without touching any escalation.
  */
 export const detachChunkApiChunksChunkIdDetachPost = <ThrowOnError extends boolean = false>(options: Options<DetachChunkApiChunksChunkIdDetachPostData, ThrowOnError>): RequestResult<DetachChunkApiChunksChunkIdDetachPostResponses, DetachChunkApiChunksChunkIdDetachPostErrors, ThrowOnError> => (options.client ?? client).post<DetachChunkApiChunksChunkIdDetachPostResponses, DetachChunkApiChunksChunkIdDetachPostErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/detach', ...options });
 
 /**
  * Get Envelope
  *
- * The chunk's current node envelope, idempotent — the lost-apply re-read (D-090).
+ * The chunk's current node envelope, idempotent — the lost-apply re-read.
  */
 export const getEnvelopeApiChunksChunkIdEnvelopeGet = <ThrowOnError extends boolean = false>(options: Options<GetEnvelopeApiChunksChunkIdEnvelopeGetData, ThrowOnError>): RequestResult<GetEnvelopeApiChunksChunkIdEnvelopeGetResponses, GetEnvelopeApiChunksChunkIdEnvelopeGetErrors, ThrowOnError> => (options.client ?? client).get<GetEnvelopeApiChunksChunkIdEnvelopeGetResponses, GetEnvelopeApiChunksChunkIdEnvelopeGetErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/envelope', ...options });
 
 /**
  * Report Escalation
  *
- * Land a runner's ``escalation.recorded`` — the chunk derives ``needs_human`` (D-009).
+ * Land a runner's ``escalation.recorded`` — the chunk derives ``needs_human``.
  */
 export const reportEscalationApiChunksChunkIdEscalationsPost = <ThrowOnError extends boolean = false>(options: Options<ReportEscalationApiChunksChunkIdEscalationsPostData, ThrowOnError>): RequestResult<ReportEscalationApiChunksChunkIdEscalationsPostResponses, ReportEscalationApiChunksChunkIdEscalationsPostErrors, ThrowOnError> => (options.client ?? client).post<ReportEscalationApiChunksChunkIdEscalationsPostResponses, ReportEscalationApiChunksChunkIdEscalationsPostErrors, ThrowOnError>({
     url: '/api/chunks/{chunk_id}/escalations',
@@ -118,7 +118,7 @@ export const reportEscalationApiChunksChunkIdEscalationsPost = <ThrowOnError ext
 /**
  * Group Chunks
  *
- * Merge unacquired chunks into ``chunk_id`` — the board's Group control (D-048/D-076).
+ * Merge unacquired chunks into ``chunk_id`` — the board's Group control.
  */
 export const groupChunksApiChunksChunkIdGroupPost = <ThrowOnError extends boolean = false>(options: Options<GroupChunksApiChunksChunkIdGroupPostData, ThrowOnError>): RequestResult<GroupChunksApiChunksChunkIdGroupPostResponses, GroupChunksApiChunksChunkIdGroupPostErrors, ThrowOnError> => (options.client ?? client).post<GroupChunksApiChunksChunkIdGroupPostResponses, GroupChunksApiChunksChunkIdGroupPostErrors, ThrowOnError>({
     url: '/api/chunks/{chunk_id}/group',
@@ -132,7 +132,7 @@ export const groupChunksApiChunksChunkIdGroupPost = <ThrowOnError extends boolea
 /**
  * Report Lease
  *
- * Land a runner's ``lease.minted`` — keeps the epoch fence in lockstep (D-044).
+ * Land a runner's ``lease.minted`` — keeps the epoch fence in lockstep.
  */
 export const reportLeaseApiChunksChunkIdLeasesPost = <ThrowOnError extends boolean = false>(options: Options<ReportLeaseApiChunksChunkIdLeasesPostData, ThrowOnError>): RequestResult<ReportLeaseApiChunksChunkIdLeasesPostResponses, ReportLeaseApiChunksChunkIdLeasesPostErrors, ThrowOnError> => (options.client ?? client).post<ReportLeaseApiChunksChunkIdLeasesPostResponses, ReportLeaseApiChunksChunkIdLeasesPostErrors, ThrowOnError>({
     url: '/api/chunks/{chunk_id}/leases',
@@ -146,11 +146,11 @@ export const reportLeaseApiChunksChunkIdLeasesPost = <ThrowOnError extends boole
 /**
  * Get Pm Items
  *
- * Pass-through PM items read (D-047/D-084/D-107) — one entry per pointer, contents never stored.
+ * Pass-through PM items read — one entry per pointer, contents never stored.
  *
  * Each pointer is resolved to its own binding by name (``pm.get(pointer.source)``), then
  * fetched fresh from the forge; a per-pointer resolution or forge failure degrades to an
- * ``error`` on that entry rather than failing the whole read, so a grouped chunk (D-047)
+ * ``error`` on that entry rather than failing the whole read, so a grouped chunk
  * still surfaces the pointers it reached beside a notice for the ones it did not. A chunk
  * with no pointers is an empty list — the board's empty state — not a 404. No configured
  * PM source at all is a 503 up front — the request-wide degradation preserved unchanged
@@ -161,7 +161,7 @@ export const getPmItemsApiChunksChunkIdPmItemsGet = <ThrowOnError extends boolea
 /**
  * Promote Chunk
  *
- * Promote a not-ready chunk to ready so a runner may claim it (D-103).
+ * Promote a not-ready chunk to ready so a runner may claim it.
  *
  * Idempotent: promoting an already-ready or already-running chunk is a harmless no-op.
  * 404 only when the chunk is unknown.
@@ -171,21 +171,21 @@ export const promoteChunkApiChunksChunkIdPromotePost = <ThrowOnError extends boo
 /**
  * Requeue Chunk
  *
- * Close an escalation by supersession: requeue at the current node (D-067).
+ * Close an escalation by supersession: requeue at the current node.
  */
 export const requeueChunkApiChunksChunkIdRequeuesPost = <ThrowOnError extends boolean = false>(options: Options<RequeueChunkApiChunksChunkIdRequeuesPostData, ThrowOnError>): RequestResult<RequeueChunkApiChunksChunkIdRequeuesPostResponses, RequeueChunkApiChunksChunkIdRequeuesPostErrors, ThrowOnError> => (options.client ?? client).post<RequeueChunkApiChunksChunkIdRequeuesPostResponses, RequeueChunkApiChunksChunkIdRequeuesPostErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/requeues', ...options });
 
 /**
  * List Decisions
  *
- * The fleet's open (unresolved) decisions — gate surfacing (D-052).
+ * The fleet's open (unresolved) decisions — gate surfacing.
  */
 export const listDecisionsApiDecisionsGet = <ThrowOnError extends boolean = false>(options?: Options<ListDecisionsApiDecisionsGetData, ThrowOnError>): RequestResult<ListDecisionsApiDecisionsGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListDecisionsApiDecisionsGetResponses, unknown, ThrowOnError>({ url: '/api/decisions', ...options });
 
 /**
  * Resolve Decision
  *
- * Resolve an open decision, first-write-wins CAS (D-045).
+ * Resolve an open decision, first-write-wins CAS.
  */
 export const resolveDecisionApiDecisionsDecisionIdResolutionPost = <ThrowOnError extends boolean = false>(options: Options<ResolveDecisionApiDecisionsDecisionIdResolutionPostData, ThrowOnError>): RequestResult<ResolveDecisionApiDecisionsDecisionIdResolutionPostResponses, ResolveDecisionApiDecisionsDecisionIdResolutionPostErrors, ThrowOnError> => (options.client ?? client).post<ResolveDecisionApiDecisionsDecisionIdResolutionPostResponses, ResolveDecisionApiDecisionsDecisionIdResolutionPostErrors, ThrowOnError>({
     url: '/api/decisions/{decision_id}/resolution',
@@ -199,7 +199,7 @@ export const resolveDecisionApiDecisionsDecisionIdResolutionPost = <ThrowOnError
 /**
  * Ingest Runner Facts
  *
- * Land runner-minted facts, idempotent by per-runner seq high-water (D-069/D-044).
+ * Land runner-minted facts, idempotent by per-runner seq high-water.
  *
  * The store-and-forward ingest: ``lease.minted`` (the fence input), ``escalation.recorded``,
  * ``question.asked``, and ``answer.delivered`` ride the runner's outbound buffer here. A
@@ -220,7 +220,7 @@ export const ingestRunnerFactsApiEventsPost = <ThrowOnError extends boolean = fa
 /**
  * Mint Graph
  *
- * Validate and mint an immutable graph; 422 on validation errors (D-071).
+ * Validate and mint an immutable graph; 422 on validation errors.
  */
 export const mintGraphApiGraphsPost = <ThrowOnError extends boolean = false>(options: Options<MintGraphApiGraphsPostData, ThrowOnError>): RequestResult<MintGraphApiGraphsPostResponses, MintGraphApiGraphsPostErrors, ThrowOnError> => (options.client ?? client).post<MintGraphApiGraphsPostResponses, MintGraphApiGraphsPostErrors, ThrowOnError>({
     url: '/api/graphs',
@@ -260,7 +260,7 @@ export const askQuestionApiQuestionsPost = <ThrowOnError extends boolean = false
 /**
  * Get Question
  *
- * One question with its derived answer state — the runner's answer poll (D-004).
+ * One question with its derived answer state — the runner's answer poll.
  */
 export const getQuestionApiQuestionsQuestionIdGet = <ThrowOnError extends boolean = false>(options: Options<GetQuestionApiQuestionsQuestionIdGetData, ThrowOnError>): RequestResult<GetQuestionApiQuestionsQuestionIdGetResponses, GetQuestionApiQuestionsQuestionIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetQuestionApiQuestionsQuestionIdGetResponses, GetQuestionApiQuestionsQuestionIdGetErrors, ThrowOnError>({ url: '/api/questions/{question_id}', ...options });
 
@@ -281,14 +281,14 @@ export const answerQuestionApiQuestionsQuestionIdAnswerPost = <ThrowOnError exte
 /**
  * Peek Queue
  *
- * The hub-ordered ready queue, read-only (D-080) — honours reorder + grouping (D-048).
+ * The hub-ordered ready queue, read-only — honours reorder + grouping.
  */
 export const peekQueueApiQueuePeekGet = <ThrowOnError extends boolean = false>(options?: Options<PeekQueueApiQueuePeekGetData, ThrowOnError>): RequestResult<PeekQueueApiQueuePeekGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<PeekQueueApiQueuePeekGetResponses, unknown, ThrowOnError>({ url: '/api/queue/peek', ...options });
 
 /**
  * Reorder Queue
  *
- * Move a ready chunk to a queue position — the board's Prioritize control (D-048).
+ * Move a ready chunk to a queue position — the board's Prioritize control.
  */
 export const reorderQueueApiQueueReorderPost = <ThrowOnError extends boolean = false>(options: Options<ReorderQueueApiQueueReorderPostData, ThrowOnError>): RequestResult<ReorderQueueApiQueueReorderPostResponses, ReorderQueueApiQueueReorderPostErrors, ThrowOnError> => (options.client ?? client).post<ReorderQueueApiQueueReorderPostResponses, ReorderQueueApiQueueReorderPostErrors, ThrowOnError>({
     url: '/api/queue/reorder',
@@ -307,7 +307,7 @@ export const readyApiReadyGet = <ThrowOnError extends boolean = false>(options?:
 /**
  * Claim Route
  *
- * Claim a chunk; 409 if already claimed, else the first node envelope (D-080).
+ * Claim a chunk; 409 if already claimed, else the first node envelope.
  */
 export const claimRouteApiRoutesPost = <ThrowOnError extends boolean = false>(options: Options<ClaimRouteApiRoutesPostData, ThrowOnError>): RequestResult<ClaimRouteApiRoutesPostResponses, ClaimRouteApiRoutesPostErrors, ThrowOnError> => (options.client ?? client).post<ClaimRouteApiRoutesPostResponses, ClaimRouteApiRoutesPostErrors, ThrowOnError>({
     url: '/api/routes',
@@ -321,14 +321,14 @@ export const claimRouteApiRoutesPost = <ThrowOnError extends boolean = false>(op
 /**
  * List Runners
  *
- * The fleet registry — every runner with derived liveness + paused state (D-070).
+ * The fleet registry — every runner with derived liveness + paused state.
  */
 export const listRunnersApiRunnersGet = <ThrowOnError extends boolean = false>(options?: Options<ListRunnersApiRunnersGetData, ThrowOnError>): RequestResult<ListRunnersApiRunnersGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListRunnersApiRunnersGetResponses, unknown, ThrowOnError>({ url: '/api/runners', ...options });
 
 /**
  * Register Runner
  *
- * Register a runner — runner id + workspace binding (D-019); idempotent upsert.
+ * Register a runner — runner id + workspace binding; idempotent upsert.
  */
 export const registerRunnerApiRunnersPost = <ThrowOnError extends boolean = false>(options: Options<RegisterRunnerApiRunnersPostData, ThrowOnError>): RequestResult<RegisterRunnerApiRunnersPostResponses, RegisterRunnerApiRunnersPostErrors, ThrowOnError> => (options.client ?? client).post<RegisterRunnerApiRunnersPostResponses, RegisterRunnerApiRunnersPostErrors, ThrowOnError>({
     url: '/api/runners',
@@ -342,21 +342,21 @@ export const registerRunnerApiRunnersPost = <ThrowOnError extends boolean = fals
 /**
  * Get Runner
  *
- * One runner's declarative state — the runner's own pull read (D-043/D-070).
+ * One runner's declarative state — the runner's own pull read.
  */
 export const getRunnerApiRunnersRunnerIdGet = <ThrowOnError extends boolean = false>(options: Options<GetRunnerApiRunnersRunnerIdGetData, ThrowOnError>): RequestResult<GetRunnerApiRunnersRunnerIdGetResponses, GetRunnerApiRunnersRunnerIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetRunnerApiRunnersRunnerIdGetResponses, GetRunnerApiRunnersRunnerIdGetErrors, ThrowOnError>({ url: '/api/runners/{runner_id}', ...options });
 
 /**
  * Heartbeat Runner
  *
- * Refresh a runner's liveness (D-070) — the slow runner-level heartbeat. Returns 204.
+ * Refresh a runner's liveness — the slow runner-level heartbeat. Returns 204.
  */
 export const heartbeatRunnerApiRunnersRunnerIdHeartbeatsPost = <ThrowOnError extends boolean = false>(options: Options<HeartbeatRunnerApiRunnersRunnerIdHeartbeatsPostData, ThrowOnError>): RequestResult<HeartbeatRunnerApiRunnersRunnerIdHeartbeatsPostResponses, HeartbeatRunnerApiRunnersRunnerIdHeartbeatsPostErrors, ThrowOnError> => (options.client ?? client).post<HeartbeatRunnerApiRunnersRunnerIdHeartbeatsPostResponses, HeartbeatRunnerApiRunnersRunnerIdHeartbeatsPostErrors, ThrowOnError>({ url: '/api/runners/{runner_id}/heartbeats', ...options });
 
 /**
  * Pause Runner
  *
- * Set a runner's pause brake — no new claims; in-flight chunks run on (D-043).
+ * Set a runner's pause brake — no new claims; in-flight chunks run on.
  */
 export const pauseRunnerApiRunnersRunnerIdPausePost = <ThrowOnError extends boolean = false>(options: Options<PauseRunnerApiRunnersRunnerIdPausePostData, ThrowOnError>): RequestResult<PauseRunnerApiRunnersRunnerIdPausePostResponses, PauseRunnerApiRunnersRunnerIdPausePostErrors, ThrowOnError> => (options.client ?? client).post<PauseRunnerApiRunnersRunnerIdPausePostResponses, PauseRunnerApiRunnersRunnerIdPausePostErrors, ThrowOnError>({
     url: '/api/runners/{runner_id}/pause',
@@ -370,7 +370,7 @@ export const pauseRunnerApiRunnersRunnerIdPausePost = <ThrowOnError extends bool
 /**
  * Resume Runner
  *
- * Clear a runner's pause brake — it resumes claiming on its next pull (D-043).
+ * Clear a runner's pause brake — it resumes claiming on its next pull.
  */
 export const resumeRunnerApiRunnersRunnerIdResumePost = <ThrowOnError extends boolean = false>(options: Options<ResumeRunnerApiRunnersRunnerIdResumePostData, ThrowOnError>): RequestResult<ResumeRunnerApiRunnersRunnerIdResumePostResponses, ResumeRunnerApiRunnersRunnerIdResumePostErrors, ThrowOnError> => (options.client ?? client).post<ResumeRunnerApiRunnersRunnerIdResumePostResponses, ResumeRunnerApiRunnersRunnerIdResumePostErrors, ThrowOnError>({
     url: '/api/runners/{runner_id}/resume',

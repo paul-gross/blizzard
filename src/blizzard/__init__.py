@@ -1,6 +1,6 @@
 """Blizzard — hub, runner, and CLI for orchestrating fleets of coding agents.
 
-One repo, one wheel (D-061): this package ships both daemons, the CLI, and the
+One repo, one wheel: this package ships both daemons, the CLI, and the
 embedded frontend. See the per-package READMEs and blizzard-harness for the rules
 this code is held to.
 """

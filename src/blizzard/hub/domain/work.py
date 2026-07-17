@@ -1,8 +1,8 @@
 """Work-lifecycle domain — the chunk, its facts, and its **derived** status.
 
-The center of the model (D-024). Per ``bzh:facts-not-status`` a chunk's status is
+The center of the model. Per ``bzh:facts-not-status`` a chunk's status is
 never a stored column: it is computed here, by :func:`derive_chunk_status`, from
-the recorded facts (D-004/D-067). This module owns the derivation queries the hub
+the recorded facts. This module owns the derivation queries the hub
 runs — expressed as pure functions over already-loaded domain facts
 (``bzh:domain-takes-objects``), so they unit-test with zero store and zero tokens.
 
@@ -33,7 +33,7 @@ from blizzard.hub.domain.graph import Executor
 
 
 class ChunkStatus(StrEnum):
-    """The derived chunk statuses (D-067). Never stored — always a query result."""
+    """The derived chunk statuses. Never stored — always a query result."""
 
     NOT_READY = "not_ready"
     READY = "ready"
@@ -50,8 +50,8 @@ class ChunkStatus(StrEnum):
 
 @dataclass(frozen=True)
 class PmPointer:
-    """One wrapped PM item — ``{source, ref}`` (D-107), superseding ``{provider, url}``
-    (D-075). ``source`` names a configured ``[[pm_source]]`` (D-108); ``ref`` is that
+    """One wrapped PM item — ``{source, ref}``, superseding ``{provider, url}``.
+    ``source`` names a configured ``[[pm_source]]``; ``ref`` is that
     source's own item token (a GitHub issue number). Contents never stored."""
 
     source: str
@@ -60,7 +60,7 @@ class PmPointer:
 
 @dataclass(frozen=True)
 class Chunk:
-    """The unit of work that travels the workflow graph (D-024/D-047)."""
+    """The unit of work that travels the workflow graph."""
 
     chunk_id: str
     graph_id: str
@@ -76,7 +76,7 @@ class Chunk:
 
 @dataclass(frozen=True)
 class RouteCreatedFact:
-    """A ``route.created`` fact — the claim (D-021/D-080).
+    """A ``route.created`` fact — the claim.
 
     ``seq`` is the monotonic route-event tiebreak (see :func:`_has_live_route`): a
     per-chunk counter shared with :class:`RouteReleasedFact`, assigned in real write
@@ -89,7 +89,7 @@ class RouteCreatedFact:
 
 @dataclass(frozen=True)
 class RouteReleasedFact:
-    """A ``route.released`` fact — forcible detach (D-088). ``seq`` — see :class:`RouteCreatedFact`."""
+    """A ``route.released`` fact — forcible detach. ``seq`` — see :class:`RouteCreatedFact`."""
 
     released_at: datetime
     seq: int = 0
@@ -97,12 +97,12 @@ class RouteReleasedFact:
 
 @dataclass(frozen=True)
 class PrOpenedFact:
-    """A ``pr.opened`` fact — the open-pr deliver mode's park record (D-059).
+    """A ``pr.opened`` fact — the open-pr deliver mode's park record.
 
     One per repo whose branch the coordinator opened a PR for instead of merging. It
     carries no terminal weight: while a chunk has ``pr.opened`` facts and no ``pr.closed``,
-    it derives ``delivering`` (awaiting an external merge) with environments held (D-066).
-    ``number``/``url`` are the forge handle a later ``check_pr`` polls (D-065); ``repo`` is
+    it derives ``delivering`` (awaiting an external merge) with environments held.
+    ``number``/``url`` are the forge handle a later ``check_pr`` polls; ``repo`` is
     also the reconciliation skip-set that keeps a redelivery from opening a duplicate PR.
     """
 
@@ -115,7 +115,7 @@ class PrOpenedFact:
 
 @dataclass(frozen=True)
 class PrClosedFact:
-    """A ``pr.closed`` fact — the terminal outcome of an open-pr delivery (D-065).
+    """A ``pr.closed`` fact — the terminal outcome of an open-pr delivery.
 
     Written when a poll or the on-demand check detects the PR reached a terminal state;
     ``merged`` distinguishes merged from closed-without-merge (both terminal), and
@@ -131,7 +131,7 @@ class PrClosedFact:
 
 @dataclass(frozen=True)
 class LeaseFact:
-    """A ``lease.minted`` fact reported up from a runner (D-044)."""
+    """A ``lease.minted`` fact reported up from a runner."""
 
     epoch: int
     minted_at: datetime
@@ -139,7 +139,7 @@ class LeaseFact:
 
 @dataclass(frozen=True)
 class TransitionFact:
-    """A ``transition.recorded`` fact (D-027) with its target node's executor.
+    """A ``transition.recorded`` fact with its target node's executor.
 
     ``to_node_executor`` is resolved by the hydrating repository (a join to the
     pinned graph's nodes) so the derivation stays a pure function — the domain
@@ -148,7 +148,7 @@ class TransitionFact:
     ``from_node_id`` and ``choice_name`` describe the edge that was taken — the
     step's origin node and the judgement choice that routed it. The status
     derivations read only ``to_node_id``/``to_node_executor``/``epoch``/``recorded_at``;
-    the edge fields feed the chunk's transition-history view (D-036) and default to
+    the edge fields feed the chunk's transition-history view and default to
     ``None`` so a derivation unit test never has to supply them.
     """
 
@@ -162,12 +162,12 @@ class TransitionFact:
 
 @dataclass(frozen=True)
 class EscalationFact:
-    """An ``escalation.recorded`` fact — retries exhausted / dead worker (D-009).
+    """An ``escalation.recorded`` fact — retries exhausted / dead worker.
 
     Carries the runner-composed **takeover command** (D-035/harness-adapters.md): the
     literal ``cd <workdir> && <harness resume>`` a human pastes to enter the parked
     session. It is surfaced on the chunk detail so ``needs_human`` is actionable; the
-    status derivation itself keys only on ``(epoch, recorded_at)`` supersession (D-067).
+    status derivation itself keys only on ``(epoch, recorded_at)`` supersession.
     """
 
     epoch: int
@@ -179,7 +179,7 @@ class EscalationFact:
 class QuestionFact:
     """A ``question.asked`` row and whether it has been answered ([ask-answer.md]).
 
-    Open/answered is **derived** (D-004): a question is open exactly while no
+    Open/answered is **derived**: a question is open exactly while no
     ``question.answered`` row exists, and an open question is the fact the chunk's
     ``waiting_on_human`` status derives from. ``answered`` is resolved by the
     hydrating repository (the presence of the answer row) so the derivation stays a
@@ -194,7 +194,7 @@ class QuestionFact:
 
 @dataclass(frozen=True)
 class DecisionFact:
-    """A gate's ``decision.submitted`` row and whether a transition references it (D-045).
+    """A gate's ``decision.submitted`` row and whether a transition references it.
 
     Kin to :class:`QuestionFact`: the chunk derives ``waiting_on_human`` from an
     **open** decision — one no transition resolves — exactly the D-037 pending pattern.
@@ -211,14 +211,14 @@ class DecisionFact:
 
 @dataclass(frozen=True)
 class RequeueFact:
-    """A ``requeue.recorded`` fact — closes an open escalation by supersession (D-067)."""
+    """A ``requeue.recorded`` fact — closes an open escalation by supersession."""
 
     requeued_at: datetime
 
 
 @dataclass(frozen=True)
 class DecisionChoice:
-    """One selectable gate outcome — a button on the board/bot (D-042)."""
+    """One selectable gate outcome — a button on the board/bot."""
 
     name: str
     description: str
@@ -226,7 +226,7 @@ class DecisionChoice:
 
 @dataclass(frozen=True)
 class DecisionRow:
-    """A gate decision in full — the surfacing/read model (D-045).
+    """A gate decision in full — the surfacing/read model.
 
     Resolution and resolving-transition state are **derived**: ``resolved_choice`` is
     set once a resolution row exists, and ``transitioned`` is true once a transition
@@ -253,7 +253,7 @@ class DecisionRow:
 
 @dataclass(frozen=True)
 class ChunkFacts:
-    """Every fact a chunk's status derives from (D-067), already loaded.
+    """Every fact a chunk's status derives from, already loaded.
 
     The derivation is a pure function of this aggregate — the unit tests build it
     directly, no store required.
@@ -275,11 +275,11 @@ class ChunkFacts:
     pr_opened: list[PrOpenedFact] = field(default_factory=list)
 
 
-# --- The derivation queries (D-067) -----------------------------------------
+# --- The derivation queries -----------------------------------------
 
 
 def derive_chunk_status(facts: ChunkFacts) -> ChunkStatus:
-    """Derive a chunk's single status from its facts, first match wins (D-067)."""
+    """Derive a chunk's single status from its facts, first match wins."""
     if facts.stopped:
         return ChunkStatus.STOPPED
     if facts.delivery_landed or facts.pr_closed:
@@ -297,7 +297,7 @@ def derive_chunk_status(facts: ChunkFacts) -> ChunkStatus:
     if _has_live_route(facts):
         return ChunkStatus.RUNNING
     if not facts.promoted:
-        # An un-promoted chunk rests ``not_ready`` — visible but never claimed (D-103).
+        # An un-promoted chunk rests ``not_ready`` — visible but never claimed.
         # Sits just above the ``ready`` fall-through and below every post-claim state, so a
         # promoted chunk that later runs/delivers/parks still derives from those facts; only
         # a fresh, un-promoted chunk with no live route lands here.
@@ -306,15 +306,15 @@ def derive_chunk_status(facts: ChunkFacts) -> ChunkStatus:
 
 
 def _has_open_escalation(facts: ChunkFacts) -> bool:
-    """An escalation with no later lease mint — supersession, not resolution (D-067)."""
+    """An escalation with no later lease mint — supersession, not resolution."""
     return open_escalation(facts) is not None
 
 
 def open_escalation(facts: ChunkFacts) -> EscalationFact | None:
-    """The newest escalation not yet closed by a later lease mint (D-067), or ``None``.
+    """The newest escalation not yet closed by a later lease mint, or ``None``.
 
     Requeue/takeover close an escalation by **supersession** — a later lease mint or a
-    later ``requeue.recorded`` fact, never a resolution fact (D-067) — so an escalation
+    later ``requeue.recorded`` fact, never a resolution fact — so an escalation
     stays open exactly while nothing was recorded after it. When open, its
     ``takeover_command`` is the resume command a human pastes (harness-adapters.md); the
     board surfaces it on the ``needs_human`` chunk.
@@ -337,7 +337,7 @@ def _is_waiting_on_human(facts: ChunkFacts) -> bool:
 def open_questions(facts: ChunkFacts) -> list[QuestionFact]:
     """The chunk's unanswered questions, oldest first ([ask-answer.md]).
 
-    A question is open exactly while no ``question.answered`` row exists (D-004); an
+    A question is open exactly while no ``question.answered`` row exists; an
     answer flips it out of ``waiting_on_human``. The list is what the chunk detail and
     ``blizzard hub status`` surface, and its non-emptiness is the derivation's input.
     """
@@ -345,12 +345,12 @@ def open_questions(facts: ChunkFacts) -> list[QuestionFact]:
 
 
 def has_open_decision(facts: ChunkFacts) -> bool:
-    """True iff a gate's decision is unresolved — no resolution flips it off (D-045)."""
+    """True iff a gate's decision is unresolved — no resolution flips it off."""
     return open_decision(facts) is not None
 
 
 def open_decision(facts: ChunkFacts) -> DecisionFact | None:
-    """The newest gate decision no resolution has flipped off (D-045), or ``None``.
+    """The newest gate decision no resolution has flipped off, or ``None``.
 
     A decision is open while it carries no resolution row — the person has not yet
     picked a choice. Once resolved, ``waiting_on_human`` drops away (the chunk's route
@@ -364,22 +364,22 @@ def open_decision(facts: ChunkFacts) -> DecisionFact | None:
 
 
 def awaiting_external_merge(facts: ChunkFacts) -> bool:
-    """A ``delivering`` chunk parked on an open PR — ``pr.opened`` without ``pr.closed`` (D-065).
+    """A ``delivering`` chunk parked on an open PR — ``pr.opened`` without ``pr.closed``.
 
     Not a distinct status: the chunk derives ``delivering`` (its newest transition still
     enters the deliver hub node, environments held — D-066). This is the board **detail**
-    that distinguishes an open-pr park from an in-flight merge (design/domain/events.md).
+    that distinguishes an open-pr park from an in-flight merge.
     """
     return bool(facts.pr_opened) and not facts.pr_closed
 
 
 def open_pr_handles(facts: ChunkFacts) -> list[PrOpenedFact]:
-    """The chunk's open PRs — the handles a poll or the on-demand check reads (D-065)."""
+    """The chunk's open PRs — the handles a poll or the on-demand check reads."""
     return list(facts.pr_opened)
 
 
 def _newest_transition_enters_hub_node(facts: ChunkFacts) -> bool:
-    """The newest accepted transition's target is a hub-executed node (D-030)."""
+    """The newest accepted transition's target is a hub-executed node."""
     transition = newest_transition(facts)
     return transition is not None and transition.to_node_executor is Executor.HUB
 
@@ -387,7 +387,7 @@ def _newest_transition_enters_hub_node(facts: ChunkFacts) -> bool:
 def newest_live_route(
     routes_created: list[RouteCreatedFact], routes_released: list[RouteReleasedFact]
 ) -> RouteCreatedFact | None:
-    """The newest ``route.created`` fact still live, or ``None`` if released (D-088).
+    """The newest ``route.created`` fact still live, or ``None`` if released.
 
     The single tie-break both :func:`_has_live_route` and :meth:`ChunkStore.route_of`
     resolve against, so route liveness has exactly one answer at a same-instant tie
@@ -422,7 +422,7 @@ def newest_live_route(
 
 
 def _has_live_route(facts: ChunkFacts) -> bool:
-    """A ``route.created`` with no later ``route.released`` (D-088). See :func:`newest_live_route`."""
+    """A ``route.created`` with no later ``route.released``. See :func:`newest_live_route`."""
     return newest_live_route(facts.routes_created, facts.routes_released) is not None
 
 
@@ -463,7 +463,7 @@ def current_node_id(facts: ChunkFacts) -> str | None:
 
 
 def latest_epoch(facts: ChunkFacts) -> int | None:
-    """The chunk's latest fencing epoch — its newest lease's, else ``None`` (D-007)."""
+    """The chunk's latest fencing epoch — its newest lease's, else ``None``."""
     if not facts.leases:
         return None
     return max(lease.epoch for lease in facts.leases)
@@ -477,7 +477,7 @@ class QuestionRow:
     """A durable question row with its derived answer state ([ask-answer.md]).
 
     The full surfacing shape behind ``blizzard hub status`` and the chunk detail's
-    open-questions list. Open/answered is **derived** (D-004): a question is answered
+    open-questions list. Open/answered is **derived**: a question is answered
     exactly while its answer row exists, and ``answered_by``/``answer``/``answered_at``
     are the winning first-write-wins CAS row (``None`` while open).
     """
@@ -530,11 +530,11 @@ class IReadChunkRepository(Protocol):
         ...
 
     def load_questions(self, chunk_id: str) -> list[QuestionRow]:
-        """A chunk's questions, open and answered — the chunk-detail surface (D-004)."""
+        """A chunk's questions, open and answered — the chunk-detail surface."""
         ...
 
     def load_artifacts(self, chunk_id: str) -> list[ArtifactRow]:
-        """Every artifact row of a chunk; the caller resolves latest-by-epoch (D-089)."""
+        """Every artifact row of a chunk; the caller resolves latest-by-epoch."""
         ...
 
     def route_of(self, chunk_id: str) -> Route | None:
@@ -544,32 +544,32 @@ class IReadChunkRepository(Protocol):
     def list_ready(self) -> list[Chunk]: ...
     def list_all(self) -> list[Chunk]: ...
     def queue_positions(self) -> dict[str, float]:
-        """The newest explicit ready-queue position per chunk — the order peek honours (D-048)."""
+        """The newest explicit ready-queue position per chunk — the order peek honours."""
         ...
 
     def find_live_holder(self, pointer: PmPointer) -> str | None:
-        """The chunk_id of a live (non-terminal) chunk holding ``pointer`` (D-093), or None."""
+        """The chunk_id of a live (non-terminal) chunk holding ``pointer``, or None."""
         ...
 
     def accepted_transition_target(self, chunk_id: str, *, from_node_id: str, epoch: int) -> str | None:
         """The ``to_node_id`` of an already-accepted transition out of ``from_node_id`` at
-        ``epoch`` — the idempotency probe for a re-applied completion (D-090), or None."""
+        ``epoch`` — the idempotency probe for a re-applied completion, or None."""
         ...
 
     def landed_repos(self, chunk_id: str) -> set[str]:
-        """The repos already landed for a chunk — the delivery reconciliation skip-set (D-091)."""
+        """The repos already landed for a chunk — the delivery reconciliation skip-set."""
         ...
 
     def open_prs(self, chunk_id: str) -> list[PrOpenedFact]:
-        """The chunk's ``pr.opened`` facts — the open-pr reconcile skip-set and check handles (D-059/D-065)."""
+        """The chunk's ``pr.opened`` facts — the open-pr reconcile skip-set and check handles."""
         ...
 
     def runner_high_water(self, runner_id: str) -> int:
-        """The greatest per-runner seq the hub has already applied, or 0 (D-069)."""
+        """The greatest per-runner seq the hub has already applied, or 0."""
         ...
 
     def get_decision(self, decision_id: str) -> DecisionRow | None:
-        """One gate decision in full, with derived resolution/transition state (D-045)."""
+        """One gate decision in full, with derived resolution/transition state."""
         ...
 
     def find_decision(self, chunk_id: str, *, node_id: str, epoch: int) -> DecisionRow | None:
@@ -591,7 +591,7 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
 
     def mint(self, chunk: Chunk) -> None: ...
     def record_promote(self, chunk_id: str, *, at: datetime) -> None:
-        """Record a ``chunk.promoted`` fact — flips ``not_ready`` to ``ready`` (D-103).
+        """Record a ``chunk.promoted`` fact — flips ``not_ready`` to ``ready``.
 
         Idempotent: a chunk already promoted keeps its first row, so a re-promote (a
         double board click, a CLI retry) writes nothing and the status is unchanged."""
@@ -618,10 +618,10 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         artifacts: list[ArtifactRow],
         decision_id: str | None = None,
     ) -> None:
-        """One node-step's transition and its artifacts, written atomically (D-036).
+        """One node-step's transition and its artifacts, written atomically.
 
         ``decision_id`` is set only on a gate-resolving transition — the Decision this
-        transition resolves (D-045); ordinary transitions leave it ``None``."""
+        transition resolves; ordinary transitions leave it ``None``."""
         ...
 
     def record_delivery_repo_landed(self, chunk_id: str, *, repo: str, commit_hash: str, at: datetime) -> None: ...
@@ -645,11 +645,11 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
     def record_pr_opened(
         self, chunk_id: str, *, repo: str, number: int, url: str, commit_hash: str, at: datetime
     ) -> None:
-        """Record a ``pr.opened`` park fact (open-pr mode, D-059) — no terminal, envs held (D-066).
+        """Record a ``pr.opened`` park fact (open-pr mode, D-059) — no terminal, envs held.
 
         Idempotent per (chunk, repo): a racing second write for a repo already carrying a
         ``pr.opened`` fact is a harmless no-op, not a duplicate row — the deliver node runs
-        on both a fresh apply and an idempotent replay (D-090), and this is the actual close
+        on both a fresh apply and an idempotent replay, and this is the actual close
         of the coordinator's read-then-write race on its DB-backed skip-set (a store read
         each call, not an in-memory cache)."""
         ...
@@ -667,7 +667,7 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         transition_id: str,
         at: datetime,
     ) -> bool:
-        """Terminate an open-pr delivery atomically and idempotently (D-065).
+        """Terminate an open-pr delivery atomically and idempotently.
 
         Called once every open PR has reached a terminal state: writes the per-repo
         ``pr.closed`` facts, the hub lease, the terminal transition, and the route release
@@ -677,11 +677,11 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         ...
 
     def record_escalation(self, chunk_id: str, *, epoch: int, takeover_command: str, at: datetime) -> None:
-        """Record an ``escalation.recorded`` fact reported up by a runner (D-009/D-067).
+        """Record an ``escalation.recorded`` fact reported up by a runner.
 
         Retries exhausted (or a dead worker past the cap): the chunk derives
         ``needs_human`` until a later lease mint supersedes it. The runner-composed
-        takeover command rides along so the parked session is resumable (D-035)."""
+        takeover command rides along so the parked session is resumable."""
         ...
 
     def record_question(
@@ -709,7 +709,7 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
 
         Exactly one answer row ever exists: the first write wins (``won=True``); a
         racing second write loses (``won=False``) and is handed the winning row. This
-        row alone flips the chunk out of ``waiting_on_human`` (D-004)."""
+        row alone flips the chunk out of ``waiting_on_human``."""
         ...
 
     def record_answer_delivered(self, *, question_id: str, chunk_id: str, at: datetime) -> None:
@@ -731,7 +731,7 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         at: datetime,
         artifacts: list[ArtifactRow],
     ) -> None:
-        """Open a gate decision, committing any step artifacts atomically (D-045/D-036).
+        """Open a gate decision, committing any step artifacts atomically.
 
         A graph gate passes no artifacts (they landed with the arriving transition); a
         runner-config gate carries the gated step's artifacts here, exactly where the
@@ -744,17 +744,17 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         ...
 
     def record_requeue(self, chunk_id: str, *, at: datetime) -> None:
-        """Record a ``requeue.recorded`` fact — supersedes an open escalation (D-067)."""
+        """Record a ``requeue.recorded`` fact — supersedes an open escalation."""
         ...
 
     def record_queue_position(self, chunk_id: str, *, position: float, at: datetime) -> None:
-        """Append a ready chunk's new queue position; order derives (D-048/D-004)."""
+        """Append a ready chunk's new queue position; order derives."""
         ...
 
     def add_pm_pointers(self, chunk_id: str, pointers: list[PmPointer], *, at: datetime) -> None:
-        """Fold PM pointers into a group survivor, de-duped by (source, ref) (D-076/D-107)."""
+        """Fold PM pointers into a group survivor, de-duped by (source, ref)."""
         ...
 
     def record_grouped(self, chunk_id: str, *, grouped_into: str, at: datetime) -> None:
-        """Record ``chunk.grouped`` — the merged-away chunk becomes ephemeral (D-048/D-047)."""
+        """Record ``chunk.grouped`` — the merged-away chunk becomes ephemeral."""
         ...

@@ -1,11 +1,11 @@
-"""Gate-decision wire bodies (D-045/D-032) — the human-loop surface.
+"""Gate-decision wire bodies — the human-loop surface.
 
 A **Decision** is a gate's durable parking row: a multiple-choice ask whose
-resolution moves the chunk (design/domain/work.md). Two shapes write one:
+resolution moves the chunk. Two shapes write one:
 
 * the **runner-config gate** submits a :class:`DecisionSubmission` to
   ``POST /chunks/{id}/decisions`` — a runner choosing a decision in place of a
-  transition for a node it was configured to gate (D-032). The choice set is the
+  transition for a node it was configured to gate. The choice set is the
   node's own (the hub is the single source of truth for the graph), so the runner
   sends only the step's artifacts and its fence.
 * a **graph gate** needs no submission — the hub opens the decision itself when a
@@ -14,7 +14,7 @@ resolution moves the chunk (design/domain/work.md). Two shapes write one:
 Resolution — a person picking one choice — is first-write-wins at
 ``POST /decisions/{id}/resolution`` (:class:`DecisionResolutionRequest`), exactly
 like an answer. The holding runner picks the resolution up on PULL and records the
-resolving transition referencing ``decision_id`` (D-027).
+resolving transition referencing ``decision_id``.
 """
 
 from __future__ import annotations
@@ -25,14 +25,14 @@ from blizzard.wire.completion import SubmittedArtifact
 
 
 class DecisionChoiceModel(BaseModel):
-    """One selectable gate outcome — a button on the board/bot (D-042)."""
+    """One selectable gate outcome — a button on the board/bot."""
 
     name: str
     description: str
 
 
 class DecisionSubmission(BaseModel):
-    """A runner-config gate: submit a decision in place of a transition (D-032/D-036).
+    """A runner-config gate: submit a decision in place of a transition.
 
     Carries the gated step's artifacts and its fencing epoch — one atomic, epoch-fenced
     write, exactly where a worker-judged node would have submitted its transition. The
@@ -40,13 +40,13 @@ class DecisionSubmission(BaseModel):
     """
 
     from_node_id: str  # the gated node — its choices become the decision's
-    epoch: int  # the step's lease fence, checked against the chunk's latest (D-007)
+    epoch: int  # the step's lease fence, checked against the chunk's latest
     runner_id: str
     artifacts: list[SubmittedArtifact] = []
 
 
 class DecisionView(BaseModel):
-    """A gate decision in full — the board's card and the runner's pickup (D-045).
+    """A gate decision in full — the board's card and the runner's pickup.
 
     ``resolved_choice`` is set once a person has decided; ``transitioned`` is true once
     the holding runner has recorded the resolving transition. The runner acts on a
@@ -67,13 +67,13 @@ class DecisionView(BaseModel):
 
 
 class OpenDecisionsResponse(BaseModel):
-    """The fleet's open (unresolved) decisions — ``blizzard hub decisions`` (D-052)."""
+    """The fleet's open (unresolved) decisions — ``blizzard hub decisions``."""
 
     decisions: list[DecisionView] = []
 
 
 class DecisionResolutionRequest(BaseModel):
-    """A person's choice for an open decision — first-write-wins CAS (D-045)."""
+    """A person's choice for an open decision — first-write-wins CAS."""
 
     choice: str
     resolved_by: str = "operator"

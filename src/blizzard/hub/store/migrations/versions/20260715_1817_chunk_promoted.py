@@ -1,6 +1,6 @@
 """chunk readiness — the not-ready resting state and its promotion (hub store tree)
 
-Ingest mints a chunk NOT-READY by default (D-103): visible on the board, never claimed
+Ingest mints a chunk NOT-READY by default: visible on the board, never claimed
 by a runner until a ``chunk.promoted`` fact flips it to ``ready``. Readiness is derived
 (``bzh:facts-not-status``): an un-promoted chunk carries no ``chunk_promoted`` row and so
 derives ``not_ready``.
@@ -8,7 +8,7 @@ derives ``not_ready``.
 Existing chunks predate this fact, so a bare table create would silently un-ready every
 chunk already in flight. This revision back-fills a ``chunk.promoted`` row for every chunk
 without one — stamped with the chunk's own ``minted_at`` (the instant it was effectively
-ready before this feature) — so upgrading leaves in-flight chunks unaffected (D-103). The
+ready before this feature) — so upgrading leaves in-flight chunks unaffected. The
 back-fill is idempotent: it skips any chunk already carrying a row, so a re-run writes
 nothing a second time.
 
@@ -34,7 +34,7 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     bind = op.get_bind()
     chunk_promoted.create(bind, checkfirst=True)
-    # Back-fill every pre-existing chunk so it stays claimable (D-103). Idempotent: a
+    # Back-fill every pre-existing chunk so it stays claimable. Idempotent: a
     # chunk already promoted (e.g. on a re-run) is skipped.
     already = {r.chunk_id for r in bind.execute(select(chunk_promoted.c.chunk_id))}
     rows = [

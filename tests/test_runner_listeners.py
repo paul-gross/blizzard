@@ -2,7 +2,7 @@
 
 D-068 makes filesystem permissions the socket's access control, so the mode is a security
 property and is asserted, not assumed. The stale-socket path matters because `kill -9` is
-a supported operation (design/runner/loop.md): a crashed runner leaves its socket file
+a supported operation: a crashed runner leaves its socket file
 behind, and bind() would fail on it forever if nothing cleared it — but a file a *live*
 daemon is serving must never be cleared, so the two cases are pulled apart here.
 """

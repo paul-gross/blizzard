@@ -1,4 +1,4 @@
-"""Workflow-graph domain model — the definition chunks travel (D-025/D-071).
+"""Workflow-graph domain model — the definition chunks travel.
 
 Two representations live here, and the split is deliberate:
 
@@ -7,7 +7,7 @@ Two representations live here, and the split is deliberate:
   the mint-time validator (:mod:`blizzard.hub.domain.graph_validation`) checks.
 * the **reified graph** (:class:`Graph`, :class:`Node`, :class:`Choice`,
   :class:`Edge`) — the immutable, id-carrying entities a validated doc compiles
-  into at mint (D-033), and what the hub store persists.
+  into at mint, and what the hub store persists.
 
 Everything here is a dependency-free domain type (``bzh:domain-core``): no YAML, no
 SQLAlchemy, no FastAPI. Parsing YAML text into a ``dict`` and inlining prompt
@@ -22,45 +22,45 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
-# The reserved terminal a choice may point at instead of a node name (D-071).
+# The reserved terminal a choice may point at instead of a node name.
 RESERVED_TERMINAL = "done"
 
 
 class Executor(StrEnum):
-    """Where a node's step runs (D-030)."""
+    """Where a node's step runs."""
 
     RUNNER = "runner"
     HUB = "hub"
 
 
 class JudgedBy(StrEnum):
-    """Who renders a node's exit judgement — the structural gate marker (D-041)."""
+    """Who renders a node's exit judgement — the structural gate marker."""
 
     WORKER = "worker"
     HUMAN = "human"
 
 
 class SessionMode(StrEnum):
-    """Per-node session freshness (D-054)."""
+    """Per-node session freshness."""
 
     RESUME = "resume"
     FRESH = "fresh"
 
 
 class DeliverMode(StrEnum):
-    """The deliver hub-node's landing mode (D-059)."""
+    """The deliver hub-node's landing mode."""
 
     MERGE_TO_MAIN = "merge-to-main"
     OPEN_PR = "open-pr"
 
 
 class RetriesExhausted(StrEnum):
-    """The only exhaustion target in the MVP (D-071)."""
+    """The only exhaustion target in the MVP."""
 
     ESCALATE = "escalate"
 
 
-# Machinery-defined outcomes per hub executor (D-071/D-086): a hub node omits its
+# Machinery-defined outcomes per hub executor: a hub node omits its
 # judgement to accept these defaults, or authors a matching choice to override one.
 # Keyed by node *name* in the thin slice — deliver is the only hub node.
 HUB_NODE_OUTCOMES: dict[str, frozenset[str]] = {
@@ -73,7 +73,7 @@ HUB_NODE_OUTCOMES: dict[str, frozenset[str]] = {
 
 @dataclass(frozen=True)
 class ChoiceDoc:
-    """One fused choice/edge entry as authored (D-071)."""
+    """One fused choice/edge entry as authored."""
 
     name: str
     description: str | None
@@ -216,7 +216,7 @@ class GraphParseError(ValueError):
 
 @dataclass(frozen=True)
 class Choice:
-    """One selectable outcome of one node's judgement (D-042)."""
+    """One selectable outcome of one node's judgement."""
 
     choice_id: str
     name: str
@@ -235,7 +235,7 @@ class Edge:
 
 @dataclass(frozen=True)
 class Node:
-    """One station in one immutable graph (D-033)."""
+    """One station in one immutable graph."""
 
     node_id: str
     graph_id: str
@@ -255,7 +255,7 @@ class Node:
 
 @dataclass(frozen=True)
 class Graph:
-    """A reified, immutable workflow graph (D-025/D-033)."""
+    """A reified, immutable workflow graph."""
 
     graph_id: str
     name: str
@@ -273,7 +273,7 @@ class Graph:
         return [e for e in self.edges if e.from_node_id == node_id]
 
     def edge_for_choice(self, node_id: str, choice_name: str) -> Edge | None:
-        """The edge a node's judgement choice keys, matched by choice *name* (D-042)."""
+        """The edge a node's judgement choice keys, matched by choice *name*."""
         choice_ids = {
             c.choice_id for n in self.nodes if n.node_id == node_id for c in n.choices if c.name == choice_name
         }
@@ -288,7 +288,7 @@ class IReadGraphRepository(Protocol):
 
     def get(self, graph_id: str) -> Graph | None: ...
     def get_enabled_by_name(self, name: str) -> Graph | None:
-        """The newest enabled graph with ``name`` — the default-graph pin lookup (D-081)."""
+        """The newest enabled graph with ``name`` — the default-graph pin lookup."""
         ...
 
     def list_all(self) -> list[Graph]: ...
@@ -298,5 +298,5 @@ class IWriteGraphRepository(IReadGraphRepository, Protocol):
     """Read-write graph access. Only the domain layer depends on this variant."""
 
     def mint(self, graph: Graph, *, definition_yaml: str, at: datetime) -> None:
-        """Persist a reified, immutable graph and its source YAML (D-033)."""
+        """Persist a reified, immutable graph and its source YAML."""
         ...

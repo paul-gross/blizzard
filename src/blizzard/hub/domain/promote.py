@@ -1,4 +1,4 @@
-"""Chunk promotion — flip a not-ready chunk to ready (D-103).
+"""Chunk promotion — flip a not-ready chunk to ready.
 
 The other half of the readiness lifecycle :mod:`blizzard.hub.domain.ingest` opens: ingest
 mints a chunk in a NOT-READY resting state (visible on the board, never claimed), and
@@ -19,14 +19,14 @@ from blizzard.hub.domain.work import IWriteChunkRepository
 
 
 class PromoteService:
-    """Promote a not-ready chunk to ready — ``blizzard hub promote`` (D-103)."""
+    """Promote a not-ready chunk to ready — ``blizzard hub promote``."""
 
     def __init__(self, *, chunks: IWriteChunkRepository, clock: IClock) -> None:
         self._chunks = chunks
         self._clock = clock
 
     def promote(self, chunk_id: str) -> None:
-        """Append the ``chunk.promoted`` fact so the chunk re-derives ``ready`` (D-103).
+        """Append the ``chunk.promoted`` fact so the chunk re-derives ``ready``.
 
         Idempotent: a chunk already promoted keeps its first fact, so a repeated promote
         changes nothing."""

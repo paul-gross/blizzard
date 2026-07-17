@@ -130,7 +130,7 @@ def test_stub_verb_reports_not_implemented() -> None:
 def test_hub_host_reports_an_unset_pm_source_token_env_as_a_clean_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A `[[pm_source]]` naming an unset `token_env` fails at boot (D-108) as the same
+    """A `[[pm_source]]` naming an unset `token_env` fails at boot as the same
     clean CLI error the config-load guard raises — not an unhandled traceback.
 
     The boot failure is by design; the traceback was not. `host` builds the app after

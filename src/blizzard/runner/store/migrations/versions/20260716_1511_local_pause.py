@@ -4,7 +4,7 @@ Issue #43 lands the runner's half of the pause control (``PATCH /runner``, D-043
 locally): the operator tells *this* runner to stop claiming and it adheres without the
 hub knowing or being reachable ([api.md]). Unlike ``hub_control`` (0006), which upserts a
 mirror of a hub-owned value, these are locally-minted facts: pause/start facts append and
-the flag derives from the newest (D-004/D-039), the same shape as the hub's own
+the flag derives from the newest, the same shape as the hub's own
 ``runner_pause_facts``. Effective paused is the OR of the two brakes.
 
 Each revision in this tree creates a subset of the current ``schema`` metadata's tables

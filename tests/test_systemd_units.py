@@ -1,14 +1,14 @@
 """The colocated systemd units (``packaging/systemd/``) — the boot-recovery contract.
 
 The MVP journey has the machine reboot and "the supervisor and the colocated hub
-[come] back under systemd" (product/mvp.md). Two mechanisms deliver that: the units
+[come] back under systemd". Two mechanisms deliver that: the units
 enable at boot (``WantedBy=multi-user.target``) and restart on a crash (``Restart=``);
 the daemons' own startup pass (runner REAP, hub idempotent re-flush) does the rest,
 proven by the whole-process crash-sweep cases (docs/deployment.md).
 
 This unit test holds the *packaging* half of that contract so it cannot silently rot:
 each shipped ``.service`` file must launch a real, packaged entry point via ``host``,
-reconcile the schema before it (D-099), and carry the restart + boot-enable directives
+reconcile the schema before it, and carry the restart + boot-enable directives
 the recovery contract depends on. The *behavior* is the crash sweep's job; this is the
 static-asset guard, so it needs no systemd installed and runs in the default tier.
 """
@@ -77,12 +77,12 @@ def test_execstart_launches_a_packaged_entry_point_as_host(name: str) -> None:
 
 @pytest.mark.parametrize("name", sorted(_UNITS))
 def test_schema_is_reconciled_before_the_daemon_opens_the_store(name: str) -> None:
-    """ExecStartPre migrates the store (D-099) so a wheel upgrade + reboot self-heals."""
+    """ExecStartPre migrates the store so a wheel upgrade + reboot self-heals."""
     entry_point, runtime_dir = _UNITS[name]
     pre = _parse_unit(name).get("Service", "ExecStartPre")
     argv = pre.split()
     assert Path(argv[0]).name == entry_point, f"{name} ExecStartPre must run {entry_point}"
-    assert "migrate" in argv, f"{name} ExecStartPre must `migrate` before host (D-099)"
+    assert "migrate" in argv, f"{name} ExecStartPre must `migrate` before host"
     assert runtime_dir in argv, f"{name} ExecStartPre must target {runtime_dir}"
 
 
@@ -107,7 +107,7 @@ def test_both_colocated_units_ship_and_the_runner_orders_after_the_hub() -> None
 
 
 def test_no_forge_or_pm_credentials_are_configured_on_the_runner_unit() -> None:
-    """Credentials live only at the hub (D-047/D-084) — the runner unit must not carry them."""
+    """Credentials live only at the hub — the runner unit must not carry them."""
     runner_text = (_SYSTEMD_DIR / "blizzard-runner.service").read_text()
     for env_file_line in [ln for ln in runner_text.splitlines() if ln.startswith("EnvironmentFile")]:
         assert "runner.env" in env_file_line, f"runner unit points at a non-runner env file: {env_file_line}"

@@ -176,7 +176,7 @@ export interface BoardCard {
     }
     /* The NOT READY backlog column reads as held/inert: a muted header label and a
        dim card accent, distinct from the ready queue in the rail and from any live
-       lane. Colors come from tokens, never hard-coded hex (D-103). */
+       lane. Colors come from tokens, never hard-coded hex. */
     .b-col[data-col='notready'] .b-col-head .lbl {
       color: var(--label-dim);
     }
@@ -306,7 +306,7 @@ export class BoardShell {
   /** Emitted with a chunk id when its card is activated — fills the detail dock. */
   readonly selectChunk = output<string>();
 
-  /** Emitted with a chunk id when a not-ready card's Promote is clicked (D-103). */
+  /** Emitted with a chunk id when a not-ready card's Promote is clicked. */
   readonly promote = output<string>();
 
   protected readonly columns = LANES;

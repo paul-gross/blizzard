@@ -9,7 +9,7 @@ without a migrated database; the fleet routes then report the store is unwired.
 ``build_hosted_app`` is the ``host`` composition root: it opens the store, wires the
 readiness seam, constructs the forge-delivery seam over its own GitHub-shaped HTTP
 client (base URL + token from the environment) and the PM source registry over the
-configured ``[[pm_source]]`` entries — each with its own credentialed client (D-108) —
+configured ``[[pm_source]]`` entries — each with its own credentialed client —
 and assembles the fleet services (:func:`blizzard.hub.composition.build_services`).
 """
 
@@ -55,7 +55,7 @@ ENV_FORGE_TOKEN = "BZ_FORGE_TOKEN"
 # origins that resolve under any owner, so a workspace-configured default is enough.
 ENV_FORGE_OWNER = "BZ_FORGE_OWNER"
 DEFAULT_FORGE_OWNER = "blizzard"
-# The branch every PR/merge targets (D-060). ``main`` matches the verification forge's
+# The branch every PR/merge targets. ``main`` matches the verification forge's
 # bare origins; a real repo whose default branch differs (e.g. ``master`` on
 # ``paul-gross/blizzard``) sets this so a PR's ``base`` resolves instead of 422-ing.
 ENV_FORGE_BASE_BRANCH = "BZ_FORGE_BASE_BRANCH"
@@ -115,7 +115,7 @@ def create_app(
     app.include_router(questions_router)
     app.include_router(runners_router)
 
-    # The embedded frontend, served from the same process and origin (D-096).
+    # The embedded frontend, served from the same process and origin.
     mount_web_app(app, frontend_dir("hub"), app_name="blizzard-hub")
 
     log.info("hub app created", db_url=config.db_url, services_wired=services is not None)
@@ -134,7 +134,7 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
     forge: IForgeDelivery = (
         GitHubForgeDelivery(client, default_owner=owner) if client is not None else _UnconfiguredForge()
     )
-    # The PM registry builds its own credentialed client per configured source (D-108) —
+    # The PM registry builds its own credentialed client per configured source —
     # it no longer shares the delivery forge's client or credential.
     pm = build_pm_registry(config.pm_sources)
     base_branch = os.environ.get(ENV_FORGE_BASE_BRANCH, DEFAULT_FORGE_BASE_BRANCH)
@@ -146,7 +146,7 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
 def _forge_client() -> httpx.Client | None:
     """A GitHub-shaped HTTP client for the forge, from the environment, or None.
 
-    The hub holds the forge base URL and token (D-047): ``BZ_FORGE_URL`` (or
+    The hub holds the forge base URL and token: ``BZ_FORGE_URL`` (or
     ``BZ_FORGE_HOST``/``BZ_FORGE_PORT``) plus an optional ``BZ_FORGE_TOKEN``. When no
     forge is configured, the delivery and PM seams stay unwired.
     """

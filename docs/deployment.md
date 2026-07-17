@@ -19,15 +19,15 @@ The two units live in [`packaging/systemd/`](../packaging/systemd/):
 
 One machine runs both daemons of a single-runner deployment (the MVP shape — a
 remote hub and multiple runner machines are on the cut list). They are two
-personalities of the one `blizzard` wheel (D-061), so there is no version skew
+personalities of the one `blizzard` wheel, so there is no version skew
 between them and no Node at install or runtime:
 
 - **hub** — `blizzard-hub host`: the fleet's HTTP API, SSE, and the embedded
-  mission-control board. Holds the forge base URL and PM credentials (D-047/D-084)
+  mission-control board. Holds the forge base URL and PM credentials
   — those live only here, never on the runner.
 - **supervisor (runner)** — `blizzard-runner host`: the stateless
   `REAP → PULL → FILL → ADVANCE` loop behind a machine-local API. Reaches the hub
-  outbound-only (D-012), so it keeps working while the hub is briefly unreachable.
+  outbound-only, so it keeps working while the hub is briefly unreachable.
 
 Each daemon owns its own embedded store; neither opens the other's.
 
@@ -44,8 +44,8 @@ python3 -m venv /opt/blizzard/venv
 # 2. A service account and the shared state root the units declare (StateDirectory).
 useradd --system --home-dir /var/lib/blizzard --shell /usr/sbin/nologin blizzard
 
-# 3. Seed each runtime dir: config scaffold + data dir + a store migrated to head
-#    (D-099). Idempotent — safe to re-run.
+# 3. Seed each runtime dir: config scaffold + data dir + a store migrated to head.
+#    Idempotent — safe to re-run.
 sudo -u blizzard /opt/blizzard/venv/bin/blizzard-hub    init /var/lib/blizzard/hub
 sudo -u blizzard /opt/blizzard/venv/bin/blizzard-runner init /var/lib/blizzard/runner
 
@@ -70,7 +70,7 @@ requires an absolute path there.
 **Upgrades self-heal the store — for an additive or backfill revision.** To adopt a new
 wheel, `pip install` it into the venv and `systemctl restart` the units — no manual
 migration step. Each unit's `ExecStartPre` runs `… migrate` before the daemon opens its
-store, so a wheel that ships a new schema revision (D-099) reconciles the on-disk store
+store, so a wheel that ships a new schema revision reconciles the on-disk store
 to head on the next start; the daemon refuses to start on a revision mismatch, so a
 forgotten migration fails loudly rather than corrupting state. A graceful `systemctl
 restart` also preserves in-flight work across the upgrade — see the recovery contract
@@ -129,7 +129,7 @@ The hub's PM pass-through (D-047, MVP criterion 1) reads every chunk's PM item t
 as an `[[pm_source]]` table in `blizzard-hub.toml`. This is a separate seam from the
 delivery forge above: `BZ_FORGE_URL`/`BZ_FORGE_TOKEN` in the hub's env file control where
 a chunk's PR is opened and landed; `[[pm_source]]` controls where its PM item is *read
-from*, and each source carries its own credential (D-108) rather than sharing the
+from*, and each source carries its own credential rather than sharing the
 delivery forge's.
 
 `blizzard hub init` scaffolds a commented-out example block — uncomment it and fill in
@@ -151,8 +151,8 @@ Every field:
 |-------|----------|---------|
 | `name` | yes | The source's identity. Ingest tokens (`name:ref`, `name#ref`) and board pointer labels (`{source}#{ref}`) key on it. Must not contain `:` (the ingest token grammar splits on the first one). Must be unique across all `[[pm_source]]` blocks. |
 | `provider` | yes | The adapter grammar this source speaks. Only `"github"` exists today; an unknown provider fails at config load, not at first use. |
-| `repo` | yes | The `owner/name` coordinate this source is pinned to. Each `(provider, repo)` pair may appear under only one `name` — two names for the same repo would let one item be ingested twice under two identities (D-093). |
-| `token_env` | yes | Names an environment variable — **not the secret itself** (D-084). See "Credential indirection" below. |
+| `repo` | yes | The `owner/name` coordinate this source is pinned to. Each `(provider, repo)` pair may appear under only one `name` — two names for the same repo would let one item be ingested twice under two identities. |
+| `token_env` | yes | Names an environment variable — **not the secret itself**. See "Credential indirection" below. |
 | `api_base` | no | Overrides the provider's default API origin. Required to reach a self-hosted forge (e.g. GitHub Enterprise). |
 | `web_base` | no | Overrides the provider's default web origin, used for the item's browsable URL. Derived from `api_base` when omitted, so a self-hosted GHE source only needs to set `api_base`. |
 
@@ -182,7 +182,7 @@ this example is not an illustration of.
 `token_env` names an environment variable; the secret itself goes in the hub's env
 file (`/etc/blizzard/hub.env` under the systemd layout above), never in
 `blizzard-hub.toml` — the same separation the delivery forge's `BZ_FORGE_TOKEN`
-already follows (D-084). An unset `token_env` fails at boot, naming the missing
+already follows. An unset `token_env` fails at boot, naming the missing
 variable rather than silently ingesting unauthenticated.
 
 ### The upgrade note
@@ -265,7 +265,7 @@ who you are:
 
 Same app, same routes — two doors, not two APIs. A browser cannot open a unix socket,
 which is why the TCP listener exists; the socket exists because the operator's controls
-should not depend on a port, and filesystem permissions are their access control (D-068).
+should not depend on a port, and filesystem permissions are their access control.
 
 **Run the local verbs as the service account.** The socket is mode 0600 and the unit runs
 as `blizzard`, so the filesystem access control above is doing its job: another account —
@@ -327,7 +327,7 @@ Two systemd mechanisms combine to deliver the journey's "came back under systemd
 |---------|-------------------|-------------------------------|
 | `kill -9`, OOM, or crash of a daemon | `Restart=always` brings it straight back (`RestartSec=2`) | Startup pass recovers from the durable store — see below |
 | Machine reboot | The enabled units start at boot (`WantedBy=multi-user.target`) | Same startup pass, from the same on-disk store |
-| Graceful restart (`systemctl restart`, or stop→start on a wheel upgrade) | The SIGTERM lets the daemon run its shutdown path *before* exiting; `Restart=`/boot then brings it back | The shutdown marks every in-flight lease with a durable resume-intent (D-082); the first tick **RESUMEs** each session in place — same lease/epoch/session, only the pid rewritten, no retry consumed — so **in-flight agent context is preserved**, not merely "not worked twice" |
+| Graceful restart (`systemctl restart`, or stop→start on a wheel upgrade) | The SIGTERM lets the daemon run its shutdown path *before* exiting; `Restart=`/boot then brings it back | The shutdown marks every in-flight lease with a durable resume-intent; the first tick **RESUMEs** each session in place — same lease/epoch/session, only the pid rewritten, no retry consumed — so **in-flight agent context is preserved**, not merely "not worked twice" |
 
 The startup pass is where the "reaped the stale leases … continued at exactly the
 node the hub last recorded" clause is honored, and it is **not** new code — it is
@@ -341,15 +341,15 @@ the meantime, only deferred.
 - **Supervisor.** The runner's first tick after any restart is **REAP**. It reaps
   the leases the crash stranded (their workers are gone), re-reads its environment
   bindings from its store, and each chunk becomes leasable again at its
-  last-recorded node — never re-run from the start. Facts are the only truth
-  (D-004), so a restart reads exactly the state a clean shutdown would have left.
+  last-recorded node — never re-run from the start. Facts are the only truth,
+  so a restart reads exactly the state a clean shutdown would have left.
 - **Hub.** A completion re-flushed after a hub crash is applied idempotently
-  behind the epoch fence (D-042), and a per-repo land already recorded is skipped
+  behind the epoch fence, and a per-repo land already recorded is skipped
   on redelivery — so a crash mid-delivery lands the chunk exactly once, not twice.
 
 A **graceful** restart does one better than reaping. Because the SIGTERM lets the
 supervisor run a shutdown pass before it exits, it marks every in-flight lease with
-a durable *resume-intent* (D-082) instead of leaving its workers to be reaped. The
+a durable *resume-intent* instead of leaving its workers to be reaped. The
 first tick after the restart then **RESUMEs** each marked session in place — the same
 lease, epoch, and session, only the process id rewritten and no retry consumed — so a
 `systemctl restart` (for example, to adopt a freshly-merged runner wheel) continues
@@ -389,7 +389,7 @@ the facts-level invariant checker green after the crash and again after recovery
   change lands once.
 - `tests/crash/test_kill9_sweep.py::test_graceful_restart_resumes_in_flight_session`
   — **gracefully** restarts the supervisor while a worker is in flight; the shutdown
-  marks the lease and the restart RESUMEs the *same* session in place (D-082), so the
+  marks the lease and the restart RESUMEs the *same* session in place, so the
   chunk lands once without re-running from the top.
 
 Run just the demo (needs the sibling `blizzard-mock` worktree and a local winter

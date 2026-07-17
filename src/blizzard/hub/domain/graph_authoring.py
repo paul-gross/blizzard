@@ -1,4 +1,4 @@
-"""Graph reification and the mint service (D-033/D-071).
+"""Graph reification and the mint service.
 
 The mint pipeline's domain half: a validated :class:`GraphDoc` is compiled into an
 immutable, id-carrying :class:`Graph` (:func:`reify_graph`) and persisted through
@@ -8,7 +8,7 @@ inlining prompt *file* references are edge concerns done before this runs
 stores verbatim for audit/re-export.
 
 Validation errors reject the mint (:class:`GraphValidationError`, surfaced 422 at
-the edge); warnings ride along on the minted graph (D-071).
+the edge); warnings ride along on the minted graph.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ from blizzard.hub.domain.graph_validation import ValidationResult, validate_grap
 
 
 class GraphValidationError(Exception):
-    """A graph definition failed mint-time validation (D-071) — the 422 carrier."""
+    """A graph definition failed mint-time validation — the 422 carrier."""
 
     def __init__(self, result: ValidationResult) -> None:
         super().__init__("; ".join(result.errors) or "graph validation failed")
@@ -37,13 +37,13 @@ class GraphValidationError(Exception):
 
 
 def reify_graph(doc: GraphDoc, clock: IClock) -> Graph:
-    """Compile a validated authoring doc into an immutable, id-carrying graph (D-033).
+    """Compile a validated authoring doc into an immutable, id-carrying graph.
 
     Ids are minted here — one graph id, a node id per node, a choice id per choice —
     and the fused choice/edge entries split into reified :class:`Choice` objects on
     the node and directed :class:`Edge` objects keyed by choice id. A hub node that
     omits its judgement carries no choices and no edges; its machinery outcomes are
-    applied by the coordinator, not stored as edges (D-086).
+    applied by the coordinator, not stored as edges.
     """
     graph_id = mint(GRAPH_PREFIX, clock)
     node_ids = {node.name: mint(NODE_PREFIX, clock) for node in doc.nodes}
@@ -86,7 +86,7 @@ def reify_graph(doc: GraphDoc, clock: IClock) -> Graph:
 
 
 class GraphMintService:
-    """Validate, reify, and persist a graph — the ``POST /graphs`` domain rule (D-071).
+    """Validate, reify, and persist a graph — the ``POST /graphs`` domain rule.
 
     Holds the *write* graph repository (``bzh:controller-read-only``); the route
     resolves the YAML into a :class:`GraphDoc` and delegates here. Returns the minted
@@ -107,7 +107,7 @@ class GraphMintService:
         return graph, result.warnings
 
     def ensure_default(self, doc: GraphDoc, *, definition_yaml: str) -> Graph:
-        """Mint the configured default graph if no enabled graph of its name exists (D-081).
+        """Mint the configured default graph if no enabled graph of its name exists.
 
         Idempotent by name: a fresh hub mints the packaged default on first use, and
         re-checks are no-ops. Graphs stay immutable — this never edits an existing one.

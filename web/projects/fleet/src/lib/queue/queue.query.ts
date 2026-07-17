@@ -5,7 +5,7 @@ import { hubQueueKey } from '../query-keys';
 
 /**
  * Hub `GET /api/queue/peek` read — the ready queue in the hub's explicit
- * reorder + grouping order (D-048), through TanStack Query and the generated hub
+ * reorder + grouping order, through TanStack Query and the generated hub
  * client (bzh:generated-client). Each entry carries its `position`, `graph_id`,
  * and PM pointers so the board can render and reshape the queue. The live-update
  * service re-peeks this on `queue-changed`/`chunk-changed`; the poll is the floor.

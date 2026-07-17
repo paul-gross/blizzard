@@ -1,4 +1,4 @@
-# The merge gate — the reusable check suite (implementation/build.md).
+# The merge gate — the reusable check suite.
 #
 # This is the PR-to-master gate. `pr.yml` runs it on every pull request;
 # `push.yml` and `release.yml` call it too, then add their own extra tiers, so

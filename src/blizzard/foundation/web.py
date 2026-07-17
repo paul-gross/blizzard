@@ -1,4 +1,4 @@
-"""The frontend mount seam — StaticFiles + SPA fallback (D-096).
+"""The frontend mount seam — StaticFiles + SPA fallback.
 
 FastAPI serves the client-rendered Angular app from the same process and origin
 as ``/api`` and the SSE streams: the build output is mounted with an SPA fallback

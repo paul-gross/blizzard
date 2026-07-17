@@ -31,7 +31,7 @@ class RunnerStoreError(RuntimeError):
 
 @dataclass(frozen=True)
 class NewLease:
-    """A node-step lease at mint — before the worker exists (D-082)."""
+    """A node-step lease at mint — before the worker exists."""
 
     lease_id: str
     chunk_id: str
@@ -49,7 +49,7 @@ class LeaseRecord:
     """A lease joined with its node context — the loop's per-attempt fact.
 
     ``pid`` / ``process_start_time`` / ``session_id`` are ``None`` until
-    spawn-return records them (D-092).
+    spawn-return records them.
     """
 
     lease_id: str
@@ -82,7 +82,7 @@ class ClosedLeaseRecord:
 
 @dataclass(frozen=True)
 class EnvBindingRecord:
-    """A chunk→env binding fact (D-021/D-063)."""
+    """A chunk→env binding fact."""
 
     chunk_id: str
     environment_id: str
@@ -92,7 +92,7 @@ class EnvBindingRecord:
 
 @dataclass(frozen=True)
 class BufferedFact:
-    """One pending hub-bound fact in the store-and-forward buffer (D-069)."""
+    """One pending hub-bound fact in the store-and-forward buffer."""
 
     seq: int
     kind: str
@@ -146,7 +146,7 @@ class IReadRunnerStore(Protocol):
 
         The flusher drives a buffered completion's apply-response against this: an
         already-closed lease means the completion applied on an earlier flush whose
-        ack was lost (D-090) — the re-flush is a no-op past the ack.
+        ack was lost — the re-flush is a no-op past the ack.
         """
         ...
 
@@ -186,7 +186,7 @@ class IReadRunnerStore(Protocol):
 
         ADVANCE reads this to skip a worker whose completion (or runner-config gate
         decision) is already buffered, so the node-step's outcome is elicited exactly
-        once while the flush is pending (D-069/D-032)."""
+        once while the flush is pending."""
         ...
 
     def held_environment_ids(self) -> list[str]:
@@ -198,7 +198,7 @@ class IReadRunnerStore(Protocol):
         ...
 
     def live_tenure_chunk_ids(self) -> list[str]:
-        """Chunks still held by this runner — those with an unreleased binding (D-083)."""
+        """Chunks still held by this runner — those with an unreleased binding."""
         ...
 
     def attempt_count(self, chunk_id: str, node_id: str) -> int:
@@ -206,18 +206,18 @@ class IReadRunnerStore(Protocol):
         ...
 
     def latest_epoch(self, chunk_id: str) -> int:
-        """The highest lease epoch minted for this chunk, or 0 — the fence source (D-044)."""
+        """The highest lease epoch minted for this chunk, or 0 — the fence source."""
         ...
 
     def pending_outbound(self) -> list[BufferedFact]:
-        """The unacked outbound buffer, FIFO by seq (D-069)."""
+        """The unacked outbound buffer, FIFO by seq."""
         ...
 
     def unforwarded_ask(self, lease_id: str) -> AskRecord | None:
         """The lease's newest ask not yet parked — its question_id has no park fact.
 
         ADVANCE parks on this: an exited worker with an unforwarded ask asked and quit
-        (ask-and-exit), so the chunk parks rather than being judged (D-009). Once parked
+        (ask-and-exit), so the chunk parks rather than being judged. Once parked
         the park fact references the question_id, so the same ask is not re-parked; a
         resumed worker that asks *again* mints a fresh question_id, returned anew."""
         ...
@@ -234,7 +234,7 @@ class IReadRunnerStore(Protocol):
         ...
 
     def hub_paused(self, runner_id: str) -> bool:
-        """The last hub pause brake PULL mirrored locally — FILL adheres (D-043/D-012).
+        """The last hub pause brake PULL mirrored locally — FILL adheres.
 
         Defaults False when PULL has never synced (a fresh runner claims freely until it
         first hears otherwise)."""
@@ -254,7 +254,7 @@ class IReadRunnerStore(Protocol):
         ...
 
     def resume_intent_lease_ids(self) -> set[str]:
-        """Leases carrying an **open** restart resume-intent (D-082).
+        """Leases carrying an **open** restart resume-intent.
 
         A ``resume_intents`` mark with no ``resume_clears`` for the same lease at or
         after it — set by a graceful shutdown (#12) or ``host``'s startup crash-recovery
@@ -263,7 +263,7 @@ class IReadRunnerStore(Protocol):
         ...
 
     def session_ended_lease_ids(self) -> set[str]:
-        """Leases whose **current spawn** recorded a session-end — it declared done (D-055/D-082).
+        """Leases whose **current spawn** recorded a session-end — it declared done.
 
         A ``session_ends`` row means the Claude Code ``SessionEnd`` hook fired on a natural
         session exit. Startup crash-recovery reads this to keep a cleanly-exited worker out
@@ -304,7 +304,7 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
     def record_spawn(
         self, lease_id: str, *, pid: int, process_start_time: str, session_id: str, spawned_at: datetime
     ) -> None:
-        """Fill a lease's spawn-return facts: pid, process start time, session id (D-092).
+        """Fill a lease's spawn-return facts: pid, process start time, session id.
 
         ``spawned_at`` additionally appends the lease's spawn generation, so a fact recorded
         by an earlier session of the same lease can be told from one recorded by the process
@@ -323,25 +323,25 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         ...
 
     def record_heartbeat(self, *, lease_id: str, beat_at: datetime) -> None:
-        """Append a heartbeat for a lease — a worker tool call fired its hook (D-069)."""
+        """Append a heartbeat for a lease — a worker tool call fired its hook."""
         ...
 
     def record_closure(self, *, lease_id: str, chunk_id: str, node_id: str, reason: str, closed_at: datetime) -> None:
-        """Close a lease — a clean transition or a failure/escalation (D-078)."""
+        """Close a lease — a clean transition or a failure/escalation."""
         ...
 
     def record_release(self, *, chunk_id: str, environment_id: str, released_at: datetime) -> None:
-        """Release a chunk's env binding at tenure end (D-083)."""
+        """Release a chunk's env binding at tenure end."""
         ...
 
     def enqueue_outbound(
         self, *, kind: str, chunk_id: str | None, lease_id: str | None, payload: str, created_at: datetime
     ) -> int:
-        """Append a hub-bound fact to the store-and-forward buffer; return its seq (D-069)."""
+        """Append a hub-bound fact to the store-and-forward buffer; return its seq."""
         ...
 
     def ack_outbound(self, seq: int, *, acked_at: datetime) -> None:
-        """Mark a buffered fact delivered — a semantic rejection acks too (D-069)."""
+        """Mark a buffered fact delivered — a semantic rejection acks too."""
         ...
 
     def record_ask(
@@ -367,7 +367,7 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         ...
 
     def set_hub_paused(self, runner_id: str, *, paused: bool, at: datetime) -> None:
-        """Mirror the hub's pause brake locally (upsert) — read back by FILL (D-043/D-012)."""
+        """Mirror the hub's pause brake locally (upsert) — read back by FILL."""
         ...
 
     def record_local_pause(
@@ -376,7 +376,7 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         """Append a local pause/start fact **and** its hub-bound report, atomically (issue #43).
 
         Appends rather than upserts because this is a locally-minted fact, not a mirror of
-        someone else's value (D-004/D-039) — the same shape as the hub's own pause facts.
+        someone else's value — the same shape as the hub's own pause facts.
 
         The report is not a separate call by design: a brake the hub is never told about
         leaves the board showing a runner as claiming when it has stopped, and nothing
@@ -391,13 +391,13 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         ...
 
     def record_resume_intent(self, *, lease_id: str, marked_at: datetime) -> None:
-        """Mark a lease for same-lease restart-resume at graceful shutdown (D-082)."""
+        """Mark a lease for same-lease restart-resume at graceful shutdown."""
         ...
 
     def record_resume_clear(self, *, lease_id: str, cleared_at: datetime) -> None:
-        """Clear a lease's resume-intent — the RESUME step resumed or abandoned it (D-082)."""
+        """Clear a lease's resume-intent — the RESUME step resumed or abandoned it."""
         ...
 
     def record_session_end(self, *, lease_id: str, ended_at: datetime) -> None:
-        """Record a worker's session-end — the ``SessionEnd`` hook fired on exit (D-055/D-082)."""
+        """Record a worker's session-end — the ``SessionEnd`` hook fired on exit."""
         ...

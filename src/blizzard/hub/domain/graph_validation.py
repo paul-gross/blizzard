@@ -1,16 +1,16 @@
-"""Mint-time graph validation (D-071).
+"""Mint-time graph validation.
 
-The rules ``POST /graphs`` runs before minting a graph immutable (D-033). Errors
+The rules ``POST /graphs`` runs before minting a graph immutable. Errors
 reject the definition; warnings mint it flagged. This is pure domain logic over an
 already-parsed :class:`GraphDoc` (``bzh:domain-core``): file-reference resolution
 and YAML parsing are edge concerns done before it runs, so the validator touches
 no filesystem and no framework.
 
-The fused choice/edge shape (D-071) makes "every choice has an edge" *structurally*
+The fused choice/edge shape makes "every choice has an edge" *structurally*
 unrepresentable — a choice entry carries its own ``to``. What remains to check is
 that each ``to`` resolves, the entry node exists, judgement kind matches executor,
 and the retry escape hatch is well-formed. Reachability is a warning, not an error:
-cycles are intentional and retries escape every cycle to escalation (D-009).
+cycles are intentional and retries escape every cycle to escalation.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ from blizzard.hub.domain.graph import (
 
 @dataclass(frozen=True)
 class ValidationResult:
-    """The outcome of validating a graph definition (D-071)."""
+    """The outcome of validating a graph definition."""
 
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
@@ -120,7 +120,7 @@ def _warn_reachability(doc: GraphDoc, node_names: set[str], warnings: list[str])
 
 
 def _edges(doc: GraphDoc) -> dict[str, set[str]]:
-    """Adjacency including hub nodes' machinery-default outcomes (D-071/D-086).
+    """Adjacency including hub nodes' machinery-default outcomes.
 
     A hub node may omit its judgement to accept the machinery defaults (deliver's
     ``landed -> done`` and ``conflict -> entry``); those are real edges for
@@ -144,7 +144,7 @@ def _edges(doc: GraphDoc) -> dict[str, set[str]]:
 
 
 def _default_hub_target(outcome: str, entry: str) -> str:
-    """The default routing for a hub node's machinery outcome (D-086)."""
+    """The default routing for a hub node's machinery outcome."""
     return RESERVED_TERMINAL if outcome == "landed" else entry
 
 

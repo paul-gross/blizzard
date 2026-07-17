@@ -1,11 +1,11 @@
-"""Fleet-registry wire bodies (D-019/D-070/D-043).
+"""Fleet-registry wire bodies.
 
 The registry surface the CLI's fleet verbs, the board, and the runners themselves speak
-(design/hub/api.md): a runner registers (``POST /runners``) and heartbeats
+: a runner registers (``POST /runners``) and heartbeats
 (``POST /runners/{id}/heartbeats``); the board lists the fleet with liveness
 (``GET /runners``); the operator sets the pause brake (``POST /runners/{id}/pause`` /
 ``/resume``); and the runner reads its own declarative state back on its pull
-(``GET /runners/{id}``). ``online`` and ``paused`` are **derived** (D-004) — liveness
+(``GET /runners/{id}``). ``online`` and ``paused`` are **derived** — liveness
 from ``last_seen_at`` against the staleness threshold, paused from the newest pause fact.
 """
 
@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 
 class RunnerRegistrationRequest(BaseModel):
-    """Register a runner into the fleet — runner id + workspace binding (D-019)."""
+    """Register a runner into the fleet — runner id + workspace binding."""
 
     runner_id: str
     workspace_id: str
@@ -29,7 +29,7 @@ class RunnerRegistrationResponse(BaseModel):
 
 
 class RunnerView(BaseModel):
-    """One fleet-registry row — derived liveness and both brakes (D-004/D-070/D-043).
+    """One fleet-registry row — derived liveness and both brakes.
 
     A runner can be paused by two different parties for two different reasons, so the two
     are reported separately rather than collapsed into one ``paused`` (issue #43): the
@@ -48,12 +48,12 @@ class RunnerView(BaseModel):
 
 
 class RunnerListResponse(BaseModel):
-    """The fleet registry — every registered runner with its liveness (D-070)."""
+    """The fleet registry — every registered runner with its liveness."""
 
     runners: list[RunnerView] = []
 
 
 class RunnerPauseRequest(BaseModel):
-    """Set a runner's pause brake — records who flipped it (D-043)."""
+    """Set a runner's pause brake — records who flipped it."""
 
     by: str = "operator"

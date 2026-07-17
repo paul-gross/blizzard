@@ -1,7 +1,7 @@
 """``pr.opened`` idempotent per (chunk, repo) — a DB-level close of a write race (issue #10)
 
-The open-pr deliver mode's coordinator (D-059) runs on both a fresh apply and an
-idempotent completion replay (D-090) — deliberate, so a mid-delivery crash resumes
+The open-pr deliver mode's coordinator runs on both a fresh apply and an
+idempotent completion replay — deliberate, so a mid-delivery crash resumes
 rather than wedges the chunk (``blizzard.hub.delivery.coordinator``). Its DB-backed
 ``open_prs`` skip-set (a store read each call, not an in-memory cache) has a narrow
 read-then-write race between two overlapping runs, so a dogfood run accumulated two

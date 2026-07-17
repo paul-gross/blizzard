@@ -72,7 +72,7 @@ def check_runner_store(engine: Engine) -> list[Violation]:
                 )
 
         # runner:gapless-outbound-seq — the outbound buffer's per-runner seq is strictly
-        # monotonic and gapless (D-069); one runner per store, so the seqs must be a
+        # monotonic and gapless; one runner per store, so the seqs must be a
         # contiguous range with no holes (a hole would break FIFO idempotent replay).
         seqs = sorted(row[0] for row in conn.execute(select(runner.outbound_buffer.c.seq)))
         if seqs:
@@ -108,7 +108,7 @@ def check_hub_store(engine: Engine) -> list[Violation]:
     violations: list[Violation] = []
     with engine.connect() as conn:
         # hub:one-transition-per-node-epoch — at most one accepted transition per
-        # (chunk, from_node, epoch): the idempotency guarantee (D-090). A duplicate is a
+        # (chunk, from_node, epoch): the idempotency guarantee. A duplicate is a
         # double-apply — the fence or the idempotent replay probe failed.
         key = Counter(
             (row[0], row[1], row[2])
@@ -126,7 +126,7 @@ def check_hub_store(engine: Engine) -> list[Violation]:
                 )
 
         # hub:epoch-consistent-transitions — no accepted transition carries an epoch
-        # greater than the chunk's latest lease fact (D-007): a transition's fence is
+        # greater than the chunk's latest lease fact: a transition's fence is
         # always a lease the hub already knows, so a higher one means a zombie landed.
         latest_lease = {
             row[0]: row[1]
@@ -167,7 +167,7 @@ def check_hub_store(engine: Engine) -> list[Violation]:
                 )
 
         # hub:per-repo-land-idempotent — at most one landed fact per (chunk, repo):
-        # a redelivery skips already-landed repos (D-091), so a duplicate is a double land.
+        # a redelivery skips already-landed repos, so a duplicate is a double land.
         repo_lands = Counter(
             (row[0], row[1])
             for row in conn.execute(select(hub.delivery_repo_landed.c.chunk_id, hub.delivery_repo_landed.c.repo))
@@ -224,9 +224,9 @@ def _check_derivation_and_delivery(engine: Engine) -> list[Violation]:
             )
             continue
         # Both terminal delivery facts require the terminal transition: merge-to-main's
-        # ``delivery.landed`` and open-pr's ``pr.closed`` (D-065). An *open* PR
+        # ``delivery.landed`` and open-pr's ``pr.closed``. An *open* PR
         # (``pr_opened`` without ``pr_closed``) is deliberately parked — no terminal
-        # transition, environments held (D-066) — so it is never flagged here.
+        # transition, environments held — so it is never flagged here.
         if facts.delivery_landed or facts.pr_closed:
             newest = max(facts.transitions, key=lambda t: (t.recorded_at, t.epoch), default=None)
             if newest is None or newest.to_node_id != RESERVED_TERMINAL:

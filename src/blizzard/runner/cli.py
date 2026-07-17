@@ -1,7 +1,7 @@
-"""``blizzard runner <cmd>`` — the machine-local surface (design/cli.md).
+"""``blizzard runner <cmd>`` — the machine-local surface.
 
 Client verbs are pure clients of the runner's local API; ``host`` *becomes* the
-runner daemon (D-061). Only ``init`` / ``migrate`` / ``host`` are implemented in
+runner daemon. Only ``init`` / ``migrate`` / ``host`` are implemented in
 the scaffold — the rest are stubs that name themselves, present in ``--help`` and
 filled in by the backend builder. Worker-hook verbs (``heartbeat``, ``session-end``,
 ``ask``, ``pm-items``) take their identity from the spawn-injected environment and pass
@@ -44,7 +44,7 @@ DEFAULT_TICK_SECONDS = 30.0
 ENV_RUNNER_DIR = "BZ_RUNNER_DIR"
 DEFAULT_DIR = "."
 
-# Spawn-injected worker identity the heartbeat hook inherits (design/harness-adapters.md).
+# Spawn-injected worker identity the heartbeat hook inherits.
 # `BLIZZARD_*` is the worker namespace — per-process-tree execution truth the runner mints
 # at spawn — and is distinct from the operator's `BZ_*` config namespace below.
 ENV_LEASE_ID = "BLIZZARD_LEASE_ID"
@@ -55,7 +55,7 @@ ENV_RUNNER_URL = "BLIZZARD_RUNNER_URL"
 ENV_LOCAL_API_URL = "BZ_RUNNER_URL"
 _HEARTBEAT_TIMEOUT = 5.0
 # A PM-item read fans out runner -> hub -> vendor, so it is given a longer budget
-# than the millisecond-cheap hook posts (design/runner/api.md).
+# than the millisecond-cheap hook posts.
 _PM_ITEMS_TIMEOUT = 20.0
 # The operator's declarative pause/start verbs are pure clients of the runner's own local
 # API (issue #43) — a machine-local round trip, so they get a hook-scale budget rather
@@ -67,7 +67,7 @@ def _stub(verb: str) -> None:
     raise click.ClickException(f"`blizzard runner {verb}` is not yet implemented (scaffold stub).")
 
 
-# The local verbs address the runner's own API through one of its two doors (D-068): the
+# The local verbs address the runner's own API through one of its two doors: the
 # socket under `--dir` (the default — no port, found from the runtime dir alone) or the TCP
 # listener named by `--runner-url`. Ranked by where each value came from, because `--dir`
 # always *has* a value: it defaults to "." and takes $BZ_RUNNER_DIR, which winter's per-env
@@ -205,7 +205,7 @@ def host(directory: str, host_: str | None, port: int | None) -> None:
         f"serving blizzard-runner on {config.host}:{config.port} and {config.socket_path} (loop tick {interval}s)"
     )
 
-    # The graceful-restart resume marker (D-082) lives in this frame's `finally`, so it must run
+    # The graceful-restart resume marker lives in this frame's `finally`, so it must run
     # *after* `server.run()` returns — which means SIGTERM must drain the server, not hard-exit
     # the process. Both handlers that can be in force do exactly that by setting `should_exit`:
     #   * ours (`_drain`) below, and
@@ -216,7 +216,7 @@ def host(directory: str, host_: str | None, port: int | None) -> None:
     # `capture_signals` context manager (uvicorn ≥ 0.29) there is nothing to suppress and we lean
     # on uvicorn's own graceful `handle_exit` — equivalent for our purpose. Guarding the monkey-
     # patch with `hasattr` keeps a uvicorn upgrade from crashing startup on a missing attribute.
-    # A `kill -9` skips all of this — the ungraceful-crash boundary (design/runner/loop.md).
+    # A `kill -9` skips all of this — the ungraceful-crash boundary.
     # Host/port here are for uvicorn's own startup log only: `run(sockets=...)` below serves
     # exactly the pre-bound sockets and never consults them (uvicorn Server.startup).
     server = uvicorn.Server(uvicorn.Config(app, host=config.host, port=config.port))
@@ -245,7 +245,7 @@ def host(directory: str, host_: str | None, port: int | None) -> None:
     finally:
         # Stop the loop first so no in-flight tick races the marking: `stop()` blocks on the
         # tick thread (an unbounded join — see PeriodicDriver.stop) so the loop is quiescent
-        # before we mark every in-flight lease for the next startup's RESUME (D-082).
+        # before we mark every in-flight lease for the next startup's RESUME.
         driver.stop()
         marked = mark_resume_intents_on_shutdown(config)
         if marked:
@@ -286,10 +286,10 @@ def tick_cmd(directory: str) -> None:
 def heartbeat() -> None:
     """Worker hook: record a lease heartbeat (identity from the environment).
 
-    A pure client of the runner's local API (D-023): the ``PostToolUse`` hook runs
+    A pure client of the runner's local API: the ``PostToolUse`` hook runs
     this on every tool call, and it posts to ``BLIZZARD_RUNNER_URL`` for the lease in
-    ``BLIZZARD_LEASE_ID`` — both inherited from the spawn environment, so no arguments
-    (design/harness-adapters.md). It fails **soft**: a hook must never break the
+    ``BLIZZARD_LEASE_ID`` — both inherited from the spawn environment, so no arguments.
+    It fails **soft**: a hook must never break the
     worker's tool call, so a missing identity or an unreachable runner is reported to
     stderr and the command still exits 0.
     """
@@ -313,12 +313,12 @@ def heartbeat() -> None:
 def session_end() -> None:
     """Worker hook: record the session's exit (identity from the environment).
 
-    A pure client of the runner's local API (D-023): the ``SessionEnd`` hook runs this
+    A pure client of the runner's local API: the ``SessionEnd`` hook runs this
     when the worker's Claude session exits, and it posts to ``BLIZZARD_RUNNER_URL`` for
     the lease in ``BLIZZARD_LEASE_ID`` — both inherited from the spawn environment, so no
-    arguments (design/harness-adapters.md). The fact is the "declared done" signal
+    arguments. The fact is the "declared done" signal
     (exit-is-done, D-055) startup crash-recovery reads to tell a clean exit from a worker
-    killed mid-work (D-082). It fails **soft**, like the heartbeat: a hook must never break
+    killed mid-work. It fails **soft**, like the heartbeat: a hook must never break
     the worker's exit, so a missing identity or an unreachable runner is reported to stderr
     and the command still exits 0.
     """
@@ -343,7 +343,7 @@ def session_end() -> None:
 def ask(prompt: str, options: str | None) -> None:
     """Worker: ask-and-exit; the ask fact is durable before the worker exits.
 
-    A pure client of the runner's local API (D-023): the worker runs this on an
+    A pure client of the runner's local API: the worker runs this on an
     undecidable choice, and it posts the question for the lease in ``BLIZZARD_LEASE_ID``
     to ``BLIZZARD_RUNNER_URL`` — both inherited from the spawn environment, so no
     identity arguments (design/harness-adapters.md, [ask-answer.md]). The ask is a
@@ -373,7 +373,7 @@ def ask(prompt: str, options: str | None) -> None:
 def pm_items(chunk_id: str) -> None:
     """Worker: pass-through read of a chunk's PM items (runner -> hub -> vendor).
 
-    A pure client of the runner's local API (D-023/D-084): the build node reads its
+    A pure client of the runner's local API: the build node reads its
     chunk's issue body + comment thread through the runner's proxy route
     (``graphs/prompts/build.md``), which forwards to the hub — the worker never talks
     to the hub or the PM system directly. The runner URL is inherited from the spawn

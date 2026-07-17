@@ -1,20 +1,20 @@
-"""The runner-local PM-item pass-through proxy — ``GET /api/chunks/{id}/pm-items`` (D-047/D-084).
+"""The runner-local PM-item pass-through proxy — ``GET /api/chunks/{id}/pm-items``.
 
 A build worker reads its chunk's PM items — each pointer's issue body and comment thread —
 through this proxy while it works the build node (``graphs/prompts/build.md``): the runner
 **forwards** the read to the hub's pass-through route, and the hub calls the vendor with
-its own credentials. The layering is the point (D-084): a worker never talks to the hub
+its own credentials. The layering is the point: a worker never talks to the hub
 or the PM system directly, and PM credentials never reach the runner. Contents are never
 stored anywhere on the path — the pointer is the durable referent, the item is fetched
-fresh each call (D-047).
+fresh each call.
 
 Read-only over its wiring (``bzh:controller-read-only``): it forwards to the hub URL the
 ``host`` composition root resolved onto ``app.state.config``. ``httpx`` is used only to
-reach the hub — the same outbound-only edge the reconciliation loop's hub client rides
-(D-012); a transport failure to the hub is a ``502`` and the hub's own status (``404``
+reach the hub — the same outbound-only edge the reconciliation loop's hub client rides;
+a transport failure to the hub is a ``502`` and the hub's own status (``404``
 unknown chunk, ``503`` no work-source configured) passes through verbatim so the worker
 sees the real reason. A per-pointer forge failure is not a status — the hub degrades it to
-an ``error`` on that entry (D-084), so the worker still reads the pointers it did reach.
+an ``error`` on that entry, so the worker still reads the pointers it did reach.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ _HUB_TIMEOUT = 15.0
 
 @router.get("/chunks/{chunk_id}/pm-items", response_model=PmItemsView)
 def get_pm_items(chunk_id: str, request: Request) -> PmItemsView:
-    """Forward a chunk's PM-items read to the hub — the layered pass-through (D-084)."""
+    """Forward a chunk's PM-items read to the hub — the layered pass-through."""
     config: RunnerConfig | None = getattr(request.app.state, "config", None)
     if config is None or not config.hub_url:
         raise HTTPException(

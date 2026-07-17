@@ -3,7 +3,7 @@
  *
  * Ported VERBATIM from the discovery mockup's `:root` custom-property block
  * (blizzard-discovery: discovery/mockups/mission-control.html) — the bespoke
- * mission-control aesthetic is the board's design language (D-097). This is the
+ * mission-control aesthetic is the board's design language. This is the
  * single owner of the token layer; every fleet view resolves its colors and the
  * monospace stack through these variables, never hard-coded hex. A global
  * stylesheet (listed in each app's build `styles`) so the `:root` scope reaches

@@ -1,6 +1,6 @@
 # Embedded frontend assets — the packaging seam
 
-This directory is the wheel-embedded frontend seam (D-061, D-096). The one wheel
+This directory is the wheel-embedded frontend seam. The one wheel
 ships the compiled Angular apps as static assets here, so the released artifact
 needs no Node at install or runtime.
 

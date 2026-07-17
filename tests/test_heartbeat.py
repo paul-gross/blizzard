@@ -1,8 +1,8 @@
 """The worker heartbeat path — local-API endpoint + ``blizzard runner heartbeat`` verb.
 
-A worker heartbeats as a side effect of working (design/harness-adapters.md): its
+A worker heartbeats as a side effect of working: its
 ``PostToolUse`` hook runs ``blizzard runner heartbeat`` on every tool call, and the
-verb — a pure client of the runner's local API (D-023) — posts to ``POST
+verb — a pure client of the runner's local API — posts to ``POST
 /api/heartbeat`` for the lease it inherited from the spawn environment
 (``BLIZZARD_LEASE_ID`` / ``BLIZZARD_RUNNER_URL``). The daemon appends the beat to its
 store, and REAP reads the last beat to catch a stalled-but-alive worker.

@@ -1,10 +1,10 @@
 """The packaged default graph (unit tier) — D-081.
 
-The hub ships a default graph every chunk pins at ingest (D-081). This proves it
-loads, inlines its prompt file references (D-033), and passes mint-time validation
+The hub ships a default graph every chunk pins at ingest. This proves it
+loads, inlines its prompt file references, and passes mint-time validation
 clean — so a fresh hub's ``POST /graphs`` of it can never be rejected. P7 promoted it
 from the walking-skeleton ``build -> deliver`` to the full ``build -> review ->
-deliver`` MVP shape with the review-fail cycle (design/workflow-engine.md).
+deliver`` MVP shape with the review-fail cycle.
 """
 
 from __future__ import annotations
@@ -43,12 +43,12 @@ def test_default_graph_build_passes_to_review() -> None:
 def test_default_graph_review_is_cold_eyes_and_loops_to_build() -> None:
     review = load_default_graph_doc().node("review")
     assert review is not None and review.judgement is not None
-    # Cold eyes (D-054) and it emits the findings asset the fail edge carries back.
+    # Cold eyes and it emits the findings asset the fail edge carries back.
     assert review.session is SessionMode.FRESH
     assert "review-findings" in review.produces
     routes = {c.name: c.to for c in review.judgement.choices}
     assert routes == {"pass": "deliver", "fail": "build"}
-    # The fail edge carries an inlined arrival addendum into build (D-071).
+    # The fail edge carries an inlined arrival addendum into build.
     fail = next(c for c in review.judgement.choices if c.name == "fail")
     assert fail.prompt_addendum is not None and not fail.prompt_addendum.startswith("./")
 

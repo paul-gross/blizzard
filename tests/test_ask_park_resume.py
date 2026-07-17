@@ -5,11 +5,11 @@ Drives the loop steps directly against a real tmp runner store with fakes at the
 
 * an exited worker holding an unforwarded ask **parks** — ADVANCE forwards the
   ``question.asked`` up the outbound buffer, records the park fact, and elicits **no**
-  verdict and consumes **no** retry (D-009);
+  verdict and consumes **no** retry;
 * a parked lease's reap clock is **stopped** — REAP skips it even when its recorded pid
   reads alive and its heartbeat is long stale (the design's "no live lease while parked");
 * the answer's arrival **resumes the dormant session** — same lease, same session
-  (D-082) — records the park-resume and ``answer.delivered``, and the lease reads live
+   — records the park-resume and ``answer.delivered``, and the lease reads live
   again;
 * the park is not repeated once forwarded, so the verdict is never elicited on the ask.
 """

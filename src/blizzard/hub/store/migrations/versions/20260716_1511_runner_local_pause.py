@@ -1,7 +1,7 @@
 """runner-reported local pause facts — the runner's own brake, made visible (hub store tree)
 
 Issue #43 gives the runner a brake of its own (``PATCH /runner``), reported up through the
-outbound buffer (D-069). The hub holds those facts here so the board can render *which*
+outbound buffer. The hub holds those facts here so the board can render *which*
 brake is on: the runner declining to claim, the fleet coercing it (``runner_pause_facts``),
 or both. Separate table, separate concept — the hub authors the fleet's brake and only
 reads this one.

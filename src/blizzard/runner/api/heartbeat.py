@@ -3,8 +3,8 @@
 A worker heartbeats as a side effect of working: its ``PostToolUse`` hook runs
 ``blizzard runner heartbeat`` on every tool call, which posts here with the lease id
 it inherited from the spawn environment (``BLIZZARD_LEASE_ID``). The daemon appends a
-heartbeat fact to its store — the only writer of that file (D-023) — and REAP reads
-the last beat to catch a stalled-but-alive worker (design/runner/loop.md). The CLI is
+heartbeat fact to its store — the only writer of that file — and REAP reads
+the last beat to catch a stalled-but-alive worker. The CLI is
 a pure client; it never opens the store itself.
 
 The edge is read-only over its wiring (``bzh:controller-read-only``): it records
@@ -40,7 +40,7 @@ class HeartbeatResponse(BaseModel):
 
 @router.post("/heartbeat", response_model=HeartbeatResponse)
 def heartbeat(request_body: HeartbeatRequest, request: Request) -> HeartbeatResponse:
-    """Record a lease heartbeat, stamped with the injected clock (D-069)."""
+    """Record a lease heartbeat, stamped with the injected clock."""
     store: IWriteRunnerStore | None = getattr(request.app.state, "runner_store", None)
     clock: IClock | None = getattr(request.app.state, "clock", None)
     if store is None or clock is None:

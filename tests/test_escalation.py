@@ -1,13 +1,13 @@
 """Escalation at the hub — needs_human and its supersession (component tier) — MVP criterion 6.
 
-The runner reports ``escalation.recorded`` up when a node's retries exhaust (D-009);
+The runner reports ``escalation.recorded`` up when a node's retries exhaust;
 this pins the hub behavior that fact drives:
 
 * the chunk derives **needs_human** (highest live precedence after terminal, D-067);
 * the open escalation surfaces the **takeover command** so the parked session is
   resumable — the pasteable ``cd <workdir> && <harness resume>`` (harness-adapters.md);
 * a later **lease mint** (a requeue/takeover) **closes it by supersession** — no
-  resolution fact — flipping the chunk back off needs_human (D-067).
+  resolution fact — flipping the chunk back off needs_human.
 """
 
 from __future__ import annotations

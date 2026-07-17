@@ -1,11 +1,11 @@
 """fleet registry — runner registrations and pause/resume facts (hub store tree)
 
-The P7W3 runner-registry tables (design/domain/fleet.md, D-019/D-070/D-043):
+The P7W3 runner-registry tables:
 
 * ``runner_registrations`` — one upserted row per runner (runner_id + workspace_id)
-  with a refreshed ``last_seen_at`` liveness derives from (D-070).
+  with a refreshed ``last_seen_at`` liveness derives from.
 * ``runner_pause_facts`` — append-only pause/resume facts; ``paused`` derives from
-  the newest one, read back by the runner on its outbound pull and adhered to (D-043).
+  the newest one, read back by the runner on its outbound pull and adhered to.
 
 Parents before children so the FK from ``runner_pause_facts`` resolves.
 

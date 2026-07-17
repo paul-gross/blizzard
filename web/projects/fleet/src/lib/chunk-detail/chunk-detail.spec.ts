@@ -100,7 +100,7 @@ describe('ChunkDetail container', () => {
     expect(rest?.textContent).toContain('SELECT');
   });
 
-  it('fires the resolve-decision client call when a gate choice button is clicked (D-042)', async () => {
+  it('fires the resolve-decision client call when a gate choice button is clicked', async () => {
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_gate');
     await settle(fixture);

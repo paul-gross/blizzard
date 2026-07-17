@@ -2,7 +2,7 @@
  * Public API of the `fleet` shared library.
  *
  * The fleet views, the SSE transport + live-update spine, the reads/mutations, and
- * the generated API clients live here once (D-097) so both the hub app and the runner
+ * the generated API clients live here once so both the hub app and the runner
  * app compose them. The two generated clients are re-exported under namespaces because
  * the hub and runner SDKs share operation names (e.g. `healthApiHealthGet`).
  */

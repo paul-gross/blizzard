@@ -20,7 +20,7 @@ pytestmark = pytest.mark.component
 _POINTER = {"source": "default", "ref": "12"}
 
 # A minimal build -> deliver graph named `default-delivery`, pre-minted so the hub's
-# lazy `ensure_default` (POST /chunks) reuses it by name (D-081) instead of minting
+# lazy `ensure_default` (POST /chunks) reuses it by name instead of minting
 # the packaged prose graph. This keeps these hub-delivery mechanics tests focused on
 # the deliver hub node, decoupled from the packaged default graph's shape (P7 promoted
 # that to build -> review -> deliver; the review cycle is test_review_cycle's subject).
@@ -53,7 +53,7 @@ def _ingest(hub) -> str:  # type: ignore[no-untyped-def]
     resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]})
     assert resp.status_code == 201, resp.text
     chunk_id = resp.json()["chunk_id"]
-    assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # ready to claim (D-103)
+    assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # ready to claim
     return chunk_id
 
 
@@ -63,7 +63,7 @@ def _claim(hub, chunk_id: str) -> dict:  # type: ignore[no-untyped-def]
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["env-a"]},
     )
     assert resp.status_code == 201, resp.text
-    # The runner mints its lease and reports it up (D-044) — the fence input for the
+    # The runner mints its lease and reports it up — the fence input for the
     # completion that follows.
     report_lease(hub, chunk_id, epoch=1, seq=1)
     return resp.json()
@@ -96,7 +96,7 @@ def _two_repo_completion(build_node_id: str, epoch: int, *, api_commit: str, web
     """A build completion over a two-repo chunk — one pointer per repo (distinct names).
 
     The two artifacts carry distinct names (``work-api`` / ``work-web``) so both survive
-    the latest-by-``{node_name}.{name}`` resolution (D-089); the coordinator lands them
+    the latest-by-``{node_name}.{name}`` resolution; the coordinator lands them
     serially in list order (``acme/api`` first).
     """
     return {
@@ -185,7 +185,7 @@ def test_delivery_conflict_routes_back_to_entry(tmp_path: Path) -> None:
 
 
 def test_multi_repo_partial_land_is_retained_and_redelivery_skips_the_landed_repo(tmp_path: Path) -> None:
-    """A two-repo chunk where one repo lands and the other conflicts (D-091).
+    """A two-repo chunk where one repo lands and the other conflicts.
 
     The best-effort serial land keeps the partial land: ``acme/api`` merges, then
     ``acme/web`` conflicts and routes the chunk intra-graph back to build with

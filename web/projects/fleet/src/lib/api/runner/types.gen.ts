@@ -162,12 +162,12 @@ export type LeaseView = {
 /**
  * PmItemEntry
  *
- * One pointer's pass-through PM item (D-047/D-074/D-107) — title, body + comment
+ * One pointer's pass-through PM item — title, body + comment
  * thread, vendor-native.
  *
  * ``label``/``web_url`` are the board-legible pointer label (``blizzard#8``) and its
- * browser address (D-110) — both null when no configured source names ``source``. A
- * per-pointer forge failure degrades here rather than failing the whole read (D-084):
+ * browser address — both null when no configured source names ``source``. A
+ * per-pointer forge failure degrades here rather than failing the whole read:
  * ``error`` carries the reason and ``title``/``body`` are null, so one unreachable
  * pointer never blinds the reader to the pointers it did reach.
  */
@@ -213,10 +213,10 @@ export type PmItemEntry = {
 /**
  * PmItemsView
  *
- * A chunk's pass-through PM items (D-074/D-084) — one entry per pointer, order preserved.
+ * A chunk's pass-through PM items — one entry per pointer, order preserved.
  *
  * Empty when the chunk holds no pointers — the board's empty state; a grouped chunk carrying
- * many pointers (D-047) yields one entry per pointer, each fetched fresh and never stored.
+ * many pointers yields one entry per pointer, each fetched fresh and never stored.
  */
 export type PmItemsView = {
     /**

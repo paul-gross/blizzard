@@ -8,7 +8,7 @@ hub, and the real runner reconciliation loop over a minted ``blizzard-mock`` fix
 every seam real, no tokens and no network. It proves the operator surface end to end
 (MVP criterion 11, D-048/D-097):
 
-0. **Promote from the board.** Ingest rests a chunk not-ready (D-103): it renders in the
+0. **Promote from the board.** Ingest rests a chunk not-ready: it renders in the
    board's backlog column and no runner may claim it. Promoting it from its card makes it
    claimable — it leaves the board for the rail's ready queue (there is no READY column).
 1. **Live board, no reload.** The board is loaded once and never reloaded. As facts
@@ -27,7 +27,7 @@ every seam real, no tokens and no network. It proves the operator surface end to
    the UI — the survivor carries the union of PM pointers (plural) — and the ready
    queue is **reordered** (move-to-top) from the UI. The next FILL then honors **both**:
    the grouped survivor, with its plural pointers, is what the runner claims, and it is
-   claimed **first** because it was moved to the top (D-047/D-048/D-080).
+   claimed **first** because it was moved to the top.
 4. **Answer from the board.** A parked chunk's open question is answered from the detail
    dock; the holding runner resumes the dormant session and the chunk lands (D-052,
    MVP criterion 7).
@@ -112,8 +112,8 @@ _REVIEW_JUDGEMENT = "verdict('pass', 'cold-eyes review: clean; ready to deliver'
 def _graph_yaml() -> str:
     """The scripted ``default-delivery`` graph — build (ask/answer) → review → deliver.
 
-    Named ``default-delivery`` so the hub's lazy ``ensure_default`` reuses it by name
-    (D-081). Mirrors scenario 4's ask/answer graph so the board-answered chunk parks on
+    Named ``default-delivery`` so the hub's lazy ``ensure_default`` reuses it by name.
+    Mirrors scenario 4's ask/answer graph so the board-answered chunk parks on
     a question, resumes on the human's answer, produces a review-findings asset, and
     delivers — giving the detail drawer both history and artifacts to render.
     """
@@ -218,7 +218,7 @@ def _tick_n(config: RunnerConfig, fenced: dict[str, str], count: int) -> None:
 def _ingest_chunk(forge: httpx.Client, hub: httpx.Client, title: str) -> str:
     """File a forge issue and ingest its pointer into a not-ready chunk; return the chunk id.
 
-    Ingest rests the chunk not-ready (D-103). The scenario promotes it from the **board**
+    Ingest rests the chunk not-ready. The scenario promotes it from the **board**
     rather than here, so the promote control itself is exercised through the browser.
     """
     issue = forge.post(f"/repos/{REPO}/issues", json={"title": title, "body": "the chunk"})
@@ -303,7 +303,7 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 def queue_row(chunk_id: str):
                     return page.locator(f'[data-testid="queue-row"][data-chunk="{chunk_id}"]')
 
-                # All three chunks rest NOT READY (D-103) — held from the fleet in the
+                # All three chunks rest NOT READY — held from the fleet in the
                 # board's backlog column, and queued for no claim. No runner has
                 # registered yet.
                 expect(page.get_by_test_id("chunk-card")).to_have_count(3)
@@ -422,7 +422,7 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 expect(page.get_by_test_id("queue-row")).to_have_count(1)  # A alone remains ready
                 page.get_by_test_id("runner-toggle").click()  # Pause
                 # The board's toggle drives the *hub's* brake; the runner's own brake is a
-                # separate concept the board renders apart and cannot clear (D-105).
+                # separate concept the board renders apart and cannot clear.
                 expect(page.get_by_test_id("runner")).to_have_attribute("data-hub-paused", "true")
                 expect(page.get_by_test_id("runner-hub-paused")).to_be_visible()
                 expect(page.get_by_test_id("runner-locally-paused")).to_have_count(0)

@@ -42,19 +42,19 @@ def _at(seconds: int) -> datetime:
 
 
 def test_minted_with_no_facts_is_not_ready() -> None:
-    # Ingest mints a chunk in the not-ready resting state (D-103): visible, never claimed
+    # Ingest mints a chunk in the not-ready resting state: visible, never claimed
     # until promoted. Un-promoted with no other facts falls through to not_ready.
     assert derive_chunk_status(ChunkFacts(minted=True)) is ChunkStatus.NOT_READY
 
 
 def test_promoted_chunk_with_no_route_is_ready() -> None:
-    # The ``chunk.promoted`` fact flips the resting state to ready (D-103) — now claimable.
+    # The ``chunk.promoted`` fact flips the resting state to ready — now claimable.
     assert derive_chunk_status(ChunkFacts(minted=True, promoted=True)) is ChunkStatus.READY
 
 
 def test_live_route_wins_over_not_ready() -> None:
     # A live route derives running even without promotion: the route check sits above the
-    # not_ready fall-through, so a claimed chunk always reads its post-claim state (D-103).
+    # not_ready fall-through, so a claimed chunk always reads its post-claim state.
     facts = ChunkFacts(minted=True, routes_created=[RouteCreatedFact(created_at=_at(1))])
     assert derive_chunk_status(facts) is ChunkStatus.RUNNING
 
@@ -70,7 +70,7 @@ def test_released_route_on_promoted_chunk_re_derives_ready() -> None:
 
 
 def _detached_route(**extra: object) -> ChunkFacts:
-    """A route created then released — detach's fact shape (D-088): one write, no
+    """A route created then released — detach's fact shape: one write, no
     supersession, no epoch bump. Used to pin that detach clears only the running
     branch and leaves every higher-precedence branch untouched."""
     return ChunkFacts(
@@ -101,7 +101,7 @@ def test_detached_route_with_an_open_question_still_derives_waiting_on_human() -
 
 
 def test_stopped_wins_over_not_ready() -> None:
-    # An operator can abandon a chunk before promoting it — stopped still wins (D-103).
+    # An operator can abandon a chunk before promoting it — stopped still wins.
     assert derive_chunk_status(ChunkFacts(minted=True, stopped=True)) is ChunkStatus.STOPPED
 
 
@@ -173,7 +173,7 @@ def test_delivery_landed_is_done_over_a_live_route() -> None:
 
 def _parked_on_open_pr(**extra: object) -> ChunkFacts:
     """A chunk in open-pr mode: its newest transition entered the deliver hub node, a PR
-    was opened, and no ``pr.closed`` yet — the environments still held (D-059/D-066)."""
+    was opened, and no ``pr.closed`` yet — the environments still held."""
     return ChunkFacts(
         minted=True,
         routes_created=[RouteCreatedFact(created_at=_at(1))],
@@ -190,14 +190,14 @@ def _parked_on_open_pr(**extra: object) -> ChunkFacts:
 def test_open_pr_park_is_delivering_awaiting_external_merge() -> None:
     facts = _parked_on_open_pr()
     # Still ``delivering`` (the newest transition entered the deliver hub node), with the
-    # awaiting-external-merge detail set — not a distinct status (design/domain/events.md).
+    # awaiting-external-merge detail set — not a distinct status.
     assert derive_chunk_status(facts) is ChunkStatus.DELIVERING
     assert awaiting_external_merge(facts) is True
 
 
 def test_pr_closed_is_done() -> None:
     # The terminal ``pr.closed`` fact flips the chunk to done, the open-pr counterpart of
-    # ``delivery.landed`` (D-065), and clears the awaiting-external-merge detail.
+    # ``delivery.landed``, and clears the awaiting-external-merge detail.
     facts = _parked_on_open_pr(pr_closed=True)
     assert derive_chunk_status(facts) is ChunkStatus.DONE
     assert awaiting_external_merge(facts) is False
@@ -222,7 +222,7 @@ def test_escalation_closed_by_later_lease_is_no_longer_needs_human() -> None:
         minted=True,
         routes_created=[RouteCreatedFact(created_at=_at(1))],
         escalations=[EscalationFact(epoch=1, recorded_at=_at(4))],
-        leases=[LeaseFact(epoch=2, minted_at=_at(6))],  # requeue + re-lease supersedes (D-067)
+        leases=[LeaseFact(epoch=2, minted_at=_at(6))],  # requeue + re-lease supersedes
     )
     assert derive_chunk_status(facts) is ChunkStatus.RUNNING
 
@@ -240,7 +240,7 @@ def test_open_question_is_waiting_on_human_over_a_live_route() -> None:
 
 
 def test_answered_question_flips_back_to_running() -> None:
-    # The answer row alone flips the chunk out of waiting_on_human (D-004).
+    # The answer row alone flips the chunk out of waiting_on_human.
     facts = ChunkFacts(
         minted=True,
         routes_created=[RouteCreatedFact(created_at=_at(1))],

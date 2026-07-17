@@ -1,11 +1,11 @@
-"""Queue-shaping domain — ready-queue reordering and grouping (D-048).
+"""Queue-shaping domain — ready-queue reordering and grouping.
 
 The two operator actions that shape the ready queue rather than execute work
-(design/hub/web-app.md): **Prioritize** (reorder a ready chunk to a position) and
+: **Prioritize** (reorder a ready chunk to a position) and
 **Group** (merge unacquired chunks into one surviving chunk). Both are pure hub-side
-properties over the fact store — order derives from appended position facts (D-004),
-and grouping folds PM pointers into the survivor and discards the rest as ephemeral
-(D-076/D-047). Neither touches an acquired chunk: reordering and grouping are legal
+properties over the fact store — order derives from appended position facts,
+and grouping folds PM pointers into the survivor and discards the rest as ephemeral.
+Neither touches an acquired chunk: reordering and grouping are legal
 only in ``ready`` (the fill/peek surface), so a running chunk is never reshaped under a
 runner's feet.
 
@@ -38,7 +38,7 @@ class ChunkNotFound(LookupError):
 
 
 class ChunkNotReady(ValueError):
-    """A queue-shaping op named a chunk that is not in ``ready`` (D-047/D-048)."""
+    """A queue-shaping op named a chunk that is not in ``ready``."""
 
     def __init__(self, chunk_id: str, status: ChunkStatus) -> None:
         super().__init__(f"chunk {chunk_id} is {status.value}, not ready — queue shaping is ready-only")
@@ -47,14 +47,14 @@ class ChunkNotReady(ValueError):
 
 
 class QueueService:
-    """Reorder the ready queue as an explicit hub-side property (D-048)."""
+    """Reorder the ready queue as an explicit hub-side property."""
 
     def __init__(self, *, chunks: IWriteChunkRepository, clock: IClock) -> None:
         self._chunks = chunks
         self._clock = clock
 
     def ordered_ready(self) -> list[Chunk]:
-        """Ready chunks in queue order — ascending by effective position (D-048)."""
+        """Ready chunks in queue order — ascending by effective position."""
         positions = self._chunks.queue_positions()
         ready = self._chunks.list_ready()
         return sorted(ready, key=lambda c: self._effective_position(c, positions))
@@ -106,7 +106,7 @@ class QueueService:
 
 
 class GroupService:
-    """Merge unacquired (ready) chunks into one surviving chunk (D-048/D-076/D-047)."""
+    """Merge unacquired (ready) chunks into one surviving chunk."""
 
     def __init__(self, *, chunks: IWriteChunkRepository, clock: IClock) -> None:
         self._chunks = chunks
@@ -116,9 +116,9 @@ class GroupService:
         """Fold ``merge_ids`` into ``survivor_id``; the survivor absorbs their pointers.
 
         The survivor and every merged chunk must be ``ready`` (unacquired) — grouping is
-        not batching and never reshapes running work (design/hub/web-app.md). The merged
+        not batching and never reshapes running work. The merged
         chunks' PM pointers are appended to the survivor (union, D-076), and each merged
-        chunk records a ``chunk.grouped`` fact, becoming ephemeral (D-047).
+        chunk records a ``chunk.grouped`` fact, becoming ephemeral.
         """
         survivor = self._require_ready_chunk(survivor_id)
         targets = self._resolve_targets(survivor_id, merge_ids)

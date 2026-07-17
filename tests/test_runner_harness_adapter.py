@@ -37,7 +37,7 @@ def test_parse_verdict_reads_plain_text_reply() -> None:
 @pytest.mark.unit
 def test_parse_verdict_missing_choice_is_none() -> None:
     assert ClaudeCodeAdapter().parse_verdict('{"type":"result","result":"no verdict here","session_id":"s1"}') is None
-    # A delivered judgement whose reply has no parseable <Choice> is a failure (D-009):
+    # A delivered judgement whose reply has no parseable <Choice> is a failure:
     # an unclosed tag, whitespace-only name, and a bare open tag all read as None.
     assert ClaudeCodeAdapter().parse_verdict("<Choice>") is None
     assert ClaudeCodeAdapter().parse_verdict("<Choice></Choice>") is None
@@ -142,7 +142,7 @@ def test_spawn_pins_a_configured_model(tmp_path: Path) -> None:
 @pytest.mark.component
 def test_spawn_passes_the_permission_mode_flag_when_configured(tmp_path: Path) -> None:
     # A headless worker has no one to approve tool use; the configured permission mode is
-    # what lets it edit/commit in its sandboxed worktree (D-092).
+    # what lets it edit/commit in its sandboxed worktree.
     binary = _fake_binary(tmp_path)
     workdir = tmp_path / "e1"
     workdir.mkdir()

@@ -54,14 +54,14 @@ export type AnswerResult = {
 /**
  * ApplyOutcome
  *
- * What a completion's apply produced (D-072).
+ * What a completion's apply produced.
  */
 export type ApplyOutcome = 'next' | 'hub_node_taken' | 'parked_at_gate' | 'done' | 'failure';
 
 /**
  * ApplyResponse
  *
- * The response to a completion submission (D-072).
+ * The response to a completion submission.
  *
  * Exactly one of ``next_envelope`` (when ``outcome == next``) or ``detail`` (on a
  * non-advancing outcome) is meaningful; the ``outcome`` discriminates.
@@ -78,24 +78,24 @@ export type ApplyResponse = {
 /**
  * ArtifactKind
  *
- * The union discriminator (D-036).
+ * The union discriminator.
  */
 export type ArtifactKind = 'git_commit' | 'asset';
 
 /**
  * ArtifactView
  *
- * One entry of a chunk's inline artifact store (D-036).
+ * One entry of a chunk's inline artifact store.
  *
  * ``key`` is the store key ``{node}.{artifact-name}.{epoch}`` — append-only, so
- * every re-run's entry is retained and latest-by-epoch resolution is the reader's
- * (D-089). ``content`` carries an **asset's** text verbatim (a review's findings
+ * every re-run's entry is retained and latest-by-epoch resolution is the reader's.
+ * ``content`` carries an **asset's** text verbatim (a review's findings
  * document); the ``repo``/``branch_name``/``commit_hash`` trio carries a
  * ``git_commit`` artifact's pinned reference (the hub stores the reference, never the
  * code — D-012).
  *
  * ``branch_url`` is the forge ``tree`` URL for the produced branch, resolved server-side
- * from the chunk's issue-shaped PM pointer (D-075) so the board can link a ``git_commit``
+ * from the chunk's issue-shaped PM pointer so the board can link a ``git_commit``
  * to the branch on the forge; null when no forge web base is derivable — the row then
  * shows the branch name without a link (no broken link).
  */
@@ -149,7 +149,7 @@ export type ArtifactView = {
 /**
  * CheckDeliveryResponse
  *
- * The result of an on-demand ``POST /chunks/{id}/check-delivery`` (D-065).
+ * The result of an on-demand ``POST /chunks/{id}/check-delivery``.
  */
 export type CheckDeliveryResponse = {
     /**
@@ -174,7 +174,7 @@ export type CheckDeliveryResponse = {
 /**
  * CheckResult
  *
- * One deterministic check's outcome, informing the verdict (D-077).
+ * One deterministic check's outcome, informing the verdict.
  */
 export type CheckResult = {
     /**
@@ -190,7 +190,7 @@ export type CheckResult = {
 /**
  * ChunkDetail
  *
- * The chunk aggregate in full (D-036) — the board's chunk view and envelope feed.
+ * The chunk aggregate in full — the board's chunk view and envelope feed.
  *
  * Carries the chunk's **transition history** and its inline **artifact store** so the
  * web app can render every node it visited, the review that failed once and looped
@@ -251,11 +251,11 @@ export type ChunkDetail = {
 /**
  * ChunkGroupRequest
  *
- * Merge unacquired chunks into one — the board's Group control (D-048/D-076).
+ * Merge unacquired chunks into one — the board's Group control.
  *
  * ``merge_chunk_ids`` are the ready chunks folded into the path's survivor chunk; the
  * survivor absorbs the union of their PM pointers and the merged chunks are discarded as
- * ephemeral (D-047). Self-references and duplicates are ignored; a non-ready member is
+ * ephemeral. Self-references and duplicates are ignored; a non-ready member is
  * rejected ``409``.
  */
 export type ChunkGroupRequest = {
@@ -288,7 +288,7 @@ export type ChunkGroupResponse = {
 /**
  * ChunkIngestRequest
  *
- * Ingest by source-native token — specific items always, batch fine (D-047/D-111).
+ * Ingest by source-native token — specific items always, batch fine.
  *
  * Each token is resolved against the configured PM sources' own grammar
  * (``IPmSource.parse``): ``{name}:{ref}``, ``{name}#{ref}``, or the item's own URL.
@@ -317,14 +317,14 @@ export type ChunkIngestResponse = {
 /**
  * ChunkStatus
  *
- * The derived chunk statuses (D-067). Never stored — always a query result.
+ * The derived chunk statuses. Never stored — always a query result.
  */
 export type ChunkStatus = 'not_ready' | 'ready' | 'running' | 'delivering' | 'waiting_on_human' | 'needs_human' | 'stopped' | 'done';
 
 /**
  * ChunkSummary
  *
- * One row of the fleet chunk list — derived status + current node (D-004).
+ * One row of the fleet chunk list — derived status + current node.
  *
  * ``current_node_name`` is the node's human graph name (``build``, ``review``) the
  * board renders in place of the raw ``nd_`` ULID; null when the chunk has no
@@ -393,7 +393,7 @@ export type CompletionSubmission = {
 /**
  * DecisionChoiceModel
  *
- * One selectable gate outcome — a button on the board/bot (D-042).
+ * One selectable gate outcome — a button on the board/bot.
  */
 export type DecisionChoiceModel = {
     /**
@@ -409,7 +409,7 @@ export type DecisionChoiceModel = {
 /**
  * DecisionResolutionRequest
  *
- * A person's choice for an open decision — first-write-wins CAS (D-045).
+ * A person's choice for an open decision — first-write-wins CAS.
  */
 export type DecisionResolutionRequest = {
     /**
@@ -449,7 +449,7 @@ export type DecisionResolutionResponse = {
 /**
  * DecisionSubmission
  *
- * A runner-config gate: submit a decision in place of a transition (D-032/D-036).
+ * A runner-config gate: submit a decision in place of a transition.
  *
  * Carries the gated step's artifacts and its fencing epoch — one atomic, epoch-fenced
  * write, exactly where a worker-judged node would have submitted its transition. The
@@ -477,7 +477,7 @@ export type DecisionSubmission = {
 /**
  * DecisionView
  *
- * A gate decision in full — the board's card and the runner's pickup (D-045).
+ * A gate decision in full — the board's card and the runner's pickup.
  *
  * ``resolved_choice`` is set once a person has decided; ``transitioned`` is true once
  * the holding runner has recorded the resolving transition. The runner acts on a
@@ -533,7 +533,7 @@ export type DecisionView = {
 /**
  * EnvelopeArtifact
  *
- * One artifact carried into a node-step, resolved latest-by-epoch (D-036).
+ * One artifact carried into a node-step, resolved latest-by-epoch.
  */
 export type EnvelopeArtifact = {
     /**
@@ -570,7 +570,7 @@ export type EnvelopeArtifact = {
 /**
  * EnvelopeChoice
  *
- * A selectable outcome the worker's judgement may emit (D-042).
+ * A selectable outcome the worker's judgement may emit.
  */
 export type EnvelopeChoice = {
     /**
@@ -586,11 +586,11 @@ export type EnvelopeChoice = {
 /**
  * EscalationReport
  *
- * A runner's ``escalation.recorded`` — retries exhausted for the node (D-009).
+ * A runner's ``escalation.recorded`` — retries exhausted for the node.
  *
  * ``takeover_command`` is the literal ``cd <workdir> && <harness resume>`` a human
- * pastes to enter the parked session (design/harness-adapters.md); ``epoch`` is the
- * exhausted attempt's fence, closed by a later lease mint (D-067).
+ * pastes to enter the parked session; ``epoch`` is the
+ * exhausted attempt's fence, closed by a later lease mint.
  */
 export type EscalationReport = {
     /**
@@ -610,11 +610,11 @@ export type EscalationReport = {
 /**
  * EscalationView
  *
- * An open escalation on a ``needs_human`` chunk (D-009/D-067).
+ * An open escalation on a ``needs_human`` chunk.
  *
  * Surfaces the runner-composed takeover command so a human can resume the parked
- * session (design/harness-adapters.md). Present only while the escalation is open —
- * a later lease mint (requeue/takeover) supersedes it and this drops away (D-067).
+ * session. Present only while the escalation is open —
+ * a later lease mint (requeue/takeover) supersedes it and this drops away.
  */
 export type EscalationView = {
     /**
@@ -630,14 +630,14 @@ export type EscalationView = {
 /**
  * Executor
  *
- * Where a node's step runs (D-030).
+ * Where a node's step runs.
  */
 export type Executor = 'runner' | 'hub';
 
 /**
  * GraphMintRequest
  *
- * A graph definition to mint — the raw YAML body (D-071).
+ * A graph definition to mint — the raw YAML body.
  */
 export type GraphMintRequest = {
     /**
@@ -715,14 +715,14 @@ export type HttpValidationError = {
 /**
  * JudgedBy
  *
- * Who renders a node's exit judgement — the structural gate marker (D-041).
+ * Who renders a node's exit judgement — the structural gate marker.
  */
 export type JudgedBy = 'worker' | 'human';
 
 /**
  * LeaseMintReport
  *
- * A runner's ``lease.minted`` — one node-step attempt's fencing epoch (D-044).
+ * A runner's ``lease.minted`` — one node-step attempt's fencing epoch.
  */
 export type LeaseMintReport = {
     /**
@@ -738,7 +738,7 @@ export type LeaseMintReport = {
 /**
  * NodeConfig
  *
- * The node's invariant identity for this step (D-025/D-038).
+ * The node's invariant identity for this step.
  */
 export type NodeConfig = {
     /**
@@ -777,7 +777,7 @@ export type NodeConfig = {
 /**
  * NodeEnvelope
  *
- * Everything a runner needs to work one node-step (D-089).
+ * Everything a runner needs to work one node-step.
  */
 export type NodeEnvelope = {
     /**
@@ -816,7 +816,7 @@ export type NodeEnvelope = {
 /**
  * OpenDecisionsResponse
  *
- * The fleet's open (unresolved) decisions — ``blizzard hub decisions`` (D-052).
+ * The fleet's open (unresolved) decisions — ``blizzard hub decisions``.
  */
 export type OpenDecisionsResponse = {
     /**
@@ -828,12 +828,12 @@ export type OpenDecisionsResponse = {
 /**
  * PmItemEntry
  *
- * One pointer's pass-through PM item (D-047/D-074/D-107) — title, body + comment
+ * One pointer's pass-through PM item — title, body + comment
  * thread, vendor-native.
  *
  * ``label``/``web_url`` are the board-legible pointer label (``blizzard#8``) and its
- * browser address (D-110) — both null when no configured source names ``source``. A
- * per-pointer forge failure degrades here rather than failing the whole read (D-084):
+ * browser address — both null when no configured source names ``source``. A
+ * per-pointer forge failure degrades here rather than failing the whole read:
  * ``error`` carries the reason and ``title``/``body`` are null, so one unreachable
  * pointer never blinds the reader to the pointers it did reach.
  */
@@ -879,10 +879,10 @@ export type PmItemEntry = {
 /**
  * PmItemsView
  *
- * A chunk's pass-through PM items (D-074/D-084) — one entry per pointer, order preserved.
+ * A chunk's pass-through PM items — one entry per pointer, order preserved.
  *
  * Empty when the chunk holds no pointers — the board's empty state; a grouped chunk carrying
- * many pointers (D-047) yields one entry per pointer, each fetched fresh and never stored.
+ * many pointers yields one entry per pointer, each fetched fresh and never stored.
  */
 export type PmItemsView = {
     /**
@@ -894,7 +894,7 @@ export type PmItemsView = {
 /**
  * PmPointerModel
  *
- * One ``{source, ref}`` PM pointer (D-107) — ``source`` names a configured
+ * One ``{source, ref}`` PM pointer — ``source`` names a configured
  * ``[[pm_source]]``; ``ref`` is that source's own item token.
  */
 export type PmPointerModel = {
@@ -911,7 +911,7 @@ export type PmPointerModel = {
 /**
  * PmPointerView
  *
- * A pointer as the views render it (D-107/D-110) — the raw pair plus its legible
+ * A pointer as the views render it — the raw pair plus its legible
  * label and browser URL, both rendered by the pointer's configured source binding.
  *
  * ``label`` is the board-legible ``{name}#{ref}`` (e.g. ``blizzard#8``); ``web_url``
@@ -940,7 +940,7 @@ export type PmPointerView = {
 /**
  * PrView
  *
- * An open PR a chunk is parked on in open-pr delivery mode (D-059/D-065).
+ * An open PR a chunk is parked on in open-pr delivery mode.
  */
 export type PrView = {
     /**
@@ -1008,7 +1008,7 @@ export type QuestionAsked = {
 /**
  * QuestionView
  *
- * A question row with its derived answer state — the surfacing shape (D-004).
+ * A question row with its derived answer state — the surfacing shape.
  *
  * Behind ``GET /questions`` (open only), ``GET /questions/{id}`` (the runner's answer
  * poll), and the chunk detail's open-questions list. ``answered`` and the answer
@@ -1096,7 +1096,7 @@ export type QueuePeekEntry = {
 /**
  * QueuePeekResponse
  *
- * The ready queue as peeked by FILL, in the hub's explicit order (D-048).
+ * The ready queue as peeked by FILL, in the hub's explicit order.
  */
 export type QueuePeekResponse = {
     /**
@@ -1108,11 +1108,11 @@ export type QueuePeekResponse = {
 /**
  * QueueReorderRequest
  *
- * Move a ready chunk to a queue position — the board's Prioritize control (D-048).
+ * Move a ready chunk to a queue position — the board's Prioritize control.
  *
  * ``position`` is the target index in the ready queue, ``0`` being the top; it is
  * clamped into range, so ``0`` always means "to the front". Ordering is a hub-side
- * property: the move appends one position fact and the order re-derives (D-004).
+ * property: the move appends one position fact and the order re-derives.
  */
 export type QueueReorderRequest = {
     /**
@@ -1168,7 +1168,7 @@ export type ReadinessResponse = {
 /**
  * RouteClaim
  *
- * A complete route fact posted by the claiming runner (D-080).
+ * A complete route fact posted by the claiming runner.
  */
 export type RouteClaim = {
     /**
@@ -1217,7 +1217,7 @@ export type RouteClaimResponse = {
 /**
  * RouteView
  *
- * A chunk's route — where it is being worked (D-021).
+ * A chunk's route — where it is being worked.
  */
 export type RouteView = {
     /**
@@ -1297,7 +1297,7 @@ export type RunnerFactAck = {
 /**
  * RunnerFactBatch
  *
- * A runner's push of one-or-more buffered facts, ordered by seq (D-069).
+ * A runner's push of one-or-more buffered facts, ordered by seq.
  */
 export type RunnerFactBatch = {
     /**
@@ -1313,7 +1313,7 @@ export type RunnerFactBatch = {
 /**
  * RunnerListResponse
  *
- * The fleet registry — every registered runner with its liveness (D-070).
+ * The fleet registry — every registered runner with its liveness.
  */
 export type RunnerListResponse = {
     /**
@@ -1325,7 +1325,7 @@ export type RunnerListResponse = {
 /**
  * RunnerPauseRequest
  *
- * Set a runner's pause brake — records who flipped it (D-043).
+ * Set a runner's pause brake — records who flipped it.
  */
 export type RunnerPauseRequest = {
     /**
@@ -1337,7 +1337,7 @@ export type RunnerPauseRequest = {
 /**
  * RunnerRegistrationRequest
  *
- * Register a runner into the fleet — runner id + workspace binding (D-019).
+ * Register a runner into the fleet — runner id + workspace binding.
  */
 export type RunnerRegistrationRequest = {
     /**
@@ -1369,7 +1369,7 @@ export type RunnerRegistrationResponse = {
 /**
  * RunnerView
  *
- * One fleet-registry row — derived liveness and both brakes (D-004/D-070/D-043).
+ * One fleet-registry row — derived liveness and both brakes.
  *
  * A runner can be paused by two different parties for two different reasons, so the two
  * are reported separately rather than collapsed into one ``paused`` (issue #43): the
@@ -1411,14 +1411,14 @@ export type RunnerView = {
 /**
  * SessionMode
  *
- * Per-node session freshness (D-054).
+ * Per-node session freshness.
  */
 export type SessionMode = 'resume' | 'fresh';
 
 /**
  * SubmittedArtifact
  *
- * An artifact committed atomically with the completion (D-036).
+ * An artifact committed atomically with the completion.
  */
 export type SubmittedArtifact = {
     /**
@@ -1447,7 +1447,7 @@ export type SubmittedArtifact = {
 /**
  * TransitionView
  *
- * One accepted transition in a chunk's history (D-027/D-036).
+ * One accepted transition in a chunk's history.
  *
  * The edge a node-step took — its origin node, the judgement choice that routed it,
  * and its destination — oldest first on the detail. This is what makes the review-fail
@@ -1456,7 +1456,7 @@ export type SubmittedArtifact = {
  *
  * ``from_node_name``/``to_node_name`` are the nodes' human graph names (``build``,
  * ``review``) the board renders in place of the raw ``nd_`` ULIDs; resolved here so the
- * timeline is legible without reassembly (D-075), null when the pinned graph cannot
+ * timeline is legible without reassembly, null when the pinned graph cannot
  * resolve the id.
  */
 export type TransitionView = {

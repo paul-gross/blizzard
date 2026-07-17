@@ -11,9 +11,9 @@ Every assertion is made over the wire against the running hub:
   advances the chunk to the next node (``next`` observed over the wire, D-036).
 * **stale-epoch rejection** — with the runner's ``stale_epoch`` lever armed, the completion
   carries a zombie fence; the hub rejects it (``failure``, "stale epoch") and does **not**
-  advance (D-007).
+  advance.
 * **queue shaping** — grouping folds two ready chunks into one plural-pointer survivor and
-  a reorder moves it to the top; ``GET /api/queue/peek`` reflects both (D-048).
+  a reorder moves it to the top; ``GET /api/queue/peek`` reflects both.
 * **SSE contract** — ``GET /api/events/stream`` serves a valid ``text/event-stream`` an
   ``EventSource`` connects to (the reserved comment), D-067.
 
@@ -46,7 +46,7 @@ def _graph_yaml() -> str:
     """A scripted ``default-delivery`` graph — build -> review -> deliver.
 
     Named ``default-delivery`` so the hub's lazy ``ensure_default`` (POST /chunks) reuses it
-    by name (D-081). The prompts are inert here: the mock runner does not execute them, it
+    by name. The prompts are inert here: the mock runner does not execute them, it
     just submits the judgement choice over the wire, so the hub applies the transition.
     """
     import yaml
@@ -84,7 +84,7 @@ def _ingest(forge: httpx.Client, hub: httpx.Client, title: str) -> str:
     )
     assert ingested.status_code == 201, ingested.text
     chunk_id = ingested.json()["chunk_id"]
-    # Ingest rests not-ready (D-103); promote so the chunk enters the ready queue.
+    # Ingest rests not-ready; promote so the chunk enters the ready queue.
     assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
     return chunk_id
 
@@ -136,7 +136,7 @@ def test_stale_epoch_completion_is_rejected_over_the_wire(tmp_path: Path) -> Non
             # Arm the runner to fence its completion with a stale (held-epoch - 1) epoch.
             assert runner.post("/_levers/stale_epoch", json={"chunk_id": chunk_id}).status_code == 200
             out = runner.post("/_drive/complete", json={"chunk_id": chunk_id, "choice": "pass"}).json()
-            assert out["response"]["outcome"] == "failure", out  # the hub fenced the zombie (D-007)
+            assert out["response"]["outcome"] == "failure", out  # the hub fenced the zombie
             assert "stale" in (out["response"].get("detail") or "").lower()
             # the hub did not advance — the chunk sits where it was.
             assert hub.get(f"/api/chunks/{chunk_id}").json()["current_node_id"] == before
@@ -167,7 +167,7 @@ def test_sse_stream_serves_the_eventsource_contract(tmp_path: Path) -> None:
         assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
         _ingest(forge, hub, "an event")  # a chunk-changed event enters the broker's buffer
 
-        # GET /api/events/stream is the SSE surface an EventSource subscribes to (D-067):
+        # GET /api/events/stream is the SSE surface an EventSource subscribes to:
         # a valid text/event-stream opening with the reserved comment. Read only the first
         # chunk (the reserved comment) rather than draining to EOF — an SSE stream may stay
         # open, and the opening bytes are the contract an EventSource connects on.
@@ -189,10 +189,10 @@ def test_runner_registers_and_reads_its_pause_brake(tmp_path: Path) -> None:
         assert poll_until(
             lambda: any(r["runner_id"] == "runner-brake" for r in hub.get("/api/runners").json()["runners"])
         )
-        # the operator flips the pause brake; the hub's registry reflects it (D-043).
+        # the operator flips the pause brake; the hub's registry reflects it.
         assert hub.post("/api/runners/runner-brake/pause", json={"by": "operator"}).status_code == 200
         view = hub.get("/api/runners/runner-brake").json()
         assert view["hub_paused"] is True
-        # The runner's own brake is a separate field the hub only ever reads (D-105); the
+        # The runner's own brake is a separate field the hub only ever reads; the
         # operator flipping the fleet's brake must not appear to have set it.
         assert view["locally_paused"] is False

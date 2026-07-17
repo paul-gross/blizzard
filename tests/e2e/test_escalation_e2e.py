@@ -5,14 +5,14 @@ The third full-stack scenario alongside the happy path (test_acceptance_loop) an
 review-fail cycle (test_review_cycle_e2e). One chunk is driven through the real forge +
 hub + runner + ``mock-claude-code`` façade where the build worker **exits without a
 parseable verdict twice** — a clean exit whose judgement resume yields no
-``<Choice>`` (D-009). With ``retries.max = 1`` that is two failed execution attempts
-(D-078), so the node's budget is exhausted and the runner **escalates**:
+``<Choice>``. With ``retries.max = 1`` that is two failed execution attempts,
+so the node's budget is exhausted and the runner **escalates**:
 
 * the chunk derives **needs_human** — an open ``escalation.recorded`` with no later
   lease mint (domain/events.md), flushed up the runner's outbound buffer to
-  ``POST /api/events`` and dispatched to ``record_escalation`` (D-044/D-069);
+  ``POST /api/events`` and dispatched to ``record_escalation``;
 * the open escalation surfaces the runner-composed **takeover command** — the
-  pasteable ``cd <workdir> && <harness> --resume <session>`` (design/harness-adapters.md);
+  pasteable ``cd <workdir> && <harness> --resume <session>``;
 * and that command, **executed verbatim in the env**, actually resumes the parked
   mock session — asserted by the session's own persisted state advancing (a new turn
   recording the human's takeover message), not merely by the string existing.
@@ -58,7 +58,7 @@ pytestmark = [
 _BUILD_SCRIPT = "pass\n"
 # build judgement: a no-op that emits NO verdict() — so the resume reply carries no
 # ``<Choice>``, which the adapter parses to None and the core treats as a failed
-# attempt (D-009). Every attempt fails this way, so the node's retry budget exhausts.
+# attempt. Every attempt fails this way, so the node's retry budget exhausts.
 _VERDICTLESS_JUDGEMENT = "pass\n"
 
 # The takeover message a human types into the resumed session. It arrives as code (a
@@ -149,7 +149,7 @@ def test_retries_exhausted_escalates_and_takeover_resumes_session(tmp_path: Path
         )
         assert ingested.status_code == 201, ingested.text
         chunk_id = ingested.json()["chunk_id"]
-        assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # ready for the runner (D-103)
+        assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # ready for the runner
 
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         config = dataclasses.replace(config, max_agents=1)

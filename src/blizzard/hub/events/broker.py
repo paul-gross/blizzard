@@ -1,4 +1,4 @@
-"""The hub event broker (D-067) — the live SSE re-broadcast seam.
+"""The hub event broker — the live SSE re-broadcast seam.
 
 Fact names double as event names (``events.md``): the hub re-broadcasts landed facts
 over ``GET /api/events/stream`` so the board and runners keep live views current. This
@@ -31,7 +31,7 @@ import threading
 from collections import deque
 from dataclasses import dataclass
 
-# SSE event-type names — the board's live vocabulary (design/hub/web-app.md).
+# SSE event-type names — the board's live vocabulary.
 CHUNK_CHANGED = "chunk-changed"
 QUESTION_ASKED = "question-asked"
 QUESTION_ANSWERED = "question-answered"
@@ -50,7 +50,7 @@ class Event:
     data: str  # JSON-encoded payload
 
     def framed(self) -> str:
-        """The ``text/event-stream`` frame — ``id`` first so a reconnect resumes (D-067)."""
+        """The ``text/event-stream`` frame — ``id`` first so a reconnect resumes."""
         return f"id: {self.id}\nevent: {self.type}\ndata: {self.data}\n\n"
 
 
@@ -96,7 +96,7 @@ class EventBroker:
         return event.id
 
     def publish_chunk_changed(self, chunk_id: str, status: str) -> int:
-        """A chunk's derived status changed (D-004) — the board refreshes that row."""
+        """A chunk's derived status changed — the board refreshes that row."""
         return self.publish(CHUNK_CHANGED, {"chunk_id": chunk_id, "status": status})
 
     def publish_question_asked(self, chunk_id: str, question_id: str) -> int:
@@ -108,7 +108,7 @@ class EventBroker:
         return self.publish(QUESTION_ANSWERED, {"chunk_id": chunk_id, "question_id": question_id})
 
     def publish_decision_opened(self, chunk_id: str, decision_id: str) -> int:
-        """A gate ``decision.submitted`` opened — a human choice is awaited (D-045)."""
+        """A gate ``decision.submitted`` opened — a human choice is awaited."""
         return self.publish(DECISION_OPENED, {"chunk_id": chunk_id, "decision_id": decision_id})
 
     def publish_decision_resolved(self, chunk_id: str, decision_id: str) -> int:
@@ -116,7 +116,7 @@ class EventBroker:
         return self.publish(DECISION_RESOLVED, {"chunk_id": chunk_id, "decision_id": decision_id})
 
     def publish_queue_changed(self) -> int:
-        """The ready queue's membership or order changed — the board re-peeks (D-048)."""
+        """The ready queue's membership or order changed — the board re-peeks."""
         return self.publish(QUEUE_CHANGED, {})
 
     def publish_runner_changed(self, runner_id: str) -> int:

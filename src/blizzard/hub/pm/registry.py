@@ -1,10 +1,10 @@
-"""The PM source registry (D-108) — configured sources looked up by name.
+"""The PM source registry — configured sources looked up by name.
 
 A plain, dependency-free ``dict`` wrapper (``bzh:domain-core``, no I/O): the
 credentialed clients live behind each entry's adapter, built at the composition root
 (:mod:`blizzard.hub.pm.internal.factory`). An empty registry is a legal hub with no PM
 reach — the pass-through routes degrade per-chunk/per-pointer rather than refusing to
-start (D-108).
+start.
 
 D-107 gives the pointer its own ``source`` name, so finding a pointer's binding is a
 plain lookup — ``registry.get(pointer.source)`` — rather than the D-109 repo-matching
@@ -40,7 +40,7 @@ class PmSourceRegistry:
 
     def resolve(self, token: str) -> PmPointer | None:
         """The first configured binding's ``parse`` of ``token`` that claims it, or
-        ``None`` when none do (D-111)."""
+        ``None`` when none do."""
         for source in self._sources.values():
             pointer = source.parse(token)
             if pointer is not None:

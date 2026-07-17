@@ -14,7 +14,7 @@ import {
 } from 'fleet';
 
 /**
- * The hub board app — the mission-control fleet surface (D-048). It composes the
+ * The hub board app — the mission-control fleet surface. It composes the
  * shared fleet library over live reads from the generated client (TanStack Query)
  * and the hub's SSE stream:
  *
@@ -128,7 +128,7 @@ export class App {
   private readonly chunksQuery = injectHubChunksQuery();
   private readonly live = inject(FleetLiveUpdates);
 
-  /** Promote a not-ready chunk to ready from its board card (D-103). */
+  /** Promote a not-ready chunk to ready from its board card. */
   protected readonly promoteChunk = injectPromoteChunkMutation();
 
   constructor() {

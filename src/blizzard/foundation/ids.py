@@ -1,4 +1,4 @@
-"""Prefixed-ULID id minting — the hub-entity id convention (D-075).
+"""Prefixed-ULID id minting — the hub-entity id convention.
 
 Every hub entity id is a **prefixed ULID**: a short type tag, an underscore, then a
 Crockford-base32 ULID — ``ch_01J9Z3M0P8QK7V2S4W6X8Y0A1B``. The tag makes an id
@@ -23,7 +23,7 @@ _TIME_CHARS = 10  # 48 bits of millisecond timestamp
 _RAND_CHARS = 16  # 80 bits of randomness
 _ULID_CHARS = _TIME_CHARS + _RAND_CHARS
 
-# The id-prefix registry (D-075): one tag per hub entity kind. `ch_` is the only
+# The id-prefix registry: one tag per hub entity kind. `ch_` is the only
 # one the walking skeleton mints end-to-end; the rest pin the convention for the
 # entities their tables already carry so a builder never invents a second scheme.
 CHUNK_PREFIX = "ch"
@@ -53,7 +53,7 @@ def ulid(clock: IClock) -> str:
 
 
 def mint(prefix: str, clock: IClock) -> str:
-    """Mint a prefixed ULID — ``<prefix>_<ulid>`` (D-075)."""
+    """Mint a prefixed ULID — ``<prefix>_<ulid>``."""
     return f"{prefix}_{ulid(clock)}"
 
 

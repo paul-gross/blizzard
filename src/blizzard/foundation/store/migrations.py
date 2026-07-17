@@ -2,7 +2,7 @@
 
 Schema change is Alembic, applied manually through the CLI, never at daemon
 startup (``bzh:manual-migrations``). Each daemon owns an independent migration
-tree (D-099); this runner drives *one* tree — pointed at a ``script_location``
+tree; this runner drives *one* tree — pointed at a ``script_location``
 and a store ``url`` — and is reused by both. The revision guard is what a daemon
 calls at startup to **refuse to run on a schema mismatch**, naming the exact
 migrate command to fix it.

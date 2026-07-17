@@ -1,7 +1,7 @@
 """The runner store's SQLAlchemy metadata — the target for its Alembic tree.
 
 Facts only, status derived (``bzh:facts-not-status``): the machine-local fast path
-(D-023/D-028) — leases with their pid + process-start-time, chunk->env bindings,
+ — leases with their pid + process-start-time, chunk->env bindings,
 and the store-and-forward outbound buffer. Timestamps come from the injected clock,
 never a ``server_default`` (``bzh:injected-clock``); portable-SQL surface only
 (``bzh:sql-portable``).
@@ -32,7 +32,7 @@ metadata = MetaData()
 # --- Leases (the machine's execution right now — D-023/D-035) ---------------
 #
 # The lease carries the pid + process start time, recorded by the spawn wrapper
-# from inside the child (D-092): pid alone is ambiguous across reuse, so REAP
+# from inside the child: pid alone is ambiguous across reuse, so REAP
 # keys on (pid, process_start_time) — the P6 liveness signal, heartbeats being P7.
 
 leases = Table(
@@ -40,9 +40,9 @@ leases = Table(
     metadata,
     Column("lease_id", String, primary_key=True),  # lease_<ulid>
     Column("chunk_id", String, nullable=False),  # the chunk this lease attempt is for
-    Column("epoch", Integer, nullable=False),  # incrementing fence, reported to the hub (D-044)
+    Column("epoch", Integer, nullable=False),  # incrementing fence, reported to the hub
     Column("runner_id", String, nullable=False),
-    Column("pid", Integer, nullable=True),  # filled at spawn-return (D-092)
+    Column("pid", Integer, nullable=True),  # filled at spawn-return
     Column("process_start_time", String, nullable=True),  # stable across pid reuse; REAP keys on it
     Column("session_id", String, nullable=True),  # harness-assigned, recorded at spawn-return
     Column("created_at", UtcDateTime, nullable=False),
@@ -56,7 +56,7 @@ env_bindings = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("chunk_id", String, nullable=False),
     Column("environment_id", String, nullable=False),  # opaque provider id
-    Column("workdir", String, nullable=False),  # provider-returned working directory (D-063)
+    Column("workdir", String, nullable=False),  # provider-returned working directory
     Column("bound_at", UtcDateTime, nullable=False),
 )
 
@@ -74,7 +74,7 @@ env_bindings = Table(
 outbound_buffer = Table(
     "outbound_buffer",
     metadata,
-    Column("seq", Integer, primary_key=True, autoincrement=True),  # per-runner monotonic (D-069)
+    Column("seq", Integer, primary_key=True, autoincrement=True),  # per-runner monotonic
     Column("kind", String, nullable=False),  # lease.minted | completion.submitted | escalation.recorded
     Column("chunk_id", String, nullable=True),  # the correlated chunk, when the fact has one
     Column("lease_id", String, nullable=True),  # the correlated attempt, when the fact has one
@@ -179,7 +179,7 @@ binding_releases = Table(
 #
 # ``blizzard runner ask`` hits the runner's local API before the worker exits, so
 # the ask is durable by the time the process ends — that is how ADVANCE tells "parked
-# on a question" apart from "died without a verdict" (D-009). The runner mints the
+# on a question" apart from "died without a verdict". The runner mints the
 # ``question_id`` here so it can poll the hub for the answer by it. An ask is
 # *unforwarded* (awaiting park) until a park_fact references its question_id.
 
@@ -189,7 +189,7 @@ asks = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("lease_id", String, nullable=False),  # BLIZZARD_LEASE_ID the worker inherited
     Column("chunk_id", String, nullable=False),
-    Column("question_id", String, nullable=False),  # qn_<ulid>, runner-minted (D-075)
+    Column("question_id", String, nullable=False),  # qn_<ulid>, runner-minted
     Column("question", Text, nullable=False),
     Column("options", Text, nullable=False),  # JSON list[str] (may be empty)
     Column("session_id", String, nullable=True),  # the session to resume around the answer
@@ -230,7 +230,7 @@ park_resumes = Table(
 # then resume the session in place under the **unchanged** ``lease_id``/``epoch``/``session_id``
 # (only ``pid``/``process_start_time`` are rewritten). This is the fourth sibling of the resume
 # family (spawn / judgement / answer, D-082): it is explicitly not a retry (new lease/epoch/
-# session), so it consumes no retry budget (D-078).
+# session), so it consumes no retry budget.
 #
 # Two paths write the intent. A **graceful** shutdown (SIGTERM: ``systemctl restart``/stop)
 # marks *before* the daemon exits (#12). An ungraceful ``kill -9`` / OOM / reboot never runs
@@ -286,7 +286,7 @@ session_ends = Table(
 # runner reads it on its outbound PULL and mirrors it here, then FILL adheres — paused
 # stops new claims, in-flight chunks run on ([loop.md]). Mirroring it in the store keeps
 # the read a machine-local, crash-safe fact: FILL never calls the hub itself, and the
-# last-known directive holds while the hub is unreachable (D-012). One upserted row per
+# last-known directive holds while the hub is unreachable. One upserted row per
 # runner; ``paused`` is the value, ``updated_at`` when PULL last refreshed it.
 
 hub_control = Table(
@@ -304,7 +304,7 @@ hub_control = Table(
 # or being reachable — the operator contract's standing requirement ([api.md]). Distinct
 # from ``hub_control`` above in both concept and shape: that mirrors a hub-owned value,
 # so it upserts; this is a locally-minted fact, so pause/start facts **append** and the
-# flag derives from the newest (D-004/D-039), exactly like the hub's own
+# flag derives from the newest, exactly like the hub's own
 # ``runner_pause_facts``. Effective paused is the OR of the two — FILL adheres to either.
 # ``set_by`` records who flipped it, on the fact.
 

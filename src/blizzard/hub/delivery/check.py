@@ -1,8 +1,8 @@
-"""On-demand external-merge detection for open-pr deliveries (D-065).
+"""On-demand external-merge detection for open-pr deliveries.
 
-The open-pr deliver mode (D-059) parks a chunk on an opened PR without a terminal
+The open-pr deliver mode parks a chunk on an opened PR without a terminal
 transition — the chunk derives ``delivering`` (awaiting an external merge) with its
-environments held (D-066). This service is the *detection* half: it polls each open PR
+environments held. This service is the *detection* half: it polls each open PR
 through the forge seam (``check_pr``) and, once **every** PR has reached a terminal
 state, terminates the delivery through :meth:`finalize_pr_delivery` — the ``pr.closed``
 facts, the hub lease, the terminal transition, and the route release, written atomically
@@ -37,7 +37,7 @@ class CheckDeliveryResult:
 
 
 class DeliveryCheckService:
-    """Polls a parked open-pr chunk's PRs and finalizes once all are terminal (D-065)."""
+    """Polls a parked open-pr chunk's PRs and finalizes once all are terminal."""
 
     def __init__(self, *, chunks: IWriteChunkRepository, forge: IForgeDelivery, clock: IClock) -> None:
         self._chunks = chunks

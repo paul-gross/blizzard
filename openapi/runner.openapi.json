@@ -250,7 +250,7 @@
         "type": "object"
       },
       "PmItemEntry": {
-        "description": "One pointer's pass-through PM item (D-047/D-074/D-107) \u2014 title, body + comment\nthread, vendor-native.\n\n``label``/``web_url`` are the board-legible pointer label (``blizzard#8``) and its\nbrowser address (D-110) \u2014 both null when no configured source names ``source``. A\nper-pointer forge failure degrades here rather than failing the whole read (D-084):\n``error`` carries the reason and ``title``/``body`` are null, so one unreachable\npointer never blinds the reader to the pointers it did reach.",
+        "description": "One pointer's pass-through PM item \u2014 title, body + comment\nthread, vendor-native.\n\n``label``/``web_url`` are the board-legible pointer label (``blizzard#8``) and its\nbrowser address \u2014 both null when no configured source names ``source``. A\nper-pointer forge failure degrades here rather than failing the whole read:\n``error`` carries the reason and ``title``/``body`` are null, so one unreachable\npointer never blinds the reader to the pointers it did reach.",
         "properties": {
           "body": {
             "anyOf": [
@@ -337,7 +337,7 @@
         "type": "object"
       },
       "PmItemsView": {
-        "description": "A chunk's pass-through PM items (D-074/D-084) \u2014 one entry per pointer, order preserved.\n\nEmpty when the chunk holds no pointers \u2014 the board's empty state; a grouped chunk carrying\nmany pointers (D-047) yields one entry per pointer, each fetched fresh and never stored.",
+        "description": "A chunk's pass-through PM items \u2014 one entry per pointer, order preserved.\n\nEmpty when the chunk holds no pointers \u2014 the board's empty state; a grouped chunk carrying\nmany pointers yields one entry per pointer, each fetched fresh and never stored.",
         "properties": {
           "items": {
             "default": [],
@@ -687,7 +687,7 @@
   "paths": {
     "/api/chunks/{chunk_id}/pm-items": {
       "get": {
-        "description": "Forward a chunk's PM-items read to the hub \u2014 the layered pass-through (D-084).",
+        "description": "Forward a chunk's PM-items read to the hub \u2014 the layered pass-through.",
         "operationId": "get_pm_items_api_chunks__chunk_id__pm_items_get",
         "parameters": [
           {
@@ -755,7 +755,7 @@
     },
     "/api/heartbeat": {
       "post": {
-        "description": "Record a lease heartbeat, stamped with the injected clock (D-069).",
+        "description": "Record a lease heartbeat, stamped with the injected clock.",
         "operationId": "heartbeat_api_heartbeat_post",
         "requestBody": {
           "content": {
@@ -872,7 +872,7 @@
     },
     "/api/leases/{lease_id}/session-end": {
       "post": {
-        "description": "Record a lease's session-end, stamped with the injected clock (D-055/D-082).",
+        "description": "Record a lease's session-end, stamped with the injected clock.",
         "operationId": "session_end_api_leases__lease_id__session_end_post",
         "parameters": [
           {

@@ -1,9 +1,9 @@
 """Open-pr delivery mode over the hub boundary (component tier).
 
-The counterpart to ``test_delivery_loop`` for the ``open-pr`` deliver mode (D-059/D-065):
+The counterpart to ``test_delivery_loop`` for the ``open-pr`` deliver mode:
 a chunk travels ingest -> claim -> completion -> deliver, and instead of merging, the
 coordinator opens a PR and **parks** the chunk — ``delivering`` with the awaiting-external-
-merge detail and its environments still held (D-066). A later ``POST /check-delivery``
+merge detail and its environments still held. A later ``POST /check-delivery``
 detects the external merge and drives the chunk to ``done``, releasing the route.
 """
 
@@ -103,7 +103,7 @@ def test_open_pr_mode_opens_a_pr_and_parks_the_chunk(tmp_path: Path) -> None:
     assert detail["status"] == "delivering"
     assert detail["awaiting_external_merge"] is True
     assert [(p["repo"], p["number"]) for p in detail["open_prs"]] == [("acme/widget", 1)]
-    assert detail["route"] is not None  # environments held until the terminal outcome (D-066)
+    assert detail["route"] is not None  # environments held until the terminal outcome
 
 
 def test_open_pr_targets_the_configured_base_branch(tmp_path: Path) -> None:
@@ -161,7 +161,7 @@ def test_check_delivery_finalizes_after_an_external_merge(tmp_path: Path) -> Non
     final = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert final["status"] == "done"
     assert final["awaiting_external_merge"] is False
-    assert final["route"] is None  # environments released on the terminal outcome (D-066)
+    assert final["route"] is None  # environments released on the terminal outcome
 
     # A second check is idempotent — the delivery is already finalized.
     again = hub.client.post(f"/api/chunks/{chunk_id}/check-delivery")
@@ -171,7 +171,7 @@ def test_check_delivery_finalizes_after_an_external_merge(tmp_path: Path) -> Non
 
 def test_pr_opened_write_is_idempotent_per_chunk_and_repo(tmp_path: Path) -> None:
     """Pins issue #10: the deliver node runs on both a fresh apply and an idempotent
-    replay (D-090), and the coordinator's DB-backed ``open_prs`` skip-set (a store read
+    replay, and the coordinator's DB-backed ``open_prs`` skip-set (a store read
     each call, not an in-memory cache) has a narrow read-then-write race between two such
     overlapping runs. This drives the store write the coordinator makes directly, past the
     skip-set, the way that race would — the ``pr.opened`` write itself must be idempotent
@@ -213,7 +213,7 @@ def test_check_delivery_finalizes_a_close_without_merge(tmp_path: Path) -> None:
     chunk_id = _ingest(hub)
     _deliver(hub, chunk_id)
 
-    # A PR closed without merging is also terminal (D-065): the chunk moves to done.
+    # A PR closed without merging is also terminal: the chunk moves to done.
     forge.mark_closed("acme/widget", 1)
     resp = hub.client.post(f"/api/chunks/{chunk_id}/check-delivery")
     assert resp.json()["finalized"] is True

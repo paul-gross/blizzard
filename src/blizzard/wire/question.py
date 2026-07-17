@@ -1,6 +1,6 @@
 """The ask/answer wire shapes ([ask-answer.md] / domain/questions.md).
 
-The rendezvous spans the two daemons deliberately (design/cli.md): the runner
+The rendezvous spans the two daemons deliberately: the runner
 forwards a ``question.asked`` up to the hub — as a batched ``POST /events`` fact and,
 equivalently, the typed ``POST /questions`` route — where it becomes a durable row;
 ``POST /questions/{id}/answer`` writes the answer first-write-wins; and the runner
@@ -52,7 +52,7 @@ class AnswerResult(BaseModel):
 
 
 class QuestionView(BaseModel):
-    """A question row with its derived answer state — the surfacing shape (D-004).
+    """A question row with its derived answer state — the surfacing shape.
 
     Behind ``GET /questions`` (open only), ``GET /questions/{id}`` (the runner's answer
     poll), and the chunk detail's open-questions list. ``answered`` and the answer

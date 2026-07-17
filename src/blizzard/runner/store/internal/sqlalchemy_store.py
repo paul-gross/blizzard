@@ -451,7 +451,7 @@ class SqlAlchemyRunnerStore:
         # land together or not at all. Two transactions would leave a `kill -9` window
         # where the runner has stopped claiming and the hub is never told — and nothing
         # reconciles that afterwards, since PULL only mirrors hub->runner. The buffer
-        # delivers whenever the hub is next reachable, so this stays a local write (D-069).
+        # delivers whenever the hub is next reachable, so this stays a local write.
         with self._begin() as conn:
             conn.execute(local_pause_facts.insert().values(runner_id=runner_id, paused=paused, set_at=at, set_by=by))
             conn.execute(

@@ -338,7 +338,7 @@ describe('ChunkDetailPanel', () => {
     expect(emitted).toBe(false);
   });
 
-  it('emits resolveDecision with the chosen gate choice when a choice button is clicked (D-042)', async () => {
+  it('emits resolveDecision with the chosen gate choice when a choice button is clicked', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', WAITING_DECISION_DETAIL);
     let emitted: { decisionId: string; choice: string; chunkId: string } | undefined;
@@ -356,7 +356,7 @@ describe('ChunkDetailPanel', () => {
     });
   });
 
-  it('surfaces an escalation with its copyable takeover command (D-009)', async () => {
+  it('surfaces an escalation with its copyable takeover command', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', ESCALATED_DETAIL);
     await fixture.whenStable();
@@ -456,7 +456,7 @@ describe('ChunkDetailPanel', () => {
     expect(el.querySelector('[data-testid="detach-chunk"]')).not.toBeNull();
   });
 
-  it('does not promise the ready queue in the confirm copy for a needs_human chunk (D-088)', async () => {
+  it('does not promise the ready queue in the confirm copy for a needs_human chunk', async () => {
     // derive_chunk_status checks an open escalation before a live route, so detaching
     // this chunk re-derives needs_human, not ready — the dialog must not claim
     // otherwise for the one case its own spec singles out as interesting.

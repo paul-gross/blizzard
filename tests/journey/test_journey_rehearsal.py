@@ -105,7 +105,7 @@ WEB_REPO = "toy-web"
 
 
 def _pm_sources(forge_port: int) -> tuple[PmSourceConfig, ...]:
-    """Two ``[[pm_source]]`` bindings (D-108/D-109) — one per fixture repo — since the
+    """Two ``[[pm_source]]`` bindings — one per fixture repo — since the
     journey files issues across both. This is the case that proves the D-109
     repo-matching resolver: a first-entry shim would fetch half these issues from the
     wrong repo the moment two sources are configured (the Phase 1 finale's ``alpha#7``
@@ -193,7 +193,7 @@ _BUILD_JUDGEMENT = """\
 import pathlib
 b = pathlib.Path(".behavior").read_text().strip() if pathlib.Path(".behavior").exists() else "clean"
 if b == "escalate":
-    pass  # NO verdict() -> verdict-less -> a failed attempt (D-009)
+    pass  # NO verdict() -> verdict-less -> a failed attempt
 else:
     verdict("pass", "build checks are green")
 """
@@ -235,7 +235,7 @@ def _graph_yaml() -> str:
     import yaml
 
     graph = {
-        "name": "default-delivery",  # reused by name on ingest (D-081)
+        "name": "default-delivery",  # reused by name on ingest
         "entry": "build",
         "nodes": {
             "build": {
@@ -285,7 +285,7 @@ def _blizzard_bin(name: str) -> str:
 
 
 def _file_hub(forge: httpx.Client, repo: str, title: str, body: str) -> tuple[str, str]:
-    """File an issue and return its ``{source, ref}`` pointer (D-107) — ``repo`` is the
+    """File an issue and return its ``{source, ref}`` pointer — ``repo`` is the
     configured source's own name (``_pm_sources``), ``ref`` its issue number."""
     issue = forge.post(f"/repos/{OWNER}/{repo}/issues", json={"title": title, "body": body})
     assert issue.status_code == 201, issue.text
@@ -297,7 +297,7 @@ def _ingest(hub: httpx.Client, pointer: tuple[str, str]) -> str:
     resp = hub.post("/api/chunks", json={"tokens": [f"{source}:{ref}"]})
     assert resp.status_code == 201, resp.text
     chunk_id = resp.json()["chunk_id"]
-    # Ingest rests not-ready (D-103); promote so the fleet claims it as the journey expects.
+    # Ingest rests not-ready; promote so the fleet claims it as the journey expects.
     assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
     return chunk_id
 

@@ -62,7 +62,7 @@ def _seed_running_lease(store, *, node_id="nd_build", node_name="build"):  # typ
 
 @pytest.mark.unit
 def test_runner_config_gate_buffers_a_decision_not_a_completion(tmp_path):  # type: ignore[no-untyped-def]
-    """A gated node's exited worker submits a decision (not a transition) and parks (D-032)."""
+    """A gated node's exited worker submits a decision (not a transition) and parks."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     hub = FakeHub()
@@ -130,7 +130,7 @@ def test_gated_node_decision_elicited_exactly_once_while_flush_pending(tmp_path)
 @pytest.mark.unit
 def test_resolved_gate_is_advanced_by_the_resolving_transition(tmp_path):  # type: ignore[no-untyped-def]
     """A held chunk whose gate the human resolved: the runner records the resolving
-    transition and continues in place from the returned envelope (D-027/D-045)."""
+    transition and continues in place from the returned envelope."""
     store = _store(tmp_path)
     # A chunk parked at a gate: envs bound, no active lease.
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
@@ -227,7 +227,7 @@ def test_fill_leaves_a_resolved_gate_to_advance(tmp_path):  # type: ignore[no-un
     with a bound env and no active lease — the *same* shape FILL's crash reconciler
     (``_reconcile_interrupted_claims``) recovers. Without the gate guard, FILL would
     "adopt" it by spawning a worker on the human-judged node, minting a fresh-epoch lease
-    that strands the human's resolving transition as stale (D-045/D-027). FILL must skip
+    that strands the human's resolving transition as stale. FILL must skip
     it and leave the resolving transition to ADVANCE.
     """
     store = _store(tmp_path)

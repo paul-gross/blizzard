@@ -1,5 +1,4 @@
-# Push to master — the merge gate plus the extra tiers and a dev build
-# (implementation/build.md).
+# Push to master — the merge gate plus the extra tiers and a dev build.
 #
 # Runs the full PR gate, then the SERVICE tier and the kill-9 CRASH SWEEP as REAL
 # gates (blizzard-harness verification/blizzard.md: blizzard:service-test,
@@ -147,7 +146,7 @@ jobs:
         run: |
           # The version scheme is 0.<milestone>.<patch> pre-1.0. A dev build off
           # master targets the milestone in progress at patch 0, tagged with the
-          # run number: 0.<milestone>.0.dev<run> (implementation/build.md).
+          # run number: 0.<milestone>.0.dev<run>.
           BASE=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
           MINOR=$(echo "$BASE" | cut -d. -f2)
           DEV="0.${MINOR}.0.dev${{ github.run_number }}"

@@ -1,14 +1,14 @@
-"""The node envelope and the apply-response (D-072/D-089/D-090).
+"""The node envelope and the apply-response.
 
 The **envelope** is what the runner works a node-step from: the pre-prompt (base
 prompt + any arrival addendum, already inlined), the node's config, the chunk's
-PM pointers, and every artifact resolved latest-by-epoch (D-036/D-089). It is
+PM pointers, and every artifact resolved latest-by-epoch. It is
 handed back by the claim response, by ``POST /chunks/{id}/completions`` (the next
-node), and by the idempotent ``GET /chunks/{id}/envelope`` re-read (D-090).
+node), and by the idempotent ``GET /chunks/{id}/envelope`` re-read.
 
 The **apply-response** is the completion's reply: the next envelope, or a signal
 that a hub node took over, or a failure — the advancement checkpoint that lets the
-runner continue in place (D-072).
+runner continue in place.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from blizzard.hub.domain.graph import Executor, JudgedBy, SessionMode
 
 
 class EnvelopeArtifact(BaseModel):
-    """One artifact carried into a node-step, resolved latest-by-epoch (D-036)."""
+    """One artifact carried into a node-step, resolved latest-by-epoch."""
 
     name: str
     kind: ArtifactKind
@@ -37,14 +37,14 @@ class EnvelopeArtifact(BaseModel):
 
 
 class EnvelopeChoice(BaseModel):
-    """A selectable outcome the worker's judgement may emit (D-042)."""
+    """A selectable outcome the worker's judgement may emit."""
 
     name: str
     description: str
 
 
 class NodeConfig(BaseModel):
-    """The node's invariant identity for this step (D-025/D-038)."""
+    """The node's invariant identity for this step."""
 
     node_id: str
     node_name: str
@@ -59,13 +59,13 @@ class NodeConfig(BaseModel):
 
 
 class NodeEnvelope(BaseModel):
-    """Everything a runner needs to work one node-step (D-089)."""
+    """Everything a runner needs to work one node-step."""
 
     chunk_id: str
     graph_id: str
     epoch: int
     node: NodeConfig
-    # The pre-prompt: base prompt + inlined arrival addendum (D-038). None at a
+    # The pre-prompt: base prompt + inlined arrival addendum. None at a
     # hub node or a human gate, which carry no worker prompt.
     prompt: str | None
     judgement_prompt: str | None
@@ -74,7 +74,7 @@ class NodeEnvelope(BaseModel):
 
 
 class ApplyOutcome(StrEnum):
-    """What a completion's apply produced (D-072)."""
+    """What a completion's apply produced."""
 
     NEXT = "next"  # the runner continues in place; `next_envelope` is set
     HUB_NODE_TAKEN = "hub_node_taken"  # a hub node (deliver) took over; runner holds envs, waits
@@ -84,7 +84,7 @@ class ApplyOutcome(StrEnum):
 
 
 class ApplyResponse(BaseModel):
-    """The response to a completion submission (D-072).
+    """The response to a completion submission.
 
     Exactly one of ``next_envelope`` (when ``outcome == next``) or ``detail`` (on a
     non-advancing outcome) is meaningful; the ``outcome`` discriminates.

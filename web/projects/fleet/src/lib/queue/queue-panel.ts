@@ -5,14 +5,14 @@ import { injectHubQueueQuery } from './queue.query';
 import { injectGroupChunksMutation, injectReorderQueueMutation } from './queue.mutations';
 
 /**
- * The queue-shaping panel (D-048) — the operator's two controls over the ready queue,
+ * The queue-shaping panel — the operator's two controls over the ready queue,
  * the surface that shapes work rather than executes it:
  *
  * - **Prioritize**: a move-to-top action per row drives `POST /api/queue/reorder`
  *   with `position: 0`; the next acquire honors the new order;
  * - **Group**: multi-select two or more ready chunks and merge them into the
  *   top-most selected survivor via `POST /api/chunks/{id}/group` — the survivor
- *   carries the union of PM pointers, the rest are discarded (D-047).
+ *   carries the union of PM pointers, the rest are discarded.
  *
  * A container: it owns the queue query and both mutations, all through the generated
  * client (bzh:generated-client); the live-update service re-peeks on `queue-changed`.
@@ -164,7 +164,7 @@ export class QueuePanel {
   private readonly reorderMutation = injectReorderQueueMutation();
   private readonly groupMutation = injectGroupChunksMutation();
 
-  /** The ready queue in hub order (D-048); empty until the first read resolves. */
+  /** The ready queue in hub order; empty until the first read resolves. */
   protected readonly entries = computed<readonly QueuePeekEntry[]>(() => this.queueQuery.data() ?? []);
 
   /** Chunk ids checked for grouping. */

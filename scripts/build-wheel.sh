@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The one build entrypoint (implementation/build.md, D-061).
+# The one build entrypoint.
 #
 # Turns the source tree into the single distributable wheel and proves it:
 #   1. builds both Angular apps and writes their output into the wheel-embed

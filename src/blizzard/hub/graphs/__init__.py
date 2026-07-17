@@ -1,9 +1,9 @@
-"""Packaged workflow graphs — the hub-configured default graph (D-081).
+"""Packaged workflow graphs — the hub-configured default graph.
 
-The hub ships a default graph every ingested chunk is pinned to (D-033/D-081). It
+The hub ships a default graph every ingested chunk is pinned to. It
 lives here as packaged data (``default.yaml`` plus its prompt files) so a fresh hub
 mints it at init without any authoring. This module is the *loader* — the edge that
-reads YAML and inlines prompt *file* references (D-033) before the pure-domain
+reads YAML and inlines prompt *file* references before the pure-domain
 parser and validator run; it is deliberately outside the domain (it touches the
 filesystem and PyYAML), which the domain must not (``bzh:domain-core``).
 """
@@ -19,7 +19,7 @@ from blizzard.hub.domain.graph import GraphDoc, parse_graph_doc
 _GRAPHS_DIR = Path(__file__).resolve().parent
 DEFAULT_GRAPH_PATH = _GRAPHS_DIR / "default.yaml"
 
-# The prompt-carrying fields whose file references are inlined at load (D-033).
+# The prompt-carrying fields whose file references are inlined at load.
 _PROMPT_KEYS = ("prompt", "prompt_addendum")
 
 
@@ -32,7 +32,7 @@ def load_graph_doc(path: Path) -> GraphDoc:
     """Load a graph definition file, inline its prompt references, and parse it.
 
     Inlining resolves every ``prompt`` / ``judgement.prompt`` / ``prompt_addendum``
-    file reference relative to ``path`` and replaces it with the file's text (D-033),
+    file reference relative to ``path`` and replaces it with the file's text,
     so the parsed :class:`GraphDoc` carries prose, never paths — exactly what a mint
     persists. A missing referenced file raises :class:`FileNotFoundError`.
     """
@@ -44,7 +44,7 @@ def load_graph_doc(path: Path) -> GraphDoc:
 
 
 def load_default_graph_doc() -> GraphDoc:
-    """Load and parse the packaged default graph (D-081)."""
+    """Load and parse the packaged default graph."""
     return load_graph_doc(DEFAULT_GRAPH_PATH)
 
 

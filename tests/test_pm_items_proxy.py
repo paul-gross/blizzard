@@ -1,8 +1,8 @@
 """The runner-local PM-item pass-through proxy — route + ``blizzard runner pm-items`` verb.
 
-The layered pass-through (D-084): a build worker reads its chunk's issue through the
+The layered pass-through: a build worker reads its chunk's issue through the
 runner's ``GET /api/chunks/{id}/pm-items`` route, which **forwards** to the hub's
-pass-through — the worker never talks to the hub or the PM system directly (D-047). The
+pass-through — the worker never talks to the hub or the PM system directly. The
 hub half (forge read, contents-not-stored) is covered by ``test_pm_item``; this proves
 the *runner's* half — that it forwards, and that the hub's own status passes through.
 
@@ -74,7 +74,7 @@ def _runner_app(tmp_path: Path) -> TestClient:
 
 @pytest.mark.component
 def test_proxy_forwards_the_read_to_the_hub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The route forwards to the hub's pm-items route and returns the items verbatim (D-084).
+    """The route forwards to the hub's pm-items route and returns the items verbatim.
 
     ``title`` is carried by the shared ``PmItemsView`` wire model (D-084's pass-through
     point), so it rides through this proxy untouched with no proxy-side code change."""
@@ -98,7 +98,7 @@ def test_proxy_forwards_the_read_to_the_hub(tmp_path: Path, monkeypatch: pytest.
 def test_proxy_carries_a_degraded_entry_through_rather_than_500ing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A hub-degraded entry (null ``title``/``body`` + ``error``) rides through as a 200 (D-084).
+    """A hub-degraded entry (null ``title``/``body`` + ``error``) rides through as a 200.
 
     The hub degrades a per-pointer forge failure to an ``error`` entry rather than failing the
     whole read; the proxy re-validates that payload through ``PmItemsView``. A wire model that

@@ -57,7 +57,7 @@ export interface LoggedEvent {
 const LOG_LIMIT = 256;
 
 /**
- * The live-update spine of the board (D-097): one SSE subscription to the hub's
+ * The live-update spine of the board: one SSE subscription to the hub's
  * event stream that **invalidates or patches TanStack queries** so every live view
  * keeps streaming while the cache stays truthful. It is the sanctioned bridge from
  * the {@link SseService} transport to the query cache — the one place SSE meets reads.

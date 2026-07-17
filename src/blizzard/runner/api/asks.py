@@ -1,11 +1,11 @@
 """The runner-local ask endpoint — ``POST /api/leases/{lease_id}/asks`` ([ask-answer.md]).
 
 A worker facing an undecidable choice runs ``blizzard runner ask`` and ends its turn
-(ask-and-exit, D-010/D-015). That verb is a pure client of this endpoint (D-023): it
+(ask-and-exit, D-010/D-015). That verb is a pure client of this endpoint: it
 posts the question with the lease id it inherited from the spawn environment
 (``BLIZZARD_LEASE_ID``), and the daemon records the ask fact **before** the worker
 exits — which is how ADVANCE later tells "parked on a question" from "died without a
-verdict" (D-009). The runner mints the ``question_id`` here so it can poll the hub for
+verdict". The runner mints the ``question_id`` here so it can poll the hub for
 the answer by it, and forwards the question up on its next tick.
 
 Read-only over its wiring (``bzh:controller-read-only``): it records through the store

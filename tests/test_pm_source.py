@@ -1,7 +1,7 @@
 """The GitHub-shaped PM source adapter (component tier).
 
 Exercises :class:`~blizzard.hub.pm.internal.github_pm_source.GitHubPmSource`'s
-``{source, ref}`` pointer handling (D-107) and vendor-native read against the GitHub-REST
+``{source, ref}`` pointer handling and vendor-native read against the GitHub-REST
 double — the same choice of a local double over a ``blizzard-mock`` dev dependency
 recorded in ``tests.support`` — plus the D-108 factory that builds one credentialed
 client per configured source, the D-110 label/web-base rendering the binding owns, and
@@ -99,7 +99,7 @@ def test_parse_accepts_this_source_s_own_schemeless_issue_url() -> None:
 
 def test_parse_resolves_a_url_even_when_the_source_name_is_not_the_repo_tail() -> None:
     """The regression this phase exists to fix: the old CLI heuristic assumed a
-    source's name is its repo tail and could never resolve this case (D-111)."""
+    source's name is its repo tail and could never resolve this case."""
     source = GitHubPmSource(github_double(), name="bz", repo="paul-gross/blizzard", web_base="https://github.com")
     pointer = source.parse("https://github.com/paul-gross/blizzard/issues/26")
     assert pointer is not None
@@ -123,7 +123,7 @@ def test_parse_rejects_an_unshaped_token() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# The factory (D-108) — one credentialed client per configured source.
+# The factory — one credentialed client per configured source.
 # --------------------------------------------------------------------------- #
 
 
@@ -161,7 +161,7 @@ def test_factory_derives_web_base_by_stripping_the_api_v3_path_suffix(monkeypatc
 
 def test_factory_gives_each_source_its_own_credentialed_client(monkeypatch: pytest.MonkeyPatch) -> None:
     """Two sources, two tokens: each built client carries only its own credential — the
-    PM seam never shares one client (or token) across sources (D-108)."""
+    PM seam never shares one client (or token) across sources."""
     monkeypatch.setenv("_TEST_TOKEN_ONE", "token-one")
     monkeypatch.setenv("_TEST_TOKEN_TWO", "token-two")
     sources = [
@@ -213,7 +213,7 @@ def test_registry_get_picks_the_named_binding_over_real_adapters() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# The registry's intake-side resolver (D-111) — tries every configured binding's
+# The registry's intake-side resolver — tries every configured binding's
 # own `parse` in turn, first claim wins.
 # --------------------------------------------------------------------------- #
 

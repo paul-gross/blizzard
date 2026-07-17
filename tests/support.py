@@ -4,7 +4,7 @@ Builds the store-backed ``host`` composition with the two external seams — the
 delivery and the PM read — replaced by in-process fakes (``bzh:pluggable-seams``): a
 :class:`FakeForge` that records lands and lets a test arm a conflict, and a
 :class:`FakePmSource` that returns canned issue text, wired into the hub through a
-:class:`~blizzard.hub.pm.registry.PmSourceRegistry` (D-108) the same way the real
+:class:`~blizzard.hub.pm.registry.PmSourceRegistry` the same way the real
 factory would. The clock is a :class:`~blizzard.foundation.clock.FixedClock` the test
 can advance, so ids order and timestamps are deterministic (``bzh:injected-clock``).
 """
@@ -45,9 +45,9 @@ from blizzard.hub.runtime import migration_runner
 class FakeForge:
     """An in-process :class:`IForgeDelivery` — records lands/opens, arms conflicts by repo.
 
-    For the open-pr mode (D-059): ``open_pr`` mints an incrementing PR number and records
+    For the open-pr mode: ``open_pr`` mints an incrementing PR number and records
     the request; a test drives a PR's fate with :meth:`mark_merged`/:meth:`mark_closed`,
-    and ``check_pr`` reports the disposition the way a poll would (D-065). A repo already
+    and ``check_pr`` reports the disposition the way a poll would. A repo already
     opened (same branch) reuses its handle, mirroring the real adapter's crash-safe reuse.
     """
 
@@ -92,17 +92,17 @@ def _conforms_fake_forge(x: FakeForge) -> IForgeDelivery:
 
 
 class FakePmSource:
-    """An in-process :class:`IPmSource` — canned title + body + comments per pointer ref (D-107).
+    """An in-process :class:`IPmSource` — canned title + body + comments per pointer ref.
 
     Keyed on ``pointer.ref`` (an opaque item token, mirroring the real GitHub adapter's
     issue number) rather than a URL — the pointer names its binding by ``source``
-    (D-107/D-108) so this fake, like the real adapter, never re-derives a repo from a
+     so this fake, like the real adapter, never re-derives a repo from a
     URL. A default ``title``/``body``/``comments`` answers every pointer; ``by_ref``
     overrides the item for specific refs (a grouped chunk reads distinct items), and
     ``fail_refs`` raises :class:`PmSourceError` for a ref to exercise the per-pointer
     forge-failure degradation. ``name`` is this fake's registered source name — the
     prefix its ``label`` renders under and the ``source`` a pointer it mints carries,
-    mirroring a real binding's configured ``name`` (D-108/D-110). ``repo`` is the
+    mirroring a real binding's configured ``name``. ``repo`` is the
     ``owner/repo`` this fake renders ``web_url``s under — cosmetic only now that
     resolution is name-keyed."""
 
@@ -127,7 +127,7 @@ class FakePmSource:
         self.fetched: list[str] = []
 
     def parse(self, token: str) -> PmPointer | None:
-        """``{name}:{ref}`` or ``{name}#{ref}`` (D-107/D-111); ``None`` otherwise — this
+        """``{name}:{ref}`` or ``{name}#{ref}``; ``None`` otherwise — this
         fake carries no URL grammar (the real binding's own concern, D-110) and, unlike
         the real GitHub adapter, does not require a numeric ``ref`` — tests key fakes on
         whatever ref shape is convenient."""
@@ -171,7 +171,7 @@ OMIT_TITLE = _OmitTitle()
 
 
 def github_double(*, conflict_branches: set[str] | None = None, issues: dict[str, dict] | None = None) -> TestClient:
-    """A tiny GitHub-shaped forge double for the real HTTP adapters (D-047/D-057).
+    """A tiny GitHub-shaped forge double for the real HTTP adapters.
 
     Rather than couple this repo to ``blizzard-mock`` as a dev dependency (a separate
     uv project), the adapter HTTP shaping is exercised against this minimal
@@ -291,10 +291,10 @@ def build_hub(
     """A migrated, fully-wired hub over ``tmp_path`` with fake external seams.
 
     ``pm`` is ``{name: FakePmSource}`` — the same name-keyed shape the real
-    :func:`~blizzard.hub.pm.internal.factory.build_pm_registry` produces (D-108);
+    :func:`~blizzard.hub.pm.internal.factory.build_pm_registry` produces;
     defaults to one entry so the common single-source case needs no test churn.
     ``None`` defaults to one source; an explicit ``pm={}`` is a legal, deliberately
-    **empty** registry (D-108) — ``or`` would silently coerce that back to the default,
+    **empty** registry — ``or`` would silently coerce that back to the default,
     which is what made the empty-registry path unreachable through this harness."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     config = HubConfig(root=tmp_path, db_url=db_url)
@@ -319,7 +319,7 @@ def build_hub(
 
 
 def write_pm_sources(hub_dir: Path, sources: Sequence[PmSourceConfig]) -> HubConfig:
-    """Declare ``[[pm_source]]`` entries on an already-``init``ed hub runtime dir (D-108/D-109).
+    """Declare ``[[pm_source]]`` entries on an already-``init``ed hub runtime dir.
 
     Every upper-tier fixture (``tests/e2e``, ``tests/crash``, ``tests/journey``,
     ``tests/service``) runs ``blizzard hub init`` from its own subprocess-driven support
@@ -394,7 +394,7 @@ def emitted_events(hub: HubHarness, *, since: int = 0) -> list[dict[str, str]]:
 
 
 def pointer_token(pointer: dict) -> str:
-    """A ``{source, ref}`` pointer dict's own ``{source}:{ref}`` ingest token (D-111) —
+    """A ``{source, ref}`` pointer dict's own ``{source}:{ref}`` ingest token —
     the request-side shape a test builds from the same dict it asserts the response
     (``{source, ref, label, web_url}``) against."""
     return f"{pointer['source']}:{pointer['ref']}"
@@ -402,8 +402,8 @@ def pointer_token(pointer: dict) -> str:
 
 def ingest(hub: HubHarness, pointers: list[dict], *, promote: bool = True) -> str:
     """Ingest ``pointers`` (as ``{source, ref}`` dicts) into one chunk and (by default)
-    promote it to ready (D-103) — each dict is converted to its ``{source}:{ref}``
-    ingest token before posting (D-111).
+    promote it to ready — each dict is converted to its ``{source}:{ref}``
+    ingest token before posting.
 
     Ingest now mints a chunk in the not-ready resting state, so most tests — which expect
     the chunk claimable/in the ready queue — promote it in the same breath. Pass
@@ -451,7 +451,7 @@ def assert_all_timestamps_utc(payload: object) -> None:
 
 
 def report_lease(hub: HubHarness, chunk_id: str, *, epoch: int, seq: int, runner_id: str = "r1") -> dict:
-    """Report a runner-minted ``lease.minted`` fact through POST /events (D-044/D-069).
+    """Report a runner-minted ``lease.minted`` fact through POST /events.
 
     Mirrors the real runner flow: after claiming a route, the runner mints its lease
     locally and reports its epoch up through the store-and-forward buffer, which is the

@@ -16,7 +16,7 @@ pytestmark = pytest.mark.component
 
 _POINTER = {"source": "default", "ref": "9"}
 
-# A build -> deliver graph named `default-delivery`, reused by name on ingest (D-081),
+# A build -> deliver graph named `default-delivery`, reused by name on ingest,
 # so these apply-mechanics tests reach a terminal chunk in one build pass — decoupled
 # from the packaged default graph's P7 build -> review -> deliver shape.
 _BUILD_DELIVER_YAML = """
@@ -102,7 +102,7 @@ def test_stale_epoch_is_rejected_and_nothing_lands(tmp_path: Path) -> None:
     resp = hub.client.post(f"/api/chunks/{chunk_id}/completions", json=_completion(node_id, epoch=99))
     assert resp.status_code == 200
     assert resp.json()["outcome"] == "failure"
-    # The chunk never advanced and no artifact entered the store (D-007).
+    # The chunk never advanced and no artifact entered the store.
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "running"
     assert hub.forge.landed == []
 
@@ -154,7 +154,7 @@ def test_non_code_chunk_completes_with_only_asset_artifacts(tmp_path: Path) -> N
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
     # Git truth: a non-code chunk lands nothing — the forge was never asked to merge.
     assert hub.forge.landed == []
-    # Hub-durable artifacts (D-026): exactly the asset, and no git-commit pointer.
+    # Hub-durable artifacts: exactly the asset, and no git-commit pointer.
     artifacts = hub.client.get(f"/api/chunks/{chunk_id}").json()["artifacts"]
     assert [a["kind"] for a in artifacts] == ["asset"], f"expected only an asset artifact, got: {artifacts}"
     assert artifacts[0]["name"] == "spike-notes"

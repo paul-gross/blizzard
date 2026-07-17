@@ -5,7 +5,7 @@ import { hubChunkPmItemsKey } from '../query-keys';
 
 /**
  * Hub `GET /api/chunks/{chunk_id}/pm-items` read — the chunk's related PM items
- * (D-047/D-084): each pointer's issue **body and comment thread**, fetched fresh from
+ * : each pointer's issue **body and comment thread**, fetched fresh from
  * the forge and never stored. One entry per pointer, so a grouped chunk surfaces each;
  * a per-pointer forge failure carries an `error` the board renders as a notice rather
  * than failing the whole read. This is the surface the detail dock's Issue tab renders.

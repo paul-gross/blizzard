@@ -65,7 +65,7 @@ def test_latest_artifacts_by_name_keeps_the_highest_epoch() -> None:
 def test_envelope_carries_authored_judgement_prose_and_choice_set() -> None:
     # The author writes only the prose; the runner appends the (harness-inert)
     # elicitation tail from node.choices when it delivers the judgement into the
-    # session (D-042). The envelope must therefore carry the prose verbatim and the
+    # session. The envelope must therefore carry the prose verbatim and the
     # choice set — never a baked-in tail (which would duplicate it and break the mock).
     env = build_node_envelope(chunk=_chunk(), node=_node(), artifacts=[_row("f", 1)], epoch=1)
     assert env.epoch == 1

@@ -219,9 +219,9 @@ export class AgentRow {
   /**
    * Space-joined pointer labels (`gh:winter#412`) from whatever pm-items arrived
    * — empty when the read hasn't resolved, failed, returned no items, or every
-   * item lacks a board-legible label (D-075). A per-pointer forge failure still
+   * item lacks a board-legible label. A per-pointer forge failure still
    * carries its `label` (parsed from the pointer URL, not fetched), so one bad
-   * pointer degrading to `title: null` doesn't blind this chip (D-084).
+   * pointer degrading to `title: null` doesn't blind this chip.
    */
   protected readonly chips = computed<string>(() => {
     const items = this.titleQuery.data()?.items ?? [];

@@ -1,9 +1,9 @@
-"""The runner adheres to the hub's pause brake (D-043/D-012) — loop component tier.
+"""The runner adheres to the hub's pause brake — loop component tier.
 
 The declarative pause brake lives at the hub; the runner reads it on PULL (a
 ``GET /runners/{id}`` behind the hub client), mirrors it to its store, and FILL adheres:
 paused = no new claims, in-flight chunks run on. When the hub is unreachable the runner
-keeps its last-mirrored directive (D-012). Driven directly against a real (tmp sqlite)
+keeps its last-mirrored directive. Driven directly against a real (tmp sqlite)
 runner store with :class:`FakeHub`/:class:`FakeHarness`/:class:`FakeProvider`/
 :class:`FakeProbe` standing in only at the seams — a domain slice over real internal
 collaborators, the harness matrix's component definition, not its one-function unit one.
@@ -164,7 +164,7 @@ def test_unreachable_hub_keeps_last_mirrored_brake(tmp_path):  # type: ignore[no
     pull(ctx)
     assert store.hub_paused("r1") is True
     fill(ctx)
-    assert hub.claims == []  # still adhering to the last directive (D-012)
+    assert hub.claims == []  # still adhering to the last directive
 
 
 # --------------------------------------------------------------------------- #
@@ -193,7 +193,7 @@ def test_fill_claims_again_after_a_local_start(tmp_path):  # type: ignore[no-unt
     fill(ctx)
     assert hub.claims == []
 
-    # Facts append and the flag derives from the newest (D-004/D-039) — no row is mutated.
+    # Facts append and the flag derives from the newest — no row is mutated.
     _pause_locally(store, ctx, paused=False)
     fill(ctx)
     assert len(hub.claims) == 1
@@ -354,7 +354,7 @@ def test_restart_resume_suppressed_then_advance_does_not_judge_or_spawn(tmp_path
     leak the lease to ADVANCE. Left active with a dead pid and an open resume intent, the
     lease is exactly the shape ADVANCE would otherwise read as an exited worker to judge —
     and judging it both spawns a harness process (``ctx.harness.judge`` resumes the
-    session) and reads a worker killed mid-work as a done declaration (D-055). Drives a
+    session) and reads a worker killed mid-work as a done declaration. Drives a
     full tick's worth of steps in RESUME-then-ADVANCE order, the shape a restart under a
     standing local pause actually produces.
     """
@@ -493,7 +493,7 @@ def test_apply_response_next_spawn_suppressed_then_adopted_at_unpause(tmp_path):
     assert harness.spawns == []
     assert store.held_environment_ids() == ["e1"]
 
-    # Unpause; the next FILL's reconcile pass (D-083) sees the same shape a crashed FILL
+    # Unpause; the next FILL's reconcile pass sees the same shape a crashed FILL
     # would leave and adopts it — no deferred-spawn state was needed.
     _pause_locally(store, ctx, paused=False)
     hub.chunks["ch_1"] = ChunkDetail(
@@ -554,7 +554,7 @@ def test_hub_paused_only_requeue_still_spawns(tmp_path):  # type: ignore[no-unty
     assert store.hub_paused("r1") is True
     assert store.local_paused("r1") is False
 
-    advance(ctx)  # no parseable verdict -> failure -> requeue in place (D-078)
+    advance(ctx)  # no parseable verdict -> failure -> requeue in place
 
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None and lease.epoch == 2  # a fresh attempt was spawned
@@ -651,7 +651,7 @@ def test_reap_orphan_requeue_respawn_suppressed_then_adopted_at_unpause(tmp_path
     assert [f for f in store.pending_outbound() if f.kind == LEASE_MINTED] == []
     assert store.held_environment_ids() == ["e1"]
 
-    # Unpause; FILL's reconcile pass (D-083) sees the same shape a crashed FILL would
+    # Unpause; FILL's reconcile pass sees the same shape a crashed FILL would
     # leave and adopts it — no deferred-spawn state was needed.
     _pause_locally(store, ctx, paused=False)
     hub.chunks["ch_1"] = _running_chunk("ch_1")
@@ -721,7 +721,7 @@ def test_reap_at_exhausted_retries_does_not_escalate_while_locally_paused(tmp_pa
     hub = FakeHub()
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)  # retries_max=2
     provider = FakeProvider({"e1": "/ws/e1"})
-    # Two verdict-less exits requeue in place (D-078): attempt 1 -> 2, attempt 2 -> 3. The
+    # Two verdict-less exits requeue in place: attempt 1 -> 2, attempt 2 -> 3. The
     # active lease left behind — attempt 3 — has exhausted the retry budget: REAP reaping
     # it next would ordinarily escalate.
     for i in range(1, 3):
@@ -854,7 +854,7 @@ def test_advance_does_not_judge_a_lease_resume_left_open_after_a_hub_blip(tmp_pa
     later in the same tick — leaves a lease that is active, session-bearing and dead-pid:
     exactly what ADVANCE reads as exited work. Judging it would elicit a verdict from a
     session RESUME never re-attached and read a worker killed mid-work as a done
-    declaration (D-055). Only the resume-intent skip stops it; the judge's local-brake gate
+    declaration. Only the resume-intent skip stops it; the judge's local-brake gate
     cannot, because nothing here is paused.
     """
     store = _store(tmp_path)

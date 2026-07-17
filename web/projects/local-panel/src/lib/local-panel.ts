@@ -6,7 +6,7 @@ import { TranscriptPanel } from './transcript-panel';
 
 /**
  * The runner's machine-local panel — the runner app's own view, added on top of
- * the shared fleet views (D-097). Its critical path is `GET /api/leases` (issue
+ * the shared fleet views. Its critical path is `GET /api/leases` (issue
  * #28): every active lease, each rendered as a {@link AgentRow}. Hub-free by
  * design (`design/runner/web-app.md`: "the machine panel is precisely the part
  * of the app that must not depend on the hub") — the query polls the runner's

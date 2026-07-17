@@ -159,7 +159,7 @@ def test_missing_workspace_prompt_file_raises(tmp_path: Path) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# `[[pm_source]]` (D-107/D-108) — the hub's configured PM work sources.
+# `[[pm_source]]` — the hub's configured PM work sources.
 # --------------------------------------------------------------------------- #
 
 
@@ -228,7 +228,7 @@ def test_pm_source_duplicate_name_raises(tmp_path: Path) -> None:
 @pytest.mark.unit
 def test_pm_source_duplicate_provider_and_repo_raises(tmp_path: Path) -> None:
     # Two names for one (provider, repo) would let the same item be ingested twice
-    # under two identities — this is what holds D-093 up (D-107).
+    # under two identities — this is what holds D-093 up.
     root = tmp_path / "hub"
     root.mkdir()
     (root / "blizzard-hub.toml").write_text(

@@ -114,7 +114,7 @@ describe('LocalPanel', () => {
   });
 
   // ★ The degraded-path spec (issue #28 phase 7) — protects "the machine panel
-  // must not depend on the hub" (design/runner/web-app.md) from eroding later.
+  // must not depend on the hub" from eroding later.
   // GET /api/leases (hub-free, critical path) succeeds with three leases; every
   // GET /api/chunks/*/pm-items (the severable title read) 502s, as it would with
   // the hub down. The panel must render as if titles were never attempted.

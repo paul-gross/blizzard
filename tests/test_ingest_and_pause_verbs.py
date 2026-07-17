@@ -65,7 +65,7 @@ class _FakeResponse:
 
 @pytest.mark.unit
 def test_ingest_posts_the_tokens_verbatim_and_reports_the_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The verb carries no token grammar (D-111): it POSTs every token through
+    """The verb carries no token grammar: it POSTs every token through
     unchanged and echoes the minted id."""
     calls: list[tuple[str, object]] = []
 
@@ -90,7 +90,7 @@ def test_ingest_posts_the_tokens_verbatim_and_reports_the_chunk(monkeypatch: pyt
 @pytest.mark.unit
 def test_ingest_passes_a_source_hash_ref_token_through(monkeypatch: pytest.MonkeyPatch) -> None:
     """``source#ref`` travels through exactly like ``source:ref`` — the hub, not the
-    CLI, tells them apart (D-110/D-111)."""
+    CLI, tells them apart."""
     calls: list[object] = []
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
@@ -106,7 +106,7 @@ def test_ingest_passes_a_source_hash_ref_token_through(monkeypatch: pytest.Monke
 
 @pytest.mark.unit
 def test_ingest_passes_a_pasted_issue_url_through_for_the_hub_to_resolve(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A pasted PM item URL travels through byte-for-byte (D-111) — the ergonomic path,
+    """A pasted PM item URL travels through byte-for-byte — the ergonomic path,
     copied straight from the browser — with no local resolution or repo-tail guess.
     Only the hub, which holds the source configuration, can say which source it names
     (the whole point of this phase: the CLI can no longer assume a source is named
@@ -161,7 +161,7 @@ def test_ingest_maps_a_pointer_conflict(monkeypatch: pytest.MonkeyPatch) -> None
 
 @pytest.mark.unit
 def test_ingest_maps_a_422_naming_the_unclaimed_token(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The hub resolves tokens now, not the CLI (D-111): a token no configured source
+    """The hub resolves tokens now, not the CLI: a token no configured source
     claims is a 422 whose detail — naming the token and the configured sources — is
     the *only* feedback a user gets, so it must surface verbatim rather than a generic
     error."""
@@ -185,7 +185,7 @@ def test_ingest_passes_a_non_issue_url_through_for_the_hub_to_reject(monkeypatch
     """Phase 3's finale fixed a *local* bug here: a pasted non-issue URL used to fall
     through to the ``source:ref`` split and partition on the URL's own scheme colon
     (``https://…/pull/5`` -> ``{source: "https", ref: "//…/pull/5"}``). With the CLI
-    carrying no grammar at all (D-111), that class of input isn't rejected locally
+    carrying no grammar at all, that class of input isn't rejected locally
     any more — it travels to the hub exactly as pasted, and the hub's 422 (naming the
     token and the configured sources) is what the user now sees."""
     calls: list[object] = []
@@ -214,7 +214,7 @@ def test_ingest_passes_a_non_issue_url_through_for_the_hub_to_reject(monkeypatch
 
 @pytest.mark.unit
 def test_promote_posts_to_the_chunk_and_reports_ready(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The verb POSTs to the chunk's promote sub-resource and echoes the ready line (D-103)."""
+    """The verb POSTs to the chunk's promote sub-resource and echoes the ready line."""
     calls: list[str] = []
 
     def fake_post(url: str, *, timeout: float) -> _FakeResponse:
@@ -250,7 +250,7 @@ def test_promote_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.mark.unit
 def test_detach_posts_to_the_chunk_and_reports_released(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The verb POSTs to the chunk's detach sub-resource and echoes the release line (D-088)."""
+    """The verb POSTs to the chunk's detach sub-resource and echoes the release line."""
     calls: list[str] = []
 
     def fake_post(url: str, *, timeout: float) -> _FakeResponse:
@@ -440,7 +440,7 @@ def test_start_reports_the_resume_upward(tmp_path: Path, monkeypatch: pytest.Mon
 
 @pytest.mark.unit
 def test_pause_reports_a_daemon_that_is_not_running(tmp_path: Path) -> None:
-    """No socket means no daemon — a diagnostic, never a fallback to reading the store (D-068)."""
+    """No socket means no daemon — a diagnostic, never a fallback to reading the store."""
     root = _init_runner(tmp_path)  # initialized, but nothing is serving
     result = CliRunner().invoke(runner_group, ["pause", "--dir", str(root)])
 

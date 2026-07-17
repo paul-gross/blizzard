@@ -1,9 +1,9 @@
-"""Decision routes — gate surfacing and resolution (D-045/D-052).
+"""Decision routes — gate surfacing and resolution.
 
 The fleet half of the human gate: ``GET /decisions`` lists the open decisions the
 board and ``blizzard hub decisions`` render, and ``POST /decisions/{id}/resolution``
 records a person's choice first-write-wins — the same route the board's buttons and
-``blizzard hub decide`` hit (D-042/D-045). The controller stays read-only over the
+``blizzard hub decide`` hit. The controller stays read-only over the
 store (``bzh:controller-read-only``): resolution delegates to
 :class:`~blizzard.hub.domain.decisions.DecisionService`.
 """
@@ -50,7 +50,7 @@ def to_decision_view(row: DecisionRow) -> DecisionView:
 
 @router.get("/decisions", response_model=OpenDecisionsResponse)
 def list_decisions(services: Annotated[HubServices, Depends(get_services)]) -> OpenDecisionsResponse:
-    """The fleet's open (unresolved) decisions — gate surfacing (D-052)."""
+    """The fleet's open (unresolved) decisions — gate surfacing."""
     return OpenDecisionsResponse(decisions=[to_decision_view(d) for d in services.chunks.list_open_decisions()])
 
 
@@ -60,7 +60,7 @@ def resolve_decision(
     request: DecisionResolutionRequest,
     services: Annotated[HubServices, Depends(get_services)],
 ) -> object:
-    """Resolve an open decision, first-write-wins CAS (D-045)."""
+    """Resolve an open decision, first-write-wins CAS."""
     try:
         result = services.decisions.resolve(decision_id, choice=request.choice, resolved_by=request.resolved_by)
     except ValueError as exc:

@@ -30,10 +30,10 @@ A row whose backfilled ``source`` matches no ``[[pm_source]]`` the operator late
 configures is not this migration's concern and must not fail it — refusing to boot
 because a chunk that went ``done`` months ago names a retired source would be wrong. The
 hub's pass-through routes already degrade a pointer with no matching configured source
-to a null label (D-108); the composition root is where an operator would be warned of a
+to a null label; the composition root is where an operator would be warned of a
 still-unresolved name, not a hard migration failure or a startup refusal.
 
-**``downgrade()`` is canonicalizing, not byte-exact (D-107):** reversing
+**``downgrade()`` is canonicalizing, not byte-exact:** reversing
 ``source="blizzard", ref="26"`` needs a full issue URL, but the *owner* segment
 (``paul-gross`` in ``https://github.com/paul-gross/blizzard/issues/26``) was never
 retained forward — only the repo tail was. That owner is genuinely unrecoverable from
@@ -42,7 +42,7 @@ backfilled GitHub-issue row and reconstructed as ``provider="github"``,
 ``url=f"https://github.com/{_UNKNOWN_OWNER}/{source}/issues/{ref}"`` — *structurally*
 canonical under a documented, constant placeholder owner, **not resolvable**: nothing
 is served at that address (the real owner is gone, so no reconstruction could be).
-That is the accepted, recorded cost (D-107), and its operational consequence is
+That is the accepted, recorded cost, and its operational consequence is
 concrete: **a downgraded hub running pre-0013 code parses that URL for owner/repo and
 404s on every PM read** of a backfilled pointer until the chunk is re-ingested. A
 rollback restores the *schema*, not the hub's PM reach.
@@ -90,7 +90,7 @@ _ISSUE_RE = re.compile(r"(?:^|/)(?:repos/)?(?P<owner>[^/]+)/(?P<repo>[^/]+)/issu
 
 # The documented, constant placeholder owner downgrade() reconstructs a GitHub issue
 # URL under — the repo tail alone (this revision's forward output) cannot recover the
-# real owner, and this is the deliberate, recorded cost of that (D-107).
+# real owner, and this is the deliberate, recorded cost of that.
 _UNKNOWN_OWNER = "unknown"
 
 _OLD_POINTERS = sa.Table(

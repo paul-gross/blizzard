@@ -48,7 +48,7 @@ single entrypoint an agent, a human, or the release workflow invokes. It:
    trees; and
 4. installs the wheel into a clean, **node-free** virtualenv and runs
    `blizzard --version`, proving the released artifact needs no Node at install
-   or runtime (D-061).
+   or runtime.
 
 Set `BLIZZARD_VERSION=<v>` to override the wheel version (the dev-build and
 release jobs do this); it is restored after the build.

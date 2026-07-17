@@ -6,7 +6,7 @@ build worker hits an undecidable choice, runs the **real** ``blizzard runner ask
 through the runner's spawn env), and **exits**. The chunk parks — its forwarded
 question lands at the hub, the reap clock stops, and it derives **waiting_on_human**.
 The park is then proven **inert**: several more ticks advance with the dormant lease
-never reaped, never re-elicited, and no retry consumed (D-009) — the chunk stays
+never reaped, never re-elicited, and no retry consumed — the chunk stays
 waiting_on_human on the same single open question.
 A human answers at the hub with ``blizzard hub answer``; the runner picks the answer up
 on its next tick and **resumes the dormant session** around it — same session — and the
@@ -232,7 +232,7 @@ def test_ask_parks_then_answer_resumes_session_to_done(tmp_path: Path) -> None:
         )
         assert ingested.status_code == 201, ingested.text
         chunk_id = ingested.json()["chunk_id"]
-        assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # ready for the runner (D-103)
+        assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202  # ready for the runner
 
         # A free local-API port the worker's `blizzard runner ask` will POST to.
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)

@@ -1,11 +1,10 @@
 """Chunk routes — ingest, list, detail, envelope, completion, PM pass-through.
 
-The chunk-facing surface of the hub API (D-024/D-047). Controllers stay read-only
+The chunk-facing surface of the hub API. Controllers stay read-only
 over the store (``bzh:controller-read-only``): ingest and completion delegate to
 domain services that hold the write repository; the list/detail/envelope reads
 derive status and current node from facts (``bzh:facts-not-status``), never a stored
-column. The PM read is a vendor-native pass-through whose contents are never stored
-(D-047).
+column. The PM read is a vendor-native pass-through whose contents are never stored.
 """
 
 from __future__ import annotations
@@ -64,8 +63,8 @@ router = APIRouter(prefix="/api", tags=["chunks"])
 
 
 def _pointer_views(chunk: Chunk, pm: IPmSourceRegistry) -> list[PmPointerView]:
-    """Each pointer with its board-legible label and browser URL (D-107/D-110) —
-    both null when no configured source names ``pointer.source`` (D-108).
+    """Each pointer with its board-legible label and browser URL —
+    both null when no configured source names ``pointer.source``.
 
     Each pointer is resolved to its own binding by name (``pm.get(p.source)``) — a
     chunk's pointers need not all share one source."""
@@ -84,7 +83,7 @@ def _pointer_views(chunk: Chunk, pm: IPmSourceRegistry) -> list[PmPointerView]:
 
 
 def _publish_open_decision(services: HubServices, chunk_id: str) -> None:
-    """Emit ``decision-opened`` if the chunk now carries a live, unresolved gate (D-045)."""
+    """Emit ``decision-opened`` if the chunk now carries a live, unresolved gate."""
     decision = services.chunks.decision_for_chunk(chunk_id)
     if decision is not None and not decision.resolved and not decision.transitioned:
         services.events.publish_decision_opened(chunk_id, decision.decision_id)
@@ -99,10 +98,10 @@ def _node_name(graph: Graph | None, node_id: str | None) -> str | None:
 
 
 def _history_views(facts: ChunkFacts, graph: Graph | None) -> list[TransitionView]:
-    """The chunk's transitions oldest-first — the board's node-history timeline (D-036).
+    """The chunk's transitions oldest-first — the board's node-history timeline.
 
     Each edge's node ids are resolved to their human graph names against the chunk's
-    pinned graph so the timeline reads ``build -> review`` (D-075)."""
+    pinned graph so the timeline reads ``build -> review``."""
     return [
         TransitionView(
             from_node_id=t.from_node_id,
@@ -118,9 +117,9 @@ def _history_views(facts: ChunkFacts, graph: Graph | None) -> list[TransitionVie
 
 
 def _branch_url_source(chunk: Chunk, pm: IPmSourceRegistry) -> IPmSource | None:
-    """The binding a chunk's artifact branch links resolve through (D-110).
+    """The binding a chunk's artifact branch links resolve through.
 
-    The one-forge-per-chunk assumption (D-075) is no longer *inferred* by sniffing
+    The one-forge-per-chunk assumption is no longer *inferred* by sniffing
     whichever pointer URL happened to parse first — it is *declared*: the chunk's
     first pointer whose ``source`` names a configured binding lends its
     :meth:`~blizzard.hub.pm.source.IPmSource.branch_url`. ``None`` when no pointer's
@@ -134,7 +133,7 @@ def _branch_url_source(chunk: Chunk, pm: IPmSourceRegistry) -> IPmSource | None:
 
 def _artifact_views(rows: list[ArtifactRow], web_base: IPmSource | None) -> list[ArtifactView]:
     """The chunk's inline artifact store — every entry, with an asset's content and a
-    git-commit's pinned reference surfaced (D-036); ordered by ``{node}.{name}.{epoch}``
+    git-commit's pinned reference surfaced; ordered by ``{node}.{name}.{epoch}``
     so a re-run's later-epoch entry follows its predecessors (append-only history)."""
     views: list[ArtifactView] = []
     for row in sorted(rows, key=lambda r: (r.node_name, r.name, r.epoch)):
@@ -169,7 +168,7 @@ def _current_node(
     """The chunk's current node as ``(id, name)`` — the newest transition's target, or
     the pinned graph's entry node before the first transition (a nicer board value than
     ``None``). The name is the node's human graph name, resolved here so the board is
-    legible without reassembly (D-075); the graph per graph_id is memoised in ``cache``
+    legible without reassembly; the graph per graph_id is memoised in ``cache``
     so a fleet list resolves each once."""
     if chunk.graph_id not in cache:
         cache[chunk.graph_id] = services.graphs.get(chunk.graph_id)
@@ -183,8 +182,8 @@ def _current_node(
 
 @router.post("/chunks", response_model=ChunkIngestResponse, status_code=status.HTTP_201_CREATED)
 def ingest_chunk(request: ChunkIngestRequest, services: Annotated[HubServices, Depends(get_services)]) -> object:
-    """Ingest by source-native token (D-047/D-111); 422 on a token no configured source
-    claims (D-108/D-109); 409 on a pointer held by a live chunk (D-093)."""
+    """Ingest by source-native token; 422 on a token no configured source
+    claims; 409 on a pointer held by a live chunk."""
     if not request.tokens:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="at least one token required")
     # Resolution before minting, and before the live-holder check: an unresolvable
@@ -209,7 +208,7 @@ def ingest_chunk(request: ChunkIngestRequest, services: Annotated[HubServices, D
             existing_chunk_id=exc.existing_chunk_id, source=exc.pointer.source, ref=exc.pointer.ref
         )
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=conflict.model_dump())
-    # A freshly ingested chunk rests ``not_ready`` (D-103) — visible on the board but not
+    # A freshly ingested chunk rests ``not_ready`` — visible on the board but not
     # in the ready queue, so no ``queue-changed`` fires until it is promoted.
     services.events.publish_chunk_changed(chunk_id, ChunkStatus.NOT_READY.value)
     return ChunkIngestResponse(chunk_id=chunk_id)
@@ -217,7 +216,7 @@ def ingest_chunk(request: ChunkIngestRequest, services: Annotated[HubServices, D
 
 @router.get("/chunks", response_model=list[ChunkSummary])
 def list_chunks(services: Annotated[HubServices, Depends(get_services)]) -> list[ChunkSummary]:
-    """The fleet chunk list — derived status per chunk (D-004)."""
+    """The fleet chunk list — derived status per chunk."""
     summaries: list[ChunkSummary] = []
     graph_cache: dict[str, Graph | None] = {}
     for chunk in services.chunks.list_all():
@@ -238,7 +237,7 @@ def list_chunks(services: Annotated[HubServices, Depends(get_services)]) -> list
 
 @router.get("/chunks/{chunk_id}", response_model=ChunkDetail)
 def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> ChunkDetail:
-    """One chunk aggregate in full — derived status, current node, route (D-036)."""
+    """One chunk aggregate in full — derived status, current node, route."""
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
@@ -279,7 +278,7 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
 
 @router.get("/chunks/{chunk_id}/envelope", response_model=NodeEnvelope)
 def get_envelope(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> NodeEnvelope:
-    """The chunk's current node envelope, idempotent — the lost-apply re-read (D-090)."""
+    """The chunk's current node envelope, idempotent — the lost-apply re-read."""
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
@@ -305,7 +304,7 @@ def submit_completion(
     submission: CompletionSubmission,
     services: Annotated[HubServices, Depends(get_services)],
 ) -> ApplyResponse:
-    """Apply a node-step's completion atomically; reply carries the next envelope (D-072)."""
+    """Apply a node-step's completion atomically; reply carries the next envelope."""
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
@@ -315,7 +314,7 @@ def submit_completion(
     response = services.apply.apply(chunk, graph, submission)
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
-    # A completion landing on a human-judged node opens a graph gate (D-045): surface it.
+    # A completion landing on a human-judged node opens a graph gate: surface it.
     _publish_open_decision(services, chunk_id)
     return response
 
@@ -325,7 +324,7 @@ def check_delivery(
     chunk_id: str,
     services: Annotated[HubServices, Depends(get_services)],
 ) -> CheckDeliveryResponse:
-    """Poll a parked open-pr chunk's PRs; finalize the delivery once all are terminal (D-065).
+    """Poll a parked open-pr chunk's PRs; finalize the delivery once all are terminal.
 
     The on-demand external-merge detection (the impatient path): for a chunk parked in
     ``open-pr`` mode, check every open PR through the forge and, when all have merged or
@@ -357,7 +356,7 @@ def submit_decision(
     submission: DecisionSubmission,
     services: Annotated[HubServices, Depends(get_services)],
 ) -> ApplyResponse:
-    """Runner-config gate: park the chunk on a decision in place of a transition (D-032/D-045)."""
+    """Runner-config gate: park the chunk on a decision in place of a transition."""
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
@@ -367,14 +366,14 @@ def submit_decision(
     response = services.decisions.submit(chunk, graph, submission)
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
-    # The runner-config gate parked the chunk on an open decision (D-032): surface it.
+    # The runner-config gate parked the chunk on an open decision: surface it.
     _publish_open_decision(services, chunk_id)
     return response
 
 
 @router.post("/chunks/{chunk_id}/requeues", status_code=status.HTTP_202_ACCEPTED)
 def requeue_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> dict[str, str]:
-    """Close an escalation by supersession: requeue at the current node (D-067)."""
+    """Close an escalation by supersession: requeue at the current node."""
     if services.chunks.get(chunk_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     try:
@@ -383,13 +382,13 @@ def requeue_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_se
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
-    services.events.publish_queue_changed()  # requeue can re-admit the chunk to the queue (D-067)
+    services.events.publish_queue_changed()  # requeue can re-admit the chunk to the queue
     return {"chunk_id": chunk_id}
 
 
 @router.post("/chunks/{chunk_id}/detach", status_code=status.HTTP_202_ACCEPTED)
 def detach_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> dict[str, str]:
-    """Forcibly release a chunk from its runner without touching any escalation (D-088)."""
+    """Forcibly release a chunk from its runner without touching any escalation."""
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
@@ -399,13 +398,13 @@ def detach_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_ser
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
-    services.events.publish_queue_changed()  # a detached chunk re-enters the ready queue (D-088)
+    services.events.publish_queue_changed()  # a detached chunk re-enters the ready queue
     return {"chunk_id": chunk_id}
 
 
 @router.post("/chunks/{chunk_id}/promote", status_code=status.HTTP_202_ACCEPTED)
 def promote_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> dict[str, str]:
-    """Promote a not-ready chunk to ready so a runner may claim it (D-103).
+    """Promote a not-ready chunk to ready so a runner may claim it.
 
     Idempotent: promoting an already-ready or already-running chunk is a harmless no-op.
     404 only when the chunk is unknown."""
@@ -414,7 +413,7 @@ def promote_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_se
     services.promote.promote(chunk_id)
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
-    services.events.publish_queue_changed()  # a promoted chunk enters the ready queue (D-048/D-103)
+    services.events.publish_queue_changed()  # a promoted chunk enters the ready queue
     return {"chunk_id": chunk_id}
 
 
@@ -424,7 +423,7 @@ def report_lease(
     report: LeaseMintReport,
     services: Annotated[HubServices, Depends(get_services)],
 ) -> dict[str, str]:
-    """Land a runner's ``lease.minted`` — keeps the epoch fence in lockstep (D-044)."""
+    """Land a runner's ``lease.minted`` — keeps the epoch fence in lockstep."""
     if services.chunks.get(chunk_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     services.runner_facts.record_lease_minted(chunk_id, epoch=report.epoch, runner_id=report.runner_id)
@@ -437,7 +436,7 @@ def report_escalation(
     report: EscalationReport,
     services: Annotated[HubServices, Depends(get_services)],
 ) -> dict[str, str]:
-    """Land a runner's ``escalation.recorded`` — the chunk derives ``needs_human`` (D-009)."""
+    """Land a runner's ``escalation.recorded`` — the chunk derives ``needs_human``."""
     if services.chunks.get(chunk_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     services.runner_facts.record_escalation(chunk_id, epoch=report.epoch, takeover_command=report.takeover_command)
@@ -448,11 +447,11 @@ def report_escalation(
 
 @router.get("/chunks/{chunk_id}/pm-items", response_model=PmItemsView)
 def get_pm_items(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> PmItemsView:
-    """Pass-through PM items read (D-047/D-084/D-107) — one entry per pointer, contents never stored.
+    """Pass-through PM items read — one entry per pointer, contents never stored.
 
     Each pointer is resolved to its own binding by name (``pm.get(pointer.source)``), then
     fetched fresh from the forge; a per-pointer resolution or forge failure degrades to an
-    ``error`` on that entry rather than failing the whole read, so a grouped chunk (D-047)
+    ``error`` on that entry rather than failing the whole read, so a grouped chunk
     still surfaces the pointers it reached beside a notice for the ones it did not. A chunk
     with no pointers is an empty list — the board's empty state — not a 404. No configured
     PM source at all is a 503 up front — the request-wide degradation preserved unchanged

@@ -58,7 +58,7 @@ def test_open_decision_parks_waiting_on_human() -> None:
 
 def test_resolved_decision_no_longer_waits() -> None:
     # Resolved but the resolving transition has not landed yet: the route is still live,
-    # so the chunk derives running — "the resolution flips it back" (design/domain/work.md).
+    # so the chunk derives running — "the resolution flips it back".
     facts = ChunkFacts(
         minted=True,
         leases=[LeaseFact(epoch=1, minted_at=_at(0))],
@@ -111,7 +111,7 @@ def test_requeue_supersedes_an_open_escalation() -> None:
     # escalation and no live route, the chunk re-derives ready for a fresh FILL.
     requeued = ChunkFacts(
         minted=True,
-        promoted=True,  # it was claimed, so it was promoted — requeue re-derives ready (D-103)
+        promoted=True,  # it was claimed, so it was promoted — requeue re-derives ready
         leases=[LeaseFact(epoch=1, minted_at=_at(0))],
         routes_created=[RouteCreatedFact(created_at=_at(0))],
         routes_released=[RouteReleasedFact(released_at=_at(3))],

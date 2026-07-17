@@ -1,4 +1,4 @@
-"""DetachService (unit tier) — the operator-release write, facts only (D-088).
+"""DetachService (unit tier) — the operator-release write, facts only.
 
 A fake stands in for the store — only ``route_of`` and ``record_route_released`` are
 meaningfully implemented; every other seam is unreachable from

@@ -2,7 +2,7 @@
 
 A bare pid check is unsafe: the OS reuses pids, so a different process may now hold
 an old worker's pid. REAP therefore keys on **pid AND the recorded process start
-time together** (design/runner/loop.md) — comparing the recorded start time against
+time together** — comparing the recorded start time against
 the live process's start time survives pid reuse. Heartbeat-based stall detection is
 P7; in P6 a worker's liveness is exactly whether its recorded (pid, start_time) is
 still the process at that pid.

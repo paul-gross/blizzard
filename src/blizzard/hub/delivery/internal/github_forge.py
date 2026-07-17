@@ -7,10 +7,10 @@ workspace's bare origins, so a merge is a *real* merge into bare ``main`` —
 placement, ``bzh:dependency-inversion``); ``httpx`` lives only here.
 
 ``land`` (the P6 walking-skeleton operation) opens a PR for the pointer's branch and
-merges it, guarding the merge with the pointer's authoritative commit hash (D-060):
-a merge that the forge rejects as unmergeable maps to a ``conflict`` disposition
-(D-086); a transport/5xx failure raises. ``open_pr`` / ``check_pr`` shape the P7
-PR-mode path (D-059/D-065). The client is injected at the composition root with the
+merges it, guarding the merge with the pointer's authoritative commit hash:
+a merge that the forge rejects as unmergeable maps to a ``conflict`` disposition;
+a transport/5xx failure raises. ``open_pr`` / ``check_pr`` shape the P7
+PR-mode path. The client is injected at the composition root with the
 forge base URL and auth; tests inject a client bound to a fake GitHub-shaped app.
 """
 
@@ -33,7 +33,7 @@ from blizzard.hub.delivery.forge import (
 
 _HUB_USER = "blizzard-hub"
 # Forge statuses that mean "this branch will not merge cleanly" — a conflict on the
-# unlanded remainder (D-086), not an infrastructure failure.
+# unlanded remainder, not an infrastructure failure.
 _CONFLICT_STATUSES = frozenset({405, 409, 422})
 
 _log = get_logger("blizzard.hub.delivery")
@@ -52,7 +52,7 @@ class GitHubForgeDelivery:
         self._default_owner = default_owner
 
     def _repo_path(self, repo: str) -> str:
-        """The ``owner/name`` the forge routes on — qualifying a bare repo (D-060)."""
+        """The ``owner/name`` the forge routes on — qualifying a bare repo."""
         if "/" in repo or not self._default_owner:
             return repo
         return f"{self._default_owner}/{repo}"

@@ -22,7 +22,7 @@ function errorMessage(error: unknown): string {
 }
 
 /**
- * The chunk detail **container** — owns the reactive detail query (D-036) and the
+ * The chunk detail **container** — owns the reactive detail query and the
  * human-loop mutations (answer a question, resolve a gate decision — D-042/D-052),
  * and renders the presentational {@link ChunkDetailPanel} over them. It stays
  * mounted in the bottom dock and shows a rest state until a card is selected; the

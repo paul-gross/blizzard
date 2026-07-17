@@ -69,7 +69,7 @@ def test_check_pr_reports_open_then_merged() -> None:
     handle = forge.open_pr(LandingRequest(repo="acme/widget", branch_name="feat", commit_hash="abc"))
     assert forge.check_pr(handle).disposition is PrDisposition.OPEN
 
-    # Merge it out of band (a human on GitHub) — the check now reports the merge (D-065).
+    # Merge it out of band (a human on GitHub) — the check now reports the merge.
     double.forge_state["pulls"][handle.number].update(  # type: ignore[attr-defined]
         {"merged": True, "state": "closed", "merge_commit_sha": "landed-abc"}
     )

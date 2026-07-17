@@ -1,4 +1,4 @@
-# PR to master — the merge gate (implementation/build.md).
+# PR to master — the merge gate.
 #
 # ruff + pyright + eslint + client-drift check + the unit and component tiers.
 # This is the whole gate: it delegates to the reusable `gate` workflow so the

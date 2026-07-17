@@ -69,7 +69,7 @@ def test_derive_lease_state_stale_when_alive_but_heartbeat_old() -> None:
 
 @pytest.mark.unit
 def test_derive_lease_state_exited_when_process_not_alive() -> None:
-    """A dead pid is ADVANCE's exit-is-done, not a stall (D-055) — it derives exited
+    """A dead pid is ADVANCE's exit-is-done, not a stall — it derives exited
     even when the (stale) heartbeat check would also fire, since exit is checked first."""
     lease = _lease_record()
     assert derive_lease_state(lease, is_closed=False, is_parked=False, is_alive=False, is_stale=True) == "exited"
@@ -106,7 +106,7 @@ def test_derive_lease_state_parked_wins_over_stale() -> None:
 def test_derive_lease_state_spawning_wins_over_an_ancient_heartbeat() -> None:
     """Precedence: a lease with no pid/session derives spawning even when its
     heartbeat baseline reads as stale — the mint→spawn window has no live worker to
-    stall yet (D-092)."""
+    stall yet."""
     lease = _lease_record(pid=None, process_start_time=None, session_id=None)
     assert derive_lease_state(lease, is_closed=False, is_parked=False, is_alive=False, is_stale=True) == "spawning"
 

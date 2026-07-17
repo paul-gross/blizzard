@@ -76,11 +76,11 @@ def create_app(
     app = FastAPI(title="blizzard-runner", version=__version__)
     app.state.config = config
     app.state.readiness = readiness
-    # The runner's execution seams (D-062/D-092), wired at the host root; the
+    # The runner's execution seams, wired at the host root; the
     # store-free app leaves them None. The reconciliation loop reads them off app.state.
     app.state.workspace_provider = workspace_provider
     app.state.harness = harness
-    # The runner store backs the local-API heartbeat write (D-023); the injected clock
+    # The runner store backs the local-API heartbeat write; the injected clock
     # stamps the beat (``bzh:injected-clock``). Both None on the store-free app.
     app.state.runner_store = runner_store
     app.state.clock = SystemClock() if runner_store is not None else None
@@ -97,7 +97,7 @@ def create_app(
     app.include_router(asks_router)
     app.include_router(leases_router)
     app.include_router(transcripts_router)
-    # The PM-item pass-through proxy (D-084): a build worker reads its issue through
+    # The PM-item pass-through proxy: a build worker reads its issue through
     # this route, which forwards to the hub — the worker never crosses a layer.
     app.include_router(pm_items_router)
     # The runtime workspace-prompt control (issue #17): read the effective spawn preamble
@@ -108,7 +108,7 @@ def create_app(
     app.include_router(control_router)
 
     # The runner-served web app (post-MVP); the mount point is live from the
-    # scaffold so the seam is exercised (D-096).
+    # scaffold so the seam is exercised.
     mount_web_app(app, frontend_dir("runner"), app_name="blizzard-runner")
 
     log.info("runner app created", db_url=config.db_url, readiness_wired=readiness is not None)
@@ -128,8 +128,8 @@ def build_hosted_app(config: RunnerConfig) -> FastAPI:
     expected = migration_runner(config).script_head()
     readiness = ReadinessService(reader=reader, expected_revision=expected)
     runner_store = SqlAlchemyRunnerStore(engine)
-    # Bind the reference execution seams (winter workspace, Claude Code) from config
-    # (D-062/D-092). The reconciliation loop drives them through its own composition
+    # Bind the reference execution seams (winter workspace, Claude Code) from config.
+    # The reconciliation loop drives them through its own composition
     # root (:mod:`blizzard.runner.loop.build`); these are exposed on ``app.state`` for
     # the runner's local API surface.
     workspace_provider: IWorkspaceProvider = WinterWorkspaceProvider(

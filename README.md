@@ -2,7 +2,7 @@
 
 The main application — the **hub**, the **runner**, the **CLI**, and the web board for orchestrating autonomous fleets of coding agents.
 
-One repo, one wheel (D-061): the single distributable ships both daemons, the CLI, and the compiled frontend as embedded assets — no Node at install or runtime ([blizzard-discovery `implementation/build.md`](https://github.com/paul-gross/blizzard-discovery)).
+One repo, one wheel: the single distributable ships both daemons, the CLI, and the compiled frontend as embedded assets — no Node at install or runtime ([blizzard-discovery `implementation/build.md`](https://github.com/paul-gross/blizzard-discovery)).
 
 ## Install
 
@@ -37,7 +37,7 @@ The top-level packages announce what blizzard *is*: two daemons and the client t
 | Package | What it is |
 |---------|-----------|
 | `src/blizzard/hub/` | the `blizzard-hub` daemon — the work orchestrator. `api/` HTTP edge, `domain/` core, `store/` with its **own** Alembic tree. |
-| `src/blizzard/runner/` | the `blizzard-runner` daemon — the supervisor. Same `api/` + `domain/` + `store/` shape, an **independent** Alembic tree (D-099). |
+| `src/blizzard/runner/` | the `blizzard-runner` daemon — the supervisor. Same `api/` + `domain/` + `store/` shape, an **independent** Alembic tree. |
 | `src/blizzard/cli/` | the `blizzard` binary's root command group — verbs namespaced by target (`blizzard hub …`, `blizzard runner …`). |
 | `src/blizzard/foundation/` | the shared kernel both daemons compose: the injected clock (`bzh:injected-clock`), structlog wiring, the portable store engine, and the Alembic migration runner + revision-mismatch guard. |
 | `src/blizzard/static/` | the wheel-embedded frontend assets seam — CI fills `hub/` and `runner/` with the compiled Angular apps ([static/README.md](./src/blizzard/static/README.md)). |
@@ -90,15 +90,15 @@ default `uv run pytest` gate stays hermetic.
   (one synchronous tick at a time) against the **mock hub** (`blizzard-mock-hub`, run as
   its own subprocess), pulling its levers to manufacture states a real hub could only be
   contrived into: an **unreachable hub** proves the completion is store-and-forward
-  buffered and lands on recovery (D-069); a **dropped ack** proves the re-flush re-applies
-  idempotently through to done (D-090); a **stale envelope** is tolerated because the
-  runner fences on its own lease epoch (D-007).
+  buffered and lands on recovery; a **dropped ack** proves the re-flush re-applies
+  idempotently through to done; a **stale envelope** is tolerated because the
+  runner fences on its own lease epoch.
 - **Hub service tests** (`test_hub_service.py`) drive the **real hub** with the **mock
   runner** (`blizzard-mock-runner`, a levered driver) and the **mock forge** as its
   counterparts, asserting over the wire: a claim + completion advances the chunk; the
-  runner's `stale_epoch` lever gets the completion **rejected** (D-007); queue **grouping +
-  reorder** are reflected in `peek` (D-048); and `GET /api/events/stream` serves the
-  **SSE contract** an `EventSource` subscribes to (D-067).
+  runner's `stale_epoch` lever gets the completion **rejected**; queue **grouping +
+  reorder** are reflected in `peek`; and `GET /api/events/stream` serves the
+  **SSE contract** an `EventSource` subscribes to.
 
 The counterpart mocks and their lever surfaces live in the `blizzard-mock` repo
 (`blizzard_mock.mock_hub` / `blizzard_mock.mock_runner`). sqlite only, no tokens, no

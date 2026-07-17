@@ -1,4 +1,4 @@
-"""The chunk-promoted back-fill — existing chunks stay claimable after the not-ready state lands (D-103).
+"""The chunk-promoted back-fill — existing chunks stay claimable after the not-ready state lands.
 
 Adding the not-ready resting state makes an un-promoted chunk derive ``not_ready``. A bare
 table create would silently un-ready every chunk already in flight, so the chunk-promoted migration

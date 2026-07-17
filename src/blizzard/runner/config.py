@@ -3,7 +3,7 @@
 ``blizzard runner init <dir>`` scaffolds a config file and a data directory; the
 daemon and the offline ``migrate`` verb read it back. The store URL is the single
 portability knob (``bzh:sql-portable``): sqlite (WAL, in-process) is the runner's
-embedded default (D-023/D-028). The bind port falls back to the winter service
+embedded default. The bind port falls back to the winter service
 band's ``BZ_RUNNER_PORT`` (band +3).
 """
 
@@ -17,10 +17,10 @@ from pathlib import Path
 
 CONFIG_FILENAME = "blizzard-runner.toml"
 DATA_DIRNAME = "data"
-# The runner-owned worker hook file `init` scaffolds (design/harness-adapters.md); the
+# The runner-owned worker hook file `init` scaffolds; the
 # adapter passes it to a spawned worker as `--settings` to deliver the heartbeat hook.
 WORKER_SETTINGS_FILENAME = "worker-settings.json"
-# The local API's unix socket (D-068): it lives under the state dir beside the store, and
+# The local API's unix socket: it lives under the state dir beside the store, and
 # filesystem permissions are its access control — so the CLI finds it from the runtime dir
 # alone. The TCP listener runs alongside it for the browser, which cannot speak a socket.
 SOCKET_FILENAME = "runner.sock"
@@ -39,14 +39,14 @@ ENV_WORKSPACE_ENVS = "BZ_WORKSPACE_ENVS"  # comma-separated env-id pool
 ENV_HARNESS_BINARY = "BZ_HARNESS_BINARY"
 ENV_HARNESS_PERMISSION_MODE = "BZ_HARNESS_PERMISSION_MODE"
 ENV_BASE_BRANCH = "BZ_BASE_BRANCH"
-ENV_GATES = "BZ_RUNNER_GATES"  # comma-separated node names this runner gates (D-032/D-073)
+ENV_GATES = "BZ_RUNNER_GATES"  # comma-separated node names this runner gates
 ENV_WORKSPACE_PROMPT = "BZ_WORKSPACE_PROMPT"  # the runner-owned workspace prompt, inline (issue #17)
 # Where the coding harness writes session transcripts (issue #29); empty defaults to
 # `~/.claude/projects`, resolved once at the composition root (`runner/app.py`), never here.
 ENV_TRANSCRIPTS_ROOT = "BZ_TRANSCRIPTS_ROOT"
 
-# Reconciliation-loop defaults (design/runner/loop.md). The runner is machine-level
-# and single-workspace (D-019); these seam the loop to the hub, the workspace it
+# Reconciliation-loop defaults. The runner is machine-level
+# and single-workspace; these seam the loop to the hub, the workspace it
 # drives, and the coding harness it spawns.
 DEFAULT_HUB_URL = "http://127.0.0.1:8421"  # the hub's default bind (band +2)
 DEFAULT_RUNNER_ID = "runner-local"
@@ -54,7 +54,7 @@ DEFAULT_WORKSPACE_ID = "workspace-local"
 DEFAULT_HARNESS_BINARY = "claude"
 # A workspace-isolated worker runs headless with no one to approve tool use, so real
 # Claude Code needs a non-interactive permission mode to edit/commit in its sandboxed
-# worktree (design/harness-adapters.md, D-092); ``bypassPermissions`` is the fresh-init
+# worktree; ``bypassPermissions`` is the fresh-init
 # default. The ``mock-claude-code`` façade ignores it; a config may set it empty to omit.
 DEFAULT_HARNESS_PERMISSION_MODE = "bypassPermissions"
 DEFAULT_MAX_AGENTS = 1
@@ -67,7 +67,7 @@ def socket_path_for(root: Path) -> Path:
 
     Deliberately not a method on the loaded config: it is what lets the CLI's local verbs
     address the daemon from ``--dir`` without reading the toml or opening the store — a
-    pure client of the local API (D-023/D-068).
+    pure client of the local API.
     """
     return root / SOCKET_FILENAME
 
@@ -84,18 +84,18 @@ class RunnerConfig:
     db_url: str
     host: str = DEFAULT_HOST
     port: int = DEFAULT_PORT
-    # Reconciliation-loop seams (design/runner/loop.md).
+    # Reconciliation-loop seams.
     hub_url: str = DEFAULT_HUB_URL
     runner_id: str = DEFAULT_RUNNER_ID
     workspace_id: str = DEFAULT_WORKSPACE_ID
     workspace_root: str = ""  # the winter workspace the provider drives; required to FILL
-    workspace_envs: tuple[str, ...] = DEFAULT_ENV_POOL  # the provider's static env pool (D-062)
-    harness_binary: str = DEFAULT_HARNESS_BINARY  # mock-claude-code in tests, `claude` in prod (D-092)
+    workspace_envs: tuple[str,...] = DEFAULT_ENV_POOL  # the provider's static env pool
+    harness_binary: str = DEFAULT_HARNESS_BINARY  # mock-claude-code in tests, `claude` in prod
     harness_permission_mode: str | None = None  # `claude -p --permission-mode` (headless); None omits it
     worker_settings_path: str | None = None  # the runner-owned worker hook file (P7)
     max_agents: int = DEFAULT_MAX_AGENTS
     base_branch: str = DEFAULT_BASE_BRANCH
-    #: Node NAMES this runner imposes a human gate on (D-032/D-041/D-073). Reloaded each
+    #: Node NAMES this runner imposes a human gate on. Reloaded each
     #: tick — the loop rebuilds its context from this config on every pass.
     gates: tuple[str, ...] = ()
     #: The runner-owned workspace prompt prepended to every worker spawn (issue #17): the
@@ -129,7 +129,7 @@ class RunnerConfig:
 
     @property
     def socket_path(self) -> Path:
-        """The local API's unix socket, under the state dir with the store (D-068)."""
+        """The local API's unix socket, under the state dir with the store."""
         return socket_path_for(self.root)
 
     @staticmethod
@@ -181,7 +181,7 @@ class RunnerConfig:
             base_branch=os.environ.get(ENV_BASE_BRANCH, DEFAULT_BASE_BRANCH),
             gates=tuple(g.strip() for g in gates.split(",") if g.strip()) if gates else (),
             # The worker hook file `init` writes alongside the config; the adapter
-            # delivers it as `--settings` so a spawned worker heartbeats (D-069).
+            # delivers it as `--settings` so a spawned worker heartbeats.
             worker_settings_path=str(root / WORKER_SETTINGS_FILENAME),
             # The runner-owned workspace prompt (issue #17): empty on a fresh scaffold —
             # an operator sets it inline (or points `workspace_prompt_file` at a file), or
@@ -204,7 +204,7 @@ class RunnerConfig:
             f'db_url = "{self.db_url}"\n'
             f'host = "{self.host}"\n'
             f"port = {self.port}\n"
-            "\n# Reconciliation-loop seams (design/runner/loop.md).\n"
+            "\n# Reconciliation-loop seams.\n"
             f'hub_url = "{self.hub_url}"\n'
             f'runner_id = "{self.runner_id}"\n'
             f'workspace_id = "{self.workspace_id}"\n'
@@ -215,7 +215,7 @@ class RunnerConfig:
             f"worker_settings_path = {settings}\n"
             f"max_agents = {self.max_agents}\n"
             f'base_branch = "{self.base_branch}"\n'
-            "\n# Human gates this runner imposes by node name (D-032/D-073); empty = none.\n"
+            "\n# Human gates this runner imposes by node name; empty = none.\n"
             f"gates = [{gates}]\n"
             "\n# The runner-owned workspace prompt prepended to every worker spawn (issue #17).\n"
             "# `workspace_prompt` is inline text; `workspace_prompt_file` (a path) wins when set.\n"

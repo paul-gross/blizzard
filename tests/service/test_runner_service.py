@@ -8,11 +8,11 @@ manufacture the rare states a real hub could only be contrived into, so the tick
 resilience logic is asserted directly:
 
 * **unreachable hub → buffered completion** — the completion is store-and-forward durable
-  (D-069): while the hub is down the chunk never advances and the runner's outbound buffer
+  : while the hub is down the chunk never advances and the runner's outbound buffer
   holds the fact; when the hub heals the buffered completion flushes and the chunk lands.
 * **dropped ack → idempotent re-apply** — the hub applies the transition but drops the ack
   (503); the runner re-flushes the same completion and the hub's epoch-idempotent apply
-  (D-090) advances the chunk exactly once — no double transition — through to done.
+   advances the chunk exactly once — no double transition — through to done.
 * **stale envelope tolerated** — the hub serves a stale-epoch envelope; the runner fences
   its completion on its own lease epoch (not the envelope's), so the chunk still lands.
 
@@ -84,7 +84,7 @@ def _status(hub: httpx.Client, chunk_id: str) -> str:
 
 
 def _pending_outbound(config: RunnerConfig) -> int:
-    """The depth of the runner's store-and-forward buffer (D-069)."""
+    """The depth of the runner's store-and-forward buffer."""
     engine = create_engine_from_url(config.db_url)
     try:
         return len(SqlAlchemyRunnerStore(engine).pending_outbound())
@@ -116,11 +116,11 @@ def test_unreachable_hub_buffers_the_completion_then_lands_on_recovery(tmp_path:
         assert _status(hub, chunk_id) != "done", "the chunk landed before the outage could be staged"
 
         # Now the hub goes unreachable: every flush attempt fails, so the completion stays
-        # store-and-forward buffered (D-069). The chunk's status is unreadable *because* the
+        # store-and-forward buffered. The chunk's status is unreadable *because* the
         # hub is down — which is the point — so the buffer depth is the proof it did not flush.
         assert hub.post("/_levers/unreachable", json={"remaining": 10_000}).status_code == 200
         _drive(config, fenced, ticks=4)
-        assert _pending_outbound(config) >= 1, "the completion did not stay buffered during the outage (D-069)"
+        assert _pending_outbound(config) >= 1, "the completion did not stay buffered during the outage"
 
         # Heal the hub; the buffered completion flushes and the chunk lands.
         assert hub.post("/_levers/reset").status_code == 200
@@ -147,7 +147,7 @@ def test_dropped_ack_reapplies_idempotently_through_to_done(tmp_path: Path) -> N
 
         # Drop the very first completion ack: the hub advances build -> deliver but answers
         # 503, so the runner keeps the completion buffered and re-flushes it. The hub's
-        # epoch-idempotent apply (D-090) must advance the chunk exactly once.
+        # epoch-idempotent apply must advance the chunk exactly once.
         assert hub.post("/_levers/drop_ack", json={"chunk_id": chunk_id, "remaining": 1}).status_code == 200
         landed = poll_until(lambda: _run_and_check(config, fenced, hub, chunk_id, "done"), timeout=90.0)
         assert landed, f"chunk did not land after the dropped ack (status {_status(hub, chunk_id)!r})"

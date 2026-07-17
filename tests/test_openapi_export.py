@@ -1,7 +1,7 @@
 """OpenAPI export smoke (unit tier).
 
 The exporter is the single source of both specs the frontend's openapi-ts client
-and CI's drift check consume (D-100). This asserts it writes deterministic,
+and CI's drift check consume. This asserts it writes deterministic,
 non-empty specs for both daemons that include the health route.
 """
 

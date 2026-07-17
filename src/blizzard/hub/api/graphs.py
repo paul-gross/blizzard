@@ -1,7 +1,7 @@
-"""Graph routes — ``POST /api/graphs`` (D-071).
+"""Graph routes — ``POST /api/graphs``.
 
 Mint a workflow graph from a YAML definition: parse it, validate (errors reject 422
-with a :class:`GraphValidationReport`, warnings flag — D-071), reify immutable (D-033).
+with a :class:`GraphValidationReport`, warnings flag — D-071), reify immutable.
 The controller stays read-only over the store (``bzh:controller-read-only``): it
 resolves the YAML into a :class:`GraphDoc` and delegates the validate-reify-persist
 to :class:`~blizzard.hub.domain.graph_authoring.GraphMintService`.
@@ -26,7 +26,7 @@ router = APIRouter(prefix="/api", tags=["graphs"])
 
 @router.post("/graphs", response_model=GraphView, status_code=status.HTTP_201_CREATED)
 def mint_graph(request: GraphMintRequest, services: Annotated[HubServices, Depends(get_services)]) -> object:
-    """Validate and mint an immutable graph; 422 on validation errors (D-071)."""
+    """Validate and mint an immutable graph; 422 on validation errors."""
     try:
         raw = yaml.safe_load(request.definition_yaml)
         if not isinstance(raw, dict):

@@ -2,7 +2,7 @@
 
 The issue's explicit criterion: "A detached runner's late completion for that chunk
 is rejected by the lease floor and does not resurrect the route." Detach relies on
-the existing epoch fence (D-035/D-044) **as-is** — this test is scoped to *proving*
+the existing epoch fence **as-is** — this test is scoped to *proving*
 that reliance holds, not to the fence's own mechanics (``tests/test_zombie_fence.py``
 owns those and this test follows its established pattern: a 200 whose
 :class:`~blizzard.wire.envelope.ApplyResponse` outcome is ``failure`` with a
@@ -98,7 +98,7 @@ def test_a_detached_runners_late_completion_is_rejected_and_does_not_resurrect_t
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
 
     # Another runner claims the now-ready chunk and mints its OWN lease at epoch 2 —
-    # this is what raises the lease floor (D-035/D-044). Before this claim+lease, the
+    # this is what raises the lease floor. Before this claim+lease, the
     # fence would not yet reject runner A's epoch-1 completion (it would still be
     # current); the fence only bites from here on.
     hub.clock.advance(timedelta(seconds=1))

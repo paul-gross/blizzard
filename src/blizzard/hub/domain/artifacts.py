@@ -1,9 +1,9 @@
-"""Artifact domain — a chunk's durable outputs and their storage model (D-026/D-036).
+"""Artifact domain — a chunk's durable outputs and their storage model.
 
 A discriminated union: code works with the typed variants (:class:`GitCommitArtifact`,
 :class:`AssetArtifact`); the compact single-string :class:`ArtifactRow` is the
-storage model the variants compress to and uncompress from at the store boundary
-(D-036). The round trip is exact in both directions — the property the unit tests
+storage model the variants compress to and uncompress from at the store boundary.
+The round trip is exact in both directions — the property the unit tests
 pin.
 
 Dependency-free (``bzh:domain-core``): no SQLAlchemy here. :class:`ArtifactRow` is a
@@ -17,7 +17,7 @@ from enum import StrEnum
 
 
 class ArtifactKind(StrEnum):
-    """The union discriminator (D-036)."""
+    """The union discriminator."""
 
     GIT_COMMIT = "git_commit"
     ASSET = "asset"
@@ -25,7 +25,7 @@ class ArtifactKind(StrEnum):
 
 @dataclass(frozen=True)
 class Provenance:
-    """Where an artifact came from — a reference to its committing transition (D-036)."""
+    """Where an artifact came from — a reference to its committing transition."""
 
     chunk_id: str
     node_id: str
@@ -34,7 +34,7 @@ class Provenance:
 
 @dataclass(frozen=True)
 class GitCommitArtifact:
-    """A branch pushed to the forge before submission, pinned by commit hash (D-026)."""
+    """A branch pushed to the forge before submission, pinned by commit hash."""
 
     artifact_id: str
     name: str
@@ -48,7 +48,7 @@ class GitCommitArtifact:
 
 @dataclass(frozen=True)
 class AssetArtifact:
-    """A text or blob output — a review's findings, a spike write-up (D-026)."""
+    """A text or blob output — a review's findings, a spike write-up."""
 
     artifact_id: str
     name: str
@@ -63,7 +63,7 @@ Artifact = GitCommitArtifact | AssetArtifact
 
 @dataclass(frozen=True)
 class ArtifactRow:
-    """The flat storage row (D-036): variant fields compressed into one ``data`` string.
+    """The flat storage row: variant fields compressed into one ``data`` string.
 
     ``data`` is keyed by ``kind``: ``git_commit`` -> ``<branch>:<commit>``; ``asset``
     -> the raw content. ``repo`` is a ``git_commit``-only sibling column, not encoded
@@ -124,5 +124,5 @@ def from_row(row: ArtifactRow) -> Artifact:
 
 
 def store_key(row: ArtifactRow) -> str:
-    """The chunk artifact-store key ``{node}.{artifact-name}.{epoch}`` (D-036)."""
+    """The chunk artifact-store key ``{node}.{artifact-name}.{epoch}``."""
     return f"{row.node_name}.{row.name}.{row.epoch}"

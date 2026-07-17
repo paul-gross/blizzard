@@ -817,7 +817,7 @@ export class ChunkDetailPanel {
   /** Emitted when the operator answers an open question (MVP criterion 7). */
   readonly answerQuestion = output<AnswerQuestionEvent>();
 
-  /** Emitted when the operator resolves an open gate decision (D-042). */
+  /** Emitted when the operator resolves an open gate decision. */
   readonly resolveDecision = output<ResolveDecisionEvent>();
 
   /** Emitted with the chunk id when the operator confirms Detach (D-088, issue #42). */
@@ -855,18 +855,18 @@ export class ChunkDetailPanel {
   protected readonly history = computed<readonly TransitionView[]>(() => this.detail().history ?? []);
   protected readonly artifacts = computed<readonly ArtifactView[]>(() => this.detail().artifacts ?? []);
 
-  /** The chunk's open (unanswered) questions — the ask a parked chunk waits on (D-004). */
+  /** The chunk's open (unanswered) questions — the ask a parked chunk waits on. */
   protected readonly openQuestions = computed<readonly QuestionView[]>(() =>
     (this.detail().questions ?? []).filter((q) => !q.answered),
   );
 
-  /** The chunk's live gate decision while it still awaits the resolving transition (D-045). */
+  /** The chunk's live gate decision while it still awaits the resolving transition. */
   protected readonly openDecision = computed<DecisionView | null>(() => {
     const decision = this.detail().decision;
     return decision && !decision.transitioned ? decision : null;
   });
 
-  /** The chunk's open escalation, if it currently needs a human takeover (D-009). */
+  /** The chunk's open escalation, if it currently needs a human takeover. */
   protected readonly escalation = computed<EscalationView | null>(() => this.detail().escalation ?? null);
 
   /** The chunk's live route, if any — Detach shows only while this is non-null
@@ -895,7 +895,7 @@ export class ChunkDetailPanel {
     });
   }
 
-  /** Confirm, then emit `detach` for the container's mutation to fire (D-088). A
+  /** Confirm, then emit `detach` for the container's mutation to fire. A
    * native `confirm()` — the same one-line browser affordance `copyTakeover` already
    * reaches for — guards the forcible release; declining emits nothing. */
   protected onDetach(): void {

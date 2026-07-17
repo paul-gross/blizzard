@@ -1,6 +1,6 @@
 """store-and-forward high-water mark (hub store tree)
 
-P7 store-and-forward (D-069) gives the runner→hub fact push (POST /events) its
+P7 store-and-forward gives the runner→hub fact push (POST /events) its
 per-runner idempotency memory: ``runner_high_water`` records the greatest per-runner
 sequence number the hub has already applied, so a replayed fact (lost ack, outage
 backlog) is re-acked without re-applying. Defined once in
