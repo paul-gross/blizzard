@@ -25,6 +25,7 @@ from blizzard.hub.domain.detach import NotRouted
 from blizzard.hub.domain.envelope import build_node_envelope
 from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.ingest import IngestConflict
+from blizzard.hub.domain.pause import ChunkNotPausable
 from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
@@ -35,6 +36,7 @@ from blizzard.hub.domain.work import (
     derive_chunk_status,
     latest_epoch,
     open_escalation,
+    open_pause,
     transition_history,
 )
 from blizzard.hub.pm.source import IPmSource, IPmSourceRegistry, PmSourceError
@@ -45,8 +47,10 @@ from blizzard.wire.chunk import (
     ChunkIngestConflict,
     ChunkIngestRequest,
     ChunkIngestResponse,
+    ChunkPauseRequest,
     ChunkSummary,
     EscalationView,
+    PauseView,
     PmItemEntry,
     PmItemsView,
     PmPointerView,
@@ -244,6 +248,7 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     route = services.chunks.route_of(chunk_id)
     escalation = open_escalation(facts)
+    pause = open_pause(facts)
     decision = services.chunks.decision_for_chunk(chunk_id)
     graph = services.graphs.get(chunk.graph_id)
     node_id = current_node_id(facts) or (graph.entry_node_id if graph is not None else None)
@@ -267,6 +272,7 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
         escalation=EscalationView(epoch=escalation.epoch, takeover_command=escalation.takeover_command)
         if escalation is not None
         else None,
+        pause=PauseView(by=pause.set_by, set_at=iso_utc(pause.set_at)) if pause is not None else None,
         decision=to_decision_view(decision) if decision is not None else None,
         history=_history_views(facts, graph),
         artifacts=_artifact_views(services.chunks.load_artifacts(chunk_id), web_base),
@@ -399,6 +405,39 @@ def detach_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_ser
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
     services.events.publish_queue_changed()  # a detached chunk re-enters the ready queue
+    return {"chunk_id": chunk_id}
+
+
+@router.post("/chunks/{chunk_id}/pause", status_code=status.HTTP_202_ACCEPTED)
+def pause_chunk(
+    chunk_id: str, request: ChunkPauseRequest, services: Annotated[HubServices, Depends(get_services)]
+) -> dict[str, str]:
+    """Set a chunk's operator pause brake — the claim is kept, unlike detach (issue #46)."""
+    chunk = services.chunks.get(chunk_id)
+    if chunk is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+    try:
+        services.pause.pause(chunk, by=request.by)
+    except ChunkNotPausable as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
+    services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
+    services.events.publish_queue_changed()  # a pause moves the chunk out of the ready queue (issue #46)
+    return {"chunk_id": chunk_id}
+
+
+@router.post("/chunks/{chunk_id}/resume", status_code=status.HTTP_202_ACCEPTED)
+def resume_chunk(
+    chunk_id: str, request: ChunkPauseRequest, services: Annotated[HubServices, Depends(get_services)]
+) -> dict[str, str]:
+    """Clear a chunk's operator pause brake — idempotent, never refused (issue #46)."""
+    chunk = services.chunks.get(chunk_id)
+    if chunk is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+    services.pause.resume(chunk, by=request.by)
+    facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
+    services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
+    services.events.publish_queue_changed()  # a resume can re-admit the chunk to the queue (issue #46)
     return {"chunk_id": chunk_id}
 
 

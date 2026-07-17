@@ -176,6 +176,52 @@ def test_parked_lease_is_not_reaped_though_pid_reads_alive_and_stale(tmp_path): 
     assert [f for f in store.pending_outbound() if f.kind == "escalation.recorded"] == []
 
 
+def test_ask_forwards_correctly_while_a_pause_park_exists(tmp_path):  # type: ignore[no-untyped-def]
+    """The §0.2 A landmine fence (issue #46 plan).
+
+    ``unforwarded_ask`` reads ``asks.c.question_id.not_in(select(park_facts.c.
+    question_id))`` — if a pause-park were ever modeled as a ``park_facts`` row with a
+    nullable ``question_id`` (the design this plan rejects), SQL's ``x NOT IN (subquery
+    containing NULL)`` would evaluate to NULL for *every* row, so this ask would stop
+    being forwarded — not just this chunk's, every chunk's, fleet-wide, with a green
+    gate. Pause-parks live in their own table (``pause_parks``/``pause_park_resumes``),
+    untouched by this predicate, so a pause-park coexisting with an open ask must not
+    change this outcome at all.
+    """
+    store = _store(tmp_path)
+    _seed_exited_lease(store)
+    store.record_ask(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        question_id="qn_1",
+        question="Which API?",
+        options=["rest", "graphql"],
+        session_id="sess-a",
+        asked_at=_NOW,
+    )
+    # A pause-park on a *different* lease — proves the predicate is untouched by the
+    # separate table's presence, not merely untouched because it targets this lease.
+    store.record_pause_park(lease_id="lease_other", chunk_id="ch_other", parked_at=_NOW)
+
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(
+        store, hub=FakeHub(), provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe()
+    )
+
+    advance(ctx)
+
+    # The ask-park landed on lease_1 alongside the pre-existing pause-park on the
+    # unrelated lease_other — parked_lease_ids() is their union (§1.3), and neither
+    # predicate disturbed the other.
+    assert store.ask_parked_lease_ids() == {"lease_1"}
+    assert store.pause_parked_lease_ids() == {"lease_other"}
+    assert store.parked_lease_ids() == {"lease_1", "lease_other"}
+    buffered = [f for f in store.pending_outbound() if f.kind == QUESTION_ASKED]
+    assert len(buffered) == 1
+    assert '"question_id": "qn_1"' in buffered[0].payload
+    assert harness.judged == []
+
+
 def test_answer_resumes_the_dormant_session_under_the_same_lease(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _seed_exited_lease(store)

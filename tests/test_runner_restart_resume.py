@@ -260,7 +260,7 @@ def test_resume_abandons_chunk_unknown_at_the_hub(tmp_path):  # type: ignore[no-
     """The explicit companion to the two cases above: a 404 (``ChunkNotFoundError``) is
     terminal, not the generic ``HubClientError`` the deferral branch below waits out —
     ``_resume_marked_lease`` abandons on it directly rather than leaving the intent open
-    for PULL's ``_release_detached`` to find on some later tick (blizzard#9)."""
+    for PULL's ``_reconcile_leases`` to find on some later tick (blizzard#9)."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     mark_resume_intents(store, now=_NOW)

@@ -348,6 +348,16 @@
             "title": "Open Prs",
             "type": "array"
           },
+          "pause": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PauseView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "pm_pointers": {
             "default": [],
             "items": {
@@ -466,6 +476,18 @@
         "title": "ChunkIngestResponse",
         "type": "object"
       },
+      "ChunkPauseRequest": {
+        "description": "Set or clear a chunk's operator pause brake \u2014 records who flipped it (issue #46).",
+        "properties": {
+          "by": {
+            "default": "operator",
+            "title": "By",
+            "type": "string"
+          }
+        },
+        "title": "ChunkPauseRequest",
+        "type": "object"
+      },
       "ChunkStatus": {
         "description": "The derived chunk statuses. Never stored \u2014 always a query result.",
         "enum": [
@@ -475,6 +497,7 @@
           "delivering",
           "waiting_on_human",
           "needs_human",
+          "paused",
           "stopped",
           "done"
         ],
@@ -482,7 +505,7 @@
         "type": "string"
       },
       "ChunkSummary": {
-        "description": "One row of the fleet chunk list \u2014 derived status + current node.\n\n``current_node_name`` is the node's human graph name (``build``, ``review``) the\nboard renders in place of the raw ``nd_`` ULID; null when the chunk has no\ncurrent node or its pinned graph cannot resolve the id.",
+        "description": "One row of the fleet chunk list \u2014 derived status + current node.\n\n``current_node_name`` is the node's human graph name (``build``, ``review``) the\nboard renders in place of the raw ``nd_`` ULID; null when the chunk has no\ncurrent node or its pinned graph cannot resolve the id.\n\nDeliberately status-only: the summary feeds the board **card**, which is a passive\nstatus view (issue #42), so no operator *fact* is carried here. The pause fact \u2014 and\nevery other fact an operator action keys on \u2014 reaches the chunk detail dock through\n:class:`ChunkDetail`, the one place a board action lives.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -1208,6 +1231,25 @@
           }
         },
         "title": "OpenDecisionsResponse",
+        "type": "object"
+      },
+      "PauseView": {
+        "description": "An open pause on a chunk (issue #46) \u2014 who set it and when.\n\nPresent only while ``paused=True`` is the newest pause fact; a resume clears it.\nCarried independently of ``status``: PAUSED sits below the human-gated statuses in\nthe derivation order, so a chunk both paused and parked on a question derives\n``waiting_on_human`` \u2014 this field is the only way the runner (and the board) learn\nthe chunk is paused in that case, and it also answers \"who paused it\".",
+        "properties": {
+          "by": {
+            "title": "By",
+            "type": "string"
+          },
+          "set_at": {
+            "title": "Set At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "by",
+          "set_at"
+        ],
+        "title": "PauseView",
         "type": "object"
       },
       "PmItemEntry": {
@@ -2699,6 +2741,63 @@
         ]
       }
     },
+    "/api/chunks/{chunk_id}/pause": {
+      "post": {
+        "description": "Set a chunk's operator pause brake \u2014 the claim is kept, unlike detach (issue #46).",
+        "operationId": "pause_chunk_api_chunks__chunk_id__pause_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChunkPauseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Pause Chunk Api Chunks  Chunk Id  Pause Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pause Chunk",
+        "tags": [
+          "chunks"
+        ]
+      }
+    },
     "/api/chunks/{chunk_id}/pm-items": {
       "get": {
         "description": "Pass-through PM items read \u2014 one entry per pointer, contents never stored.\n\nEach pointer is resolved to its own binding by name (``pm.get(pointer.source)``), then\nfetched fresh from the forge; a per-pointer resolution or forge failure degrades to an\n``error`` on that entry rather than failing the whole read, so a grouped chunk\nstill surfaces the pointers it reached beside a notice for the ones it did not. A chunk\nwith no pointers is an empty list \u2014 the board's empty state \u2014 not a 404. No configured\nPM source at all is a 503 up front \u2014 the request-wide degradation preserved unchanged\nfrom before per-pointer resolution existed.",
@@ -2831,6 +2930,63 @@
           }
         },
         "summary": "Requeue Chunk",
+        "tags": [
+          "chunks"
+        ]
+      }
+    },
+    "/api/chunks/{chunk_id}/resume": {
+      "post": {
+        "description": "Clear a chunk's operator pause brake \u2014 idempotent, never refused (issue #46).",
+        "operationId": "resume_chunk_api_chunks__chunk_id__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChunkPauseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Resume Chunk Api Chunks  Chunk Id  Resume Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resume Chunk",
         "tags": [
           "chunks"
         ]

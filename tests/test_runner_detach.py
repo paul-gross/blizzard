@@ -1,9 +1,11 @@
 """A live runner learns its chunk was detached (issue #38).
 
-``_release_detached``, folded into PULL between ``_sync_registry`` and the flush, asks the
+``_reconcile_leases``, folded into PULL between ``_sync_registry`` and the flush, asks the
 hub — per active lease, on every tick — whether this runner still holds the chunk's route,
 and abandons (kill the worker, release the environments, close the lease ``released``, no
-epoch bump, no requeue fact, no retry consumed) any lease it no longer holds. This is the
+epoch bump, no requeue fact, no retry consumed) any lease it no longer holds. That same
+sweep also parks a lease the operator paused (issue #46), off the same ``get_chunk``; the
+pause half is covered by ``test_chunk_pause.py``, the detach half here. This is the
 live-tick counterpart of restart-resume's ``_resume_marked_lease`` (``test_runner_restart_
 resume.py``), which only ever runs after a restart — these tests are the live-tick half, so
 they live here rather than falsifying that file's restart-scoped docstring
@@ -287,7 +289,7 @@ def test_pull_abandons_before_it_flushes(tmp_path):  # type: ignore[no-untyped-d
 def test_reap_abandons_instead_of_escalating_a_detached_chunk(tmp_path):  # type: ignore[no-untyped-def]
     """Tick order is REAP -> RESUME -> PULL -> FILL -> ADVANCE, so a lease whose retry budget
     REAP exhausts can reach the requeue-or-escalate decision *before* PULL's own
-    ``_release_detached`` ever gets to ask the hub about it this tick. If the hub already
+    ``_reconcile_leases`` ever gets to ask the hub about it this tick. If the hub already
     detached this chunk (the operator released it to ``ready``), escalating anyway would post
     an ``escalation.recorded`` fact this same tick's flush cannot retract — flipping the chunk
     back to ``needs_human`` behind the operator's back, and PULL cannot un-post a fact once
@@ -482,7 +484,7 @@ def test_reap_abandons_instead_of_escalating_a_chunk_unknown_at_the_hub(tmp_path
 def test_reap_orphan_requeue_releases_envs_when_chunk_unknown_at_the_hub(tmp_path):  # type: ignore[no-untyped-def]
     """The requeue path's own 404 guard: REAP's ``_fail_attempt`` closes the exhausted
     attempt and calls ``_requeue`` *before* PULL's own live-tick sweep
-    (``_release_detached``) ever runs this tick, and by the time ``_requeue`` calls
+    (``_reconcile_leases``) ever runs this tick, and by the time ``_requeue`` calls
     ``get_envelope`` the prior lease is already closed — so there is no active lease
     left for that sweep to find and abandon later. Left as a generic ``HubClientError``,
     a chunk gone by requeue time would hold its environment forever, the same shape

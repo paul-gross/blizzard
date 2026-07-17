@@ -26,7 +26,7 @@ from blizzard.runner.loop.hub import HubClientError
 from blizzard.runner.loop.steps import advance, fill, mark_resume_intents, pull, reap, resume
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.store.repository import NewLease
-from blizzard.wire.chunk import ChunkDetail, RouteView
+from blizzard.wire.chunk import ChunkDetail, PauseView, RouteView
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from blizzard.wire.facts import (
     ANSWER_DELIVERED,
@@ -956,3 +956,88 @@ def test_pull_rejection_at_exhausted_retries_defers_escalation_while_locally_pau
 
     assert [f for f in store.pending_outbound() if f.kind == ESCALATION_RECORDED]
     assert store.active_lease("lease_1") is None  # closed — escalated
+
+
+# --------------------------------------------------------------------------- #
+# Two brakes at once (issue #46 row 14): the runner's own, and the hub's per-chunk pause.
+# --------------------------------------------------------------------------- #
+
+
+def test_a_chunk_paused_on_a_locally_paused_runner_resumes_for_neither_brake_alone(tmp_path):  # type: ignore[no-untyped-def]
+    """The two brakes are independent authorities: the chunk resumes only when **both** clear.
+
+    They are deliberately not the same lever (issue #46). The runner's own brake says "start no
+    processes on this machine"; the hub's chunk pause says "stop this one chunk". So:
+
+    * :func:`_kill_and_park_paused` is **ungated** — the local brake does not veto the hub's
+      instruction about a specific chunk, and a kill is not a spawn. The park below therefore
+      happens on a fully locally-paused runner, which is the first assertion here.
+    * :func:`_resume_if_unpaused` **is** gated — its ``resume_with_message`` is a real (fifth)
+      spawn primitive, and landing one outside the gate is precisely how issue #45 happened.
+
+    Driven as full ticks, since the interplay spans PULL (which parks) and ADVANCE (which
+    resumes).
+    """
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    probe = FakeProbe(alive={(100, "start-100")})  # a live worker for the pause to kill
+    hub = FakeHub()
+    hub.paused = False  # the hub's *runner* brake (D-043) is off — not the lever under test
+    hub.chunks["ch_1"] = ChunkDetail(
+        chunk_id="ch_1",
+        graph_id="gr_1",
+        status=ChunkStatus.PAUSED,
+        current_node_id="nd_build",
+        latest_epoch=1,
+        route=RouteView(runner_id="r1", workspace_id="ws1", environment_ids=["e1"]),
+        pause=PauseView(by="operator", set_at="2026-07-13T12:00:00Z"),
+    )
+    hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=probe)
+    _pause_locally(store, ctx, paused=True)
+
+    tick(ctx)
+
+    # The hub's instruction about this chunk is honored despite the local brake: killed, parked.
+    assert probe.killed == [100]
+    assert store.pause_parked_lease_ids() == {"lease_1"}
+    assert store.active_lease("lease_1") is not None  # and the claim is kept, as ever
+
+    # Brake 1 clears: the operator resumes the CHUNK, but the runner is still locally paused.
+    hub.chunks["ch_1"] = _running_chunk()
+    tick(ctx)
+
+    assert harness.resumed == []  # the local brake still forbids the spawn
+    # The gate sits above the fact: a suppressed resume writes nothing, so the park stays open
+    # and the next tick re-asks it cleanly.
+    assert store.pause_parked_lease_ids() == {"lease_1"}
+
+    # The other order proves independence rather than luck: re-pause the chunk, clear the LOCAL
+    # brake instead, and it must still not resume.
+    hub.chunks["ch_1"] = ChunkDetail(
+        chunk_id="ch_1",
+        graph_id="gr_1",
+        status=ChunkStatus.PAUSED,
+        current_node_id="nd_build",
+        latest_epoch=1,
+        route=RouteView(runner_id="r1", workspace_id="ws1", environment_ids=["e1"]),
+        pause=PauseView(by="operator", set_at="2026-07-13T12:05:00Z"),
+    )
+    _pause_locally(store, ctx, paused=False)
+    tick(ctx)
+
+    assert harness.resumed == []  # the chunk's own pause forbids it now
+    assert store.pause_parked_lease_ids() == {"lease_1"}
+
+    # Both clear: the session resumes in place — same lease, epoch and session, no retry burned.
+    hub.chunks["ch_1"] = _running_chunk()
+    tick(ctx)
+
+    assert harness.resumed == [
+        ("/ws/e1", "sess-a", "# The operator resumed this chunk; continue your task where you left off.")
+    ]
+    assert store.pause_parked_lease_ids() == set()
+    lease = store.active_lease("lease_1")
+    assert lease is not None and lease.epoch == 1 and lease.session_id == "sess-a" and lease.pid == 4321
+    assert store.attempt_count("ch_1", "nd_build") == 1

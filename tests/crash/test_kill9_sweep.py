@@ -25,6 +25,13 @@ swept by its own dedicated scenario (``test_kill9_at_abandon_crash_point``), whi
 detaches a running chunk mid-flight via the real hub endpoint and proves the crash
 recovers through RESUME, not through REAP's retry path (blizzard#38 slice 5).
 
+The ``pause.*`` family is the third, and the abandon family's mirror image: its boundary
+is reached only when an operator **pauses** a chunk out from under an active lease
+(issue #46), and where the abandon gives the claim up, the pause keeps it. Its dedicated
+scenario (``test_kill9_at_pause_park_crash_point``) pauses a running chunk mid-flight,
+crashes the runner between the worker's kill and the durable park, and proves recovery
+converges *because* RESUME parks a paused chunk rather than abandoning it.
+
 Two whole-process cases round it out: an external ``kill -9`` of the runner daemon
 mid-flight, and a kill of the hub mid-delivery.
 
@@ -82,9 +89,11 @@ _ALL_POINTS = [p.name for p in discover_crash_points()]
 # the generic sweep drives every remaining boundary; resume points are swept by the
 # graceful-restart scenario (`test_kill9_at_resume_crash_point`) and abandon points by the
 # dedicated detach scenario (`test_kill9_at_abandon_crash_point`), further down.
+_DEDICATED_PREFIXES = ("resume.", "abandon.", "pause.")
 _RESUME_POINTS = [p for p in _ALL_POINTS if p.startswith("resume.")]
 _ABANDON_POINTS = [p for p in _ALL_POINTS if p.startswith("abandon.")]
-_GENERIC_POINTS = [p for p in _ALL_POINTS if not p.startswith("resume.") and not p.startswith("abandon.")]
+_PAUSE_POINTS = [p for p in _ALL_POINTS if p.startswith("pause.")]
+_GENERIC_POINTS = [p for p in _ALL_POINTS if not p.startswith(_DEDICATED_PREFIXES)]
 
 # A representative CI subset — one crash point per boundary family, biased toward the
 # recovery-critical windows the sweep's two real bugs lived in: the FILL bind→claim window
@@ -117,6 +126,13 @@ _RESUME_CI_SUBSET = ("resume.after-kill.before-reattach",)
 # ships with zero CI coverage (bzh:crash-point-registry).
 _ABANDON_CI_SUBSET = ("abandon.after-kill.before-release",)
 
+# The pause CI subset: `pause.*` is a new boundary family (issue #46) whose lone member is that
+# family's CI representative, exactly as `abandon.*`'s is. It earns CI time on its own merit
+# rather than by symmetry: this window is the regression fence on the plan's central bug — the
+# recovery it asserts converges *only* because `_resume_marked_lease` parks a paused chunk instead
+# of abandoning it, so a regression there fails this case and nothing else in the sweep.
+_PAUSE_CI_SUBSET = ("pause.after-kill.before-park",)
+
 
 def _select(points: list[str], ci_subset: tuple[str, ...]) -> list[str]:
     """The points to parametrize: all of ``points``, or its CI subset under the CI profile."""
@@ -133,6 +149,7 @@ def _select(points: list[str], ci_subset: tuple[str, ...]) -> list[str]:
 _POINTS = _select(_GENERIC_POINTS, _CI_SUBSET)
 _RESUME_SWEEP = _select(_RESUME_POINTS, _RESUME_CI_SUBSET)
 _ABANDON_SWEEP = _select(_ABANDON_POINTS, _ABANDON_CI_SUBSET)
+_PAUSE_SWEEP = _select(_PAUSE_POINTS, _PAUSE_CI_SUBSET)
 
 
 def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -158,6 +175,7 @@ def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
         set(_select(_GENERIC_POINTS, _CI_SUBSET))
         | set(_select(_RESUME_POINTS, _RESUME_CI_SUBSET))
         | set(_select(_ABANDON_POINTS, _ABANDON_CI_SUBSET))
+        | set(_select(_PAUSE_POINTS, _PAUSE_CI_SUBSET))
     )
     uncovered = {family for family in families if not any(p.startswith(f"{family}.") for p in ci_selected)}
     assert not uncovered, f"registry families with zero CI-subset coverage: {sorted(uncovered)}"
@@ -770,6 +788,110 @@ def test_kill9_at_abandon_crash_point(crash_env: CrashEnv, tmp_path: Path, point
         fresh_lease_id = next(lid for lid in lease_ids_after if lid != lease_id_before)
         assert _closure_reason(runner_dir, fresh_lease_id) == "transitioned", "the fresh re-claim did not land cleanly"
 
+        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}")
+        tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
+        commits = [line for line in tree.splitlines() if line.strip()]
+        assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
+    finally:
+        hub.close()
+        terminate(runner_proc)
+        terminate(hub_proc)
+
+
+# --------------------------------------------------------------------------- #
+# Operator chunk pause (issue #46) — the pause-park crash point
+# --------------------------------------------------------------------------- #
+
+
+def _open_pause_parks(runner_dir: Path) -> set[str]:
+    store, engine = _runner_store(runner_dir)
+    try:
+        return store.pause_parked_lease_ids()
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize("point", _PAUSE_SWEEP)
+def test_kill9_at_pause_park_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
+    """A ``kill -9`` between a paused worker's kill and its durable park still keeps the claim.
+
+    The abandon scenario's inverse (issue #46). The operator pauses a chunk that is hung
+    mid-flight; the armed runner's PULL discovers the pause, kills the worker, and self-SIGKILLs
+    *before* the ``pause_parks`` row is durable — leaving a lease that is active,
+    session-bearing, pid-dead and unparked.
+
+    That residue is the whole point. It is exactly the shape startup crash-recovery marks for
+    resume, so recovery runs straight back through ``_resume_marked_lease`` — which converges
+    **only because** it reads ``detail.pause`` and parks, killing an already-dead pid as a no-op.
+    The same path *abandoned* the chunk before this issue's central fix, so a regression there
+    surfaces right here as a ``released`` closure and freed environments instead of a held claim.
+    That is what earns this point its place in the CI subset.
+
+    The claim is then proven end to end: the chunk stays paused with its environments held, the
+    operator resumes it, the *same* session finishes the work, and it lands exactly once under
+    the same lease — no retry consumed anywhere.
+    """
+    landed_file = f"LANDED-{point.replace('.', '_')}.md"
+    hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
+    hub_port, runner_port = free_port(), free_port()
+
+    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+    runner_proc = None
+    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    try:
+        await_http(hub, "/api/health", proc=hub_proc)
+        # The hanging graph: the worker commits, then hangs — real in-flight work to pause.
+        chunk_id = _ingest_hanging_chunk(hub, crash_env.forge, landed_file)
+        write_runner_config(
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+        )
+        # Armed from the start: unarmed in effect until a live PULL discovers the pause and
+        # reaches `point` inside the park it triggers.
+        runner_proc = start_runner(runner_dir, crash_point=point)
+
+        assert wait_status(hub, chunk_id, {"running"}) == "running"
+        _await_committed(runner_dir, chunk_id, landed_file)
+        before = _leases_for_chunk(runner_dir, chunk_id)
+        assert len(before) == 1, f"expected one lease before the pause, got {before}"
+        lease_id, epoch, session_id, pid_before = before[0]
+        assert session_id and pid_before is not None
+
+        # The operator pauses the running chunk — a claim-keeping brake, not a detach.
+        paused = hub.post(f"/api/chunks/{chunk_id}/pause", json={"by": "crash-sweep"})
+        assert paused.status_code == 202, paused.text
+
+        # The armed runner's next PULL kills the hung worker and self-SIGKILLs before the park.
+        code = wait_death(runner_proc)
+        assert code == -9, f"armed runner at {point} exited {code}, not SIGKILL (-9); point never reached?"
+        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}")
+        assert _open_pause_parks(runner_dir) == set(), "the park was durable — the crash point fired too late"
+        assert _session_ends(runner_dir) == set(), "a SIGKILL'd worker must record no session-end"
+
+        # Restart UNARMED: recovery must re-run the park, NOT abandon the chunk.
+        runner_proc = start_runner(runner_dir, crash_point=None)
+        deadline = time.monotonic() + 30.0
+        while time.monotonic() < deadline and _open_pause_parks(runner_dir) != {lease_id}:
+            time.sleep(0.25)
+        assert _open_pause_parks(runner_dir) == {lease_id}, (
+            "the paused lease was never re-parked after the crash — recovery abandoned the chunk "
+            "instead of keeping the claim (the issue #46 RESUME fix regressed?)"
+        )
+        # The claim survived the crash: no closure at all, and emphatically not `released`.
+        assert _closure_reason(runner_dir, lease_id) is None, "recovery closed the paused lease — pause became detach"
+        assert hub.get(f"/api/chunks/{chunk_id}").json()["status"] == "paused"
+        assert _open_resume_intents(runner_dir) == set(), "the resume-intent was not cleared after recovery"
+        _assert_invariants(runner_dir, hub_dir, when=f"after the pause-park recovered past {point}")
+
+        # The operator resumes: the SAME session finishes the work it was paused mid-way through.
+        resumed = hub.post(f"/api/chunks/{chunk_id}/resume", json={"by": "crash-sweep"})
+        assert resumed.status_code == 202, resumed.text
+        assert wait_status(hub, chunk_id, {"done"}) == "done", f"chunk did not converge after kill at {point}"
+
+        after = _leases_for_chunk(runner_dir, chunk_id)
+        # Nothing worked twice: still exactly one lease, same lease/epoch/session — the pause cost
+        # the chunk a process, not an attempt (a retry would have minted a second lease).
+        assert len(after) == 1, f"the pause/resume cycle minted an extra lease (retry, not resume): {after}"
+        assert (after[0][0], after[0][1], after[0][2]) == (lease_id, epoch, session_id)
         _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}")
         tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
         commits = [line for line in tree.splitlines() if line.strip()]

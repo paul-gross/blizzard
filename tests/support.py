@@ -19,6 +19,7 @@ from pathlib import Path
 import sqlalchemy as sa
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine
+from sqlalchemy import insert as sa_insert
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
@@ -40,6 +41,7 @@ from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.pm.registry import PmSourceRegistry
 from blizzard.hub.pm.source import IPmSource, PmItem, PmSourceError
 from blizzard.hub.runtime import migration_runner
+from blizzard.hub.store import schema
 
 
 class FakeForge:
@@ -416,6 +418,34 @@ def ingest(hub: HubHarness, pointers: list[dict], *, promote: bool = True) -> st
         promoted = hub.client.post(f"/api/chunks/{chunk_id}/promote")
         assert promoted.status_code == 202, promoted.text
     return chunk_id
+
+
+def write_chunk_pause_facts(tmp_path: Path, chunk_id: str, *facts: tuple[bool, datetime]) -> None:
+    """Append ``chunk_pause_facts`` rows for ``chunk_id``, in argument order (issue #46).
+
+    **Not** a stand-in for the pause route — that exists (``POST /api/chunks/{id}/pause``)
+    and its own write path is proven through it in ``test_chunks_api.py``, which drives a
+    real pause-then-resume and is what fails if the ``load_facts`` hydration order ever
+    reverses. This helper exists for the one thing the route cannot express: **arbitrary
+    ``set_at`` values**. The route stamps a single ``clock.now()`` per call, so a fact
+    sequence with *distinct* instants (or a deliberate same-instant collision) is
+    unreachable through it — and those permutations are exactly what the newest-wins
+    ordering tests need.
+
+    Each tuple is ``(paused, set_at)``; write order is the newest-wins order, matching the
+    append-only ``id`` the hydration sorts by. The **read** path stays entirely real —
+    ``ChunkStore.load_facts`` hydration and then ``derive_chunk_status`` — so nothing
+    asserted through this is a tautology. Opens its own engine on the same ``db_url``
+    :func:`build_hub` derives from ``tmp_path``.
+    """
+    engine = create_engine_from_url(f"sqlite:///{tmp_path / 'hub.db'}")
+    with engine.begin() as conn:
+        for paused, set_at in facts:
+            conn.execute(
+                sa_insert(schema.chunk_pause_facts).values(
+                    chunk_id=chunk_id, paused=paused, set_at=set_at, set_by="operator"
+                )
+            )
 
 
 def assert_utc_iso(value: object) -> None:

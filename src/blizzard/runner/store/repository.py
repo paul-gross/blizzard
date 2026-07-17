@@ -223,10 +223,27 @@ class IReadRunnerStore(Protocol):
         ...
 
     def parked_lease_ids(self) -> set[str]:
-        """Leases dormant on a question — a park fact with no later resume.
+        """Leases dormant on a question **or an operator pause** — the union of
+        :meth:`ask_parked_lease_ids` and :meth:`pause_parked_lease_ids` (issue #46).
 
         REAP skips these (the reap clock is stopped — no live worker to stall) and
-        ADVANCE polls them for an answer rather than eliciting a verdict."""
+        ADVANCE polls the ask-parked ones for an answer rather than eliciting a
+        verdict; every existing skip site inherits pause-parks through this union
+        with no other change ([ask-answer.md])."""
+        ...
+
+    def ask_parked_lease_ids(self) -> set[str]:
+        """Leases dormant on a question — a park fact with no later resume ([ask-answer.md]).
+
+        The ask-park half of :meth:`parked_lease_ids`'s union."""
+        ...
+
+    def pause_parked_lease_ids(self) -> set[str]:
+        """Leases dormant on an operator pause — a pause-park fact with no later
+        pause-resume at or after it (issue #46).
+
+        The pause-park half of :meth:`parked_lease_ids`'s union; ADVANCE's routing
+        discriminator between an ask-park and a pause-park."""
         ...
 
     def open_park(self, lease_id: str) -> ParkRecord | None:
@@ -364,6 +381,14 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
 
     def record_park_resume(self, *, lease_id: str, question_id: str, resumed_at: datetime) -> None:
         """End a lease's park — the answer arrived and the session was resumed."""
+        ...
+
+    def record_pause_park(self, *, lease_id: str, chunk_id: str, parked_at: datetime) -> None:
+        """Park a lease on an operator pause — dormant, its env bindings held (issue #46)."""
+        ...
+
+    def record_pause_park_resume(self, *, lease_id: str, resumed_at: datetime) -> None:
+        """End a lease's pause-park — the operator resumed it (issue #46)."""
         ...
 
     def set_hub_paused(self, runner_id: str, *, paused: bool, at: datetime) -> None:

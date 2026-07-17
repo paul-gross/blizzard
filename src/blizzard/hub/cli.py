@@ -346,6 +346,55 @@ def detach(chunk_id: str, hub_url: str | None) -> None:
     click.echo(f"detached {chunk_id} — released from its runner, re-claimable at its current node")
 
 
+@hub.command("pause-chunk")
+@click.argument("chunk_id")
+@click.option("--by", "by", default="operator", help="Who is pausing (recorded on the fact).")
+@click.option("--hub-url", default=None, help=f"Hub API base URL (default ${ENV_HUB_URL} or {DEFAULT_HUB_URL}).")
+def pause_chunk(chunk_id: str, by: str, hub_url: str | None) -> None:
+    """Pause CHUNK — the runner kills and parks the worker but keeps the claim (issue #46).
+
+    A pure client of the hub API: ``POST /api/chunks/{id}/pause``. Unlike ``detach``, no
+    route is released and no retry is consumed. 409 when the chunk is done/stopped/
+    delivering."""
+    url = f"{_hub_url(hub_url).rstrip('/')}/api/chunks/{chunk_id}/pause"
+    try:
+        resp = httpx.post(url, json={"by": by}, timeout=_CLIENT_TIMEOUT)
+    except httpx.HTTPError as exc:
+        raise _api_error("POST /chunks/{id}/pause", exc) from exc
+    if resp.status_code == httpx.codes.CONFLICT:
+        raise click.ClickException(resp.json().get("detail", "chunk is not pausable"))
+    if resp.status_code == httpx.codes.NOT_FOUND:
+        raise click.ClickException(f"no such chunk {chunk_id}")
+    try:
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise _api_error("POST /chunks/{id}/pause", exc) from exc
+    click.echo(f"paused {chunk_id} — its worker will be killed and parked, keeping the claim")
+
+
+@hub.command("resume-chunk")
+@click.argument("chunk_id")
+@click.option("--by", "by", default="operator", help="Who is resuming (recorded on the fact).")
+@click.option("--hub-url", default=None, help=f"Hub API base URL (default ${ENV_HUB_URL} or {DEFAULT_HUB_URL}).")
+def resume_chunk(chunk_id: str, by: str, hub_url: str | None) -> None:
+    """Resume a paused CHUNK — the runner resumes the parked worker in place (issue #46).
+
+    A pure client of the hub API: ``POST /api/chunks/{id}/resume``. Idempotent: resuming
+    an unpaused chunk is a harmless no-op. 404 only when the chunk is unknown."""
+    url = f"{_hub_url(hub_url).rstrip('/')}/api/chunks/{chunk_id}/resume"
+    try:
+        resp = httpx.post(url, json={"by": by}, timeout=_CLIENT_TIMEOUT)
+    except httpx.HTTPError as exc:
+        raise _api_error("POST /chunks/{id}/resume", exc) from exc
+    if resp.status_code == httpx.codes.NOT_FOUND:
+        raise click.ClickException(f"no such chunk {chunk_id}")
+    try:
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise _api_error("POST /chunks/{id}/resume", exc) from exc
+    click.echo(f"resumed {chunk_id} — its worker resumes in place")
+
+
 @hub.command()
 @click.argument("runner_id")
 @click.option("--by", "by", default="operator", help="Who is pausing (recorded on the fact).")

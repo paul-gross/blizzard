@@ -44,6 +44,8 @@ export type { DetachVars } from './lib/chunks/detach.mutations';
 
 export { injectPromoteChunkMutation } from './lib/chunks/promote.mutations';
 export type { PromoteVars } from './lib/chunks/promote.mutations';
+export { injectChunkPauseMutation } from './lib/chunks/pause.mutations';
+export type { ChunkPauseVars } from './lib/chunks/pause.mutations';
 export { injectHubQueueQuery } from './lib/queue/queue.query';
 export { injectReorderQueueMutation, injectGroupChunksMutation } from './lib/queue/queue.mutations';
 export type { ReorderVars, GroupVars } from './lib/queue/queue.mutations';

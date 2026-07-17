@@ -235,6 +235,7 @@ export type ChunkDetail = {
      * Open Prs
      */
     open_prs?: Array<PrView>;
+    pause?: PauseView | null;
     /**
      * Pm Pointers
      */
@@ -315,11 +316,23 @@ export type ChunkIngestResponse = {
 };
 
 /**
+ * ChunkPauseRequest
+ *
+ * Set or clear a chunk's operator pause brake — records who flipped it (issue #46).
+ */
+export type ChunkPauseRequest = {
+    /**
+     * By
+     */
+    by?: string;
+};
+
+/**
  * ChunkStatus
  *
  * The derived chunk statuses. Never stored — always a query result.
  */
-export type ChunkStatus = 'not_ready' | 'ready' | 'running' | 'delivering' | 'waiting_on_human' | 'needs_human' | 'stopped' | 'done';
+export type ChunkStatus = 'not_ready' | 'ready' | 'running' | 'delivering' | 'waiting_on_human' | 'needs_human' | 'paused' | 'stopped' | 'done';
 
 /**
  * ChunkSummary
@@ -329,6 +342,11 @@ export type ChunkStatus = 'not_ready' | 'ready' | 'running' | 'delivering' | 'wa
  * ``current_node_name`` is the node's human graph name (``build``, ``review``) the
  * board renders in place of the raw ``nd_`` ULID; null when the chunk has no
  * current node or its pinned graph cannot resolve the id.
+ *
+ * Deliberately status-only: the summary feeds the board **card**, which is a passive
+ * status view (issue #42), so no operator *fact* is carried here. The pause fact — and
+ * every other fact an operator action keys on — reaches the chunk detail dock through
+ * :class:`ChunkDetail`, the one place a board action lives.
  */
 export type ChunkSummary = {
     /**
@@ -823,6 +841,28 @@ export type OpenDecisionsResponse = {
      * Decisions
      */
     decisions?: Array<DecisionView>;
+};
+
+/**
+ * PauseView
+ *
+ * An open pause on a chunk (issue #46) — who set it and when.
+ *
+ * Present only while ``paused=True`` is the newest pause fact; a resume clears it.
+ * Carried independently of ``status``: PAUSED sits below the human-gated statuses in
+ * the derivation order, so a chunk both paused and parked on a question derives
+ * ``waiting_on_human`` — this field is the only way the runner (and the board) learn
+ * the chunk is paused in that case, and it also answers "who paused it".
+ */
+export type PauseView = {
+    /**
+     * By
+     */
+    by: string;
+    /**
+     * Set At
+     */
+    set_at: string;
 };
 
 /**
@@ -1843,6 +1883,40 @@ export type ReportLeaseApiChunksChunkIdLeasesPostResponses = {
 
 export type ReportLeaseApiChunksChunkIdLeasesPostResponse = ReportLeaseApiChunksChunkIdLeasesPostResponses[keyof ReportLeaseApiChunksChunkIdLeasesPostResponses];
 
+export type PauseChunkApiChunksChunkIdPausePostData = {
+    body: ChunkPauseRequest;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/pause';
+};
+
+export type PauseChunkApiChunksChunkIdPausePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PauseChunkApiChunksChunkIdPausePostError = PauseChunkApiChunksChunkIdPausePostErrors[keyof PauseChunkApiChunksChunkIdPausePostErrors];
+
+export type PauseChunkApiChunksChunkIdPausePostResponses = {
+    /**
+     * Response Pause Chunk Api Chunks  Chunk Id  Pause Post
+     *
+     * Successful Response
+     */
+    202: {
+        [key: string]: string;
+    };
+};
+
+export type PauseChunkApiChunksChunkIdPausePostResponse = PauseChunkApiChunksChunkIdPausePostResponses[keyof PauseChunkApiChunksChunkIdPausePostResponses];
+
 export type GetPmItemsApiChunksChunkIdPmItemsGetData = {
     body?: never;
     path: {
@@ -1940,6 +2014,40 @@ export type RequeueChunkApiChunksChunkIdRequeuesPostResponses = {
 };
 
 export type RequeueChunkApiChunksChunkIdRequeuesPostResponse = RequeueChunkApiChunksChunkIdRequeuesPostResponses[keyof RequeueChunkApiChunksChunkIdRequeuesPostResponses];
+
+export type ResumeChunkApiChunksChunkIdResumePostData = {
+    body: ChunkPauseRequest;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/resume';
+};
+
+export type ResumeChunkApiChunksChunkIdResumePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ResumeChunkApiChunksChunkIdResumePostError = ResumeChunkApiChunksChunkIdResumePostErrors[keyof ResumeChunkApiChunksChunkIdResumePostErrors];
+
+export type ResumeChunkApiChunksChunkIdResumePostResponses = {
+    /**
+     * Response Resume Chunk Api Chunks  Chunk Id  Resume Post
+     *
+     * Successful Response
+     */
+    202: {
+        [key: string]: string;
+    };
+};
+
+export type ResumeChunkApiChunksChunkIdResumePostResponse = ResumeChunkApiChunksChunkIdResumePostResponses[keyof ResumeChunkApiChunksChunkIdResumePostResponses];
 
 export type ListDecisionsApiDecisionsGetData = {
     body?: never;

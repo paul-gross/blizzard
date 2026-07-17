@@ -34,6 +34,28 @@ every seam real, no tokens and no network. It proves the operator surface end to
 5. **Pause brake from the board.** Pausing the runner from the fleet strip stops new
    claims — a still-ready chunk is *not* claimed across several ticks — and resuming it
    lets the claim resume (MVP criterion 11).
+6. **Per-chunk pause from the board (issue #46).** Once the runner-level brake above
+   resumes A's claim, A is paused from its **chunk detail dock** — the claim-keeping,
+   one-chunk lever, distinct from the runner-level brake in (5). The dock is where every
+   board operator action lives (issue #42 decided that pattern for Detach and this verb
+   follows it; the card stays a passive status view), and the action is guarded by a
+   native ``confirm()`` the test accepts via a dialog handler. The chip flips to
+   ``paused`` live over SSE with no reload (the one status a pause-parked chunk's chip
+   actually shows — `derive_chunk_status` puts the human-gated states ahead of
+   ``paused``, so this proof needs a chunk caught genuinely running, not one already
+   parked on a question), the card relocates from RUNNING to WAIT/HUMAN (`STATUS_LANE`
+   in `chunk-lanes.ts` maps both there), the claim is kept (its route survives the runner's kill-and-park),
+   the dock's ``chunk-pause-by`` names who paused it, and resuming from the dock returns
+   it to a live, progressing status rather than leaving it stranded.
+
+   The dock's Pause/Resume switch keys on ``ChunkDetail.pause`` — the pause **fact** —
+   not on the chip's status, so the paused-and-asking overlap (where the status reads
+   ``waiting_on_human``) still offers Resume. That overlap is fenced at the tiers that
+   can isolate it — ``chunk-detail-panel.spec.ts`` and ``chunk-detail.spec.ts`` for the
+   dock's actions, ``test_chunks_api.py`` for the field behind the hiding status —
+   rather than here: this scenario's value is the live SSE chip flip and the surviving
+   claim, both of which need the chip to actually read ``paused``, and neither of which
+   the overlap would prove better.
 
 It is the **e2e tier**: it needs the full live stack, the sibling ``blizzard-mock``
 worktree, a local winter source, and an installed Chromium, so it is **skipped unless
@@ -284,6 +306,11 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
         with _runner_api(config), sync_playwright() as pw:
             browser = pw.chromium.launch(headless=True)
             page = browser.new_page()
+            # The dock's operator actions are guarded by a native `confirm()` (issue #42's
+            # pattern, which #46's Pause/Resume follows). Playwright *dismisses* dialogs by
+            # default, which would silently answer every confirm with "no" and make the
+            # action a no-op — accept them, the way the operator clicking Pause does.
+            page.on("dialog", lambda dialog: dialog.accept())
             expect.set_options(timeout=20_000)
             try:
                 # --- Load the board ONCE. It is never reloaded again. -------------------
@@ -434,9 +461,67 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 # --- Resume from the board: the claim resumes -------------------------
                 page.get_by_test_id("runner-toggle").click()  # Resume
                 expect(page.get_by_test_id("runner")).to_have_attribute("data-hub-paused", "false")
-                status = _tick_until(config, hub, chunk_a, fenced, {"running", "waiting_on_human", "done"}, 60.0)
-                assert status != "ready", f"resumed runner did not claim A (status {status!r})"
+                status = _tick_until(config, hub, chunk_a, fenced, {"running"}, 30.0)
+                assert status == "running", f"resumed runner did not claim A as running (status {status!r})"
                 expect(queue_row(chunk_a)).to_have_count(0)  # A left the ready queue — the claim resumed
+
+                # --- Per-chunk pause from the board (issue #46) -------------------------
+                # A is genuinely running — claimed and spawned, not yet parked on its
+                # question — the only status a pause-parked chunk's chip literally reads
+                # `paused` for: `derive_chunk_status` (hub/domain/work.py) puts the
+                # human-gated states ahead of PAUSED, so pausing an already-
+                # `waiting_on_human` chunk would leave its chip reading `waiting_on_human`,
+                # not `paused`. This is the claim-keeping, one-*chunk* lever — distinct
+                # from the runner-level brake just exercised above.
+                #
+                # The action lives in the chunk detail dock, not on the card (issue #42
+                # decided that pattern; the card stays a passive status view save for
+                # Promote), so A's card is opened first and paused from the dock.
+                a_card = page.locator('[data-status="running"]')
+                expect(a_card).to_have_count(1)
+                a_card.click()
+                expect(page.get_by_test_id("chunk-detail")).to_be_visible()
+                expect(page.get_by_test_id("detail-id")).to_have_attribute("title", chunk_a)
+                page.get_by_test_id("pause-chunk").click()
+
+                # The chip flips to `paused` live over SSE, with no reload, and the card
+                # relocates from RUNNING to WAIT/HUMAN (STATUS_LANE in chunk-lanes.ts maps
+                # paused there too, the same lane `waiting_on_human` used for B earlier).
+                expect(col_cards("running")).to_have_count(0)
+                expect(col_cards("waiting")).to_have_count(1)
+                expect(col("waiting").get_by_test_id("chunk-status")).to_have_text("paused")
+                expect(queue_row(chunk_a)).to_have_count(0)  # kept the claim — never re-enters the queue
+
+                # The runner kills the live worker and parks the lease on its next PULL,
+                # keeping the claim — no requeue, no released route (unlike detach).
+                _tick_n(config, fenced, 2)
+                paused_claim = hub.get(f"/api/chunks/{chunk_a}").json()
+                assert paused_claim["status"] == "paused", f"A did not stay paused (status {paused_claim['status']!r})"
+                assert paused_claim["route"] is not None, "chunk pause released the route — it must keep the claim"
+
+                # The dock — not the card — carries who paused it: `ChunkSummary` (the
+                # card) has no pause field by design, only `ChunkDetail` does. The dock is
+                # still open on A from the pause above, and live-updates in place.
+                expect(page.get_by_test_id("detail-id")).to_have_attribute("title", chunk_a)
+                expect(page.get_by_test_id("chunk-pause-by")).to_contain_text("operator")
+
+                # --- Resume the chunk from the dock: it returns and proceeds -----------
+                # Pause is gone and Resume stands in its place — the switch reads the pause
+                # fact off `ChunkDetail.pause`, which is why it survives a hiding status.
+                expect(page.get_by_test_id("pause-chunk")).to_have_count(0)
+                page.get_by_test_id("resume-chunk").click()
+                expect(page.get_by_test_id("chunk-pause-by")).to_have_count(0)  # the dock live-updates too
+
+                # A few bounded ticks — enough to prove the resumed session is spawned and
+                # making forward progress again (issue #46's `resume-chunk` respawns the
+                # parked session in place, same lease/epoch/session), without racing the
+                # full build -> review -> deliver journey B already proved above.
+                _tick_n(config, fenced, 3)
+                resumed_status = hub.get(f"/api/chunks/{chunk_a}").json()["status"]
+                assert resumed_status in {"running", "waiting_on_human"}, (
+                    f"resumed chunk did not proceed (status {resumed_status!r})"
+                )
+                expect(page.get_by_test_id("chunk-card")).to_have_count(2)  # B done, A live again
             finally:
                 browser.close()
 

@@ -376,6 +376,22 @@ requeues = Table(
     Column("requeued_at", UtcDateTime, nullable=False),  # supersedes an earlier escalation
 )
 
+# --- Chunk pause facts (chunk.paused / chunk.resumed — issue #46) -----------
+#
+# An operator-level brake over one specific chunk, orthogonal to the runner's own brake
+# (``runner_pause_facts`` above) and to detach (which gives up the claim). Append-only,
+# newest-fact-wins, mirroring ``runner_pause_facts`` exactly.
+
+chunk_pause_facts = Table(
+    "chunk_pause_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
+    Column("paused", Boolean, nullable=False),  # paused derives from the newest fact
+    Column("set_at", UtcDateTime, nullable=False),
+    Column("set_by", String, nullable=False),  # who flipped it — recorded on the fact
+)
+
 # --- Store-and-forward high-water mark (per-runner idempotency) ---------------
 #
 # The hub's dedup memory for the runner→hub fact push (POST /events): the greatest

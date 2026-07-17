@@ -178,6 +178,44 @@ def test_sse_stream_serves_the_eventsource_contract(tmp_path: Path) -> None:
         assert first.startswith(": blizzard hub event stream"), first[:80]
 
 
+def test_chunk_pause_field_reflects_the_operator_chunk_brake(tmp_path: Path) -> None:
+    """The ``pause`` wire field off a live ``GET /chunks/{id}`` response (issue #46).
+
+    Nothing type-checks a wire field name off a live response (``bzh:sweep-release-only-
+    tiers``) — this is that mandatory surface, distinct from the runner-level brake above:
+    a chunk pause keeps the claim (the route stays), unlike the runner's own brake.
+
+    ``ChunkDetail.pause`` is the **only** shape the fact travels in: the runner reads it,
+    and so does the board's chunk detail dock, which is where every operator action lives
+    (issue #42). The summary deliberately carries no pause field — the card is a passive
+    status view — and this asserts that narrowing, since a silently re-added field would
+    be exactly as untype-checked as a removed one.
+    """
+    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+        assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
+        chunk_id = _ingest(forge, hub, "pause over the wire")
+
+        def _summary() -> dict:
+            return next(c for c in hub.get("/api/chunks").json() if c["chunk_id"] == chunk_id)
+
+        assert hub.get(f"/api/chunks/{chunk_id}").json()["pause"] is None
+        assert "paused" not in _summary(), "the card is a passive status view — no pause fact on the summary"
+
+        paused = hub.post(f"/api/chunks/{chunk_id}/pause", json={"by": "operator"})
+        assert paused.status_code == 202, paused.text
+        detail = hub.get(f"/api/chunks/{chunk_id}").json()
+        assert detail["status"] == "paused"
+        assert detail["pause"]["by"] == "operator"
+        assert detail["pause"]["set_at"]
+        assert _summary()["status"] == "paused", "the card still reflects the pause as a status"
+        assert "paused" not in _summary()
+
+        resumed = hub.post(f"/api/chunks/{chunk_id}/resume", json={"by": "operator"})
+        assert resumed.status_code == 202, resumed.text
+        assert hub.get(f"/api/chunks/{chunk_id}").json()["pause"] is None
+
+
 def test_runner_registers_and_reads_its_pause_brake(tmp_path: Path) -> None:
     bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
     with (

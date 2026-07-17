@@ -90,6 +90,12 @@ _RELEASED = "released"  # the chunk was found reassigned/detached/unknown — ab
 #: and the answer-resume framing). The exact prose is unpinned.
 _RESTART_RESUME_MESSAGE = "# The supervisor restarted; continue your task where you left off."
 
+#: The message ADVANCE delivers into a session the operator paused and then resumed (issue #46).
+#: Same ``#``-prefixed inert-comment framing as the restart resume above, for the same reason: the
+#: session may be real-harness prose or a blizzard-mock behavior *script* it ``exec``s. The exact
+#: prose is unpinned.
+_PAUSE_RESUME_MESSAGE = "# The operator resumed this chunk; continue your task where you left off."
+
 # Outbound-buffer fact kinds. ``completion.submitted`` is the
 # runner-local kind whose flush drives the apply-response; ``decision.submitted`` is the
 # runner-config gate's kind, which parks the chunk instead of advancing it; the
@@ -122,7 +128,7 @@ _CP_RESUME_AFTER_KILL = crashpoint("resume.after-kill.before-reattach", "survivo
 _CP_RESUME_AFTER = crashpoint("resume.after-reattach", "session re-attached under the same lease; intent cleared")
 
 # ABANDON — the reassigned/detached release (`_abandon_reassigned`), reached from RESUME (a chunk
-# reassigned/detached while the runner was down), PULL's `_release_detached` (reassigned/detached
+# reassigned/detached while the runner was down), PULL's `_reconcile_leases` (reassigned/detached
 # while the runner was up, caught by its live-tick detach check), or REAP's `_fail_attempt` escalate
 # guard (an exhausted-retries lease the hub already moved elsewhere, since blizzard#38). A crash
 # here leaves a lease with a dead pid, environments not yet released, and no closure recorded, so
@@ -131,12 +137,27 @@ _CP_RESUME_AFTER = crashpoint("resume.after-reattach", "session re-attached unde
 # parked/pending-submission/session-ended, and not stale-heartbeat as measured at crash time —
 # is re-asked by RESUME, finds it still not ours, and re-runs this same abandon idempotently. A
 # lease in one of those skipped states gets no resume intent, so RESUME never revisits it — but
-# PULL's own `_release_detached` re-scans *every* active lease each tick, unconditional on those
+# PULL's own `_reconcile_leases` re-scans *every* active lease each tick, unconditional on those
 # states, and reaches the identical re-ask; it is the stronger recovery story of the two, and the
 # one that actually covers every path into this function (killing an already-dead pid is a
 # no-op; `_release_all` and `record_closure` are re-runnable), and the chunk lands exactly once.
 _CP_ABANDON_AFTER_KILL = crashpoint(
     "abandon.after-kill.before-release", "detached worker killed; environments not yet released"
+)
+
+# PAUSE — the operator's per-chunk pause park (`_kill_and_park_paused`, issue #46), reached from
+# RESUME (a chunk paused while the runner was down) and PULL's `_reconcile_leases` (paused while
+# it was up). Its own boundary family, not `abandon.*`'s and not a step's: this is the deliberate
+# *inverse* of the abandon — the worker dies but the claim, the route, the epoch and every
+# environment survive — and it is reached from two different steps, so naming it for either one
+# would be false. A crash here leaves a lease that is still active, session-bearing, pid dead, and
+# NOT yet parked. Recovery converges *because of* the RESUME fix (`_resume_marked_lease`): startup
+# crash-recovery marks that exact shape for resume (fresh-at-crash heartbeat, no session-end),
+# RESUME re-asks the hub, reads `detail.pause is not None`, and re-runs this same park idempotently
+# — killing the already-dead pid is a no-op. Before that fix the identical path *abandoned* the
+# chunk, so this point is the regression fence on the plan's central bug, not decoration.
+_CP_PAUSE_PARK_AFTER_KILL = crashpoint(
+    "pause.after-kill.before-park", "paused worker killed; pause-park not yet durable"
 )
 
 # PULL — the single outbound flusher (store-and-forward drain).
@@ -396,13 +417,32 @@ def resume(ctx: LoopContext) -> None:
 
 
 def _resume_marked_lease(ctx: LoopContext, lease: LeaseRecord) -> None:
-    """Resume a marked lease in place, or abandon it if the hub reassigned its chunk,
-    or if the hub no longer knows it at all (blizzard#9)."""
+    """Park a paused chunk, else resume in place, else abandon it if the hub reassigned its chunk
+    (issue #46), or if the hub no longer knows it at all (blizzard#9).
+
+    The pause branch is **first**, and it keys on the pause *fact* rather than the derived
+    status (issue #46). Both details are load-bearing:
+
+    * **First**, because a paused chunk derives ``PAUSED``, not ``RUNNING`` — so before this
+      branch existed a chunk still routed to *this* runner fell through to
+      :func:`_abandon_reassigned`, giving up the claim, the route and every environment. A
+      pause silently degraded into a detach on every restart, and RESUME runs before PULL, so
+      PULL's own pause-park never got the chance to see it.
+    * **The fact, not the status**, because ``status == PAUSED`` is a lossy read: PAUSED sits
+      below the human-gated states in the derivation order, so a chunk both paused *and*
+      parked on a question derives ``waiting_on_human``. A status-keyed check would never
+      learn it was paused and would resume it on the answer.
+
+    Conjoined with ``ours`` so a chunk that was **detached and then paused** still abandons:
+    detach wins, because the route is gone and no amount of pausing makes it ours again. A chunk
+    the hub has forgotten outright (a 404, :class:`ChunkNotFoundError`) abandons ahead of all
+    three branches for the same reason (blizzard#9): there is no pause fact to read off a chunk
+    that no longer exists."""
     try:
         detail = ctx.hub.get_chunk(lease.chunk_id)
     except ChunkNotFoundError:
         # The chunk is gone outright (e.g. a store reset) — terminal, not retryable; abandon now
-        # rather than leave the intent open for PULL's `_release_detached` to find it later.
+        # rather than leave the intent open for PULL's `_reconcile_leases` to find it later.
         _abandon_reassigned(ctx, lease, via="resume")
         return
     except HubClientError:
@@ -411,7 +451,9 @@ def _resume_marked_lease(ctx: LoopContext, lease: LeaseRecord) -> None:
         # over a chunk that may have been reassigned; the ownership check is worth the wait.
         return
     ours = detail.route is not None and detail.route.runner_id == ctx.config.runner_id
-    if detail.status == ChunkStatus.RUNNING and ours:
+    if ours and detail.pause is not None:
+        _kill_and_park_paused(ctx, lease, via="resume")
+    elif detail.status == ChunkStatus.RUNNING and ours:
         _resume_in_place(ctx, lease)
     else:
         _abandon_reassigned(ctx, lease, via="resume")
@@ -494,7 +536,7 @@ def _abandon_reassigned(ctx: LoopContext, lease: LeaseRecord, *, killed: bool = 
     does exactly what losing ownership requires: kill the worker, release the environments. The lease is closed
     ``released`` (not a failed attempt — it never gets to run) and the intent is cleared. ``via``
     names which caller reached the ownership check that led here (``"resume"`` — restart-resume,
-    ``"pull"`` — a live tick's :func:`_release_detached`, ``"reap"`` — an escalation REAP
+    ``"pull"`` — a live tick's :func:`_reconcile_leases`, ``"reap"`` — an escalation REAP
     suppressed in favor of this abandon, see :func:`_fail_attempt`) so the log line below does not
     overclaim a single cause."""
     now = ctx.clock.now()
@@ -509,6 +551,54 @@ def _abandon_reassigned(ctx: LoopContext, lease: LeaseRecord, *, killed: bool = 
     _log.info("abandoned reassigned/detached/unknown chunk", chunk_id=lease.chunk_id, lease_id=lease.lease_id, via=via)
 
 
+def _kill_and_park_paused(ctx: LoopContext, lease: LeaseRecord, *, via: str) -> None:
+    """Kill a paused chunk's worker and park its lease — the claim is **kept** (issue #46).
+
+    The deliberate inverse of :func:`_abandon_reassigned`, and a genuinely separate function
+    rather than that one with a flag: the two diverge on every consequential point. This one
+    does **not** release the environments (they stay held and warm for the resume), does not
+    record a closure (the lease stays ACTIVE), does not bump the epoch, mints no lease, and
+    records no requeue — so **no retry is consumed** and the route, epoch and session all
+    survive the pause. What ends is the *process*, not the tenure. Detach gives the work away;
+    a pause holds it exactly where it is.
+
+    ``via`` names which caller reached the pause check that led here (``"resume"`` — a chunk
+    paused while the runner was down, ``"pull"`` — paused while it was up), following the
+    module's twin-caller convention.
+
+    **Not gated by :func:`_spawn_suppressed`.** A kill is not a spawn, and a chunk pause is a
+    hub-level instruction over one specific chunk — orthogonal to the runner's own brake, so
+    one must not suppress the other. This is the same reason the abandon kill that
+    :func:`_reconcile_leases` reaches (:func:`_abandon_reassigned`) is ungated. It reads as an
+    asymmetry against REAP's stall kill, which *is*
+    deferred while locally paused, so the distinction is worth naming: there the local brake is
+    the **only** authority saying anything about that worker, and killing it would make a pause
+    into a drain. Here a second authority — the hub, about this chunk — has said stop, and
+    honoring it is not the brake's business either way.
+
+    ``record_resume_clear`` unconditionally is correct and inert when there is no mark:
+    ``_intent_is_open`` is timestamp-correlated, so clearing an unmarked lease writes a row no
+    predicate reads (exactly as :func:`_abandon_reassigned` already does). It matters on the
+    RESUME path, where a marked lease must not be left holding an open intent ADVANCE would
+    then skip on forever.
+
+    Crash window (``bzh:crash-point-registry``): :data:`_CP_PAUSE_PARK_AFTER_KILL` sits between
+    the kill and the durable park — see its declaration for why recovery converges."""
+    now = ctx.clock.now()
+    if lease.pid is not None:
+        ctx.process.kill(lease.pid)
+    _CP_PAUSE_PARK_AFTER_KILL.reached()  # worker dead; the park is not yet durable
+    ctx.store.record_pause_park(lease_id=lease.lease_id, chunk_id=lease.chunk_id, parked_at=now)
+    ctx.store.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
+    _log.info(
+        "parked chunk on an operator pause — claim retained",
+        chunk_id=lease.chunk_id,
+        lease_id=lease.lease_id,
+        epoch=lease.epoch,
+        via=via,
+    )
+
+
 # --------------------------------------------------------------------------- #
 # PULL
 # --------------------------------------------------------------------------- #
@@ -520,10 +610,11 @@ def pull(ctx: LoopContext) -> None:
 
     Three outbound exchanges happen here. First :func:`_sync_registry` registers the runner
     (idempotent — refreshing its ``last_seen_at`` liveness) and reads its declarative
-    pause brake back, mirroring it locally so FILL adheres. Then :func:`_release_detached`
+    pause brake back, mirroring it locally so FILL adheres. Then :func:`_reconcile_leases`
     asks the hub, per active lease, whether this runner still holds the route — the same
     ownership question restart-resume already asks — and abandons any lease it no longer holds,
-    before anything is flushed. Then the outbound buffer drains.
+    or parks one the operator paused (issue #46), before anything is flushed. Then the
+    outbound buffer drains.
 
     Store-and-forward always: every hub-bound fact was written to the buffer at mint
     with a per-runner monotonic seq, and this is the single flusher that drains it — FIFO, so
@@ -534,7 +625,7 @@ def pull(ctx: LoopContext) -> None:
     flushes next tick; an outage is just a bigger backlog.
     """
     _sync_registry(ctx)
-    _release_detached(ctx)
+    _reconcile_leases(ctx)
     _CP_PULL_BEFORE.reached()
     flush_outbound(ctx)
     _CP_PULL_AFTER.reached()
@@ -557,21 +648,50 @@ def _sync_registry(ctx: LoopContext) -> None:
     ctx.store.set_hub_paused(ctx.config.runner_id, paused=paused, at=ctx.clock.now())
 
 
-def _release_detached(ctx: LoopContext) -> None:
-    """Abandon any active lease the hub no longer routes to this runner — a live tick's
-    half of restart-resume's ownership check (:func:`_resume_marked_lease`).
+def _reconcile_leases(ctx: LoopContext) -> None:
+    """Reconcile every active lease against the hub's view of its chunk — abandon it if the hub
+    no longer routes it here, else park it if the operator paused it (issue #46).
+
+    A live tick's half of restart-resume's ownership check (:func:`_resume_marked_lease`), and
+    the two questions share **one** ``get_chunk`` per lease: this sweep already made that call
+    for the detach check, and the pause answer rides the very same response, so honoring a pause
+    on a live tick costs no extra hub polling at all.
 
     For every active lease, ask the hub who holds the chunk's route now. Unreachable hub →
     ``continue``: keep working, the last-known directive holds (the same rule
-    :func:`_sync_registry` follows) — do not crash, do not abandon on a transport failure. Ours
-    and still routed here → leave it alone, whatever its derived status: a live runner legitimately
-    holds an active lease while the chunk derives ``delivering``, ``waiting_on_human``, or
-    ``needs_human`` (a hub-node hold or an open escalation), so — unlike the restart-resume
-    predicate, which also checks ``status == RUNNING`` because at restart a non-running status
-    means the world moved on — the check here is route identity **alone**: ``route is None``
-    (detached) or ``route.runner_id`` is someone else's (reassigned). Either one is
-    :func:`_abandon_reassigned`: kill the worker, release every environment, close the lease
-    ``released`` with no epoch bump, no requeue fact, no retry consumed.
+    :func:`_sync_registry` follows) — do not crash, do not abandon on a transport failure, and do
+    not read a transport failure as a pause either. Then, in order:
+
+    * **Unknown at the hub** (a 404, :class:`ChunkNotFoundError`) → :func:`_abandon_reassigned`:
+      terminal, not retryable (blizzard#9) — the chunk's tenure ended out from under this
+      runner, so the worker is reaped and the environments released rather than the read retried
+      forever. Caught **ahead of** the ``HubClientError`` arm below, which it subclasses.
+    * **Detached or reassigned** (``route is None`` or someone else's ``runner_id``) →
+      :func:`_abandon_reassigned`: kill the worker, release every environment, close the lease
+      ``released`` with no epoch bump, no requeue fact, no retry consumed. Checked **first** of
+      the two fact branches, so a chunk that was detached *and* paused abandons — detach wins,
+      the route is gone.
+    * **Paused** (``detail.pause`` is set) → :func:`_kill_and_park_paused`: kill the worker but
+      keep the claim, the route, the epoch and the environments.
+    * Otherwise → leave it alone, whatever its derived status: a live runner legitimately holds
+      an active lease while the chunk derives ``delivering``, ``waiting_on_human``, or
+      ``needs_human`` (a hub-node hold or an open escalation), so — unlike the restart-resume
+      predicate, which also checks ``status == RUNNING`` because at restart a non-running status
+      means the world moved on — the check here is route identity **alone**.
+
+    The pause branch keys on the ``pause`` **fact**, not the derived status, and that is what
+    makes the overlap with an ask-park work: a paused chunk that is also parked on a question
+    derives ``waiting_on_human``, so a status-keyed check would miss the pause entirely. Parking
+    an already-ask-parked lease is safe — the kill is a no-op on an already-dead worker and the
+    pause-park is additive to the ask-park, which stays open underneath and is delivered by
+    :func:`_resume_if_answered` on the tick after the pause clears.
+
+    The park is guarded by :meth:`pause_parked_lease_ids` (read **once**, hoisted out of the
+    loop) so it is idempotent across ticks: without the guard every tick of a standing pause
+    would append another park row for the same lease — unbounded growth, and an
+    ``open_pause_park`` whose answer depends on which duplicate it read. The
+    ``runner:one-open-pause-park-per-lease`` invariant (``bzh:invariant-checker``) fences
+    exactly this.
 
     Runs before the flush, deliberately: killing the detached chunk's worker as early **within
     this step** as possible is the best lever the runner has on the late-write window — between
@@ -585,9 +705,23 @@ def _release_detached(ctx: LoopContext) -> None:
     facts to close it would trade a durable invariant for a window the fence closes anyway. This is
     requeue's existing window (requeue already releases the route with no bump too) — not engineered
     around here."""
+    pause_parked = ctx.store.pause_parked_lease_ids()  # hoisted: the park guard, one read per tick
     for lease in ctx.store.list_active_leases():
-        if _reassigned_or_detached(ctx, lease):
+        try:
+            detail = ctx.hub.get_chunk(lease.chunk_id)
+        except ChunkNotFoundError:
+            # The chunk is gone from the hub outright — terminal, not retryable (blizzard#9).
+            # Ordered before the HubClientError arm because it is a *subclass* of it: without
+            # this arm the 404 would be swallowed as "hub unreachable" and this sweep would
+            # re-ask forever, never reaping the worker or releasing the environments.
             _abandon_reassigned(ctx, lease, via="pull")
+            continue
+        except HubClientError:
+            continue  # hub unreachable — last-known directive holds; keep working
+        if detail.route is None or detail.route.runner_id != ctx.config.runner_id:
+            _abandon_reassigned(ctx, lease, via="pull")
+        elif detail.pause is not None and lease.lease_id not in pause_parked:
+            _kill_and_park_paused(ctx, lease, via="pull")
 
 
 def _reassigned_or_detached(ctx: LoopContext, lease: LeaseRecord) -> bool:
@@ -599,9 +733,15 @@ def _reassigned_or_detached(ctx: LoopContext, lease: LeaseRecord) -> bool:
     rule: the hub telling us the chunk no longer exists (e.g. a store reset) is not a transport
     failure to wait out — it is terminal, so this reads it as detached too and lets the caller's
     abandon path reap the lease and release the held environments rather than retry the 404
-    forever. Shared by :func:`_release_detached` (a live-tick sweep over every active lease) and
-    :func:`_fail_attempt`'s escalate guard (a single lease, checked only on the exhausted-retries
-    path) — the same ownership question, asked at two different rates."""
+    forever (blizzard#9).
+
+    :func:`_fail_attempt`'s escalate guard is this function's caller: a single lease, checked
+    only on the exhausted-retries path. PULL's own sweep (:func:`_reconcile_leases`) once shared
+    it, but now inlines the ``get_chunk`` so its detach and pause branches can read one response
+    instead of polling the hub twice — it carries its own copy of the 404 rule above, for the
+    same reason and to the same effect. This stays a function because the two ask the same
+    ownership question at very different rates, and the escalate guard needs the answer where no
+    sweep is running."""
     try:
         detail = ctx.hub.get_chunk(lease.chunk_id)
     except ChunkNotFoundError:
@@ -918,6 +1058,17 @@ def advance(ctx: LoopContext) -> None:
     A worker whose completion or decision is already buffered is skipped: the outcome is
     elicited exactly once, then the chunk waits at its node boundary for the flush.
 
+    A dormant lease routes to whichever of the two resume siblings its park calls for, and
+    **pause dominates the ask** (issue #46). The overlap is real, not hypothetical: an operator
+    may pause a chunk that is already ``waiting_on_human`` (pause is deliberately not refused
+    there), and PULL keys on the pause *fact* rather than the derived status, so it happily
+    pause-parks a lease that is already ask-parked. Ordering the pause branch first — together
+    with :func:`_resume_if_unpaused`'s own ask-park early return — is what makes **an answer
+    not un-pause a chunk**: the pause-park clears when the operator resumes, and the *next*
+    tick's :func:`_resume_if_answered` delivers the answer. Ordered the other way,
+    :func:`_resume_if_answered` would resume a paused worker and PULL would kill it again the
+    next tick — a spawn/kill churn loop.
+
     A lease with an **open resume intent** is skipped too (issue #45): RESUME, not this
     step, owns it until the intent clears. This is not just a pause artifact — it holds
     on every tick, restart or not. On an ordinary restart RESUME already resolved every
@@ -933,7 +1084,8 @@ def advance(ctx: LoopContext) -> None:
     though its process is gone.
     """
     pending = ctx.store.pending_submission_lease_ids()
-    parked = ctx.store.parked_lease_ids()
+    ask_parked = ctx.store.ask_parked_lease_ids()
+    pause_parked = ctx.store.pause_parked_lease_ids()
     resume_intents = ctx.store.resume_intent_lease_ids()
     for lease in ctx.store.list_active_leases():
         if lease.pid is None or lease.session_id is None:
@@ -942,7 +1094,10 @@ def advance(ctx: LoopContext) -> None:
             continue  # RESUME hasn't re-attached (or abandoned) it yet — not exited work
         if lease.lease_id in pending:
             continue  # outcome elicited, awaiting flush — the node boundary
-        if lease.lease_id in parked:
+        if lease.lease_id in pause_parked:
+            _resume_if_unpaused(ctx, lease)  # dormant on an operator pause — resume when it lifts
+            continue
+        if lease.lease_id in ask_parked:
             _resume_if_answered(ctx, lease)  # dormant on a question — resume on the answer
             continue
         if ctx.process.is_alive(lease.pid, lease.process_start_time or ""):
@@ -1171,18 +1326,24 @@ def _spawn_suppressed(ctx: LoopContext, *, via: str, chunk_id: str, lease_id: st
     Reads **``local_paused`` only**: the hub brake keeps its claims-only meaning
     and stays read in FILL alone. The local brake is the machine declining to work, and
     "start no processes on my machine" is a local statement, not a claims-only one — this
-    is that gate's one shared home, called before each of the **four** spawn primitives'
+    is that gate's one shared home, called before each of the **five** spawn primitives'
     first mutation (:func:`_spawn_attempt`, :func:`_resume_in_place`,
-    :func:`_resume_if_answered`, and the judgement resume inside
+    :func:`_resume_if_answered`, :func:`_resume_if_unpaused`, and the judgement resume inside
     :func:`_advance_exited_worker`) so a suppressed spawn writes no fact, kills no pid,
     mints no lease, and elicits no verdict. The lease is left exactly as it was — active,
     unmodified — and the shape it is left in (an interrupted claim, an open resume intent,
-    an open park, an unjudged exit) is what the next tick's own recovery re-drives once
-    the brake clears; no new state is needed here.
+    an open ask- or pause-park, an unjudged exit) is what the next tick's own recovery
+    re-drives once the brake clears; no new state is needed here.
+
+    **This list is the gate's call-site registry — extend it whenever a primitive is added.**
+    Issue #45 shipped because the judgement resume was a spawn nobody had counted; issue #46's
+    :func:`_resume_if_unpaused` was the fifth. A stale count here is how the sixth gets missed.
+    Note what is deliberately *absent*: :func:`_kill_and_park_paused` is a kill, not a spawn,
+    and a chunk-level pause from the hub is not this brake's business (see that function).
 
     ``chunk_id`` is always present; ``lease_id`` is ``None`` at :func:`_spawn_attempt` (the
     gate fires before a lease is minted) and carries the held/prior lease at restart-resume,
-    answer-resume, and the judgement resume."""
+    answer-resume, pause-resume, and the judgement resume."""
     if not ctx.store.local_paused(ctx.config.runner_id):
         return False
     _log.info(
@@ -1275,12 +1436,12 @@ def _fail_attempt(ctx: LoopContext, lease: LeaseRecord, *, reason: str, via: str
 
     The exhausted-retries branch checks ownership before escalating (blizzard#38). Tick order is
     REAP -> RESUME -> PULL -> FILL -> ADVANCE, and PULL's own detach sweep
-    (:func:`_release_detached`) is what abandons a lease the hub no longer routes here — but a
+    (:func:`_reconcile_leases`) is what abandons a lease the hub no longer routes here — but a
     caller earlier in the tick (REAP, chiefly) can reach an exhausted retry budget on such a
     lease first. Escalating anyway would buffer an ``escalation.recorded`` fact this same tick's
     PULL cannot retract once flushed — unlike the requeue branch, whose fresh, routeless lease is
     itself caught and abandoned by that later PULL pass, an escalation is a one-way door. So this
-    branch re-asks the same ownership question :func:`_release_detached` asks and, if the chunk is
+    branch re-asks the same ownership question :func:`_reconcile_leases` asks and, if the chunk is
     no longer ours, abandons in place (:func:`_abandon_reassigned`) instead of escalating — the
     same outcome PULL would reach later this tick, without the intervening false escalation.
 
@@ -1385,7 +1546,7 @@ def _requeue(ctx: LoopContext, lease: LeaseRecord) -> None:
 
     The prior attempt's lease is already closed by the caller (:func:`_fail_attempt`) before
     this runs, so a 404 (:class:`ChunkNotFoundError`) here leaves no active lease behind for
-    PULL's own sweep (:func:`_release_detached`) to find and clean up — reached, notably, from
+    PULL's own sweep (:func:`_reconcile_leases`) to find and clean up — reached, notably, from
     REAP, which precedes PULL in tick order, so PULL's sweep has not yet run this same chunk
     this tick. Left as a generic :class:`HubClientError`, this is the same held-forever shape
     issue #9 fixed for :func:`_reassigned_or_detached`, just for a chunk gone between the
@@ -1469,9 +1630,12 @@ def _resume_if_answered(ctx: LoopContext, lease: LeaseRecord) -> None:
     new pid is recorded so it reads live again, the park is closed, and ``answer.delivered``
     is buffered up to the hub (board detail; the status already flipped at question.answered).
 
-    Gated by the local brake (issue #45) **before the poll** — a paused runner makes no hub
-    poll at all. A suppressed resume leaves the park open; the answer is picked up once the
-    brake clears (no retry consumed either way).
+    Gated by the local brake (issue #45) **before the poll** — this step's own ``get_question``
+    poll runs none while the brake is on. That is not the same as the runner making no hub call
+    that tick: :func:`_reconcile_leases` still polls ``ctx.hub.get_chunk`` once per active lease
+    regardless of the local brake, deliberately ungated — a kill is not a spawn, and a chunk pause
+    is a hub-level instruction orthogonal to this runner's own brake. A suppressed resume leaves
+    the park open; the answer is picked up once the brake clears (no retry consumed either way).
     """
     if _spawn_suppressed(ctx, via="answer-resume", chunk_id=lease.chunk_id, lease_id=lease.lease_id):
         return
@@ -1516,6 +1680,88 @@ def _resume_if_answered(ctx: LoopContext, lease: LeaseRecord) -> None:
         created_at=now,
     )
     _log.info("resumed dormant session with answer", chunk_id=lease.chunk_id, question_id=park.question_id, pid=pid)
+
+
+def _resume_if_unpaused(ctx: LoopContext, lease: LeaseRecord) -> None:
+    """Poll a pause-parked lease's chunk; once the operator resumes it, restart its session (#46).
+
+    The **fifth** member of the resume family, and a sibling of :func:`_resume_if_answered`
+    rather than a branch inside it: the two share a silhouette but no body. That one polls
+    ``get_question(park.question_id)`` — structurally impossible here, since a pause-park has no
+    question — and they differ in every step besides: a different poll, a different message, a
+    different resume fact, and no outbound. Parameterizing them on a boolean would produce one
+    function with two disjoint halves.
+
+    Same lease, same epoch, same session; only ``pid``/``process_start_time`` are
+    rewritten via ``record_spawn``, so **no retry is consumed** — the pause cost the chunk a
+    process, not an attempt. Modeled on :func:`_resume_if_answered` minus its kill-first: a
+    pause-parked worker was already killed by :func:`_kill_and_park_paused`, so there is no
+    survivor to fence.
+
+    An **ask-parked** lease returns early even once unpaused. This is the other half of ADVANCE's
+    pause-dominates ordering: the lease is dormant on a question *and* a pause, so lifting the
+    pause must not conjure a resume out of an answer that may not exist. Clearing the pause-park
+    hands it back to :func:`_resume_if_answered` on the next tick, which resumes it if and only
+    if the question is actually answered.
+
+    **Gated by the local brake before the poll**, like every other spawn primitive:
+    ``resume_with_message`` below is a real spawn, and landing a fifth one outside
+    :func:`_spawn_suppressed` is precisely how issue #45 happened. The gate sits above
+    ``record_pause_park_resume`` so a suppressed resume writes **no fact** — the gate's stated
+    contract — leaving the pause-park open for the first tick after the brake clears. That gate
+    stops only this step's own ``get_chunk`` poll, not every hub call the tick makes:
+    :func:`_reconcile_leases` still polls ``ctx.hub.get_chunk`` once per active lease regardless
+    of the local brake, deliberately ungated — a kill is not a spawn, and a chunk pause is a
+    hub-level instruction orthogonal to this runner's own brake.
+
+    The ``resume_with_message`` → ``record_spawn`` gap is the same by-construction spawn-record
+    window :func:`_resume_in_place` and :func:`_resume_if_answered` already carry un-armed: no
+    crash point can arm a window whose recovery input — the new pid — does not yet exist. It is
+    bounded to that one call-return→store-write gap (design/runner/loop.md)."""
+    if _spawn_suppressed(ctx, via="pause-resume", chunk_id=lease.chunk_id, lease_id=lease.lease_id):
+        return
+    try:
+        detail = ctx.hub.get_chunk(lease.chunk_id)
+    except ChunkNotFoundError:
+        # The chunk is gone outright — not this step's abandon to make: PULL's
+        # `_reconcile_leases` owns it and runs ahead of ADVANCE this same tick.
+        return
+    except HubClientError:
+        return  # hub unreachable — the park is durable; retry next tick
+    if detail.pause is not None:
+        return  # still paused — the reap clock stays stopped
+    if detail.route is None or detail.route.runner_id != ctx.config.runner_id:
+        return  # detached/reassigned while parked — PULL's sweep abandons it, not this step
+    now = ctx.clock.now()
+    if lease.lease_id in ctx.store.ask_parked_lease_ids():
+        # Dormant on a question underneath the pause. Clearing the pause-park is the whole action:
+        # the next tick's `_resume_if_answered` owns it, and an answer — not this resume —
+        # restarts it.
+        ctx.store.record_pause_park_resume(lease_id=lease.lease_id, resumed_at=now)
+        _log.info("pause lifted on an ask-parked chunk — awaiting its answer", chunk_id=lease.chunk_id)
+        return
+    bindings = ctx.store.bindings_for_chunk(lease.chunk_id)
+    if not bindings or lease.session_id is None:
+        _log.warning("unpaused chunk has no warm env/session — cannot resume", chunk_id=lease.chunk_id)
+        return
+    # The un-armable spawn-record gap (see the docstring) — the same one SPAWN, restart-resume
+    # and answer-resume carry, not a new one this step introduces.
+    pid = ctx.harness.resume_with_message(bindings[0].workdir, lease.session_id, _PAUSE_RESUME_MESSAGE)
+    ctx.store.record_spawn(
+        lease.lease_id,
+        pid=pid,
+        process_start_time=ctx.process.start_time(pid) or "",
+        session_id=lease.session_id,  # unchanged — same session under the same lease
+        spawned_at=now,
+    )
+    ctx.store.record_pause_park_resume(lease_id=lease.lease_id, resumed_at=now)
+    _log.info(
+        "resumed dormant session after an operator unpause",
+        chunk_id=lease.chunk_id,
+        lease_id=lease.lease_id,
+        epoch=lease.epoch,
+        pid=pid,
+    )
 
 
 def _collect_asset_artifacts(

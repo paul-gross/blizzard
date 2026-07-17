@@ -4,6 +4,7 @@ import { injectHubChunkDetailQuery } from '../chunks/chunk-detail.query';
 import { injectHubChunkPmItemsQuery } from '../chunks/chunk-pm-items.query';
 import { injectDetachChunkMutation } from '../chunks/detach.mutations';
 import { injectAnswerQuestionMutation, injectResolveDecisionMutation } from '../chunks/human.mutations';
+import { injectChunkPauseMutation } from '../chunks/pause.mutations';
 import {
   type AnswerQuestionEvent,
   ChunkDetailPanel,
@@ -13,12 +14,13 @@ import {
 
 /** The hub's `{"detail": "..."}` error body, or anything close enough to read one
  * off of — 404/409 aren't in the generated error union (only 422 is documented),
- * so this reads the same shape defensively rather than trusting the response type. */
-function errorMessage(error: unknown): string {
+ * so this reads the same shape defensively rather than trusting the response type.
+ * `fallback` names the verb that failed, for the case where no body can be read. */
+function errorMessage(error: unknown, fallback: string): string {
   if (error && typeof error === 'object' && 'detail' in error && typeof error.detail === 'string') {
     return error.detail;
   }
-  return 'Detach failed.';
+  return fallback;
 }
 
 /**
@@ -30,11 +32,12 @@ function errorMessage(error: unknown): string {
  * client (bzh:generated-client).
  *
  * Reactive over the selected `chunkId`: the query re-keys and disables itself while
- * nothing is open, so no request fires for the empty board. Answering, resolving, or
- * detaching invalidates the chunk and the fleet list, and the SSE stream corroborates.
- * Detach's 404/409 is read off the mutation's `onError` and held in `detachError` for
- * the panel to show — issue #42's "report, don't swallow" requirement — and clears the
- * moment a different chunk opens.
+ * nothing is open, so no request fires for the empty board. Answering, resolving,
+ * detaching, or pausing/resuming invalidates the chunk and the fleet list, and the SSE
+ * stream corroborates. Every operator action's 404/409 is read off its mutation's
+ * `onError` and held in the shared `actionError` for the panel to show — issue #42's
+ * "report, don't swallow" requirement, which issue #46's pause/resume follows rather
+ * than reinvent — and clears on the next attempt or the moment a different chunk opens.
  */
 @Component({
   selector: 'fleet-chunk-detail',
@@ -45,11 +48,13 @@ function errorMessage(error: unknown): string {
       <fleet-chunk-detail-panel
         [detail]="d"
         [pmItems]="pmItems()"
-        [detachError]="detachError()"
+        [actionError]="actionError()"
         (dismiss)="dismiss.emit()"
         (answerQuestion)="onAnswer($event)"
         (resolveDecision)="onResolve($event)"
         (detach)="onDetach($event)"
+        (pauseChunk)="onPause($event)"
+        (resumeChunk)="onResume($event)"
       />
     } @else {
       <p class="rest" data-testid="chunk-detail-empty">
@@ -90,15 +95,17 @@ export class ChunkDetail {
   private readonly answerMutation = injectAnswerQuestionMutation();
   private readonly resolveMutation = injectResolveDecisionMutation();
   private readonly detachMutation = injectDetachChunkMutation();
+  private readonly pauseMutation = injectChunkPauseMutation();
 
-  /** The open chunk's last detach failure, or `null`. Reset on every new detach
-   * attempt and whenever a different chunk opens (issue #42). */
-  protected readonly detachError = signal<string | null>(null);
+  /** The open chunk's last operator-action failure, or `null`. Reset on every new
+   * attempt and whenever a different chunk opens (issue #42). Shared by every action
+   * in the dock — detach, pause, resume (issue #46). */
+  protected readonly actionError = signal<string | null>(null);
 
   constructor() {
     effect(() => {
       this.chunkId();
-      this.detachError.set(null);
+      this.actionError.set(null);
     });
   }
 
@@ -123,10 +130,26 @@ export class ChunkDetail {
   }
 
   protected onDetach(chunkId: string): void {
-    this.detachError.set(null);
+    this.actionError.set(null);
     this.detachMutation.mutate(
       { chunkId },
-      { onError: (error) => this.detachError.set(errorMessage(error)) },
+      { onError: (error) => this.actionError.set(errorMessage(error, 'Detach failed.')) },
+    );
+  }
+
+  protected onPause(chunkId: string): void {
+    this.actionError.set(null);
+    this.pauseMutation.mutate(
+      { chunkId, paused: true },
+      { onError: (error) => this.actionError.set(errorMessage(error, 'Pause failed.')) },
+    );
+  }
+
+  protected onResume(chunkId: string): void {
+    this.actionError.set(null);
+    this.pauseMutation.mutate(
+      { chunkId, paused: false },
+      { onError: (error) => this.actionError.set(errorMessage(error, 'Resume failed.')) },
     );
   }
 }

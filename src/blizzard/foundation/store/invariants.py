@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlalchemy import Engine, func, select
 
@@ -82,7 +83,62 @@ def check_runner_store(engine: Engine) -> list[Violation]:
                 violations.append(
                     Violation("runner:gapless-outbound-seq", f"outbound seqs not gapless; missing {missing}")
                 )
+
+        # runner:one-open-pause-park-per-lease — a lease has at most one *open* pause-park
+        # (a park fact with no pause-resume at or after it) (issue #46). The park is
+        # additive and append-only, so the only thing keeping it single is the writer's
+        # guard: PULL parks a lease only when it is not already in
+        # ``pause_parked_lease_ids()``. Drop that guard and every tick appends another park
+        # for the same standing pause — unbounded growth, and an ``open_pause_park`` whose
+        # answer depends on which duplicate it reads. A re-pause (paused -> resumed ->
+        # paused again on one lease) is legitimate and does *not* breach this: the earlier
+        # park is closed by its resume, so only the newest is open.
+        open_parks = Counter(lease_id for lease_id, _ in _open_pause_parks(conn))
+        for lease_id, n in open_parks.items():
+            if n > 1:
+                violations.append(
+                    Violation("runner:one-open-pause-park-per-lease", f"lease {lease_id} has {n} open pause-parks")
+                )
+
+        # NOT checked, deliberately: "a pause-parked lease has no closure" (issue #46 plan §7).
+        # It reads like the natural companion to the rule above, and it is **false on a legal
+        # history**: pause a chunk, then detach it. `_reconcile_leases` abandons the lease —
+        # closure `released`, envs freed — and records no pause-park resume, so the park is still
+        # open over a closed lease. The plan wants detach to win there, so that history is
+        # correct and the invariant, not the loop, is what is wrong. An invariant must hold at
+        # every instant of every legal history (this checker runs after arbitrary kill -9s), so a
+        # rule with a legitimate counterexample cannot live here at any strength: scoping it to
+        # unclosed leases makes it the tautology "an unclosed lease has no closure".
+        #
+        # The property it was reaching for — `_kill_and_park_paused` must not close the lease it
+        # parks, which is what FILL's `_reconcile_interrupted_claims` and ADVANCE's
+        # `_advance_held_chunk` rest on when they skip a chunk with an active lease — is a
+        # statement about **loop behavior**, not about durable facts, and its home is the
+        # component tier: `tests/test_chunk_pause.py` asserts it directly and independently per
+        # seam. Nor is a stale park over a closed lease a leak to plug: every reader of
+        # `pause_parked_lease_ids()` / `parked_lease_ids()` first iterates `list_active_leases()`,
+        # so a park is only ever consulted for a live lease — the same property the older
+        # ask-park (`park_facts`) has always rested on, with the identical exposure and no
+        # invariant of its own.
     return violations
+
+
+def _open_pause_parks(conn) -> list[tuple[str, datetime]]:  # type: ignore[no-untyped-def]
+    """(lease_id, parked_at) for every pause-park with no pause-resume at or after it.
+
+    The plain-query mirror of the store adapter's ``_pause_park_is_open`` — same
+    ``>=`` (a same-instant resume is a resume) and same per-lease correlation, so the
+    checker and the loop agree on what "parked" means."""
+    resumes: dict[str, list[datetime]] = {}
+    for lease_id, resumed_at in conn.execute(
+        select(runner.pause_park_resumes.c.lease_id, runner.pause_park_resumes.c.resumed_at)
+    ):
+        resumes.setdefault(lease_id, []).append(resumed_at)
+    return [
+        (lease_id, parked_at)
+        for lease_id, parked_at in conn.execute(select(runner.pause_parks.c.lease_id, runner.pause_parks.c.parked_at))
+        if not any(r >= parked_at for r in resumes.get(lease_id, ()))
+    ]
 
 
 def _held_bindings(conn) -> list[tuple[str, str]]:  # type: ignore[no-untyped-def]

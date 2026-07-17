@@ -22,7 +22,9 @@ export const LANES: readonly Lane[] = [
  * fold, because the board and the titlebar both render it and must not disagree.
  *
  * The transient `delivering` shows under RUNNING and the terminal `stopped` under
- * DONE. `ready` maps to **no** lane (`null`): the ready queue lives in the left rail
+ * DONE. `paused` shares WAIT/HUMAN with `waiting_on_human`: that is the lane for work
+ * stopped pending a human, which is what an operator's pause is. `ready` maps to **no**
+ * lane (`null`): the ready queue lives in the left rail
  * (fleet-queue-panel), so a ready chunk shows there and never also as a board card
  * (issue #22) — which makes `null` mean "in the rail, not on the board", and the
  * titlebar counts its Ready cell off exactly that rather than re-naming the status.
@@ -38,6 +40,7 @@ export const STATUS_LANE: Record<ChunkStatus, string | null> = {
   delivering: 'running',
   waiting_on_human: 'waiting',
   needs_human: 'needs',
+  paused: 'waiting',
   stopped: 'done',
   done: 'done',
 };

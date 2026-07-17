@@ -178,3 +178,65 @@ def test_transition_epoch_beyond_latest_lease_is_a_violation(tmp_path: Path) -> 
         )
     slugs = {v.invariant for v in check_hub_store(engine)}
     assert "hub:epoch-consistent-transitions" in slugs
+
+
+def test_two_open_pause_parks_on_one_lease_is_a_violation(tmp_path: Path) -> None:
+    """``runner:one-open-pause-park-per-lease`` — PULL's park guard is the only thing
+    keeping a standing pause to a single open park (issue #46, plan §7)."""
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        for _ in range(2):  # the same standing pause parked twice — the dropped-guard shape
+            conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=_NOW))
+    slugs = {v.invariant for v in check_runner_store(engine)}
+    assert "runner:one-open-pause-park-per-lease" in slugs
+
+    # Resuming the lease closes both parks (the resume is at/after each) — no violation.
+    with engine.begin() as conn:
+        conn.execute(insert(runner.pause_park_resumes).values(lease_id="lease_a", resumed_at=_NOW))
+    assert check_runner_store(engine) == []
+
+
+def test_a_repause_on_one_lease_is_not_a_violation(tmp_path: Path) -> None:
+    """Pause -> resume -> pause again on one lease is legitimate: only the newest park is
+    open, so the invariant must not fire. Guards against a checker written as a naive
+    'at most one pause_parks row per lease' count, which would forbid a re-pause."""
+    engine = _runner_engine(tmp_path)
+    t1 = datetime(2026, 7, 14, 1, tzinfo=UTC)
+    t2 = datetime(2026, 7, 14, 2, tzinfo=UTC)
+    with engine.begin() as conn:
+        conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=_NOW))
+        conn.execute(insert(runner.pause_park_resumes).values(lease_id="lease_a", resumed_at=t1))
+        conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=t2))
+    assert check_runner_store(engine) == []
+
+
+def test_open_pause_parks_on_different_leases_are_not_a_violation(tmp_path: Path) -> None:
+    """The invariant is per-lease: two chunks paused at once is the normal world."""
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=_NOW))
+        conn.execute(insert(runner.pause_parks).values(lease_id="lease_b", chunk_id="ch_2", parked_at=_NOW))
+    assert check_runner_store(engine) == []
+
+
+def test_a_double_park_after_a_repause_is_still_a_violation(tmp_path: Path) -> None:
+    """The ``>=`` correlation in the checker's mirror is load-bearing.
+
+    A checker that treated *any* resume on the lease as closing *every* park would read
+    this lease as unparked and miss the breach — so a dropped PULL guard would go
+    undetected on any lease that had ever been resumed, which is every long-lived one.
+    The checker must agree with the store's ``_pause_park_is_open``: only a resume at or
+    after a given park closes *that* park.
+    """
+    engine = _runner_engine(tmp_path)
+    t1 = datetime(2026, 7, 14, 1, tzinfo=UTC)
+    t2 = datetime(2026, 7, 14, 2, tzinfo=UTC)
+    with engine.begin() as conn:
+        conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=_NOW))
+        conn.execute(insert(runner.pause_park_resumes).values(lease_id="lease_a", resumed_at=t1))
+        # Re-paused, then parked again by a tick that lost its guard — two parks open
+        # above the resume, on a lease that *does* carry a resume fact.
+        conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=t2))
+        conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=t2))
+    slugs = {v.invariant for v in check_runner_store(engine)}
+    assert "runner:one-open-pause-park-per-lease" in slugs

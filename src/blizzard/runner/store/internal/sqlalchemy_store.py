@@ -43,6 +43,8 @@ from blizzard.runner.store.schema import (
     outbound_buffer,
     park_facts,
     park_resumes,
+    pause_park_resumes,
+    pause_parks,
     resume_clears,
     resume_intents,
     session_ends,
@@ -88,6 +90,24 @@ def _intent_is_open():  # type: ignore[no-untyped-def]
         .where(
             (resume_clears.c.lease_id == resume_intents.c.lease_id)
             & (resume_clears.c.cleared_at >= resume_intents.c.marked_at)
+        )
+        .exists()
+    )
+
+
+def _pause_park_is_open():  # type: ignore[no-untyped-def]
+    """A pause-park is open iff no resume for its lease is at or after the park instant.
+
+    Timestamp-aware exactly like _intent_is_open: a plain `lease_id NOT IN resumes` would
+    mask a re-pause — paused, resumed, paused again under one lease — leaving the second
+    pause invisible and its worker running. `>=` keeps a same-instant resume winning,
+    consistent with _binding_is_held and _intent_is_open.
+    """
+    return ~(
+        select(pause_park_resumes.c.id)
+        .where(
+            (pause_park_resumes.c.lease_id == pause_parks.c.lease_id)
+            & (pause_park_resumes.c.resumed_at >= pause_parks.c.parked_at)
         )
         .exists()
     )
@@ -223,7 +243,14 @@ class SqlAlchemyRunnerStore:
         return self._row_to_ask(rows[0]) if rows else None
 
     def parked_lease_ids(self) -> set[str]:
+        return self.ask_parked_lease_ids() | self.pause_parked_lease_ids()
+
+    def ask_parked_lease_ids(self) -> set[str]:
         stmt = select(park_facts.c.lease_id).where(park_facts.c.question_id.not_in(select(park_resumes.c.question_id)))
+        return {str(r.lease_id) for r in self._all(stmt)}
+
+    def pause_parked_lease_ids(self) -> set[str]:
+        stmt = select(pause_parks.c.lease_id).where(_pause_park_is_open()).distinct()
         return {str(r.lease_id) for r in self._all(stmt)}
 
     def open_park(self, lease_id: str) -> ParkRecord | None:
@@ -429,6 +456,16 @@ class SqlAlchemyRunnerStore:
                 park_resumes.insert().values(lease_id=lease_id, question_id=question_id, resumed_at=resumed_at)
             )
         _log.info("park resumed with answer", lease_id=lease_id, question_id=question_id)
+
+    def record_pause_park(self, *, lease_id: str, chunk_id: str, parked_at: datetime) -> None:
+        with self._begin() as conn:
+            conn.execute(pause_parks.insert().values(lease_id=lease_id, chunk_id=chunk_id, parked_at=parked_at))
+        _log.info("chunk parked on operator pause", lease_id=lease_id, chunk_id=chunk_id)
+
+    def record_pause_park_resume(self, *, lease_id: str, resumed_at: datetime) -> None:
+        with self._begin() as conn:
+            conn.execute(pause_park_resumes.insert().values(lease_id=lease_id, resumed_at=resumed_at))
+        _log.info("pause park resumed", lease_id=lease_id)
 
     def set_hub_paused(self, runner_id: str, *, paused: bool, at: datetime) -> None:
         with self._begin() as conn:

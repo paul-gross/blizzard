@@ -44,19 +44,35 @@ const GATE_DETAIL: ChunkDetailModel = {
   },
 };
 
+// A chunk carrying an open pause fact while its derived status reads waiting_on_human —
+// the overlap PAUSED's position below the human-gated states creates (issue #46).
+const PAUSED_ASKING_DETAIL: ChunkDetailModel = {
+  ...GATE_DETAIL,
+  chunk_id: 'ch_paused',
+  pause: { by: 'operator', set_at: '2026-07-16T00:00:00Z' },
+  decision: undefined,
+};
+
 describe('ChunkDetail container', () => {
   let stub: HubClientStub;
   // Mutated per-test to drive the detach mutation's response (200/404/409); the stub
   // closure below reads it live, so a test can set it after the fixture is mounted.
   let detachResponse: unknown = {};
+  // The same, for the pause/resume verbs (issue #46).
+  let pauseResponse: unknown = {};
 
   beforeEach(async () => {
     detachResponse = {};
+    pauseResponse = {};
     // The generated client's transport is stubbed so we can assert the exact call the button fires.
     stub = stubHubClient((method, path) => {
       if (method === 'GET' && path === '/api/chunks/ch_gate') return GATE_DETAIL;
       if (method === 'GET' && path === '/api/chunks/ch_routed') return ROUTED_DETAIL;
-      if (method === 'GET' && (path === '/api/chunks/ch_gate/pm-items' || path === '/api/chunks/ch_routed/pm-items')) {
+      if (method === 'GET' && path === '/api/chunks/ch_paused') return PAUSED_ASKING_DETAIL;
+      if (method === 'POST' && (path === '/api/chunks/ch_routed/pause' || path === '/api/chunks/ch_paused/resume')) {
+        return pauseResponse;
+      }
+      if (method === 'GET' && path.endsWith('/pm-items')) {
         return {
           items: [
             {
@@ -157,7 +173,7 @@ describe('ChunkDetail container', () => {
     await settle(fixture);
 
     expect(stub.forRoute('/api/chunks/ch_routed/detach', 'POST')).toHaveLength(1);
-    expect(el.querySelector('[data-testid="detach-error"]')?.textContent).toContain('has no live route');
+    expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('has no live route');
     confirmSpy.mockRestore();
   });
 
@@ -171,12 +187,64 @@ describe('ChunkDetail container', () => {
 
     el.querySelector<HTMLButtonElement>('[data-testid="detach-chunk"]')?.click();
     await settle(fixture);
-    expect(el.querySelector('[data-testid="detach-error"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="action-error"]')).not.toBeNull();
 
     fixture.componentRef.setInput('chunkId', 'ch_gate');
     await settle(fixture);
     el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('[data-testid="detach-error"]')).toBeNull();
+    expect(el.querySelector('[data-testid="action-error"]')).toBeNull();
+    confirmSpy.mockRestore();
+  });
+
+  // --- Pause / Resume (issue #46) --------------------------------------------
+
+  it('fires the pause client call for a running chunk once the operator confirms', async () => {
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_routed');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.click();
+    await settle(fixture);
+
+    const calls = stub.forRoute('/api/chunks/ch_routed/pause', 'POST');
+    expect(calls).toHaveLength(1);
+    expect(calls[0].body).toMatchObject({ by: 'operator' });
+    confirmSpy.mockRestore();
+  });
+
+  it('fires the resume client call for a paused chunk whose status reads waiting_on_human (issue #46)', async () => {
+    // The overlap, end to end through the generated client: the dock reads the pause
+    // fact off ChunkDetail, so it offers Resume for a chunk whose status hides the pause.
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_paused');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="detail-status"]')?.textContent).toContain('waiting_on_human');
+    expect(el.querySelector('[data-testid="pause-chunk"]')).toBeNull();
+
+    el.querySelector<HTMLButtonElement>('[data-testid="resume-chunk"]')?.click();
+    await settle(fixture);
+
+    expect(stub.forRoute('/api/chunks/ch_paused/resume', 'POST')).toHaveLength(1);
+    confirmSpy.mockRestore();
+  });
+
+  it('surfaces a 409 refusal from pause in the shared notice rather than swallowing it', async () => {
+    pauseResponse = stubError(409, { detail: 'chunk ch_routed is not pausable (delivering)' });
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_routed');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.click();
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('not pausable');
     confirmSpy.mockRestore();
   });
 });

@@ -369,6 +369,29 @@ describe('ChunkDetailPanel', () => {
     expect(el.querySelector('[data-testid="copy-takeover"]')).not.toBeNull();
   });
 
+  it('surfaces who paused a chunk in the drawer (issue #46) — ChunkSummary carries no such field', async () => {
+    const paused: ChunkDetail = {
+      ...REVIEW_FAIL_DETAIL,
+      status: 'paused',
+      pause: { by: 'operator', set_at: '2026-07-16T00:00:00Z' },
+    };
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', paused);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="chunk-pause-by"]')?.textContent).toContain('operator');
+  });
+
+  it('shows no chunk-pause-by when the chunk carries no open pause fact', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', REVIEW_FAIL_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="chunk-pause-by"]')).toBeNull();
+  });
+
   it('emits dismiss when the close button is activated', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', REVIEW_FAIL_DETAIL);
@@ -438,11 +461,11 @@ describe('ChunkDetailPanel', () => {
   it('surfaces a detach error passed down from the container instead of swallowing it', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
-    fixture.componentRef.setInput('detachError', 'chunk ch_01routed000000000000000000 has no live route');
+    fixture.componentRef.setInput('actionError', 'chunk ch_01routed000000000000000000 has no live route');
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="detach-error"]')?.textContent).toContain('has no live route');
+    expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('has no live route');
   });
 
   it('still shows a Detach action for a needs_human chunk that still carries a live route (not requeue)', async () => {
@@ -472,6 +495,166 @@ describe('ChunkDetailPanel', () => {
     const message = confirmSpy.mock.calls[0][0];
     expect(message).not.toContain('ready queue');
     confirmSpy.mockRestore();
+  });
+
+  // --- Pause / Resume (issue #46) -------------------------------------------
+  //
+  // The same dock, the same confirm, the same notice as Detach above — issue #42
+  // decided the operator-action pattern and this verb follows it rather than grow a
+  // second one on the board card.
+
+  /** A chunk carrying an open pause fact, whatever its derived status reads. */
+  function pausedDetail(status: ChunkDetail['status'], extra: Partial<ChunkDetail> = {}): ChunkDetail {
+    return {
+      ...ROUTED_DETAIL,
+      status,
+      pause: { by: 'operator', set_at: '2026-07-16T00:00:00Z' },
+      ...extra,
+    };
+  }
+
+  it('shows Pause — not Resume — for a running chunk carrying no pause fact', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="pause-chunk"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="resume-chunk"]')).toBeNull();
+  });
+
+  it('shows no Pause for a chunk the hub would refuse to pause (done/stopped/delivering)', async () => {
+    // Mirrors PauseService's ChunkNotPausable so the dock never offers a 409.
+    for (const status of ['done', 'stopped', 'delivering'] as const) {
+      const fixture = TestBed.createComponent(ChunkDetailPanel);
+      fixture.componentRef.setInput('detail', { ...ROUTED_DETAIL, status });
+      await fixture.whenStable();
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector('[data-testid="pause-chunk"]'), status).toBeNull();
+    }
+  });
+
+  it('still offers Pause for a waiting_on_human / needs_human chunk — the lever stays broad', async () => {
+    for (const status of ['waiting_on_human', 'needs_human'] as const) {
+      const fixture = TestBed.createComponent(ChunkDetailPanel);
+      fixture.componentRef.setInput('detail', { ...ROUTED_DETAIL, status });
+      await fixture.whenStable();
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector('[data-testid="pause-chunk"]'), status).not.toBeNull();
+    }
+  });
+
+  it('shows Resume — not Pause — for a paused chunk', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', pausedDetail('paused'));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="resume-chunk"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="pause-chunk"]')).toBeNull();
+  });
+
+  it('offers Resume — not Pause — for a paused chunk whose status reads waiting_on_human (issue #46)', async () => {
+    // THE overlap case, and the reason this action lives in the dock at all. Pausing a
+    // `waiting_on_human` chunk is deliberately allowed, and PAUSED derives *below* the
+    // human-gated states — so this chunk is paused while its status says
+    // `waiting_on_human`. A dock keyed on `status === 'paused'` would render Pause (a
+    // no-op re-pause) and no Resume, leaving the chunk un-pausable from the board while
+    // `chunk-pause-by`, two elements away, plainly says who paused it. Keying the switch
+    // on `detail().pause` — the fact — is what makes the dock and the server agree.
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', pausedDetail('waiting_on_human'));
+    let resumed: string | undefined;
+    fixture.componentInstance.resumeChunk.subscribe((id) => (resumed = id));
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="detail-status"]')?.textContent).toContain('waiting_on_human');
+    expect(el.querySelector('[data-testid="chunk-pause-by"]')?.textContent).toContain('operator');
+    expect(el.querySelector('[data-testid="resume-chunk"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="pause-chunk"]')).toBeNull();
+
+    el.querySelector<HTMLButtonElement>('[data-testid="resume-chunk"]')?.click();
+    expect(resumed).toBe(ROUTED_DETAIL.chunk_id);
+    confirmSpy.mockRestore();
+  });
+
+  it('emits pauseChunk with the chunk id once the operator confirms', async () => {
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    let emitted: string | undefined;
+    fixture.componentInstance.pauseChunk.subscribe((id) => (emitted = id));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.click();
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(emitted).toBe(ROUTED_DETAIL.chunk_id);
+    confirmSpy.mockRestore();
+  });
+
+  it('emits nothing when the operator declines the pause confirm', async () => {
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    let emitted = false;
+    fixture.componentInstance.pauseChunk.subscribe(() => (emitted = true));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.click();
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(emitted).toBe(false);
+    confirmSpy.mockRestore();
+  });
+
+  it('emits nothing when the operator declines the resume confirm', async () => {
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', pausedDetail('paused'));
+    let emitted = false;
+    fixture.componentInstance.resumeChunk.subscribe(() => (emitted = true));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="resume-chunk"]')?.click();
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(emitted).toBe(false);
+    confirmSpy.mockRestore();
+  });
+
+  it('does not claim the claim is given up in the pause confirm copy — that is detach', async () => {
+    // Pause keeps the lease, route, and epoch; the dialog must not read like detach.
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="pause-chunk"]')?.click();
+
+    const message = confirmSpy.mock.calls[0][0];
+    expect(message).toContain('keeps the');
+    expect(message).toContain('claim');
+    confirmSpy.mockRestore();
+  });
+
+  it('surfaces a pause error passed down from the container in the shared notice', async () => {
+    // One notice for every operator action in the dock — issue #42's `.notice`, reused.
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('actionError', 'chunk ch_01routed000000000000000000 is not pausable (done)');
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('not pausable');
   });
 
   // --- The chunk's own facts -------------------------------------------------

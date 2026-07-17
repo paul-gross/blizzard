@@ -294,6 +294,95 @@ def test_detach_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# `blizzard hub pause-chunk` / `resume-chunk` (issue #46)
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.unit
+def test_pause_chunk_posts_to_the_chunk_and_reports_paused(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The verb POSTs to the chunk's pause sub-resource, carrying ``--by`` (issue #46)."""
+    calls: list[tuple[str, object]] = []
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        calls.append((url, json))
+        return _FakeResponse(202, {"chunk_id": "ch_42"})
+
+    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    result = CliRunner().invoke(
+        hub_group, ["pause-chunk", "ch_42", "--by", "alice"], env={"BZ_HUB_URL": "http://hub.local:8421"}
+    )
+
+    assert result.exit_code == 0, result.output
+    url, body = calls[0]
+    assert url == "http://hub.local:8421/api/chunks/ch_42/pause"
+    assert body == {"by": "alice"}
+    assert "paused ch_42" in result.output
+
+
+@pytest.mark.unit
+def test_pause_chunk_maps_a_conflict_with_the_servers_detail(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A 409 (done/stopped/delivering) surfaces the server's own detail text as a ClickException."""
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        return _FakeResponse(409, {"detail": "chunk ch_42 is delivering, not pausable"})
+
+    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["pause-chunk", "ch_42"])
+
+    assert result.exit_code != 0
+    assert "chunk ch_42 is delivering, not pausable" in result.output
+
+
+@pytest.mark.unit
+def test_pause_chunk_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A 404 (no such chunk) is a named error, not a stack trace."""
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        return _FakeResponse(404)
+
+    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["pause-chunk", "ch_nope"])
+
+    assert result.exit_code != 0
+    assert "ch_nope" in result.output
+
+
+@pytest.mark.unit
+def test_resume_chunk_posts_to_the_chunk_and_reports_resumed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The verb POSTs to the chunk's resume sub-resource — never refused (issue #46)."""
+    calls: list[tuple[str, object]] = []
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        calls.append((url, json))
+        return _FakeResponse(202, {"chunk_id": "ch_42"})
+
+    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    result = CliRunner().invoke(
+        hub_group, ["resume-chunk", "ch_42", "--by", "alice"], env={"BZ_HUB_URL": "http://hub.local:8421"}
+    )
+
+    assert result.exit_code == 0, result.output
+    url, body = calls[0]
+    assert url == "http://hub.local:8421/api/chunks/ch_42/resume"
+    assert body == {"by": "alice"}
+    assert "resumed ch_42" in result.output
+
+
+@pytest.mark.unit
+def test_resume_chunk_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A 404 (no such chunk) is a named error, not a stack trace."""
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        return _FakeResponse(404)
+
+    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["resume-chunk", "ch_nope"])
+
+    assert result.exit_code != 0
+    assert "ch_nope" in result.output
+
+
+# --------------------------------------------------------------------------- #
 # `blizzard runner pause`
 # --------------------------------------------------------------------------- #
 

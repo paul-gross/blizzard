@@ -3,14 +3,26 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
 import type {
   ArtifactView,
   ChunkDetail,
+  ChunkStatus,
   DecisionView,
   EscalationView,
+  PauseView,
   PmItemEntry,
   QuestionView,
   RouteView,
   TransitionView,
 } from '../api/hub';
 import { shortChunkId } from '../chunk-id';
+
+/** Statuses the hub's `PauseService` refuses to pause (`ChunkNotPausable`), mirrored
+ * here so the dock never offers a Pause the server would answer with a 409 (issue #46).
+ * A terminal or mid-delivery chunk has no work to stop.
+ *
+ * `paused` is deliberately **absent**: whether a chunk is already paused is not a
+ * question `status` can answer (PAUSED derives below the human-gated states), so it is
+ * never asked here — see `ChunkDetailPanel.pause`, which owns that half by reading the
+ * fact. */
+const NOT_PAUSABLE = new Set<ChunkStatus>(['done', 'stopped', 'delivering']);
 
 /** The chunk's related PM items and the state of the pass-through fetch, for the work-item column.
  *
@@ -50,6 +62,12 @@ export interface ResolveDecisionEvent {
  * derives `needs_human` afterward (`src/blizzard/hub/domain/detach.py`); this dock
  * never claims otherwise.
  *
+ * The **Pause/Resume** control sits in that same header beside Detach, following the
+ * same pattern (issue #46): pause keeps the claim and kills the worker, where detach
+ * gives the claim up — the two halves of one choice, so they read together. Which of
+ * the two renders is switched on the pause **fact** (`ChunkDetail.pause`), never on
+ * `status` — see `pause` below.
+ *
  * Under the header sit three columns of roughly equal weight — **what it is**,
  * **where it has been**, **what it produced**:
  *
@@ -67,11 +85,12 @@ export interface ResolveDecisionEvent {
  *   criterion 12), or an **escalation's** copyable **takeover command**.
  *
  * Presentational only: it holds the detail input and emits `dismiss`, `answerQuestion`,
- * `resolveDecision`, and `detach` (guarded by a `confirm()`, the one browser affordance
- * this panel already reaches for — see `copyTakeover`); the data client (the mutation
- * `detach` drives, and the error it surfaces back down as `detachError`) lives in the
- * container. All color comes from the design-token layer, never hard-coded, and every
- * text size from that layer's type scale.
+ * `resolveDecision`, `detach`, `pauseChunk`, and `resumeChunk` (each operator verb
+ * guarded by a `confirm()`, the one browser affordance this panel already reaches for —
+ * see `copyTakeover`); the data client (the mutations those events drive, and the error
+ * any of them surfaces back down as `actionError`) lives in the container. All color
+ * comes from the design-token layer, never hard-coded, and every text size from that
+ * layer's type scale.
  */
 @Component({
   selector: 'fleet-chunk-detail-panel',
@@ -92,6 +111,38 @@ export interface ResolveDecisionEvent {
           </span>
         </div>
         <div class="d-meta">
+          <!-- Who paused the chunk, read off the pause fact — the header states it because
+               a paused chunk that is also parked on a question derives waiting_on_human, so
+               the status cell above would never say so (issue #46). -->
+          @if (pause(); as p) {
+            <span class="pb" data-testid="chunk-pause-by">Paused by {{ p.by }}</span>
+          }
+          <!-- Pause/Resume sits beside Detach: the two are the halves of one choice —
+               detach gives the claim away, pause keeps it. Unlike Detach it does not hang
+               off the route, so it renders whether or not a route is live (issue #46). -->
+          <div class="d-actions">
+            @if (pause()) {
+              <button
+                type="button"
+                class="act"
+                data-testid="resume-chunk"
+                [attr.aria-label]="'Resume chunk ' + detail().chunk_id"
+                (click)="onResume()"
+              >
+                Resume
+              </button>
+            } @else if (pausable()) {
+              <button
+                type="button"
+                class="act"
+                data-testid="pause-chunk"
+                [attr.aria-label]="'Pause chunk ' + detail().chunk_id"
+                (click)="onPause()"
+              >
+                Pause
+              </button>
+            }
+          </div>
           <!-- The route rides in the header beside Detach, not down in the facts, because
                it is the button's object: it names what is about to be released (issue #42).
                The work-item column states the same runner as a plain fact. -->
@@ -119,8 +170,8 @@ export interface ResolveDecisionEvent {
         </div>
       </header>
 
-      @if (detachError(); as err) {
-        <p class="notice detach-notice" data-testid="detach-error" role="alert">{{ err }}</p>
+      @if (actionError(); as err) {
+        <p class="notice action-notice" data-testid="action-error" role="alert">{{ err }}</p>
       }
 
       <div class="d-body">
@@ -427,7 +478,14 @@ export interface ResolveDecisionEvent {
       text-transform: uppercase;
       white-space: nowrap;
     }
-    .d-route {
+    /* The pause marker reads amber — an operator-held state, not a fault. */
+    .d-meta .pb {
+      color: var(--amber-hi);
+      font-size: var(--fs-xs);
+      white-space: nowrap;
+    }
+    .d-route,
+    .d-actions {
       display: flex;
       align-items: center;
       gap: 6px;
@@ -448,9 +506,10 @@ export interface ResolveDecisionEvent {
       border-color: var(--red);
       background: color-mix(in srgb, var(--red) 12%, transparent);
     }
-    /* The detach failure reads between the header and the columns — the action's own
-       result, next to the control that fired it, not buried in a column. */
-    .detach-notice {
+    /* An operator action's failure reads between the header and the columns — the
+       action's own result, next to the control that fired it, not buried in a column.
+       One notice serves detach, pause, and resume alike. */
+    .action-notice {
       margin: 6px;
       flex: none;
     }
@@ -807,9 +866,12 @@ export class ChunkDetailPanel {
    * Defaults to `loading` so the panel constructs without the container wiring it. */
   readonly pmItems = input<PmItemsState>({ status: 'loading', items: [] });
 
-  /** The container's last detach failure for this chunk (the 409/404 surfaced, not
-   * swallowed — issue #42), or `null` when there is nothing to report. */
-  readonly detachError = input<string | null>(null);
+  /** The container's last **operator-action** failure for this chunk (the 409/404
+   * surfaced, not swallowed — issue #42), or `null` when there is nothing to report.
+   * One notice for every action in this dock (detach, pause, resume): they share a
+   * surface because only one of them can be in flight from one operator at a time,
+   * and a second banner would only ever compete with the first for the same corner. */
+  readonly actionError = input<string | null>(null);
 
   /** Emitted when the operator dismisses the dock. */
   readonly dismiss = output<void>();
@@ -822,6 +884,15 @@ export class ChunkDetailPanel {
 
   /** Emitted with the chunk id when the operator confirms Detach (issue #42). */
   readonly detach = output<string>();
+
+  /** Emitted with the chunk id when the operator confirms Pause (issue #46). Named
+   * `pauseChunk`, not `pause` — `@angular-eslint/no-output-native` forbids an output
+   * shadowing the native DOM `pause` event. */
+  readonly pauseChunk = output<string>();
+
+  /** Emitted with the chunk id when the operator confirms Resume (issue #46). Named
+   * `resumeChunk` for symmetry with `pauseChunk`. */
+  readonly resumeChunk = output<string>();
 
   /** The chunk's short name — the same identity its board card carries. */
   protected readonly shortId = computed<string>(() => shortChunkId(this.detail().chunk_id));
@@ -873,6 +944,33 @@ export class ChunkDetailPanel {
    * (issue #42): a chunk with no live route has nothing to release. */
   protected readonly route = computed<RouteView | null>(() => this.detail().route ?? null);
 
+  /** The chunk's open operator pause, if any — who set it (issue #46). Read off the
+   * detail's `pause` fact, not `status`: a chunk both paused and parked on a question
+   * derives `waiting_on_human`, so `status` alone would never surface it. Only the
+   * detail carries this — `ChunkSummary` (the board card) does not, so this renders
+   * in the dock rather than on the card.
+   *
+   * This is also the **Pause/Resume switch**: non-null renders Resume, null renders
+   * Pause (subject to {@link pausable}). Keying that switch on the fact rather than
+   * on `status === 'paused'` is the whole reason the action lives here — a status-keyed
+   * dock would offer a paused-and-asking chunk PAUSE (a no-op re-pause) and never
+   * RESUME, leaving it un-pausable from the board while this very line says who paused
+   * it. `status` must never gate Resume. */
+  protected readonly pause = computed<PauseView | null>(() => this.detail().pause ?? null);
+
+  /** Whether an **unpaused** chunk may be paused — mirrors the hub `PauseService`'s
+   * refusal (`ChunkNotPausable`) so the dock never offers a control the server would
+   * answer with a 409 (issue #46), exactly as Detach shows only with a live route to
+   * release (issue #42). `waiting_on_human`/`needs_human` are deliberately pausable —
+   * the lever stays broad by decision.
+   *
+   * Status is a sound input **here** and only here: this asks "would the server refuse
+   * a pause?", which is a question about the chunk's terminal-or-delivering state, and
+   * those statuses hide nothing. It is *not* asked "is this already paused?" — that is
+   * {@link pause}'s job, and the reason this predicate is consulted only on the Pause
+   * half of the switch. */
+  protected readonly pausable = computed<boolean>(() => !NOT_PAUSABLE.has(this.detail().status));
+
   /** Emit an answer for a question — no-op on an empty answer. */
   protected submitAnswer(questionId: string, answer: string): void {
     const trimmed = answer.trim();
@@ -906,5 +1004,30 @@ export class ChunkDetailPanel {
     );
     if (!confirmed) return;
     this.detach.emit(this.detail().chunk_id);
+  }
+
+  /** Confirm, then emit `pauseChunk` for the container's mutation to fire (issue #46).
+   * Same `confirm()` guard as `onDetach` — a pause kills the chunk's running worker. */
+  protected onPause(): void {
+    if (this.pause() || !this.pausable()) return;
+    const confirmed = globalThis.confirm(
+      `Pause chunk ${this.detail().chunk_id}? This kills its active worker but keeps the ` +
+        `claim (this is not detach); resume it later to pick the work back up.`,
+    );
+    if (!confirmed) return;
+    this.pauseChunk.emit(this.detail().chunk_id);
+  }
+
+  /** Confirm, then emit `resumeChunk` for the container's mutation to fire (issue #46).
+   * Guarded on the pause **fact**, never on `status`: the chunk this resumes may well
+   * read `waiting_on_human` rather than `paused`. */
+  protected onResume(): void {
+    if (!this.pause()) return;
+    const confirmed = globalThis.confirm(
+      `Resume chunk ${this.detail().chunk_id}? Its runner picks the work back up from ` +
+        `where the pause stopped it.`,
+    );
+    if (!confirmed) return;
+    this.resumeChunk.emit(this.detail().chunk_id);
   }
 }

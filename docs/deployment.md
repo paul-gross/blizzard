@@ -308,15 +308,73 @@ see depends on how the daemon left:
 Either way the next `host` start is clean: it clears a socket nothing is serving, and
 refuses to start beside one that is still live (the store is single-writer).
 
-## Detaching a chunk
+## Four verbs, two axes — pause a chunk, detach a chunk, pause a runner (hub or local)
 
-Detach forcibly releases a chunk's live route — the board's Detach control (chunk
-detail dock, issue #42) and `blizzard hub detach <chunk_id>` both reach the same
-`POST /api/chunks/{id}/detach`, so either door does exactly the same thing. It is
-**not** requeue: no supersession fact is recorded and no epoch bumps, so a
-`needs_human` chunk detached this way is still `needs_human` afterward — only the
-route is gone, freeing the runner that held it. 409s when the chunk already has no
-live route to release. See `blizzard hub detach --help` for the CLI's full contract.
+Four verbs stop work, and two of them share the word "pause," which is exactly where
+operators mix them up. They split cleanly along two axes: what they target (one chunk,
+or a whole runner) and what they do to the claim (keep it, or give it away).
+
+- **`blizzard hub pause-chunk <chunk_id>` / `resume-chunk <chunk_id>`** (issue #46), or
+  the board's **Pause**/**Resume** control in the chunk detail dock beside Detach —
+  targets **one chunk**. On a chunk with a live claim, the runner kills that chunk's
+  live worker but **keeps the claim**: the lease, route, epoch, held environments, and
+  retry budget all survive untouched — only the process dies. Pause is also allowed on
+  a chunk that hasn't been claimed yet (`ready`): there it holds the chunk out of the
+  queue instead — it derives `paused`, not `ready`, so FILL skips it until it's
+  resumed. `resume-chunk` respawns a parked session **in place**, under the unchanged
+  lease/epoch/session id, consuming no retry (a still-unclaimed chunk just re-derives
+  `ready` and rejoins the queue). Refused (`409`) on a chunk that is
+  `done`/`stopped`/`delivering`; deliberately **allowed** on
+  `waiting_on_human`/`needs_human` — pause is a broad lever. The pause *fact* survives
+  the answer to that question untouched (answering never un-pauses a chunk), but the
+  *derived status* doesn't show `paused` while the question is open — a chunk both
+  paused and parked on a question derives `waiting_on_human` first, so the board shows
+  a `waiting_on_human` chip, not `paused`, until the question is answered. The dock
+  still says so plainly and still offers **Resume** there — it reads the pause fact
+  (`ChunkDetail.pause`), not the chip. Once
+  answered, the pause fact is still there, so the chunk then derives `paused` (and
+  stays parked) rather than resuming — `resume-chunk` is what actually lets it go.
+  `resume-chunk` is idempotent — resuming an already-running chunk is a harmless
+  no-op.
+- **`blizzard hub detach <chunk_id>`**, or the board's **Detach** control in the
+  chunk detail dock (issue #42) — also targets **one chunk**, but the opposite direction:
+  it **gives the claim away**. Both doors reach the same `POST /api/chunks/{id}/detach`,
+  so either does exactly the same thing. The route is released, every held environment is
+  freed, the lease closes, and the chunk re-derives `ready` so any runner — including a
+  different one — can claim it next. Any live worker is abandoned along with everything
+  else, not merely killed-and-kept. It is **not** requeue: no supersession fact is
+  recorded and no epoch bumps, so a `needs_human` chunk detached this way is still
+  `needs_human` afterward — only the route is gone. Refused (`409`) when the chunk has no
+  live route left to release. See `blizzard hub detach --help` for the CLI's full
+  contract.
+- **`blizzard hub pause <runner_id>` / `resume <runner_id>`** (the hub brake)
+  and **`runner pause` / `runner start`** (the runner's own local brake, issue #45,
+  above) are **per-runner**, not per-chunk. Neither kills any particular chunk's
+  worker: the hub brake only stops that runner from claiming *new* work (every
+  in-flight chunk, live worker included, runs on); the local brake additionally blocks
+  every other spawn site (restart-resume, an answer-resume, a requeue respawn, …) but
+  still never kills a worker that is already running — pausing locally is not a drain.
+
+The distinction worth holding onto: `pause-chunk` is the **only** one of the four that
+kills a live worker, and it is also the only chunk-level lever that **keeps** the
+claim rather than giving it away — `detach` is the one that gives it away. The two
+runner-level brakes sit apart from both: they never touch a live worker, and they
+have no notion of "this one chunk" at all.
+
+**A pause-parked chunk still occupies an agent slot.** FILL only ever claims new work
+into a runner's *open* slots, and a chunk pause deliberately leaves the lease active
+and its environments held warm for the resume — that is what makes the resume land in
+place instead of re-provisioning. So a paused lease counts against `max_agents`
+exactly like a running one, with no worker consuming it. Pause enough chunks on one
+runner and it silently stops claiming new work — no error, nothing beyond the pause's
+own log line — because every slot is spoken for by parked claims. Detach, by contrast,
+frees the slot immediately (the claim is given away, not held).
+
+A restart into a **standing** chunk pause does not resume it — the runner checks the
+pause fact first, ahead of the normal restart-resume path described below (see "The
+recovery contract"), so a chunk still marked paused when the runner comes back is
+(re-)parked, not respawned. The claim is kept exactly as it would be if the pause had
+landed on a live tick; only a chunk that was *not* paused resumes in place on restart.
 
 ## The recovery contract
 
@@ -326,7 +384,7 @@ Two systemd mechanisms combine to deliver the journey's "came back under systemd
 |---------|-------------------|-------------------------------|
 | `kill -9`, OOM, or crash of a daemon | `Restart=always` brings it straight back (`RestartSec=2`) | Startup pass recovers from the durable store — see below |
 | Machine reboot | The enabled units start at boot (`WantedBy=multi-user.target`) | Same startup pass, from the same on-disk store |
-| Graceful restart (`systemctl restart`, or stop→start on a wheel upgrade) | The SIGTERM lets the daemon run its shutdown path *before* exiting; `Restart=`/boot then brings it back | The shutdown marks every in-flight lease with a durable resume-intent; the first tick **RESUMEs** each session in place — same lease/epoch/session, only the pid rewritten, no retry consumed — so **in-flight agent context is preserved**, not merely "not worked twice" |
+| Graceful restart (`systemctl restart`, or stop→start on a wheel upgrade) | The SIGTERM lets the daemon run its shutdown path *before* exiting; `Restart=`/boot then brings it back | The shutdown marks every in-flight lease with a durable resume-intent; the first tick **RESUMEs** each session in place — same lease/epoch/session, only the pid rewritten, no retry consumed — so **in-flight agent context is preserved**, not merely "not worked twice" (unless the lease is under a standing operator chunk pause — see below) |
 
 The startup pass is where the "reaped the stale leases … continued at exactly the
 node the hub last recorded" clause is honored, and it is **not** new code — it is
@@ -352,10 +410,14 @@ a durable *resume-intent* instead of leaving its workers to be reaped. The
 first tick after the restart then **RESUMEs** each marked session in place — the same
 lease, epoch, and session, only the process id rewritten and no retry consumed — so a
 `systemctl restart` (for example, to adopt a freshly-merged runner wheel) continues
-each agent mid-thought rather than reaping and re-running it from the top. An
-ungraceful `kill -9` skips the marking, so its workers fall back to the reap path
-above; and a crash *during* the re-attach itself degrades to that same reap path — the
-resume is bounded by the crash-point sweep's recovery, no stronger.
+each agent mid-thought rather than reaping and re-running it from the top —
+**provided the chunk isn't under a standing operator pause** (issue #46; see "Four
+verbs, two axes" above). If it is, the RESUME path re-parks it instead of respawning
+it, the same way it would if the pause had landed on a live tick; the pause fact, not
+the restart, decides. An ungraceful `kill -9` skips the marking, so its workers fall
+back to the reap path above; and a crash *during* the re-attach itself degrades to
+that same reap path — the resume is bounded by the crash-point sweep's recovery, no
+stronger.
 
 `runner pause`, then `systemctl restart` to adopt a new wheel, is a plausible
 maintenance sequence — but a runner paused *before* the restart stays paused after it

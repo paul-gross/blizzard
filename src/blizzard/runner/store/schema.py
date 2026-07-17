@@ -224,6 +224,35 @@ park_resumes = Table(
     Column("resumed_at", UtcDateTime, nullable=False),
 )
 
+# --- Pause park / resume (the chunk's dormancy on an operator pause — issue #46) --
+#
+# A deliberate SEPARATE table pair from park_facts/park_resumes above, not a reshape:
+# ``unforwarded_ask`` (below) reads ``asks.c.question_id.not_in(select(park_facts.c.
+# question_id))`` — a nullable ``question_id`` on that table would make SQL's
+# ``x NOT IN (subquery containing NULL)`` evaluate to NULL for *every* row, silently
+# breaking ask-and-exit fleet-wide with a green gate. A pause has no natural key
+# (unlike an ask's fresh ``question_id`` per ask), so mirroring the same table with a
+# nullable question id is unsafe by construction; a separate table makes it
+# unreachable. See ``pause_park_resumes`` below for the corresponding non-key-based
+# open predicate.
+
+pause_parks = Table(
+    "pause_parks",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("lease_id", String, nullable=False),
+    Column("chunk_id", String, nullable=False),
+    Column("parked_at", UtcDateTime, nullable=False),
+)
+
+pause_park_resumes = Table(
+    "pause_park_resumes",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("lease_id", String, nullable=False),
+    Column("resumed_at", UtcDateTime, nullable=False),
+)
+
 # --- Resume intent (the restart resume marker) -------------------------------
 #
 # A restart marks every active, non-parked, session-bearing lease with a resume-intent, then

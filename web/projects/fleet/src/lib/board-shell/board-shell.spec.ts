@@ -77,6 +77,20 @@ describe('BoardShell', () => {
     expect(el.querySelector('[data-status="ready"]')).toBeNull();
   });
 
+  it('renders a paused chunk in the WAIT/HUMAN column (issue #46)', async () => {
+    const chunks: ChunkSummary[] = [
+      { chunk_id: 'ch_01paused000000000000000000', graph_id: 'gr_1', status: 'paused', current_node_id: 'nd_build', pm_pointers: [] },
+    ];
+    const fixture = TestBed.createComponent(BoardShell);
+    fixture.componentRef.setInput('chunks', chunks);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    // Paused shares the WAIT/HUMAN column — work stopped pending a human either way.
+    const card = el.querySelector('[data-col="waiting"] [data-testid="chunk-card"]');
+    expect(card?.getAttribute('data-status')).toBe('paused');
+  });
+
   it('emits the chunk id when a card is activated (fills the detail dock)', async () => {
     const chunks: ChunkSummary[] = [
       { chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', status: 'running', current_node_id: 'nd_build', pm_pointers: [] },

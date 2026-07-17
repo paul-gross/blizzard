@@ -37,6 +37,7 @@ from blizzard.hub.domain.work import (
     EscalationFact,
     IWriteChunkRepository,
     LeaseFact,
+    PauseFact,
     PmPointer,
     PrClosedFact,
     PrOpenedFact,
@@ -135,6 +136,14 @@ class ChunkStore:
                 RequeueFact(requeued_at=r.requeued_at)
                 for r in conn.execute(select(s.requeues).where(s.requeues.c.chunk_id == chunk_id)).all()
             ]
+            pauses = [
+                PauseFact(paused=p.paused, set_at=p.set_at, set_by=p.set_by)
+                for p in conn.execute(
+                    select(s.chunk_pause_facts)
+                    .where(s.chunk_pause_facts.c.chunk_id == chunk_id)
+                    .order_by(s.chunk_pause_facts.c.id)
+                ).all()
+            ]
             pr_opened = [
                 PrOpenedFact(
                     repo=p.repo, number=p.pr_number, url=p.pr_url, commit_hash=p.commit_hash, opened_at=p.opened_at
@@ -158,6 +167,7 @@ class ChunkStore:
                 decisions=decisions,
                 requeues=requeues,
                 pr_opened=pr_opened,
+                pauses=pauses,
             )
 
     def load_artifacts(self, chunk_id: str) -> list[ArtifactRow]:
@@ -798,6 +808,11 @@ class ChunkStore:
         """Record ``chunk.grouped`` — the merged-away chunk is ephemeral now."""
         with self._engine.begin() as conn:
             conn.execute(insert(s.chunk_grouped).values(chunk_id=chunk_id, grouped_into=grouped_into, grouped_at=at))
+
+    def record_pause(self, chunk_id: str, *, paused: bool, by: str, at: datetime) -> None:
+        """Append a ``chunk.paused``/``chunk.resumed`` fact — newest-fact-wins (issue #46)."""
+        with self._engine.begin() as conn:
+            conn.execute(insert(s.chunk_pause_facts).values(chunk_id=chunk_id, paused=paused, set_at=at, set_by=by))
 
     # --- helpers ------------------------------------------------------------
 

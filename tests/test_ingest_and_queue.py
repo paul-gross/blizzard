@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.domain.work import PmPointer
-from tests.support import FakePmSource, build_hub, ingest, pointer_token
+from tests.support import FakePmSource, build_hub, ingest, pointer_token, write_chunk_pause_facts
 
 pytestmark = pytest.mark.component
 
@@ -104,6 +104,24 @@ def test_live_pointer_reingest_is_409(tmp_path: Path) -> None:
     assert body["existing_chunk_id"] == first
     assert body["source"] == _P1["source"]
     assert body["ref"] == _P1["ref"]
+
+
+def test_a_paused_chunk_still_holds_its_pointer_live(tmp_path: Path) -> None:
+    """Pausing must not read as terminal (issue #46): ``_TERMINAL`` stays ``{stopped, done}``.
+
+    The live-pointer conflict is keyed on the holder being non-terminal, so admitting
+    ``paused`` to ``_TERMINAL`` would let this re-ingest mint a **second** chunk for the same
+    issue — two chunks racing one pointer, from an operator merely pressing pause. Nothing
+    else pins that: pause is a new status and every other test predates it.
+    """
+    hub = build_hub(tmp_path)
+    first = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_P1)]}).json()["chunk_id"]
+    write_chunk_pause_facts(tmp_path, first, (True, hub.clock.now()))
+    assert hub.client.get(f"/api/chunks/{first}").json()["status"] == "paused"
+
+    conflict = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_P1)]})
+    assert conflict.status_code == 409, "a paused chunk still holds its pointer — no duplicate mint"
+    assert conflict.json()["existing_chunk_id"] == first
 
 
 # --------------------------------------------------------------------------- #

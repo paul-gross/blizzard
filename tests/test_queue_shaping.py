@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import HubHarness, build_hub, pointer_token
+from tests.support import HubHarness, build_hub, pointer_token, write_chunk_pause_facts
 
 pytestmark = pytest.mark.component
 
@@ -61,6 +61,83 @@ def test_reorder_to_top_and_to_a_position(tmp_path: Path) -> None:
     # Move c to the bottom.
     hub.client.post("/api/queue/reorder", json={"chunk_id": c, "position": 99})
     assert _peek_ids(hub) == [a, b, c]
+
+
+def _pause(tmp_path: Path, hub: HubHarness, chunk_id: str) -> None:
+    write_chunk_pause_facts(tmp_path, chunk_id, (True, hub.clock.now()))
+
+
+def test_paused_ready_chunk_is_excluded_from_the_queue(tmp_path: Path) -> None:
+    # The free win (issue #46 §4): list_ready()/peek filter on status is ChunkStatus.READY,
+    # so a paused chunk drops out with no queue filter at all — pinned here as a property,
+    # not an accident.
+    hub = build_hub(tmp_path)
+    a, b = _ingest(hub, 1), _ingest(hub, 2)
+    _pause(tmp_path, hub, a)
+    assert _peek_ids(hub) == [b]
+
+
+def test_paused_chunk_with_a_live_route_is_still_excluded_from_the_queue(tmp_path: Path) -> None:
+    # Paused wins over ``running`` in the derivation precedence too — a held chunk is
+    # never READY regardless, but this pins that a live route doesn't smuggle it back in.
+    hub = build_hub(tmp_path)
+    a, b = _ingest(hub, 1), _ingest(hub, 2)
+    claim = hub.client.post(
+        "/api/routes",
+        json={"chunk_id": a, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
+    )
+    assert claim.status_code == 201, claim.text
+    _pause(tmp_path, hub, a)
+    assert _peek_ids(hub) == [b]
+    # Confirms this is the pause branch, not merely "running is already excluded":
+    # paused wins over running in the derivation precedence (D-067/issue #46).
+    assert hub.client.get(f"/api/chunks/{a}").json()["status"] == "paused"
+
+
+# --- Newest-fact-wins across the store seam (issue #46) -----------------------
+#
+# ``_is_paused`` reads the pause list's tail, which only means "newest" because
+# ``load_facts`` hydrates ``chunk_pause_facts`` ordered by ``id``. The unit tier proves the
+# pure function over a hand-built list and structurally cannot see that ordering — reverse
+# the hydration and every resume silently becomes a no-op, with the whole unit tier green.
+# These pin the two halves together over multi-fact sequences the single-fact tests above
+# cannot distinguish.
+
+
+def test_pause_then_resume_returns_the_chunk_to_the_queue(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    a, b = _ingest(hub, 1), _ingest(hub, 2)
+    now = hub.clock.now()
+    write_chunk_pause_facts(tmp_path, a, (True, now), (False, now + timedelta(seconds=1)))
+    assert hub.client.get(f"/api/chunks/{a}").json()["status"] == "ready"
+    assert _peek_ids(hub) == [a, b]  # back in the queue, in its original FIFO slot
+
+
+def test_re_pause_after_resume_stays_out_of_the_queue(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    a, b = _ingest(hub, 1), _ingest(hub, 2)
+    now = hub.clock.now()
+    write_chunk_pause_facts(
+        tmp_path,
+        a,
+        (True, now),
+        (False, now + timedelta(seconds=1)),
+        (True, now + timedelta(seconds=2)),
+    )
+    assert hub.client.get(f"/api/chunks/{a}").json()["status"] == "paused"
+    assert _peek_ids(hub) == [b]
+
+
+def test_same_instant_pause_and_resume_resolve_by_write_order(tmp_path: Path) -> None:
+    # Two facts can share a ``set_at`` — timestamps have finite granularity and a pause and
+    # its resume can land inside one tick. Append-only write order (the ``id`` the hydration
+    # orders by) is the tiebreak, not ``set_at``: the resume written second wins.
+    hub = build_hub(tmp_path)
+    a, b = _ingest(hub, 1), _ingest(hub, 2)
+    now = hub.clock.now()
+    write_chunk_pause_facts(tmp_path, a, (True, now), (False, now))
+    assert hub.client.get(f"/api/chunks/{a}").json()["status"] == "ready"
+    assert _peek_ids(hub) == [a, b]
 
 
 def test_reorder_unknown_chunk_is_404(tmp_path: Path) -> None:

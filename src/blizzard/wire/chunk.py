@@ -74,7 +74,12 @@ class ChunkSummary(BaseModel):
 
     ``current_node_name`` is the node's human graph name (``build``, ``review``) the
     board renders in place of the raw ``nd_`` ULID; null when the chunk has no
-    current node or its pinned graph cannot resolve the id."""
+    current node or its pinned graph cannot resolve the id.
+
+    Deliberately status-only: the summary feeds the board **card**, which is a passive
+    status view (issue #42), so no operator *fact* is carried here. The pause fact — and
+    every other fact an operator action keys on — reaches the chunk detail dock through
+    :class:`ChunkDetail`, the one place a board action lives."""
 
     chunk_id: str
     graph_id: str
@@ -171,6 +176,25 @@ class CheckDeliveryResponse(BaseModel):
     detail: str
 
 
+class ChunkPauseRequest(BaseModel):
+    """Set or clear a chunk's operator pause brake — records who flipped it (issue #46)."""
+
+    by: str = "operator"
+
+
+class PauseView(BaseModel):
+    """An open pause on a chunk (issue #46) — who set it and when.
+
+    Present only while ``paused=True`` is the newest pause fact; a resume clears it.
+    Carried independently of ``status``: PAUSED sits below the human-gated statuses in
+    the derivation order, so a chunk both paused and parked on a question derives
+    ``waiting_on_human`` — this field is the only way the runner (and the board) learn
+    the chunk is paused in that case, and it also answers "who paused it"."""
+
+    by: str
+    set_at: str
+
+
 class ChunkDetail(BaseModel):
     """The chunk aggregate in full — the board's chunk view and envelope feed.
 
@@ -187,6 +211,11 @@ class ChunkDetail(BaseModel):
     pm_pointers: list[PmPointerView] = []
     route: RouteView | None = None
     escalation: EscalationView | None = None
+    # The operator's per-chunk pause brake (issue #46) — non-None iff currently paused.
+    # Carried independently of ``status``: PAUSED sits below the human-gated statuses, so
+    # a chunk both paused and waiting_on_human needs this field to be legible as paused
+    # at all (see PauseView). The runner reads this fact, not the derived status.
+    pause: PauseView | None = None
     # The chunk's live gate decision — the open (waiting_on_human) or resolved-but-not-
     # yet-transitioned one. The board renders its buttons + artifacts; the
     # holding runner picks up a resolved decision and records the resolving transition.

@@ -20,6 +20,7 @@ from blizzard.hub.domain.work import (
     DecisionFact,
     EscalationFact,
     LeaseFact,
+    PauseFact,
     PrOpenedFact,
     QuestionFact,
     RouteCreatedFact,
@@ -29,6 +30,7 @@ from blizzard.hub.domain.work import (
     current_node_id,
     derive_chunk_status,
     latest_epoch,
+    open_pause,
     open_questions,
 )
 
@@ -310,3 +312,194 @@ def test_current_node_and_epoch_none_before_any_fact() -> None:
     facts = ChunkFacts(minted=True)
     assert current_node_id(facts) is None
     assert latest_epoch(facts) is None
+
+
+# --- Pause (issue #46) --------------------------------------------------------
+
+
+def test_paused_wins_over_delivering() -> None:
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        transitions=[
+            TransitionFact(to_node_id="nd_deliver", to_node_executor=Executor.HUB, epoch=1, recorded_at=_at(5)),
+        ],
+        pauses=[PauseFact(paused=True, set_at=_at(6), set_by="operator")],
+    )
+    assert derive_chunk_status(facts) is ChunkStatus.PAUSED
+
+
+def test_paused_wins_over_running() -> None:
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        pauses=[PauseFact(paused=True, set_at=_at(2), set_by="operator")],
+    )
+    assert derive_chunk_status(facts) is ChunkStatus.PAUSED
+
+
+def test_paused_wins_over_not_ready() -> None:
+    facts = ChunkFacts(minted=True, pauses=[PauseFact(paused=True, set_at=_at(1), set_by="operator")])
+    assert derive_chunk_status(facts) is ChunkStatus.PAUSED
+
+
+def test_paused_wins_over_ready() -> None:
+    facts = ChunkFacts(minted=True, promoted=True, pauses=[PauseFact(paused=True, set_at=_at(1), set_by="operator")])
+    assert derive_chunk_status(facts) is ChunkStatus.PAUSED
+
+
+def test_waiting_on_human_wins_over_paused() -> None:
+    # An operator may pause a chunk already parked on a question (§0.3): the chunk is
+    # first, still, waiting on a human — pausing does not preempt the human gate.
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        questions=[QuestionFact(question_id="qn_1", asked_at=_at(2), answered=False)],
+        pauses=[PauseFact(paused=True, set_at=_at(3), set_by="operator")],
+    )
+    assert derive_chunk_status(facts) is ChunkStatus.WAITING_ON_HUMAN
+
+
+def test_needs_human_wins_over_paused() -> None:
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        escalations=[EscalationFact(epoch=1, recorded_at=_at(2))],
+        pauses=[PauseFact(paused=True, set_at=_at(3), set_by="operator")],
+    )
+    assert derive_chunk_status(facts) is ChunkStatus.NEEDS_HUMAN
+
+
+def test_done_wins_over_paused() -> None:
+    facts = ChunkFacts(
+        minted=True,
+        delivery_landed=True,
+        pauses=[PauseFact(paused=True, set_at=_at(1), set_by="operator")],
+    )
+    assert derive_chunk_status(facts) is ChunkStatus.DONE
+
+
+def test_stopped_wins_over_paused() -> None:
+    facts = ChunkFacts(minted=True, stopped=True, pauses=[PauseFact(paused=True, set_at=_at(1), set_by="operator")])
+    assert derive_chunk_status(facts) is ChunkStatus.STOPPED
+
+
+def test_resumed_chunk_no_longer_paused() -> None:
+    # Newest-fact-wins: a resume appended after the pause flips it back.
+    facts = ChunkFacts(
+        minted=True,
+        promoted=True,
+        pauses=[
+            PauseFact(paused=True, set_at=_at(1), set_by="operator"),
+            PauseFact(paused=False, set_at=_at(2), set_by="operator"),
+        ],
+    )
+    assert derive_chunk_status(facts) is ChunkStatus.READY
+
+
+def test_re_pause_after_resume_derives_paused_again() -> None:
+    # Pause -> resume -> pause again: the newest fact (a second pause) must win.
+    facts = ChunkFacts(
+        minted=True,
+        promoted=True,
+        pauses=[
+            PauseFact(paused=True, set_at=_at(1), set_by="operator"),
+            PauseFact(paused=False, set_at=_at(2), set_by="operator"),
+            PauseFact(paused=True, set_at=_at(3), set_by="operator"),
+        ],
+    )
+    assert derive_chunk_status(facts) is ChunkStatus.PAUSED
+
+
+# --- open_pause: the FACT, deliberately not the derived status (issue #46 §4) ---
+#
+# `open_pause` is the sole source of the wire's `ChunkDetail.pause`, which is in turn the
+# only thing the runner (P4) may key its kill-and-park on. PAUSED sits *below* the
+# human-gated states in the precedence above, so `status == PAUSED` is a **lossy** read of
+# "is this chunk paused" — the tests here are what forbid `open_pause` from ever being
+# rewritten in terms of `derive_chunk_status`. Without them that rewrite is invisible: it
+# passes every other test in the suite, and P4 then silently never learns a
+# paused-and-parked chunk is paused, resuming its worker on the answer (§3.3).
+
+
+def _paused_and_asking() -> ChunkFacts:
+    """Paused **and** parked on an open question — the overlap §0.3 deliberately allows."""
+    return ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        questions=[QuestionFact(question_id="qn_1", asked_at=_at(2), answered=False)],
+        pauses=[PauseFact(paused=True, set_at=_at(3), set_by="alice")],
+    )
+
+
+def test_open_pause_survives_a_status_that_hides_the_pause() -> None:
+    """THE keystone: status is waiting_on_human, yet the pause fact is still legible.
+
+    This is the single property P4's correctness rests on. If it ever regresses, a paused
+    chunk that is also parked on a question reads as un-paused to the runner.
+    """
+    facts = _paused_and_asking()
+    assert derive_chunk_status(facts) is ChunkStatus.WAITING_ON_HUMAN  # the status hides it...
+    pause = open_pause(facts)
+    assert pause is not None, "a status-keyed open_pause would return None here — the P4 trap"
+    assert pause.set_by == "alice"
+    assert pause.set_at == _at(3)
+
+
+def test_open_pause_survives_needs_human_too() -> None:
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        escalations=[EscalationFact(epoch=1, recorded_at=_at(2))],
+        pauses=[PauseFact(paused=True, set_at=_at(3), set_by="operator")],
+    )
+    assert derive_chunk_status(facts) is ChunkStatus.NEEDS_HUMAN
+    assert open_pause(facts) is not None
+
+
+def test_open_pause_is_none_without_any_pause_fact() -> None:
+    assert open_pause(ChunkFacts(minted=True, promoted=True)) is None
+
+
+def test_open_pause_is_none_after_a_resume() -> None:
+    # Newest-fact-wins: the tail reads paused=False, so no pause is open — even though a
+    # pause fact exists in the list.
+    facts = ChunkFacts(
+        minted=True,
+        promoted=True,
+        pauses=[
+            PauseFact(paused=True, set_at=_at(1), set_by="operator"),
+            PauseFact(paused=False, set_at=_at(2), set_by="operator"),
+        ],
+    )
+    assert open_pause(facts) is None
+
+
+def test_open_pause_returns_the_newest_pause_after_a_re_pause() -> None:
+    # Pause(alice) -> resume -> pause(bob): the view must carry *bob*, the newest setter,
+    # not the first one. Reading the head of the list would answer "alice".
+    facts = ChunkFacts(
+        minted=True,
+        promoted=True,
+        pauses=[
+            PauseFact(paused=True, set_at=_at(1), set_by="alice"),
+            PauseFact(paused=False, set_at=_at(2), set_by="alice"),
+            PauseFact(paused=True, set_at=_at(3), set_by="bob"),
+        ],
+    )
+    pause = open_pause(facts)
+    assert pause is not None
+    assert pause.set_by == "bob"
+    assert pause.set_at == _at(3)
+
+
+def test_open_pause_reads_the_fact_on_a_done_chunk() -> None:
+    # `done` outranks `paused` in the derivation, so a status-keyed read loses the pause
+    # here too — the same lossiness as the human-gated states, one rank further up.
+    facts = ChunkFacts(
+        minted=True,
+        delivery_landed=True,
+        pauses=[PauseFact(paused=True, set_at=_at(1), set_by="operator")],
+    )
+    assert derive_chunk_status(facts) is ChunkStatus.DONE
+    assert open_pause(facts) is not None

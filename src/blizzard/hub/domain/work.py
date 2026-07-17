@@ -40,6 +40,7 @@ class ChunkStatus(StrEnum):
     DELIVERING = "delivering"
     WAITING_ON_HUMAN = "waiting_on_human"
     NEEDS_HUMAN = "needs_human"
+    PAUSED = "paused"
     STOPPED = "stopped"
     DONE = "done"
 
@@ -217,6 +218,15 @@ class RequeueFact:
 
 
 @dataclass(frozen=True)
+class PauseFact:
+    """A ``chunk.paused``/``chunk.resumed`` fact — newest-fact-wins (issue #46)."""
+
+    paused: bool
+    set_at: datetime
+    set_by: str
+
+
+@dataclass(frozen=True)
 class DecisionChoice:
     """One selectable gate outcome — a button on the board/bot."""
 
@@ -273,6 +283,7 @@ class ChunkFacts:
     decisions: list[DecisionFact] = field(default_factory=list)
     requeues: list[RequeueFact] = field(default_factory=list)
     pr_opened: list[PrOpenedFact] = field(default_factory=list)
+    pauses: list[PauseFact] = field(default_factory=list)
 
 
 # --- The derivation queries -----------------------------------------
@@ -292,6 +303,10 @@ def derive_chunk_status(facts: ChunkFacts) -> ChunkStatus:
         # An open question or an open decision (gate); the
         # reap clock is stopped and the answer/resolution flips it back.
         return ChunkStatus.WAITING_ON_HUMAN
+    if _is_paused(facts):
+        # Below the human-gated states (a chunk both parked on a question and paused
+        # is still, first, waiting on a human) and above delivering/running (issue #46).
+        return ChunkStatus.PAUSED
     if _newest_transition_enters_hub_node(facts):
         return ChunkStatus.DELIVERING
     if _has_live_route(facts):
@@ -332,6 +347,23 @@ def open_escalation(facts: ChunkFacts) -> EscalationFact | None:
 def _is_waiting_on_human(facts: ChunkFacts) -> bool:
     """An open question or an open decision parks the chunk."""
     return bool(open_questions(facts)) or has_open_decision(facts)
+
+
+def _is_paused(facts: ChunkFacts) -> bool:
+    """Paused derives from the newest pause fact, newest-fact-wins (issue #46)."""
+    return open_pause(facts) is not None
+
+
+def open_pause(facts: ChunkFacts) -> PauseFact | None:
+    """The newest pause fact iff it currently reads paused, else ``None`` (issue #46).
+
+    The wire (``PauseView``) and the runner both need the **fact** — who paused it and
+    when — not merely the derived boolean ``_is_paused`` gives the status query. PAUSED
+    sits below the human-gated states, so a status-keyed reader would miss a chunk that
+    is paused *and* parked on a question (``status == waiting_on_human``); this reads
+    the fact directly, independent of where pause sits in the derivation order.
+    """
+    return facts.pauses[-1] if facts.pauses and facts.pauses[-1].paused else None
 
 
 def open_questions(facts: ChunkFacts) -> list[QuestionFact]:
@@ -757,4 +789,8 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
 
     def record_grouped(self, chunk_id: str, *, grouped_into: str, at: datetime) -> None:
         """Record ``chunk.grouped`` — the merged-away chunk becomes ephemeral."""
+        ...
+
+    def record_pause(self, chunk_id: str, *, paused: bool, by: str, at: datetime) -> None:
+        """Append a ``chunk.paused``/``chunk.resumed`` fact — newest-fact-wins (issue #46)."""
         ...
