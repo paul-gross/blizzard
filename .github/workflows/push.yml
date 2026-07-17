@@ -39,92 +39,11 @@ jobs:
   gate:
     uses: ./.github/workflows/gate.yml
 
-  service-tier:
-    name: service tier (blizzard:service-test)
+  upper-tiers:
     needs: [gate]
-    runs-on: ubuntu-latest
-    steps:
-      - name: checkout blizzard
-        uses: actions/checkout@v4
-        with:
-          path: blizzard
-      - name: checkout blizzard-mock (the mock fleet + fixture scaffold)
-        uses: actions/checkout@v4
-        with:
-          repository: paul-gross/blizzard-mock
-          path: blizzard-mock
-      - name: checkout blizzard-workspace (the winter source)
-        uses: actions/checkout@v4
-        with:
-          repository: paul-gross/blizzard-workspace
-          path: blizzard-workspace
-      - uses: astral-sh/setup-uv@v6
-        with:
-          enable-cache: true
-          python-version: "3.12"
-      - name: install mise (the fixture drives the winter CLI via `mise exec -- uv run`)
-        uses: jdx/mise-action@v2
-        with:
-          install: false
-      - name: git identity for fixture/forge git operations
-        run: |
-          git config --global user.email "ci@blizzard.local"
-          git config --global user.name "blizzard CI"
-      - name: provision blizzard (hub + runner daemons)
-        run: cd blizzard && uv sync
-      - name: provision blizzard-mock (mock hub/runner/forge + fixture + mock-claude-code)
-        run: cd blizzard-mock && uv sync
-      - name: service tier — a running daemon's HTTP API vs. its mocked counterpart
-        # `mise run service-test` == `BLIZZARD_SERVICE=1 uv run pytest tests/service/`.
-        env:
-          BLIZZARD_SERVICE: "1"
-          BLIZZARD_MOCK_WINTER_SOURCE: ${{ github.workspace }}/blizzard-workspace
-        run: cd blizzard && uv run pytest tests/service/ -v
-
-  crash-sweep:
-    name: kill-9 crash sweep — CI profile (blizzard:crash-sweep)
-    needs: [gate]
-    runs-on: ubuntu-latest
-    steps:
-      - name: checkout blizzard
-        uses: actions/checkout@v4
-        with:
-          path: blizzard
-      - name: checkout blizzard-mock (the mock fleet + fixture scaffold)
-        uses: actions/checkout@v4
-        with:
-          repository: paul-gross/blizzard-mock
-          path: blizzard-mock
-      - name: checkout blizzard-workspace (the winter source)
-        uses: actions/checkout@v4
-        with:
-          repository: paul-gross/blizzard-workspace
-          path: blizzard-workspace
-      - uses: astral-sh/setup-uv@v6
-        with:
-          enable-cache: true
-          python-version: "3.12"
-      - name: install mise (the fixture drives the winter CLI via `mise exec -- uv run`)
-        uses: jdx/mise-action@v2
-        with:
-          install: false
-      - name: git identity for fixture/forge git operations
-        run: |
-          git config --global user.email "ci@blizzard.local"
-          git config --global user.name "blizzard CI"
-      - name: provision blizzard (hub + runner daemons)
-        run: cd blizzard && uv sync
-      - name: provision blizzard-mock (mock fleet + fixture + mock-claude-code)
-        run: cd blizzard-mock && uv sync
-      - name: kill-9 sweep (CI profile) — arm each subset crash point, SIGKILL, assert recovery
-        # `mise run crash-sweep-ci` == the FULL sweep gated to the representative CI subset:
-        # `BLIZZARD_CRASH_SWEEP=1 BLIZZARD_CRASH_SWEEP_CI=1 uv run pytest -m crash_sweep`.
-        # The FULL 22-point sweep is `mise run crash-sweep` (local + tag release).
-        env:
-          BLIZZARD_CRASH_SWEEP: "1"
-          BLIZZARD_CRASH_SWEEP_CI: "1"
-          BLIZZARD_MOCK_WINTER_SOURCE: ${{ github.workspace }}/blizzard-workspace
-        run: cd blizzard && uv run pytest -m crash_sweep tests/crash/ -v
+    uses: ./.github/workflows/upper-tiers.yml
+    with:
+      crash_sweep_ci: "1"
 
   dev-build:
     name: dev build wheel artifact

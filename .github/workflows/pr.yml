@@ -1,8 +1,29 @@
 # PR to master — the merge gate.
 #
-# ruff + pyright + eslint + client-drift check + the unit and component tiers.
-# This is the whole gate: it delegates to the reusable `gate` workflow so the
-# exact same checks run on push and tag.
+# ruff + pyright + eslint + client-drift check + the unit and component tiers,
+# then the SERVICE tier and the kill-9 CRASH SWEEP as REAL gates too
+# (blizzard-harness verification/blizzard.md: blizzard:service-test,
+# blizzard:crash-sweep) — a subset of the `push` workflow's jobs (everything but
+# the dev-build wheel artifact), so a PR that breaks either upper tier fails its
+# own check instead of only breaking master after merge.
+#
+# Both upper tiers need what a single-repo checkout does not carry: the sibling
+# `blizzard-mock` worktree (the mock fleet + fixture scaffold) and a local winter
+# source (its committed `tools/winter-cli`, which the fixture clones to mint a real
+# disposable winter workspace over `file://` origins — no tokens, no forge, no network
+# beyond package installs). This workflow provides them with a multi-repo checkout:
+# `blizzard`, `blizzard-mock`, and the public `blizzard-workspace` (the winter source)
+# laid out as SIBLINGS under $GITHUB_WORKSPACE — exactly the on-disk layout the tiers'
+# discovery expects (`tests/service/support.py`, `tests/crash/support.py`:
+# `blizzard_root().parent / "blizzard-mock"`, `BLIZZARD_MOCK_WINTER_SOURCE`).
+#
+# The FULL 22-point kill-9 sweep runs ~130s locally and multiples of that on a 2-core
+# GitHub runner, so this workflow runs the sweep's bounded CI profile
+# (BLIZZARD_CRASH_SWEEP_CI=1 — a representative crash point per boundary family plus the
+# two whole-process cases and the recovery-critical windows); the FULL sweep stays the
+# documented local command (`mise run crash-sweep`) and runs in the tag `release`
+# workflow. The e2e acceptance loop (`mise run e2e`, incl. the Playwright board scenario)
+# remains a local + tag-only tier, not a `pr`/`push` gate (build.md).
 name: pr
 
 on:
@@ -19,3 +40,9 @@ concurrency:
 jobs:
   gate:
     uses: ./.github/workflows/gate.yml
+
+  upper-tiers:
+    needs: [gate]
+    uses: ./.github/workflows/upper-tiers.yml
+    with:
+      crash_sweep_ci: "1"

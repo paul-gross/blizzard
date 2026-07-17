@@ -12,9 +12,10 @@ reference for running it.
 | File | Trigger | Runs |
 |------|---------|------|
 | [`.github/workflows/gate.yml`](../.github/workflows/gate.yml) | reusable (`workflow_call`) | The merge gate: ruff format+check, pyright, pytest (unit + component), OpenAPI spec drift, and — once the `web/` workspace lands — eslint, vitest, and generated-client drift. Defined once; every trigger below calls it. |
-| [`.github/workflows/pr.yml`](../.github/workflows/pr.yml) | PR to `master` | The gate. This is the merge gate. |
-| [`.github/workflows/push.yml`](../.github/workflows/push.yml) | push to `master` | The gate, plus the service tier and crash sweep (deliberate no-ops until P6), plus a **dev-build wheel** (`0.<milestone>.0.dev<run>`) uploaded as a workflow artifact. |
-| [`.github/workflows/release.yml`](../.github/workflows/release.yml) | tag `v*` | The full suite (gate today; service/e2e/crash-sweep are P6 no-ops), a wheel built with the embedded frontend, and a **GitHub Release** with the wheel attached. |
+| [`.github/workflows/upper-tiers.yml`](../.github/workflows/upper-tiers.yml) | reusable (`workflow_call`) | The service tier (`blizzard:service-test`) and the kill-9 crash sweep's bounded CI profile (`blizzard:crash-sweep`), over a multi-repo checkout (`blizzard` + `blizzard-mock` + `blizzard-workspace`). Defined once; `pr.yml` and `push.yml` both call it. |
+| [`.github/workflows/pr.yml`](../.github/workflows/pr.yml) | PR to `master` | The gate, plus the service tier and crash sweep (CI profile) as real gate jobs. |
+| [`.github/workflows/push.yml`](../.github/workflows/push.yml) | push to `master` | The gate, plus the service tier and crash sweep (CI profile) as real gate jobs, plus a **dev-build wheel** (`0.<milestone>.0.dev<run>`) uploaded as a workflow artifact. |
+| [`.github/workflows/release.yml`](../.github/workflows/release.yml) | tag `v*` | The full suite (gate, service tier, the FULL crash sweep, and e2e), a wheel built with the embedded frontend, and a **GitHub Release** with the wheel attached. |
 
 All gate checks are seams-mocked and token-free — they install dependencies and
 run, needing no real forge, no tokens, and no network beyond package installs.
@@ -29,9 +30,10 @@ external package-index publish.
   `npm run generate:client`. Until then each is a clearly-labeled no-op. The
   path and script names are the declared interface; the P5 integrate step
   reconciles them.
-- **Service tier, e2e tier, crash sweep** land in P6 (the walking skeleton).
-  They are wired as explicit no-op jobs that cannot fail and name their P6 gap,
-  so the workflows are green today and the gap shows in the run graph.
+- **Service tier and crash sweep** are real gate jobs as of P6/P7: `pr.yml` and
+  `push.yml` both run them (via `upper-tiers.yml`) at the bounded CI crash-sweep
+  profile, and `release.yml` runs them at full strength. Only the **e2e tier**
+  remains a local + tag-`release`-only tier — it is not a `pr`/`push` gate job.
 
 ## The one build entrypoint
 
@@ -70,6 +72,16 @@ uv run pyright                                 # typecheck
 uv run pytest -n auto                          # unit + component tiers, parallel
 uv run blizzard-export-openapi --out-dir openapi && git diff --exit-code openapi/   # spec drift
 # frontend (once web/ lands): cd web && npm ci && npm run lint && npm run test && npm run generate:client && git diff --exit-code web/
+```
+
+The `pr` and `push` workflows also run the service tier and the crash sweep's CI
+profile as their own gate jobs (`upper-tiers.yml`, needing the sibling
+`blizzard-mock` worktree provisioned — `winter provision <env>`); their exact
+local equivalents:
+
+```bash
+mise run service-test    # == BLIZZARD_SERVICE=1 uv run pytest tests/service/
+mise run crash-sweep-ci  # == BLIZZARD_CRASH_SWEEP=1 BLIZZARD_CRASH_SWEEP_CI=1 uv run pytest -m crash_sweep tests/crash/
 ```
 
 ## Watching runs
