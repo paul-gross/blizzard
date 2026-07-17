@@ -10,8 +10,10 @@ structlog inside the runtime and app.
 
 from __future__ import annotations
 
+import asyncio
 import os
 from pathlib import Path
+from types import FrameType
 
 import click
 import httpx
@@ -80,6 +82,35 @@ def migrate_cmd(directory: str, down: str | None) -> None:
     click.echo("migrated" if down is None else f"reversed to {down}")
 
 
+# Bounds uvicorn's own connection-drain wait — defense-in-depth, not the fix for issue #47
+# (see ``_EarlyShutdownServer`` below).
+_GRACEFUL_SHUTDOWN_SECONDS = 5
+
+
+class _EarlyShutdownServer(uvicorn.Server):
+    """Sets ``shutdown_signal`` the instant SIGTERM/SIGINT is caught (issue #47).
+
+    Uvicorn's own shutdown sequence (``Server.shutdown``) closes listening sockets, marks
+    open connections non-keep-alive, then waits up to ``timeout_graceful_shutdown`` for
+    every in-flight response to finish **before** it sends the ASGI ``lifespan`` "shutdown"
+    message. An SSE response never finishes on its own, so an ``asyncio.Event`` set only
+    from a FastAPI ``lifespan=`` handler (``blizzard.hub.app._lifespan``) would not fire
+    until that drain already timed out — too late to unblock the stream's live-wait race
+    (``blizzard.hub.api.events._stream``). ``handle_exit`` runs synchronously the moment the
+    signal arrives, well before that drain begins, so setting the event here is what lets
+    every open stream close immediately instead of waiting on the drain or its fallback
+    cancellation.
+    """
+
+    def __init__(self, config: uvicorn.Config, *, shutdown_signal: asyncio.Event) -> None:
+        super().__init__(config)
+        self._shutdown_signal = shutdown_signal
+
+    def handle_exit(self, sig: int, frame: FrameType | None) -> None:
+        self._shutdown_signal.set()
+        super().handle_exit(sig, frame)
+
+
 @hub.command()
 @click.argument("directory", required=False, default=None)
 @click.option(
@@ -114,7 +145,10 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(f"serving blizzard-hub on {config.host}:{config.port}")
-    uvicorn.run(app, host=config.host, port=config.port)
+    uvicorn_config = uvicorn.Config(
+        app, host=config.host, port=config.port, timeout_graceful_shutdown=_GRACEFUL_SHUTDOWN_SECONDS
+    )
+    _EarlyShutdownServer(uvicorn_config, shutdown_signal=app.state.shutdown).run()
 
 
 @hub.command()

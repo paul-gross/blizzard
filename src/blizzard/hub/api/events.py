@@ -86,20 +86,33 @@ def ingest_runner_facts(
     return ack
 
 
-async def _stream(broker: EventBroker | None, request: Request, *, last_event_id: int) -> AsyncIterator[bytes]:
+async def _stream(
+    broker: EventBroker | None,
+    request: Request,
+    *,
+    last_event_id: int,
+    shutdown: asyncio.Event | None = None,
+) -> AsyncIterator[bytes]:
     """Yield the reserved comment, the buffered replay tail, then live events forever.
 
     ``last_event_id`` is the reconnect cursor (``Last-Event-ID`` header). Subscribing
     *before* reading the replay tail means an event published in the window between the
     two is captured by the live queue and skipped in the tail (or vice-versa) — dedup by
-    monotonic id makes the seam exact. The generator unsubscribes on any exit (client
-    disconnect, cancellation, shutdown).
+    monotonic id makes the seam exact. ``shutdown`` is the app-lifetime signal
+    (``app.state.shutdown``, set by ``blizzard.hub.app._lifespan`` on server shutdown);
+    each live-wait races it against the queue read instead of waiting on the queue alone, so
+    the generator returns promptly on shutdown rather than on its next keepalive wake. A
+    caller with no shutdown signal to offer (the store-free export/unit app, or a direct
+    test call) gets a private ``Event`` that is never set — the race then behaves exactly
+    like the old bare queue wait. The generator unsubscribes on any exit: client disconnect,
+    cancellation, or this shutdown signal.
     """
     if broker is None:
         # The store-free export/unit app carries no broker: open cleanly and idle.
         yield _RESERVED_COMMENT.encode()
         return
 
+    shutdown = shutdown if shutdown is not None else asyncio.Event()
     sub = broker.subscribe()
     last_sent = last_event_id
     try:
@@ -110,11 +123,22 @@ async def _stream(broker: EventBroker | None, request: Request, *, last_event_id
         while True:
             if await request.is_disconnected():
                 return
+            get_task = asyncio.ensure_future(sub.queue.get())
+            shutdown_task = asyncio.ensure_future(shutdown.wait())
             try:
-                event = await asyncio.wait_for(sub.queue.get(), timeout=_KEEPALIVE_SECONDS)
-            except TimeoutError:
+                done, _ = await asyncio.wait(
+                    {get_task, shutdown_task}, timeout=_KEEPALIVE_SECONDS, return_when=asyncio.FIRST_COMPLETED
+                )
+            finally:
+                for task in (get_task, shutdown_task):
+                    if not task.done():
+                        task.cancel()
+            if shutdown_task in done:
+                return
+            if get_task not in done:
                 yield b": keepalive\n\n"
                 continue
+            event = get_task.result()
             if event.id <= last_sent:
                 continue  # already emitted in the replay tail (dedup at the seam)
             yield event.framed().encode()
@@ -127,8 +151,11 @@ async def _stream(broker: EventBroker | None, request: Request, *, last_event_id
 async def events_stream(request: Request) -> StreamingResponse:
     """Subscribe to the live event stream, resuming from ``Last-Event-ID`` if present."""
     broker: EventBroker | None = getattr(request.app.state, "events", None)
+    shutdown: asyncio.Event | None = getattr(request.app.state, "shutdown", None)
     last_event_id = _parse_last_event_id(request)
-    return StreamingResponse(_stream(broker, request, last_event_id=last_event_id), media_type="text/event-stream")
+    return StreamingResponse(
+        _stream(broker, request, last_event_id=last_event_id, shutdown=shutdown), media_type="text/event-stream"
+    )
 
 
 def _parse_last_event_id(request: Request) -> int:

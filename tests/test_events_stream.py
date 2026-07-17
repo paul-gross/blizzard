@@ -10,11 +10,12 @@ opens with the reserved comment. Replay/live semantics are covered in ``test_eve
 
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 
 import pytest
 
-from blizzard.hub.api.events import events_stream
+from blizzard.hub.api.events import _stream, events_stream
 from blizzard.hub.app import create_app_for_export
 from blizzard.hub.events.broker import EventBroker
 
@@ -48,3 +49,32 @@ async def test_stream_endpoint_returns_an_sse_response() -> None:
 def test_events_stream_excluded_from_openapi() -> None:
     app = create_app_for_export()
     assert "/api/events/stream" not in app.openapi()["paths"]
+
+
+async def test_stream_exits_promptly_on_shutdown_signal_not_disconnect() -> None:
+    """A shutting-down stream returns as soon as ``shutdown`` fires — not on client
+    disconnect (which never happens here) and not on the next 15s keepalive wake
+    (issue #47). Bounding the wait at 1s makes this fail if the shutdown signal is not
+    wired into the live-wait race: without it the generator only wakes up on its
+    keepalive timeout, and the ``wait_for`` below times out first.
+    """
+    broker = EventBroker()
+    shutdown = asyncio.Event()
+
+    class _ConnectedRequest:
+        async def is_disconnected(self) -> bool:
+            return False  # the client stays connected — only the shutdown signal ends this
+
+    async def _drain() -> None:
+        async for _ in _stream(broker, _ConnectedRequest(), last_event_id=0, shutdown=shutdown):  # type: ignore[arg-type]
+            pass
+
+    task = asyncio.ensure_future(_drain())
+    await asyncio.sleep(0.05)  # let the generator subscribe and reach its live wait
+    assert broker.subscriber_count() == 1
+
+    shutdown.set()
+    await asyncio.wait_for(task, timeout=1.0)
+
+    # The generator's `finally: broker.unsubscribe(sub)` ran — no leaked subscriber.
+    assert broker.subscriber_count() == 0

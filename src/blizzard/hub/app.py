@@ -15,7 +15,10 @@ and assembles the fleet services (:func:`blizzard.hub.composition.build_services
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import os
+from collections.abc import AsyncIterator
 
 import httpx
 from fastapi import FastAPI
@@ -80,6 +83,27 @@ class _UnconfiguredForge:
         raise RuntimeError(f"no forge configured (set {ENV_FORGE_URL})")
 
 
+@contextlib.asynccontextmanager
+async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Set ``app.state.shutdown`` on the ASGI ``lifespan`` "shutdown" message (issue #47).
+
+    ``app.state.shutdown`` (an ``asyncio.Event``, created eagerly in :func:`create_app` so
+    it exists before the first subscriber connects) is what every ``/api/events/stream``
+    generator races against its queue read (``blizzard.hub.api.events._stream``), so a
+    shutting-down stream returns immediately instead of blocking a graceful drain until its
+    next 15s keepalive wake (or forever). This ASGI-level hook makes the app a well-behaved
+    lifespan citizen under any runner, but it is **not** what unblocks the stream when
+    ``blizzard hub host`` serves under uvicorn: uvicorn's own ``Server.shutdown`` only sends
+    this message *after* waiting (up to ``timeout_graceful_shutdown``) for in-flight
+    responses to finish on their own — an SSE response never does, so that wait would
+    already be blocking or timing out before this fires. The real signal path there is
+    ``blizzard.hub.cli._EarlyShutdownServer.handle_exit``, which sets the same event
+    synchronously the instant SIGTERM/SIGINT is caught, well before uvicorn's drain begins.
+    """
+    yield
+    app.state.shutdown.set()
+
+
 def create_app(
     config: HubConfig,
     *,
@@ -95,13 +119,15 @@ def create_app(
     """
     log = get_logger("blizzard.hub")
 
-    app = FastAPI(title="blizzard-hub", version=__version__)
+    app = FastAPI(title="blizzard-hub", version=__version__, lifespan=_lifespan)
     app.state.config = config
     app.state.readiness = readiness
     app.state.services = services
     # The event broker is always present (cheap, in-memory) so the SSE stream opens
     # cleanly even on the store-free app; mutating routes publish through it.
     app.state.events = services.events if services is not None else EventBroker()
+    # Set on shutdown by ``_lifespan``; every SSE stream races it (issue #47).
+    app.state.shutdown = asyncio.Event()
 
     # API routers first, so /api/* always wins over the web mount at /.
     app.include_router(health_router)

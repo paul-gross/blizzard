@@ -137,6 +137,11 @@ class EventBroker:
         with self._lock:
             self._subscribers.discard(sub)
 
+    def subscriber_count(self) -> int:
+        """The number of live connections — the no-leak invariant a shutdown test asserts."""
+        with self._lock:
+            return len(self._subscribers)
+
     def replay_since(self, last_event_id: int) -> list[Event]:
         """The buffered events newer than ``last_event_id`` — the reconnect replay tail."""
         with self._lock:
