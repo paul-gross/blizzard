@@ -38,7 +38,7 @@ from blizzard.runner.environments.provider import (
 from blizzard.runner.harness.adapter import WorkerPreamble
 from blizzard.runner.harness.preamble import render_worker_preamble
 from blizzard.runner.loop.context import LoopContext
-from blizzard.runner.loop.hub import HubClientError
+from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.store.repository import (
     AskRecord,
@@ -82,7 +82,7 @@ _REAPED = "reaped"
 _FAILED = "failed"
 _ESCALATED = "escalated"
 _PARKED = "parked"  # a runner-config gate: the node-step completed, the chunk parks on a decision
-_RELEASED = "released"  # the chunk was found reassigned/detached — abandon, no requeue (D-088)
+_RELEASED = "released"  # the chunk was found reassigned/detached/unknown — abandon, no requeue (D-088/blizzard#9)
 
 #: The message RESUME delivers into a marked session on a restart (D-082). Framed
 #: as a ``#``-prefixed comment so it is inert whether the session is real-harness prose or a
@@ -396,9 +396,15 @@ def resume(ctx: LoopContext) -> None:
 
 
 def _resume_marked_lease(ctx: LoopContext, lease: LeaseRecord) -> None:
-    """Resume a marked lease in place, or abandon it if the hub reassigned its chunk (D-082/D-088)."""
+    """Resume a marked lease in place, or abandon it if the hub reassigned its chunk (D-082/D-088),
+    or if the hub no longer knows it at all (blizzard#9)."""
     try:
         detail = ctx.hub.get_chunk(lease.chunk_id)
+    except ChunkNotFoundError:
+        # The chunk is gone outright (e.g. a store reset) — terminal, not retryable; abandon now
+        # rather than leave the intent open for PULL's `_release_detached` to find it later.
+        _abandon_reassigned(ctx, lease, via="resume")
+        return
     except HubClientError:
         # Hub unreachable — the intent is durable and the environments stay held (D-083), so
         # leave it open and retry next tick. Resuming blind would risk re-asserting authority
@@ -479,16 +485,18 @@ def _resume_in_place(ctx: LoopContext, lease: LeaseRecord) -> None:
 
 
 def _abandon_reassigned(ctx: LoopContext, lease: LeaseRecord, *, killed: bool = False, via: str) -> None:
-    """Release a chunk the hub reassigned or detached (D-088) — reached from restart-resume or a live tick.
+    """Release a chunk the hub reassigned, detached, or no longer knows about (D-088/blizzard#9) —
+    reached from restart-resume or a live tick.
 
-    No epoch bump and no requeue: the chunk is another runner's now (or detached to ``ready``),
-    so re-asserting authority over it would be wrong — the runner learns of the detach, whether
-    over its own restart or on a live tick, and does exactly what D-088 asks: kill the worker,
-    release the environments. The lease is closed ``released`` (not a failed attempt — it never
-    gets to run) and the intent is cleared. ``via`` names which caller reached the ownership
-    check that led here (``"resume"`` — restart-resume, ``"pull"`` — a live tick's
-    :func:`_release_detached`, ``"reap"`` — an escalation REAP suppressed in favor of this
-    abandon, see :func:`_fail_attempt`) so the log line below does not overclaim a single cause."""
+    No epoch bump and no requeue: the chunk is another runner's now (or detached to ``ready``, or
+    gone outright — a 404 at the hub, e.g. after a store reset), so re-asserting authority over it
+    would be wrong — the runner learns of it, whether over its own restart or on a live tick, and
+    does exactly what D-088 asks: kill the worker, release the environments. The lease is closed
+    ``released`` (not a failed attempt — it never gets to run) and the intent is cleared. ``via``
+    names which caller reached the ownership check that led here (``"resume"`` — restart-resume,
+    ``"pull"`` — a live tick's :func:`_release_detached`, ``"reap"`` — an escalation REAP
+    suppressed in favor of this abandon, see :func:`_fail_attempt`) so the log line below does not
+    overclaim a single cause."""
     now = ctx.clock.now()
     if lease.pid is not None and not killed:
         ctx.process.kill(lease.pid)
@@ -498,7 +506,7 @@ def _abandon_reassigned(ctx: LoopContext, lease: LeaseRecord, *, killed: bool = 
         lease_id=lease.lease_id, chunk_id=lease.chunk_id, node_id=lease.node_id, reason=_RELEASED, closed_at=now
     )
     ctx.store.record_resume_clear(lease_id=lease.lease_id, cleared_at=now)
-    _log.info("abandoned reassigned/detached chunk", chunk_id=lease.chunk_id, lease_id=lease.lease_id, via=via)
+    _log.info("abandoned reassigned/detached/unknown chunk", chunk_id=lease.chunk_id, lease_id=lease.lease_id, via=via)
 
 
 # --------------------------------------------------------------------------- #
@@ -583,14 +591,21 @@ def _release_detached(ctx: LoopContext) -> None:
 
 
 def _reassigned_or_detached(ctx: LoopContext, lease: LeaseRecord) -> bool:
-    """True iff the hub no longer routes ``lease``'s chunk to this runner (D-088).
+    """True iff the hub no longer routes ``lease``'s chunk to this runner (D-088), or the
+    chunk is gone outright (blizzard#9).
 
     Unreachable hub → ``False``: last-known directive holds (D-012) — a transport failure is
-    never read as a detach. Shared by :func:`_release_detached` (a live-tick sweep over every
-    active lease) and :func:`_fail_attempt`'s escalate guard (a single lease, checked only on
-    the exhausted-retries path) — the same ownership question, asked at two different rates."""
+    never read as a detach. A 404 (:class:`ChunkNotFoundError`) is the one exception to that
+    rule: the hub telling us the chunk no longer exists (e.g. a store reset) is not a transport
+    failure to wait out — it is terminal, so this reads it as detached too and lets the caller's
+    abandon path reap the lease and release the held environments rather than retry the 404
+    forever. Shared by :func:`_release_detached` (a live-tick sweep over every active lease) and
+    :func:`_fail_attempt`'s escalate guard (a single lease, checked only on the exhausted-retries
+    path) — the same ownership question, asked at two different rates."""
     try:
         detail = ctx.hub.get_chunk(lease.chunk_id)
+    except ChunkNotFoundError:
+        return True  # the chunk no longer exists at the hub — terminal, not retryable
     except HubClientError:
         return False  # hub unreachable — last-known directive holds (D-012); keep working
     return detail.route is None or detail.route.runner_id != ctx.config.runner_id
@@ -779,12 +794,22 @@ def _reconcile_interrupted_claims(ctx: LoopContext) -> None:
 
     A chunk at a hub node (``delivering``) or awaiting a human keeps its binding and is
     left to ADVANCE — only a chunk the runner should be actively working, but isn't, is
-    reconciled here."""
+    reconciled here.
+
+    A 404 (:class:`ChunkNotFoundError`) is a third, terminal shape, same as
+    :func:`_advance_held_chunk` (blizzard#9): the hub no longer knows this chunk, so the
+    orphaned binding is released rather than left for this reconciler to keep re-asking
+    about forever — the generic :class:`HubClientError` branch below is for a transport
+    failure alone, not this one."""
     for chunk_id in ctx.store.live_tenure_chunk_ids():
         if ctx.store.active_lease_for_chunk(chunk_id) is not None:
             continue  # a live worker holds it — REAP/ADVANCE own it
         try:
             detail = ctx.hub.get_chunk(chunk_id)
+        except ChunkNotFoundError:
+            _log.warning("hub reports interrupted-claim chunk unknown — releasing envs", chunk_id=chunk_id)
+            _release_all(ctx, chunk_id)
+            continue
         except HubClientError:
             continue  # hub unreachable — the binding is durable; retry next tick
         if detail.decision is not None:
@@ -1081,9 +1106,19 @@ def _advance_held_chunk(ctx: LoopContext, chunk_id: str) -> None:
     (D-066); a chunk **parked on a resolved gate decision** is advanced by recording the
     resolving transition along the chosen edge (D-027/D-045), then continued in place from
     the returned envelope — the human's choice moves the chunk.
+
+    A 404 (:class:`ChunkNotFoundError`) is a third, terminal shape (blizzard#9): the hub no
+    longer knows this chunk (e.g. a store reset), so there is nothing left to poll toward —
+    the held environments are released the same way a landed delivery releases them. No lease
+    is open here to reap (that is :func:`_reassigned_or_detached`'s job, for the active-lease
+    case), just the binding this function already owns.
     """
     try:
         detail = ctx.hub.get_chunk(chunk_id)
+    except ChunkNotFoundError:
+        _log.warning("hub reports held chunk unknown — releasing envs", chunk_id=chunk_id)
+        _release_all(ctx, chunk_id)
+        return
     except HubClientError:
         return
     if detail.status == ChunkStatus.DONE:
@@ -1296,13 +1331,22 @@ def _adopt_interrupted_claim(ctx: LoopContext, chunk_id: str) -> None:
     The hub confirms this runner holds the route (D-080) and the runner holds the binding,
     but no lease was ever minted (the crash landed in FILL's claim→spawn window). Recovery
     is a spawn of the chunk's current node from its idempotent envelope (D-090) into the
-    already-bound environment — the same work FILL's tail would have done."""
+    already-bound environment — the same work FILL's tail would have done.
+
+    A 404 (:class:`ChunkNotFoundError`) here is terminal the same way it is for
+    :func:`_advance_held_chunk` (blizzard#9): there is no active lease over this chunk to
+    reap, only the binding this function already owns, so a chunk the hub no longer knows
+    about is released the same way rather than retried forever."""
     bindings = ctx.store.bindings_for_chunk(chunk_id)
     if not bindings:
         _log.warning("adopt with no bound env — cannot spawn", chunk_id=chunk_id)
         return
     try:
         envelope = ctx.hub.get_envelope(chunk_id)
+    except ChunkNotFoundError:
+        _log.warning("hub reports adopted chunk unknown — releasing envs", chunk_id=chunk_id)
+        _release_all(ctx, chunk_id)
+        return
     except HubClientError:
         return  # hub unreachable — the binding is durable; retry next tick
     _log.info("adopting interrupted claim — spawning current node", chunk_id=chunk_id)
@@ -1337,13 +1381,25 @@ def _reclaim_interrupted(ctx: LoopContext, chunk_id: str, bindings: list[EnvBind
 
 
 def _requeue(ctx: LoopContext, lease: LeaseRecord) -> None:
-    """Re-attempt the node in the same environments — new session, new lease, fresh epoch (D-082)."""
+    """Re-attempt the node in the same environments — new session, new lease, fresh epoch (D-082).
+
+    The prior attempt's lease is already closed by the caller (:func:`_fail_attempt`) before
+    this runs, so a 404 (:class:`ChunkNotFoundError`) here leaves no active lease behind for
+    PULL's own sweep (:func:`_release_detached`) to find and clean up — reached, notably, from
+    REAP, which precedes PULL in tick order, so PULL's sweep has not yet run this same chunk
+    this tick. Left as a generic :class:`HubClientError`, this is the same held-forever shape
+    issue #9 fixed for :func:`_reassigned_or_detached`, just for a chunk gone between the
+    failed attempt and its requeue rather than between two ticks — so it is released here too."""
     bindings = ctx.store.bindings_for_chunk(lease.chunk_id)
     if not bindings:
         _log.warning("requeue with no bound env — cannot re-spawn", chunk_id=lease.chunk_id)
         return
     try:
         envelope = ctx.hub.get_envelope(lease.chunk_id)  # idempotent re-read (D-090)
+    except ChunkNotFoundError:
+        _log.warning("hub reports chunk unknown at requeue — releasing envs", chunk_id=lease.chunk_id)
+        _release_all(ctx, lease.chunk_id)
+        return
     except HubClientError:
         return  # the closed attempt is durable; FILL/ADVANCE re-drives next tick
     _log.info("requeuing at node", chunk_id=lease.chunk_id, node=lease.node_name)

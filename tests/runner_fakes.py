@@ -24,7 +24,7 @@ from blizzard.runner.environments.provider import (
 )
 from blizzard.runner.harness.adapter import IHarnessAdapter, WorkerHandle, WorkerPreamble
 from blizzard.runner.loop.context import LoopConfig, LoopContext
-from blizzard.runner.loop.hub import HubClientError, IHubClient, RouteClaimOutcome
+from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError, IHubClient, RouteClaimOutcome
 from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.loop.worktree import GitArtifact, IWorktreeGit
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
@@ -57,7 +57,11 @@ class FakeHub:
     ``down`` simulates an unreachable hub — ``submit_completion`` and ``push_facts``
     raise :class:`HubClientError` so store-and-forward buffering can be exercised
     (D-069). ``push_facts`` keeps a per-runner high-water mark and re-acks a replayed
-    seq without re-applying, mirroring the hub's idempotency contract.
+    seq without re-applying, mirroring the hub's idempotency contract. ``not_found``
+    simulates a chunk the hub no longer knows about (blizzard#9) — ``get_chunk`` and
+    ``get_envelope`` raise :class:`ChunkNotFoundError` for any chunk id it names,
+    checked before ``down`` since a 404 is a distinguishable outcome, not a transport
+    failure.
     """
 
     def __init__(self, *, default_runner_id: str = "r1") -> None:
@@ -84,6 +88,7 @@ class FakeHub:
         self.registered: list[tuple[str, str]] = []  # (runner_id, workspace_id)
         self.paused = False  # the hub-side pause brake this fake reports back (D-043)
         self.down = False
+        self.not_found: set[str] = set()  # chunk ids `get_chunk`/`get_envelope` 404 for (blizzard#9)
 
     def peek_queue(self) -> QueuePeekResponse:
         return QueuePeekResponse(entries=list(self.queue))
@@ -124,9 +129,13 @@ class FakeHub:
         return RunnerFactAck(runner_id=batch.runner_id, high_water=mark, applied=applied, already_applied=already)
 
     def get_envelope(self, chunk_id: str) -> NodeEnvelope:
+        if chunk_id in self.not_found:
+            raise ChunkNotFoundError(f"chunk {chunk_id} unknown")
         return self.envelopes[chunk_id]
 
     def get_chunk(self, chunk_id: str) -> ChunkDetail:
+        if chunk_id in self.not_found:
+            raise ChunkNotFoundError(f"chunk {chunk_id} unknown")
         if self.down:
             raise HubClientError("fake hub is down")
         # Default a hub-node-held chunk to `delivering` (the merge queue is still

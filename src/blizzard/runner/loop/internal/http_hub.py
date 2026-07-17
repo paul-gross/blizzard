@@ -13,7 +13,7 @@ from __future__ import annotations
 import httpx
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.loop.hub import HubClientError, IHubClient, RouteClaimOutcome
+from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError, IHubClient, RouteClaimOutcome
 from blizzard.wire.chunk import ChunkDetail
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
@@ -62,11 +62,11 @@ class HttpHubClient:
         return RunnerFactAck.model_validate(resp.json())
 
     def get_envelope(self, chunk_id: str) -> NodeEnvelope:
-        resp = self._get(f"{_API}/chunks/{chunk_id}/envelope")
+        resp = self._get(f"{_API}/chunks/{chunk_id}/envelope", not_found_as=ChunkNotFoundError)
         return NodeEnvelope.model_validate(resp.json())
 
     def get_chunk(self, chunk_id: str) -> ChunkDetail:
-        resp = self._get(f"{_API}/chunks/{chunk_id}")
+        resp = self._get(f"{_API}/chunks/{chunk_id}", not_found_as=ChunkNotFoundError)
         return ChunkDetail.model_validate(resp.json())
 
     def get_question(self, question_id: str) -> QuestionView:
@@ -99,12 +99,12 @@ class HttpHubClient:
 
     # --- plumbing -----------------------------------------------------------
 
-    def _get(self, path: str) -> httpx.Response:
+    def _get(self, path: str, *, not_found_as: type[HubClientError] | None = None) -> httpx.Response:
         try:
             resp = self._client.get(path)
         except httpx.HTTPError as exc:
             raise self._wrap(exc, f"GET {path}") from exc
-        self._raise_for_status(resp, f"GET {path}")
+        self._raise_for_status(resp, f"GET {path}", not_found_as=not_found_as)
         return resp
 
     def _post(self, path: str, body: object) -> httpx.Response:
@@ -115,10 +115,14 @@ class HttpHubClient:
         self._raise_for_status(resp, f"POST {path}")
         return resp
 
-    def _raise_for_status(self, resp: httpx.Response, operation: str) -> None:
+    def _raise_for_status(
+        self, resp: httpx.Response, operation: str, *, not_found_as: type[HubClientError] | None = None
+    ) -> None:
         if resp.is_success:
             return
         _log.error("hub call failed", operation=operation, status=resp.status_code, body=resp.text[:500])
+        if not_found_as is not None and resp.status_code == httpx.codes.NOT_FOUND:
+            raise not_found_as(f"{operation} -> {resp.status_code}: {resp.text[:200]}")
         raise HubClientError(f"{operation} -> {resp.status_code}: {resp.text[:200]}")
 
     @staticmethod

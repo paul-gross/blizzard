@@ -11,7 +11,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from blizzard.runner.loop.hub import HubClientError
+from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.internal.http_hub import HttpHubClient
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.route import RouteClaim
@@ -149,3 +149,32 @@ def test_transport_failure_raises_hub_client_error() -> None:
 
     with pytest.raises(HubClientError):
         _client(handler).peek_queue()
+
+
+@pytest.mark.unit
+def test_get_chunk_404_is_chunk_not_found() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, text="no such chunk")
+
+    with pytest.raises(ChunkNotFoundError):
+        _client(handler).get_chunk("ch_1")
+
+
+@pytest.mark.unit
+def test_get_chunk_500_is_hub_client_error_not_chunk_not_found() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, text="boom")
+
+    with pytest.raises(HubClientError) as exc_info:
+        _client(handler).get_chunk("ch_1")
+    assert not isinstance(exc_info.value, ChunkNotFoundError)
+
+
+@pytest.mark.unit
+def test_get_chunk_transport_failure_raises_plain_hub_client_error() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    with pytest.raises(HubClientError) as exc_info:
+        _client(handler).get_chunk("ch_1")
+    assert not isinstance(exc_info.value, ChunkNotFoundError)

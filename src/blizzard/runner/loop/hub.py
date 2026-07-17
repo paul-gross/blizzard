@@ -32,6 +32,21 @@ class HubClientError(RuntimeError):
     """
 
 
+class ChunkNotFoundError(HubClientError):
+    """The hub reports a chunk unknown (404) — terminal, not transient (blizzard#9).
+
+    Raised only by :meth:`IHubClient.get_chunk` / :meth:`IHubClient.get_envelope`,
+    the two chunk-identified GET reads: a 404 there means the chunk no longer exists
+    at the hub (e.g. after a store reset), which is a different outcome from every
+    other :class:`HubClientError` cause (unreachable, 5xx, malformed body) — those
+    stay retryable, "hub unreachable, try next tick". A reconcile step that reads a
+    chunk it holds treats this subtype as the chunk's tenure having ended out from
+    under it: reap any live worker and release the held environments rather than
+    retrying the read forever. Still an instance of :class:`HubClientError`, so a
+    caller with no special handling for it degrades to the existing retry behavior.
+    """
+
+
 @dataclass(frozen=True)
 class RouteClaimOutcome:
     """The result of a route claim: exactly one of ``claimed`` / ``conflict`` set."""

@@ -25,7 +25,7 @@ import pytest
 
 from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.loop.steps import pull, reap
+from blizzard.runner.loop.steps import advance, fill, pull, reap
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.store.repository import NewLease
 from blizzard.wire.chunk import ChunkDetail, RouteView
@@ -355,6 +355,194 @@ def test_tick_releases_a_detached_chunk_and_the_next_tick_does_not_reclaim_it(tm
 
     # The next tick: nothing left to reap/resume/advance for ch_1, and FILL (which peeks
     # an empty queue here) does not re-claim it — the released chunk stays released.
+    tick(ctx)
+
+    assert store.live_tenure_chunk_ids() == []
+    assert store.bindings_for_chunk("ch_1") == []
+    assert store.active_lease("lease_1") is None
+
+
+# --------------------------------------------------------------------------- #
+# A chunk unknown at the hub (404) is terminal, not a transport failure (blizzard#9)
+# --------------------------------------------------------------------------- #
+#
+# A hub store reset (or any other cause of the chunk record vanishing) surfaces as a 404
+# on the same `GET /chunks/{id}` this module's detach sweep already polls every tick —
+# `ChunkNotFoundError`, not the generic `HubClientError` an unreachable hub or a 5xx
+# raises. Before blizzard#9, both were caught identically ("hub unreachable, keep
+# working"), so a held chunk the hub no longer knows about looped forever: the runner
+# never released the environment or claimed new work. The fix reads the 404 as detached
+# too, so it flows through the exact same abandon path as a genuine detach/reassignment.
+
+
+@pytest.mark.unit
+def test_pull_abandons_a_live_lease_whose_chunk_the_hub_reports_unknown(tmp_path):  # type: ignore[no-untyped-def]
+    """The regression pin: an exited worker still holding its env, its chunk 404ing at the
+    hub (a store reset), is reaped and released rather than retried forever."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    hub = FakeHub()
+    hub.not_found = {"ch_1"}
+    provider = FakeProvider({"e1": "/ws/e1"})
+    probe = FakeProbe()  # the worker has already exited — no alive pid
+    ctx = _ctx(store, hub, provider=provider, probe=probe)
+
+    pull(ctx)
+
+    assert probe.killed == [100]  # worker reaped (best-effort — already exited)
+    assert provider.released == ["e1"]  # environment released
+    assert store.active_lease("lease_1") is None  # lease closed
+    assert store.latest_epoch("ch_1") == 1  # no epoch bump
+    assert store.pending_outbound() == []  # no requeue, no escalation
+    assert store.attempt_count("ch_1", "nd_build") == 1  # no retry consumed
+
+
+@pytest.mark.unit
+def test_pull_defers_a_live_lease_on_a_transient_hub_failure(tmp_path):  # type: ignore[no-untyped-def]
+    """The companion case: a transient hub failure (unreachable / 5xx) must NOT be read as
+    the chunk being gone — the env stays held and the lease survives untouched, retried
+    next tick, exactly as :func:`test_pull_defers_when_hub_unreachable` already pins for
+    the plain-detach predicate. Kept alongside the 404 regression above so the two
+    outcomes (terminal vs. retryable) are asserted side by side."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    hub = FakeHub()
+    hub.down = True  # a transient hub failure — not a 404
+    provider = FakeProvider({"e1": "/ws/e1"})
+    probe = FakeProbe()  # the worker has already exited — no alive pid
+    ctx = _ctx(store, hub, provider=provider, probe=probe)
+
+    pull(ctx)
+
+    assert probe.killed == []  # not reaped — a transient failure is not terminal
+    assert provider.released == []  # environment stays held
+    lease = store.active_lease("lease_1")
+    assert lease is not None and lease.pid == 100  # lease survives, retried next tick
+
+
+@pytest.mark.unit
+def test_advance_held_chunk_unknown_at_the_hub_releases_envs(tmp_path):  # type: ignore[no-untyped-def]
+    """The leaseless counterpart: a chunk parked at a hub node (envs held, no active lease)
+    whose ``GET /chunks/{id}`` now 404s is released the same way a landed delivery is —
+    :func:`_advance_held_chunk`'s own terminal branch, distinct from the active-lease path
+    :func:`_reassigned_or_detached` covers above."""
+    store = _store(tmp_path)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    hub = FakeHub()
+    hub.not_found = {"ch_1"}
+    provider = FakeProvider({"e1": "/ws/e1"})
+    ctx = _ctx(store, hub, provider=provider, probe=FakeProbe())
+
+    advance(ctx)
+
+    assert provider.released == ["e1"]
+    assert store.bindings_for_chunk("ch_1") == []
+
+
+@pytest.mark.unit
+def test_advance_held_chunk_defers_on_a_transient_hub_failure(tmp_path):  # type: ignore[no-untyped-def]
+    """Companion to the above: an unreachable hub leaves the held-but-leaseless chunk's
+    environment untouched, retried next tick."""
+    store = _store(tmp_path)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    hub = FakeHub()
+    hub.down = True
+    provider = FakeProvider({"e1": "/ws/e1"})
+    ctx = _ctx(store, hub, provider=provider, probe=FakeProbe())
+
+    advance(ctx)
+
+    assert provider.released == []
+    assert len(store.bindings_for_chunk("ch_1")) == 1  # unchanged, still held
+
+
+@pytest.mark.unit
+def test_reap_abandons_instead_of_escalating_a_chunk_unknown_at_the_hub(tmp_path):  # type: ignore[no-untyped-def]
+    """The exhausted-budget escalate guard shares the same ownership predicate
+    (:func:`_reassigned_or_detached`), so a chunk that 404s there is abandoned instead of
+    escalated too — mirroring ``test_reap_abandons_instead_of_escalating_a_detached_chunk``
+    for the unknown-chunk cause."""
+    store = _store(tmp_path)
+    _seed_orphan_lease(store, retries_max=0)
+    hub = FakeHub()
+    hub.not_found = {"ch_1"}
+    provider = FakeProvider({"e1": "/ws/e1"})
+    probe = FakeProbe()
+    ctx = _ctx(store, hub, provider=provider, probe=probe)
+
+    reap(ctx)
+
+    assert store.pending_outbound() == []  # no escalation.recorded fact posted
+    assert provider.released == ["e1"]  # abandoned — envs released
+    assert store.active_lease("lease_1") is None
+    assert store.latest_epoch("ch_1") == 1  # no requeue, no new lease minted
+
+
+@pytest.mark.unit
+def test_reap_orphan_requeue_releases_envs_when_chunk_unknown_at_the_hub(tmp_path):  # type: ignore[no-untyped-def]
+    """The requeue path's own 404 guard: REAP's ``_fail_attempt`` closes the exhausted
+    attempt and calls ``_requeue`` *before* PULL's own live-tick sweep
+    (``_release_detached``) ever runs this tick, and by the time ``_requeue`` calls
+    ``get_envelope`` the prior lease is already closed — so there is no active lease
+    left for that sweep to find and abandon later. Left as a generic ``HubClientError``,
+    a chunk gone by requeue time would hold its environment forever, the same shape
+    issue #9 fixed for the active-lease case."""
+    store = _store(tmp_path)
+    _seed_orphan_lease(store, retries_max=2)  # under budget — requeues rather than escalates
+    hub = FakeHub()
+    hub.not_found = {"ch_1"}
+    provider = FakeProvider({"e1": "/ws/e1"})
+    probe = FakeProbe()
+    ctx = _ctx(store, hub, provider=provider, probe=probe)
+
+    reap(ctx)
+
+    assert provider.released == ["e1"]  # environment released rather than held forever
+    assert store.active_lease("lease_1") is None
+    assert store.bindings_for_chunk("ch_1") == []
+
+
+@pytest.mark.unit
+def test_fill_releases_an_interrupted_claim_binding_when_chunk_unknown_at_the_hub(tmp_path):  # type: ignore[no-untyped-def]
+    """The interrupted-claim reconciler's own 404 guard: a binding left by a crash in
+    FILL's bind->claim->spawn window, whose chunk the hub no longer knows about, is
+    released the same way ``_advance_held_chunk`` releases a held-but-leaseless chunk
+    (blizzard#9) — not left for the reconciler to keep re-asking about forever."""
+    store = _store(tmp_path)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    hub = FakeHub()
+    hub.not_found = {"ch_1"}
+    hub.queue = []  # nothing new to fill — the reconciler is the only path that could act
+    provider = FakeProvider({"e1": "/ws/e1"})
+    ctx = _ctx(store, hub, provider=provider, probe=FakeProbe())
+
+    fill(ctx)
+
+    assert provider.released == ["e1"]
+    assert store.bindings_for_chunk("ch_1") == []
+
+
+@pytest.mark.component
+def test_tick_releases_a_chunk_unknown_at_the_hub_and_the_next_tick_does_not_reclaim_it(tmp_path):  # type: ignore[no-untyped-def]
+    """The full-tick seam, mirroring ``test_tick_releases_a_detached_chunk_and_the_next_
+    tick_does_not_reclaim_it``: a 404'ing chunk is reaped and released in one tick, and
+    stays released — the runner does not loop on the 404 forever (blizzard#9)."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    hub = FakeHub()
+    hub.not_found = {"ch_1"}
+    provider = FakeProvider({"e1": "/ws/e1"})
+    probe = FakeProbe()  # the worker has already exited
+    ctx = _ctx(store, hub, provider=provider, probe=probe)
+
+    tick(ctx)
+
+    assert probe.killed == [100]
+    assert provider.released == ["e1"]
+    assert store.active_lease("lease_1") is None
+    assert store.live_tenure_chunk_ids() == []
+    assert store.bindings_for_chunk("ch_1") == []
+
     tick(ctx)
 
     assert store.live_tenure_chunk_ids() == []

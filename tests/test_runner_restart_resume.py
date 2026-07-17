@@ -255,6 +255,30 @@ def test_resume_abandons_detached_chunk(tmp_path):  # type: ignore[no-untyped-de
     assert store.resume_intent_lease_ids() == set()
 
 
+@pytest.mark.unit
+def test_resume_abandons_chunk_unknown_at_the_hub(tmp_path):  # type: ignore[no-untyped-def]
+    """The explicit companion to the two cases above: a 404 (``ChunkNotFoundError``) is
+    terminal, not the generic ``HubClientError`` the deferral branch below waits out —
+    ``_resume_marked_lease`` abandons on it directly rather than leaving the intent open
+    for PULL's ``_release_detached`` to find on some later tick (blizzard#9)."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    mark_resume_intents(store, now=_NOW)
+
+    hub = FakeHub()
+    hub.not_found = {"ch_1"}
+    provider = FakeProvider({"e1": "/ws/e1"})
+    ctx = make_context(
+        store, hub=hub, provider=provider, harness=FakeHarness(handle=_HANDLE, verdict=None), probe=FakeProbe()
+    )
+
+    resume(ctx)
+
+    assert provider.released == ["e1"]
+    assert store.active_lease("lease_1") is None
+    assert store.resume_intent_lease_ids() == set()
+
+
 # --------------------------------------------------------------------------- #
 # RESUME — resilience
 # --------------------------------------------------------------------------- #
