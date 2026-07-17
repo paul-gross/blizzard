@@ -41,4 +41,14 @@ module.exports = defineConfig([
     ],
     rules: {},
   },
+  // The workspace's own CommonJS config files (the dev-server proxies, this file).
+  // Without this block they are the only source in the repo no linter reads.
+  {
+    files: ["*.js"],
+    extends: [eslint.configs.recommended],
+    languageOptions: {
+      sourceType: "commonjs",
+      globals: { module: "writable", require: "readonly", process: "readonly" },
+    },
+  },
 ]);

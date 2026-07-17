@@ -33,6 +33,35 @@ library, and no prettier** (eslint owns formatting).
 `mise.toml` mirrors these as `web-install`, `web-lint`, `web-test`, `web-build`,
 `web-generate-client`.
 
+## The dev server (`ng serve`)
+
+| Script | Serves | Needs |
+|--------|--------|-------|
+| `npm start` | the hub board, live-reloading | `BZ_HUB_PORT` — the hub daemon's port |
+| `npm run start:runner` | the runner local panel | `BZ_RUNNER_PORT` — the runner daemon's port |
+
+The apps request `/api/*` **same-origin** (the generated clients carry an empty
+baseUrl). Under `blizzard hub host` that works because the daemon serves the built
+bundle beside its own API. The dev server has no API on its origin, so it **proxies**
+`/api` to the daemon — `proxy.conf.hub.js` / `proxy.conf.runner.js`, wired to each
+app's `serve` target in `angular.json`. Each app gets its own file because both
+request the same `/api` prefix but must reach different daemons.
+
+The port is read from the environment rather than pinned, since every feature env
+binds its own (workspace `.winter/config.toml`, `[env.feature.vars]`) — a literal
+would be right in one env and silently wrong in the rest. **Both scripts fail fast if
+their port var is unset**, rather than starting a server whose every read 404s:
+
+```
+BZ_HUB_PORT is not set. Run the dev server under `winter service up <env>`, which
+injects the env band, or set it explicitly for an ad-hoc client (e.g.
+`BZ_HUB_PORT=4582 npm start`).
+```
+
+So: run it under `winter service up <env>` (which injects the band), or export the
+port yourself. The daemons must be up — the dev server proxies to them, it does not
+start them.
+
 ## The generated API client (D-100, `bzh:generated-client`)
 
 The apps never hand-write fetch code. `projects/fleet/src/lib/api/{hub,runner}`

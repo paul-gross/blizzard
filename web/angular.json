@@ -60,6 +60,9 @@
         },
         "serve": {
           "builder": "@angular/build:dev-server",
+          "options": {
+            "proxyConfig": "proxy.conf.hub.js"
+          },
           "configurations": {
             "production": {
               "buildTarget": "hub:build:production"
@@ -139,6 +142,9 @@
         },
         "serve": {
           "builder": "@angular/build:dev-server",
+          "options": {
+            "proxyConfig": "proxy.conf.runner.js"
+          },
           "configurations": {
             "production": {
               "buildTarget": "runner:build:production"
