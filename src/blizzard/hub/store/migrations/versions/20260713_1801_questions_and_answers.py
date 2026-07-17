@@ -13,8 +13,8 @@ head schema. This revision creates exactly the three new tables (the same
 live-schema pattern the sibling revisions use), ``checkfirst`` so ``base -> head``
 on a fresh store and an in-place upgrade of a pre-P7 store both converge.
 
-Revision ID: 0006_hub_questions_and_answers
-Revises: 0005_hub_graph_node_produces_checks
+Revision ID: 20260713_1801_hub_questions_and_answers
+Revises: 20260713_1716_hub_graph_node_produces_checks
 """
 
 from __future__ import annotations
@@ -25,8 +25,8 @@ from alembic import op
 
 from blizzard.hub.store.schema import answer_deliveries, question_answers, questions
 
-revision: str = "0006_hub_questions_and_answers"
-down_revision: str | None = "0005_hub_graph_node_produces_checks"
+revision: str = "20260713_1801_hub_questions_and_answers"
+down_revision: str | None = "20260713_1716_hub_graph_node_produces_checks"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

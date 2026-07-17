@@ -26,8 +26,8 @@ Local ``sa.Table`` literals, not an import of ``blizzard.hub.store.schema`` (the
 recorded in ``0013_pm_pointer_source_ref``'s docstring): a migration's meaning must not
 depend on when it is read, and ``schema.py`` now carries this very constraint.
 
-Revision ID: 0014_hub_pr_opened_idempotent
-Revises: 0013_hub_pm_pointer_source_ref
+Revision ID: 20260716_2206_hub_pr_opened_idempotent
+Revises: 20260716_1512_hub_pm_pointer_source_ref
 """
 
 from __future__ import annotations
@@ -37,8 +37,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0014_hub_pr_opened_idempotent"
-down_revision: str | None = "0013_hub_pm_pointer_source_ref"
+revision: str = "20260716_2206_hub_pr_opened_idempotent"
+down_revision: str | None = "20260716_1512_hub_pm_pointer_source_ref"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -11,11 +11,11 @@ refuses to start on a revision mismatch (``bzh:manual-migrations``), so a store 
 ever sees is at head.
 
 ``hub:pr-opened-idempotent`` needs one extra step to honor that. The violation it
-guards is one ``uq_delivery_pr_opened_chunk_repo`` (0014_hub_pr_opened_idempotent)
+guards is one ``uq_delivery_pr_opened_chunk_repo`` (20260716_2206_hub_pr_opened_idempotent)
 makes impossible to *write* at head — a raw two-insert seed the way every sibling
 check does it dies on the constraint instead of producing a violation. So that test
 drops the constraint on an otherwise head-shaped store (via the same
-``batch_alter_table`` 0014 adds it with) and then seeds the duplicate: the check is
+``batch_alter_table`` the pr-opened-idempotent revision adds it with) and then seeds the duplicate: the check is
 defense in depth *behind* the constraint, and this is what proves it still fires if
 the constraint is ever absent. Seeding an older revision instead would leave the
 store missing columns that other checks in the same pass read.
@@ -41,7 +41,7 @@ from blizzard.runner.store import schema as runner
 pytestmark = pytest.mark.component
 
 _NOW = datetime(2026, 7, 14, tzinfo=UTC)
-_PR_OPENED_UNIQUE = "uq_delivery_pr_opened_chunk_repo"  # added by 0014_hub_pr_opened_idempotent
+_PR_OPENED_UNIQUE = "uq_delivery_pr_opened_chunk_repo"  # added by 20260716_2206_hub_pr_opened_idempotent
 
 
 def _runner_engine(tmp_path: Path):

@@ -11,8 +11,8 @@ Each revision in this tree creates a subset of the current ``schema`` metadata's
 (the live-schema pattern); this one creates exactly the one new table, ``checkfirst`` so
 a fresh ``base -> head`` and an in-place upgrade both converge.
 
-Revision ID: 0011_runner_local_pause
-Revises: 0010_runner_crash_recovery_context
+Revision ID: 20260716_1511_runner_local_pause
+Revises: 20260716_0532_runner_crash_recovery_context
 """
 
 from __future__ import annotations
@@ -23,8 +23,8 @@ from alembic import op
 
 from blizzard.runner.store.schema import local_pause_facts
 
-revision: str = "0011_runner_local_pause"
-down_revision: str | None = "0010_runner_crash_recovery_context"
+revision: str = "20260716_1511_runner_local_pause"
+down_revision: str | None = "20260716_0532_runner_crash_recovery_context"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

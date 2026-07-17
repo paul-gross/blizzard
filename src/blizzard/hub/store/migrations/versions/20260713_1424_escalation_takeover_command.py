@@ -13,8 +13,8 @@ objects reflect the *current* definition, so a fresh database's 0002 already cre
 so ``base -> head`` on a fresh store and an in-place upgrade of a pre-P7 store both
 land at exactly one column.
 
-Revision ID: 0003_hub_escalation_takeover
-Revises: 0002_hub_walking_skeleton
+Revision ID: 20260713_1424_hub_escalation_takeover
+Revises: 20260713_1218_hub_walking_skeleton
 """
 
 from __future__ import annotations
@@ -24,8 +24,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0003_hub_escalation_takeover"
-down_revision: str | None = "0002_hub_walking_skeleton"
+revision: str = "20260713_1424_hub_escalation_takeover"
+down_revision: str | None = "20260713_1218_hub_walking_skeleton"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

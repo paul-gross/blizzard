@@ -7,7 +7,7 @@ configured ``[[pm_source]]`` plus that source's own item reference: ``{source, r
 
 **Deliberate deviation from 0011's shape:** this revision declares its own local
 ``sa.Table`` literals for both the old and new column shapes below, rather than
-importing :mod:`blizzard.hub.store.schema` the way ``0011_chunk_promoted.py`` does.
+importing :mod:`blizzard.hub.store.schema` the way ``20260715_1817_chunk_promoted.py`` does.
 0011 only *creates* a table, so importing head-of-tree shape was harmless; a revision
 that *reshapes* a column is a data migration pinned to a moment in time; that module is
 head-of-tree and will keep moving, so importing it here would silently change what this
@@ -65,8 +65,8 @@ the forward rule does not record which branch it took — so a hypothetical
 exists in any live store (a bare number is not a URL), and down-then-up remains stable
 for it regardless; it is recorded here rather than guarded against.
 
-Revision ID: 0013_hub_pm_pointer_source_ref
-Revises: 0012_hub_runner_local_pause
+Revision ID: 20260716_1512_hub_pm_pointer_source_ref
+Revises: 20260716_1511_hub_runner_local_pause
 """
 
 from __future__ import annotations
@@ -77,8 +77,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0013_hub_pm_pointer_source_ref"
-down_revision: str | None = "0012_hub_runner_local_pause"
+revision: str = "20260716_1512_hub_pm_pointer_source_ref"
+down_revision: str | None = "20260716_1511_hub_runner_local_pause"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

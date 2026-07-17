@@ -180,7 +180,7 @@ def check_hub_store(engine: Engine) -> list[Violation]:
 
         # hub:pr-opened-idempotent — at most one pr.opened fact per (chunk, repo): a
         # racing redelivery is caught by ``uq_delivery_pr_opened_chunk_repo`` at the store
-        # layer (0014_hub_pr_opened_idempotent), so a duplicate here means that guard
+        # layer (20260716_2206_hub_pr_opened_idempotent), so a duplicate here means that guard
         # failed to hold.
         pr_opens = Counter(
             (row[0], row[1])

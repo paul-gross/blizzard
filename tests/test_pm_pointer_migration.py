@@ -1,15 +1,16 @@
-"""The 0013 pointer-identity reshape — ``{provider, url}`` -> ``{source, ref}`` (D-107).
+"""The pm-pointer-source-ref revision's pointer-identity reshape — ``{provider, url}`` -> ``{source, ref}`` (D-107).
 
-Exercises the backfill on a store migrated to ``0012`` (the revision *before* 0013),
-seeded with rows in the **pre-0013** shape: an issue-shaped GitHub URL (backfills to the
+Exercises the backfill on a store migrated to the runner-local-pause revision (the
+revision immediately before the pointer reshape), seeded with rows in the
+**pre-reshape** shape: an issue-shaped GitHub URL (backfills to the
 repo tail plus the issue number) and a non-issue-shaped row (survives verbatim into
 ``ref``, D-107's lossless branch). Also exercises ``downgrade()``'s canonicalizing
 reverse.
 
-Seeded with literal SQL against the pre-0013 shape rather than
+Seeded with literal SQL against the pre-reshape shape rather than
 ``from blizzard.hub.store import schema as s`` (the way
 ``test_chunk_promoted_migration.py`` seeds its unaffected tables) — the same reason
-migration 0013 itself declares its own local ``sa.Table`` literals rather than
+the pm-pointer-source-ref migration itself declares its own local ``sa.Table`` literals rather than
 importing ``schema.py`` (see that module's docstring): ``schema.py`` is head-of-tree
 and will keep moving, so a test pinned to a revision *before* a column reshape must not
 import a table shape that has since moved on.
@@ -29,10 +30,10 @@ from blizzard.hub.runtime import migration_runner
 
 pytestmark = pytest.mark.component
 
-_BEFORE = "0012_hub_runner_local_pause"  # the head just before the pointer reshape
+_BEFORE = "20260716_1511_hub_runner_local_pause"  # the head just before the pointer reshape
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
-# Literal, revision-pinned table shapes — the pre-0013 ``chunk_pm_pointers`` plus the
+# Literal, revision-pinned table shapes — the pre-reshape ``chunk_pm_pointers`` plus the
 # untouched ``graphs``/``chunks`` tables this revision doesn't reshape, but a seeded
 # pointer row still needs a parent chunk to satisfy the foreign key.
 _GRAPHS = sa.Table(
@@ -148,7 +149,7 @@ def test_downgrade_reconstructs_a_structurally_canonical_url(tmp_path: Path) -> 
 
 
 def test_down_then_up_returns_the_identical_source_ref_rows(tmp_path: Path) -> None:
-    """The property that makes 0013 rehearsable despite the lossy owner (D-099/D-107).
+    """The property that makes the pm-pointer-source-ref revision rehearsable despite the lossy owner (D-099/D-107).
 
     ``downgrade()`` cannot restore the original bytes, so byte-exactness is not the bar.
     The bar is that the *pointer identity* — the ``(source, ref)`` the whole system keys
@@ -182,7 +183,7 @@ def test_down_then_up_returns_the_identical_source_ref_rows(tmp_path: Path) -> N
 
 def test_upgrade_is_idempotent_over_an_already_reshaped_store(tmp_path: Path) -> None:
     """Re-running the revision on reshaped bytes no-ops rather than double-backfilling —
-    the guard is on the revision itself, not per-row (0011's skip-rows trick doesn't
+    the guard is on the revision itself, not per-row (the chunk-promoted migration's skip-rows trick doesn't
     transfer to a column reshape)."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
@@ -202,16 +203,18 @@ def test_upgrade_is_idempotent_over_an_already_reshaped_store(tmp_path: Path) ->
 
 
 def test_a_fresh_store_reaches_0013_in_the_pre_reshape_shape(tmp_path: Path) -> None:
-    """0002 must materialize ``{provider, url}``, not head-of-tree ``schema.py``'s shape.
+    """The walking-skeleton revision must materialize ``{provider, url}``, not head-of-tree ``schema.py``'s shape.
 
-    0002 creates ``chunk_pm_pointers``; it once did so by importing the live
+    The walking-skeleton revision creates ``chunk_pm_pointers``; it once did so by importing the live
     ``schema.py`` table object. Once ``schema.py`` gained ``{source, ref}`` that import
-    would have made a *fresh* store materialize the post-reshape columns at revision
-    0002 — and 0013's ``if "url" not in columns: return`` guard would then fire, so its
+    would have made a *fresh* store materialize the post-reshape columns at the
+    walking-skeleton revision — and the pm-pointer-source-ref revision's
+    ``if "url" not in columns: return`` guard would then fire, so its
     backfill would be dead on every fresh store (i.e. every test store) while the live
     store still needed it. A revision pinned in time must not read a moving shape, so
-    0002 now carries its own frozen literal. This asserts the freeze holds from both
-    ends: the pre-reshape shape exists at 0002, and 0013 genuinely reshapes it away.
+    the walking-skeleton revision now carries its own frozen literal. This asserts the freeze holds from both
+    ends: the pre-reshape shape exists at the walking-skeleton revision, and the
+    pm-pointer-source-ref revision genuinely reshapes it away.
     """
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
@@ -221,17 +224,17 @@ def test_a_fresh_store_reaches_0013_in_the_pre_reshape_shape(tmp_path: Path) -> 
         with engine.connect() as conn:
             return {c["name"] for c in sa.inspect(conn).get_columns("chunk_pm_pointers")}
 
-    runner.upgrade("0002_hub_walking_skeleton")
-    assert {"provider", "url"} <= columns(), "0002 must create the pre-reshape shape"
-    assert not ({"source", "ref"} & columns()), "0002 leaked head-of-tree schema.py's shape"
+    runner.upgrade("20260713_1218_hub_walking_skeleton")
+    assert {"provider", "url"} <= columns(), "the walking-skeleton revision must create the pre-reshape shape"
+    assert not ({"source", "ref"} & columns()), "the walking-skeleton revision leaked head-of-tree schema.py's shape"
 
     runner.upgrade("head")
-    assert {"source", "ref"} <= columns(), "0013 must reshape a fresh store, not no-op"
+    assert {"source", "ref"} <= columns(), "the pm-pointer-source-ref revision must reshape a fresh store, not no-op"
     assert not ({"provider", "url"} & columns())
 
 
 def test_a_fresh_store_s_chunk_pm_pointers_keeps_the_chunk_id_foreign_key(tmp_path: Path) -> None:
-    """0002's frozen ``chunk_pm_pointers`` literal must still declare the FK to
+    """The walking-skeleton revision's frozen ``chunk_pm_pointers`` literal must still declare the FK to
     ``chunks.chunk_id`` that ``schema.py`` declares (``bzh:sql-portable`` — postgres is
     the same schema under a different URL, so a schema that only *sometimes* carries the
     FK is two schemas). Checked via ``Inspector.get_foreign_keys``, not a sqlite

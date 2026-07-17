@@ -153,8 +153,9 @@ class GraphStore:
 def _json_list(value: str | None) -> list[str]:
     """Decode a JSON-encoded ``list[str]`` node column (``produces``/``checks``).
 
-    ``None`` (a pre-0005 row, or a fresh column default) reads as the empty list — the
-    same value the walking skeleton hardcoded before these were round-tripped."""
+    ``None`` (a row predating the graph-node-produces-checks revision, or a fresh
+    column default) reads as the empty list — the same value the walking skeleton
+    hardcoded before these were round-tripped."""
     return [str(x) for x in json.loads(value)] if value else []
 
 

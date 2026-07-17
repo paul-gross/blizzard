@@ -12,8 +12,8 @@ Each revision in this tree creates a subset of the current ``schema`` metadata's
 (the live-schema pattern); this one creates exactly the one new table, ``checkfirst`` so
 a fresh ``base -> head`` and an in-place upgrade both converge.
 
-Revision ID: 0009_runner_session_ends
-Revises: 0008_runner_workspace_prompt
+Revision ID: 20260715_1641_runner_session_ends
+Revises: 20260715_1633_runner_workspace_prompt
 """
 
 from __future__ import annotations
@@ -24,8 +24,8 @@ from alembic import op
 
 from blizzard.runner.store.schema import session_ends
 
-revision: str = "0009_runner_session_ends"
-down_revision: str | None = "0008_runner_workspace_prompt"
+revision: str = "20260715_1641_runner_session_ends"
+down_revision: str | None = "20260715_1633_runner_workspace_prompt"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

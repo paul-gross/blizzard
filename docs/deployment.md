@@ -76,14 +76,14 @@ forgotten migration fails loudly rather than corrupting state. A graceful `syste
 restart` also preserves in-flight work across the upgrade — see the recovery contract
 below. That loud-failure guarantee is the whole safety story for a revision whose
 `upgrade()` only adds or backfills; it is not for a **destructive** one, whose
-`upgrade()` deletes rows outright — see "The 0014 upgrade note" below for the one
+`upgrade()` deletes rows outright — see "The pr-opened-idempotent upgrade note" below for the one
 revision so far that does.
 
-### The 0014 upgrade note
+### The pr-opened-idempotent upgrade note
 
-**`0014_hub_pr_opened_idempotent` is the first migration in either store whose
-`upgrade()` deletes rows** (`0003`/`0005` are the only other destructive revisions in
-either tree, and both only drop columns). Closing a coordinator read-then-write race
+**`20260716_2206_hub_pr_opened_idempotent` is the first migration in either store whose
+`upgrade()` deletes rows** (the escalation-takeover and graph-node-produces-checks revisions are the
+only other destructive revisions in either tree, and both only drop columns). Closing a coordinator read-then-write race
 (issue #10) with a unique constraint on `(chunk_id, repo)` first requires a store
 carrying the race's duplicate rows to no longer carry them, so `upgrade()` deletes every
 `delivery_pr_opened` row but the earliest per `(chunk_id, repo)` before adding the
@@ -94,7 +94,7 @@ In practice this only ever removes true duplicates (a redundant `pr.opened` fact
 PR the forge had already deduplicated to one), so no chunk loses a fact a human or the
 board ever relied on distinguishing. But because the delete is unconditional and
 irreversible, **copy the hub's store file before restarting into a wheel carrying this
-migration** — `cp <hub-dir>/data/hub.db <hub-dir>/data/hub.db.pre-0014` for the sqlite
+migration** — `cp <hub-dir>/data/hub.db <hub-dir>/data/hub.db.pre-pr-opened-idempotent` for the sqlite
 default, or the equivalent for a configured postgres `db_url` (`bzh:sql-portable`) —
 the same caution any one-way migration deserves, and not something `migrate`'s
 revision-mismatch guard can catch after the fact, since the delete is exactly what

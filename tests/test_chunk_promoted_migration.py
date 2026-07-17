@@ -1,7 +1,7 @@
-"""The 0011 back-fill — existing chunks stay claimable after the not-ready state lands (D-103).
+"""The chunk-promoted back-fill — existing chunks stay claimable after the not-ready state lands (D-103).
 
 Adding the not-ready resting state makes an un-promoted chunk derive ``not_ready``. A bare
-table create would silently un-ready every chunk already in flight, so migration 0011
+table create would silently un-ready every chunk already in flight, so the chunk-promoted migration
 back-fills a ``chunk.promoted`` fact for every pre-existing chunk. This exercises that on a
 store migrated to the revision *before* ``chunk_promoted``, carrying a chunk minted the old
 way: after the upgrade it must derive ``ready`` (claimable), unaffected by the change.
@@ -25,7 +25,7 @@ from blizzard.hub.store.internal.chunk_store import ChunkStore
 
 pytestmark = pytest.mark.component
 
-_BEFORE = "0010_hub_delivery_pr_facts"  # the head just before chunk_promoted
+_BEFORE = "20260714_0819_hub_delivery_pr_facts"  # the head just before chunk_promoted
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 
@@ -42,7 +42,7 @@ def test_backfill_keeps_preexisting_chunks_ready(tmp_path: Path) -> None:
         )
         conn.execute(insert(s.chunks).values(chunk_id="ch_legacy", graph_id="gr_1", minted_at=_T0))
 
-    # Upgrade to head — 0011 adds the table and back-fills the pre-existing chunk.
+    # Upgrade to head — the chunk-promoted migration adds the table and back-fills the pre-existing chunk.
     runner.upgrade("head")
 
     store = ChunkStore(engine, FixedClock(_T0))

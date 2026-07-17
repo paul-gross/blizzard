@@ -12,8 +12,8 @@ ready before this feature) — so upgrading leaves in-flight chunks unaffected (
 back-fill is idempotent: it skips any chunk already carrying a row, so a re-run writes
 nothing a second time.
 
-Revision ID: 0011_hub_chunk_promoted
-Revises: 0010_hub_delivery_pr_facts
+Revision ID: 20260715_1817_hub_chunk_promoted
+Revises: 20260714_0819_hub_delivery_pr_facts
 """
 
 from __future__ import annotations
@@ -25,8 +25,8 @@ from sqlalchemy import insert, select
 
 from blizzard.hub.store.schema import chunk_promoted, chunks
 
-revision: str = "0011_hub_chunk_promoted"
-down_revision: str | None = "0010_hub_delivery_pr_facts"
+revision: str = "20260715_1817_hub_chunk_promoted"
+down_revision: str | None = "20260714_0819_hub_delivery_pr_facts"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

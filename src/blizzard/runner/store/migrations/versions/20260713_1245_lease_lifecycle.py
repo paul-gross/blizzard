@@ -7,8 +7,8 @@ is one with no closure), and binding releases (``binding_releases`` — a held e
 one whose binding has no release). Defined once in ``blizzard.runner.store.schema``;
 this revision creates exactly its three new tables and touches none of 0002's.
 
-Revision ID: 0003_runner_lease_lifecycle
-Revises: 0002_runner_walking_skeleton
+Revision ID: 20260713_1245_runner_lease_lifecycle
+Revises: 20260713_1218_runner_walking_skeleton
 """
 
 from __future__ import annotations
@@ -19,8 +19,8 @@ from alembic import op
 
 from blizzard.runner.store.schema import binding_releases, lease_closures, lease_context
 
-revision: str = "0003_runner_lease_lifecycle"
-down_revision: str | None = "0002_runner_walking_skeleton"
+revision: str = "20260713_1245_runner_lease_lifecycle"
+down_revision: str | None = "20260713_1218_runner_walking_skeleton"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -7,8 +7,8 @@ backlog) is re-acked without re-applying. Defined once in
 ``blizzard.hub.store.schema``; this revision creates exactly that one table and
 touches none of the earlier revisions'.
 
-Revision ID: 0004_hub_runner_high_water
-Revises: 0003_hub_escalation_takeover
+Revision ID: 20260713_1635_hub_runner_high_water
+Revises: 20260713_1424_hub_escalation_takeover
 """
 
 from __future__ import annotations
@@ -19,8 +19,8 @@ from alembic import op
 
 from blizzard.hub.store.schema import runner_high_water
 
-revision: str = "0004_hub_runner_high_water"
-down_revision: str | None = "0003_hub_escalation_takeover"
+revision: str = "20260713_1635_hub_runner_high_water"
+down_revision: str | None = "20260713_1424_hub_escalation_takeover"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

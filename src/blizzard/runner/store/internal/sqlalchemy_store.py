@@ -274,8 +274,9 @@ class SqlAlchemyRunnerStore:
         stmt = (
             select(session_ends.c.lease_id)
             .select_from(session_ends.outerjoin(newest_spawn, newest_spawn.c.lease_id == session_ends.c.lease_id))
-            # No spawn fact = a lease minted before 0010: fall back to the unscoped reading, which
-            # over-reports "declared done" and so can only suppress a resume, never invent one.
+            # No spawn fact = a lease minted before the crash-recovery-context revision: fall back to
+            # the unscoped reading, which over-reports "declared done" and so can only suppress a
+            # resume, never invent one.
             .where(or_(newest_spawn.c.spawned_at.is_(None), session_ends.c.ended_at >= newest_spawn.c.spawned_at))
             .distinct()
         )

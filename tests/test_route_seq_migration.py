@@ -1,10 +1,11 @@
-"""The 0014 route-event ``seq`` backfill (issue #41).
+"""The route-seq-tiebreak revision's route-event ``seq`` backfill (issue #41).
 
-Exercises the backfill on a store migrated to ``0013`` (the revision *before* 0014),
-seeded with pre-existing ``route_created``/``route_released`` rows in the pre-``seq``
+Exercises the backfill on a store migrated to the pm-pointer-source-ref revision (the
+revision immediately before route-seq-tiebreak), seeded with pre-existing
+``route_created``/``route_released`` rows in the pre-``seq``
 shape. Seeded with a local frozen literal rather than ``from blizzard.hub.store import
 schema as s`` (the same reason ``test_pm_pointer_migration.py`` does: a revision pinned
-in time must not read a moving shape — see 0002's and 0014's module docstrings).
+in time must not read a moving shape — see the walking-skeleton and route-seq-tiebreak revisions' module docstrings).
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ from tests.support import migrate_to, seed_chunk, seed_graph
 
 pytestmark = pytest.mark.component
 
-_BEFORE = "0013_hub_pm_pointer_source_ref"  # the head just before the route seq tiebreak
+_BEFORE = "20260716_1512_hub_pm_pointer_source_ref"  # the head just before the route seq tiebreak
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 _OLD_ROUTE_CREATED = sa.Table(
@@ -93,7 +94,7 @@ def test_chronologically_ordered_rows_backfill_seq_in_order(tmp_path: Path) -> N
 
 
 def test_same_instant_rows_backfill_created_before_released(tmp_path: Path) -> None:
-    """The documented backfill default for a historical tie (see 0014's docstring):
+    """The documented backfill default for a historical tie (see the route-seq-tiebreak revision's docstring):
     created sorts first, so a pre-existing same-instant pair backfills as though the
     release outranked the create — the same "release wins" bias ``route_of`` used to
     hard-code, kept only here since a real historical tie is not expected to exist."""
@@ -162,9 +163,9 @@ def test_downgrade_drops_the_seq_column(tmp_path: Path) -> None:
 
 
 def test_a_fresh_store_reaches_0013_in_the_pre_seq_shape(tmp_path: Path) -> None:
-    """0002 must materialize route_created/route_released without ``seq``, not
-    head-of-tree ``schema.py``'s shape — the same freeze 0013 established for
-    ``chunk_pm_pointers`` (see 0002's and 0014's module docstrings)."""
+    """The walking-skeleton revision must materialize route_created/route_released without ``seq``, not
+    head-of-tree ``schema.py``'s shape — the same freeze the pm-pointer-source-ref revision established for
+    ``chunk_pm_pointers`` (see the walking-skeleton and route-seq-tiebreak revisions' module docstrings)."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     engine = create_engine_from_url(db_url)
@@ -173,7 +174,7 @@ def test_a_fresh_store_reaches_0013_in_the_pre_seq_shape(tmp_path: Path) -> None
         with engine.connect() as conn:
             return {c["name"] for c in sa.inspect(conn).get_columns(table)}
 
-    runner.upgrade("0002_hub_walking_skeleton")
+    runner.upgrade("20260713_1218_hub_walking_skeleton")
     assert "seq" not in columns("route_created")
     assert "seq" not in columns("route_released")
 

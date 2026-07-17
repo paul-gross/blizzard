@@ -33,17 +33,17 @@ class _FakeReader:
 @pytest.mark.unit
 def test_ready_when_reachable_and_at_head() -> None:
     r = evaluate_readiness(
-        StoreStatus(reachable=True, revision="0001_hub_initial"), expected_revision="0001_hub_initial"
+        StoreStatus(reachable=True, revision="20260713_1112_hub_initial"), expected_revision="20260713_1112_hub_initial"
     )
     assert r.ready is True
     assert r.store_reachable is True
-    assert r.store_revision == "0001_hub_initial"
+    assert r.store_revision == "20260713_1112_hub_initial"
 
 
 @pytest.mark.unit
 def test_not_ready_when_store_unreachable() -> None:
     r = evaluate_readiness(
-        StoreStatus(reachable=False, revision=None, detail="boom"), expected_revision="0001_hub_initial"
+        StoreStatus(reachable=False, revision=None, detail="boom"), expected_revision="20260713_1112_hub_initial"
     )
     assert r.ready is False
     assert r.store_reachable is False
@@ -52,9 +52,9 @@ def test_not_ready_when_store_unreachable() -> None:
 
 @pytest.mark.unit
 def test_not_ready_on_revision_drift() -> None:
-    r = evaluate_readiness(StoreStatus(reachable=True, revision=None), expected_revision="0001_hub_initial")
+    r = evaluate_readiness(StoreStatus(reachable=True, revision=None), expected_revision="20260713_1112_hub_initial")
     assert r.ready is False
-    assert "expected 0001_hub_initial" in r.detail
+    assert "expected 20260713_1112_hub_initial" in r.detail
 
 
 @pytest.mark.unit

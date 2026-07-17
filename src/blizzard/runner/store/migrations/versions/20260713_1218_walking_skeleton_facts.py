@@ -5,8 +5,8 @@ chunk->env bindings, and the store-and-forward outbound buffer. Facts only, stat
 derived (``bzh:facts-not-status``). Defined once in
 ``blizzard.runner.store.schema``; this revision creates exactly its subset.
 
-Revision ID: 0002_runner_walking_skeleton
-Revises: 0001_runner_initial
+Revision ID: 20260713_1218_runner_walking_skeleton
+Revises: 20260713_1112_runner_initial
 """
 
 from __future__ import annotations
@@ -17,8 +17,8 @@ from alembic import op
 
 from blizzard.runner.store.schema import env_bindings, leases, outbound_buffer
 
-revision: str = "0002_runner_walking_skeleton"
-down_revision: str | None = "0001_runner_initial"
+revision: str = "20260713_1218_runner_walking_skeleton"
+down_revision: str | None = "20260713_1112_runner_initial"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

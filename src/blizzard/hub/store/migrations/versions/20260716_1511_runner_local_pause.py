@@ -10,8 +10,8 @@ Each revision in this tree creates a subset of the current ``schema`` metadata's
 (the live-schema pattern); this one creates exactly the one new table, ``checkfirst`` so
 a fresh ``base -> head`` and an in-place upgrade both converge.
 
-Revision ID: 0012_hub_runner_local_pause
-Revises: 0011_hub_chunk_promoted
+Revision ID: 20260716_1511_hub_runner_local_pause
+Revises: 20260715_1817_hub_chunk_promoted
 """
 
 from __future__ import annotations
@@ -22,8 +22,8 @@ from alembic import op
 
 from blizzard.hub.store.schema import runner_local_pause_facts
 
-revision: str = "0012_hub_runner_local_pause"
-down_revision: str | None = "0011_hub_chunk_promoted"
+revision: str = "20260716_1511_hub_runner_local_pause"
+down_revision: str | None = "20260715_1817_hub_chunk_promoted"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

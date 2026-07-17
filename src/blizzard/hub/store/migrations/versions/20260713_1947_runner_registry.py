@@ -9,8 +9,8 @@ The P7W3 runner-registry tables (design/domain/fleet.md, D-019/D-070/D-043):
 
 Parents before children so the FK from ``runner_pause_facts`` resolves.
 
-Revision ID: 0009_hub_runner_registry
-Revises: 0008_hub_queue_shaping
+Revision ID: 20260713_1947_hub_runner_registry
+Revises: 20260713_1946_hub_queue_shaping
 """
 
 from __future__ import annotations
@@ -21,8 +21,8 @@ from alembic import op
 
 from blizzard.hub.store.schema import runner_pause_facts, runner_registrations
 
-revision: str = "0009_hub_runner_registry"
-down_revision: str | None = "0008_hub_queue_shaping"
+revision: str = "20260713_1947_hub_runner_registry"
+down_revision: str | None = "20260713_1946_hub_queue_shaping"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

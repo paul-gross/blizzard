@@ -8,8 +8,8 @@ definition in ``blizzard.runner.store.schema`` — created with the table in 000
 same live-schema pattern these revisions use (each creates a subset of the schema's
 tables). This revision creates exactly the one new table.
 
-Revision ID: 0004_runner_heartbeats
-Revises: 0003_runner_lease_lifecycle
+Revision ID: 20260713_1635_runner_heartbeats
+Revises: 20260713_1245_runner_lease_lifecycle
 """
 
 from __future__ import annotations
@@ -20,8 +20,8 @@ from alembic import op
 
 from blizzard.runner.store.schema import heartbeats
 
-revision: str = "0004_runner_heartbeats"
-down_revision: str | None = "0003_runner_lease_lifecycle"
+revision: str = "20260713_1635_runner_heartbeats"
+down_revision: str | None = "20260713_1245_runner_lease_lifecycle"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -30,8 +30,8 @@ order regardless.
 reshapes it (0002's own module docstring explains why); this revision does the same for
 ``route_created``/``route_released``, which is why 0002 no longer imports them live.
 
-Revision ID: 0015_hub_route_seq_tiebreak
-Revises: 0014_hub_pr_opened_idempotent
+Revision ID: 20260716_2207_hub_route_seq_tiebreak
+Revises: 20260716_2206_hub_pr_opened_idempotent
 """
 
 from __future__ import annotations
@@ -45,8 +45,8 @@ from alembic import op
 
 from blizzard.foundation.store.utc import UtcDateTime
 
-revision: str = "0015_hub_route_seq_tiebreak"
-down_revision: str | None = "0014_hub_pr_opened_idempotent"
+revision: str = "20260716_2207_hub_route_seq_tiebreak"
+down_revision: str | None = "20260716_2206_hub_pr_opened_idempotent"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

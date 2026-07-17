@@ -101,9 +101,9 @@ heartbeats = Table(
     Column("beat_at", UtcDateTime, nullable=False),  # injected-clock stamp of the tool call
 )
 
-# --- Lease node context (the node identity of each attempt — 0002's leases lacks it) -
+# --- Lease node context (the node identity of each attempt — the walking-skeleton revision's leases lacks it) -
 #
-# 0002's `leases` table is frozen; the node a lease attempts (and the retry budget
+# The walking-skeleton revision's `leases` table is frozen; the node a lease attempts (and the retry budget
 # the node carries) is the one fact the reconciliation loop needs that it does not
 # hold. Written once per lease at mint. Append-only, one row per lease (D-082 — a
 # lease is one node-step attempt).
@@ -122,7 +122,7 @@ lease_context = Table(
 
 # --- Lease spawns (the spawn generation of each attempt — issue #13) ----------
 #
-# 0002's `leases` is frozen and `record_spawn` rewrites its pid/session in place, so
+# The walking-skeleton revision's `leases` is frozen and `record_spawn` rewrites its pid/session in place, so
 # the lease alone cannot say *when* its current process was spawned. A lease outlives
 # its sessions — the ask/answer and resume paths re-spawn under the same lease_id and
 # session_id (`_resume_if_answered`, `_resume_in_place`) — so a per-lease fact that is

@@ -11,8 +11,8 @@ The tables are defined once in ``blizzard.hub.store.schema`` (the metadata Alemb
 targets); this revision creates exactly its own subset, so a fresh ``base -> head``
 and an in-place upgrade of a pre-P7W3 store both land here.
 
-Revision ID: 0008_hub_queue_shaping
-Revises: 0007_hub_gate_decisions
+Revision ID: 20260713_1946_hub_queue_shaping
+Revises: 20260713_1803_hub_gate_decisions
 """
 
 from __future__ import annotations
@@ -23,8 +23,8 @@ from alembic import op
 
 from blizzard.hub.store.schema import chunk_grouped, queue_positions
 
-revision: str = "0008_hub_queue_shaping"
-down_revision: str | None = "0007_hub_gate_decisions"
+revision: str = "20260713_1946_hub_queue_shaping"
+down_revision: str | None = "20260713_1803_hub_gate_decisions"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

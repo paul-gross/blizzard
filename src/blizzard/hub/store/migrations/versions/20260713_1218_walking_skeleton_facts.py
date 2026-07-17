@@ -20,8 +20,8 @@ from there. The frozen literals still declare their ``chunk_id`` foreign key to
 below) so a fresh store's schema matches ``schema.py``'s declared FK
 (``bzh:sql-portable``: postgres is the same schema under a different URL).
 
-Revision ID: 0002_hub_walking_skeleton
-Revises: 0001_hub_initial
+Revision ID: 20260713_1218_hub_walking_skeleton
+Revises: 20260713_1112_hub_initial
 """
 
 from __future__ import annotations
@@ -48,8 +48,8 @@ from blizzard.hub.store.schema import (
     transitions,
 )
 
-revision: str = "0002_hub_walking_skeleton"
-down_revision: str | None = "0001_hub_initial"
+revision: str = "20260713_1218_hub_walking_skeleton"
+down_revision: str | None = "20260713_1112_hub_initial"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

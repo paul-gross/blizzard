@@ -15,8 +15,8 @@ The tables are defined once in ``blizzard.hub.store.schema`` (the metadata Alemb
 targets); this revision creates exactly its own subset in FK-dependency order, so a
 fresh ``base -> head`` and an in-place upgrade of a pre-P7W2 store both land here.
 
-Revision ID: 0007_hub_gate_decisions
-Revises: 0006_hub_questions_and_answers
+Revision ID: 20260713_1803_hub_gate_decisions
+Revises: 20260713_1801_hub_questions_and_answers
 """
 
 from __future__ import annotations
@@ -27,8 +27,8 @@ from alembic import op
 
 from blizzard.hub.store.schema import decision_resolutions, decisions, requeues
 
-revision: str = "0007_hub_gate_decisions"
-down_revision: str | None = "0006_hub_questions_and_answers"
+revision: str = "20260713_1803_hub_gate_decisions"
+down_revision: str | None = "20260713_1801_hub_questions_and_answers"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

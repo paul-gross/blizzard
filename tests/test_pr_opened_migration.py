@@ -1,4 +1,4 @@
-"""The 0014 ``pr.opened`` de-duplication + unique constraint (issue #10).
+"""The pr-opened-idempotent revision's ``pr.opened`` de-duplication + unique constraint (issue #10).
 
 Exercises the migration on a store carrying the exact shape a dogfood run produced:
 two ``delivery_pr_opened`` rows for the same (chunk, repo) — the coordinator's
@@ -25,7 +25,7 @@ from blizzard.hub.runtime import migration_runner
 
 pytestmark = pytest.mark.component
 
-_BEFORE = "0013_hub_pm_pointer_source_ref"  # the head just before the idempotent constraint
+_BEFORE = "20260716_1512_hub_pm_pointer_source_ref"  # the head just before the idempotent constraint
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 _GRAPHS = sa.Table(
@@ -46,7 +46,7 @@ _CHUNKS = sa.Table(
     sa.Column("minted_at", sa.DateTime, nullable=False),
 )
 
-# The pre-0014 shape: no unique constraint, so two rows for the same (chunk_id, repo)
+# The pre-pr-opened-idempotent shape: no unique constraint, so two rows for the same (chunk_id, repo)
 # are legal to seed — exactly the dogfood run's duplicate.
 _OLD_PR_OPENED = sa.Table(
     "delivery_pr_opened",
@@ -60,7 +60,7 @@ _OLD_PR_OPENED = sa.Table(
     sa.Column("opened_at", sa.DateTime, nullable=False),
 )
 
-# The post-0014 shape, for asserting the constraint now holds.
+# The post-pr-opened-idempotent shape, for asserting the constraint now holds.
 _NEW_PR_OPENED = sa.Table(
     "delivery_pr_opened",
     sa.MetaData(),

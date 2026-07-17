@@ -16,8 +16,8 @@ reflect the *current* definition, so a fresh database's 0002 already creates
 so ``base -> head`` on a fresh store and an in-place upgrade of a pre-P7 store both land
 at exactly one of each column.
 
-Revision ID: 0005_hub_graph_node_produces_checks
-Revises: 0004_hub_runner_high_water
+Revision ID: 20260713_1716_hub_graph_node_produces_checks
+Revises: 20260713_1635_hub_runner_high_water
 """
 
 from __future__ import annotations
@@ -27,8 +27,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0005_hub_graph_node_produces_checks"
-down_revision: str | None = "0004_hub_runner_high_water"
+revision: str = "20260713_1716_hub_graph_node_produces_checks"
+down_revision: str | None = "20260713_1635_hub_runner_high_water"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
