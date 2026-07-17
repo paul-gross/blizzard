@@ -1342,20 +1342,23 @@ def _spawn_suppressed(ctx: LoopContext, *, via: str, chunk_id: str, lease_id: st
     Reads **``local_paused`` only**: the hub brake keeps its claims-only meaning
     and stays read in FILL alone. The local brake is the machine declining to work, and
     "start no processes on my machine" is a local statement, not a claims-only one — this
-    is that gate's one shared home, called before each of the **five** spawn primitives'
-    first mutation (:func:`_spawn_attempt`, :func:`_resume_in_place`,
-    :func:`_resume_if_answered`, :func:`_resume_if_unpaused`, and the judgement resume inside
-    :func:`_advance_exited_worker`) so a suppressed spawn writes no fact, kills no pid,
-    mints no lease, and elicits no verdict. The lease is left exactly as it was — active,
-    unmodified — and the shape it is left in (an interrupted claim, an open resume intent,
-    an open ask- or pause-park, an unjudged exit) is what the next tick's own recovery
-    re-drives once the brake clears; no new state is needed here.
+    is that gate's one shared home, called before every spawn primitive's first mutation
+    so a suppressed spawn writes no fact, kills no pid, mints no lease, and elicits no
+    verdict. The lease is left exactly as it was — active, unmodified — and the shape it
+    is left in (an interrupted claim, an open resume intent, an open ask- or pause-park,
+    an unjudged exit) is what the next tick's own recovery re-drives once the brake
+    clears; no new state is needed here.
 
-    **This list is the gate's call-site registry — extend it whenever a primitive is added.**
-    Issue #45 shipped because the judgement resume was a spawn nobody had counted; issue #46's
-    :func:`_resume_if_unpaused` was the fifth. A stale count here is how the sixth gets missed.
-    Note what is deliberately *absent*: :func:`_kill_and_park_paused` is a kill, not a spawn,
-    and a chunk-level pause from the hub is not this brake's business (see that function).
+    Issue #45 shipped because the judgement resume was a spawn nobody had counted by hand;
+    issue #46 added a fifth primitive the same way. ``tests/test_spawn_suppressed_registry.py``
+    now holds that count mechanically, not this docstring: it AST-asserts every
+    ``ctx.harness.spawn``/``ctx.harness.resume_with_message``/``ctx.harness.judge`` call site
+    (:func:`_spawn_attempt`, :func:`_resume_in_place`, :func:`_resume_if_answered`,
+    :func:`_resume_if_unpaused`, :func:`_advance_exited_worker`'s judgement resume) sits in a
+    function that also calls this gate, so a sixth primitive of that shape fails the test by
+    name instead of shipping ungated. Note what is deliberately *absent* even so:
+    :func:`_kill_and_park_paused` is a kill, not a spawn, and a chunk-level pause from the
+    hub is not this brake's business (see that function).
 
     ``chunk_id`` is always present; ``lease_id`` is ``None`` at :func:`_spawn_attempt` (the
     gate fires before a lease is minted) and carries the held/prior lease at restart-resume,
