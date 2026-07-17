@@ -340,6 +340,10 @@
             ],
             "title": "Latest Epoch"
           },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
           "open_prs": {
             "default": [],
             "items": {
@@ -393,9 +397,43 @@
           "graph_id",
           "status",
           "current_node_id",
-          "latest_epoch"
+          "latest_epoch",
+          "model"
         ],
         "title": "ChunkDetail",
+        "type": "object"
+      },
+      "ChunkGraphUpdateRequest": {
+        "description": "Repin a not-ready chunk's workflow graph (issue #27) \u2014 the target graph's id.",
+        "properties": {
+          "graph_id": {
+            "title": "Graph Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "graph_id"
+        ],
+        "title": "ChunkGraphUpdateRequest",
+        "type": "object"
+      },
+      "ChunkGraphView": {
+        "description": "A chunk's current graph selection \u2014 the read/write shape issue #27's board editor uses.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "graph_id": {
+            "title": "Graph Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "graph_id"
+        ],
+        "title": "ChunkGraphView",
         "type": "object"
       },
       "ChunkGroupRequest": {
@@ -476,6 +514,39 @@
         "title": "ChunkIngestResponse",
         "type": "object"
       },
+      "ChunkModelUpdateRequest": {
+        "description": "Repin a not-ready chunk's model selection (issue #27).",
+        "properties": {
+          "model": {
+            "title": "Model",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model"
+        ],
+        "title": "ChunkModelUpdateRequest",
+        "type": "object"
+      },
+      "ChunkModelView": {
+        "description": "A chunk's current model selection \u2014 the read/write shape issue #27's board editor uses.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "model"
+        ],
+        "title": "ChunkModelView",
+        "type": "object"
+      },
       "ChunkPauseRequest": {
         "description": "Set or clear a chunk's operator pause brake \u2014 records who flipped it (issue #46).",
         "properties": {
@@ -537,6 +608,10 @@
             "title": "Graph Id",
             "type": "string"
           },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
           "pm_pointers": {
             "default": [],
             "items": {
@@ -553,7 +628,8 @@
           "chunk_id",
           "graph_id",
           "status",
-          "current_node_id"
+          "current_node_id",
+          "model"
         ],
         "title": "ChunkSummary",
         "type": "object"
@@ -2631,6 +2707,59 @@
         ]
       }
     },
+    "/api/chunks/{chunk_id}/graph": {
+      "post": {
+        "description": "Repin a not-ready chunk's workflow graph (issue #27).\n\n404 on an unknown chunk or an unknown target graph; 409 once the chunk has left\n``not_ready`` (already promoted, claimed, running, or later).",
+        "operationId": "set_chunk_graph_api_chunks__chunk_id__graph_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChunkGraphUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChunkGraphView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Chunk Graph",
+        "tags": [
+          "chunks"
+        ]
+      }
+    },
     "/api/chunks/{chunk_id}/group": {
       "post": {
         "description": "Merge unacquired chunks into ``chunk_id`` \u2014 the board's Group control.",
@@ -2736,6 +2865,59 @@
           }
         },
         "summary": "Report Lease",
+        "tags": [
+          "chunks"
+        ]
+      }
+    },
+    "/api/chunks/{chunk_id}/model": {
+      "post": {
+        "description": "Repin a not-ready chunk's model selection (issue #27).\n\n404 on an unknown chunk; 422 on a blank model; 409 once the chunk has left\n``not_ready`` (already promoted, claimed, running, or later).",
+        "operationId": "set_chunk_model_api_chunks__chunk_id__model_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChunkModelUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChunkModelView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Chunk Model",
         "tags": [
           "chunks"
         ]

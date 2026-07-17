@@ -25,7 +25,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from blizzard.hub.domain.work import ChunkStatus
+from blizzard.hub.domain.work import DEFAULT_MODEL, ChunkStatus
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.steps import advance, fill, pull, reap
 from blizzard.runner.loop.tick import tick
@@ -92,7 +92,13 @@ def _seed_orphan_lease(store, *, chunk="ch_1", lease="lease_1", retries_max=0): 
 
 def _detached_chunk(chunk="ch_1", *, status=ChunkStatus.READY):  # type: ignore[no-untyped-def]
     return ChunkDetail(
-        chunk_id=chunk, graph_id="gr_1", status=status, current_node_id="nd_build", latest_epoch=1, route=None
+        chunk_id=chunk,
+        graph_id="gr_1",
+        status=status,
+        current_node_id="nd_build",
+        latest_epoch=1,
+        model=DEFAULT_MODEL,
+        route=None,
     )
 
 
@@ -103,6 +109,7 @@ def _routed_chunk(chunk="ch_1", *, status: ChunkStatus, runner_id="r1"):  # type
         status=status,
         current_node_id="nd_build",
         latest_epoch=1,
+        model=DEFAULT_MODEL,
         route=RouteView(runner_id=runner_id, workspace_id="ws1", environment_ids=["e1"]),
     )
 

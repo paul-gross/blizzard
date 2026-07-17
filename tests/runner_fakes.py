@@ -15,7 +15,7 @@ from sqlalchemy import MetaData
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.domain.work import ChunkStatus
+from blizzard.hub.domain.work import DEFAULT_MODEL, ChunkStatus
 from blizzard.runner.environments.provider import (
     AcquiredEnvironment,
     EnvironmentPreparationError,
@@ -151,6 +151,7 @@ class FakeHub:
             status=ChunkStatus.DELIVERING,
             current_node_id="deliver",
             latest_epoch=1,
+            model=DEFAULT_MODEL,
             route=RouteView(runner_id=self.default_runner_id, workspace_id="ws1", environment_ids=[]),
         )
 

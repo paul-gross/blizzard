@@ -1,8 +1,10 @@
 """Chunk ingest — wrap PM pointers into a chunk.
 
 The ``POST /chunks`` domain rule: a caller submits one or more ``{source, ref}``
- pointers and the hub mints a chunk pinned to the configured default graph.
-Contents are never stored — only the pointer.
+ pointers and the hub mints a chunk pinned to the configured default graph and the
+default model (``DEFAULT_MODEL``); both are editable later while the chunk rests
+``not_ready`` (issue #27, ``domain/edit.py``). Contents are never stored — only the
+pointer.
 
 **Batch = one chunk.** The wire response carries a single ``chunk_id``, so a
 multi-pointer request mints one chunk holding all its pointers; per-pointer fan-out
@@ -20,7 +22,7 @@ from __future__ import annotations
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import CHUNK_PREFIX, mint
 from blizzard.hub.domain.graph import Graph
-from blizzard.hub.domain.work import Chunk, IWriteChunkRepository, PmPointer
+from blizzard.hub.domain.work import DEFAULT_MODEL, Chunk, IWriteChunkRepository, PmPointer
 
 
 class IngestConflict(Exception):
@@ -49,6 +51,7 @@ class IngestService:
             graph_id=graph.graph_id,
             pm_pointers=list(pointers),
             minted_at=self._clock.now(),
+            model=DEFAULT_MODEL,
         )
         self._chunks.mint(chunk)
         return chunk.chunk_id

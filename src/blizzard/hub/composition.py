@@ -28,6 +28,7 @@ from blizzard.hub.domain.apply import ApplyService
 from blizzard.hub.domain.claim import ClaimService
 from blizzard.hub.domain.decisions import DecisionService, RequeueService
 from blizzard.hub.domain.detach import DetachService
+from blizzard.hub.domain.edit import EditService
 from blizzard.hub.domain.facts import FactIngestService, RunnerFactsService
 from blizzard.hub.domain.graph import GraphDoc, IReadGraphRepository
 from blizzard.hub.domain.graph_authoring import GraphMintService
@@ -60,6 +61,7 @@ class HubServices:
     requeue: RequeueService
     detach: DetachService
     pause: PauseService
+    edit: EditService
     facts: FactIngestService
     graph_mint: GraphMintService
     runner_facts: RunnerFactsService
@@ -109,6 +111,7 @@ def build_services(
         requeue=RequeueService(chunks=chunk_store, clock=clock),
         detach=DetachService(chunks=chunk_store, clock=clock),
         pause=PauseService(chunks=chunk_store, clock=clock),
+        edit=EditService(chunks=chunk_store),
         facts=FactIngestService(chunks=chunk_store, fleet=fleet, clock=clock),
         graph_mint=GraphMintService(graphs=graph_store, clock=clock),
         runner_facts=RunnerFactsService(chunks=chunk_store, clock=clock),

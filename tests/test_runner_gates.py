@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from blizzard.hub.domain.work import ChunkStatus
+from blizzard.hub.domain.work import DEFAULT_MODEL, ChunkStatus
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.steps import advance, fill, pull
@@ -141,6 +141,7 @@ def test_resolved_gate_is_advanced_by_the_resolving_transition(tmp_path):  # typ
         status=ChunkStatus.RUNNING,  # resolved, awaiting the resolving transition
         current_node_id="nd_gate",
         latest_epoch=1,
+        model=DEFAULT_MODEL,
         decision=DecisionView(
             decision_id="dec_1",
             chunk_id="ch_1",
@@ -192,6 +193,7 @@ def test_unresolved_gate_keeps_waiting(tmp_path):  # type: ignore[no-untyped-def
         status=ChunkStatus.WAITING_ON_HUMAN,
         current_node_id="nd_gate",
         latest_epoch=1,
+        model=DEFAULT_MODEL,
         decision=DecisionView(
             decision_id="dec_1",
             chunk_id="ch_1",
@@ -240,6 +242,7 @@ def test_fill_leaves_a_resolved_gate_to_advance(tmp_path):  # type: ignore[no-un
         status=ChunkStatus.RUNNING,  # resolved, awaiting the resolving transition
         current_node_id="nd_gate",
         latest_epoch=1,
+        model=DEFAULT_MODEL,
         # The route is still live and held by THIS runner — the fact that makes a resolved
         # gate look exactly like an interrupted claim to the reconciler (route ours, RUNNING).
         route=RouteView(runner_id="r1", workspace_id="ws1", environment_ids=["e1"]),

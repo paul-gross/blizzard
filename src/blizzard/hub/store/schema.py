@@ -94,6 +94,10 @@ chunks = Table(
     Column("chunk_id", String, primary_key=True),  # ch_<ulid>
     Column("graph_id", String, ForeignKey("graphs.graph_id"), nullable=False),  # pinned at mint
     Column("minted_at", UtcDateTime, nullable=False),
+    # The model selection — pinned at mint, editable while the chunk rests `not_ready`
+    # (issue #27, domain/edit.py). A plain mutable column, not a fact log — mirrors
+    # `graph_id` above, which was already mutable-at-mint with no fact table behind it.
+    Column("model", String, nullable=False),
 )
 
 chunk_pm_pointers = Table(

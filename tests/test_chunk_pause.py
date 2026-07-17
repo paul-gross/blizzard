@@ -30,7 +30,7 @@ from sqlalchemy import select
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.domain.work import ChunkStatus
+from blizzard.hub.domain.work import DEFAULT_MODEL, ChunkStatus
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.steps import advance, fill, mark_crash_resume_intents
@@ -95,6 +95,7 @@ def _paused_chunk(chunk="ch_1", *, runner_id="r1", status=ChunkStatus.PAUSED):  
         status=status,
         current_node_id="nd_build",
         latest_epoch=1,
+        model=DEFAULT_MODEL,
         route=RouteView(runner_id=runner_id, workspace_id="ws1", environment_ids=["e1"]),
         pause=PauseView(by="operator", set_at="2026-07-16T12:00:00Z"),
     )
@@ -108,6 +109,7 @@ def _running_chunk(chunk="ch_1", *, runner_id="r1"):  # type: ignore[no-untyped-
         status=ChunkStatus.RUNNING,
         current_node_id="nd_build",
         latest_epoch=1,
+        model=DEFAULT_MODEL,
         route=RouteView(runner_id=runner_id, workspace_id="ws1", environment_ids=["e1"]),
     )
 

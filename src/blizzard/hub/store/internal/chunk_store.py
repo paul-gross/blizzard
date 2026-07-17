@@ -383,7 +383,12 @@ class ChunkStore:
     def mint(self, chunk: Chunk) -> None:
         with self._engine.begin() as conn:
             conn.execute(
-                insert(s.chunks).values(chunk_id=chunk.chunk_id, graph_id=chunk.graph_id, minted_at=chunk.minted_at)
+                insert(s.chunks).values(
+                    chunk_id=chunk.chunk_id,
+                    graph_id=chunk.graph_id,
+                    minted_at=chunk.minted_at,
+                    model=chunk.model,
+                )
             )
             for pointer in chunk.pm_pointers:
                 conn.execute(
@@ -814,6 +819,16 @@ class ChunkStore:
         with self._engine.begin() as conn:
             conn.execute(insert(s.chunk_pause_facts).values(chunk_id=chunk_id, paused=paused, set_at=at, set_by=by))
 
+    def set_graph(self, chunk_id: str, *, graph_id: str) -> None:
+        """Repin a not-ready chunk to a different workflow graph (issue #27)."""
+        with self._engine.begin() as conn:
+            conn.execute(update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(graph_id=graph_id))
+
+    def set_model(self, chunk_id: str, *, model: str) -> None:
+        """Repin a not-ready chunk's model selection (issue #27)."""
+        with self._engine.begin() as conn:
+            conn.execute(update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(model=model))
+
     # --- helpers ------------------------------------------------------------
 
     @staticmethod
@@ -895,7 +910,13 @@ class ChunkStore:
                 select(s.chunk_pm_pointers).where(s.chunk_pm_pointers.c.chunk_id == row.chunk_id)
             ).all()
         ]
-        return Chunk(chunk_id=row.chunk_id, graph_id=row.graph_id, pm_pointers=pointers, minted_at=row.minted_at)
+        return Chunk(
+            chunk_id=row.chunk_id,
+            graph_id=row.graph_id,
+            pm_pointers=pointers,
+            minted_at=row.minted_at,
+            model=row.model,
+        )
 
     def _status(self, chunk_id: str) -> ChunkStatus:
         facts = self.load_facts(chunk_id)

@@ -16,7 +16,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.work import ChunkStatus
+from blizzard.hub.domain.work import DEFAULT_MODEL, ChunkStatus
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.context import LoopConfig
@@ -457,7 +457,12 @@ def test_poll_hub_node_releases_on_done(tmp_path):  # type: ignore[no-untyped-de
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     hub = FakeHub()
     hub.chunks["ch_1"] = ChunkDetail(
-        chunk_id="ch_1", graph_id="gr_1", status=ChunkStatus.DONE, current_node_id="deliver", latest_epoch=1
+        chunk_id="ch_1",
+        graph_id="gr_1",
+        status=ChunkStatus.DONE,
+        current_node_id="deliver",
+        latest_epoch=1,
+        model=DEFAULT_MODEL,
     )
     provider = FakeProvider({"e1": "/ws/e1"})
     ctx = make_context(
@@ -476,7 +481,12 @@ def test_poll_hub_node_waits_while_delivering(tmp_path):  # type: ignore[no-unty
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     hub = FakeHub()
     hub.chunks["ch_1"] = ChunkDetail(
-        chunk_id="ch_1", graph_id="gr_1", status=ChunkStatus.DELIVERING, current_node_id="deliver", latest_epoch=1
+        chunk_id="ch_1",
+        graph_id="gr_1",
+        status=ChunkStatus.DELIVERING,
+        current_node_id="deliver",
+        latest_epoch=1,
+        model=DEFAULT_MODEL,
     )
     provider = FakeProvider({"e1": "/ws/e1"})
     ctx = make_context(
@@ -692,7 +702,12 @@ def test_full_happy_path_across_ticks(tmp_path):  # type: ignore[no-untyped-def]
 
     # The hub's merge queue lands the delivery; nothing left to peek.
     hub.chunks["ch_1"] = ChunkDetail(
-        chunk_id="ch_1", graph_id="gr_1", status=ChunkStatus.DONE, current_node_id="deliver", latest_epoch=1
+        chunk_id="ch_1",
+        graph_id="gr_1",
+        status=ChunkStatus.DONE,
+        current_node_id="deliver",
+        latest_epoch=1,
+        model=DEFAULT_MODEL,
     )
     hub.queue = []
 

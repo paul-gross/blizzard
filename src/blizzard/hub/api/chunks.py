@@ -5,6 +5,10 @@ over the store (``bzh:controller-read-only``): ingest and completion delegate to
 domain services that hold the write repository; the list/detail/envelope reads
 derive status and current node from facts (``bzh:facts-not-status``), never a stored
 column. The PM read is a vendor-native pass-through whose contents are never stored.
+``POST /chunks/{id}/graph`` and ``POST /chunks/{id}/model`` (issue #27) repin a
+not-ready chunk's workflow graph or model selection — read is already carried on the
+list/detail views' ``graph_id``/``model`` fields; write is refused (409) once the chunk
+has left ``not_ready``.
 """
 
 from __future__ import annotations
@@ -22,6 +26,7 @@ from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.artifacts import ArtifactRow, GitCommitArtifact, from_row, store_key
 from blizzard.hub.domain.decisions import NotEscalated
 from blizzard.hub.domain.detach import NotRouted
+from blizzard.hub.domain.edit import ChunkNotEditable
 from blizzard.hub.domain.envelope import build_node_envelope
 from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.ingest import IngestConflict
@@ -44,9 +49,13 @@ from blizzard.wire.chunk import (
     ArtifactView,
     CheckDeliveryResponse,
     ChunkDetail,
+    ChunkGraphUpdateRequest,
+    ChunkGraphView,
     ChunkIngestConflict,
     ChunkIngestRequest,
     ChunkIngestResponse,
+    ChunkModelUpdateRequest,
+    ChunkModelView,
     ChunkPauseRequest,
     ChunkSummary,
     EscalationView,
@@ -234,6 +243,7 @@ def list_chunks(services: Annotated[HubServices, Depends(get_services)]) -> list
                 current_node_id=node_id,
                 current_node_name=node_name,
                 pm_pointers=_pointer_views(chunk, services.pm),
+                model=chunk.model,
             )
         )
     return summaries
@@ -262,6 +272,7 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
         current_node_name=node_name,
         latest_epoch=latest_epoch(facts),
         pm_pointers=_pointer_views(chunk, services.pm),
+        model=chunk.model,
         route=RouteView(
             runner_id=route.runner_id,
             workspace_id=route.workspace_id,
@@ -454,6 +465,52 @@ def promote_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_se
     services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
     services.events.publish_queue_changed()  # a promoted chunk enters the ready queue
     return {"chunk_id": chunk_id}
+
+
+@router.post("/chunks/{chunk_id}/graph", response_model=ChunkGraphView, status_code=status.HTTP_202_ACCEPTED)
+def set_chunk_graph(
+    chunk_id: str, request: ChunkGraphUpdateRequest, services: Annotated[HubServices, Depends(get_services)]
+) -> ChunkGraphView:
+    """Repin a not-ready chunk's workflow graph (issue #27).
+
+    404 on an unknown chunk or an unknown target graph; 409 once the chunk has left
+    ``not_ready`` (already promoted, claimed, running, or later)."""
+    chunk = services.chunks.get(chunk_id)
+    if chunk is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+    graph = services.graphs.get(request.graph_id)
+    if graph is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {request.graph_id}")
+    try:
+        services.edit.set_graph(chunk, graph=graph)
+    except ChunkNotEditable as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
+    services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
+    return ChunkGraphView(chunk_id=chunk_id, graph_id=graph.graph_id)
+
+
+@router.post("/chunks/{chunk_id}/model", response_model=ChunkModelView, status_code=status.HTTP_202_ACCEPTED)
+def set_chunk_model(
+    chunk_id: str, request: ChunkModelUpdateRequest, services: Annotated[HubServices, Depends(get_services)]
+) -> ChunkModelView:
+    """Repin a not-ready chunk's model selection (issue #27).
+
+    404 on an unknown chunk; 422 on a blank model; 409 once the chunk has left
+    ``not_ready`` (already promoted, claimed, running, or later)."""
+    chunk = services.chunks.get(chunk_id)
+    if chunk is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+    model = request.model.strip()
+    if not model:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="model must not be blank")
+    try:
+        services.edit.set_model(chunk, model=model)
+    except ChunkNotEditable as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
+    services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
+    return ChunkModelView(chunk_id=chunk_id, model=model)
 
 
 @router.post("/chunks/{chunk_id}/leases", status_code=status.HTTP_202_ACCEPTED)

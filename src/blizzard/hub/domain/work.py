@@ -58,6 +58,14 @@ class PmPointer:
     ref: str
 
 
+# The model a chunk runs on absent an edit (issue #27). Defined independently of the
+# runner's own ``DEFAULT_WORKER_MODEL`` (``blizzard.runner.harness.internal.
+# claude_code_adapter``) — the hub domain must not depend on the runner
+# (``bzh:domain-core``, separate daemons) — but carries the same value so a freshly
+# minted chunk's selection matches what the fleet actually ran before this field existed.
+DEFAULT_MODEL = "claude-opus-4-8"
+
+
 @dataclass(frozen=True)
 class Chunk:
     """The unit of work that travels the workflow graph."""
@@ -66,6 +74,10 @@ class Chunk:
     graph_id: str
     pm_pointers: list[PmPointer]
     minted_at: datetime
+    # The chunk's model selection — editable while ``not_ready`` (issue #27,
+    # ``domain/edit.py``). Defaulted so the many fakes/tests that build a ``Chunk``
+    # without opinion on it keep compiling.
+    model: str = DEFAULT_MODEL
 
 
 # --- Facts that feed the derivations ---------------------------------------
@@ -793,4 +805,17 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
 
     def record_pause(self, chunk_id: str, *, paused: bool, by: str, at: datetime) -> None:
         """Append a ``chunk.paused``/``chunk.resumed`` fact — newest-fact-wins (issue #46)."""
+        ...
+
+    def set_graph(self, chunk_id: str, *, graph_id: str) -> None:
+        """Repin a not-ready chunk to a different workflow graph (issue #27).
+
+        A plain column overwrite, not an append-only fact: ``graph_id`` was already a
+        mint-time column with no fact log behind it, and this keeps the same shape.
+        The caller (:class:`~blizzard.hub.domain.edit.EditService`) has already checked
+        the chunk is still ``not_ready``."""
+        ...
+
+    def set_model(self, chunk_id: str, *, model: str) -> None:
+        """Repin a not-ready chunk's model selection (issue #27) — see :meth:`set_graph`."""
         ...

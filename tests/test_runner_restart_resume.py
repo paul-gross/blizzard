@@ -13,7 +13,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from blizzard.hub.domain.work import ChunkStatus
+from blizzard.hub.domain.work import DEFAULT_MODEL, ChunkStatus
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.steps import mark_resume_intents, resume
 from blizzard.runner.loop.tick import tick
@@ -64,6 +64,7 @@ def _running_chunk(chunk="ch_1", *, runner_id="r1"):  # type: ignore[no-untyped-
         status=ChunkStatus.RUNNING,
         current_node_id="nd_build",
         latest_epoch=1,
+        model=DEFAULT_MODEL,
         route=RouteView(runner_id=runner_id, workspace_id="ws1", environment_ids=["e1"]),
     )
 
@@ -241,6 +242,7 @@ def test_resume_abandons_detached_chunk(tmp_path):  # type: ignore[no-untyped-de
         status=ChunkStatus.READY,
         current_node_id="nd_build",
         latest_epoch=1,
+        model=DEFAULT_MODEL,
         route=None,
     )
     provider = FakeProvider({"e1": "/ws/e1"})

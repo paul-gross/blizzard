@@ -87,6 +87,9 @@ class ChunkSummary(BaseModel):
     current_node_id: str | None
     current_node_name: str | None = None
     pm_pointers: list[PmPointerView] = []
+    # The chunk's model selection (issue #27) — editable while `not_ready`. Required:
+    # the store column is non-nullable and every mint sets DEFAULT_MODEL.
+    model: str
 
 
 class RouteView(BaseModel):
@@ -182,6 +185,32 @@ class ChunkPauseRequest(BaseModel):
     by: str = "operator"
 
 
+class ChunkGraphUpdateRequest(BaseModel):
+    """Repin a not-ready chunk's workflow graph (issue #27) — the target graph's id."""
+
+    graph_id: str
+
+
+class ChunkGraphView(BaseModel):
+    """A chunk's current graph selection — the read/write shape issue #27's board editor uses."""
+
+    chunk_id: str
+    graph_id: str
+
+
+class ChunkModelUpdateRequest(BaseModel):
+    """Repin a not-ready chunk's model selection (issue #27)."""
+
+    model: str
+
+
+class ChunkModelView(BaseModel):
+    """A chunk's current model selection — the read/write shape issue #27's board editor uses."""
+
+    chunk_id: str
+    model: str
+
+
 class PauseView(BaseModel):
     """An open pause on a chunk (issue #46) — who set it and when.
 
@@ -209,6 +238,9 @@ class ChunkDetail(BaseModel):
     current_node_name: str | None = None
     latest_epoch: int | None
     pm_pointers: list[PmPointerView] = []
+    # The chunk's model selection (issue #27) — editable while `not_ready`. Required:
+    # the store column is non-nullable and every mint sets DEFAULT_MODEL.
+    model: str
     route: RouteView | None = None
     escalation: EscalationView | None = None
     # The operator's per-chunk pause brake (issue #46) — non-None iff currently paused.

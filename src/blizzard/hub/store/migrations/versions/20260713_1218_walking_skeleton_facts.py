@@ -7,18 +7,19 @@ commit -> deliver -> land loop derives every chunk status from
 this revision creates exactly this revision's subset in FK-dependency order, so a
 later revision that adds tables to the same metadata does not get re-created here.
 
-``chunk_pm_pointers``, ``route_created``, and ``route_released`` are the exceptions
-(as of ``0013_pm_pointer_source_ref`` and ``0015_route_seq_tiebreak`` respectively):
-importing them from ``schema.py`` here would mean this revision's *historical* shape
-silently follows whatever ``schema.py`` says today — exactly the bug 0013's own
-docstring names and refuses to repeat. This revision instead declares its own frozen
-literal for each — ``{provider, url}`` for pointers, no ``seq`` column for the two
-route tables — so upgrading from ``base`` always recreates the column shape this
-revision actually shipped with; 0013 and 0014 are the revisions that reshape them
-from there. The frozen literals still declare their ``chunk_id`` foreign key to
-``chunks.chunk_id`` (via a same-MetaData resolution stub, not a live import — see
-below) so a fresh store's schema matches ``schema.py``'s declared FK
-(``bzh:sql-portable``: postgres is the same schema under a different URL).
+``chunk_pm_pointers``, ``route_created``, ``route_released``, and ``chunks`` are the
+exceptions (as of ``0013_pm_pointer_source_ref``, ``0015_route_seq_tiebreak``, and
+``0018_chunk_model_selection`` respectively): importing them from ``schema.py`` here
+would mean this revision's *historical* shape silently follows whatever ``schema.py``
+says today — exactly the bug 0013's own docstring names and refuses to repeat. This
+revision instead declares its own frozen literal for each — ``{provider, url}`` for
+pointers, no ``seq`` column for the two route tables, no ``model`` column for
+``chunks`` — so upgrading from ``base`` always recreates the column shape this
+revision actually shipped with; 0013, 0014, and 0018 are the revisions that reshape
+them from there. The frozen literals still declare their ``chunk_id``/``graph_id``
+foreign keys (via same-MetaData resolution stubs, not live imports — see below) so a
+fresh store's schema matches ``schema.py``'s declared FKs (``bzh:sql-portable``:
+postgres is the same schema under a different URL).
 
 Revision ID: 20260713_1218_hub_walking_skeleton
 Revises: 20260713_1112_hub_initial
@@ -35,7 +36,6 @@ from blizzard.foundation.store.utc import UtcDateTime
 from blizzard.hub.store.schema import (
     artifacts,
     chunk_stopped,
-    chunks,
     delivery_landed,
     delivery_repo_landed,
     escalations,
@@ -53,19 +53,24 @@ down_revision: str | None = "20260713_1112_hub_initial"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# This revision's own frozen shape — {provider, url} — reshaped by 0013. Not imported
-# from schema.py (see the module docstring). A bare `sa.ForeignKey("chunks.chunk_id")`
-# needs a `chunks` table it can resolve against in the *same* MetaData; this revision's
-# own `chunks` is created below via schema.py's up-to-date import (0002 doesn't reshape
-# `chunks`, so that import is safe), which already lives in a different MetaData than
-# this frozen one. So a standalone resolution stub is declared here purely so the FK
-# object has something to resolve against — it is never added to `_TABLES` and is
-# never created or dropped; `chunks` itself is still created from the real import above.
+# This revision's own frozen shape — no `model` column — reshaped by
+# 0018_chunk_model_selection. Not imported from schema.py (see the module docstring).
+# `chunks.graph_id` FKs to `graphs.graph_id`; `graphs` itself is unreshaped and created
+# below from the real schema.py import, but it lives in a *different* MetaData than this
+# frozen one, so a bare `sa.ForeignKey("graphs.graph_id")` needs its own same-MetaData
+# resolution stub — never added to `_TABLES`, never created or dropped.
 _frozen_metadata = sa.MetaData()
 sa.Table(
+    "graphs",
+    _frozen_metadata,
+    sa.Column("graph_id", sa.String, primary_key=True),
+)
+_chunks = sa.Table(
     "chunks",
     _frozen_metadata,
     sa.Column("chunk_id", sa.String, primary_key=True),
+    sa.Column("graph_id", sa.String, sa.ForeignKey("graphs.graph_id"), nullable=False),
+    sa.Column("minted_at", UtcDateTime, nullable=False),
 )
 _chunk_pm_pointers = sa.Table(
     "chunk_pm_pointers",
@@ -100,7 +105,7 @@ _TABLES = [
     graph_nodes,
     graph_choices,
     graph_edges,
-    chunks,
+    _chunks,
     _chunk_pm_pointers,
     transitions,
     artifacts,

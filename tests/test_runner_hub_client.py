@@ -102,6 +102,7 @@ def test_get_chunk_parses_status() -> None:
                 "status": "done",
                 "current_node_id": "deliver",
                 "latest_epoch": 1,
+                "model": "claude-opus-4-8",
             },
         )
 
