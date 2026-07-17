@@ -1,0 +1,52 @@
+/*
+ * Blizzard mission-control scrollbars.
+ *
+ * The OS default scrollbar is a light, chunky intrusion into a dark bezelled
+ * board. The discovery mockups styled their scroll containers 6px wide with a
+ * `--bezel` thumb (blizzard-discovery: discovery/mockups/mission-control.html);
+ * that treatment never crossed into the app, so every panel scrolled in the
+ * platform's chrome instead of the board's. This restores it — globally rather
+ * than per-panel, so a new scroll container inherits the aesthetic instead of
+ * re-declaring it.
+ *
+ * A global stylesheet (listed in each app's build `styles`), because component
+ * styles are view-encapsulated and these pseudo-elements must reach scroll
+ * containers inside every component. Colors resolve through the token layer
+ * (tokens.css), never hard-coded hex.
+ *
+ * Two mechanisms, deliberately not overlapped: WebKit's `::-webkit-scrollbar`
+ * pseudo-elements carry Chrome and Safari, and the standard
+ * `scrollbar-width`/`scrollbar-color` pair carries Firefox. Chrome 121+ ignores
+ * the pseudo-elements on any element whose `scrollbar-width`/`-color` is set to
+ * a non-auto value, so the standard properties are fenced behind an
+ * `@supports not selector(::-webkit-scrollbar)` guard — Chrome and Safari skip
+ * the block and keep the exact 6px treatment; Firefox, which does not support
+ * the pseudo-element, applies it.
+ */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--bezel);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--bezel-hi);
+}
+/* Where a vertical and a horizontal bar meet, the default corner is an opaque
+ * light square; the board's own background reads as continuous instead. */
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--bezel) transparent;
+  }
+}

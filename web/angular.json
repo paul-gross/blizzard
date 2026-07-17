@@ -30,6 +30,7 @@
             ],
             "styles": [
               "projects/fleet/src/lib/design/tokens.css",
+              "projects/fleet/src/lib/design/scrollbars.css",
               "projects/hub/src/styles.css"
             ]
           },
@@ -108,6 +109,7 @@
             ],
             "styles": [
               "projects/fleet/src/lib/design/tokens.css",
+              "projects/fleet/src/lib/design/scrollbars.css",
               "projects/runner/src/styles.css"
             ]
           },
