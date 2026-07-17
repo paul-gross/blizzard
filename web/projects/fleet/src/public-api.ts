@@ -35,6 +35,8 @@ export { injectHubChunksQuery } from './lib/chunks/chunks.query';
 export { injectHubChunkDetailQuery } from './lib/chunks/chunk-detail.query';
 export { injectAnswerQuestionMutation, injectResolveDecisionMutation } from './lib/chunks/human.mutations';
 export type { AnswerVars, ResolveVars } from './lib/chunks/human.mutations';
+export { injectDetachChunkMutation } from './lib/chunks/detach.mutations';
+export type { DetachVars } from './lib/chunks/detach.mutations';
 
 export { injectPromoteChunkMutation } from './lib/chunks/promote.mutations';
 export type { PromoteVars } from './lib/chunks/promote.mutations';

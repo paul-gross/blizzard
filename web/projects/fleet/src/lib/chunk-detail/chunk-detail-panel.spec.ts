@@ -1,5 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { vi } from 'vitest';
 
 import type { ChunkDetail } from '../api/hub';
 import { ChunkDetailPanel, type PmItemsState } from './chunk-detail-panel';
@@ -160,6 +161,25 @@ const ESCALATED_DETAIL: ChunkDetail = {
     epoch: 3,
     takeover_command: 'blizzard runner takeover ch_01esc00000000000000000000000',
   },
+};
+
+const ROUTED_DETAIL: ChunkDetail = {
+  chunk_id: 'ch_01routed000000000000000000',
+  graph_id: 'gr_1',
+  status: 'running',
+  current_node_id: 'nd_build',
+  latest_epoch: 1,
+  pm_pointers: [],
+  history: [],
+  artifacts: [],
+  route: { runner_id: 'rn_01', workspace_id: 'ws_01', environment_ids: ['env_01'] },
+};
+
+// A needs_human chunk that also still carries its live route — detach releases the
+// runner without touching the open escalation (D-088; issue #42's not-requeue AC).
+const ESCALATED_ROUTED_DETAIL: ChunkDetail = {
+  ...ESCALATED_DETAIL,
+  route: { runner_id: 'rn_02', workspace_id: 'ws_01', environment_ids: [] },
 };
 
 describe('ChunkDetailPanel', () => {
@@ -359,6 +379,99 @@ describe('ChunkDetailPanel', () => {
 
     el.querySelector<HTMLButtonElement>('[data-testid="detail-close"]')?.click();
     expect(closed).toBe(true);
+  });
+
+  // --- Detach (D-088, issue #42) ---------------------------------------------
+
+  it('shows no Detach action for a chunk with no live route', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', REVIEW_FAIL_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="detach-chunk"]')).toBeNull();
+    expect(el.querySelector('[data-testid="route-info"]')).toBeNull();
+  });
+
+  it('shows the routed runner and a Detach action for a chunk with a live route', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="route-runner"]')?.textContent).toContain('rn_01');
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="detach-chunk"]')).not.toBeNull();
+  });
+
+  it('emits detach with the chunk id once the operator confirms', async () => {
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    let emitted: string | undefined;
+    fixture.componentInstance.detach.subscribe((chunkId) => (emitted = chunkId));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="detach-chunk"]')?.click();
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(emitted).toBe('ch_01routed000000000000000000');
+    confirmSpy.mockRestore();
+  });
+
+  it('emits nothing when the operator declines the confirm', async () => {
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    let emitted = false;
+    fixture.componentInstance.detach.subscribe(() => (emitted = true));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="detach-chunk"]')?.click();
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(emitted).toBe(false);
+    confirmSpy.mockRestore();
+  });
+
+  it('surfaces a detach error passed down from the container instead of swallowing it', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('detachError', 'chunk ch_01routed000000000000000000 has no live route');
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="detach-error"]')?.textContent).toContain('has no live route');
+  });
+
+  it('still shows a Detach action for a needs_human chunk that still carries a live route (not requeue)', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', ESCALATED_ROUTED_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    // The escalation dock stays up — detach does not resolve it.
+    expect(el.querySelector('[data-testid="escalation"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="detach-chunk"]')).not.toBeNull();
+  });
+
+  it('does not promise the ready queue in the confirm copy for a needs_human chunk (D-088)', async () => {
+    // derive_chunk_status checks an open escalation before a live route, so detaching
+    // this chunk re-derives needs_human, not ready — the dialog must not claim
+    // otherwise for the one case its own spec singles out as interesting.
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', ESCALATED_ROUTED_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="detach-chunk"]')?.click();
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    const message = confirmSpy.mock.calls[0][0];
+    expect(message).not.toContain('ready queue');
+    confirmSpy.mockRestore();
   });
 
   // --- The Issue tab (issue #24) --------------------------------------------

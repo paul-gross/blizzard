@@ -7,6 +7,7 @@ import type {
   EscalationView,
   PmItemEntry,
   QuestionView,
+  RouteView,
   TransitionView,
 } from '../api/hub';
 
@@ -40,6 +41,12 @@ export interface ResolveDecisionEvent {
  * MVP criterion 9/11). Fills the bottom dock beneath the board when a card is
  * selected — without reflowing the board columns — and renders:
  *
+ * - the **route + Detach** control, in the header, whenever the chunk carries a live
+ *   route: the one place an operator verb with a real failure mode (409, no live
+ *   route to release) lives on the board (issue #42). Detach is deliberately **not**
+ *   requeue — it supersedes no escalation and bumps no epoch, so a `needs_human`
+ *   chunk detached this way still derives `needs_human` afterward
+ *   (`src/blizzard/hub/domain/detach.py`); this dock never claims otherwise;
  * - the **awaiting-human** state, when the chunk is parked (`waiting_on_human`): its
  *   open **question** with an inline **Answer** action (MVP criterion 7, D-052) and/or
  *   its open gate **decision** rendered as **choice buttons** the operator resolves
@@ -53,7 +60,9 @@ export interface ResolveDecisionEvent {
  *   **git_commit's** pinned `repo @ commit` reference (the branch pointers merged).
  *
  * Presentational only: it holds the detail input and emits `dismiss`, `answerQuestion`,
- * and `resolveDecision`; the data client (the mutations those events drive) lives in the
+ * `resolveDecision`, and `detach` (guarded by a `confirm()`, the one browser affordance
+ * this panel already reaches for — see `copyTakeover`); the data client (the mutation
+ * `detach` drives, and the error it surfaces back down as `detachError`) lives in the
  * container. All color comes from the design-token layer, never hard-coded.
  */
 @Component({
@@ -70,10 +79,29 @@ export interface ResolveDecisionEvent {
           <span class="st" data-testid="detail-status">{{ detail().status }}</span>
           <span class="nd" data-testid="detail-node">{{ detail().current_node_id ?? '—' }}</span>
         </div>
+        @if (route(); as r) {
+          <div class="d-route" data-testid="route-info">
+            <span class="lbl">Route</span>
+            <span class="rn" data-testid="route-runner" [attr.title]="r.runner_id">{{ r.runner_id }}</span>
+            <button
+              type="button"
+              class="act danger"
+              data-testid="detach-chunk"
+              [attr.aria-label]="'Detach chunk ' + detail().chunk_id + ' from its runner'"
+              (click)="onDetach()"
+            >
+              Detach
+            </button>
+          </div>
+        }
         <button type="button" class="close" data-testid="detail-close" aria-label="Close" (click)="dismiss.emit()">
           ✕
         </button>
       </header>
+
+      @if (detachError(); as err) {
+        <p class="notice" data-testid="detach-error" role="alert">{{ err }}</p>
+      }
 
       <nav class="tabs" role="tablist" aria-label="Chunk detail sections">
         @for (t of tabs; track t.key) {
@@ -314,7 +342,7 @@ export interface ResolveDecisionEvent {
     }
     .d-head {
       display: grid;
-      grid-template-columns: 1fr auto auto;
+      grid-template-columns: 1fr auto auto auto;
       align-items: center;
       gap: 8px;
       padding: 6px 8px;
@@ -348,6 +376,26 @@ export interface ResolveDecisionEvent {
     .d-meta .nd {
       color: var(--label-dim);
       font-size: 9px;
+    }
+    .d-route {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .d-route .rn {
+      color: var(--cyan);
+      font-size: 10px;
+      max-width: 12ch;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .act.danger {
+      color: var(--danger, #e06c75);
+      border-color: var(--danger, #e06c75);
+    }
+    .act.danger:hover {
+      background: rgba(224, 108, 117, 0.12);
     }
     .close {
       background: transparent;
@@ -682,6 +730,10 @@ export class ChunkDetailPanel {
    * Defaults to `loading` so the panel constructs without the container wiring it. */
   readonly pmItems = input<PmItemsState>({ status: 'loading', items: [] });
 
+  /** The container's last detach failure for this chunk (the 409/404 surfaced, not
+   * swallowed — issue #42), or `null` when there is nothing to report. */
+  readonly detachError = input<string | null>(null);
+
   /** Emitted when the operator dismisses the dock. */
   readonly dismiss = output<void>();
 
@@ -690,6 +742,9 @@ export class ChunkDetailPanel {
 
   /** Emitted when the operator resolves an open gate decision (D-042). */
   readonly resolveDecision = output<ResolveDecisionEvent>();
+
+  /** Emitted with the chunk id when the operator confirms Detach (D-088, issue #42). */
+  readonly detach = output<string>();
 
   /** The dock's tabs — the existing chunk detail, and the related issue content (issue #24). */
   protected readonly tabs = [
@@ -723,6 +778,10 @@ export class ChunkDetailPanel {
   /** The chunk's open escalation, if it currently needs a human takeover (D-009). */
   protected readonly escalation = computed<EscalationView | null>(() => this.detail().escalation ?? null);
 
+  /** The chunk's live route, if any — Detach shows only while this is non-null
+   * (D-088, issue #42): a chunk with no live route has nothing to release. */
+  protected readonly route = computed<RouteView | null>(() => this.detail().route ?? null);
+
   /** Emit an answer for a question — no-op on an empty answer. */
   protected submitAnswer(questionId: string, answer: string): void {
     const trimmed = answer.trim();
@@ -743,5 +802,18 @@ export class ChunkDetailPanel {
       this.copied.set(true);
       setTimeout(() => this.copied.set(false), 1500);
     });
+  }
+
+  /** Confirm, then emit `detach` for the container's mutation to fire (D-088). A
+   * native `confirm()` — the same one-line browser affordance `copyTakeover` already
+   * reaches for — guards the forcible release; declining emits nothing. */
+  protected onDetach(): void {
+    if (!this.route()) return;
+    const confirmed = globalThis.confirm(
+      `Detach chunk ${this.detail().chunk_id} from its runner? This releases the runner; ` +
+        `the chunk keeps its current status (this is not requeue).`,
+    );
+    if (!confirmed) return;
+    this.detach.emit(this.detail().chunk_id);
   }
 }

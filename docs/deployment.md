@@ -309,6 +309,16 @@ see depends on how the daemon left:
 Either way the next `host` start is clean: it clears a socket nothing is serving, and
 refuses to start beside one that is still live (the store is single-writer).
 
+## Detaching a chunk
+
+Detach forcibly releases a chunk's live route — the board's Detach control (chunk
+detail dock, issue #42) and `blizzard hub detach <chunk_id>` both reach the same
+`POST /api/chunks/{id}/detach`, so either door does exactly the same thing. It is
+**not** requeue: no supersession fact is recorded and no epoch bumps, so a
+`needs_human` chunk detached this way is still `needs_human` afterward — only the
+route is gone, freeing the runner that held it. 409s when the chunk already has no
+live route to release. See `blizzard hub detach --help` for the CLI's full contract.
+
 ## The recovery contract
 
 Two systemd mechanisms combine to deliver the journey's "came back under systemd":

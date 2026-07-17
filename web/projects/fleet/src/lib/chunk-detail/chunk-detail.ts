@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
 
 import { injectHubChunkDetailQuery } from '../chunks/chunk-detail.query';
 import { injectHubChunkPmItemsQuery } from '../chunks/chunk-pm-items.query';
+import { injectDetachChunkMutation } from '../chunks/detach.mutations';
 import { injectAnswerQuestionMutation, injectResolveDecisionMutation } from '../chunks/human.mutations';
 import {
   type AnswerQuestionEvent,
@@ -9,6 +10,16 @@ import {
   type PmItemsState,
   type ResolveDecisionEvent,
 } from './chunk-detail-panel';
+
+/** The hub's `{"detail": "..."}` error body, or anything close enough to read one
+ * off of — 404/409 aren't in the generated error union (only 422 is documented),
+ * so this reads the same shape defensively rather than trusting the response type. */
+function errorMessage(error: unknown): string {
+  if (error && typeof error === 'object' && 'detail' in error && typeof error.detail === 'string') {
+    return error.detail;
+  }
+  return 'Detach failed.';
+}
 
 /**
  * The chunk detail **container** — owns the reactive detail query (D-036) and the
@@ -19,8 +30,11 @@ import {
  * client (bzh:generated-client).
  *
  * Reactive over the selected `chunkId`: the query re-keys and disables itself while
- * nothing is open, so no request fires for the empty board. Answering or resolving
- * invalidates the chunk and the fleet list, and the SSE stream corroborates.
+ * nothing is open, so no request fires for the empty board. Answering, resolving, or
+ * detaching invalidates the chunk and the fleet list, and the SSE stream corroborates.
+ * Detach's 404/409 is read off the mutation's `onError` and held in `detachError` for
+ * the panel to show — issue #42's "report, don't swallow" requirement — and clears the
+ * moment a different chunk opens.
  */
 @Component({
   selector: 'fleet-chunk-detail',
@@ -31,9 +45,11 @@ import {
       <fleet-chunk-detail-panel
         [detail]="d"
         [pmItems]="pmItems()"
+        [detachError]="detachError()"
         (dismiss)="dismiss.emit()"
         (answerQuestion)="onAnswer($event)"
         (resolveDecision)="onResolve($event)"
+        (detach)="onDetach($event)"
       />
     } @else {
       <p class="rest" data-testid="chunk-detail-empty">
@@ -73,6 +89,18 @@ export class ChunkDetail {
   private readonly pmItemsQuery = injectHubChunkPmItemsQuery(() => this.chunkId());
   private readonly answerMutation = injectAnswerQuestionMutation();
   private readonly resolveMutation = injectResolveDecisionMutation();
+  private readonly detachMutation = injectDetachChunkMutation();
+
+  /** The open chunk's last detach failure, or `null`. Reset on every new detach
+   * attempt and whenever a different chunk opens (issue #42). */
+  protected readonly detachError = signal<string | null>(null);
+
+  constructor() {
+    effect(() => {
+      this.chunkId();
+      this.detachError.set(null);
+    });
+  }
 
   /** The open chunk's aggregate, or `undefined` while closed / still loading. */
   protected readonly detail = computed(() => (this.chunkId() === null ? undefined : this.detailQuery.data()));
@@ -92,5 +120,13 @@ export class ChunkDetail {
 
   protected onResolve(event: ResolveDecisionEvent): void {
     this.resolveMutation.mutate({ decisionId: event.decisionId, choice: event.choice, chunkId: event.chunkId });
+  }
+
+  protected onDetach(chunkId: string): void {
+    this.detachError.set(null);
+    this.detachMutation.mutate(
+      { chunkId },
+      { onError: (error) => this.detachError.set(errorMessage(error)) },
+    );
   }
 }

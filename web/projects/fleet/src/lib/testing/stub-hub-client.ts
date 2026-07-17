@@ -15,12 +15,37 @@ export interface HubClientStub {
   restore(): void;
 }
 
+/** A `route` return value naming a non-200 status — e.g. the hub's 404/409
+ * `{"detail": "..."}` error bodies — instead of the default 200 + JSON body. */
+export interface StubHttpError {
+  readonly status: number;
+  readonly body: unknown;
+}
+
+/** Build a {@link StubHttpError} a `route` callback can return to make
+ * {@link stubHubClient} answer with a non-200 status, e.g. the hub's 409
+ * "no live route" or 404 "unknown chunk" detach responses. */
+export function stubError(status: number, body: unknown): StubHttpError {
+  return { status, body };
+}
+
+function isStubHttpError(value: unknown): value is StubHttpError {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'status' in value &&
+    'body' in value &&
+    typeof (value as { status: unknown }).status === 'number'
+  );
+}
+
 /**
  * Stub the generated hub client's transport with a fake `fetch` so component tests
  * can assert the exact call a button fires and hand back canned responses — the
  * TestBed-friendly seam (the Angular unit-test system forbids `vi.mock` on relative
- * imports). `route` maps a `METHOD /path` to the JSON body to return; unmatched
- * routes return `{}`. Every request is captured for assertions.
+ * imports). `route` maps a `METHOD /path` to the JSON body to return (200), or to a
+ * {@link stubError} for a non-200 status; unmatched routes return `{}` (200). Every
+ * request is captured for assertions.
  */
 export function stubHubClient(route: (method: string, path: string) => unknown = () => ({})): HubClientStub {
   const requests: CapturedRequest[] = [];
@@ -38,9 +63,10 @@ export function stubHubClient(route: (method: string, path: string) => unknown =
       body = undefined;
     }
     requests.push({ method, path, body });
-    const data = route(method, path);
+    const result = route(method, path);
+    const [status, data] = isStubHttpError(result) ? [result.status, result.body] : [200, result];
     return new Response(JSON.stringify(data ?? {}), {
-      status: 200,
+      status,
       headers: { 'Content-Type': 'application/json' },
     });
   };
