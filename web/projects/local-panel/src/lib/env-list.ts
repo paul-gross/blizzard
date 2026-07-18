@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
-import { compactRef, type runnerApi } from 'fleet';
+import { compactRef, KitAsyncState, type KitAsyncStateValue, type runnerApi } from 'fleet';
 
 import { ageMs, formatHeldFor } from './age';
 import { injectRunnerEnvironmentsQuery } from './status.query';
@@ -15,15 +15,16 @@ import { injectRunnerEnvironmentsQuery } from './status.query';
 @Component({
   selector: 'fleet-env-list',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [KitAsyncState],
   template: `
     <div class="wrap" data-testid="env-list">
-      @if (query.isPending()) {
-        <p class="status">LOADING…</p>
-      } @else if (query.isError()) {
-        <p class="status error">ENVIRONMENTS UNAVAILABLE</p>
-      } @else if (envs().length === 0) {
-        <p class="status" data-testid="env-empty">NO HELD ENVIRONMENTS — POOL FREE</p>
-      } @else {
+      <fleet-kit-async-state
+        [state]="triadState()"
+        loadingText="LOADING…"
+        errorText="ENVIRONMENTS UNAVAILABLE"
+        emptyText="NO HELD ENVIRONMENTS — POOL FREE"
+        emptyTestid="env-empty"
+      >
         @for (env of envs(); track env.environment_id) {
           <div class="row" data-testid="env-row" [attr.data-env-id]="env.environment_id">
             <span class="led"></span>
@@ -32,7 +33,7 @@ import { injectRunnerEnvironmentsQuery } from './status.query';
             <span class="held" data-testid="env-held-for">{{ heldFor(env) }}</span>
           </div>
         }
-      }
+      </fleet-kit-async-state>
     </div>
   `,
   styles: `
@@ -44,19 +45,6 @@ import { injectRunnerEnvironmentsQuery } from './status.query';
     .wrap {
       position: relative;
       min-height: 40px;
-    }
-    .status {
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      white-space: nowrap;
-      color: var(--label-dim);
-      font-size: var(--fs-xs);
-      letter-spacing: 0.12em;
-    }
-    .status.error {
-      color: var(--red);
     }
     .row {
       display: grid;
@@ -92,6 +80,14 @@ export class EnvList {
   protected readonly query = injectRunnerEnvironmentsQuery();
 
   protected readonly envs = computed(() => this.query.data() ?? []);
+
+  /** The async triad's resolved state — loading/error take precedence, then
+   * an empty pool, else the held-environment rows render. */
+  protected readonly triadState = computed<KitAsyncStateValue>(() => {
+    if (this.query.isPending()) return 'loading';
+    if (this.query.isError()) return 'error';
+    return this.envs().length === 0 ? 'empty' : 'ready';
+  });
 
   protected chunkRef(env: runnerApi.HeldEnvironmentView): string {
     return compactRef(env.chunk_id);

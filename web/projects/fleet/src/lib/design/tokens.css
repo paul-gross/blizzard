@@ -49,4 +49,18 @@
   --fs-base: 15px; /* body copy and controls */
   --fs-md: 16px; /* card ids, column counts, runner names */
   --fs-lg: 19px; /* the brand and header values */
+
+  /*
+   * Overlay opacities (issue #78) — the discrete black washes used for panel
+   * headers, table heads, pressed/inset surfaces, and the engraved-label text
+   * shadow. Named by their opacity so a component picks the wash it already
+   * used, verbatim; no existing token value changes here, only these five new
+   * ones plus the label shadow, replacing raw `rgba(0, 0, 0, …)` literals.
+   */
+  --overlay-20: rgba(0, 0, 0, 0.2);
+  --overlay-25: rgba(0, 0, 0, 0.25);
+  --overlay-30: rgba(0, 0, 0, 0.3);
+  --overlay-35: rgba(0, 0, 0, 0.35);
+  --overlay-40: rgba(0, 0, 0, 0.4);
+  --overlay-90: rgba(0, 0, 0, 0.9); /* the engraved .lbl text-shadow */
 }

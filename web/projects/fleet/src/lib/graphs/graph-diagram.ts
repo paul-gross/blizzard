@@ -235,7 +235,7 @@ export const GRAPH_TEXT_MEASURER = new InjectionToken<TextMeasurer>('fleet.GRAPH
       overflow-x: auto;
       overflow-y: hidden;
       border: 1px solid var(--bezel);
-      background: rgba(0, 0, 0, 0.2);
+      background: var(--overlay-20);
     }
     svg {
       display: block;

@@ -7,6 +7,13 @@
  * the hub and runner SDKs share operation names (e.g. `healthApiHealthGet`).
  */
 
+export { KitPanel } from './lib/kit/kit-panel';
+export { KitAsyncState, type KitAsyncStateValue } from './lib/kit/kit-async-state';
+export { KitBadge } from './lib/kit/kit-badge';
+export { KitButton } from './lib/kit/kit-button';
+export { KitChip, KitChips, type KitChipOption } from './lib/kit/kit-chips';
+export type { Tone } from './lib/kit/tone';
+
 export { BoardHeader } from './lib/board-header/board-header';
 export { BrandMark } from './lib/design/brand-mark';
 export { BoardShell } from './lib/board-shell/board-shell';

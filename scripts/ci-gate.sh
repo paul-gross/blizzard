@@ -4,7 +4,7 @@
 # Runs exactly the checks the `pr` GitHub Actions workflow runs, in one command,
 # so an agent or human can reproduce the gate before pushing:
 #   ruff format --check · ruff check · pyright · pytest (unit + component)
-#   · OpenAPI spec drift · eslint · vitest · generated-client drift
+#   · OpenAPI spec drift · eslint · vitest · structural gate · generated-client drift
 #
 # Invoke as `mise run gate` or `./scripts/ci-gate.sh`. Frontend steps are a
 # clearly-labeled no-op until the P5 frontend workspace lands (see WEB_DIR).
@@ -71,6 +71,9 @@ if [ -f "$WEB_DIR/package.json" ]; then
 
   step "vitest ($WEB_DIR)"
   ( cd "$WEB_DIR" && npm run test )
+
+  step "structural gate ($WEB_DIR): retired chrome-class sweep (web:structural-gate)"
+  ( cd "$WEB_DIR" && npm run structural-gate )
 
   step "generated-client drift ($WEB_DIR): openapi-ts codegen + git diff"
   ( cd "$WEB_DIR" && npm run generate:client >/dev/null )

@@ -31,4 +31,18 @@ describe('design tokens', () => {
       expect(tokensCss).toContain(`${name}: ${value}`);
     }
   });
+
+  it('carries the overlay opacity scale (issue #78) verbatim', () => {
+    const expected: Record<string, string> = {
+      '--overlay-20': 'rgba(0, 0, 0, 0.2)',
+      '--overlay-25': 'rgba(0, 0, 0, 0.25)',
+      '--overlay-30': 'rgba(0, 0, 0, 0.3)',
+      '--overlay-35': 'rgba(0, 0, 0, 0.35)',
+      '--overlay-40': 'rgba(0, 0, 0, 0.4)',
+      '--overlay-90': 'rgba(0, 0, 0, 0.9)',
+    };
+    for (const [name, value] of Object.entries(expected)) {
+      expect(tokensCss).toContain(`${name}: ${value}`);
+    }
+  });
 });

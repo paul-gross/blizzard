@@ -33,7 +33,7 @@ interface StatCell {
       </div>
       @for (cell of stats(); track cell.key) {
         <div class="cell" [attr.data-stat]="cell.key">
-          <span class="lbl">{{ cell.label }}</span>
+          <span class="stat-lbl">{{ cell.label }}</span>
           <span class="v" [attr.data-testid]="'stat-' + cell.key">{{ cell.value }}</span>
         </div>
       }
@@ -43,12 +43,12 @@ interface StatCell {
              start-of-day instant the caller passed as since; the cost-absent lower
              bound is marked, never presented as exact (a leading tilde, formatCost). -->
         <div class="cell spend" data-testid="spend-today">
-          <span class="lbl">Spend today</span>
+          <span class="stat-lbl">Spend today</span>
           <span class="v" data-testid="spend-today-value">{{ formatCost(spend.cost_usd, spend.cost_partial) }}</span>
         </div>
       }
       <div class="cell conn" data-testid="conn">
-        <span class="lbl">Hub</span>
+        <span class="stat-lbl">Hub</span>
         <span class="v">{{ connection() }}</span>
       </div>
     </header>
@@ -68,12 +68,12 @@ interface StatCell {
       border-bottom: 1px solid var(--bezel);
       background: linear-gradient(180deg, var(--header-hi), var(--header-lo));
     }
-    .lbl {
+    .stat-lbl {
       font-size: var(--fs-label);
       letter-spacing: 0.18em;
       text-transform: uppercase;
       color: var(--label);
-      text-shadow: 0 1px 0 rgba(0, 0, 0, 0.9);
+      text-shadow: 0 1px 0 var(--overlay-90);
     }
     .brand {
       display: flex;

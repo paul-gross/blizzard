@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import { compactRef, type runnerApi } from 'fleet';
+import { compactRef, KitBadge, type runnerApi } from 'fleet';
 
 import { injectChunkTitleQuery } from './chunk-title.query';
 import type { MachineChunkStatus } from './chunk-status';
@@ -19,6 +19,7 @@ import type { MachineChunkStatus } from './chunk-status';
 @Component({
   selector: 'fleet-chunk-row',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [KitBadge],
   template: `
     <div
       class="c-row"
@@ -45,7 +46,7 @@ import type { MachineChunkStatus } from './chunk-status';
         }
         {{ titleText() }}
       </span>
-      <span class="st" [attr.data-tone]="status().tone" data-testid="chunk-row-status">{{ status().label }}</span>
+      <fleet-kit-badge [tone]="status().tone" data-testid="chunk-row-status">{{ status().label }}</fleet-kit-badge>
     </div>
   `,
   styles: `
@@ -99,37 +100,11 @@ import type { MachineChunkStatus } from './chunk-status';
     a.chip:hover {
       text-decoration: underline;
     }
-    .st {
+    /* Grid-cell layout only — the tone→color ladder itself is the kit
+     * badge's own concern. */
+    fleet-kit-badge {
       flex: none;
       text-align: right;
-      font-size: var(--fs-label);
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-    }
-    /* The hub board's status→color scheme, keyed by tone: live work amber,
-     * human-blocked red, human-waiting amber-hi, landed green, spawning cyan,
-     * spent rows dim. */
-    .st[data-tone='running'] {
-      color: var(--amber);
-    }
-    .st[data-tone='stale'],
-    .st[data-tone='needs'] {
-      color: var(--red);
-    }
-    .st[data-tone='waiting'] {
-      color: var(--amber-hi);
-    }
-    .st[data-tone='takeover'] {
-      color: var(--amber-hi);
-    }
-    .st[data-tone='spawning'] {
-      color: var(--cyan);
-    }
-    .st[data-tone='done'] {
-      color: var(--green);
-    }
-    .st[data-tone='idle'] {
-      color: var(--label-dim);
     }
   `,
 })

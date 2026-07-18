@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, output } from '@angular/core';
 
 import { compactRef } from '../compact-ref';
+import { KitPanel } from '../kit/kit-panel';
 import { injectHubQuestionsQuery } from './questions.query';
 
 /**
@@ -22,13 +23,16 @@ import { injectHubQuestionsQuery } from './questions.query';
 @Component({
   selector: 'fleet-questions-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [KitPanel],
   template: `
-    <section class="panel" aria-label="Open questions" data-testid="questions-panel">
-      <div class="panel-head">
-        <span class="lbl">Open questions · agent asks</span>
-        <span class="lbl" data-testid="questions-count">{{ questions().length || '' }}</span>
-      </div>
-      <div class="panel-body">
+    <fleet-kit-panel
+      class="fill"
+      aria-label="Open questions"
+      data-testid="questions-panel"
+      label="Open questions · agent asks"
+      [count]="questions().length || null"
+      countTestid="questions-count"
+    >
         @if (questions().length === 0) {
           <p class="none" data-testid="questions-empty">NO OPEN QUESTIONS</p>
         } @else {
@@ -52,8 +56,7 @@ import { injectHubQuestionsQuery } from './questions.query';
             </button>
           }
         }
-      </div>
-    </section>
+    </fleet-kit-panel>
   `,
   styles: `
     :host {
@@ -66,36 +69,8 @@ import { injectHubQuestionsQuery } from './questions.query';
       font-variant-numeric: tabular-nums;
       color: var(--text);
     }
-    .panel {
-      background: linear-gradient(180deg, var(--panel) 0%, var(--panel-deep) 100%);
-      border: 1px solid var(--bezel);
-      display: flex;
-      flex-direction: column;
-      min-height: 0;
+    fleet-kit-panel.fill {
       flex: 1;
-    }
-    .panel-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      padding: 4px 8px;
-      border-bottom: 1px solid var(--line);
-      background: rgba(0, 0, 0, 0.25);
-      flex: none;
-    }
-    .lbl {
-      font-size: var(--fs-label);
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: var(--label);
-      text-shadow: 0 1px 0 rgba(0, 0, 0, 0.9);
-    }
-    .panel-body {
-      overflow-y: auto;
-      overflow-x: hidden;
-      flex: 1;
-      min-height: 0;
     }
     .qq {
       display: flex;

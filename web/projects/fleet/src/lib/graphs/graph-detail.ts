@@ -30,15 +30,15 @@ interface ResolvedEdge {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [GraphDiagram],
   template: `
-    <section class="panel graph-detail" aria-label="Graph detail" data-testid="graph-detail">
+    <section class="gd-panel graph-detail" aria-label="Graph detail" data-testid="graph-detail">
       @if (graphQuery.isPending()) {
         <p class="none" data-testid="graph-detail-loading">Loading graph…</p>
       } @else if (graphQuery.isError()) {
         <p class="none" data-testid="graph-detail-error">Unknown graph: {{ graphId() }}</p>
       } @else if (graph(); as g) {
         <div class="body" data-testid="graph-detail-body">
-          <div class="panel-head">
-            <span class="lbl">{{ g.name }}</span>
+          <div class="gd-hdr">
+            <span class="gd-lbl">{{ g.name }}</span>
             <span class="gid" data-testid="graph-detail-graph-id">{{ g.graph_id }}</span>
           </div>
           <p class="entry" data-testid="graph-detail-entry">
@@ -82,7 +82,7 @@ interface ResolvedEdge {
           </table>
 
           <div class="section" data-testid="graph-detail-edges">
-            <span class="lbl">Edges &amp; choices</span>
+            <span class="gd-lbl">Edges &amp; choices</span>
             @for (node of nodes(); track node.node_id) {
               @if (resolvedEdges(node).length > 0) {
                 <div class="node-edges" data-testid="graph-detail-node-edges" [attr.data-node-id]="node.node_id">
@@ -107,7 +107,7 @@ interface ResolvedEdge {
           </div>
 
           <div class="section" data-testid="graph-detail-prompts">
-            <span class="lbl">Prompts</span>
+            <span class="gd-lbl">Prompts</span>
             @for (node of nodes(); track node.node_id) {
               @if (node.prompt) {
                 <div class="prompt-block" data-testid="graph-detail-prompt" [attr.data-node-id]="node.node_id">
@@ -130,13 +130,13 @@ interface ResolvedEdge {
       font-size: var(--fs-base);
       color: var(--text);
     }
-    .lbl {
+    .gd-lbl {
       font-size: var(--fs-label);
       letter-spacing: 0.18em;
       text-transform: uppercase;
       color: var(--label);
     }
-    .panel {
+    .gd-panel {
       background: linear-gradient(180deg, var(--panel) 0%, var(--panel-deep) 100%);
       border: 1px solid var(--bezel);
       min-height: 0;
@@ -146,14 +146,14 @@ interface ResolvedEdge {
       font-size: var(--fs-xs);
       padding: 6px 8px;
     }
-    .panel-head {
+    .gd-hdr {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 8px;
       padding: 4px 8px;
       border-bottom: 1px solid var(--line);
-      background: rgba(0, 0, 0, 0.25);
+      background: var(--overlay-25);
     }
     .gid {
       color: var(--label-dim);
@@ -189,7 +189,7 @@ interface ResolvedEdge {
       color: var(--label);
       text-transform: uppercase;
       letter-spacing: 0.08em;
-      background: rgba(0, 0, 0, 0.25);
+      background: var(--overlay-25);
     }
     .nid {
       color: var(--cyan);

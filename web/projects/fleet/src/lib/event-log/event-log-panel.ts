@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 
+import { KitPanel } from '../kit/kit-panel';
 import { FleetLiveUpdates, type LoggedEvent } from '../sse/fleet-live';
 
 /** One rendered Event log row — the logged frame plus its display strings. */
@@ -62,12 +63,16 @@ function summarize(event: LoggedEvent): string {
 @Component({
   selector: 'fleet-event-log-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [KitPanel],
   template: `
-    <section class="panel log-panel" aria-label="Event log" data-testid="event-log-panel">
-      <div class="panel-head">
-        <span class="lbl">Event log</span>
-        <span class="lbl" data-testid="event-log-count">{{ rows().length }} ev</span>
-      </div>
+    <fleet-kit-panel
+      class="fill"
+      aria-label="Event log"
+      data-testid="event-log-panel"
+      label="Event log"
+      [count]="rows().length + ' ev'"
+      countTestid="event-log-count"
+    >
       @if (rows().length === 0) {
         <p class="none" data-testid="event-log-empty">No events yet.</p>
       } @else {
@@ -80,7 +85,7 @@ function summarize(event: LoggedEvent): string {
           }
         </div>
       }
-    </section>
+    </fleet-kit-panel>
   `,
   styles: `
     :host {
@@ -92,29 +97,8 @@ function summarize(event: LoggedEvent): string {
       font-variant-numeric: tabular-nums;
       color: var(--text);
     }
-    .lbl {
-      font-size: var(--fs-label);
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: var(--label);
-    }
-    .panel {
-      background: linear-gradient(180deg, var(--panel) 0%, var(--panel-deep) 100%);
-      border: 1px solid var(--bezel);
-      display: flex;
-      flex-direction: column;
-      min-height: 0;
+    fleet-kit-panel.fill {
       flex: 1;
-    }
-    .panel-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      padding: 4px 8px;
-      border-bottom: 1px solid var(--line);
-      background: rgba(0, 0, 0, 0.25);
-      flex: none;
     }
     .none {
       color: var(--label-dim);

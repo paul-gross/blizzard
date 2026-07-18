@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
+import { KitAsyncState, type KitAsyncStateValue } from 'fleet';
 
 import { ageMs, formatAge } from './age';
 import { injectRunnerStatusQuery } from './status.query';
@@ -19,38 +20,37 @@ import { injectRunnerStatusQuery } from './status.query';
 @Component({
   selector: 'fleet-local-info',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [KitAsyncState],
   template: `
     <div class="wrap" data-testid="local-info">
-      @if (query.isPending()) {
-        <p class="status">LOADING…</p>
-      } @else if (query.isError()) {
-        <p class="status error">RUNNER STATUS UNAVAILABLE</p>
-      } @else if (view(); as v) {
-        <dl class="kv">
-          <dt>endpoint</dt>
-          <dd class="path" data-testid="hub-endpoint">{{ v.hub.endpoint }}</dd>
-          <dt>link</dt>
-          <dd>
-            <span class="link" [class.up]="v.hub.reachable" [class.down]="!v.hub.reachable" data-testid="hub-link">
-              {{ v.hub.reachable ? 'CONNECTED' : 'UNREACHABLE' }}
-            </span>
-          </dd>
-          <dt>last flush</dt>
-          <dd data-testid="hub-last-flush">{{ lastFlushLabel() }}</dd>
-          <dt>buffered</dt>
-          <dd data-testid="hub-buffered">{{ v.hub.buffer_depth }} events</dd>
-          <dt>agents</dt>
-          <dd>{{ v.capacities.used }}/{{ v.capacities.max_agents }} slots</dd>
-          <dt>loop</dt>
-          <dd>
-            <span [class.paused]="v.pause.effective">{{ v.pause.effective ? 'PAUSED' : 'FILLING' }}</span>
-            <small class="tick">· tick {{ lastTickLabel() }}</small>
-          </dd>
-        </dl>
-        <a class="board-link" [href]="v.hub.endpoint" target="_blank" rel="noopener" data-testid="board-link">
-          open fleet board — hub serving →
-        </a>
-      }
+      <fleet-kit-async-state [state]="triadState()" loadingText="LOADING…" errorText="RUNNER STATUS UNAVAILABLE">
+        @if (view(); as v) {
+          <dl class="kv">
+            <dt>endpoint</dt>
+            <dd class="path" data-testid="hub-endpoint">{{ v.hub.endpoint }}</dd>
+            <dt>link</dt>
+            <dd>
+              <span class="link" [class.up]="v.hub.reachable" [class.down]="!v.hub.reachable" data-testid="hub-link">
+                {{ v.hub.reachable ? 'CONNECTED' : 'UNREACHABLE' }}
+              </span>
+            </dd>
+            <dt>last flush</dt>
+            <dd data-testid="hub-last-flush">{{ lastFlushLabel() }}</dd>
+            <dt>buffered</dt>
+            <dd data-testid="hub-buffered">{{ v.hub.buffer_depth }} events</dd>
+            <dt>agents</dt>
+            <dd>{{ v.capacities.used }}/{{ v.capacities.max_agents }} slots</dd>
+            <dt>loop</dt>
+            <dd>
+              <span [class.paused]="v.pause.effective">{{ v.pause.effective ? 'PAUSED' : 'FILLING' }}</span>
+              <small class="tick">· tick {{ lastTickLabel() }}</small>
+            </dd>
+          </dl>
+          <a class="board-link" [href]="v.hub.endpoint" target="_blank" rel="noopener" data-testid="board-link">
+            open fleet board — hub serving →
+          </a>
+        }
+      </fleet-kit-async-state>
     </div>
   `,
   styles: `
@@ -63,19 +63,6 @@ import { injectRunnerStatusQuery } from './status.query';
       position: relative;
       min-height: 60px;
       padding: 6px 8px;
-    }
-    .status {
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      white-space: nowrap;
-      color: var(--label-dim);
-      font-size: var(--fs-xs);
-      letter-spacing: 0.12em;
-    }
-    .status.error {
-      color: var(--red);
     }
     .kv {
       display: grid;
@@ -136,6 +123,15 @@ export class LocalInfo {
     // A malformed body (e.g. `{}` from a misrouted proxy) must render the
     // degraded state, not throw on `hub.endpoint` mid-template.
     return data?.hub && data.capacities && data.pause ? data : null;
+  });
+
+  /** The async triad's resolved state — no `'empty'` case: a resolved read
+   * with a malformed body renders nothing (the `view()` null-guard in the
+   * projected content), the same degraded-blank behavior as before. */
+  protected readonly triadState = computed<KitAsyncStateValue>(() => {
+    if (this.query.isPending()) return 'loading';
+    if (this.query.isError()) return 'error';
+    return 'ready';
   });
 
   /** `-34s` since the last successful PULL, or `never` before first contact. */

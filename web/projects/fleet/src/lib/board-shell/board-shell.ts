@@ -4,6 +4,7 @@ import type { ChunkStatus, ChunkSummary } from '../api/hub';
 import { compactRef } from '../compact-ref';
 import { LANES, STATUS_LANE } from '../chunk-lanes';
 import { formatCost } from '../cost-format';
+import { KitPanel } from '../kit/kit-panel';
 
 /** One rendered board card — the derived-status view of a chunk. */
 export interface BoardCard {
@@ -37,18 +38,20 @@ export interface BoardCard {
 @Component({
   selector: 'fleet-board-shell',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [KitPanel],
   template: `
     <div class="mc" data-testid="board-shell">
-      <section class="panel board-panel" aria-label="Chunk board">
-        <div class="panel-head">
-          <span class="lbl">Chunk board · workflow build → review → deliver</span>
-          <span class="lbl">graph: default</span>
-        </div>
+      <fleet-kit-panel
+        class="board-panel"
+        aria-label="Chunk board"
+        label="Chunk board · workflow build → review → deliver"
+      >
+        <span header class="col-lbl">graph: default</span>
         <div class="board" data-testid="board">
           @for (col of columns; track col.key) {
             <div class="b-col" [attr.data-col]="col.key">
               <div class="b-col-head">
-                <span class="lbl">{{ col.label }}</span>
+                <span class="col-lbl">{{ col.label }}</span>
                 <span class="n">
                   <!-- A live lane with occupants announces itself: a flashing square
                        ahead of the count — amber for work in flight or parked on a
@@ -117,7 +120,7 @@ export interface BoardCard {
         @if (total() === 0) {
           <p class="empty" data-testid="empty-state">NO CHUNKS — FLEET IDLE</p>
         }
-      </section>
+      </fleet-kit-panel>
     </div>
   `,
   styles: `
@@ -136,33 +139,23 @@ export interface BoardCard {
       height: 100%;
       min-height: 0;
     }
-    .lbl {
+    /* The board's own engraved labels: the second panel-head span (projected into
+       the kit panel's header slot) and every column's header label. Content
+       projected into a child component keeps *this* component's style scope
+       (Angular content projection doesn't move a node into the child's
+       encapsulation), so this is a local rule, not a re-typed copy of the kit
+       panel's own label chrome — same look, kept separate from the retired
+       chrome class names so the structural gate stays honest. */
+    .col-lbl {
       font-size: var(--fs-label);
       letter-spacing: 0.18em;
       text-transform: uppercase;
       color: var(--label);
-      text-shadow: 0 1px 0 rgba(0, 0, 0, 0.9);
+      text-shadow: 0 1px 0 var(--overlay-90);
     }
-    .panel {
-      background: linear-gradient(180deg, var(--panel) 0%, var(--panel-deep) 100%);
-      border: 1px solid var(--bezel);
-      display: flex;
-      flex-direction: column;
-      min-height: 0;
-    }
-    .board-panel {
+    fleet-kit-panel.board-panel {
       flex: 1;
       position: relative;
-    }
-    .panel-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      padding: 4px 8px;
-      border-bottom: 1px solid var(--line);
-      background: rgba(0, 0, 0, 0.25);
-      flex: none;
     }
     .board {
       display: grid;
@@ -239,7 +232,7 @@ export interface BoardCard {
     /* The NOT READY backlog column reads as held/inert: a muted header label and a
        dim card accent, distinct from the ready queue in the rail and from any live
        lane. Colors come from tokens, never hard-coded hex. */
-    .b-col[data-col='notready'] .b-col-head .lbl {
+    .b-col[data-col='notready'] .b-col-head .col-lbl {
       color: var(--label-dim);
     }
     .card[data-status='not_ready'] {
@@ -274,7 +267,7 @@ export interface BoardCard {
       box-sizing: border-box;
       border: 1px solid var(--line);
       border-left: 3px solid var(--amber);
-      background: rgba(0, 0, 0, 0.25);
+      background: var(--overlay-25);
       padding: 4px 6px;
       display: flex;
       flex-direction: column;
@@ -291,7 +284,7 @@ export interface BoardCard {
     .card.selected {
       outline: 1px solid var(--cyan);
       outline-offset: -1px;
-      background: color-mix(in srgb, var(--cyan) 8%, rgba(0, 0, 0, 0.25));
+      background: color-mix(in srgb, var(--cyan) 8%, var(--overlay-25));
     }
     .card-open {
       border: 0;

@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
-import { compactRef, type runnerApi } from 'fleet';
+import { compactRef, KitAsyncState, type KitAsyncStateValue, type runnerApi } from 'fleet';
 
 import { injectRunnerFactsQuery } from './status.query';
 
@@ -13,15 +13,16 @@ import { injectRunnerFactsQuery } from './status.query';
 @Component({
   selector: 'fleet-fact-log',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [KitAsyncState],
   template: `
     <div class="wrap" data-testid="fact-log">
-      @if (query.isPending()) {
-        <p class="status">LOADING…</p>
-      } @else if (query.isError()) {
-        <p class="status error">FACT LOG UNAVAILABLE</p>
-      } @else if (facts().length === 0) {
-        <p class="status" data-testid="facts-empty">NO FACTS RECORDED YET</p>
-      } @else {
+      <fleet-kit-async-state
+        [state]="triadState()"
+        loadingText="LOADING…"
+        errorText="FACT LOG UNAVAILABLE"
+        emptyText="NO FACTS RECORDED YET"
+        emptyTestid="facts-empty"
+      >
         @for (fact of facts(); track fact.seq) {
           <div class="ev" data-testid="fact-row" [attr.data-seq]="fact.seq">
             <span class="t">{{ timeLabel(fact) }}</span>
@@ -39,7 +40,7 @@ import { injectRunnerFactsQuery } from './status.query';
             </span>
           </div>
         }
-      }
+      </fleet-kit-async-state>
     </div>
   `,
   styles: `
@@ -51,19 +52,6 @@ import { injectRunnerFactsQuery } from './status.query';
     .wrap {
       position: relative;
       min-height: 40px;
-    }
-    .status {
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      white-space: nowrap;
-      color: var(--label-dim);
-      font-size: var(--fs-xs);
-      letter-spacing: 0.12em;
-    }
-    .status.error {
-      color: var(--red);
     }
     .ev {
       display: flex;
@@ -106,6 +94,14 @@ export class FactLog {
   protected readonly query = injectRunnerFactsQuery();
 
   protected readonly facts = computed(() => this.query.data() ?? []);
+
+  /** The async triad's resolved state — loading/error take precedence, then
+   * an empty ledger, else the fact rows render. */
+  protected readonly triadState = computed<KitAsyncStateValue>(() => {
+    if (this.query.isPending()) return 'loading';
+    if (this.query.isError()) return 'error';
+    return this.facts().length === 0 ? 'empty' : 'ready';
+  });
 
   protected ref(id: string): string {
     return compactRef(id);

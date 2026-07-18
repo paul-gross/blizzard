@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
-import type { runnerApi } from 'fleet';
+import { KitAsyncState, type runnerApi } from 'fleet';
 
 import { injectTranscriptQuery } from './transcript.query';
 
@@ -58,28 +58,40 @@ function formatTurnTimestamp(iso: string | null): string {
 @Component({
   selector: 'fleet-transcript-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [KitAsyncState],
   template: `
     @if (leaseId() === null) {
-      <p class="status" data-testid="transcript-empty">SELECT AN AGENT</p>
+      <fleet-kit-async-state state="empty" emptyText="SELECT AN AGENT" emptyTestid="transcript-empty" />
     } @else if (transcriptQuery.isPending()) {
-      <p class="status" data-testid="transcript-loading">LOADING TRANSCRIPT…</p>
+      <fleet-kit-async-state state="loading" loadingText="LOADING TRANSCRIPT…" loadingTestid="transcript-loading" />
     } @else if (transcriptQuery.isError()) {
-      <p class="status error" data-testid="transcript-error">TRANSCRIPT UNAVAILABLE — RUNNER LOCAL API UNREACHABLE</p>
+      <fleet-kit-async-state
+        state="error"
+        errorText="TRANSCRIPT UNAVAILABLE — RUNNER LOCAL API UNREACHABLE"
+        errorTestid="transcript-error"
+      />
     } @else if (!transcript()?.available) {
       @switch (transcript()?.reason) {
         @case ('spawning') {
-          <p class="status spawning" data-testid="transcript-spawning">NO TRANSCRIPT YET — AGENT STARTING</p>
+          <fleet-kit-async-state
+            state="empty"
+            tone="accent"
+            emptyText="NO TRANSCRIPT YET — AGENT STARTING"
+            emptyTestid="transcript-spawning"
+          />
         }
         @case ('unreadable') {
-          <p class="status error" data-testid="transcript-unreadable">TRANSCRIPT UNREADABLE</p>
+          <fleet-kit-async-state state="error" errorText="TRANSCRIPT UNREADABLE" errorTestid="transcript-unreadable" />
         }
         @case ('not_found') {
-          <p class="status" data-testid="transcript-not-found">
-            NO TRANSCRIPT ON DISK · SESSION {{ transcript()?.session_id ?? '—' }}
-          </p>
+          <fleet-kit-async-state
+            state="empty"
+            [emptyText]="'NO TRANSCRIPT ON DISK · SESSION ' + (transcript()?.session_id ?? '—')"
+            emptyTestid="transcript-not-found"
+          />
         }
         @default {
-          <p class="status" data-testid="transcript-unknown">TRANSCRIPT STATE UNKNOWN</p>
+          <fleet-kit-async-state state="empty" emptyText="TRANSCRIPT STATE UNKNOWN" emptyTestid="transcript-unknown" />
         }
       }
     } @else {
@@ -128,29 +140,13 @@ function formatTurnTimestamp(iso: string | null): string {
       font-size: var(--fs-base);
       font-variant-numeric: tabular-nums;
     }
-    .status {
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      white-space: nowrap;
-      color: var(--label-dim);
-      font-size: var(--fs-sm);
-      letter-spacing: 0.12em;
-    }
-    .status.error {
-      color: var(--red);
-    }
-    .status.spawning {
-      color: var(--cyan);
-    }
     .banner {
       color: var(--amber-hi);
       font-size: var(--fs-sm);
       letter-spacing: 0.1em;
       padding: 5px 8px;
       border-bottom: 1px solid var(--line);
-      background: rgba(0, 0, 0, 0.25);
+      background: var(--overlay-25);
     }
     .turns {
       padding: 4px 0 12px;
@@ -228,7 +224,7 @@ function formatTurnTimestamp(iso: string | null): string {
     .tool-call {
       border: 1px solid var(--line);
       border-left: 2px solid var(--green-dim);
-      background: rgba(0, 0, 0, 0.3);
+      background: var(--overlay-30);
       padding: 2px 6px;
     }
     .tool-call .tc-head {

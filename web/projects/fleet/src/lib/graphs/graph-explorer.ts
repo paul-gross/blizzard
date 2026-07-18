@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 
 import type { GraphSummaryView } from '../api/hub';
+import { KitPanel } from '../kit/kit-panel';
 import { injectHubGraphsQuery } from './graphs.query';
 
 /** One graph name's lineage, grouped client-side from the flat `GraphSummaryView[]`
@@ -28,11 +29,9 @@ interface GraphGroup {
 @Component({
   selector: 'fleet-graph-explorer',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [KitPanel],
   template: `
-    <section class="panel graph-explorer" aria-label="Graphs" data-testid="graph-explorer">
-      <div class="panel-head">
-        <span class="lbl">Graphs · by name</span>
-      </div>
+    <fleet-kit-panel class="graph-explorer" aria-label="Graphs" data-testid="graph-explorer" label="Graphs · by name">
       @if (graphsQuery.isPending()) {
         <p class="none" data-testid="graph-explorer-loading">Loading graphs…</p>
       } @else if (graphsQuery.isError()) {
@@ -87,7 +86,7 @@ interface GraphGroup {
           }
         </ul>
       }
-    </section>
+    </fleet-kit-panel>
   `,
   styles: `
     :host {
@@ -95,27 +94,6 @@ interface GraphGroup {
       font-family: var(--mono);
       font-size: var(--fs-base);
       color: var(--text);
-    }
-    .lbl {
-      font-size: var(--fs-label);
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: var(--label);
-    }
-    .panel {
-      background: linear-gradient(180deg, var(--panel) 0%, var(--panel-deep) 100%);
-      border: 1px solid var(--bezel);
-      display: flex;
-      flex-direction: column;
-      min-height: 0;
-    }
-    .panel-head {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 4px 8px;
-      border-bottom: 1px solid var(--line);
-      background: rgba(0, 0, 0, 0.25);
     }
     .none {
       color: var(--label-dim);
@@ -139,7 +117,7 @@ interface GraphGroup {
       gap: 8px;
       padding: 3px 6px;
       border: 1px solid var(--line);
-      background: rgba(0, 0, 0, 0.2);
+      background: var(--overlay-20);
       color: var(--text);
       font-family: inherit;
       font-size: var(--fs-sm);

@@ -88,7 +88,7 @@ describe('QuestionsPanel', () => {
 
     expect(el.querySelector('[data-testid="questions-empty"]')).not.toBeNull();
     expect(el.querySelectorAll('[data-testid="rail-question"]')).toHaveLength(0);
-    // The count badge stays blank rather than printing a bare 0 beside "open questions".
-    expect(el.querySelector('[data-testid="questions-count"]')?.textContent?.trim()).toBe('');
+    // The count badge is omitted entirely rather than printing a bare 0 beside "open questions".
+    expect(el.querySelector('[data-testid="questions-count"]')).toBeNull();
   });
 });

@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
 
 import type { QueuePeekEntry } from '../api/hub';
+import { KitButton } from '../kit/kit-button';
+import { KitPanel } from '../kit/kit-panel';
 import { injectHubQueueQuery } from './queue.query';
 import { injectGroupChunksMutation, injectReorderQueueMutation } from './queue.mutations';
 
@@ -20,20 +22,18 @@ import { injectGroupChunksMutation, injectReorderQueueMutation } from './queue.m
 @Component({
   selector: 'fleet-queue-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [KitButton, KitPanel],
   template: `
-    <section class="panel queue-panel" aria-label="Ready queue" data-testid="queue-panel">
-      <div class="panel-head">
-        <span class="lbl">Ready queue · prioritize + group</span>
-        <button
-          type="button"
-          class="act primary"
-          data-testid="group-selected"
-          [disabled]="selectedIds().length < 2"
-          (click)="groupSelected()"
-        >
-          Group ({{ selectedIds().length }})
-        </button>
-      </div>
+    <fleet-kit-panel class="queue-panel" aria-label="Ready queue" data-testid="queue-panel" label="Ready queue · prioritize + group">
+      <fleet-kit-button
+        header
+        variant="primary"
+        testid="group-selected"
+        [disabled]="selectedIds().length < 2"
+        (click)="groupSelected()"
+      >
+        Group ({{ selectedIds().length }})
+      </fleet-kit-button>
       @if (entries().length === 0) {
         <p class="none" data-testid="queue-empty">Ready queue is empty.</p>
       } @else {
@@ -51,21 +51,19 @@ import { injectGroupChunksMutation, injectReorderQueueMutation } from './queue.m
               <span class="pos" data-testid="queue-position">{{ entry.position }}</span>
               <span class="qid" data-testid="queue-chunk-id">{{ shortId(entry.chunk_id) }}</span>
               <span class="ptr" data-testid="queue-pointer">{{ pointerLabel(entry) }}</span>
-              <button
-                type="button"
-                class="act"
-                data-testid="queue-move-top"
-                [attr.aria-label]="'Move ' + entry.chunk_id + ' to top'"
+              <fleet-kit-button
+                testid="queue-move-top"
+                [ariaLabel]="'Move ' + entry.chunk_id + ' to top'"
                 [disabled]="entry.position === 0"
                 (click)="moveToTop(entry.chunk_id)"
               >
                 Top
-              </button>
+              </fleet-kit-button>
             </li>
           }
         </ol>
       }
-    </section>
+    </fleet-kit-panel>
   `,
   styles: `
     :host {
@@ -74,47 +72,6 @@ import { injectGroupChunksMutation, injectReorderQueueMutation } from './queue.m
       font-size: var(--fs-base);
       font-variant-numeric: tabular-nums;
       color: var(--text);
-    }
-    .lbl {
-      font-size: var(--fs-label);
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: var(--label);
-    }
-    .panel {
-      background: linear-gradient(180deg, var(--panel) 0%, var(--panel-deep) 100%);
-      border: 1px solid var(--bezel);
-      display: flex;
-      flex-direction: column;
-      min-height: 0;
-    }
-    .panel-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      padding: 4px 8px;
-      border-bottom: 1px solid var(--line);
-      background: rgba(0, 0, 0, 0.25);
-    }
-    .act {
-      font-family: inherit;
-      background: rgba(0, 0, 0, 0.3);
-      border: 1px solid var(--line);
-      color: var(--text);
-      cursor: pointer;
-      padding: 2px 7px;
-      font-size: var(--fs-xs);
-    }
-    .act.primary {
-      color: var(--cyan);
-    }
-    .act:hover:not(:disabled) {
-      border-color: var(--cyan);
-    }
-    .act:disabled {
-      opacity: 0.4;
-      cursor: default;
     }
     .none {
       color: var(--label-dim);
@@ -137,7 +94,7 @@ import { injectGroupChunksMutation, injectReorderQueueMutation } from './queue.m
       gap: 8px;
       padding: 3px 6px;
       border: 1px solid var(--line);
-      background: rgba(0, 0, 0, 0.2);
+      background: var(--overlay-20);
     }
     .pos {
       color: var(--label-dim);

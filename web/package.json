@@ -7,6 +7,7 @@
     "start:runner": "ng serve runner",
     "lint": "ng lint",
     "test": "ng test hub && ng test runner && ng test fleet && ng test local-panel",
+    "structural-gate": "node scripts/structural-gate.js",
     "build": "npm run build:hub && npm run build:runner",
     "build:hub": "ng build hub",
     "build:runner": "ng build runner",

@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
-import { compactRef, type runnerApi } from 'fleet';
+import { compactRef, KitAsyncState, type KitAsyncStateValue, type runnerApi } from 'fleet';
 
 import { ageMs, formatHeldFor } from './age';
 import { injectRunnerAsksQuery } from './status.query';
@@ -13,15 +13,16 @@ import { injectRunnerAsksQuery } from './status.query';
 @Component({
   selector: 'fleet-local-asks',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [KitAsyncState],
   template: `
     <div class="wrap" data-testid="local-asks">
-      @if (query.isPending()) {
-        <p class="status">LOADING…</p>
-      } @else if (query.isError()) {
-        <p class="status error">ASKS UNAVAILABLE</p>
-      } @else if (asks().length === 0) {
-        <p class="status" data-testid="asks-empty">NO OPEN ASKS ON THIS MACHINE</p>
-      } @else {
+      <fleet-kit-async-state
+        [state]="triadState()"
+        loadingText="LOADING…"
+        errorText="ASKS UNAVAILABLE"
+        emptyText="NO OPEN ASKS ON THIS MACHINE"
+        emptyTestid="asks-empty"
+      >
         @for (ask of asks(); track ask.question_id) {
           <div class="ask" data-testid="ask-row" [attr.data-question-id]="ask.question_id">
             <div class="a-hdr">
@@ -32,7 +33,7 @@ import { injectRunnerAsksQuery } from './status.query';
             <div class="route">answer is a hub write → <code>blizzard hub answer</code> or the fleet board</div>
           </div>
         }
-      }
+      </fleet-kit-async-state>
     </div>
   `,
   styles: `
@@ -44,19 +45,6 @@ import { injectRunnerAsksQuery } from './status.query';
     .wrap {
       position: relative;
       min-height: 40px;
-    }
-    .status {
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      white-space: nowrap;
-      color: var(--label-dim);
-      font-size: var(--fs-xs);
-      letter-spacing: 0.12em;
-    }
-    .status.error {
-      color: var(--red);
     }
     .ask {
       padding: 6px 8px;
@@ -95,6 +83,14 @@ export class LocalAsks {
   protected readonly query = injectRunnerAsksQuery();
 
   protected readonly asks = computed(() => this.query.data() ?? []);
+
+  /** The async triad's resolved state — loading/error take precedence, then
+   * no open asks, else the ask rows render. */
+  protected readonly triadState = computed<KitAsyncStateValue>(() => {
+    if (this.query.isPending()) return 'loading';
+    if (this.query.isError()) return 'error';
+    return this.asks().length === 0 ? 'empty' : 'ready';
+  });
 
   protected chunkRef(ask: runnerApi.AskView): string {
     return compactRef(ask.chunk_id);

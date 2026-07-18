@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 import type { RunnerView } from '../api/hub';
 import { compactRef } from '../compact-ref';
 import { injectHubChunksQuery } from '../chunks/chunks.query';
+import { KitPanel } from '../kit/kit-panel';
 import { injectHubRunnersQuery } from './runners.query';
 import { injectRunnerPauseMutation } from './runners.mutations';
 
@@ -27,17 +28,19 @@ interface ClaimLine {
 @Component({
   selector: 'fleet-runner-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [KitPanel],
   template: `
-    <section class="panel" aria-label="Runner registry" data-testid="runner-panel">
-      <div class="panel-head">
-        <span class="lbl">Runners · fleet registry</span>
-        <span class="lbl" data-testid="runners-count">{{ runners().length || '' }}</span>
-      </div>
-      <div class="panel-body">
-        @if (runners().length === 0) {
-          <p class="none" data-testid="runners-empty">NO RUNNERS REGISTERED</p>
-        } @else {
-          <ul class="runners" data-testid="runner-list">
+    <fleet-kit-panel
+      aria-label="Runner registry"
+      data-testid="runner-panel"
+      label="Runners · fleet registry"
+      [count]="runners().length || null"
+      countTestid="runners-count"
+    >
+      @if (runners().length === 0) {
+        <p class="none" data-testid="runners-empty">NO RUNNERS REGISTERED</p>
+      } @else {
+        <ul class="runners" data-testid="runner-list">
             @for (runner of runners(); track runner.runner_id) {
               <li
                 class="runner"
@@ -111,8 +114,7 @@ interface ClaimLine {
             }
           </ul>
         }
-      </div>
-    </section>
+    </fleet-kit-panel>
   `,
   styles: `
     :host {
@@ -124,35 +126,6 @@ interface ClaimLine {
       font-size: var(--fs-base);
       font-variant-numeric: tabular-nums;
       color: var(--text);
-    }
-    .panel {
-      background: linear-gradient(180deg, var(--panel) 0%, var(--panel-deep) 100%);
-      border: 1px solid var(--bezel);
-      display: flex;
-      flex-direction: column;
-      min-height: 0;
-    }
-    .panel-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      padding: 4px 8px;
-      border-bottom: 1px solid var(--line);
-      background: rgba(0, 0, 0, 0.25);
-      flex: none;
-    }
-    .lbl {
-      font-size: var(--fs-label);
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: var(--label);
-      text-shadow: 0 1px 0 rgba(0, 0, 0, 0.9);
-    }
-    .panel-body {
-      overflow-y: auto;
-      overflow-x: hidden;
-      min-height: 0;
     }
     .none {
       color: var(--label-dim);
