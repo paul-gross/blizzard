@@ -18,6 +18,7 @@ from typing import Any, cast
 import pytest
 
 from blizzard.hub.domain.edit import ChunkNotEditable, EditService
+from blizzard.hub.domain.graph import RESERVED_TERMINAL, Executor
 from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
@@ -26,6 +27,7 @@ from blizzard.hub.domain.work import (
     IWriteChunkRepository,
     QuestionFact,
     RouteCreatedFact,
+    TransitionFact,
 )
 from tests.support import make_graph
 
@@ -101,7 +103,13 @@ def _stopped_facts() -> ChunkFacts:
 
 
 def _done_facts() -> ChunkFacts:
-    return ChunkFacts(minted=True, delivery_landed=True)
+    return ChunkFacts(
+        minted=True,
+        delivery_landed=True,
+        transitions=[
+            TransitionFact(to_node_id=RESERVED_TERMINAL, to_node_executor=Executor.HUB, epoch=1, recorded_at=_T0),
+        ],
+    )
 
 
 def test_set_graph_writes_on_a_not_ready_chunk() -> None:

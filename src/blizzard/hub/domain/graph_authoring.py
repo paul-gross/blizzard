@@ -24,6 +24,7 @@ from blizzard.hub.domain.graph import (
     IWriteGraphRepository,
     JudgedBy,
     Node,
+    RunStep,
 )
 from blizzard.hub.domain.graph_validation import ValidationResult, validate_graph
 
@@ -41,9 +42,10 @@ def reify_graph(doc: GraphDoc, clock: IClock) -> Graph:
 
     Ids are minted here — one graph id, a node id per node, a choice id per choice —
     and the fused choice/edge entries split into reified :class:`Choice` objects on
-    the node and directed :class:`Edge` objects keyed by choice id. A hub node that
-    omits its judgement carries no choices and no edges; its machinery outcomes are
-    applied by the coordinator, not stored as edges.
+    the node and directed :class:`Edge` objects keyed by choice id. Since #67 every
+    hub node authors its own judgement, exactly like a worker node's — no node name
+    is privileged, so there is no machinery-outcome fallback left to apply outside
+    the reified edges.
     """
     graph_id = mint(GRAPH_PREFIX, clock)
     node_ids = {node.name: mint(NODE_PREFIX, clock) for node in doc.nodes}
@@ -81,6 +83,10 @@ def reify_graph(doc: GraphDoc, clock: IClock) -> Graph:
                 mode=nd.mode,
                 judgement_prompt=nd.judgement.prompt if nd.judgement is not None else None,
                 choices=choices,
+                bounce_cap=nd.bounce_cap,
+                run=[RunStep(command=r.command, name=r.name, produces=r.produces) for r in nd.run],
+                poll_interval_seconds=nd.poll_interval_seconds,
+                poll_timeout_seconds=nd.poll_timeout_seconds,
             )
         )
     return Graph(

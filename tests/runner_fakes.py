@@ -33,7 +33,7 @@ from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStor
 from blizzard.runner.store.repository import IWriteRunnerStore
 from blizzard.runner.store.schema import metadata as runner_metadata
 from blizzard.runner.transcripts.repository import Transcript
-from blizzard.wire.chunk import ChunkDetail, RouteView
+from blizzard.wire.chunk import ChunkDetail, HubAdvanceResponse, RouteView
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeConfig, NodeEnvelope
@@ -92,6 +92,8 @@ class FakeHub:
         self.paused = False  # the hub-side pause brake this fake reports back
         self.down = False
         self.not_found: set[str] = set()  # chunk ids `get_chunk`/`get_envelope` 404 for (blizzard#9)
+        self.hub_advance_calls: list[str] = []  # chunk ids `hub_advance` was called for (#66)
+        self.hub_advance_responses: dict[str, HubAdvanceResponse] = {}
 
     def peek_queue(self) -> QueuePeekResponse:
         return QueuePeekResponse(entries=list(self.queue))
@@ -156,6 +158,16 @@ class FakeHub:
             latest_epoch=1,
             model=DEFAULT_MODEL,
             route=RouteView(runner_id=self.default_runner_id, workspace_id="ws1", environment_ids=[]),
+        )
+
+    def hub_advance(self, chunk_id: str) -> HubAdvanceResponse:
+        if self.down:
+            raise HubClientError("fake hub is down")
+        self.hub_advance_calls.append(chunk_id)
+        if chunk_id in self.hub_advance_responses:
+            return self.hub_advance_responses[chunk_id]
+        return HubAdvanceResponse(
+            chunk_id=chunk_id, status=ChunkStatus.DELIVERING, ran=False, detail="scripted default"
         )
 
     def get_question(self, question_id: str) -> QuestionView:

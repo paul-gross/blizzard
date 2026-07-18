@@ -12,11 +12,13 @@ One chunk travels a **spike** node whose worker does read-only investigation (no
 so nothing is pushed and ``_push_and_collect_artifacts`` yields no git-commit artifact)
 and ``produces`` a ``spike-notes`` **asset**, whose content is the worker's judgement
 assessment — the text after ``</Choice>``. The spike routes into the hub
-**deliver** node exactly as a code chunk does; because the chunk carries *no* git-commit
-pointers, the merge-queue coordinator lands nothing — it opens no PR and moves no ``main``
-— yet still writes the terminal ``delivery.landed`` fact, so the chunk derives ``done``
-carrying only its asset (``hub/delivery/coordinator.py``: an empty ``pointers`` list
-skips straight to ``_landed``). The assertions pin the criterion at all three truths:
+**deliver** node exactly as a code chunk does — the same packaged
+``land_default.py`` script (#67) every other e2e scenario's delivery runs; because the
+chunk carries *no* git-commit pointers, ``BZ_HUB_GIT_COMMITS`` is an empty list, so the
+script's own pending-repo loop is empty and it prints ``landed`` immediately, opening no
+PR and moving no ``main`` — yet the ``landed -> done`` edge still finalizes the chunk, so
+it derives ``done`` carrying only its asset. The assertions pin the criterion at all
+three truths:
 
 * **fleet truth** — the hub derives the chunk ``done`` (an empty delivery still lands);
 * **hub-durable artifacts** — the chunk detail exposes exactly one artifact, the
@@ -104,7 +106,16 @@ def _graph_yaml() -> str:
                 },
                 "retries": {"max": 1, "exhausted": "escalate"},
             },
-            "deliver": {"executor": "hub", "mode": "merge-to-main"},
+            "deliver": {
+                "executor": "hub",
+                "run": [{"command": "python3 -m blizzard.hub.graphs.scripts.land_default"}],
+                "judgement": {
+                    "choices": {
+                        "landed": {"description": "Landed.", "to": "done"},
+                        "conflict": {"description": "Conflict.", "to": "spike"},
+                    }
+                },
+            },
         },
     }
     return yaml.safe_dump(graph, sort_keys=False)
@@ -167,12 +178,12 @@ def test_spike_chunk_terminates_with_only_asset_artifacts(tmp_path: Path) -> Non
         # Fleet truth: the chunk reached the terminal (the empty deliver still lands).
         assert status == "done", f"spike chunk did not reach done (last status {status!r})"
 
-        # Hub-durable artifacts: exactly the spike-notes asset, and no git commit.
+        # Hub-durable artifacts: the spike-notes asset and the deliver hub node's own
+        # run: step log (#65's captured stdout/stderr) — no git commit, ever.
         detail = hub.get(f"/api/chunks/{chunk_id}").json()
         artifacts = detail["artifacts"]
-        assert [a["kind"] for a in artifacts] == ["asset"], f"expected a single asset artifact, got: {artifacts}"
-        note = artifacts[0]
-        assert note["name"] == "spike-notes"
+        assert {a["kind"] for a in artifacts} == {"asset"}, f"expected only asset artifacts, got: {artifacts}"
+        note = next(a for a in artifacts if a["name"] == "spike-notes")
         assert note["content"] == _SPIKE_NOTES, f"asset content is not the worker's write-up: {note['content']!r}"
         assert not [a for a in artifacts if a["kind"] == "git_commit"], f"a non-code chunk pushed a commit: {artifacts}"
 

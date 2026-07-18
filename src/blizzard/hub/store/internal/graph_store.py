@@ -26,6 +26,7 @@ from blizzard.hub.domain.graph import (
     IWriteGraphRepository,
     JudgedBy,
     Node,
+    RunStep,
     SessionMode,
 )
 from blizzard.hub.store.schema import graph_choices, graph_edges, graph_nodes, graphs
@@ -64,6 +65,10 @@ class GraphStore:
                         mode=node.mode,
                         produces=json.dumps(list(node.produces)),
                         checks=json.dumps(list(node.checks)),
+                        bounce_cap=node.bounce_cap,
+                        run=json.dumps([_run_step_to_json(r) for r in node.run]) if node.run else None,
+                        poll_interval_seconds=node.poll_interval_seconds,
+                        poll_timeout_seconds=node.poll_timeout_seconds,
                     )
                 )
                 for choice in node.choices:
@@ -131,6 +136,10 @@ class GraphStore:
                     retries_exhausted=nr.retries_exhausted,
                     mode=nr.mode,
                     judgement_prompt=nr.judgement_prompt,
+                    bounce_cap=nr.bounce_cap,
+                    run=_run_steps(nr.run),
+                    poll_interval_seconds=nr.poll_interval_seconds,
+                    poll_timeout_seconds=nr.poll_timeout_seconds,
                     choices=[
                         Choice(choice_id=c.choice_id, name=c.name, description=c.description) for c in choice_rows
                     ],
@@ -155,6 +164,19 @@ class GraphStore:
             edges=edges,
             created_at=graph_row.created_at,
         )
+
+
+def _run_step_to_json(step: RunStep) -> dict[str, str | None]:
+    return {"command": step.command, "name": step.name, "produces": step.produces}
+
+
+def _run_steps(value: str | None) -> list[RunStep]:
+    """Decode a JSON-encoded ``list[{command, name, produces}]`` ``run`` column."""
+    if not value:
+        return []
+    return [
+        RunStep(command=str(r["command"]), name=r.get("name"), produces=r.get("produces")) for r in json.loads(value)
+    ]
 
 
 def _json_list(value: str | None) -> list[str]:

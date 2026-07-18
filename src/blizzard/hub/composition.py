@@ -2,11 +2,11 @@
 
 One place the store-backed collaborators are constructed and injected: the chunk and
 graph stores, the four domain services (ingest, claim, apply, graph-mint) and the
-deliver coordinator, the PM read seam, and the event broker. :func:`build_services`
+generic hub command node executor, the PM read seam, and the event broker. :func:`build_services`
 is called by the ``host`` composition root (:func:`blizzard.hub.app.build_hosted_app`)
-and by tests, which swap the forge and PM seams for fakes by type. The store-free
-export/unit app builds no services — the fleet routes report the store is unwired
-rather than serving on a missing database.
+and by tests, which swap the PM seam for fakes by type. The store-free export/unit app
+builds no services — the fleet routes report the store is unwired rather than serving
+on a missing database.
 
 Controllers read the stores through their **read** Protocols and mutate only through
 the services (``bzh:controller-read-only``); both variants are the one
@@ -16,14 +16,18 @@ sees a consistent view.
 
 from __future__ import annotations
 
+import tempfile
 from dataclasses import dataclass
+from pathlib import Path
 
 from sqlalchemy import Engine
 
 from blizzard.foundation.clock import IClock, SystemClock
-from blizzard.hub.delivery.check import DeliveryCheckService
-from blizzard.hub.delivery.coordinator import MergeQueueCoordinator
-from blizzard.hub.delivery.forge import IForgeDelivery
+from blizzard.hub.delivery.command_runner import IHubCommandRunner
+from blizzard.hub.delivery.hub_node import HubNodeExecutor
+from blizzard.hub.delivery.internal.hub_command_runner import SubprocessHubCommandRunner
+from blizzard.hub.delivery.internal.hub_workdir import FilesystemHubWorkdir
+from blizzard.hub.delivery.workdir import IHubWorkdir
 from blizzard.hub.domain.apply import ApplyService
 from blizzard.hub.domain.claim import ClaimService
 from blizzard.hub.domain.decisions import DecisionService, RequeueService
@@ -69,7 +73,7 @@ class HubServices:
     queue: QueueService
     group: GroupService
     fleet: FleetService
-    delivery_check: DeliveryCheckService
+    hub_node: HubNodeExecutor
     events: EventBroker
     clock: IClock
     default_graph_doc: GraphDoc
@@ -80,23 +84,46 @@ class HubServices:
 def build_services(
     engine: Engine,
     *,
-    forge: IForgeDelivery,
     events: EventBroker,
     pm: IPmSourceRegistry,
     clock: IClock | None = None,
     base_branch: str = "main",
+    hub_command_runner: IHubCommandRunner | None = None,
+    hub_workdir: IHubWorkdir | None = None,
+    hub_workdir_root: Path | None = None,
+    hub_marker_callback_base_url: str = "",
+    forge_url: str | None = None,
+    forge_token: str | None = None,
+    forge_owner: str | None = None,
 ) -> HubServices:
     """Construct and wire every fleet service over a migrated store engine.
 
     ``base_branch`` is the branch every PR/merge targets — ``main`` for the
     verification forge's bare origins, set to a real repo's default (e.g. ``master``) at
-    the ``host`` composition root from ``BZ_FORGE_BASE_BRANCH``.
+    the ``host`` composition root from ``BZ_FORGE_BASE_BRANCH``. ``hub_command_runner``
+    / ``hub_workdir`` are the generic hub command node's mechanism seams (#65) — tests
+    inject fakes; the ``host`` composition root leaves them ``None`` for the real
+    subprocess/filesystem adapters, rooted under ``hub_workdir_root``. ``forge_owner``
+    is injected into a hub command node's env (``BZ_FORGE_OWNER``) so its own
+    ``run:`` script can qualify a bare (owner-less) repo the same way its own
+    ``qualify_repo`` does (e.g. ``hub/graphs/scripts/land_default.py``).
     """
     clock = clock or SystemClock()
     chunk_store = ChunkStore(engine, clock)
     graph_store = GraphStore(engine)
     registry_store = RunnerRegistryStore(engine)
-    coordinator = MergeQueueCoordinator(chunks=chunk_store, forge=forge, clock=clock, base_branch=base_branch)
+    hub_node = HubNodeExecutor(
+        chunks=chunk_store,
+        runner=hub_command_runner or SubprocessHubCommandRunner(),
+        workdir=hub_workdir
+        or FilesystemHubWorkdir(hub_workdir_root or Path(tempfile.gettempdir()) / "blizzard-hub-workdirs"),
+        clock=clock,
+        base_branch=base_branch,
+        marker_callback_base_url=hub_marker_callback_base_url,
+        forge_url=forge_url,
+        forge_token=forge_token,
+        forge_owner=forge_owner,
+    )
     # One fleet service, shared: the API's pause routes and the fact ingest both land
     # registry facts, and two instances would be two of the same thing (issue #43).
     fleet = FleetService(registry=registry_store, clock=clock)
@@ -106,7 +133,7 @@ def build_services(
         ingest=IngestService(chunks=chunk_store, clock=clock),
         promote=PromoteService(chunks=chunk_store, clock=clock),
         claim=ClaimService(chunks=chunk_store, registry=registry_store, clock=clock),
-        apply=ApplyService(chunks=chunk_store, coordinator=coordinator, clock=clock),
+        apply=ApplyService(chunks=chunk_store, clock=clock, hub_node_executor=hub_node),
         decisions=DecisionService(chunks=chunk_store, clock=clock),
         requeue=RequeueService(chunks=chunk_store, clock=clock),
         detach=DetachService(chunks=chunk_store, clock=clock),
@@ -119,7 +146,7 @@ def build_services(
         queue=QueueService(chunks=chunk_store, clock=clock),
         group=GroupService(chunks=chunk_store, clock=clock),
         fleet=fleet,
-        delivery_check=DeliveryCheckService(chunks=chunk_store, forge=forge, clock=clock),
+        hub_node=hub_node,
         events=events,
         clock=clock,
         default_graph_doc=load_default_graph_doc(),

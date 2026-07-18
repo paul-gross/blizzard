@@ -251,6 +251,28 @@ def check_hub_store(engine: Engine) -> list[Violation]:
                     Violation("hub:per-repo-land-idempotent", f"chunk {chunk_id} repo {repo} landed {n} times")
                 )
 
+        # hub:per-repo-marker-idempotent — at most one `merged/<repo>` marker artifact
+        # per (chunk, node, epoch, name): #67's generic-marker counterpart to
+        # `hub:per-repo-land-idempotent` above — a re-run skips a repo whose marker
+        # already exists (`HubNodeExecutor`/the mid-run callback), so a duplicate here
+        # means that idempotent-append guard failed to hold.
+        markers = Counter(
+            (row[0], row[1], row[2], row[3])
+            for row in conn.execute(
+                select(
+                    hub.artifacts.c.chunk_id, hub.artifacts.c.node_id, hub.artifacts.c.epoch, hub.artifacts.c.name
+                ).where(hub.artifacts.c.name.like("merged/%"))
+            )
+        )
+        for (chunk_id, node_id, epoch, name), n in markers.items():
+            if n > 1:
+                violations.append(
+                    Violation(
+                        "hub:per-repo-marker-idempotent",
+                        f"chunk {chunk_id} node {node_id} epoch {epoch} has {n} `{name}` marker artifacts",
+                    )
+                )
+
         # hub:pr-opened-idempotent — at most one pr.opened fact per (chunk, repo): a
         # racing redelivery is caught by ``uq_delivery_pr_opened_chunk_repo`` at the store
         # layer (20260716_2206_hub_pr_opened_idempotent), so a duplicate here means that guard
@@ -272,6 +294,17 @@ def check_hub_store(engine: Engine) -> list[Violation]:
                 violations.append(
                     Violation("hub:no-double-delivery", f"chunk {chunk_id} has {n} delivery.landed facts")
                 )
+
+        # hub:one-live-exec-slot — at most one hub_exec_slot row is live
+        # (``released_at IS NULL``) at a time (#65): the fleet-wide serialization slot
+        # is a FACT, not an in-process lock, precisely so this is assertable after any
+        # crash — two live slots would mean two chunks' hub command nodes could run
+        # concurrently, the exact hazard the slot exists to close.
+        live_slots = conn.execute(
+            select(func.count()).select_from(hub.hub_exec_slot).where(hub.hub_exec_slot.c.released_at.is_(None))
+        ).scalar()
+        if (live_slots or 0) > 1:
+            violations.append(Violation("hub:one-live-exec-slot", f"{live_slots} hub-execution slots are live at once"))
 
     # hub:merge-queue-single-state — a delivered chunk's newest transition is the
     # terminal, so it never reads as both landed and mid-flight (two states at once).
@@ -300,6 +333,17 @@ def _check_derivation_and_delivery(engine: Engine) -> list[Violation]:
         # ``delivery.landed`` and open-pr's ``pr.closed``. An *open* PR
         # (``pr_opened`` without ``pr_closed``) is deliberately parked — no terminal
         # transition, environments held — so it is never flagged here.
+        #
+        # This is the facts-level embodiment of #63's "DONE derives from *reaching* the
+        # terminal transition, never from a landed fact alone": a whole-chunk ``delivery.landed``
+        # fact that is not paired with the terminal transition would be a chunk merged yet
+        # not-terminal — read as both landed and mid-flight (two states), the "un-merged"
+        # corruption. The complementary case #63 makes legal — a chunk merged into a
+        # post-merge node (per-repo ``delivery.repo_landed`` facts, a NON-terminal newest
+        # transition, and no whole-chunk ``delivery.landed``) — is correctly not flagged here:
+        # it carries no whole-chunk terminal fact, so it derives its live status, exactly as
+        # #63 requires. "No double delivery" is held by ``hub:no-double-delivery`` +
+        # ``hub:per-repo-land-idempotent`` above (append-only lands, never removed → never un-merged).
         if facts.delivery_landed or facts.pr_closed:
             newest = max(facts.transitions, key=lambda t: (t.recorded_at, t.epoch), default=None)
             if newest is None or newest.to_node_id != RESERVED_TERMINAL:

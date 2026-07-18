@@ -265,7 +265,25 @@ def _graph_yaml() -> str:
                 },
                 "retries": {"max": 1, "exhausted": "escalate"},
             },
-            "deliver": {"executor": "hub", "mode": "merge-to-main"},
+            # Delivery is graph CONTENT since #67: a generic hub command node whose
+            # `run:` step is the packaged default graph's own `land_default` script —
+            # fetch, check every repo merges cleanly, then push all, recording a
+            # `merged/<repo>` marker per repo. `landed -> done` / `conflict -> build`
+            # mirror `hub/graphs/default.yaml`. (Before #67 this was the coordinator's
+            # `mode: merge-to-main` special case, deleted with the retirement.)
+            "deliver": {
+                "executor": "hub",
+                "run": [{"name": "land-every-repo", "command": "python3 -m blizzard.hub.graphs.scripts.land_default"}],
+                "judgement": {
+                    "choices": {
+                        "landed": {"description": "Every repo merged cleanly into its base branch.", "to": "done"},
+                        "conflict": {
+                            "description": "A repo did not merge cleanly; kicked back to build.",
+                            "to": "build",
+                        },
+                    }
+                },
+            },
         },
     }
     return yaml.safe_dump(graph, sort_keys=False)

@@ -23,6 +23,7 @@ from blizzard.cli.host_directory import resolve_host_directory
 from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.hub.app import build_hosted_app
 from blizzard.hub.config import ConfigError, HubConfig
+from blizzard.hub.delivery.hub_node import ENV_MARKER_CALLBACK_URL
 from blizzard.hub.runtime import ensure_current_revision, init_environment, migrate, migration_runner
 
 # The hub the client verbs talk to: ``BZ_HUB_URL`` overrides the
@@ -373,6 +374,28 @@ def promote(chunk_id: str, hub_url: str | None) -> None:
     except httpx.HTTPError as exc:
         raise _api_error("POST /chunks/{id}/promote", exc) from exc
     click.echo(f"promoted {chunk_id} — now ready for a runner to claim")
+
+
+@hub.command("record-marker")
+@click.argument("name")
+@click.argument("content", required=False, default="")
+def record_marker(name: str, content: str) -> None:
+    """A hub command node's ``run:`` script: record a marker artifact mid-run (#65).
+
+    A pure client of the mid-run marker callback — the injected
+    ``BZ_HUB_MARKER_CALLBACK_URL`` already carries this run's chunk id, node id, and
+    epoch, mirroring ``blizzard runner ask``'s identity-from-environment convention.
+    Enables a dynamic loop (``merge repo -> push -> record merged/<repo> -> next``)
+    without waiting for the whole step to exit. Idempotent per marker NAME."""
+    callback_url = os.environ.get(ENV_MARKER_CALLBACK_URL)
+    if not callback_url:
+        raise click.ClickException(f"record-marker: no {ENV_MARKER_CALLBACK_URL} in the environment")
+    try:
+        resp = httpx.post(callback_url, json={"name": name, "content": content}, timeout=_CLIENT_TIMEOUT)
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise click.ClickException(f"record-marker: could not record the marker ({exc})") from exc
+    click.echo(f"recorded marker `{name}`")
 
 
 @hub.command()

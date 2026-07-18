@@ -38,7 +38,16 @@ entry: ship
 nodes:
   ship:
     executor: hub
-    mode: merge-to-main
+    run:
+      - command: "true"
+    judgement:
+      choices:
+        landed:
+          description: every repo merged cleanly
+          to: done
+        conflict:
+          description: a repo did not merge cleanly
+          to: ship
 """
 
 

@@ -127,12 +127,65 @@ def build_script(landed_file: str) -> str:
 _JUDGEMENT_SCRIPT = "verdict('pass', 'the mock harness committed the change; checks are green')\n"
 
 
+# The generic sweep's ``deliver`` node command — a real merge-to-main, not a ``true``
+# no-op. The runner pushes each build commit to a feature branch; this step opens a PR
+# per submitted branch and merges it to the base by pinned SHA against the mock forge, so
+# the change actually LANDS on bare ``main`` and the sweep's exactly-once-on-``main``
+# assertion is meaningful (before #67 the ``deliver`` node was the coordinator's own
+# ``mode: merge-to-main`` — a bare ``true`` after the retirement never merged anything and
+# left every "landed once on bare main" assertion asserting against an unmoved ``main``).
+# Driven entirely off the injected env (``BZ_FORGE_URL`` / ``BZ_HUB_GIT_COMMITS`` /
+# ``BZ_HUB_BASE_BRANCH``), never a typed forge seam (policy-in-YAML, #67); idempotent by
+# construction — re-merging an already-merged head is a git "Already up to date" no-op, so
+# a crash-recovery re-run lands nothing twice. It prints a non-choice line, so the
+# executor's outcome mapping falls through to the node's default ``success`` edge.
+LAND_STEP = """python3 - <<'PYEOF'
+import json, os, urllib.error, urllib.request
+
+forge = os.environ["BZ_FORGE_URL"]
+base = os.environ.get("BZ_HUB_BASE_BRANCH", "main")
+commits = json.loads(os.environ.get("BZ_HUB_GIT_COMMITS") or "[]")
+
+
+def call(method, path, payload):
+    data = json.dumps(payload).encode()
+    req = urllib.request.Request(
+        forge + path, data=data, headers={"Content-Type": "application/json"}, method=method
+    )
+    try:
+        with urllib.request.urlopen(req) as resp:
+            return resp.status, json.loads(resp.read().decode() or "null")
+    except urllib.error.HTTPError as exc:
+        return exc.code, None
+
+
+for c in commits:
+    repo = c["repo"] if "/" in c["repo"] else "blizzard/" + c["repo"]
+    status, body = call(
+        "POST",
+        "/repos/%s/pulls" % repo,
+        {"title": "land", "head": c["branch"], "base": base, "body": "", "user": "blizzard-hub"},
+    )
+    if status == 201 and body:
+        call(
+            "PUT",
+            "/repos/%s/pulls/%s/merge" % (repo, body["number"]),
+            {"commit_message": "blizzard: land", "sha": c["commit"], "merge_method": "merge", "user": "blizzard-hub"},
+        )
+print("landed the submitted branches")
+PYEOF
+"""
+
+
 def graph_yaml(landed_file: str) -> str:
     """A minimal ``build -> deliver`` graph, named ``default-delivery`` so ingest reuses it.
 
-    Shorter than the packaged build→review→deliver shape — every crash point (reap,
-    pull, fill, spawn, advance, flush, deliver) is still traversed, and each scenario
-    lands a **unique** file so successive points never collide in the shared origins.
+    Shorter than the packaged build→review→deliver shape — every GENERIC crash point
+    (reap, pull, fill, spawn, advance, flush) is still traversed; ``deliver`` is a generic
+    hub command node (#67) whose ``run:`` step (:data:`LAND_STEP`) actually merges every
+    submitted branch to bare ``main`` against the mock forge, so the sweep's
+    exactly-once-on-``main`` assertion is real. Each scenario lands a **unique** file so
+    successive points never collide in the shared origins.
     """
     import yaml
 
@@ -154,7 +207,16 @@ def graph_yaml(landed_file: str) -> str:
                 },
                 "retries": {"max": 1, "exhausted": "escalate"},
             },
-            "deliver": {"executor": "hub", "mode": "merge-to-main"},
+            "deliver": {
+                "executor": "hub",
+                "run": [{"command": LAND_STEP}],
+                "judgement": {
+                    "choices": {
+                        "success": {"description": "Delivered.", "to": "done"},
+                        "failure": {"description": "Failed to deliver.", "to": "build"},
+                    }
+                },
+            },
         },
     }
     return yaml.safe_dump(graph, sort_keys=False)
@@ -239,13 +301,23 @@ def start_hub(
     port: int,
     crash_point: str | None,
     pm_sources: Sequence[PmSourceConfig] | None = None,
+    new_session: bool = False,
+    extra_env: dict[str, str] | None = None,
 ) -> subprocess.Popen[str]:
     """Start (or restart) the hub daemon; arm ``crash_point`` when it is a deliver point.
 
     ``pm_sources`` is declared only on the first call for ``hub_dir`` — the
     one that also runs ``hub init`` — since a restart reuses the config file already on
     disk; defaults to :func:`default_pm_sources`, the crash sweep's single source. Every
-    restart still carries ``PM_TOKEN_ENV`` regardless, since the config always names it."""
+    restart still carries ``PM_TOKEN_ENV`` regardless, since the config always names it.
+
+    ``new_session`` starts the hub as a session/process-group leader so a caller can
+    ``os.killpg`` the WHOLE tree — the hub plus any ``run:`` subprocess it has spawned —
+    which is what a faithful ``kill -9`` mid-script needs (a bare kill of the hub pid
+    would orphan a running land script; see the #67 mid-script sweep). ``extra_env``
+    layers additional variables onto the hub's environment (e.g. a land script's
+    test-only pause), applied after the base env so a caller can override nothing
+    load-bearing."""
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     if not (hub_dir / "blizzard-hub.toml").exists():
         subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
@@ -257,12 +329,15 @@ def start_hub(
         PM_TOKEN_ENV: "crash-fixture-token",
     }
     _apply_crash_env(env, crash_point)
+    if extra_env:
+        env.update(extra_env)
     return subprocess.Popen(
         [hub_bin, "host", "--dir", str(hub_dir), "--host", "127.0.0.1", "--port", str(port)],
         env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
+        start_new_session=new_session,
     )
 
 

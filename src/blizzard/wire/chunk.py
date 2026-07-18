@@ -225,14 +225,61 @@ class PrView(BaseModel):
     url: str
 
 
-class CheckDeliveryResponse(BaseModel):
-    """The result of an on-demand ``POST /chunks/{id}/check-delivery``."""
+class BounceView(BaseModel):
+    """One recorded delivery kick-back (#64) — contention, not failure.
+
+    Surfaced on chunk detail so the bounce history is readable — including once the
+    count crosses the node's ``bounce_cap`` and the chunk derives ``needs_human`` instead
+    of routing back — without itself being (or affecting) the chunk's derived status.
+    ``envelope`` is the raw JSON kick-back payload (cause detail, etc.) verbatim."""
+
+    cause: str
+    envelope: str
+    recorded_at: str
+
+
+class HubAdvanceResponse(BaseModel):
+    """The result of one on-demand ``POST /chunks/{id}/hub-advance`` (#65).
+
+    A generic hub command node runs ``run:`` to completion, one call at a time,
+    behind the fleet-wide serialization slot: ``ran=False`` means the slot was held
+    by a different chunk and this call deferred without touching anything — not an
+    error, just try again on a later poll."""
 
     chunk_id: str
     status: ChunkStatus
-    finalized: bool  # True iff this check terminated the delivery
-    open_prs: int  # PRs still awaiting an external merge
-    detail: str
+    ran: bool
+    outcome_choice: str | None = None
+    to_node_name: str | None = None
+    detail: str = ""
+
+
+class PendingView(BaseModel):
+    """A hub node's in-progress poll (#66) — waiting on external state, honestly.
+
+    Surfaced on chunk detail so a ``delivering`` chunk parked at a hub node reads
+    truthfully whether it is about to run its first attempt or already mid-poll, and
+    when the next attempt is due — never itself a status (the chunk still derives
+    ``delivering``, mirroring ``awaiting_external_merge``)."""
+
+    node_name: str
+    next_poll_at: str
+
+
+class HubMarkerRequest(BaseModel):
+    """The mid-run marker callback's body (#65) — mirrors ``blizzard runner ask``'s
+    own worker-facing callback shape."""
+
+    name: str
+    content: str = ""
+
+
+class HubMarkerResponse(BaseModel):
+    """The recorded marker — ``recorded=False`` iff it already existed (idempotent)."""
+
+    recorded: bool
+    chunk_id: str
+    name: str
 
 
 class ChunkPauseRequest(BaseModel):
@@ -313,15 +360,31 @@ class ChunkDetail(BaseModel):
     # The chunk's open questions: a ``waiting_on_human``
     # chunk carries the ask a human answers with ``blizzard hub answer``.
     questions: list[QuestionView] = []
-    # Open-pr delivery: a ``delivering`` chunk whose deliver node opened a
-    # PR instead of merging is parked awaiting an external merge. ``open_prs`` are the PRs
-    # a human reviews and merges; ``check-delivery`` then drives the chunk to ``done``.
+    # Open-pr delivery (pre-#67, kept for back-compat reads of a historical chunk): a
+    # ``delivering`` chunk whose deliver node opened a PR instead of merging was
+    # parked awaiting an external merge, with ``open_prs`` naming the PRs a human
+    # reviewed and merged. No engine path writes these facts any more — a hub command
+    # node's own ``run:`` script owns this policy now (#67).
     awaiting_external_merge: bool = False
     open_prs: list[PrView] = []
     # The chunk's derived usage/cost total (issue #59) — see ChunkUsageTotalView.
     cost: ChunkUsageTotalView = Field(default_factory=_zero_usage_total)
     # Per-node-step usage history, oldest first — the board's future cost timeline.
     usage: list[ChunkUsageView] = []
+    # A generic hub command node's in-progress poll (#66) — non-None iff the chunk's
+    # newest transition enters a hub node AND a poll fact is recorded for that visit
+    # with no later transition. Never a status: the chunk still derives ``delivering``.
+    pending: PendingView | None = None
+    # Informational, never a status (#63): true iff any repo has landed for this chunk,
+    # whether or not delivery has reached the terminal transition yet — an authored
+    # ``merged -> <node>`` edge can hold the chunk running (or escalated) in a
+    # post-merge node with every repo already merged. "Merged but stuck" reads
+    # honestly here rather than un-merging or hiding behind `status`.
+    landed: bool = False
+    # The chunk's recorded delivery kick-backs (#64), oldest first — informational,
+    # never a status: a bounce is contention, not failure, and this reads truthfully
+    # even once the count has crossed the node's cap and the chunk derives needs_human.
+    bounces: list[BounceView] = []
 
 
 class PmItemEntry(BaseModel):

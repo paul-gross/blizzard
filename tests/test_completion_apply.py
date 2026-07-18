@@ -1,6 +1,6 @@
 """Completion apply — the epoch fence, terminal rejection, and bad choices (component tier).
 
-The happy path and idempotent replay are covered by ``test_delivery_loop``; this file
+The happy path and idempotent replay are covered by ``test_hub_command_node``; this file
 pins the rejection edges (``bzh:facts-not-status``).
 """
 
@@ -39,7 +39,16 @@ nodes:
           to: build
   deliver:
     executor: hub
-    mode: merge-to-main
+    run:
+      - command: "true"
+    judgement:
+      choices:
+        success:
+          description: Delivered.
+          to: done
+        failure:
+          description: Failed to deliver.
+          to: build
 """
 
 
@@ -67,7 +76,16 @@ nodes:
           to: deliver
   deliver:
     executor: hub
-    mode: merge-to-main
+    run:
+      - command: "true"
+    judgement:
+      choices:
+        success:
+          description: Delivered.
+          to: done
+        failure:
+          description: Failed to deliver.
+          to: spike
 """
 
 
@@ -104,7 +122,6 @@ def test_stale_epoch_is_rejected_and_nothing_lands(tmp_path: Path) -> None:
     assert resp.json()["outcome"] == "failure"
     # The chunk never advanced and no artifact entered the store.
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "running"
-    assert hub.forge.landed == []
 
 
 def test_completion_on_terminal_chunk_fails(tmp_path: Path) -> None:
@@ -124,7 +141,6 @@ def test_unknown_choice_is_a_failure(tmp_path: Path) -> None:
     chunk_id, node_id = _claimed(hub)
     resp = hub.client.post(f"/api/chunks/{chunk_id}/completions", json=_completion(node_id, epoch=1, choice="nope"))
     assert resp.json()["outcome"] == "failure"
-    assert hub.forge.landed == []
 
 
 def test_non_code_chunk_completes_with_only_asset_artifacts(tmp_path: Path) -> None:
@@ -152,13 +168,12 @@ def test_non_code_chunk_completes_with_only_asset_artifacts(tmp_path: Path) -> N
 
     # Fleet truth: the empty deliver still finalizes the chunk terminal.
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
-    # Git truth: a non-code chunk lands nothing — the forge was never asked to merge.
-    assert hub.forge.landed == []
-    # Hub-durable artifacts: exactly the asset, and no git-commit pointer.
+    # Hub-durable artifacts: no git-commit pointer ever lands — only the spike's own
+    # asset and the deliver hub node's own run: step log (#65's captured stdout/stderr).
     artifacts = hub.client.get(f"/api/chunks/{chunk_id}").json()["artifacts"]
-    assert [a["kind"] for a in artifacts] == ["asset"], f"expected only an asset artifact, got: {artifacts}"
-    assert artifacts[0]["name"] == "spike-notes"
-    assert artifacts[0]["content"] == "no change warranted"
+    assert {a["kind"] for a in artifacts} == {"asset"}, f"expected only asset artifacts, got: {artifacts}"
+    spike_notes = next(a for a in artifacts if a["name"] == "spike-notes")
+    assert spike_notes["content"] == "no change warranted"
 
 
 def test_completion_on_unknown_chunk_is_404(tmp_path: Path) -> None:

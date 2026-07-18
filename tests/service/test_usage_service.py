@@ -165,7 +165,16 @@ def _graph_yaml() -> str:
                 "judgement": {"prompt": "# judge", "choices": {"pass": {"description": "green", "to": "deliver"}}},
                 "retries": {"max": 1, "exhausted": "escalate"},
             },
-            "deliver": {"executor": "hub", "mode": "merge-to-main"},
+            "deliver": {
+                "executor": "hub",
+                "run": [{"command": "true"}],
+                "judgement": {
+                    "choices": {
+                        "landed": {"description": "Every repo merged cleanly.", "to": "done"},
+                        "conflict": {"description": "A repo did not merge cleanly.", "to": "build"},
+                    },
+                },
+            },
         },
     }
     return yaml.safe_dump(graph, sort_keys=False)

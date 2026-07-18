@@ -113,7 +113,16 @@ def _graph_yaml() -> str:
                 },
                 "retries": {"max": 1, "exhausted": "escalate"},
             },
-            "deliver": {"executor": "hub", "mode": "merge-to-main"},
+            "deliver": {
+                "executor": "hub",
+                "run": [{"command": "python3 -m blizzard.hub.graphs.scripts.land_default"}],
+                "judgement": {
+                    "choices": {
+                        "landed": {"description": "Landed.", "to": "done"},
+                        "conflict": {"description": "Conflict.", "to": "build"},
+                    }
+                },
+            },
         },
     }
     return yaml.safe_dump(graph, sort_keys=False)

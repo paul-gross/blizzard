@@ -76,7 +76,7 @@ pytestmark = [
 # under. The forge's git backend is permissive (``forge/internal/git_backend.py``):
 # ``blizzard/toy-api`` resolves the flat ``origins/toy-api.git`` the fixture mints,
 # and the hub qualifies the runner's bare ``toy-api`` artifact with this same owner
-# (BZ_FORGE_OWNER -> github_forge._repo_path).
+# (BZ_FORGE_OWNER -> land_default.qualify_repo).
 OWNER = "blizzard"
 REPO_NAME = "toy-api"
 REPO = f"{OWNER}/{REPO_NAME}"
@@ -197,7 +197,16 @@ def _graph_yaml() -> str:
                 },
                 "retries": {"max": 1, "exhausted": "escalate"},
             },
-            "deliver": {"executor": "hub", "mode": "merge-to-main"},
+            "deliver": {
+                "executor": "hub",
+                "run": [{"command": "python3 -m blizzard.hub.graphs.scripts.land_default"}],
+                "judgement": {
+                    "choices": {
+                        "landed": {"description": "Landed.", "to": "done"},
+                        "conflict": {"description": "Conflict.", "to": "build"},
+                    }
+                },
+            },
         },
     }
     return yaml.safe_dump(graph, sort_keys=False)
@@ -493,7 +502,16 @@ def _pm_graph_yaml() -> str:
                 },
                 "retries": {"max": 1, "exhausted": "escalate"},
             },
-            "deliver": {"executor": "hub", "mode": "merge-to-main"},
+            "deliver": {
+                "executor": "hub",
+                "run": [{"command": "python3 -m blizzard.hub.graphs.scripts.land_default"}],
+                "judgement": {
+                    "choices": {
+                        "landed": {"description": "Landed.", "to": "done"},
+                        "conflict": {"description": "Conflict.", "to": "build"},
+                    }
+                },
+            },
         },
     }
     return yaml.safe_dump(graph, sort_keys=False)

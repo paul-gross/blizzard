@@ -35,7 +35,16 @@ def _min_build_deliver() -> dict[str, Any]:
                 },
                 "retries": {"max": 2, "exhausted": "escalate"},
             },
-            "deliver": {"executor": "hub", "mode": "merge-to-main"},
+            "deliver": {
+                "executor": "hub",
+                "run": [{"command": "true"}],
+                "judgement": {
+                    "choices": {
+                        "landed": {"description": "landed", "to": "done"},
+                        "conflict": {"description": "conflict", "to": "build"},
+                    }
+                },
+            },
         },
     }
 
@@ -44,7 +53,7 @@ def test_valid_build_deliver_graph_passes_with_no_errors_or_warnings() -> None:
     result = validate_graph(parse_graph_doc(_min_build_deliver()))
     assert result.ok
     assert result.errors == []
-    # The hub deliver node's machinery default (landed -> done) makes a path to the
+    # The `deliver` node's authored `landed -> done` choice makes a path to the
     # terminal exist, so no "no path to done" warning fires.
     assert result.warnings == []
 
@@ -93,19 +102,34 @@ def test_human_gate_with_a_judgement_prompt_is_an_error() -> None:
     assert any("must not declare `judgement.prompt`" in e for e in result.errors)
 
 
-def test_hub_node_choice_outside_the_known_outcome_set_is_an_error() -> None:
+def test_hub_node_choice_with_an_arbitrary_name_is_legal() -> None:
+    """#67: no node name is privileged, and a hub node's choices are checked
+    generically like a worker node's — any choice name is legal, not just a
+    machinery-known outcome."""
     doc = _min_build_deliver()
     doc["nodes"]["deliver"]["judgement"] = {  # type: ignore[index]
         "choices": {"bogus": {"description": "x", "to": "build"}}
     }
     result = validate_graph(parse_graph_doc(doc))
-    assert any("not a known outcome" in e for e in result.errors)
+    assert result.ok
 
 
 def test_hub_node_overriding_conflict_routing_is_legal() -> None:
     doc = _min_build_deliver()
     doc["nodes"]["deliver"]["judgement"] = {  # type: ignore[index]
         "choices": {"conflict": {"description": "merge conflicted", "to": "build"}}
+    }
+    result = validate_graph(parse_graph_doc(doc))
+    assert result.ok
+
+
+def test_hub_node_choice_routing_straight_to_the_terminal_is_legal() -> None:
+    """#67: no choice is restricted from routing straight to `done` — the still-special
+    deliver node's "only `landed` finalizes" rule is retired along with the rest of the
+    special case; a hub node's routing is checked exactly like a worker node's."""
+    doc = _min_build_deliver()
+    doc["nodes"]["deliver"]["judgement"] = {  # type: ignore[index]
+        "choices": {"conflict": {"description": "merge conflicted", "to": "done"}}
     }
     result = validate_graph(parse_graph_doc(doc))
     assert result.ok

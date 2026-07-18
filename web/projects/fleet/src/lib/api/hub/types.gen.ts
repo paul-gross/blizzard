@@ -154,28 +154,28 @@ export type ArtifactView = {
 };
 
 /**
- * CheckDeliveryResponse
+ * BounceView
  *
- * The result of an on-demand ``POST /chunks/{id}/check-delivery``.
+ * One recorded delivery kick-back (#64) — contention, not failure.
+ *
+ * Surfaced on chunk detail so the bounce history is readable — including once the
+ * count crosses the node's ``bounce_cap`` and the chunk derives ``needs_human`` instead
+ * of routing back — without itself being (or affecting) the chunk's derived status.
+ * ``envelope`` is the raw JSON kick-back payload (cause detail, etc.) verbatim.
  */
-export type CheckDeliveryResponse = {
+export type BounceView = {
     /**
-     * Chunk Id
+     * Cause
      */
-    chunk_id: string;
+    cause: string;
     /**
-     * Detail
+     * Envelope
      */
-    detail: string;
+    envelope: string;
     /**
-     * Finalized
+     * Recorded At
      */
-    finalized: boolean;
-    /**
-     * Open Prs
-     */
-    open_prs: number;
-    status: ChunkStatus;
+    recorded_at: string;
 };
 
 /**
@@ -213,6 +213,10 @@ export type ChunkDetail = {
      */
     awaiting_external_merge?: boolean;
     /**
+     * Bounces
+     */
+    bounces?: Array<BounceView>;
+    /**
      * Chunk Id
      */
     chunk_id: string;
@@ -236,6 +240,10 @@ export type ChunkDetail = {
      */
     history?: Array<TransitionView>;
     /**
+     * Landed
+     */
+    landed?: boolean;
+    /**
      * Latest Epoch
      */
     latest_epoch: number | null;
@@ -248,6 +256,7 @@ export type ChunkDetail = {
      */
     open_prs?: Array<PrView>;
     pause?: PauseView | null;
+    pending?: PendingView | null;
     /**
      * Pm Pointers
      */
@@ -1054,6 +1063,77 @@ export type HttpValidationError = {
 };
 
 /**
+ * HubAdvanceResponse
+ *
+ * The result of one on-demand ``POST /chunks/{id}/hub-advance`` (#65).
+ *
+ * A generic hub command node runs ``run:`` to completion, one call at a time,
+ * behind the fleet-wide serialization slot: ``ran=False`` means the slot was held
+ * by a different chunk and this call deferred without touching anything — not an
+ * error, just try again on a later poll.
+ */
+export type HubAdvanceResponse = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Detail
+     */
+    detail?: string;
+    /**
+     * Outcome Choice
+     */
+    outcome_choice?: string | null;
+    /**
+     * Ran
+     */
+    ran: boolean;
+    status: ChunkStatus;
+    /**
+     * To Node Name
+     */
+    to_node_name?: string | null;
+};
+
+/**
+ * HubMarkerRequest
+ *
+ * The mid-run marker callback's body (#65) — mirrors ``blizzard runner ask``'s
+ * own worker-facing callback shape.
+ */
+export type HubMarkerRequest = {
+    /**
+     * Content
+     */
+    content?: string;
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
+ * HubMarkerResponse
+ *
+ * The recorded marker — ``recorded=False`` iff it already existed (idempotent).
+ */
+export type HubMarkerResponse = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Recorded
+     */
+    recorded: boolean;
+};
+
+/**
  * JudgedBy
  *
  * Who renders a node's exit judgement — the structural gate marker.
@@ -1186,6 +1266,27 @@ export type PauseView = {
      * Set At
      */
     set_at: string;
+};
+
+/**
+ * PendingView
+ *
+ * A hub node's in-progress poll (#66) — waiting on external state, honestly.
+ *
+ * Surfaced on chunk detail so a ``delivering`` chunk parked at a hub node reads
+ * truthfully whether it is about to run its first attempt or already mid-poll, and
+ * when the next attempt is due — never itself a status (the chunk still derives
+ * ``delivering``, mirroring ``awaiting_external_merge``).
+ */
+export type PendingView = {
+    /**
+     * Next Poll At
+     */
+    next_poll_at: string;
+    /**
+     * Node Name
+     */
+    node_name: string;
 };
 
 /**
@@ -1962,36 +2063,6 @@ export type GetChunkApiChunksChunkIdGetResponses = {
 
 export type GetChunkApiChunksChunkIdGetResponse = GetChunkApiChunksChunkIdGetResponses[keyof GetChunkApiChunksChunkIdGetResponses];
 
-export type CheckDeliveryApiChunksChunkIdCheckDeliveryPostData = {
-    body?: never;
-    path: {
-        /**
-         * Chunk Id
-         */
-        chunk_id: string;
-    };
-    query?: never;
-    url: '/api/chunks/{chunk_id}/check-delivery';
-};
-
-export type CheckDeliveryApiChunksChunkIdCheckDeliveryPostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type CheckDeliveryApiChunksChunkIdCheckDeliveryPostError = CheckDeliveryApiChunksChunkIdCheckDeliveryPostErrors[keyof CheckDeliveryApiChunksChunkIdCheckDeliveryPostErrors];
-
-export type CheckDeliveryApiChunksChunkIdCheckDeliveryPostResponses = {
-    /**
-     * Successful Response
-     */
-    200: CheckDeliveryResponse;
-};
-
-export type CheckDeliveryApiChunksChunkIdCheckDeliveryPostResponse = CheckDeliveryApiChunksChunkIdCheckDeliveryPostResponses[keyof CheckDeliveryApiChunksChunkIdCheckDeliveryPostResponses];
-
 export type SubmitCompletionApiChunksChunkIdCompletionsPostData = {
     body: CompletionSubmission;
     path: {
@@ -2209,6 +2280,75 @@ export type GroupChunksApiChunksChunkIdGroupPostResponses = {
 };
 
 export type GroupChunksApiChunksChunkIdGroupPostResponse = GroupChunksApiChunksChunkIdGroupPostResponses[keyof GroupChunksApiChunksChunkIdGroupPostResponses];
+
+export type HubAdvanceApiChunksChunkIdHubAdvancePostData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/hub-advance';
+};
+
+export type HubAdvanceApiChunksChunkIdHubAdvancePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type HubAdvanceApiChunksChunkIdHubAdvancePostError = HubAdvanceApiChunksChunkIdHubAdvancePostErrors[keyof HubAdvanceApiChunksChunkIdHubAdvancePostErrors];
+
+export type HubAdvanceApiChunksChunkIdHubAdvancePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: HubAdvanceResponse;
+};
+
+export type HubAdvanceApiChunksChunkIdHubAdvancePostResponse = HubAdvanceApiChunksChunkIdHubAdvancePostResponses[keyof HubAdvanceApiChunksChunkIdHubAdvancePostResponses];
+
+export type RecordHubMarkerApiChunksChunkIdHubMarkersPostData = {
+    body: HubMarkerRequest;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query: {
+        /**
+         * Node Id
+         */
+        node_id: string;
+        /**
+         * Epoch
+         */
+        epoch: number;
+    };
+    url: '/api/chunks/{chunk_id}/hub-markers';
+};
+
+export type RecordHubMarkerApiChunksChunkIdHubMarkersPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RecordHubMarkerApiChunksChunkIdHubMarkersPostError = RecordHubMarkerApiChunksChunkIdHubMarkersPostErrors[keyof RecordHubMarkerApiChunksChunkIdHubMarkersPostErrors];
+
+export type RecordHubMarkerApiChunksChunkIdHubMarkersPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: HubMarkerResponse;
+};
+
+export type RecordHubMarkerApiChunksChunkIdHubMarkersPostResponse = RecordHubMarkerApiChunksChunkIdHubMarkersPostResponses[keyof RecordHubMarkerApiChunksChunkIdHubMarkersPostResponses];
 
 export type ReportLeaseApiChunksChunkIdLeasesPostData = {
     body: LeaseMintReport;

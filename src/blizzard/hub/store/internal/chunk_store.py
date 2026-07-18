@@ -16,18 +16,19 @@ except to source the ULID instant of a surrogate route id.
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import Connection, Engine, func, insert, select, update
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.ids import mint
+from blizzard.foundation.ids import ARTIFACT_PREFIX, HUB_EXEC_SLOT_PREFIX, mint
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import Executor
 from blizzard.hub.domain.work import (
     AnswerOutcome,
+    BounceFact,
     Chunk,
     ChunkFacts,
     ChunkStatus,
@@ -35,11 +36,11 @@ from blizzard.hub.domain.work import (
     DecisionFact,
     DecisionRow,
     EscalationFact,
+    HubNodePollFact,
     IWriteChunkRepository,
     LeaseFact,
     PauseFact,
     PmPointer,
-    PrClosedFact,
     PrOpenedFact,
     QuestionFact,
     QuestionRow,
@@ -168,11 +169,26 @@ class ChunkStore:
                 )
                 for u in conn.execute(select(s.usage_facts).where(s.usage_facts.c.chunk_id == chunk_id)).all()
             ]
+            landed_repos = frozenset(
+                r.repo
+                for r in conn.execute(
+                    select(s.delivery_repo_landed.c.repo).where(s.delivery_repo_landed.c.chunk_id == chunk_id)
+                ).all()
+            )
+            bounces = [
+                BounceFact(epoch=b.epoch, cause=b.cause, envelope=b.envelope, recorded_at=b.recorded_at)
+                for b in conn.execute(select(s.chunk_bounces).where(s.chunk_bounces.c.chunk_id == chunk_id)).all()
+            ]
+            hub_node_polls = [
+                HubNodePollFact(node_id=p.node_id, epoch=p.epoch, polled_at=p.polled_at)
+                for p in conn.execute(select(s.hub_node_poll).where(s.hub_node_poll.c.chunk_id == chunk_id)).all()
+            ]
             return ChunkFacts(
                 minted=True,
                 promoted=self._exists(conn, s.chunk_promoted, chunk_id),
                 stopped=self._exists(conn, s.chunk_stopped, chunk_id),
                 delivery_landed=self._exists(conn, s.delivery_landed, chunk_id),
+                landed_repos=landed_repos,
                 pr_closed=self._exists(conn, s.delivery_pr_closed, chunk_id),
                 escalations=escalations,
                 leases=leases,
@@ -185,6 +201,8 @@ class ChunkStore:
                 pr_opened=pr_opened,
                 pauses=pauses,
                 usage=usage,
+                bounces=bounces,
+                hub_node_polls=hub_node_polls,
             )
 
     def load_artifacts(self, chunk_id: str) -> list[ArtifactRow]:
@@ -309,17 +327,6 @@ class ChunkStore:
                     select(s.delivery_repo_landed.c.repo).where(s.delivery_repo_landed.c.chunk_id == chunk_id)
                 ).all()
             }
-
-    def open_prs(self, chunk_id: str) -> list[PrOpenedFact]:
-        with self._engine.connect() as conn:
-            return [
-                PrOpenedFact(
-                    repo=p.repo, number=p.pr_number, url=p.pr_url, commit_hash=p.commit_hash, opened_at=p.opened_at
-                )
-                for p in conn.execute(
-                    select(s.delivery_pr_opened).where(s.delivery_pr_opened.c.chunk_id == chunk_id)
-                ).all()
-            ]
 
     def runner_high_water(self, runner_id: str) -> int:
         with self._engine.connect() as conn:
@@ -590,99 +597,50 @@ class ChunkStore:
             )
             return True
 
-    def record_pr_opened(
-        self, chunk_id: str, *, repo: str, number: int, url: str, commit_hash: str, at: datetime
-    ) -> None:
-        # Idempotent per (chunk, repo) at the DB layer (``uq_delivery_pr_opened_chunk_repo``),
-        # not just the coordinator's DB-backed skip-set read: the deliver node runs on both a
-        # fresh apply and an idempotent replay, and a racing second insert for the
-        # same repo collides on the unique constraint — caught here and discarded as the
-        # harmless duplicate it is, mirroring the ``question_answers`` CAS below. The row's
-        # own FK (``chunk_id``) and five NOT NULLs can raise the same ``IntegrityError`` on a
-        # genuine violation — SQLite has FK enforcement off, but ``bzh:sql-portable`` runs the
-        # same schema against postgres, where it does fire — so the re-select below (mirroring
-        # the CAS's own read-back) confirms the (chunk_id, repo) row actually exists before
-        # discarding the exception; an absent row re-raises rather than masking the violation.
-        try:
-            with self._engine.begin() as conn:
-                conn.execute(
-                    insert(s.delivery_pr_opened).values(
-                        chunk_id=chunk_id,
-                        repo=repo,
-                        pr_number=number,
-                        pr_url=url,
-                        commit_hash=commit_hash,
-                        opened_at=at,
-                    )
-                )
-        except IntegrityError:
-            with self._engine.connect() as conn:
-                exists = conn.execute(
-                    select(s.delivery_pr_opened.c.id).where(
-                        s.delivery_pr_opened.c.chunk_id == chunk_id, s.delivery_pr_opened.c.repo == repo
-                    )
-                ).first()
-            if exists is None:
-                raise
+    def record_bounce(self, chunk_id: str, *, epoch: int, cause: str, envelope: str, at: datetime) -> bool:
+        """Record one delivery kick-back **idempotently by** ``(chunk_id, epoch)`` (#64).
 
-    def finalize_pr_delivery(
-        self,
-        chunk_id: str,
-        *,
-        closed: list[PrClosedFact],
-        from_node_id: str,
-        to_node_id: str,
-        choice_name: str,
-        epoch: int,
-        runner_id: str,
-        transition_id: str,
-        at: datetime,
-    ) -> bool:
-        """Terminate an open-pr delivery **atomically and idempotently**.
-
-        The open-pr counterpart to :meth:`finalize_delivery`: the per-repo ``pr.closed``
-        facts, the hub lease, the terminal transition, and the route release are written
-        in **one transaction**, so a mid-finalize ``kill -9`` cannot leave a chunk
-        closed-but-not-terminal. Guarded by the ``pr.closed`` existence check: a re-checked
-        or replayed finalize re-enters harmlessly. Returns True when it wrote, False when
-        the chunk was already finalized.
-        """
+        A pre-check within the same transaction (mirroring :meth:`record_hub_step_transition`)
+        rather than a DB constraint: a redelivery replay at the coordinator's same
+        ``hub_epoch`` re-enters harmlessly. Returns True iff it wrote."""
         with self._engine.begin() as conn:
             already = conn.execute(
-                select(s.delivery_pr_closed.c.id).where(s.delivery_pr_closed.c.chunk_id == chunk_id)
+                select(s.chunk_bounces.c.id).where(
+                    (s.chunk_bounces.c.chunk_id == chunk_id) & (s.chunk_bounces.c.epoch == epoch)
+                )
             ).first()
             if already is not None:
                 return False
-            for pr in closed:
-                conn.execute(
-                    insert(s.delivery_pr_closed).values(
-                        chunk_id=chunk_id,
-                        repo=pr.repo,
-                        pr_number=pr.number,
-                        merged=pr.merged,
-                        landed_commit=pr.landed_commit,
-                        closed_at=at,
-                    )
+            conn.execute(
+                insert(s.chunk_bounces).values(
+                    chunk_id=chunk_id, epoch=epoch, cause=cause, envelope=envelope, recorded_at=at
                 )
+            )
+            return True
+
+    def record_bounce_escalation(
+        self, chunk_id: str, *, epoch: int, runner_id: str, takeover_command: str, at: datetime
+    ) -> bool:
+        """Escalate a bounce-capped chunk **atomically and idempotently** (#64).
+
+        The hub lease and the escalation fact land in one transaction, guarded by the
+        escalation's existence at this epoch — a redelivery replay re-enters harmlessly
+        and never double-escalates. No transition: the chunk's held route and stuck node
+        are untouched. Returns True iff it wrote."""
+        with self._engine.begin() as conn:
+            already = conn.execute(
+                select(s.escalations.c.id).where(
+                    (s.escalations.c.chunk_id == chunk_id) & (s.escalations.c.epoch == epoch)
+                )
+            ).first()
+            if already is not None:
+                return False
             conn.execute(
                 insert(s.lease_facts).values(chunk_id=chunk_id, epoch=epoch, runner_id=runner_id, minted_at=at)
             )
             conn.execute(
-                insert(s.transitions).values(
-                    transition_id=transition_id,
-                    chunk_id=chunk_id,
-                    from_node_id=from_node_id,
-                    to_node_id=to_node_id,
-                    choice_name=choice_name,
-                    decision_id=None,
-                    epoch=epoch,
-                    runner_id=runner_id,
-                    recorded_at=at,
-                )
-            )
-            conn.execute(
-                insert(s.route_released).values(
-                    chunk_id=chunk_id, released_at=at, seq=self._next_route_seq(conn, chunk_id)
+                insert(s.escalations).values(
+                    chunk_id=chunk_id, epoch=epoch, takeover_command=takeover_command, recorded_at=at
                 )
             )
             return True
@@ -900,6 +858,178 @@ class ChunkStore:
         """Repin a not-ready chunk's model selection (issue #27)."""
         with self._engine.begin() as conn:
             conn.execute(update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(model=model))
+
+    # --- The generic hub command node (#65) ---------------------------------
+
+    def acquire_hub_exec_slot(self, chunk_id: str, *, node_id: str, at: datetime, stale_after: timedelta) -> str | None:
+        """Acquire the fleet-wide hub-execution slot, **atomically** (crash-derivable
+        fact, ``bzh:facts-not-status`` — never an in-process lock, so the invariant
+        checker can assert at most one live slot and a ``kill -9`` mid-run leaves a
+        stale, reclaimable row rather than a wedged fleet)."""
+        with self._engine.begin() as conn:
+            # Force sqlite's whole-database write lock BEFORE the read-then-insert
+            # below — an identity update over the table (even zero rows) makes sqlite
+            # acquire the RESERVED lock immediately, closing the race a bare SELECT
+            # would leave open: two concurrent callers for two DIFFERENT chunks could
+            # otherwise both read "no live rows" under sqlite's SHARED read lock before
+            # either has inserted, and both mint a live slot (see
+            # ``_next_route_seq``'s docstring, the same trick, same reason).
+            conn.execute(update(s.hub_exec_slot).values(node_id=s.hub_exec_slot.c.node_id))
+            live_rows = conn.execute(select(s.hub_exec_slot).where(s.hub_exec_slot.c.released_at.is_(None))).all()
+            for row in live_rows:
+                if row.holder_chunk_id == chunk_id:
+                    return row.slot_id  # reentrant — this chunk already holds it
+                if at - row.acquired_at < stale_after:
+                    return None  # a different chunk genuinely holds it — defer
+                # Stale — a prior holder's run never released it (a kill -9); reclaim.
+                conn.execute(
+                    update(s.hub_exec_slot).where(s.hub_exec_slot.c.slot_id == row.slot_id).values(released_at=at)
+                )
+            slot_id = mint(HUB_EXEC_SLOT_PREFIX, self._clock)
+            conn.execute(
+                insert(s.hub_exec_slot).values(
+                    slot_id=slot_id, holder_chunk_id=chunk_id, node_id=node_id, acquired_at=at, released_at=None
+                )
+            )
+            return slot_id
+
+    def release_hub_exec_slot(self, chunk_id: str, *, at: datetime) -> None:
+        with self._engine.begin() as conn:
+            conn.execute(
+                update(s.hub_exec_slot)
+                .where((s.hub_exec_slot.c.holder_chunk_id == chunk_id) & (s.hub_exec_slot.c.released_at.is_(None)))
+                .values(released_at=at)
+            )
+
+    def count_live_hub_exec_slots(self) -> int:
+        with self._engine.connect() as conn:
+            return int(
+                conn.execute(
+                    select(func.count()).select_from(s.hub_exec_slot).where(s.hub_exec_slot.c.released_at.is_(None))
+                ).scalar()
+                or 0
+            )
+
+    def has_hub_artifact(self, chunk_id: str, *, node_id: str, epoch: int, name: str) -> bool:
+        with self._engine.connect() as conn:
+            return (
+                conn.execute(
+                    select(s.artifacts.c.artifact_id).where(
+                        (s.artifacts.c.chunk_id == chunk_id)
+                        & (s.artifacts.c.node_id == node_id)
+                        & (s.artifacts.c.epoch == epoch)
+                        & (s.artifacts.c.name == name)
+                    )
+                ).first()
+                is not None
+            )
+
+    def record_hub_artifact(
+        self, chunk_id: str, *, node_id: str, node_name: str, epoch: int, name: str, content: str, at: datetime
+    ) -> bool:
+        """Append one hub-node progress artifact **outside** a transition (#65),
+        idempotent per ``(chunk, node, name, epoch)`` — the ``produces:`` re-run skip's
+        durable side, and the mid-run marker callback's write."""
+        with self._engine.begin() as conn:
+            already = conn.execute(
+                select(s.artifacts.c.artifact_id).where(
+                    (s.artifacts.c.chunk_id == chunk_id)
+                    & (s.artifacts.c.node_id == node_id)
+                    & (s.artifacts.c.epoch == epoch)
+                    & (s.artifacts.c.name == name)
+                )
+            ).first()
+            if already is not None:
+                return False
+            conn.execute(
+                insert(s.artifacts).values(
+                    artifact_id=mint(ARTIFACT_PREFIX, self._clock),
+                    chunk_id=chunk_id,
+                    node_id=node_id,
+                    node_name=node_name,
+                    epoch=epoch,
+                    name=name,
+                    kind=ArtifactKind.ASSET.value,
+                    data=content,
+                    repo=None,
+                    produced_at=at,
+                )
+            )
+            return True
+
+    def record_hub_step_transition(
+        self,
+        chunk_id: str,
+        *,
+        from_node_id: str,
+        to_node_id: str,
+        choice_name: str,
+        epoch: int,
+        runner_id: str,
+        transition_id: str,
+        at: datetime,
+        artifacts: list[ArtifactRow],
+        release_route: bool,
+    ) -> bool:
+        """Record a generic hub command node's exit transition **atomically and
+        idempotently** (#65) — the ``HubNodeExecutor`` counterpart to
+        :meth:`finalize_delivery`, generalized to any authored target. Guarded by the
+        transition's existence at ``(chunk_id, from_node_id, epoch)``: a redelivery
+        replay re-enters harmlessly."""
+        with self._engine.begin() as conn:
+            already = conn.execute(
+                select(s.transitions.c.transition_id).where(
+                    (s.transitions.c.chunk_id == chunk_id)
+                    & (s.transitions.c.from_node_id == from_node_id)
+                    & (s.transitions.c.epoch == epoch)
+                )
+            ).first()
+            if already is not None:
+                return False
+            conn.execute(
+                insert(s.lease_facts).values(chunk_id=chunk_id, epoch=epoch, runner_id=runner_id, minted_at=at)
+            )
+            conn.execute(
+                insert(s.transitions).values(
+                    transition_id=transition_id,
+                    chunk_id=chunk_id,
+                    from_node_id=from_node_id,
+                    to_node_id=to_node_id,
+                    choice_name=choice_name,
+                    decision_id=None,
+                    epoch=epoch,
+                    runner_id=runner_id,
+                    recorded_at=at,
+                )
+            )
+            for row in artifacts:
+                conn.execute(
+                    insert(s.artifacts).values(
+                        artifact_id=row.artifact_id,
+                        chunk_id=row.chunk_id,
+                        node_id=row.node_id,
+                        node_name=row.node_name,
+                        epoch=row.epoch,
+                        name=row.name,
+                        kind=row.kind.value,
+                        data=row.data,
+                        repo=row.repo,
+                        produced_at=at,
+                    )
+                )
+            if release_route:
+                conn.execute(
+                    insert(s.route_released).values(
+                        chunk_id=chunk_id, released_at=at, seq=self._next_route_seq(conn, chunk_id)
+                    )
+                )
+            return True
+
+    def record_hub_node_poll(self, chunk_id: str, *, node_id: str, epoch: int, at: datetime) -> None:
+        """Append one pending-poll-attempt fact (#66) — never a transition, no
+        idempotency guard (an at-least-once poll attempt is harmless recorded twice)."""
+        with self._engine.begin() as conn:
+            conn.execute(insert(s.hub_node_poll).values(chunk_id=chunk_id, node_id=node_id, epoch=epoch, polled_at=at))
 
     # --- helpers ------------------------------------------------------------
 

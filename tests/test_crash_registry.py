@@ -26,7 +26,7 @@ def test_registry_enumerates_the_daemon_loop_points() -> None:
     assert any(n.startswith("fill.") for n in names)
     assert any(n.startswith("advance.") for n in names)
     assert any(n.startswith("flush.") for n in names)
-    assert any(n.startswith("deliver.") for n in names)
+    assert any(n.startswith("hubnode.") for n in names)
 
 
 def test_duplicate_declaration_is_rejected() -> None:

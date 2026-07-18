@@ -47,25 +47,37 @@ class SessionMode(StrEnum):
     FRESH = "fresh"
 
 
-class DeliverMode(StrEnum):
-    """The deliver hub-node's landing mode."""
-
-    MERGE_TO_MAIN = "merge-to-main"
-    OPEN_PR = "open-pr"
-
-
 class RetriesExhausted(StrEnum):
     """The only exhaustion target in the MVP."""
 
     ESCALATE = "escalate"
 
 
-# Machinery-defined outcomes per hub executor: a hub node omits its
-# judgement to accept these defaults, or authors a matching choice to override one.
-# Keyed by node *name* in the thin slice — deliver is the only hub node.
-HUB_NODE_OUTCOMES: dict[str, frozenset[str]] = {
-    "deliver": frozenset({"landed", "conflict"}),
-}
+# The reserved default outcome names a hub command node's machinery maps a command's
+# exit code to when the command prints no explicit choice (#65): exit 0 -> success,
+# nonzero -> failure. A node authors a matching choice to route either default
+# anywhere it likes, including straight to the reserved terminal — no node name is
+# privileged by the engine (#67); a command may also print one of the node's other
+# authored choice names (e.g. ``landed``/``conflict``) on its last stdout line to
+# select it directly.
+HUB_DEFAULT_SUCCESS_CHOICE = "success"
+HUB_DEFAULT_FAILURE_CHOICE = "failure"
+
+# The reserved **pending** outcome (#66) — a hub command node's ``run:`` step signals
+# it by printing this literal name on its last stdout line (exit code 0; a nonzero
+# exit is always a failure, never pending). Recognized regardless of whether the node
+# authors a matching choice — like ``success``/``failure``, it is machinery-reserved,
+# not an authored edge: the executor intercepts it *before* any edge lookup, records a
+# poll-attempt fact, releases the fleet-wide slot, and re-runs the node's ``run:`` list
+# (skipping any step whose ``produces:`` marker already exists) once ``poll_interval``
+# has elapsed — never routing a transition while pending persists.
+HUB_PENDING_CHOICE = "pending"
+
+# The fleet-wide default kick-back cap (#64) — a hub node whose author omits
+# ``bounce_cap`` tolerates this many bounces (conflict/CI-red/master-moved kick-backs)
+# before the chunk escalates. Per-node, not global: a flaky-CI node can set its own,
+# stricter or looser cap by authoring the field.
+DEFAULT_BOUNCE_CAP = 5
 
 
 # --- Authoring doc (parsed from a YAML body, pre-mint) ----------------------
@@ -91,6 +103,23 @@ class JudgementDoc:
 
 
 @dataclass(frozen=True)
+class RunStepDoc:
+    """One command a hub command node executes, in authored order (#65).
+
+    ``produces``, when set, names a marker artifact: the engine records it once this
+    step exits 0, and SKIPS the step on any later re-run once it already exists — the
+    at-least-once-per-step crash contract, and the redelivery reconciliation
+    generalized (``record_delivery_repo_landed``'s per-repo skip is the pattern this
+    generalizes). ``name`` is a human label only (surfaced in logs/artifacts); it
+    defaults to the step's 1-based position when omitted.
+    """
+
+    command: str
+    name: str | None = None
+    produces: str | None = None
+
+
+@dataclass(frozen=True)
 class NodeDoc:
     """One node as authored."""
 
@@ -104,6 +133,20 @@ class NodeDoc:
     retries_exhausted: str | None
     mode: str | None
     judgement: JudgementDoc | None
+    # The kick-back cap (#64) — ``None`` accepts the fleet default (``DEFAULT_BOUNCE_CAP``);
+    # a hub node may author its own, stricter or looser.
+    bounce_cap: int | None = None
+    # The generic hub command node's declared commands (#65) — non-empty exactly on a
+    # node ``executor: hub`` authors as the generic primitive; empty on every worker
+    # node. Every hub node authors ``run:`` since #67 retired the deliver special case.
+    run: list[RunStepDoc] = field(default_factory=list)
+    # The pending-poll cadence (#66), in seconds — ``None`` accepts the executor's
+    # own default (:data:`blizzard.hub.delivery.hub_node.DEFAULT_POLL_INTERVAL` /
+    # ``DEFAULT_POLL_TIMEOUT``). Legal only on a generic hub command node
+    # (``executor: hub`` with ``run:``) — a node with no ``pending``-reporting step
+    # never reads either.
+    poll_interval_seconds: int | None = None
+    poll_timeout_seconds: int | None = None
 
 
 @dataclass(frozen=True)
@@ -153,6 +196,13 @@ def _parse_node(name: str, body: dict[str, object]) -> NodeDoc:
         retries_exhausted = str(raw_exhausted) if raw_exhausted is not None else None
     prompt = body.get("prompt")
     mode = body.get("mode")
+    raw_bounce_cap = body.get("bounce_cap")
+    bounce_cap = int(str(raw_bounce_cap)) if raw_bounce_cap is not None else None
+    raw_poll_interval = body.get("poll_interval")
+    poll_interval_seconds = int(str(raw_poll_interval)) if raw_poll_interval is not None else None
+    raw_poll_timeout = body.get("poll_timeout")
+    poll_timeout_seconds = int(str(raw_poll_timeout)) if raw_poll_timeout is not None else None
+    run = [_parse_run_step(r) for r in _as_list(body.get("run", []))]
     return NodeDoc(
         name=name,
         executor=executor,
@@ -163,7 +213,28 @@ def _parse_node(name: str, body: dict[str, object]) -> NodeDoc:
         retries_max=retries_max,
         retries_exhausted=retries_exhausted,
         mode=str(mode) if mode is not None else None,
+        bounce_cap=bounce_cap,
         judgement=_parse_judgement(body.get("judgement")),
+        run=run,
+        poll_interval_seconds=poll_interval_seconds,
+        poll_timeout_seconds=poll_timeout_seconds,
+    )
+
+
+def _parse_run_step(raw: object) -> RunStepDoc:
+    if isinstance(raw, str):
+        return RunStepDoc(command=raw)
+    body = _as_dict(raw, "run entry")
+    try:
+        command = str(body["command"])
+    except KeyError as exc:
+        raise GraphParseError("a `run` entry must declare `command`") from exc
+    name = body.get("name")
+    produces = body.get("produces")
+    return RunStepDoc(
+        command=command,
+        name=str(name) if name is not None else None,
+        produces=str(produces) if produces is not None else None,
     )
 
 
@@ -234,6 +305,15 @@ class Edge:
 
 
 @dataclass(frozen=True)
+class RunStep:
+    """One reified command a hub command node executes, in authored order (#65)."""
+
+    command: str
+    name: str | None = None
+    produces: str | None = None
+
+
+@dataclass(frozen=True)
 class Node:
     """One station in one immutable graph."""
 
@@ -251,6 +331,24 @@ class Node:
     mode: str | None
     judgement_prompt: str | None = None
     choices: list[Choice] = field(default_factory=list)
+    # The kick-back cap (#64) — ``None`` accepts ``DEFAULT_BOUNCE_CAP``.
+    bounce_cap: int | None = None
+    # The generic hub command node's declared commands (#65) — see ``NodeDoc.run``.
+    run: list[RunStep] = field(default_factory=list)
+    # The pending-poll cadence (#66), in seconds — see ``NodeDoc.poll_interval_seconds``.
+    poll_interval_seconds: int | None = None
+    poll_timeout_seconds: int | None = None
+
+    @property
+    def is_hub_command_node(self) -> bool:
+        """True for a generic hub command node (``executor: hub`` + a non-empty
+        ``run:``) — the shape :class:`~blizzard.hub.delivery.hub_node.HubNodeExecutor`
+        drives. False for every worker node. Since #67 every hub node authors
+        ``run:`` — there is no other kind left, the special-cased deliver node is
+        retired — but the property stays a plain predicate rather than an
+        assertion, since an author is free to declare a (currently pointless)
+        ``executor: hub`` node with an empty ``run:``."""
+        return self.executor is Executor.HUB and bool(self.run)
 
 
 @dataclass(frozen=True)

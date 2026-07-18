@@ -227,7 +227,16 @@ def _transcript_chunk_spec(pm_url: str) -> dict:
                 "choices": [{"name": "pass", "description": "committed and green", "to": "deliver"}],
                 "retries_max": 1,
             },
-            "deliver": {"executor": "hub", "mode": "merge-to-main"},
+            "deliver": {
+                "executor": "hub",
+                "run": [{"command": "true"}],
+                "judgement": {
+                    "choices": {
+                        "landed": {"description": "Every repo merged cleanly.", "to": "done"},
+                        "conflict": {"description": "A repo did not merge cleanly.", "to": "build"},
+                    },
+                },
+            },
         },
         "pm_pointers": [{"source": "mock", "ref": pm_url}],
     }

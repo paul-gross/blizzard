@@ -18,7 +18,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from blizzard.hub.domain.graph import (
-    HUB_NODE_OUTCOMES,
     RESERVED_TERMINAL,
     Executor,
     GraphDoc,
@@ -65,6 +64,32 @@ def _check_entry(doc: GraphDoc, node_names: set[str], errors: list[str]) -> None
 def _check_node(node: NodeDoc, node_names: set[str], errors: list[str]) -> None:
     judgement = node.judgement
 
+    # `run:` is legal ONLY on a hub node — the generic hub command node (#65). Reject it
+    # on a runner (worker) node, where it is meaningless: a worker node's step is an
+    # agent turn, not a declared command list.
+    if node.run and node.executor is not Executor.HUB:
+        errors.append(f"node `{node.name}`: `run:` is only legal on a hub node (`executor: hub`)")
+
+    # The pending-poll cadence (#66) is legal only on a generic hub command node — a
+    # node with no `run:` step ever reports `pending`, so the fields are meaningless
+    # anywhere else.
+    is_hub_command_node = node.executor is Executor.HUB and bool(node.run)
+    if (node.poll_interval_seconds is not None or node.poll_timeout_seconds is not None) and not is_hub_command_node:
+        errors.append(
+            f"node `{node.name}`: `poll_interval`/`poll_timeout` are only legal on a "
+            f"hub command node (`executor: hub` with `run:`)"
+        )
+    if node.poll_interval_seconds is not None and node.poll_interval_seconds <= 0:
+        errors.append(f"node `{node.name}`: `poll_interval` must be a positive number of seconds")
+    if node.poll_timeout_seconds is not None and node.poll_timeout_seconds <= 0:
+        errors.append(f"node `{node.name}`: `poll_timeout` must be a positive number of seconds")
+    if (
+        node.poll_interval_seconds is not None
+        and node.poll_timeout_seconds is not None
+        and node.poll_timeout_seconds < node.poll_interval_seconds
+    ):
+        errors.append(f"node `{node.name}`: `poll_timeout` must be >= `poll_interval`")
+
     # Judgement-kind rules keyed on executor + judged-by.
     if node.executor is Executor.RUNNER:
         if judgement is None:
@@ -73,17 +98,25 @@ def _check_node(node: NodeDoc, node_names: set[str], errors: list[str]) -> None:
             errors.append(f"node `{node.name}`: a worker-judged node must declare `judgement.prompt`")
         elif judgement.by is JudgedBy.HUMAN and judgement.prompt:
             errors.append(f"node `{node.name}`: a human-judged (gate) node must not declare `judgement.prompt`")
-    elif node.executor is Executor.HUB and judgement is not None:
-        known = HUB_NODE_OUTCOMES.get(node.name)
-        if known is None:
-            errors.append(f"hub node `{node.name}`: no known machinery outcome set to override")
-        else:
-            for choice in judgement.choices:
-                if choice.name not in known:
-                    allowed = ", ".join(sorted(known))
-                    errors.append(
-                        f"hub node `{node.name}`: choice `{choice.name}` is not a known outcome (one of: {allowed})"
-                    )
+    elif node.executor is Executor.HUB:
+        # The generic hub command node (#65) — since #67 the ONLY hub-node shape, the
+        # deliver special case retired: structurally agentless — no prompt, no worker
+        # judgement prose, no in-session checks. Its choices are authored like a
+        # worker node's own (a fused choice/edge per outcome its commands can emit),
+        # checked generically below like every other node's choices — no node name is
+        # privileged by the engine, and no choice is restricted from routing straight
+        # to the reserved terminal.
+        if node.prompt is not None:
+            errors.append(f"hub node `{node.name}`: a hub command node must not declare `prompt`")
+        if node.checks:
+            errors.append(f"hub node `{node.name}`: a hub command node must not declare `checks`")
+        if judgement is not None and judgement.prompt:
+            errors.append(f"hub node `{node.name}`: a hub command node must not declare `judgement.prompt`")
+        if judgement is None:
+            errors.append(
+                f"hub node `{node.name}`: a hub command node must declare a judgement "
+                f"(its outcome choices — at least the edges its commands route)"
+            )
 
     # Every choice entry has a description and a `to` that resolves.
     if judgement is not None:
@@ -120,32 +153,19 @@ def _warn_reachability(doc: GraphDoc, node_names: set[str], warnings: list[str])
 
 
 def _edges(doc: GraphDoc) -> dict[str, set[str]]:
-    """Adjacency including hub nodes' machinery-default outcomes.
+    """Adjacency built from every node's authored choices — including hub nodes.
 
-    A hub node may omit its judgement to accept the machinery defaults (deliver's
-    ``landed -> done`` and ``conflict -> entry``); those are real edges for
-    reachability even though the authoring doc never spells them out. Authored
-    choices override the matching default.
+    Since #67 no node name is privileged: a hub command node's choices are authored
+    like a worker node's own (a fused choice/edge per outcome its commands can emit),
+    so this reads the same ``judgement.choices`` for every node.
     """
     out: dict[str, set[str]] = {n.name: set() for n in doc.nodes}
     for node in doc.nodes:
-        authored: set[str] = set()
         if node.judgement is not None:
             for choice in node.judgement.choices:
-                authored.add(choice.name)
                 if choice.to is not None:
                     out[node.name].add(choice.to)
-        if node.executor is Executor.HUB and node.name in HUB_NODE_OUTCOMES:
-            for outcome in HUB_NODE_OUTCOMES[node.name]:
-                if outcome in authored:
-                    continue  # an authored choice already routes this outcome
-                out[node.name].add(_default_hub_target(outcome, doc.entry))
     return out
-
-
-def _default_hub_target(outcome: str, entry: str) -> str:
-    """The default routing for a hub node's machinery outcome."""
-    return RESERVED_TERMINAL if outcome == "landed" else entry
 
 
 def _reachable_from(start: str, edges: dict[str, set[str]], *, include_terminal: bool = False) -> set[str]:

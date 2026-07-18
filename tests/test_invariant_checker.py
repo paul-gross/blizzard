@@ -221,6 +221,67 @@ def test_transition_epoch_beyond_latest_lease_is_a_violation(tmp_path: Path) -> 
     assert "hub:epoch-consistent-transitions" in slugs
 
 
+def test_landed_fact_without_terminal_transition_is_a_two_state_violation(tmp_path: Path) -> None:
+    """``hub:merge-queue-single-state`` — #63's "a merged chunk is never left non-terminal".
+
+    A whole-chunk ``delivery.landed`` fact paired with a NON-terminal newest transition is a
+    chunk that is merged yet not-terminal — read as both landed and mid-flight (two states at
+    once), the un-merged corruption. The checker fires: this is the facts-level embodiment of
+    "DONE derives from *reaching* the terminal transition, not from the landed fact." A real
+    store never writes this shape (``finalize_delivery`` writes the landed fact and the terminal
+    transition atomically), so the check is defense-in-depth behind that atomic write."""
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(insert(hub.chunks).values(chunk_id="ch_1", graph_id="gr_1", minted_at=_NOW, model="m"))
+        conn.execute(insert(hub.lease_facts).values(chunk_id="ch_1", epoch=2, runner_id="hub", minted_at=_NOW))
+        # Newest transition targets a post-merge worker node, NOT the reserved terminal.
+        conn.execute(
+            insert(hub.transitions).values(
+                transition_id="tr_1",
+                chunk_id="ch_1",
+                from_node_id="nd_deliver",
+                to_node_id="nd_verify",
+                choice_name="landed",
+                epoch=2,
+                runner_id="hub",
+                recorded_at=_NOW,
+            )
+        )
+        conn.execute(insert(hub.delivery_landed).values(chunk_id="ch_1", landed_at=_NOW))
+    slugs = {v.invariant for v in check_hub_store(engine)}
+    assert "hub:merge-queue-single-state" in slugs
+
+
+def test_merged_into_post_merge_node_is_not_a_violation(tmp_path: Path) -> None:
+    """#63's legal shape: a chunk merged into a post-merge node is clean, never flagged.
+
+    Per-repo ``delivery.repo_landed`` facts (the merge happened), a NON-terminal newest
+    transition into the post-merge node, and NO whole-chunk ``delivery.landed`` fact. The
+    chunk is merged-but-running: it carries no whole-chunk terminal fact, so it derives its
+    live status rather than DONE, and the checker must not read it as un-merged/two-state.
+    This is the exact shape #63's coordinator ``_landed`` non-terminal branch produces."""
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(insert(hub.chunks).values(chunk_id="ch_1", graph_id="gr_1", minted_at=_NOW, model="m"))
+        conn.execute(insert(hub.lease_facts).values(chunk_id="ch_1", epoch=2, runner_id="hub", minted_at=_NOW))
+        conn.execute(
+            insert(hub.transitions).values(
+                transition_id="tr_1",
+                chunk_id="ch_1",
+                from_node_id="nd_deliver",
+                to_node_id="nd_verify",
+                choice_name="landed",
+                epoch=2,
+                runner_id="hub",
+                recorded_at=_NOW,
+            )
+        )
+        conn.execute(
+            insert(hub.delivery_repo_landed).values(chunk_id="ch_1", repo="toy-api", commit_hash="abc", landed_at=_NOW)
+        )
+    assert check_hub_store(engine) == []
+
+
 def test_two_open_pause_parks_on_one_lease_is_a_violation(tmp_path: Path) -> None:
     """``runner:one-open-pause-park-per-lease`` — PULL's park guard is the only thing
     keeping a standing pause to a single open park (issue #46, plan §7)."""

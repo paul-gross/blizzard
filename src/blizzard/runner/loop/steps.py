@@ -1609,15 +1609,28 @@ def _apply_response(
 
 
 def _advance_held_chunk(ctx: LoopContext, chunk_id: str) -> None:
-    """Drive a chunk the runner holds with no active lease: a hub node or a parked gate.
+    """Drive a chunk the runner holds with no active lease: a hub node, a parked
+    gate, or a chunk the hub has just routed into a fresh runner node.
 
-    Two parked shapes share this poll (both hold environments, no live lease): a chunk at
-    a **hub node** (deliver) is polled for its terminal outcome and released on landed;
-    a chunk **parked on a resolved gate decision** is advanced by recording the
-    resolving transition along the chosen edge, then continued in place from
-    the returned envelope — the human's choice moves the chunk.
+    Three parked shapes share this poll (all hold environments, no live lease): a
+    chunk at a **hub node** (a generic hub command node, #65) is polled for its
+    terminal outcome and released once it reaches `done`; a chunk **parked on a
+    resolved gate decision** is advanced by recording the resolving transition along
+    the chosen edge, then continued in place from the returned envelope — the human's
+    choice moves the chunk; a chunk the hub has advanced to a **higher epoch** than
+    this runner has minted a lease for — its newest transition now targets a plain
+    **runner node** under the executor's own ``hub_epoch``, an authored
+    ``merged -> <node>`` edge (#63) landing the chunk into a post-merge node, or a conflict
+    routed back to a worker node — is advanced by :func:`_spawn_into_held_node`: fetch the
+    fresh envelope and spawn it into the already-held, warm environments (the same
+    :func:`_spawn_attempt` path :func:`_apply_response`'s ``NEXT`` branch uses). This is
+    the "runner advances the chunk into `<node>`" mechanism #63 names; it also subsumes the
+    conflict-reappears case once deferred here. The **strictly-higher hub epoch** is what
+    distinguishes a genuine hub advance from a chunk whose just-recorded escalation is still
+    buffered (the hub reads ``running`` for a beat, at the epoch this runner already holds) —
+    spawning on ``running`` alone would re-spawn the escalated node in an endless loop.
 
-    A 404 (:class:`ChunkNotFoundError`) is a third, terminal shape (blizzard#9): the hub no
+    A 404 (:class:`ChunkNotFoundError`) is a fourth, terminal shape (blizzard#9): the hub no
     longer knows this chunk (e.g. a store reset), so there is nothing left to poll toward —
     the held environments are released the same way a landed delivery releases them. No lease
     is open here to reap (that is :func:`_reassigned_or_detached`'s job, for the active-lease
@@ -1638,9 +1651,76 @@ def _advance_held_chunk(ctx: LoopContext, chunk_id: str) -> None:
     decision = detail.decision
     if decision is not None and decision.resolved_choice is not None and not decision.transitioned:
         _resolve_gate(ctx, chunk_id, decision)
-    # A conflict routing back to a runner node reappears as a fresh envelope
-    # the next claim/advance picks up; that recovery cycle is P7. An unresolved decision
-    # keeps waiting; the human's resolution is picked up on a later tick.
+        return
+    hub_epoch = detail.latest_epoch
+    if detail.status == ChunkStatus.RUNNING and hub_epoch is not None and hub_epoch > ctx.store.latest_epoch(chunk_id):
+        # The hub has advanced this chunk to a **higher epoch** than any lease this runner has
+        # minted for it — the hub-node executor authored a fresh transition into a plain runner
+        # node under its own ``hub_epoch = epoch + 1`` (an authored ``merged -> <node>`` land, #63, or
+        # a conflict routed back to a worker node) while this runner retained the route. Spawn
+        # into it, in place, in the warm environment.
+        #
+        # The epoch gate is load-bearing, not cosmetic: a chunk whose retries have just been
+        # exhausted has enqueued its ``escalation.recorded`` fact to the *outbound buffer* but
+        # not yet flushed it, so the hub still derives ``running`` for a beat — at the **same**
+        # epoch this runner last minted. Firing on ``status == running`` alone would mistake that
+        # for a hub advance and re-spawn the just-escalated node, which fails, escalates, and
+        # loops forever. Only a strictly-higher hub epoch means "the hub moved the chunk, and this
+        # runner has not spawned that node yet."
+        _spawn_into_held_node(ctx, chunk_id)
+    elif detail.status == ChunkStatus.DELIVERING:
+        # A chunk parked at a hub node — the generic hub command node (#65/#66,
+        # including its pending outcome). Drive it one step; a no-op at
+        # the hub (slot busy, not yet due to poll, or not a hub-command node at all)
+        # simply leaves this binding held, polled again next tick. This is the #66
+        # re-drive path: a hub node deferred by slot contention, or parked pending,
+        # had no other liveness poll before this wiring.
+        _poll_hub_node(ctx, chunk_id)
+    # An unresolved decision keeps waiting; the human's resolution is picked up on a
+    # later tick. A chunk still delivering (a hub node, e.g. an open PR) keeps its
+    # binding too — polled again next tick. A chunk whose escalation has not yet flushed
+    # (hub still ``running``, same epoch) keeps its binding — the flush lands needs_human.
+
+
+def _poll_hub_node(ctx: LoopContext, chunk_id: str) -> None:
+    """Drive a chunk parked at a hub node one step via ``POST /chunks/{id}/hub-advance``
+    (#65/#66) — the re-drive path a hub node otherwise has no liveness poll for.
+
+    A no-op at the hub is expected and silent: the chunk is not currently parked at a
+    generic hub command node, the fleet-wide serialization slot is held by a different
+    chunk right now, or a
+    prior ``pending`` outcome's ``poll_interval`` has not yet elapsed. Any of those
+    leaves this runner's binding untouched — :func:`_advance_held_chunk` calls this
+    again next tick. A transport failure is likewise swallowed: the hub is retried,
+    not treated as a chunk-ending event.
+    """
+    try:
+        ctx.hub.hub_advance(chunk_id)
+    except HubClientError:
+        return  # hub unreachable — retried next tick
+
+
+def _spawn_into_held_node(ctx: LoopContext, chunk_id: str) -> None:
+    """Spawn the held chunk's current node into its already-bound, warm environment.
+
+    The hub already advanced the chunk — a landed-to-post-merge-node transition (#63)
+    or a conflict routed back to a worker node — while this runner retained the route,
+    so no active lease was minted for it and nothing else will spawn it. Mirrors
+    :func:`_adopt_interrupted_claim`'s fetch-envelope-and-spawn shape."""
+    bindings = ctx.store.bindings_for_chunk(chunk_id)
+    if not bindings:
+        _log.warning("held chunk advanced with no bound env — cannot spawn", chunk_id=chunk_id)
+        return
+    try:
+        envelope = ctx.hub.get_envelope(chunk_id)
+    except ChunkNotFoundError:
+        _log.warning("hub reports advanced chunk unknown — releasing envs", chunk_id=chunk_id)
+        _release_all(ctx, chunk_id)
+        return
+    except HubClientError:
+        return  # hub unreachable — the transition is durable at the hub; retry next tick
+    _log.info("hub advanced held chunk into a fresh node — spawning", chunk_id=chunk_id)
+    _spawn_attempt(ctx, chunk_id, envelope, _bindings_as_environments(bindings), via="advance")
 
 
 def _resolve_gate(ctx: LoopContext, chunk_id: str, decision: DecisionView) -> None:

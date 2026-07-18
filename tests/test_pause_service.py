@@ -17,7 +17,7 @@ from typing import Any, cast
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.graph import Executor
+from blizzard.hub.domain.graph import RESERVED_TERMINAL, Executor
 from blizzard.hub.domain.pause import ChunkNotPausable, PauseService
 from blizzard.hub.domain.work import (
     Chunk,
@@ -99,7 +99,13 @@ def _stopped_facts() -> ChunkFacts:
 
 
 def _done_facts() -> ChunkFacts:
-    return ChunkFacts(minted=True, delivery_landed=True)
+    return ChunkFacts(
+        minted=True,
+        delivery_landed=True,
+        transitions=[
+            TransitionFact(to_node_id=RESERVED_TERMINAL, to_node_executor=Executor.HUB, epoch=1, recorded_at=_T0),
+        ],
+    )
 
 
 @pytest.mark.parametrize(

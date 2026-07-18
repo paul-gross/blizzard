@@ -24,11 +24,12 @@ from blizzard.hub.api.decisions import to_decision_view
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.api.questions import question_view
 from blizzard.hub.composition import HubServices
+from blizzard.hub.delivery.hub_node import poll_interval_for
 from blizzard.hub.domain.artifacts import ArtifactRow, GitCommitArtifact, from_row, store_key
 from blizzard.hub.domain.decisions import NotEscalated
 from blizzard.hub.domain.detach import NotRouted
 from blizzard.hub.domain.edit import ChunkNotEditable
-from blizzard.hub.domain.envelope import build_node_envelope
+from blizzard.hub.domain.envelope import addendum_for_transition, build_node_envelope
 from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.ingest import IngestConflict
 from blizzard.hub.domain.pause import ChunkNotPausable
@@ -41,7 +42,10 @@ from blizzard.hub.domain.work import (
     current_node_id,
     derive_chunk_status,
     derive_chunk_usage,
+    has_landed_repos,
+    hub_node_pending,
     latest_epoch,
+    newest_transition,
     open_escalation,
     open_pause,
     transition_history,
@@ -49,7 +53,7 @@ from blizzard.hub.domain.work import (
 from blizzard.hub.pm.source import IPmSource, IPmSourceRegistry, PmSourceError
 from blizzard.wire.chunk import (
     ArtifactView,
-    CheckDeliveryResponse,
+    BounceView,
     ChunkDetail,
     ChunkGraphUpdateRequest,
     ChunkGraphView,
@@ -63,7 +67,11 @@ from blizzard.wire.chunk import (
     ChunkUsageTotalView,
     ChunkUsageView,
     EscalationView,
+    HubAdvanceResponse,
+    HubMarkerRequest,
+    HubMarkerResponse,
     PauseView,
+    PendingView,
     PmItemEntry,
     PmItemsView,
     PmPointerView,
@@ -305,6 +313,14 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
     node_id = current_node_id(facts) or (graph.entry_node_id if graph is not None else None)
     node_name = _node_name(graph, node_id)
     web_base = _branch_url_source(chunk, services.pm)
+    artifacts = services.chunks.load_artifacts(chunk_id)
+    pending = hub_node_pending(facts)
+    pending_view = None
+    if pending is not None:
+        pending_node = graph.node_by_id(pending.node_id) if graph is not None else None
+        if pending_node is not None:
+            next_poll_at = pending.polled_at + poll_interval_for(pending_node)
+            pending_view = PendingView(node_name=pending_node.name, next_poll_at=iso_utc(next_poll_at))
     return ChunkDetail(
         chunk_id=chunk.chunk_id,
         graph_id=chunk.graph_id,
@@ -327,12 +343,18 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
         pause=PauseView(by=pause.set_by, set_at=iso_utc(pause.set_at)) if pause is not None else None,
         decision=to_decision_view(decision) if decision is not None else None,
         history=_history_views(facts, graph),
-        artifacts=_artifact_views(services.chunks.load_artifacts(chunk_id), web_base),
+        artifacts=_artifact_views(artifacts, web_base),
         questions=[question_view(q) for q in services.chunks.load_questions(chunk_id) if not q.answered],
         awaiting_external_merge=awaiting_external_merge(facts),
         open_prs=[PrView(repo=pr.repo, number=pr.number, url=pr.url) for pr in facts.pr_opened],
         cost=_usage_total_view(facts),
         usage=_usage_history_views(facts),
+        pending=pending_view,
+        landed=has_landed_repos(facts, artifacts),
+        bounces=[
+            BounceView(cause=b.cause, envelope=b.envelope, recorded_at=iso_utc(b.recorded_at))
+            for b in sorted(facts.bounces, key=lambda b: b.recorded_at)
+        ],
     )
 
 
@@ -355,6 +377,7 @@ def get_envelope(chunk_id: str, services: Annotated[HubServices, Depends(get_ser
         node=node,
         artifacts=services.chunks.load_artifacts(chunk_id),
         epoch=latest_epoch(facts) or 0,
+        arrival_addendum=addendum_for_transition(graph, newest_transition(facts)),
     )
 
 
@@ -379,17 +402,21 @@ def submit_completion(
     return response
 
 
-@router.post("/chunks/{chunk_id}/check-delivery", response_model=CheckDeliveryResponse)
-def check_delivery(
+@router.post("/chunks/{chunk_id}/hub-advance", response_model=HubAdvanceResponse)
+def hub_advance(
     chunk_id: str,
     services: Annotated[HubServices, Depends(get_services)],
-) -> CheckDeliveryResponse:
-    """Poll a parked open-pr chunk's PRs; finalize the delivery once all are terminal.
+) -> HubAdvanceResponse:
+    """Drive a chunk parked at a generic hub command node one step (#65).
 
-    The on-demand external-merge detection (the impatient path): for a chunk parked in
-    ``open-pr`` mode, check every open PR through the forge and, when all have merged or
-    closed, write the terminal facts so the chunk flips to ``done`` and its environments
-    release. A no-op when the chunk has no open PR or is already finalized.
+    Runs :class:`~blizzard.hub.delivery.hub_node.HubNodeExecutor` once, respecting the
+    fleet-wide serialization slot: ``ran=False`` means a different chunk holds the
+    slot right now, OR (#66) the node reported ``pending`` on a prior call and
+    ``poll_interval`` has not yet elapsed — either way not an error, the runner's
+    ADVANCE poll (``_advance_held_chunk``) simply calls this again on a later tick. A
+    no-op (``ran=False``, ``detail`` names it) when the chunk is not currently parked
+    at a generic hub command node — every hub node is this shape since #67; no other
+    delivery route remains.
     """
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
@@ -397,17 +424,74 @@ def check_delivery(
     graph = services.graphs.get(chunk.graph_id)
     if graph is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
-    result = services.delivery_check.check(chunk, graph)
+    facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
+    node_id = current_node_id(facts)
+    node = graph.node_by_id(node_id) if node_id is not None else None
+    if node is None or not node.is_hub_command_node:
+        derived = derive_chunk_status(facts)
+        return HubAdvanceResponse(
+            chunk_id=chunk_id, status=derived, ran=False, detail="not parked at a hub command node"
+        )
+    epoch = latest_epoch(facts) or 0
+    result = services.hub_node.run(chunk, graph, node, epoch=epoch)
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     derived = derive_chunk_status(facts)
     services.events.publish_chunk_changed(chunk_id, derived.value)
-    return CheckDeliveryResponse(
+    if result is None:
+        pending = hub_node_pending(facts)
+        next_poll_at = pending.polled_at + poll_interval_for(node) if pending is not None else None
+        # `next_poll_at` in the future distinguishes "not yet due to poll" (#66, gated
+        # before the slot was even attempted) from a genuinely busy slot — a pending
+        # node whose interval already elapsed but lost the slot race falls through to
+        # the busy message, same as a fresh hub node would.
+        if next_poll_at is not None and next_poll_at > services.clock.now():
+            detail = f"pending — next poll at {iso_utc(next_poll_at)}"
+        else:
+            detail = "hub-execution slot busy — try again"
+        return HubAdvanceResponse(chunk_id=chunk_id, status=derived, ran=False, detail=detail)
+    return HubAdvanceResponse(
         chunk_id=chunk_id,
         status=derived,
-        finalized=result.finalized,
-        open_prs=result.open_prs,
+        ran=True,
+        outcome_choice=result.outcome_choice,
+        to_node_name=result.to_node_name or None,
         detail=result.detail,
     )
+
+
+@router.post("/chunks/{chunk_id}/hub-markers", response_model=HubMarkerResponse)
+def record_hub_marker(
+    chunk_id: str,
+    node_id: str,
+    epoch: int,
+    request_body: HubMarkerRequest,
+    services: Annotated[HubServices, Depends(get_services)],
+) -> HubMarkerResponse:
+    """The mid-run marker callback (#65) — a ``run:`` step's own dynamic-loop marker.
+
+    Mirrors ``blizzard runner ask``'s worker-facing callback shape: a hub command
+    node's script POSTs here (via the injected
+    ``BZ_HUB_MARKER_CALLBACK_URL``, which already carries ``node_id``/``epoch``) to
+    record a marker artifact mid-run, ahead of that command's own exit — enabling a
+    dynamic loop (``merge repo -> push -> record merged/<repo> -> next``). Idempotent
+    per ``(chunk, node, name, epoch)``, exactly like the ``produces:`` marker the
+    executor records on a step's own exit.
+    """
+    chunk = services.chunks.get(chunk_id)
+    if chunk is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+    graph = services.graphs.get(chunk.graph_id)
+    node = graph.node_by_id(node_id) if graph is not None else None
+    node_name = node.name if node is not None else node_id
+    recorded = services.hub_node.record_marker(
+        chunk_id,
+        node_id=node_id,
+        node_name=node_name,
+        epoch=epoch,
+        name=request_body.name,
+        content=request_body.content,
+    )
+    return HubMarkerResponse(recorded=recorded, chunk_id=chunk_id, name=request_body.name)
 
 
 @router.post("/chunks/{chunk_id}/decisions", response_model=ApplyResponse)

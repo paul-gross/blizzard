@@ -21,14 +21,15 @@ the one ``waiting_on_human`` branch (see :func:`derive_chunk_status`).
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Protocol
 
 from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.fleet import Route
-from blizzard.hub.domain.graph import Executor
+from blizzard.hub.domain.graph import RESERVED_TERMINAL, Executor
 
 
 class ChunkStatus(StrEnum):
@@ -126,22 +127,6 @@ class PrOpenedFact:
 
 
 @dataclass(frozen=True)
-class PrClosedFact:
-    """A ``pr.closed`` fact — the terminal outcome of an open-pr delivery.
-
-    Written when a poll or the on-demand check detects the PR reached a terminal state;
-    ``merged`` distinguishes merged from closed-without-merge (both terminal), and
-    ``landed_commit`` carries the merge commit where one exists. Its presence flips the
-    chunk to ``done`` and the route is released.
-    """
-
-    repo: str
-    number: int
-    merged: bool
-    landed_commit: str | None = None
-
-
-@dataclass(frozen=True)
 class LeaseFact:
     """A ``lease.minted`` fact reported up from a runner."""
 
@@ -220,6 +205,44 @@ class DecisionFact:
     decision_id: str
     submitted_at: datetime
     resolved: bool = False
+
+
+@dataclass(frozen=True)
+class BounceFact:
+    """A ``chunk_bounces`` row — one delivery kick-back (#64).
+
+    Contention, not failure: a bounce consumes no node retry and is not itself an
+    escalation — it is counted separately, and only crossing the node's ``bounce_cap``
+    escalates. ``epoch`` is the coordinator's own ``hub_epoch`` at bounce time — the
+    natural key (``chunk_id``, ``epoch``) a hydrating repository's write guards against a
+    redelivery replay double-counting. ``cause`` names the kick-back reason (``conflict``
+    in the MVP forge seam — the fuller checks/master-moved vocabulary is a later phase's
+    forge-seam extension); ``envelope`` is the opaque JSON kick-back payload (cause detail,
+    the repo, the base branch) the routed edge's artifact carries into the fix node so it
+    never rediscovers what bounced it.
+    """
+
+    epoch: int
+    cause: str
+    envelope: str
+    recorded_at: datetime
+
+
+@dataclass(frozen=True)
+class HubNodePollFact:
+    """A ``hub_node_poll`` row — one pending-poll attempt at a hub command node (#66).
+
+    Append-only, stamped from the injected clock. ``epoch`` is the arrival epoch of
+    the current visit to ``node_id`` — the same value the node's own marker/log
+    artifacts are recorded under (:class:`~blizzard.hub.delivery.hub_node.HubNodeExecutor`),
+    not a fresh one minted per poll. Pending-ness (:func:`hub_node_pending`) derives
+    from these rows plus the newest transition — nothing in-memory, so a ``kill -9``
+    between polls resumes polling straight from the store.
+    """
+
+    node_id: str
+    epoch: int
+    polled_at: datetime
 
 
 @dataclass(frozen=True)
@@ -309,7 +332,18 @@ class ChunkFacts:
     minted: bool
     promoted: bool = False
     stopped: bool = False
+    # ``delivery.landed`` — the whole-chunk terminal fact ``finalize_delivery`` writes
+    # atomically with the terminal transition (merge-to-main). Informational only
+    # (``bzh:facts-not-status``): it no longer drives DONE (:func:`newest_transition_is_terminal`
+    # does) — it feeds :func:`has_landed_repos` alongside ``landed_repos`` below, so a
+    # merged-but-not-yet-terminal chunk (an authored ``merged -> <node>`` edge) still
+    # reads "landed" honestly in chunk detail even though this whole-chunk fact never fires
+    # for it (only the per-repo facts do).
     delivery_landed: bool = False
+    # The chunk's per-repo ``delivery.repo_landed`` facts — recorded as each repo lands,
+    # independent of whether the chunk's delivery has reached a terminal transition yet.
+    # Feeds :func:`has_landed_repos`; the derivation reads only non-emptiness.
+    landed_repos: frozenset[str] = field(default_factory=frozenset)
     pr_closed: bool = False
     escalations: list[EscalationFact] = field(default_factory=list)
     leases: list[LeaseFact] = field(default_factory=list)
@@ -322,18 +356,32 @@ class ChunkFacts:
     pr_opened: list[PrOpenedFact] = field(default_factory=list)
     pauses: list[PauseFact] = field(default_factory=list)
     usage: list[UsageFact] = field(default_factory=list)
+    # The chunk's recorded delivery kick-backs (#64) — feeds :func:`bounce_count` /
+    # :func:`bounces_over_cap` and the chunk-detail bounce history. Never a status.
+    bounces: list[BounceFact] = field(default_factory=list)
+    # The chunk's recorded hub-node poll attempts (#66) — feeds :func:`hub_node_pending`
+    # and the executor's own interval/timeout gating. Never a status: pending is a
+    # facet of ``delivering`` (the newest transition still enters the hub node).
+    hub_node_polls: list[HubNodePollFact] = field(default_factory=list)
 
 
 # --- The derivation queries -----------------------------------------
 
 
 def derive_chunk_status(facts: ChunkFacts) -> ChunkStatus:
-    """Derive a chunk's single status from its facts, first match wins."""
+    """Derive a chunk's single status from its facts, first match wins.
+
+    ``done`` is the **only** terminal (#63): it derives from *reaching* the terminal
+    transition (:func:`newest_transition_is_terminal`), not from the landed fact —
+    an authored ``merged -> <node>`` edge can land every repo and keep the chunk
+    running or escalated in a post-merge node, never un-merged, never wrongly DONE.
+    """
     if facts.stopped:
         return ChunkStatus.STOPPED
-    if facts.delivery_landed or facts.pr_closed:
+    if newest_transition_is_terminal(facts) or facts.pr_closed:
         # ``pr.closed`` is the open-pr mode's terminal fact (merged or closed-without-merge,
-        # both terminal), the counterpart to ``delivery.landed`` for merge-to-main.
+        # both terminal); its finalize always lands the terminal transition too, but the
+        # explicit check keeps this branch legible about the open-pr counterpart.
         return ChunkStatus.DONE
     if _has_open_escalation(facts):
         return ChunkStatus.NEEDS_HUMAN
@@ -443,15 +491,103 @@ def awaiting_external_merge(facts: ChunkFacts) -> bool:
     return bool(facts.pr_opened) and not facts.pr_closed
 
 
-def open_pr_handles(facts: ChunkFacts) -> list[PrOpenedFact]:
-    """The chunk's open PRs — the handles a poll or the on-demand check reads."""
-    return list(facts.pr_opened)
+_MARKER_PREFIX = "merged/"
+
+
+def landed_repos_from_markers(artifacts: Sequence[ArtifactRow]) -> frozenset[str]:
+    """Repos landed via a generic hub command node's ``merged/<repo>`` marker
+    artifact (#67) — the convention the authored default (and PR+CI example) delivery
+    graphs record per pushed repo, via the mid-run marker callback
+    (:meth:`~blizzard.hub.delivery.hub_node.HubNodeExecutor.record_marker`). This is
+    the landing truth going forward: no engine code names a "deliver" node, so
+    nothing writes the old per-repo ``delivery.repo_landed`` fact any more — a chunk's
+    landed detail is read off its own node artifacts, not a privileged fact family.
+    """
+    return frozenset(
+        artifact.name.removeprefix(_MARKER_PREFIX) for artifact in artifacts if artifact.name.startswith(_MARKER_PREFIX)
+    )
+
+
+def has_landed_repos(facts: ChunkFacts, artifacts: Sequence[ArtifactRow] = ()) -> bool:
+    """True iff any repo has landed for this chunk — informational, never a status (#63).
+
+    Feeds chunk-detail truthfully whether landing is fully finalized (the whole-chunk
+    ``delivery_landed`` fact) or only some/all repos have landed while the chunk sits
+    in a post-merge node, running or escalated — "merged but stuck" honestly, never
+    un-merged. ``artifacts`` is the chunk's node artifacts, read for the generic
+    ``merged/<repo>`` marker convention (#67) — the CURRENT landing truth; the fact
+    inputs (``delivery_landed``/``landed_repos``) are read alongside for BACK-COMPAT
+    with chunks a pre-#67 hub delivered (the ``delivery_*`` fact tables are kept, not
+    migrated), so a historical chunk still reads landed even though nothing writes
+    those facts any more.
+    """
+    return facts.delivery_landed or bool(facts.landed_repos) or bool(landed_repos_from_markers(artifacts))
+
+
+def bounce_count(facts: ChunkFacts) -> int:
+    """The chunk's total recorded delivery kick-backs (#64) — informational.
+
+    Feeds the cap check (:func:`bounces_over_cap`) and the chunk-detail bounce
+    history; never itself a status — a bounce is contention, not failure."""
+    return len(facts.bounces)
+
+
+def bounces_over_cap(facts: ChunkFacts, cap: int) -> bool:
+    """True once the chunk's bounce count has **crossed** ``cap`` (#64).
+
+    Crossed, not reached: a node whose ``bounce_cap`` is 5 tolerates 5 kick-backs
+    before this flips True on the 6th — the cap counts bounces a chunk survives before
+    escalating, not a zero-indexed budget."""
+    return bounce_count(facts) > cap
+
+
+def newest_transition_is_terminal(facts: ChunkFacts) -> bool:
+    """The newest accepted transition's target is the reserved terminal (``done``, #63).
+
+    The **sole** DONE trigger — reaching the terminal, not any landed/closed fact. A
+    chunk whose repos all landed but whose newest transition entered a post-merge node
+    (an authored ``merged -> <node>`` edge) does not derive DONE here; it derives
+    ``running``/``needs_human`` from the branches below, with :func:`has_landed_repos`
+    surfacing the landed detail truthfully alongside.
+    """
+    transition = newest_transition(facts)
+    return transition is not None and transition.to_node_id == RESERVED_TERMINAL
 
 
 def _newest_transition_enters_hub_node(facts: ChunkFacts) -> bool:
     """The newest accepted transition's target is a hub-executed node."""
     transition = newest_transition(facts)
     return transition is not None and transition.to_node_executor is Executor.HUB
+
+
+def hub_node_poll_history(facts: ChunkFacts, *, node_id: str, epoch: int) -> list[HubNodePollFact]:
+    """A hub node's poll attempts for one (node, epoch) visit, oldest first (#66).
+
+    The executor's own gating input: the earliest entry bounds ``poll_timeout``, the
+    newest gates ``poll_interval`` — both read off this history rather than any
+    in-memory state, so a ``kill -9`` between polls resumes exactly here.
+    """
+    return sorted(
+        (p for p in facts.hub_node_polls if p.node_id == node_id and p.epoch == epoch), key=lambda p: p.polled_at
+    )
+
+
+def hub_node_pending(facts: ChunkFacts) -> HubNodePollFact | None:
+    """The chunk's in-progress hub-node poll, or ``None`` — chunk-detail honesty (#66).
+
+    Not a distinct status: the chunk still derives ``delivering`` (its newest
+    transition still enters the hub node — :func:`_newest_transition_enters_hub_node`).
+    This is the DETAIL that distinguishes a hub node about to run its first attempt
+    from one already parked mid-poll, mirroring :func:`awaiting_external_merge`. A
+    poll fact recorded for the newest transition's ``(to_node_id, epoch)`` with no
+    later transition means the node is still waiting on external state; the caller
+    resolves the node's ``poll_interval`` to compute the next-poll time.
+    """
+    transition = newest_transition(facts)
+    if transition is None or transition.to_node_executor is not Executor.HUB:
+        return None
+    history = hub_node_poll_history(facts, node_id=transition.to_node_id, epoch=transition.epoch)
+    return history[-1] if history else None
 
 
 def newest_live_route(
@@ -692,10 +828,6 @@ class IReadChunkRepository(Protocol):
         """The repos already landed for a chunk — the delivery reconciliation skip-set."""
         ...
 
-    def open_prs(self, chunk_id: str) -> list[PrOpenedFact]:
-        """The chunk's ``pr.opened`` facts — the open-pr reconcile skip-set and check handles."""
-        ...
-
     def runner_high_water(self, runner_id: str) -> int:
         """The greatest per-runner seq the hub has already applied, or 0."""
         ...
@@ -780,38 +912,28 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         no-op if already landed (crash recovery). Returns True iff it wrote."""
         ...
 
-    def record_pr_opened(
-        self, chunk_id: str, *, repo: str, number: int, url: str, commit_hash: str, at: datetime
-    ) -> None:
-        """Record a ``pr.opened`` park fact (open-pr mode) — no terminal, envs held.
+    def record_bounce(self, chunk_id: str, *, epoch: int, cause: str, envelope: str, at: datetime) -> bool:
+        """Record one delivery kick-back (#64), idempotent by ``(chunk_id, epoch)``.
 
-        Idempotent per (chunk, repo): a racing second write for a repo already carrying a
-        ``pr.opened`` fact is a harmless no-op, not a duplicate row — the deliver node runs
-        on both a fresh apply and an idempotent replay, and this is the actual close
-        of the coordinator's read-then-write race on its DB-backed skip-set (a store read
-        each call, not an in-memory cache)."""
+        Append-only, and the sole input :func:`bounce_count` derives from. Guarded by
+        the natural key: a redelivery replay after a ``kill -9`` between this write and
+        the routing/escalation write that follows it (:meth:`record_hub_step_transition` /
+        :meth:`record_bounce_escalation`) re-enters harmlessly and never double-counts.
+        Returns True iff it wrote, False when already recorded at this epoch."""
         ...
 
-    def finalize_pr_delivery(
-        self,
-        chunk_id: str,
-        *,
-        closed: list[PrClosedFact],
-        from_node_id: str,
-        to_node_id: str,
-        choice_name: str,
-        epoch: int,
-        runner_id: str,
-        transition_id: str,
-        at: datetime,
+    def record_bounce_escalation(
+        self, chunk_id: str, *, epoch: int, runner_id: str, takeover_command: str, at: datetime
     ) -> bool:
-        """Terminate an open-pr delivery atomically and idempotently.
+        """Escalate a chunk whose bounce count crossed its node's cap (#64), atomically
+        and idempotently.
 
-        Called once every open PR has reached a terminal state: writes the per-repo
-        ``pr.closed`` facts, the hub lease, the terminal transition, and the route release
-        in one transaction — the open-pr counterpart to :meth:`finalize_delivery`. Guarded
-        by the ``pr.closed`` existence check so a re-checked/replayed finalize is a no-op.
-        Returns True iff it wrote."""
+        The hub lease and the escalation fact land in one transaction, guarded by the
+        escalation's existence at this epoch — a redelivery replay re-enters harmlessly
+        and never double-escalates. No transition is recorded: the chunk's held route and
+        stuck node are untouched, exactly like a normal retries-exhausted escalation — it
+        derives ``needs_human`` with the bounce history still readable in chunk detail.
+        Returns True iff it wrote, False when already recorded."""
         ...
 
     def record_escalation(self, chunk_id: str, *, epoch: int, takeover_command: str, at: datetime) -> None:
@@ -937,4 +1059,79 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
 
     def set_model(self, chunk_id: str, *, model: str) -> None:
         """Repin a not-ready chunk's model selection (issue #27) — see :meth:`set_graph`."""
+        ...
+
+    # --- The generic hub command node (#65) ---------------------------------
+
+    def acquire_hub_exec_slot(self, chunk_id: str, *, node_id: str, at: datetime, stale_after: timedelta) -> str | None:
+        """Acquire the fleet-wide hub-execution serialization slot, or ``None`` if busy.
+
+        A FACT-based lease (``bzh:facts-not-status``), not an in-process lock: insert-if-
+        none-live in one transaction. Reentrant for the chunk that already holds it (a
+        later step of the same run re-acquires the same slot id, a no-op); a live slot
+        held by a **different** chunk defers this caller (returns ``None``) unless it is
+        older than ``stale_after`` against the injected clock, in which case it is
+        reclaimed as abandoned (a kill -9 mid-run) before this caller's own slot is
+        minted. Returns the acquired/held slot id, or ``None`` while genuinely busy."""
+        ...
+
+    def release_hub_exec_slot(self, chunk_id: str, *, at: datetime) -> None:
+        """Release ``chunk_id``'s live hub-execution slot, if any — idempotent."""
+        ...
+
+    def count_live_hub_exec_slots(self) -> int:
+        """The number of currently-live hub-execution slots — the invariant checker's
+        ``hub:one-live-exec-slot`` probe (should never exceed 1)."""
+        ...
+
+    def has_hub_artifact(self, chunk_id: str, *, node_id: str, epoch: int, name: str) -> bool:
+        """True iff a marker/log artifact named ``name`` is already recorded for this
+        exact (chunk, node, epoch) — the ``produces:`` re-run skip probe (#65)."""
+        ...
+
+    def record_hub_artifact(
+        self, chunk_id: str, *, node_id: str, node_name: str, epoch: int, name: str, content: str, at: datetime
+    ) -> bool:
+        """Append one hub-node progress artifact OUTSIDE a transition (#65).
+
+        Idempotent per ``(chunk, node, name, epoch)`` natural key: a re-run that already
+        recorded this artifact writes nothing a second time. Ordinary artifact rows —
+        durable, shown in chunk detail, fed into subsequent node envelopes exactly like a
+        worker-produced artifact. Returns True iff it wrote, False when already recorded.
+        """
+        ...
+
+    def record_hub_step_transition(
+        self,
+        chunk_id: str,
+        *,
+        from_node_id: str,
+        to_node_id: str,
+        choice_name: str,
+        epoch: int,
+        runner_id: str,
+        transition_id: str,
+        at: datetime,
+        artifacts: list[ArtifactRow],
+        release_route: bool,
+    ) -> bool:
+        """Record a generic hub command node's exit transition, atomically and
+        idempotently (#65) — the ``HubNodeExecutor`` counterpart to
+        :meth:`finalize_delivery`, generalized to any authored target (including the
+        reserved terminal). The hub lease and the transition land in one transaction;
+        ``release_route`` is True only when
+        ``to_node_id`` is the reserved terminal, writing the route release alongside.
+        Guarded by the transition's existence at ``(chunk_id, from_node_id, epoch)``: a
+        redelivery replay after a ``kill -9`` re-enters harmlessly. Returns True iff it
+        wrote, False when already recorded."""
+        ...
+
+    def record_hub_node_poll(self, chunk_id: str, *, node_id: str, epoch: int, at: datetime) -> None:
+        """Append one pending-poll-attempt fact (#66) — never a transition.
+
+        Append-only: an at-least-once poll attempt is harmless to record twice (it only
+        ever widens the interval/timeout gating's read, never double-counts anything
+        load-bearing), so this carries no idempotency guard. Stamped from the injected
+        clock; :func:`hub_node_pending` and :func:`hub_node_poll_history` are the sole
+        readers."""
         ...

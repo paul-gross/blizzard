@@ -71,7 +71,16 @@ nodes:
             {_ADDENDUM}
   deliver:
     executor: hub
-    mode: merge-to-main
+    run:
+      - command: "true"
+    judgement:
+      choices:
+        success:
+          description: Delivered.
+          to: done
+        failure:
+          description: Failed to deliver.
+          to: build
 """
 
 
@@ -239,8 +248,6 @@ def test_review_cycle_second_pass_delivers_and_lands(tmp_path: Path) -> None:
 
     assert delivered["outcome"] == "hub_node_taken"
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
-    # The deliver node landed the latest build commit through the forge.
-    assert [r.commit_hash for r in hub.forge.landed] == ["c2"]
 
 
 def test_review_completion_without_lease_report_is_stale(tmp_path: Path) -> None:

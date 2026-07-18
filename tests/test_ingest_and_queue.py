@@ -15,6 +15,56 @@ pytestmark = pytest.mark.component
 _P1 = {"source": "default", "ref": "1"}
 _P2 = {"source": "default", "ref": "2"}
 
+# A build -> review -> deliver graph mirroring the packaged default's shape, but with a
+# trivial `run: [{command: "true"}]` deliver node instead of the packaged script that
+# talks to a real forge over HTTP — this test drives re-ingest-after-terminal, not
+# delivery mechanics, so it stays hermetic (no live forge needed).
+_BUILD_REVIEW_DELIVER_YAML = """
+name: default-delivery
+entry: build
+nodes:
+  build:
+    executor: runner
+    prompt: |
+      Build the change.
+    judgement:
+      prompt: |
+        Assess the build.
+      choices:
+        pass:
+          description: Complete and green.
+          to: review
+        fail:
+          description: Incomplete.
+          to: build
+  review:
+    executor: runner
+    prompt: |
+      Review the change.
+    judgement:
+      prompt: |
+        Assess the review.
+      choices:
+        pass:
+          description: Passes review.
+          to: deliver
+        fail:
+          description: Blocking issues.
+          to: build
+  deliver:
+    executor: hub
+    run:
+      - command: "true"
+    judgement:
+      choices:
+        success:
+          description: Delivered.
+          to: done
+        failure:
+          description: Failed to deliver.
+          to: build
+"""
+
 
 def test_ingest_mints_a_chunk_pinned_to_the_default_graph(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
@@ -210,6 +260,11 @@ def _pass(hub, chunk_id: str, node_id: str, epoch: int, *, artifacts: list[dict]
 
 def test_terminal_pointer_reingest_mints_a_fresh_chunk(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
+    # A build -> review -> deliver graph pre-minted under the packaged default's own
+    # name, so `ensure_default` (POST /chunks) reuses it by name (D-081) instead of
+    # minting the packaged prose graph — this test drives its own terminal chunk, not
+    # the packaged default's real forge-talking delivery script.
+    assert hub.client.post("/api/graphs", json={"definition_yaml": _BUILD_REVIEW_DELIVER_YAML}).status_code == 201
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_P1)]}).json()["chunk_id"]
     # Drive the chunk terminal through the default build -> review -> deliver graph.
     build_id = hub.client.post(

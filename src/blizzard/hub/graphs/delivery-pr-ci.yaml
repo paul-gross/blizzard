@@ -1,0 +1,85 @@
+# EXAMPLE graph — build -> review -> deliver, with delivery authored as a PR + CI-watch
+# policy instead of the default graph's straight-through check-all/push-all merge.
+#
+# Shipped alongside `default.yaml`, NOT as a replacement — proof that delivery policy
+# lives entirely in graph YAML, not blizzard code: the only thing that differs from the
+# default graph is the `deliver` node's `run:` script
+# (`hub/graphs/scripts/land_pr_ci.py` vs `scripts/land_default.py`) and its
+# `poll_interval`/`poll_timeout`. Both scripts are driven by the SAME generic
+# `executor: hub` primitive and honor the one hub-command-node authoring contract in
+# `blizzard-harness:/standards/hub-nodes.md` — the hub itself runs a declared command
+# list, serialized fleet-wide, no agent, ever (`bzh:hub-node-run-shape`).
+#
+# This graph opens one PR per repo the chunk submitted, then reports the reserved
+# `pending` outcome (`bzh:hub-node-outcome-protocol`) while any PR is not yet cleanly
+# mergeable — releasing the fleet-wide hub-execution slot between polls, so other
+# chunks' hub nodes run freely in the gap — and merges every PR once all read
+# `mergeable_state: clean`. A `poll_timeout` exceeded (no repo ever going clean) is NOT
+# the script's concern: the executor itself routes the authored `failure` edge through
+# the same kick-back accounting the default graph's `conflict` choice uses.
+#
+# An operator adopts this policy over the default's by minting a graph naming this
+# file's `deliver` node in place of the default's — no engine change, ever.
+
+name: default-delivery-pr-ci
+entry: build
+
+nodes:
+  build:
+    executor: runner
+    prompt: ./prompts/build.md
+    checks:
+      - mise run lint
+      - mise run test
+    judgement:
+      prompt: ./prompts/build.judgement.md
+      choices:
+        pass:
+          description: The work meets this node's criteria and the checks are green.
+          to: review
+        fail:
+          description: The work does not meet the criteria; the failure output is attached.
+          to: build
+          prompt_addendum: ./prompts/build.from-build.md
+    retries:
+      max: 2
+      exhausted: escalate
+
+  review:
+    executor: runner
+    prompt: ./prompts/review.md
+    session: fresh
+    produces:
+      - review-findings
+    judgement:
+      prompt: ./prompts/review.judgement.md
+      choices:
+        pass:
+          description: The submitted work passes review and is ready to deliver.
+          to: deliver
+        fail:
+          description: Review found blocking issues, recorded in the review-findings asset.
+          to: build
+          prompt_addendum: ./prompts/build.from-review.md
+    retries:
+      max: 2
+      exhausted: escalate
+
+  deliver:
+    executor: hub
+    run:
+      - name: open-prs-and-wait-for-green
+        command: python3 -m blizzard.hub.graphs.scripts.land_pr_ci
+    # Poll every 30s, give up (kick back to build) after 30 minutes of no repo going
+    # clean — the executor's own defaults; authored explicitly here so the policy is
+    # visible in the graph, not merely inherited.
+    poll_interval: 30
+    poll_timeout: 1800
+    judgement:
+      choices:
+        landed:
+          description: Every repo's PR merged cleanly.
+          to: done
+        failure:
+          description: poll_timeout exceeded with no repo ever going clean; kicked back to build.
+          to: build

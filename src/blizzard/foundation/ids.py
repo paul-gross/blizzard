@@ -38,6 +38,7 @@ QUESTION_PREFIX = "qn"
 LEASE_PREFIX = "lease"
 TAKEOVER_PREFIX = "tko"
 SELFTEST_PREFIX = "self"
+HUB_EXEC_SLOT_PREFIX = "hes"
 
 
 def _encode(value: int, length: int) -> str:

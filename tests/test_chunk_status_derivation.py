@@ -13,8 +13,9 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from blizzard.hub.domain.graph import Executor
+from blizzard.hub.domain.graph import RESERVED_TERMINAL, Executor
 from blizzard.hub.domain.work import (
+    BounceFact,
     ChunkFacts,
     ChunkStatus,
     DecisionFact,
@@ -27,8 +28,11 @@ from blizzard.hub.domain.work import (
     RouteReleasedFact,
     TransitionFact,
     awaiting_external_merge,
+    bounce_count,
+    bounces_over_cap,
     current_node_id,
     derive_chunk_status,
+    has_landed_repos,
     latest_epoch,
     open_pause,
     open_questions,
@@ -165,12 +169,69 @@ def test_runner_node_transition_stays_running_not_delivering() -> None:
 
 
 def test_delivery_landed_is_done_over_a_live_route() -> None:
+    # DONE derives from *reaching* the terminal transition (#63), not the landed fact
+    # alone — ``finalize_delivery`` always writes both atomically in the no-authored-edge
+    # (default graph) case, so this pins that real shape.
+    facts = ChunkFacts(
+        minted=True,
+        delivery_landed=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        transitions=[
+            TransitionFact(to_node_id=RESERVED_TERMINAL, to_node_executor=Executor.HUB, epoch=2, recorded_at=_at(5)),
+        ],
+    )
+    assert derive_chunk_status(facts) is ChunkStatus.DONE
+
+
+def test_delivery_landed_without_reaching_terminal_is_not_done() -> None:
+    # The delicate #63 edit: a whole-chunk ``delivery.landed`` fact with no terminal
+    # transition (a synthetic shape unreachable via ``finalize_delivery``, but the one
+    # the derivation must not key on) must NOT derive DONE — it falls through to the
+    # live route below, exactly what makes a post-merge node's worker completion
+    # legal (``apply.py:91`` would otherwise reject it as terminal).
     facts = ChunkFacts(
         minted=True,
         delivery_landed=True,
         routes_created=[RouteCreatedFact(created_at=_at(1))],
     )
-    assert derive_chunk_status(facts) is ChunkStatus.DONE
+    assert derive_chunk_status(facts) is ChunkStatus.RUNNING
+
+
+def test_merged_but_running_derives_running_not_done() -> None:
+    # An authored ``merged -> <node>`` edge: the coordinator recorded per-repo landed
+    # facts and a NON-terminal transition into the post-merge node, retaining the route.
+    # The chunk must derive its live running state, not DONE — "merged but running".
+    facts = ChunkFacts(
+        minted=True,
+        landed_repos=frozenset({"acme/widget"}),
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        transitions=[
+            TransitionFact(to_node_id="nd_postmerge", to_node_executor=Executor.RUNNER, epoch=2, recorded_at=_at(5)),
+        ],
+    )
+    assert derive_chunk_status(facts) is ChunkStatus.RUNNING
+    assert has_landed_repos(facts) is True
+
+
+def test_merged_but_escalated_derives_needs_human_with_landed_detail() -> None:
+    # The post-merge node exhausted retries: normal escalation, no un-merge path. The
+    # chunk derives BOTH needs_human (status) and landed (detail) — "merged but stuck",
+    # represented honestly rather than hidden or un-merged.
+    facts = ChunkFacts(
+        minted=True,
+        landed_repos=frozenset({"acme/widget"}),
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        transitions=[
+            TransitionFact(to_node_id="nd_postmerge", to_node_executor=Executor.RUNNER, epoch=2, recorded_at=_at(5)),
+        ],
+        escalations=[EscalationFact(epoch=2, recorded_at=_at(6))],
+    )
+    assert derive_chunk_status(facts) is ChunkStatus.NEEDS_HUMAN
+    assert has_landed_repos(facts) is True
+
+
+def test_has_landed_repos_false_with_no_landed_facts_at_all() -> None:
+    assert has_landed_repos(ChunkFacts(minted=True)) is False
 
 
 def _parked_on_open_pr(**extra: object) -> ChunkFacts:
@@ -374,6 +435,9 @@ def test_done_wins_over_paused() -> None:
     facts = ChunkFacts(
         minted=True,
         delivery_landed=True,
+        transitions=[
+            TransitionFact(to_node_id=RESERVED_TERMINAL, to_node_executor=Executor.HUB, epoch=1, recorded_at=_at(1)),
+        ],
         pauses=[PauseFact(paused=True, set_at=_at(1), set_by="operator")],
     )
     assert derive_chunk_status(facts) is ChunkStatus.DONE
@@ -493,12 +557,59 @@ def test_open_pause_returns_the_newest_pause_after_a_re_pause() -> None:
     assert pause.set_at == _at(3)
 
 
+def _bounce(epoch: int, *, at: datetime, cause: str = "conflict") -> BounceFact:
+    return BounceFact(epoch=epoch, cause=cause, envelope=f'{{"cause": "{cause}"}}', recorded_at=at)
+
+
+def test_bounce_count_zero_with_no_bounces() -> None:
+    assert bounce_count(ChunkFacts(minted=True)) == 0
+
+
+def test_bounce_count_counts_every_recorded_bounce() -> None:
+    facts = ChunkFacts(minted=True, bounces=[_bounce(2, at=_at(1)), _bounce(4, at=_at(2)), _bounce(6, at=_at(3))])
+    assert bounce_count(facts) == 3
+
+
+def test_bounces_over_cap_false_at_the_cap() -> None:
+    # A cap of 5 tolerates exactly 5 bounces — the cap counts bounces survived, not a
+    # zero-indexed budget, so the 5th does not cross it.
+    facts = ChunkFacts(minted=True, bounces=[_bounce(n, at=_at(n)) for n in range(5)])
+    assert bounce_count(facts) == 5
+    assert bounces_over_cap(facts, 5) is False
+
+
+def test_bounces_over_cap_true_once_crossed() -> None:
+    # The 6th bounce crosses a cap of 5.
+    facts = ChunkFacts(minted=True, bounces=[_bounce(n, at=_at(n)) for n in range(6)])
+    assert bounce_count(facts) == 6
+    assert bounces_over_cap(facts, 5) is True
+
+
+def test_bounce_is_informational_never_a_status() -> None:
+    # A bounced-but-still-routed chunk (live route, newest transition into a plain
+    # runner node) derives `running` regardless of how many bounces it carries — a
+    # bounce is contention, not failure, and never itself drives the status ladder.
+    facts = ChunkFacts(
+        minted=True,
+        routes_created=[RouteCreatedFact(created_at=_at(1))],
+        transitions=[
+            TransitionFact(to_node_id="nd_build", to_node_executor=Executor.RUNNER, epoch=2, recorded_at=_at(2)),
+        ],
+        bounces=[_bounce(n, at=_at(n)) for n in range(5)],
+    )
+    assert derive_chunk_status(facts) is ChunkStatus.RUNNING
+    assert bounce_count(facts) == 5
+
+
 def test_open_pause_reads_the_fact_on_a_done_chunk() -> None:
     # `done` outranks `paused` in the derivation, so a status-keyed read loses the pause
     # here too — the same lossiness as the human-gated states, one rank further up.
     facts = ChunkFacts(
         minted=True,
         delivery_landed=True,
+        transitions=[
+            TransitionFact(to_node_id=RESERVED_TERMINAL, to_node_executor=Executor.HUB, epoch=1, recorded_at=_at(1)),
+        ],
         pauses=[PauseFact(paused=True, set_at=_at(1), set_by="operator")],
     )
     assert derive_chunk_status(facts) is ChunkStatus.DONE

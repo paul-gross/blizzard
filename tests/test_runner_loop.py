@@ -551,6 +551,135 @@ def test_poll_hub_node_waits_while_delivering(tmp_path):  # type: ignore[no-unty
 
     assert provider.released == []  # still delivering — hold
     assert store.held_environment_ids() == ["e1"]
+    # #66 re-drive path: a chunk parked at a hub node is polled via hub-advance every
+    # tick — the mechanism that closes the deferred/pending-node liveness gap.
+    assert hub.hub_advance_calls == ["ch_1"]
+
+
+@pytest.mark.unit
+def test_advance_held_chunk_spawns_into_post_merge_node(tmp_path):  # type: ignore[no-untyped-def]
+    """#63: an authored ``merged -> <node>`` edge lands the chunk into a post-merge
+    runner node while the coordinator retains the route (no release). ADVANCE
+    discovers the fresh transition — no active lease, the hub reports ``running``,
+    not ``delivering`` — and spawns the current node into the already-held, warm
+    environment (the same :func:`_spawn_attempt` path ``NEXT`` uses)."""
+    store = _store(tmp_path)
+    # A chunk held at the (former) deliver hub node: its prior build lease (epoch 1) is
+    # closed, the binding retained. The coordinator then landed and advanced the chunk into
+    # ``verify`` under its own ``hub_epoch = 2`` — a HIGHER epoch than this runner has minted.
+    store.record_lease(
+        NewLease(
+            lease_id="lease_build",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=1,
+            runner_id="r1",
+            retries_max=2,
+            created_at=_NOW,
+        )
+    )
+    store.record_closure(
+        lease_id="lease_build", chunk_id="ch_1", node_id="nd_build", reason="transitioned", closed_at=_NOW
+    )
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = ChunkDetail(
+        chunk_id="ch_1",
+        graph_id="gr_1",
+        status=ChunkStatus.RUNNING,
+        current_node_id="nd_verify",
+        current_node_name="verify",
+        latest_epoch=2,  # the coordinator's hub_epoch — ahead of the runner's minted epoch 1
+        model=DEFAULT_MODEL,
+    )
+    hub.envelopes["ch_1"] = make_envelope("ch_1", "verify", node_id="nd_verify", choices=_CHOICES)
+    provider = FakeProvider({"e1": "/ws/e1"})
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe())
+
+    advance(ctx)
+
+    assert len(harness.spawns) == 1
+    spawned_envelope, _ = harness.spawns[0]
+    assert spawned_envelope.node.node_name == "verify"
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None and lease.node_name == "verify"
+    assert provider.released == []  # merged but running — still held, no release
+    assert store.held_environment_ids() == ["e1"]
+
+
+@pytest.mark.unit
+def test_advance_held_chunk_does_not_respawn_a_buffered_escalation(tmp_path):  # type: ignore[no-untyped-def]
+    """The epoch gate: a locally-escalated chunk whose fact is still buffered is NOT re-spawned.
+
+    When a node exhausts its retries the runner enqueues ``escalation.recorded`` to its outbound
+    buffer and closes the lease, but until that flushes the hub still derives ``running`` — at the
+    **same** epoch this runner last minted. ``_advance_held_chunk`` must NOT mistake that for a hub
+    advance and re-spawn the escalated node: firing on ``status == running`` alone loops forever
+    (spawn → verdict-less fail → escalate → hub still running → spawn …). Only a strictly-higher hub
+    epoch is a genuine advance, so here — hub epoch == the runner's minted epoch — nothing spawns."""
+    store = _store(tmp_path)
+    # The runner minted a build lease at epoch 2, it failed retries-exhausted, the lease is
+    # closed and the escalation buffered (not asserted here). The binding is retained.
+    store.record_lease(
+        NewLease(
+            lease_id="lease_esc",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=2,
+            runner_id="r1",
+            retries_max=2,
+            created_at=_NOW,
+        )
+    )
+    store.record_closure(lease_id="lease_esc", chunk_id="ch_1", node_id="nd_build", reason="failed", closed_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    hub = FakeHub()
+    # The hub has NOT advanced: it still reads running at the SAME epoch the runner minted (2),
+    # because the escalation.recorded fact has not flushed yet.
+    hub.chunks["ch_1"] = ChunkDetail(
+        chunk_id="ch_1",
+        graph_id="gr_1",
+        status=ChunkStatus.RUNNING,
+        current_node_id="nd_build",
+        current_node_name="build",
+        latest_epoch=2,
+        model=DEFAULT_MODEL,
+    )
+    hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
+    provider = FakeProvider({"e1": "/ws/e1"})
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe())
+
+    advance(ctx)
+
+    assert harness.spawns == []  # no re-spawn — the epoch gate held
+    assert store.active_lease_for_chunk("ch_1") is None  # nothing minted
+    assert store.held_environment_ids() == ["e1"]  # binding retained for the flush → needs_human
+
+
+@pytest.mark.unit
+def test_advance_held_chunk_with_no_binding_and_no_active_lease_is_a_noop(tmp_path):  # type: ignore[no-untyped-def]
+    """A chunk with no binding at all never reaches ``_advance_held_chunk`` — it isn't
+    in ``live_tenure_chunk_ids()`` — so a bare ADVANCE tick over an empty store spawns
+    nothing (the degenerate case the new branch must not misfire on)."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({}),
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
+        probe=FakeProbe(),
+    )
+
+    advance(ctx)
+
+    assert store.held_environment_ids() == []
 
 
 # --------------------------------------------------------------------------- #

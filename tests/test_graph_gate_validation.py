@@ -43,7 +43,16 @@ _GATE_NODES = {
             },
         },
     },
-    "deliver": {"executor": "hub", "mode": "merge-to-main"},
+    "deliver": {
+        "executor": "hub",
+        "run": [{"command": "true"}],
+        "judgement": {
+            "choices": {
+                "success": {"description": "Delivered.", "to": "done"},
+                "failure": {"description": "Failed to deliver.", "to": "build"},
+            }
+        },
+    },
 }
 
 

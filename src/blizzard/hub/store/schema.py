@@ -65,6 +65,16 @@ graph_nodes = Table(
     Column("mode", String, nullable=True),  # deliver hub node: merge-to-main | open-pr
     Column("produces", Text, nullable=True),  # JSON list of artifact names; e.g. review's `review-findings`
     Column("checks", Text, nullable=True),  # JSON list of check commands, worker-run in-session
+    # The kick-back cap (#64) — null accepts the fleet default (``graph.DEFAULT_BOUNCE_CAP``).
+    Column("bounce_cap", Integer, nullable=True),
+    # The generic hub command node's declared commands (#65) — JSON list of
+    # ``{command, name, produces}``; null/empty on every node but a generic hub
+    # command node (the still-special deliver node included).
+    Column("run", Text, nullable=True),
+    # The pending-poll cadence (#66) — null accepts the executor's own default
+    # (``hub_node.DEFAULT_POLL_INTERVAL`` / ``DEFAULT_POLL_TIMEOUT``).
+    Column("poll_interval_seconds", Integer, nullable=True),
+    Column("poll_timeout_seconds", Integer, nullable=True),
 )
 
 graph_choices = Table(
@@ -208,15 +218,40 @@ delivery_landed = Table(
     Column("landed_at", UtcDateTime, nullable=False),  # terminal: all repos landed
 )
 
+# --- Delivery kick-backs (chunk_bounces — #64) --------------------------------
+#
+# A delivery kick-back (conflict / CI-red / master-moved) is contention, not
+# failure: it consumes no node retry and triggers no escalation by itself. Every
+# kick-back appends one row here, independent of the transition that routes the
+# chunk back to a worker node (or, once the chunk's ``bounce_count`` crosses its
+# node's ``bounce_cap``, the escalation that replaces that routing) — so the count is
+# derived purely from these rows (``bzh:facts-not-status``) and a redelivery replay
+# after a crash is guarded by the natural key ``(chunk_id, epoch)`` (the coordinator's
+# own ``hub_epoch``), never double-counted. ``envelope`` is the opaque JSON kick-back
+# payload (cause, per-repo detail) carried into the fix node's arriving artifacts so it
+# never rediscovers what bounced it.
+
+chunk_bounces = Table(
+    "chunk_bounces",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
+    Column("epoch", Integer, nullable=False),  # the coordinator's hub_epoch — the natural key
+    Column("cause", String, nullable=False),  # conflict | checks | master-moved
+    Column("envelope", Text, nullable=False),  # JSON kick-back payload
+    Column("recorded_at", UtcDateTime, nullable=False),
+)
+
 # --- Open-PR delivery facts (pr.opened / pr.closed) ---------------------------
 #
-# The ``open-pr`` deliver mode: instead of merging, the coordinator opens a PR
-# per repo and PARKS the chunk — it records ``pr.opened`` here but writes NO terminal
-# transition and NO ``route_released``, so the chunk derives ``delivering`` (awaiting an
-# external merge) with its environments held. A later poll or the on-demand
-# ``POST /chunks/{id}/check-delivery`` route detects the PR's terminal state and
-# records ``pr.closed`` — the terminal fact that flips the chunk to ``done`` (either
-# disposition), carrying ``merged`` and the actually-landed commit where one exists.
+# Pre-#67 history, kept for back-compat reads of a chunk delivered before the generic
+# hub command node executor: the ``open-pr`` deliver mode recorded ``pr.opened`` here
+# without a terminal transition or ``route_released``, so the chunk derived
+# ``delivering`` (awaiting an external merge) with its environments held, and a later
+# poll recorded ``pr.closed`` — the terminal fact that flipped the chunk to ``done``
+# (either disposition), carrying ``merged`` and the actually-landed commit where one
+# exists. No engine path writes either table any more; a hub command node's own
+# ``run:`` script (e.g. ``hub/graphs/scripts/land_pr_ci.py``) owns this policy now.
 
 delivery_pr_opened = Table(
     "delivery_pr_opened",
@@ -228,12 +263,12 @@ delivery_pr_opened = Table(
     Column("pr_url", String, nullable=False),  # the PR's html url — surfaced on the board
     Column("commit_hash", String, nullable=False),  # the authoritative head the PR carries
     Column("opened_at", UtcDateTime, nullable=False),
-    # A ``pr.opened`` write is idempotent per (chunk, repo) (20260716_2206_hub_pr_opened_idempotent):
-    # the coordinator's deliver node runs on both a fresh apply and an idempotent replay,
-    # and its DB-backed ``open_prs`` skip-set (a store read each call, not an
-    # in-memory cache) has a narrow race between that read and the write. This constraint
-    # is the actual close of that race — the store adapter's ``record_pr_opened`` treats a
-    # collision as a harmless duplicate write, not an error.
+    # A ``pr.opened`` write was idempotent per (chunk, repo) (20260716_2206_hub_pr_opened_idempotent):
+    # the now-deleted coordinator's deliver node ran on both a fresh apply and an idempotent
+    # replay, and its DB-backed skip-set (a store read each call, not an in-memory cache) had a
+    # narrow race between that read and the write. This constraint was the actual close of that
+    # race. Retained now only as the shape of the historical rows this table still reads back
+    # (see the table-group comment above) — no engine path writes it any more.
     UniqueConstraint("chunk_id", "repo", name="uq_delivery_pr_opened_chunk_repo"),
 )
 
@@ -247,6 +282,51 @@ delivery_pr_closed = Table(
     Column("merged", Boolean, nullable=False),  # merged vs closed-without-merge — both terminal
     Column("landed_commit", String, nullable=True),  # the merge commit where one exists
     Column("closed_at", UtcDateTime, nullable=False),
+)
+
+# --- The fleet-wide hub-execution serialization slot (#65) -------------------
+#
+# A generic hub command node's ``run:`` list executes serialized fleet-wide — one
+# chunk's hub node running at a time is what makes merging safe. The slot is a FACT
+# (``bzh:facts-not-status``), not an in-process lock: acquire-if-none-live under
+# SQLite's single-writer transaction, released at end-of-run. A live slot is a row
+# with ``released_at IS NULL``; at most one may exist at a time (the invariant checker
+# asserts this after any crash). A slot older than its holder's staleness TTL
+# (measured against the injected clock, never wall time) is reclaimable — a kill -9
+# mid-run leaves a slot no later run will ever release, so a stale live slot is treated
+# as free rather than wedging the fleet forever.
+
+hub_exec_slot = Table(
+    "hub_exec_slot",
+    metadata,
+    Column("slot_id", String, primary_key=True),  # hes_<ulid>
+    Column("holder_chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
+    Column("node_id", String, nullable=False),
+    Column("acquired_at", UtcDateTime, nullable=False),
+    Column("released_at", UtcDateTime, nullable=True),  # null while live
+)
+
+# --- The generic hub command node's pending-poll attempts (#66) --------------
+#
+# A hub command node whose ``run:`` step reports the reserved ``pending`` outcome
+# records no transition — it appends one row here instead, releases the fleet-wide
+# ``hub_exec_slot`` immediately, and is re-run once ``poll_interval`` has elapsed. Every
+# row is one poll attempt, append-only, stamped from the injected clock
+# (``bzh:injected-clock``): pending-ness is DERIVED (``hub_node_pending`` in
+# ``hub/domain/work.py``) from "the newest transition still enters this hub node AND a
+# poll fact exists for its (node_id, epoch)" — nothing in-memory, so a ``kill -9``
+# between polls resumes polling straight from these rows. ``epoch`` is the arrival
+# epoch of the current visit (the same value the node's own marker/log artifacts are
+# recorded under, ``hub_node.HubNodeExecutor``), not a fresh one minted per poll.
+
+hub_node_poll = Table(
+    "hub_node_poll",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
+    Column("node_id", String, nullable=False),
+    Column("epoch", Integer, nullable=False),
+    Column("polled_at", UtcDateTime, nullable=False),
 )
 
 # --- Readiness: the not-ready resting state and its promotion --------

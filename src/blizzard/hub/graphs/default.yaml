@@ -8,13 +8,21 @@
 # ahead of `deliver` to dial HITL back up — graphs are
 # immutable, so that is a re-mint, not an edit.
 #
-# Conforms to the canonical authoring schema:
-# fused choice/edge entries, prompts as file references inlined at mint,
-# retries escaping to escalation, the review-fail edge carrying the findings
-# asset + its prompt_addendum back into build, and delivery as a
-# hub-executed node whose machinery outcomes (landed -> done, conflict -> entry) are
-# accepted by default. Operational metadata (enabled, auto_migrate,
-# migration_target) is NOT authored here — it is set after mint via PATCH /graphs/{id}.
+# Conforms to the canonical authoring schema: fused choice/edge entries, prompts as
+# file references inlined at mint, retries escaping to escalation, the review-fail
+# edge carrying the findings asset + its prompt_addendum back into build. Delivery is
+# authored as graph CONTENT, not an engine special case: `deliver` is a generic hub
+# command node (`executor: hub` + `run:`) whose script the hub itself executes — no
+# agent, ever (`bzh:deterministic-shell`). Its `run:` step invokes
+# `hub/graphs/scripts/land_default.py`, which owns the check-all-then-push-all mechanics
+# and the `merged/<repo>` marker convention; the hub-command-node authoring contract
+# both scripts honor lives in `blizzard-harness:/standards/hub-nodes.md`. A conflict at
+# the check stage routes `conflict -> build` (nothing pushed); a clean land routes
+# `landed -> done`. See `hub/graphs/delivery-pr-ci.yaml` for the alternative PR +
+# CI-watch delivery policy this same primitive expresses — proof that delivery policy
+# lives in YAML, not code.
+# Operational metadata (enabled, auto_migrate, migration_target) is NOT authored
+# here — it is set after mint via PATCH /graphs/{id}.
 
 name: default-delivery
 entry: build
@@ -62,7 +70,14 @@ nodes:
 
   deliver:
     executor: hub
-    mode: merge-to-main
-    # No judgement: accept the deliver machinery defaults — landed -> done (the
-    # reserved terminal) and conflict -> entry (build) in the MVP. The
-    # conventional cross-graph `merge` graph arrives with epic:migration.
+    run:
+      - name: land-every-repo
+        command: python3 -m blizzard.hub.graphs.scripts.land_default
+    judgement:
+      choices:
+        landed:
+          description: Every repo merged cleanly into its base branch.
+          to: done
+        conflict:
+          description: A repo did not merge cleanly; kicked back to build with the bounce envelope.
+          to: build

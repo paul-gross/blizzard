@@ -132,3 +132,101 @@ def test_mint_round_trips_node_produces_and_checks_through_the_store(tmp_path: P
     review = next(n for n in reloaded.nodes if n.name == "review")
     assert review.produces == ["review-findings"]
     assert review.checks == ["pytest -q", "ruff check"]
+
+
+_BOUNCE_CAP_GRAPH = """
+name: bounce-cap-graph
+entry: build
+nodes:
+  build:
+    executor: runner
+    prompt: do the work
+    judgement:
+      prompt: judge it
+      choices:
+        pass:
+          description: it works
+          to: deliver
+        fail:
+          description: it does not
+          to: build
+    retries:
+      max: 1
+      exhausted: escalate
+  deliver:
+    executor: hub
+    run:
+      - command: "true"
+    judgement:
+      choices:
+        success:
+          description: Delivered.
+          to: done
+        failure:
+          description: Failed to deliver.
+          to: build
+    bounce_cap: 3
+"""
+
+
+def test_mint_round_trips_bounce_cap_through_the_store(tmp_path: Path) -> None:
+    """A hub node's authored ``bounce_cap`` (#64) survives a store reload."""
+    hub = build_hub(tmp_path)
+    minted = hub.client.post("/api/graphs", json={"definition_yaml": _BOUNCE_CAP_GRAPH})
+    assert minted.status_code == 201, minted.text
+    graph_id = minted.json()["graph_id"]
+
+    reloaded = hub.services.graphs.get(graph_id)
+    assert reloaded is not None
+    deliver = next(n for n in reloaded.nodes if n.name == "deliver")
+    assert deliver.bounce_cap == 3
+
+
+_POLL_CADENCE_GRAPH = """
+name: poll-cadence-graph
+entry: build
+nodes:
+  build:
+    executor: runner
+    prompt: do the work
+    judgement:
+      prompt: judge it
+      choices:
+        pass:
+          description: it works
+          to: merge
+        fail:
+          description: it does not
+          to: build
+    retries:
+      max: 1
+      exhausted: escalate
+  merge:
+    executor: hub
+    run:
+      - command: check-ci
+    poll_interval: 15
+    poll_timeout: 600
+    judgement:
+      choices:
+        success:
+          description: green
+          to: done
+        failure:
+          description: red
+          to: build
+"""
+
+
+def test_mint_round_trips_poll_interval_and_timeout_through_the_store(tmp_path: Path) -> None:
+    """A hub command node's ``poll_interval``/``poll_timeout`` (#66) survive a store reload."""
+    hub = build_hub(tmp_path)
+    minted = hub.client.post("/api/graphs", json={"definition_yaml": _POLL_CADENCE_GRAPH})
+    assert minted.status_code == 201, minted.text
+    graph_id = minted.json()["graph_id"]
+
+    reloaded = hub.services.graphs.get(graph_id)
+    assert reloaded is not None
+    merge = next(n for n in reloaded.nodes if n.name == "merge")
+    assert merge.poll_interval_seconds == 15
+    assert merge.poll_timeout_seconds == 600

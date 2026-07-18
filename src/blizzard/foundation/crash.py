@@ -90,7 +90,7 @@ def all_points() -> list[CrashPoint]:
 #: would drift); each module owns its own points at their call sites.
 _INSTRUMENTED_MODULES = (
     "blizzard.runner.loop.steps",
-    "blizzard.hub.delivery.coordinator",
+    "blizzard.hub.delivery.hub_node",
 )
 
 

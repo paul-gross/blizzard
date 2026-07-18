@@ -8,8 +8,9 @@ rejected before anything is written — a zombie's work never lands), and
 the same outcome without a second transition).
 
 The apply-response is what lets the runner continue in place: a runner node
-returns the next envelope; a hub node (deliver) is taken over by the coordinator and
-returns ``hub_node_taken``; the reserved terminal returns ``done``; a human gate
+returns the next envelope; a hub node is taken over by the generic
+:class:`~blizzard.hub.delivery.hub_node.HubNodeExecutor` and returns
+``hub_node_taken``; the reserved terminal returns ``done``; a human gate
 parks the chunk on an open **Decision** (``parked_at_gate``). Ordering matters
 — the idempotency probe runs **before** the terminal check, so replaying the very
 completion that delivered the chunk still returns its original outcome rather than a
@@ -25,7 +26,7 @@ from __future__ import annotations
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import ARTIFACT_PREFIX, DECISION_PREFIX, TRANSITION_PREFIX, mint
-from blizzard.hub.delivery.coordinator import MergeQueueCoordinator
+from blizzard.hub.delivery.hub_node import HubNodeExecutor
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.envelope import build_node_envelope
 from blizzard.hub.domain.graph import RESERVED_TERMINAL, Edge, Executor, Graph, JudgedBy, Node
@@ -54,12 +55,12 @@ class ApplyService:
         self,
         *,
         chunks: IWriteChunkRepository,
-        coordinator: MergeQueueCoordinator,
         clock: IClock,
+        hub_node_executor: HubNodeExecutor,
     ) -> None:
         self._chunks = chunks
-        self._coordinator = coordinator
         self._clock = clock
+        self._hub_node_executor = hub_node_executor
 
     def apply(self, chunk: Chunk, graph: Graph, submission: CompletionSubmission) -> ApplyResponse:
         from_node = graph.node_by_id(submission.from_node_id)
@@ -73,7 +74,7 @@ class ApplyService:
             chunk.chunk_id, from_node_id=submission.from_node_id, epoch=submission.epoch
         )
         if replayed is not None:
-            return self._respond(chunk, graph, from_node, submission, to_node_id=replayed, run_coordinator=False)
+            return self._respond(chunk, graph, from_node, submission, to_node_id=replayed, is_fresh_apply=False)
 
         # A completion carrying a decision id is a gate-resolving transition —
         # graph gate (human node) or runner-config gate (worker node): validate and
@@ -112,9 +113,7 @@ class ApplyService:
             at=self._clock.now(),
             artifacts=[self._row(chunk, from_node, submission.epoch, a) for a in submission.artifacts],
         )
-        return self._respond(
-            chunk, graph, from_node, submission, to_node_id=to_node_id, run_coordinator=True, edge=edge
-        )
+        return self._respond(chunk, graph, from_node, submission, to_node_id=to_node_id, is_fresh_apply=True, edge=edge)
 
     def _apply_gate_resolution(
         self, chunk: Chunk, graph: Graph, gate_node: Node, submission: CompletionSubmission
@@ -162,9 +161,7 @@ class ApplyService:
             artifacts=[],  # the decision's artifacts already landed
             decision_id=submission.decision_id,
         )
-        return self._respond(
-            chunk, graph, gate_node, submission, to_node_id=to_node_id, run_coordinator=True, edge=edge
-        )
+        return self._respond(chunk, graph, gate_node, submission, to_node_id=to_node_id, is_fresh_apply=True, edge=edge)
 
     def _respond(
         self,
@@ -174,7 +171,7 @@ class ApplyService:
         submission: CompletionSubmission,
         *,
         to_node_id: str,
-        run_coordinator: bool,
+        is_fresh_apply: bool,
         edge: Edge | None = None,
     ) -> ApplyResponse:
         if to_node_id == RESERVED_TERMINAL:
@@ -184,12 +181,13 @@ class ApplyService:
             return _failure(f"transition target {to_node_id} is not a node")
 
         if to_node.executor is Executor.HUB:
-            # Run the coordinator on BOTH the fresh apply and the idempotent replay
-            # (``run_coordinator`` is ignored here): delivery is itself idempotent and
-            # resumable (``finalize_delivery`` + the per-repo skip), so a completion
-            # re-flushed after a mid-delivery hub crash RESUMES the interrupted delivery
-            # rather than wedging the chunk at ``delivering`` — the deliver-crash recovery.
-            self._coordinator.deliver(chunk, graph, to_node, epoch=submission.epoch)
+            # Every hub node (#67 — no engine-privileged node name remains) is driven
+            # by the generic HubNodeExecutor. Run on BOTH the fresh apply and the
+            # idempotent replay (``is_fresh_apply`` is ignored here): the executor is
+            # itself idempotent and resumable, so a completion re-flushed after a
+            # mid-run hub crash RESUMES the interrupted run rather than wedging the
+            # chunk at ``delivering``.
+            self._hub_node_executor.run(chunk, graph, to_node, epoch=submission.epoch)
             return ApplyResponse(
                 outcome=ApplyOutcome.HUB_NODE_TAKEN,
                 detail=f"hub node `{to_node.name}` took over; poll the chunk for the outcome",
@@ -197,7 +195,7 @@ class ApplyService:
         if to_node.judged_by is JudgedBy.HUMAN:
             # A transition INTO a human-judged node opens a graph gate: park on a decision
             # carrying the node's choice set. Only on the real apply, never a replay.
-            if run_coordinator:
+            if is_fresh_apply:
                 self._open_graph_gate_decision(chunk, to_node, epoch=submission.epoch)
             return ApplyResponse(outcome=ApplyOutcome.PARKED_AT_GATE, detail=f"parked at gate `{to_node.name}`")
 
@@ -216,7 +214,7 @@ class ApplyService:
 
         The node's own choices become the decision's; no artifacts are attached (they
         arrived with the transition into the gate). A replay of the arriving transition
-        never reaches here (run_coordinator=False), and the natural-key probe guards a
+        never reaches here (is_fresh_apply=False), and the natural-key probe guards a
         double-open in any other path."""
         if self._chunks.find_decision(chunk.chunk_id, node_id=gate_node.node_id, epoch=epoch) is not None:
             return

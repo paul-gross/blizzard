@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from blizzard.wire.chunk import ChunkDetail
+from blizzard.wire.chunk import ChunkDetail, HubAdvanceResponse
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
@@ -95,6 +95,17 @@ class IHubClient(Protocol):
 
     def get_chunk(self, chunk_id: str) -> ChunkDetail:
         """``GET /api/chunks/{id}`` — the chunk's derived status, polled at a hub node."""
+        ...
+
+    def hub_advance(self, chunk_id: str) -> HubAdvanceResponse:
+        """``POST /api/chunks/{id}/hub-advance`` — drive a chunk parked at a generic
+        hub command node one step (#65/#66).
+
+        A no-op at the hub (``ran=False``) when the chunk is not currently parked at a
+        generic hub command node, when the fleet-wide serialization slot is busy, or
+        when a prior ``pending`` outcome's ``poll_interval`` has not yet elapsed —
+        every case simply retried on a later :func:`~blizzard.runner.loop.steps.advance`
+        tick (:func:`~blizzard.runner.loop.steps._advance_held_chunk`)."""
         ...
 
     def get_question(self, question_id: str) -> QuestionView:

@@ -14,7 +14,7 @@ import httpx
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError, IHubClient, RouteClaimOutcome
-from blizzard.wire.chunk import ChunkDetail
+from blizzard.wire.chunk import ChunkDetail, HubAdvanceResponse
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
@@ -70,6 +70,15 @@ class HttpHubClient:
     def get_chunk(self, chunk_id: str) -> ChunkDetail:
         resp = self._get(f"{_API}/chunks/{chunk_id}", not_found_as=ChunkNotFoundError)
         return ChunkDetail.model_validate(resp.json())
+
+    def hub_advance(self, chunk_id: str) -> HubAdvanceResponse:
+        path = f"{_API}/chunks/{chunk_id}/hub-advance"
+        try:
+            resp = self._client.post(path)
+        except httpx.HTTPError as exc:
+            raise self._wrap(exc, f"POST {path}") from exc
+        self._raise_for_status(resp, f"POST {path}")
+        return HubAdvanceResponse.model_validate(resp.json())
 
     def get_question(self, question_id: str) -> QuestionView:
         resp = self._get(f"{_API}/questions/{question_id}")

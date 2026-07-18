@@ -214,37 +214,28 @@
         "title": "ArtifactView",
         "type": "object"
       },
-      "CheckDeliveryResponse": {
-        "description": "The result of an on-demand ``POST /chunks/{id}/check-delivery``.",
+      "BounceView": {
+        "description": "One recorded delivery kick-back (#64) \u2014 contention, not failure.\n\nSurfaced on chunk detail so the bounce history is readable \u2014 including once the\ncount crosses the node's ``bounce_cap`` and the chunk derives ``needs_human`` instead\nof routing back \u2014 without itself being (or affecting) the chunk's derived status.\n``envelope`` is the raw JSON kick-back payload (cause detail, etc.) verbatim.",
         "properties": {
-          "chunk_id": {
-            "title": "Chunk Id",
+          "cause": {
+            "title": "Cause",
             "type": "string"
           },
-          "detail": {
-            "title": "Detail",
+          "envelope": {
+            "title": "Envelope",
             "type": "string"
           },
-          "finalized": {
-            "title": "Finalized",
-            "type": "boolean"
-          },
-          "open_prs": {
-            "title": "Open Prs",
-            "type": "integer"
-          },
-          "status": {
-            "$ref": "#/components/schemas/ChunkStatus"
+          "recorded_at": {
+            "title": "Recorded At",
+            "type": "string"
           }
         },
         "required": [
-          "chunk_id",
-          "status",
-          "finalized",
-          "open_prs",
-          "detail"
+          "cause",
+          "envelope",
+          "recorded_at"
         ],
-        "title": "CheckDeliveryResponse",
+        "title": "BounceView",
         "type": "object"
       },
       "CheckResult": {
@@ -281,6 +272,14 @@
             "default": false,
             "title": "Awaiting External Merge",
             "type": "boolean"
+          },
+          "bounces": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/BounceView"
+            },
+            "title": "Bounces",
+            "type": "array"
           },
           "chunk_id": {
             "title": "Chunk Id",
@@ -343,6 +342,11 @@
             "title": "History",
             "type": "array"
           },
+          "landed": {
+            "default": false,
+            "title": "Landed",
+            "type": "boolean"
+          },
           "latest_epoch": {
             "anyOf": [
               {
@@ -370,6 +374,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/PauseView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pending": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PendingView"
               },
               {
                 "type": "null"
@@ -1483,6 +1497,99 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "HubAdvanceResponse": {
+        "description": "The result of one on-demand ``POST /chunks/{id}/hub-advance`` (#65).\n\nA generic hub command node runs ``run:`` to completion, one call at a time,\nbehind the fleet-wide serialization slot: ``ran=False`` means the slot was held\nby a different chunk and this call deferred without touching anything \u2014 not an\nerror, just try again on a later poll.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "outcome_choice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome Choice"
+          },
+          "ran": {
+            "title": "Ran",
+            "type": "boolean"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ChunkStatus"
+          },
+          "to_node_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To Node Name"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "status",
+          "ran"
+        ],
+        "title": "HubAdvanceResponse",
+        "type": "object"
+      },
+      "HubMarkerRequest": {
+        "description": "The mid-run marker callback's body (#65) \u2014 mirrors ``blizzard runner ask``'s\nown worker-facing callback shape.",
+        "properties": {
+          "content": {
+            "default": "",
+            "title": "Content",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "HubMarkerRequest",
+        "type": "object"
+      },
+      "HubMarkerResponse": {
+        "description": "The recorded marker \u2014 ``recorded=False`` iff it already existed (idempotent).",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "recorded": {
+            "title": "Recorded",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "recorded",
+          "chunk_id",
+          "name"
+        ],
+        "title": "HubMarkerResponse",
+        "type": "object"
+      },
       "JudgedBy": {
         "description": "Who renders a node's exit judgement \u2014 the structural gate marker.",
         "enum": [
@@ -1691,6 +1798,25 @@
           "set_at"
         ],
         "title": "PauseView",
+        "type": "object"
+      },
+      "PendingView": {
+        "description": "A hub node's in-progress poll (#66) \u2014 waiting on external state, honestly.\n\nSurfaced on chunk detail so a ``delivering`` chunk parked at a hub node reads\ntruthfully whether it is about to run its first attempt or already mid-poll, and\nwhen the next attempt is due \u2014 never itself a status (the chunk still derives\n``delivering``, mirroring ``awaiting_external_merge``).",
+        "properties": {
+          "next_poll_at": {
+            "title": "Next Poll At",
+            "type": "string"
+          },
+          "node_name": {
+            "title": "Node Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "node_name",
+          "next_poll_at"
+        ],
+        "title": "PendingView",
         "type": "object"
       },
       "PmItemEntry": {
@@ -2798,49 +2924,6 @@
         ]
       }
     },
-    "/api/chunks/{chunk_id}/check-delivery": {
-      "post": {
-        "description": "Poll a parked open-pr chunk's PRs; finalize the delivery once all are terminal.\n\nThe on-demand external-merge detection (the impatient path): for a chunk parked in\n``open-pr`` mode, check every open PR through the forge and, when all have merged or\nclosed, write the terminal facts so the chunk flips to ``done`` and its environments\nrelease. A no-op when the chunk has no open PR or is already finalized.",
-        "operationId": "check_delivery_api_chunks__chunk_id__check_delivery_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "chunk_id",
-            "required": true,
-            "schema": {
-              "title": "Chunk Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CheckDeliveryResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Check Delivery",
-        "tags": [
-          "chunks"
-        ]
-      }
-    },
     "/api/chunks/{chunk_id}/completions": {
       "post": {
         "description": "Apply a node-step's completion atomically; reply carries the next envelope.",
@@ -3197,6 +3280,120 @@
         "summary": "Group Chunks",
         "tags": [
           "queue"
+        ]
+      }
+    },
+    "/api/chunks/{chunk_id}/hub-advance": {
+      "post": {
+        "description": "Drive a chunk parked at a generic hub command node one step (#65).\n\nRuns :class:`~blizzard.hub.delivery.hub_node.HubNodeExecutor` once, respecting the\nfleet-wide serialization slot: ``ran=False`` means a different chunk holds the\nslot right now, OR (#66) the node reported ``pending`` on a prior call and\n``poll_interval`` has not yet elapsed \u2014 either way not an error, the runner's\nADVANCE poll (``_advance_held_chunk``) simply calls this again on a later tick. A\nno-op (``ran=False``, ``detail`` names it) when the chunk is not currently parked\nat a generic hub command node \u2014 every hub node is this shape since #67; no other\ndelivery route remains.",
+        "operationId": "hub_advance_api_chunks__chunk_id__hub_advance_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HubAdvanceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Hub Advance",
+        "tags": [
+          "chunks"
+        ]
+      }
+    },
+    "/api/chunks/{chunk_id}/hub-markers": {
+      "post": {
+        "description": "The mid-run marker callback (#65) \u2014 a ``run:`` step's own dynamic-loop marker.\n\nMirrors ``blizzard runner ask``'s worker-facing callback shape: a hub command\nnode's script POSTs here (via the injected\n``BZ_HUB_MARKER_CALLBACK_URL``, which already carries ``node_id``/``epoch``) to\nrecord a marker artifact mid-run, ahead of that command's own exit \u2014 enabling a\ndynamic loop (``merge repo -> push -> record merged/<repo> -> next``). Idempotent\nper ``(chunk, node, name, epoch)``, exactly like the ``produces:`` marker the\nexecutor records on a step's own exit.",
+        "operationId": "record_hub_marker_api_chunks__chunk_id__hub_markers_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "title": "Node Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "epoch",
+            "required": true,
+            "schema": {
+              "title": "Epoch",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HubMarkerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HubMarkerResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Hub Marker",
+        "tags": [
+          "chunks"
         ]
       }
     },

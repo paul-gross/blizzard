@@ -20,7 +20,6 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.store import schema
 from tests.support import (
-    FakeForge,
     assert_all_timestamps_utc,
     build_hub,
     emitted_events,
@@ -32,8 +31,10 @@ pytestmark = pytest.mark.component
 
 _POINTER = {"source": "default", "ref": "12"}
 
-# The merge-to-main graph reaches `done`; the open-pr graph parks at `delivering`
-# (D-059/D-065). Neither status is otherwise reachable through a shorter path.
+# The merge graph reaches `done`; the pending graph parks at `delivering` — its hub
+# node's script prints the reserved `pending` outcome (#66), so no transition ever
+# routes it onward and the chunk stays parked at the hub node. Neither status is
+# otherwise reachable through a shorter path.
 _MERGE_YAML = """
 name: default-delivery
 entry: build
@@ -54,10 +55,19 @@ nodes:
           to: build
   deliver:
     executor: hub
-    mode: merge-to-main
+    run:
+      - command: "true"
+    judgement:
+      choices:
+        success:
+          description: Delivered.
+          to: done
+        failure:
+          description: Failed to deliver.
+          to: build
 """
 
-_OPEN_PR_YAML = _MERGE_YAML.replace("mode: merge-to-main", "mode: open-pr")
+_PENDING_YAML = _MERGE_YAML.replace('command: "true"', 'command: "echo pending"')
 
 
 def _claim(hub, chunk_id: str) -> str:  # type: ignore[no-untyped-def]
@@ -146,7 +156,7 @@ def test_pause_unknown_chunk_is_404(tmp_path: Path) -> None:
 
 
 def test_pause_refuses_a_done_chunk(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path, forge=FakeForge())
+    hub = build_hub(tmp_path)
     chunk_id = _ingest_and_deliver(hub, yaml=_MERGE_YAML)
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
 
@@ -158,8 +168,8 @@ def test_pause_refuses_a_done_chunk(tmp_path: Path) -> None:
 
 
 def test_pause_refuses_a_delivering_chunk(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path, forge=FakeForge())
-    chunk_id = _ingest_and_deliver(hub, yaml=_OPEN_PR_YAML)
+    hub = build_hub(tmp_path)
+    chunk_id = _ingest_and_deliver(hub, yaml=_PENDING_YAML)
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "delivering"
 
     resp = hub.client.post(f"/api/chunks/{chunk_id}/pause", json={"by": "operator"})

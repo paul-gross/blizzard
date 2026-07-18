@@ -1,17 +1,19 @@
 """Shared component-test scaffolding — a fully-wired hub over a tmp sqlite store.
 
-Builds the store-backed ``host`` composition with the two external seams — the forge
-delivery and the PM read — replaced by in-process fakes (``bzh:pluggable-seams``): a
-:class:`FakeForge` that records lands and lets a test arm a conflict, and a
-:class:`FakePmSource` that returns canned issue text, wired into the hub through a
-:class:`~blizzard.hub.pm.registry.PmSourceRegistry` the same way the real
-factory would. The clock is a :class:`~blizzard.foundation.clock.FixedClock` the test
-can advance, so ids order and timestamps are deterministic (``bzh:injected-clock``).
+Builds the store-backed ``host`` composition with the PM read seam replaced by an
+in-process fake (``bzh:pluggable-seams``): a :class:`FakePmSource` that returns canned
+issue text, wired into the hub through a
+:class:`~blizzard.hub.pm.registry.PmSourceRegistry` the same way the real factory
+would. The clock is a :class:`~blizzard.foundation.clock.FixedClock` the test can
+advance, so ids order and timestamps are deterministic (``bzh:injected-clock``). A hub
+command node's own forge-facing script (#65/#67) talks HTTP directly (``urllib``), so
+no forge seam is wired here — a test that reaches a deliver hub node arms
+:class:`FakeHubCommandRunner` instead.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -27,15 +29,8 @@ from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub.app import create_app
 from blizzard.hub.composition import HubServices, build_services
 from blizzard.hub.config import HubConfig, PmSourceConfig
-from blizzard.hub.delivery.forge import (
-    IForgeDelivery,
-    LandingDisposition,
-    LandingRequest,
-    LandingResult,
-    PrDisposition,
-    PrHandle,
-    PrState,
-)
+from blizzard.hub.delivery.command_runner import CommandResult, IHubCommandRunner
+from blizzard.hub.delivery.workdir import IHubWorkdir
 from blizzard.hub.domain.graph import Edge, Graph, Node
 from blizzard.hub.domain.work import PmPointer
 from blizzard.hub.events.broker import EventBroker
@@ -67,52 +62,61 @@ def make_graph(
     )
 
 
-class FakeForge:
-    """An in-process :class:`IForgeDelivery` — records lands/opens, arms conflicts by repo.
+class FakeHubCommandRunner:
+    """An in-process :class:`IHubCommandRunner` — scripted results by command, in order.
 
-    For the open-pr mode: ``open_pr`` mints an incrementing PR number and records
-    the request; a test drives a PR's fate with :meth:`mark_merged`/:meth:`mark_closed`,
-    and ``check_pr`` reports the disposition the way a poll would. A repo already
-    opened (same branch) reuses its handle, mirroring the real adapter's crash-safe reuse.
+    ``script`` maps a command string to a queue of :class:`CommandResult`\\ s (popped in
+    order, so a command run twice — a re-run after a crash point — gets its next
+    scripted result, or repeats its last if the queue is exhausted); ``calls`` records
+    every ``(command, cwd, env)`` invocation for assertion. ``before_run``, when set, is
+    called synchronously inside :meth:`run` before returning — the serialization
+    barrier test's hook to block on a latch/barrier while holding the fleet-wide slot.
     """
 
+    def __init__(self, *, default: CommandResult | None = None) -> None:
+        self.script: dict[str, list[CommandResult]] = {}
+        self.calls: list[tuple[str, str, dict[str, str]]] = []
+        self.default = default or CommandResult(exit_code=0, stdout="", stderr="")
+        self.before_run: Callable[[str], None] | None = None
+
+    def arm(self, command: str, *results: CommandResult) -> None:
+        self.script.setdefault(command, []).extend(results)
+
+    def run(self, *, command: str, cwd: str, env: dict[str, str]) -> CommandResult:
+        self.calls.append((command, cwd, env))
+        if self.before_run is not None:
+            self.before_run(command)
+        queue = self.script.get(command)
+        if queue:
+            return queue.pop(0) if len(queue) > 1 else queue[0]
+        return self.default
+
+
+class FakeHubWorkdir:
+    """An in-process :class:`IHubWorkdir` — a plain in-memory chunk-id -> path map."""
+
     def __init__(self) -> None:
-        self.landed: list[LandingRequest] = []
-        self.conflict_repos: set[str] = set()
-        self.opened: list[LandingRequest] = []
-        self._next_pr = 1
-        self._handles: dict[tuple[str, str], PrHandle] = {}
-        self._state: dict[tuple[str, int], PrState] = {}
+        self.ensured: list[str] = []
+        self.expired: list[str] = []
+        self._paths: dict[str, str] = {}
 
-    def land(self, request: LandingRequest) -> LandingResult:
-        if request.repo in self.conflict_repos:
-            return LandingResult(disposition=LandingDisposition.CONFLICT, landed_commit=None, detail="armed conflict")
-        self.landed.append(request)
-        return LandingResult(disposition=LandingDisposition.LANDED, landed_commit=f"merged-{request.commit_hash}")
+    def ensure(self, chunk_id: str) -> str:
+        self.ensured.append(chunk_id)
+        return self._paths.setdefault(chunk_id, f"/tmp/fake-hub-workdir/{chunk_id}")
 
-    def open_pr(self, request: LandingRequest) -> PrHandle:
-        key = (request.repo, request.branch_name)
-        if key in self._handles:
-            return self._handles[key]  # reuse — the redelivery/crash-window path
-        number = self._next_pr
-        self._next_pr += 1
-        handle = PrHandle(repo=request.repo, number=number, url=f"http://forge/{request.repo}/pull/{number}")
-        self._handles[key] = handle
-        self._state[(request.repo, number)] = PrState(disposition=PrDisposition.OPEN)
-        self.opened.append(request)
-        return handle
+    def expire(self, chunk_id: str) -> None:
+        self.expired.append(chunk_id)
+        self._paths.pop(chunk_id, None)
 
-    def check_pr(self, handle: PrHandle) -> PrState:
-        return self._state.get((handle.repo, handle.number), PrState(disposition=PrDisposition.OPEN))
-
-    def mark_merged(self, repo: str, number: int, *, landed_commit: str = "merged-sha") -> None:
-        self._state[(repo, number)] = PrState(disposition=PrDisposition.MERGED, landed_commit=landed_commit)
-
-    def mark_closed(self, repo: str, number: int) -> None:
-        self._state[(repo, number)] = PrState(disposition=PrDisposition.CLOSED)
+    def list_orphans(self) -> list[str]:
+        return list(self._paths)
 
 
-def _conforms_fake_forge(x: FakeForge) -> IForgeDelivery:
+def _conforms_fake_hub_command_runner(x: FakeHubCommandRunner) -> IHubCommandRunner:
+    return x
+
+
+def _conforms_fake_hub_workdir(x: FakeHubWorkdir) -> IHubWorkdir:
     return x
 
 
@@ -299,7 +303,6 @@ class HubHarness:
 
     client: TestClient
     services: HubServices
-    forge: FakeForge
     pm: PmSourceRegistry
     clock: FixedClock
     engine: Engine
@@ -309,9 +312,11 @@ class HubHarness:
 def build_hub(
     tmp_path: Path,
     *,
-    forge: FakeForge | None = None,
     pm: dict[str, FakePmSource] | None = None,
     base_branch: str = "main",
+    hub_command_runner: IHubCommandRunner | None = None,
+    hub_workdir: IHubWorkdir | None = None,
+    forge_owner: str | None = None,
 ) -> HubHarness:
     """A migrated, fully-wired hub over ``tmp_path`` with fake external seams.
 
@@ -320,22 +325,35 @@ def build_hub(
     defaults to one entry so the common single-source case needs no test churn.
     ``None`` defaults to one source; an explicit ``pm={}`` is a legal, deliberately
     **empty** registry — ``or`` would silently coerce that back to the default,
-    which is what made the empty-registry path unreachable through this harness."""
+    which is what made the empty-registry path unreachable through this harness.
+    ``hub_command_runner``/``hub_workdir`` are the generic hub command node's mechanism
+    seams (#65) — a test binds fakes here; left ``None``, ``build_services`` wires the
+    real subprocess/filesystem adapters (rooted under a throwaway tmp dir, harmless for
+    tests that never mint a ``run:`` node)."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     config = HubConfig(root=tmp_path, db_url=db_url)
     migration_runner(config).upgrade("head")
 
-    forge = forge or FakeForge()
     pm_registry = PmSourceRegistry(pm if pm is not None else {"default": FakePmSource()})
     clock = FixedClock(datetime(2026, 7, 13, tzinfo=UTC))
     events = EventBroker()
     engine = create_engine_from_url(db_url)
-    services = build_services(engine, forge=forge, events=events, pm=pm_registry, clock=clock, base_branch=base_branch)
+    services = build_services(
+        engine,
+        events=events,
+        pm=pm_registry,
+        clock=clock,
+        base_branch=base_branch,
+        hub_command_runner=hub_command_runner,
+        hub_workdir=hub_workdir,
+        hub_workdir_root=tmp_path / "hub_workdirs",
+        hub_marker_callback_base_url="http://testserver",
+        forge_owner=forge_owner,
+    )
     app = create_app(config, services=services)
     return HubHarness(
         client=TestClient(app),
         services=services,
-        forge=forge,
         pm=pm_registry,
         clock=clock,
         engine=engine,

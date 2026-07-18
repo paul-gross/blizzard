@@ -50,7 +50,16 @@ nodes:
           to: build
   deliver:
     executor: hub
-    mode: merge-to-main
+    run:
+      - command: "true"
+    judgement:
+      choices:
+        success:
+          description: Delivered.
+          to: done
+        failure:
+          description: Failed to deliver.
+          to: build
 """
 
 _ARTIFACT = {
@@ -121,11 +130,10 @@ def test_a_detached_runners_late_completion_is_rejected_and_does_not_resurrect_t
     assert body["outcome"] == "failure"
     assert "stale epoch" in body["detail"]
 
-    # The fence held: the chunk did not advance and nothing reached the forge.
+    # The fence held: the chunk did not advance.
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "running"
     assert detail["current_node_id"] == build_node_id
-    assert hub.forge.landed == []
 
     # Critically, the route was NOT resurrected: the chunk still belongs to runner
     # B's fresh route — runner A's late write did not revive A's release-severed
@@ -142,4 +150,3 @@ def test_a_detached_runners_late_completion_is_rejected_and_does_not_resurrect_t
     )
     assert winner.json()["outcome"] == "hub_node_taken", winner.text
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
-    assert [r.commit_hash for r in hub.forge.landed] == ["late-c"]

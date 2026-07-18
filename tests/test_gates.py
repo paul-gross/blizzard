@@ -53,7 +53,16 @@ nodes:
           to: build
   deliver:
     executor: hub
-    mode: merge-to-main
+    run:
+      - command: "true"
+    judgement:
+      choices:
+        success:
+          description: Delivered.
+          to: done
+        failure:
+          description: Failed to deliver.
+          to: build
 """
 
 # A gateless build -> deliver graph, for the runner-config gate (gating a WORKER node).
@@ -77,7 +86,16 @@ nodes:
           to: build
   deliver:
     executor: hub
-    mode: merge-to-main
+    run:
+      - command: "true"
+    judgement:
+      choices:
+        success:
+          description: Delivered.
+          to: done
+        failure:
+          description: Failed to deliver.
+          to: build
 """
 
 _BUILD_ARTIFACT = {
@@ -194,13 +212,12 @@ def test_decide_then_resolving_transition_advances_the_chunk(tmp_path: Path) -> 
         f"/api/chunks/{chunk_id}/completions",
         json=_completion(nodes["approve-gate"], choice="approve", decision_id=decision_id),
     )
-    # approve -> deliver (a hub node): the coordinator lands the build artifact.
+    # approve -> deliver (a generic hub command node): its run: script executes.
     assert resolving.json()["outcome"] == "hub_node_taken", resolving.text
     done_resp = hub.client.get(f"/api/chunks/{chunk_id}")
     done = done_resp.json()
     assert done["status"] == "done"
     assert_all_timestamps_utc(done_resp.json())  # bzh:utc-instants — transitions[].recorded_at
-    assert hub.forge.landed and hub.forge.landed[0].repo == "acme/widget"
     # The decision is now transitioned; it drops off the chunk's live decision + the open list.
     assert done["decision"] is None
     assert hub.client.get("/api/decisions").json()["decisions"] == []

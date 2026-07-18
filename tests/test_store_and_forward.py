@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.support import FakeForge, build_hub, pointer_token, report_lease
+from tests.support import build_hub, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -44,7 +44,16 @@ nodes:
           to: build
   deliver:
     executor: hub
-    mode: merge-to-main
+    run:
+      - command: "true"
+    judgement:
+      choices:
+        success:
+          description: Delivered.
+          to: done
+        failure:
+          description: Failed to deliver.
+          to: build
 """
 
 
@@ -105,23 +114,25 @@ def test_events_reack_is_idempotent_by_seq_high_water(tmp_path: Path) -> None:
 
 def test_reflushed_completion_applies_exactly_once(tmp_path: Path) -> None:
     """A re-submitted completion (lost-ack replay) lands once — one transition, one merge."""
-    forge = FakeForge()
-    hub = build_hub(tmp_path, forge=forge)
+    hub = build_hub(tmp_path)
     chunk_id, build_node_id = _claim(hub)
     report_lease(hub, chunk_id, epoch=1, seq=1)
 
     first = hub.client.post(f"/api/chunks/{chunk_id}/completions", json=_completion(build_node_id, epoch=1))
     assert first.json()["outcome"] == "hub_node_taken"
-    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
-    assert [r.commit_hash for r in forge.landed] == ["c"]
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["status"] == "done"
+    assert len([t for t in detail["history"] if t["from_node_name"] == "build"]) == 1
 
     # The runner's flush ack was lost, so it re-submits the very same completion. The
     # hub returns the original outcome from the idempotency probe — no second
-    # transition, and the merge queue does not run again (the forge sees no new land).
+    # transition, and the hub node does not re-run (the deliver->done transition never
+    # double-records).
     replay = hub.client.post(f"/api/chunks/{chunk_id}/completions", json=_completion(build_node_id, epoch=1))
     assert replay.json()["outcome"] == "hub_node_taken"
-    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
-    assert [r.commit_hash for r in forge.landed] == ["c"]  # still exactly one land
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["status"] == "done"
+    assert len([t for t in detail["history"] if t["from_node_name"] == "build"]) == 1  # still exactly one transition
 
 
 def test_escalation_fact_rides_events_and_derives_needs_human(tmp_path: Path) -> None:

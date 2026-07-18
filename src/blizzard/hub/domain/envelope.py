@@ -25,8 +25,8 @@ per ``{node_name}.{artifact-name}``.
 from __future__ import annotations
 
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
-from blizzard.hub.domain.graph import Node
-from blizzard.hub.domain.work import Chunk
+from blizzard.hub.domain.graph import Graph, Node
+from blizzard.hub.domain.work import Chunk, TransitionFact
 from blizzard.wire.envelope import EnvelopeArtifact, EnvelopeChoice, NodeConfig, NodeEnvelope
 
 
@@ -71,6 +71,23 @@ def _judgement_prompt(node: Node) -> str | None:
     if not node.choices:
         return None
     return node.judgement_prompt
+
+
+def addendum_for_transition(graph: Graph, transition: TransitionFact | None) -> str | None:
+    """The inlined arrival addendum of the edge ``transition`` took, or ``None``.
+
+    Mirrors ``apply.py``'s own resolution of the just-taken edge's ``prompt_addendum``,
+    but keyed off an already-recorded :class:`~blizzard.hub.domain.work.TransitionFact`
+    rather than a live completion submission — the shape a re-fetched envelope needs
+    (``GET /chunks/{id}/envelope``, the lost-apply re-read and the held-chunk-advance
+    poll, ``runner.loop.steps._spawn_into_held_node``), where no submission is in hand.
+    ``None`` when the chunk has not yet transitioned, or the edge authored no addendum
+    (the review-fail loop's findings addendum, and #64's kick-back addendum, both ride
+    this same resolution)."""
+    if transition is None or transition.from_node_id is None or transition.choice_name is None:
+        return None
+    edge = graph.edge_for_choice(transition.from_node_id, transition.choice_name)
+    return edge.prompt_addendum if edge is not None else None
 
 
 def build_node_envelope(
