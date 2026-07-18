@@ -29,11 +29,11 @@ const PROJECTS_DIR = path.join(ROOT, 'projects');
  *
  * - `fleet/src/lib/kit` legitimately owns this chrome (issue #78 AC) — the
  *   whole point of the kit is one copy of it.
- * - `fleet/src/lib/chunk-detail` and local-panel's `chunk-detail.ts` are the
- *   chunk-detail monolith and its local-panel counterpart, explicitly out of
- *   Phase 1's adoption list (blizzard#78's Out of Scope) and deferred to the
- *   chunk-detail decomposition (blizzard#79) and #83's rename respectively —
- *   both still carry residual `.lbl`/`.status` today.
+ * - local-panel's `chunk-detail.ts` is the local-panel counterpart of the
+ *   fleet chunk-detail monolith — `fleet/src/lib/chunk-detail/` came under
+ *   the cap via its decomposition (blizzard#79); local-panel's own is
+ *   deferred to #83's rename, and still carries residual `.lbl`/`.status`
+ *   today.
  * - local-panel's `heartbeat-freshness.ts` carries its own small `.lbl`
  *   ("hb") — a single-use bar label, not a panel/status block, and outside
  *   Phase 1's enumerated adoption list; noted as a further drift instance for
@@ -44,8 +44,6 @@ const PROJECTS_DIR = path.join(ROOT, 'projects');
  */
 const EXEMPT_DIRS = [path.join('fleet', 'src', 'lib', 'kit')];
 const EXEMPT_FILES = [
-  path.join('fleet', 'src', 'lib', 'chunk-detail', 'chunk-detail-panel.ts'),
-  path.join('fleet', 'src', 'lib', 'chunk-detail', 'chunk-detail.ts'),
   path.join('local-panel', 'src', 'lib', 'chunk-detail.ts'),
   path.join('local-panel', 'src', 'lib', 'heartbeat-freshness.ts'),
 ];
