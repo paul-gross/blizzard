@@ -43,11 +43,25 @@ export interface BoardCard {
             <div class="b-col" [attr.data-col]="col.key">
               <div class="b-col-head">
                 <span class="lbl">{{ col.label }}</span>
-                <span class="n">{{ cardsFor(col.key).length }}</span>
+                <span class="n">
+                  <!-- A live lane with occupants announces itself: a flashing square
+                       ahead of the count — amber for work in flight or parked on a
+                       human, red for an escalation. Quiet (empty) lanes show none. -->
+                  @if (cardsFor(col.key).length > 0 && blinkFor(col.key); as blink) {
+                    <span class="blink" data-testid="lane-blink" [attr.data-blink]="blink"></span>
+                  }
+                  {{ cardsFor(col.key).length }}
+                </span>
               </div>
               <div class="b-col-body">
                 @for (card of cardsFor(col.key); track card.chunkId) {
-                  <div class="card" data-testid="chunk-card" [attr.data-status]="card.status">
+                  <div
+                    class="card"
+                    data-testid="chunk-card"
+                    [attr.data-status]="card.status"
+                    [class.selected]="card.chunkId === selectedChunkId()"
+                    [attr.aria-current]="card.chunkId === selectedChunkId() ? 'true' : null"
+                  >
                     <button
                       type="button"
                       class="card-open"
@@ -160,19 +174,54 @@ export interface BoardCard {
       flex: none;
     }
     .b-col-head .n {
+      display: flex;
+      align-items: center;
+      gap: 5px;
       font-size: var(--fs-md);
       color: var(--label-dim);
     }
-    /* The DONE column carries a green treatment: a green header label + head
-       accent, and green card accents, all from tokens. */
+    /* Per the mockup, the header labels stay uniformly grey and the **count** carries
+       each lane's color: amber for live work (running, parked on a human), red for an
+       escalation, green for done — all from tokens. */
+    .b-col[data-col='running'] .b-col-head .n,
+    .b-col[data-col='waiting'] .b-col-head .n {
+      color: var(--amber);
+    }
+    .b-col[data-col='needs'] .b-col-head .n {
+      color: var(--red);
+    }
+    .b-col[data-col='done'] .b-col-head .n {
+      color: var(--green);
+    }
+    /* The occupied-lane beacon ahead of the count — see the template note. */
+    .blink {
+      width: 7px;
+      height: 7px;
+      background: var(--amber);
+      animation: lane-blink 2s ease-in-out infinite;
+    }
+    .blink[data-blink='red'] {
+      background: var(--red);
+    }
+    @keyframes lane-blink {
+      50% {
+        opacity: 0;
+      }
+    }
+    /* The DONE column keeps its green head accent and card accents. */
     .b-col[data-col='done'] .b-col-head {
       border-bottom-color: var(--green-dim);
     }
-    .b-col[data-col='done'] .b-col-head .lbl {
-      color: var(--green);
-    }
     .b-col[data-col='done'] .card {
       border-left-color: var(--green);
+    }
+    /* An escalated chunk reads in the alarm color: the card's left bar and its name,
+       matching the mockup's NEEDS HUMAN treatment. */
+    .b-col[data-col='needs'] .card {
+      border-left-color: var(--red);
+    }
+    .b-col[data-col='needs'] .card-id {
+      color: var(--red);
     }
     /* The NOT READY backlog column reads as held/inert: a muted header label and a
        dim card accent, distinct from the ready queue in the rail and from any live
@@ -222,6 +271,14 @@ export interface BoardCard {
     }
     .card:hover {
       border-color: var(--cyan);
+    }
+    /* The chunk whose detail fills the dock — an outline ring (not border-color, which
+       would repaint the status-colored left bar) plus a faint cyan wash, so the
+       board answers "which one am I looking at" at a glance. */
+    .card.selected {
+      outline: 1px solid var(--cyan);
+      outline-offset: -1px;
+      background: color-mix(in srgb, var(--cyan) 8%, rgba(0, 0, 0, 0.25));
     }
     .card-open {
       border: 0;
@@ -306,10 +363,22 @@ export class BoardShell {
   /** Emitted with a chunk id when its card is activated — fills the detail dock. */
   readonly selectChunk = output<string>();
 
+  /** The chunk whose detail currently fills the dock, or null — its card carries
+   * the selection highlight so the board says which one is open. */
+  readonly selectedChunkId = input<string | null>(null);
+
   /** Emitted with a chunk id when a not-ready card's Promote is clicked. */
   readonly promote = output<string>();
 
   protected readonly columns = LANES;
+
+  /** The beacon color for an occupied lane's header, or null for the quiet lanes:
+   * amber for work in flight or parked on a human, red for an escalation. */
+  protected blinkFor(columnKey: string): 'amber' | 'red' | null {
+    if (columnKey === 'running' || columnKey === 'waiting') return 'amber';
+    if (columnKey === 'needs') return 'red';
+    return null;
+  }
 
   /** Every chunk rendered as a board card, grouped into its status column. */
   private readonly cards = computed<Map<string, BoardCard[]>>(() => {

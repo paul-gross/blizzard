@@ -79,7 +79,9 @@ class ChunkSummary(BaseModel):
     Deliberately status-only: the summary feeds the board **card**, which is a passive
     status view (issue #42), so no operator *fact* is carried here. The pause fact — and
     every other fact an operator action keys on — reaches the chunk detail dock through
-    :class:`ChunkDetail`, the one place a board action lives."""
+    :class:`ChunkDetail`, the one place a board action lives. ``runner_id`` (the live
+    route's holder, null when unrouted) is a passive where-is-it fact in that same
+    sense — it lets the fleet registry list each runner's claims — not an action key."""
 
     chunk_id: str
     graph_id: str
@@ -90,6 +92,7 @@ class ChunkSummary(BaseModel):
     # The chunk's model selection (issue #27) — editable while `not_ready`. Required:
     # the store column is non-nullable and every mint sets DEFAULT_MODEL.
     model: str
+    runner_id: str | None = None
 
 
 class RouteView(BaseModel):
@@ -146,7 +149,10 @@ class ArtifactView(BaseModel):
     ``branch_url`` is the forge ``tree`` URL for the produced branch, resolved server-side
     from the chunk's issue-shaped PM pointer so the board can link a ``git_commit``
     to the branch on the forge; null when no forge web base is derivable — the row then
-    shows the branch name without a link (no broken link)."""
+    shows the branch name without a link (no broken link).
+
+    ``recorded_at`` is the instant the artifact was attached, decoded from its id's
+    ULID timestamp (the store keeps no separate column); null for a malformed id."""
 
     key: str
     kind: str
@@ -154,6 +160,7 @@ class ArtifactView(BaseModel):
     node_id: str
     node_name: str
     epoch: int
+    recorded_at: str | None = None
     content: str | None = None
     repo: str | None = None
     branch_name: str | None = None

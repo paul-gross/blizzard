@@ -18,6 +18,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
+from blizzard.foundation.ids import minted_at
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.decisions import to_decision_view
 from blizzard.hub.api.deps import get_services
@@ -151,6 +152,7 @@ def _artifact_views(rows: list[ArtifactRow], web_base: IPmSource | None) -> list
     views: list[ArtifactView] = []
     for row in sorted(rows, key=lambda r: (r.node_name, r.name, r.epoch)):
         artifact = from_row(row)
+        attached = minted_at(row.artifact_id)
         common = {
             "key": store_key(row),
             "kind": row.kind.value,
@@ -158,6 +160,7 @@ def _artifact_views(rows: list[ArtifactRow], web_base: IPmSource | None) -> list
             "node_id": row.node_id,
             "node_name": row.node_name,
             "epoch": row.epoch,
+            "recorded_at": iso_utc(attached) if attached is not None else None,
         }
         if isinstance(artifact, GitCommitArtifact):
             branch_url = web_base.branch_url(artifact.repo, artifact.branch_name) if web_base is not None else None
@@ -235,6 +238,7 @@ def list_chunks(services: Annotated[HubServices, Depends(get_services)]) -> list
     for chunk in services.chunks.list_all():
         facts = services.chunks.load_facts(chunk.chunk_id) or ChunkFacts(minted=True)
         node_id, node_name = _current_node(services, chunk, facts, graph_cache)
+        route = services.chunks.route_of(chunk.chunk_id)
         summaries.append(
             ChunkSummary(
                 chunk_id=chunk.chunk_id,
@@ -244,6 +248,7 @@ def list_chunks(services: Annotated[HubServices, Depends(get_services)]) -> list
                 current_node_name=node_name,
                 pm_pointers=_pointer_views(chunk, services.pm),
                 model=chunk.model,
+                runner_id=route.runner_id if route is not None else None,
             )
         )
     return summaries

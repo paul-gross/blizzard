@@ -406,11 +406,9 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
 
                 col_cards("waiting").first.click()
                 expect(page.get_by_test_id("chunk-detail")).to_be_visible()
-                # The dock names the chunk the way the board does — the short name
-                # (`ch_…` + the ULID's last four), with the full id kept reachable as
-                # its title rather than spelled out across the header.
-                expect(page.get_by_test_id("detail-id")).to_have_text(f"ch_…{chunk_b[-4:]}")
-                expect(page.get_by_test_id("detail-id")).to_have_attribute("title", chunk_b)
+                # The dock spells out the full chunk id — it is the one view wide
+                # enough for it; the board card keeps the short name.
+                expect(page.get_by_test_id("detail-id")).to_have_text(chunk_b)
                 assert page.get_by_test_id("board").bounding_box() == board_at_rest, (
                     "selecting a chunk moved or resized the board — the dock is not holding its track"
                 )
@@ -481,7 +479,7 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 expect(a_card).to_have_count(1)
                 a_card.click()
                 expect(page.get_by_test_id("chunk-detail")).to_be_visible()
-                expect(page.get_by_test_id("detail-id")).to_have_attribute("title", chunk_a)
+                expect(page.get_by_test_id("detail-id")).to_have_text(chunk_a)
                 page.get_by_test_id("pause-chunk").click()
 
                 # The chip flips to `paused` live over SSE, with no reload, and the card
@@ -502,7 +500,7 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 # The dock — not the card — carries who paused it: `ChunkSummary` (the
                 # card) has no pause field by design, only `ChunkDetail` does. The dock is
                 # still open on A from the pause above, and live-updates in place.
-                expect(page.get_by_test_id("detail-id")).to_have_attribute("title", chunk_a)
+                expect(page.get_by_test_id("detail-id")).to_have_text(chunk_a)
                 expect(page.get_by_test_id("chunk-pause-by")).to_contain_text("operator")
 
                 # --- Resume the chunk from the dock: it returns and proceeds -----------

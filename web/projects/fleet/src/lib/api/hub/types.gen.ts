@@ -98,6 +98,9 @@ export type ArtifactKind = 'git_commit' | 'asset';
  * from the chunk's issue-shaped PM pointer so the board can link a ``git_commit``
  * to the branch on the forge; null when no forge web base is derivable — the row then
  * shows the branch name without a link (no broken link).
+ *
+ * ``recorded_at`` is the instant the artifact was attached, decoded from its id's
+ * ULID timestamp (the store keeps no separate column); null for a malformed id.
  */
 export type ArtifactView = {
     /**
@@ -140,6 +143,10 @@ export type ArtifactView = {
      * Node Name
      */
     node_name: string;
+    /**
+     * Recorded At
+     */
+    recorded_at?: string | null;
     /**
      * Repo
      */
@@ -406,7 +413,9 @@ export type ChunkStatus = 'not_ready' | 'ready' | 'running' | 'delivering' | 'wa
  * Deliberately status-only: the summary feeds the board **card**, which is a passive
  * status view (issue #42), so no operator *fact* is carried here. The pause fact — and
  * every other fact an operator action keys on — reaches the chunk detail dock through
- * :class:`ChunkDetail`, the one place a board action lives.
+ * :class:`ChunkDetail`, the one place a board action lives. ``runner_id`` (the live
+ * route's holder, null when unrouted) is a passive where-is-it fact in that same
+ * sense — it lets the fleet registry list each runner's claims — not an action key.
  */
 export type ChunkSummary = {
     /**
@@ -433,6 +442,10 @@ export type ChunkSummary = {
      * Pm Pointers
      */
     pm_pointers?: Array<PmPointerView>;
+    /**
+     * Runner Id
+     */
+    runner_id?: string | null;
     status: ChunkStatus;
 };
 

@@ -8,11 +8,11 @@ import type {
   EscalationView,
   PauseView,
   PmItemEntry,
+  PmPointerView,
   QuestionView,
   RouteView,
-  TransitionView,
 } from '../api/hub';
-import { shortChunkId } from '../chunk-id';
+import { formatWhen } from '../when';
 
 /** Statuses the hub's `PauseService` refuses to pause (`ChunkNotPausable`), mirrored
  * here so the dock never offers a Pause the server would answer with a 409 (issue #46).
@@ -23,6 +23,41 @@ import { shortChunkId } from '../chunk-id';
  * never asked here — see `ChunkDetailPanel.pause`, which owns that half by reading the
  * fact. */
 const NOT_PAUSABLE = new Set<ChunkStatus>(['done', 'stopped', 'delivering']);
+
+/** One judged node on the timeline: the node, the verdict that closed it, and where
+ * that verdict routed the chunk — a transition re-read node-first for display. */
+interface HistoryRow {
+  readonly epoch: number;
+  readonly nodeId: string | null;
+  readonly nodeName: string;
+  readonly verdict: string | null;
+  readonly toId: string;
+  readonly toName: string;
+  readonly when: string;
+}
+
+/** An artifact-store entry plus its pre-formatted attachment recency stamp. */
+type StampedArtifact = ArtifactView & { readonly when: string };
+
+/** The synthetic timeline row for the node currently in flight — see `activeRow`. */
+interface ActiveRow {
+  readonly epoch: number | null;
+  readonly nodeId: string;
+  readonly nodeName: string;
+  readonly choice: string;
+  readonly label: string;
+}
+
+/** What the in-flight node is doing, per status — `choice` keys the verdict color
+ * table in the styles (run reads cyan, the parked verbs amber-hi/red), `label` is the
+ * text shown. Statuses absent here have no node mid-flight, so no row renders. */
+const ACTIVE_VERBS: Partial<Record<ChunkStatus, { choice: string; label: string }>> = {
+  running: { choice: 'run', label: 'run' },
+  delivering: { choice: 'run', label: 'run' },
+  waiting_on_human: { choice: 'waiting', label: 'waiting' },
+  needs_human: { choice: 'needs-human', label: 'needs human' },
+  paused: { choice: 'paused', label: 'paused' },
+};
 
 /** The chunk's related PM items and the state of the pass-through fetch, for the work-item column.
  *
@@ -83,9 +118,10 @@ export interface EditModelEvent {
  * Under the header sit three columns of roughly equal weight — **what it is**,
  * **where it has been**, **what it produced**:
  *
- * - **the work item** — the chunk's PM pointers, each a link out to the forge (the
- *   board cards deliberately carry none), the issue title and body pass-through
- *   (issue #24), and the chunk's own facts: status, node, agent, attempts, and its
+ * - **the work item** — the chunk's own facts first (a fixed-height glance a long
+ *   issue body must not scroll away), then the PM pointers, each a link out to the
+ *   forge (the board cards deliberately carry none), and the issue title and body
+ *   pass-through (issue #24). The facts: status, node, runner, attempts, and its
  *   pinned **graph** and **model** — each editable inline, text-input-and-Set, the
  *   same shape the open-question Answer control already uses, while the chunk sits
  *   `not_ready` (issue #27). The edit row is gated on {@link editable} — the fact,
@@ -96,9 +132,12 @@ export interface EditModelEvent {
  *   /api/graphs` to mint one), so the graph edit takes a graph id by hand, same as
  *   the model edit takes a model name by hand — both plain text, no listing to pick
  *   from either;
- * - **node history**, oldest-first: every edge the chunk took with the judgement
- *   that chose it, so the review-fail loop back to build reads as a visible
- *   `review → build (fail)` step;
+ * - **node history**, oldest-first: one row per judged node — the node, the
+ *   verdict that closed it in an aligned column (`BUILD  PASS`, `REVIEW  FAIL`),
+ *   and where that verdict routed the chunk — capped by a synthetic row for the
+ *   node currently in flight (`RUN` in cyan, or the parked state's own verb), so
+ *   the review-fail loop back to build reads as `REVIEW  FAIL → build` over a
+ *   live `BUILD  RUN`;
  * - **artifacts and asks** — the **artifact store**, each entry keyed
  *   `{node}.{artifact-name}.{epoch}`, with an **asset's** findings text inline and a
  *   **git_commit's** pinned `repo @ commit` reference; above it, whatever the chunk
@@ -126,10 +165,24 @@ export interface EditModelEvent {
            sits at pushed to the far right, the same shape the board cards use. -->
       <header class="d-head">
         <div class="d-title">
-          <span class="id" data-testid="detail-id" [title]="detail().chunk_id">{{ shortId() }}</span>
+          <span class="id" data-testid="detail-id">{{ detail().chunk_id }}</span>
           <span class="d-sub">
-            @if (pointerLabel()) {
-              <span class="iss" data-testid="detail-pointer">{{ pointerLabel() }}</span>
+            <!-- Each pointer links out to its PM source here in the detail — the board
+                 cards stay plain click targets, so the anchor lives on this view only.
+                 No web_url (unconfigured source) degrades to plain text, no broken link. -->
+            @for (p of pointers(); track p.source + ':' + p.ref) {
+              @if (p.web_url) {
+                <a
+                  class="iss"
+                  data-testid="detail-pointer"
+                  [href]="p.web_url"
+                  target="_blank"
+                  rel="noreferrer"
+                  [attr.title]="p.web_url"
+                >{{ p.label ?? p.source + '#' + p.ref }}</a>
+              } @else {
+                <span class="iss" data-testid="detail-pointer">{{ p.label ?? p.source + '#' + p.ref }}</span>
+              }
             }
             <span class="st" data-testid="detail-status">{{ detail().status }}</span>
           </span>
@@ -201,6 +254,70 @@ export interface EditModelEvent {
       <div class="d-body">
         <section class="d-sec" aria-label="Work item" data-testid="issue-pane">
           <div class="s-head"><span class="lbl">Work item · {{ pointerCount() }}</span></div>
+          <!-- The chunk's own facts come first: they are a fixed-height glance, where
+               the issue body below is arbitrarily long — ordered the other way, a long
+               body scrolls the facts out of view. -->
+          <dl class="kv" data-testid="chunk-facts">
+            <dt>Status</dt>
+            <dd data-testid="fact-status">{{ detail().status }}</dd>
+            <dt>Node</dt>
+            <dd data-testid="fact-node">{{ detail().current_node_name ?? detail().current_node_id ?? '—' }}</dd>
+            <dt>Runner</dt>
+            <dd data-testid="fact-runner">{{ runner() }}</dd>
+            <dt>Attempts</dt>
+            <dd data-testid="fact-attempts">{{ attempts() }}</dd>
+            <!-- Graph and model are always shown; the edit row only while the chunk is
+                 still not_ready (issue #27) — the same shape as the open-question
+                 answer control, gated on the fact rather than confirmed. -->
+            <dt>Graph</dt>
+            <dd data-testid="fact-graph">
+              <span data-testid="graph-value" [title]="detail().graph_id">{{ detail().graph_id }}</span>
+              @if (editable()) {
+                <span class="edit-row">
+                  <input
+                    #graphInput
+                    class="edit-input"
+                    type="text"
+                    data-testid="graph-input"
+                    placeholder="New graph id…"
+                    [attr.aria-label]="'Set graph for chunk ' + detail().chunk_id"
+                  />
+                  <button
+                    type="button"
+                    class="act"
+                    data-testid="graph-submit"
+                    (click)="submitGraph(graphInput.value); graphInput.value = ''"
+                  >
+                    Set
+                  </button>
+                </span>
+              }
+            </dd>
+            <dt>Model</dt>
+            <dd data-testid="fact-model">
+              <span data-testid="model-value">{{ detail().model }}</span>
+              @if (editable()) {
+                <span class="edit-row">
+                  <input
+                    #modelInput
+                    class="edit-input"
+                    type="text"
+                    data-testid="model-input"
+                    placeholder="New model…"
+                    [attr.aria-label]="'Set model for chunk ' + detail().chunk_id"
+                  />
+                  <button
+                    type="button"
+                    class="act"
+                    data-testid="model-submit"
+                    (click)="submitModel(modelInput.value); modelInput.value = ''"
+                  >
+                    Set
+                  </button>
+                </span>
+              }
+            </dd>
+          </dl>
           @switch (pmItems().status) {
             @case ('loading') {
               <p class="none" data-testid="issue-loading">Loading issue…</p>
@@ -256,92 +373,36 @@ export interface EditModelEvent {
               }
             }
           }
-
-          <dl class="kv" data-testid="chunk-facts">
-            <dt>Status</dt>
-            <dd data-testid="fact-status">{{ detail().status }}</dd>
-            <dt>Node</dt>
-            <dd data-testid="fact-node">{{ detail().current_node_name ?? detail().current_node_id ?? '—' }}</dd>
-            <dt>Agent</dt>
-            <dd data-testid="fact-agent">{{ agent() }}</dd>
-            <dt>Attempts</dt>
-            <dd data-testid="fact-attempts">{{ attempts() }}</dd>
-            <!-- Graph and model are always shown; the edit row only while the chunk is
-                 still not_ready (issue #27) — the same shape as the open-question
-                 answer control, gated on the fact rather than confirmed. -->
-            <dt>Graph</dt>
-            <dd data-testid="fact-graph">
-              <span data-testid="graph-value" [title]="detail().graph_id">{{ detail().graph_id }}</span>
-              @if (editable()) {
-                <span class="edit-row">
-                  <input
-                    #graphInput
-                    class="edit-input"
-                    type="text"
-                    data-testid="graph-input"
-                    placeholder="New graph id…"
-                    [attr.aria-label]="'Set graph for chunk ' + detail().chunk_id"
-                  />
-                  <button
-                    type="button"
-                    class="act"
-                    data-testid="graph-submit"
-                    (click)="submitGraph(graphInput.value); graphInput.value = ''"
-                  >
-                    Set
-                  </button>
-                </span>
-              }
-            </dd>
-            <dt>Model</dt>
-            <dd data-testid="fact-model">
-              <span data-testid="model-value">{{ detail().model }}</span>
-              @if (editable()) {
-                <span class="edit-row">
-                  <input
-                    #modelInput
-                    class="edit-input"
-                    type="text"
-                    data-testid="model-input"
-                    placeholder="New model…"
-                    [attr.aria-label]="'Set model for chunk ' + detail().chunk_id"
-                  />
-                  <button
-                    type="button"
-                    class="act"
-                    data-testid="model-submit"
-                    (click)="submitModel(modelInput.value); modelInput.value = ''"
-                  >
-                    Set
-                  </button>
-                </span>
-              }
-            </dd>
-          </dl>
         </section>
         <section class="d-sec" aria-label="Node history">
           <div class="s-head"><span class="lbl">Node history</span></div>
-          @if (history().length === 0) {
+          @if (historyRows().length === 0 && !activeRow()) {
             <p class="none" data-testid="history-empty">No transitions yet — waiting on the first node-step.</p>
           } @else {
             <ol class="timeline" data-testid="history">
-              @for (step of history(); track $index) {
-                <li class="step" data-testid="history-step" [attr.data-choice]="step.choice_name">
-                  <span class="att">{{ step.epoch }}</span>
-                  <span class="nd">
-                    <span class="from" [attr.title]="step.from_node_id || null">{{
-                      step.from_node_name ?? step.from_node_id ?? '·'
-                    }}</span>
-                    <span class="arrow">→</span>
-                    <span class="to" [attr.title]="step.to_node_id || null">{{
-                      step.to_node_name ?? step.to_node_id
-                    }}</span>
+              @for (row of historyRows(); track $index) {
+                <li class="step" data-testid="history-step" [attr.data-choice]="row.verdict">
+                  <span class="att">{{ row.epoch }}</span>
+                  <span class="nd" [attr.title]="row.nodeId">{{ row.nodeName }}</span>
+                  <!-- The judgement that closed the node, in a column of its own so the
+                       verdicts read down the timeline aligned, then where it routed the
+                       chunk — the fail loop's "→ build" consequence, dimmed. -->
+                  <span class="jg">
+                    <span class="verdict" data-testid="history-choice">{{ row.verdict ?? '·' }}</span>
+                    <span class="jg-to" [attr.title]="row.toId">→ {{ row.toName }}</span>
                   </span>
-                  <!-- The edge the graph chose out of that node — a review's PASS/FAIL is
-                       the judgement that sent the chunk on or looped it back to build. -->
-                  @if (step.choice_name) {
-                    <span class="jg" data-testid="history-choice">{{ step.choice_name }}</span>
-                  }
+                  <span class="ts" data-testid="history-when">{{ row.when }}</span>
+                </li>
+              }
+              <!-- The node currently in flight — synthetic, not a recorded transition:
+                   RUN while a worker drives it, or the parked state's own verb. -->
+              @if (activeRow(); as a) {
+                <li class="step" data-testid="history-active" [attr.data-choice]="a.choice">
+                  <span class="att">{{ a.epoch ?? '·' }}</span>
+                  <span class="nd" [attr.title]="a.nodeId">{{ a.nodeName }}</span>
+                  <span class="jg">
+                    <span class="verdict" data-testid="history-active-verb">{{ a.label }}</span>
+                  </span>
                 </li>
               }
             </ol>
@@ -436,6 +497,9 @@ export interface EditModelEvent {
               <li class="artifact" data-testid="artifact" [attr.data-kind]="art.kind">
                 <div class="a-head">
                   <span class="a-key" data-testid="artifact-key">{{ art.key }}</span>
+                  @if (art.when) {
+                    <span class="a-when" data-testid="artifact-when" [attr.title]="art.recorded_at">{{ art.when }}</span>
+                  }
                   <span class="a-kind">{{ art.kind }}</span>
                 </div>
                 @if (art.kind === 'asset') {
@@ -533,6 +597,14 @@ export interface EditModelEvent {
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    a.iss {
+      text-decoration: none;
+    }
+    a.iss:hover,
+    a.iss:focus-visible {
+      text-decoration: underline;
+      outline: none;
+    }
     .d-sub .st {
       color: var(--label);
       font-size: var(--fs-label);
@@ -629,8 +701,11 @@ export interface EditModelEvent {
       color: var(--label-dim);
       font-size: var(--fs-xs);
     }
+    /* The same amber accent bar the board cards carry, with breathing room so the
+       heading never touches it. */
     .awaiting {
-      border-left: 2px solid var(--amber-hi);
+      border-left: 2px solid var(--amber);
+      padding: 4px 0 4px 8px;
     }
     .ask,
     .gate {
@@ -757,8 +832,8 @@ export interface EditModelEvent {
       padding: 4px 6px;
       font-size: var(--fs-sm);
     }
-    /* One row per edge the chunk took: the attempt it happened on, the step itself,
-       and the judgement that chose it. */
+    /* One row per judged node: the attempt, the node in a fixed column, and the
+       verdict — fixed widths so the verdicts read down the timeline aligned. */
     .timeline {
       list-style: none;
       margin: 0;
@@ -766,7 +841,7 @@ export interface EditModelEvent {
     }
     .step {
       display: grid;
-      grid-template-columns: 16px 1fr auto;
+      grid-template-columns: 16px 84px 1fr auto;
       gap: 6px;
       align-items: baseline;
       padding: 3px 0;
@@ -779,33 +854,56 @@ export interface EditModelEvent {
       font-size: var(--fs-label);
     }
     .step .nd {
-      display: flex;
-      align-items: baseline;
-      gap: 4px;
-      min-width: 0;
-      flex-wrap: wrap;
-    }
-    .step .from,
-    .step .to {
       color: var(--text);
       text-transform: uppercase;
       font-size: var(--fs-label);
       letter-spacing: 0.1em;
-    }
-    .step .arrow {
-      color: var(--label-dim);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
     }
     .step .jg {
-      color: var(--amber);
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      min-width: 0;
       font-size: var(--fs-label);
       letter-spacing: 0.12em;
       text-transform: uppercase;
+    }
+    /* The verdict color table — a verdict that moved the chunk on reads amber, one
+       that looped it back or collided reads alarm red, and the in-flight verb reads
+       cyan. Keyed on the graph's choice name; an unknown choice falls back to amber. */
+    .step .verdict {
+      color: var(--amber);
       white-space: nowrap;
     }
-    /* A fail is the one judgement that means the chunk looped back rather than
-       moved on, so it reads in the alarm color rather than the pass amber. */
-    .step[data-choice='fail'] .jg {
+    .step[data-choice='fail'] .verdict,
+    .step[data-choice='conflict'] .verdict,
+    .step[data-choice='needs-human'] .verdict {
       color: var(--red);
+    }
+    .step[data-choice='run'] .verdict {
+      color: var(--cyan);
+    }
+    .step[data-choice='waiting'] .verdict,
+    .step[data-choice='paused'] .verdict {
+      color: var(--amber-hi);
+    }
+    /* Where the verdict routed the chunk — a consequence, so it reads dim. */
+    .step .jg-to {
+      color: var(--label-dim);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+    /* When the judgement landed — recency at a glance, right-aligned and dim. */
+    .step .ts {
+      color: var(--label-dim);
+      font-size: var(--fs-label);
+      white-space: nowrap;
     }
     .artifacts {
       list-style: none;
@@ -820,10 +918,17 @@ export interface EditModelEvent {
       background: rgba(0, 0, 0, 0.2);
       padding: 4px 5px;
     }
+    /* Key left; the recency stamp and kind cluster right (.a-when's auto margin). */
     .a-head {
       display: flex;
-      justify-content: space-between;
+      align-items: baseline;
       gap: 6px;
+    }
+    .a-head .a-kind {
+      margin-left: auto;
+    }
+    .a-head .a-when + .a-kind {
+      margin-left: 0;
     }
     .a-key {
       color: var(--cyan);
@@ -834,6 +939,13 @@ export interface EditModelEvent {
       font-size: var(--fs-label);
       letter-spacing: 0.1em;
       text-transform: uppercase;
+    }
+    /* When the artifact was attached (ULID-decoded) — recency, dim like the kind. */
+    .a-when {
+      color: var(--label-dim);
+      font-size: var(--fs-label);
+      white-space: nowrap;
+      margin-left: auto;
     }
     .a-content {
       margin: 4px 0 0;
@@ -867,12 +979,13 @@ export interface EditModelEvent {
     .a-sep {
       color: var(--label-dim);
     }
-    /* The chunk's own facts, under the work item it serves. */
+    /* The chunk's own facts, above the work item it serves — the fixed-height glance
+       before the arbitrarily long issue body. */
     .kv {
       display: grid;
       grid-template-columns: 74px 1fr;
       gap: 2px 8px;
-      margin: 8px 0 0;
+      margin: 0 0 8px;
       font-size: var(--fs-sm);
     }
     .kv dt {
@@ -998,13 +1111,10 @@ export class ChunkDetailPanel {
    * (issue #27). No confirm — see the class doc. */
   readonly editModel = output<EditModelEvent>();
 
-  /** The chunk's short name — the same identity its board card carries. */
-  protected readonly shortId = computed<string>(() => shortChunkId(this.detail().chunk_id));
-
-  /** The chunk's PM work item — the label its board card carries; empty when unlabeled. */
-  protected readonly pointerLabel = computed<string>(() =>
-    (this.detail().pm_pointers ?? []).flatMap((p) => (p.label ? [p.label] : [])).join(' '),
-  );
+  /** The chunk's PM pointers, for the header — each linked out to its source's web
+   * address when the configured binding rendered one (a null `web_url` degrades to
+   * plain text, no broken link). */
+  protected readonly pointers = computed<readonly PmPointerView[]>(() => this.detail().pm_pointers ?? []);
 
   /** The chunk's PM pointer count — legible before the forge read lands. */
   protected readonly pointerCount = computed<number>(() => this.detail().pm_pointers?.length ?? 0);
@@ -1012,7 +1122,7 @@ export class ChunkDetailPanel {
   /** The runner currently holding the chunk's route, or `—` when nothing holds it —
    * the work-item column's plain-fact reading of the same {@link route} the header's
    * Detach control acts on. */
-  protected readonly agent = computed<string>(() => this.route()?.runner_id ?? '—');
+  protected readonly runner = computed<string>(() => this.route()?.runner_id ?? '—');
 
   /**
    * How many attempts the chunk has taken. The epoch is incremented per work
@@ -1027,8 +1137,46 @@ export class ChunkDetailPanel {
   /** Transient "Copied" state for the takeover-command copy button. */
   protected readonly copied = signal(false);
 
-  protected readonly history = computed<readonly TransitionView[]>(() => this.detail().history ?? []);
-  protected readonly artifacts = computed<readonly ArtifactView[]>(() => this.detail().artifacts ?? []);
+  protected readonly historyRows = computed<readonly HistoryRow[]>(() =>
+    (this.detail().history ?? [])
+      // An entry transition (no origin node) judged nothing — the node it entered
+      // shows up as the next row's origin, or as the in-flight row below.
+      .filter((t) => t.from_node_id)
+      .map((t) => ({
+        epoch: t.epoch,
+        nodeId: t.from_node_id,
+        nodeName: t.from_node_name ?? t.from_node_id ?? '·',
+        verdict: t.choice_name,
+        toId: t.to_node_id,
+        toName: t.to_node_name ?? t.to_node_id,
+        when: formatWhen(t.recorded_at),
+      })),
+  );
+
+  /** The node currently in flight, as a synthetic timeline row — `RUN` while a worker
+   * drives it, or the parked state's own verb (`WAITING`, `NEEDS HUMAN`, `PAUSED`).
+   * Null before the chunk starts (`not_ready`/`ready`) and after it ends
+   * (`done`/`stopped`): those states have no node mid-flight to report. */
+  protected readonly activeRow = computed<ActiveRow | null>(() => {
+    const d = this.detail();
+    const verb = ACTIVE_VERBS[d.status];
+    if (!verb || !d.current_node_id) return null;
+    return {
+      epoch: d.latest_epoch,
+      nodeId: d.current_node_id,
+      nodeName: d.current_node_name ?? d.current_node_id,
+      ...verb,
+    };
+  });
+
+  /** The artifact store, oldest attachment first — ordered by `recorded_at` (the
+   * ULID-decoded attachment instant), with each entry's recency stamp pre-formatted.
+   * Entries without a stamp keep the server's store-key order among themselves. */
+  protected readonly artifacts = computed<readonly StampedArtifact[]>(() =>
+    [...(this.detail().artifacts ?? [])]
+      .sort((a, b) => (a.recorded_at ?? '').localeCompare(b.recorded_at ?? ''))
+      .map((art) => ({ ...art, when: art.recorded_at ? formatWhen(art.recorded_at) : '' })),
+  );
 
   /** The chunk's open (unanswered) questions — the ask a parked chunk waits on. */
   protected readonly openQuestions = computed<readonly QuestionView[]>(() =>

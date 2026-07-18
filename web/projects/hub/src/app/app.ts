@@ -50,6 +50,7 @@ import {
           <fleet-board-shell
             class="board"
             [chunks]="chunks()"
+            [selectedChunkId]="selected()"
             (selectChunk)="selected.set($event)"
             (promote)="promoteChunk.mutate({ chunkId: $event })"
           />

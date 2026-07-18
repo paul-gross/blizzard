@@ -29,12 +29,45 @@ const RUNNERS = {
   ],
 };
 
+// The board's chunk list, as the claims read consumes it: one chunk routed to
+// rn_online at build, one routed elsewhere, one unrouted — only the first shows
+// under rn_online.
+const CHUNKS = [
+  {
+    chunk_id: 'ch_01claim000000000000000000000',
+    graph_id: 'gr_1',
+    status: 'running',
+    current_node_id: 'nd_build',
+    current_node_name: 'build',
+    model: 'claude-opus-4-8',
+    runner_id: 'rn_online',
+  },
+  {
+    chunk_id: 'ch_01other000000000000000000000',
+    graph_id: 'gr_1',
+    status: 'running',
+    current_node_id: 'nd_review',
+    current_node_name: 'review',
+    model: 'claude-opus-4-8',
+    runner_id: 'rn_paused',
+  },
+  {
+    chunk_id: 'ch_01idle0000000000000000000000',
+    graph_id: 'gr_1',
+    status: 'not_ready',
+    current_node_id: null,
+    model: 'claude-opus-4-8',
+    runner_id: null,
+  },
+];
+
 describe('RunnerPanel', () => {
   let stub: HubClientStub;
 
   beforeEach(async () => {
     stub = stubHubClient((method, path) => {
       if (method === 'GET' && path === '/api/runners') return RUNNERS;
+      if (method === 'GET' && path === '/api/chunks') return CHUNKS;
       if (path === '/api/runners/rn_online/pause') return RUNNERS.runners[0];
       if (path === '/api/runners/rn_paused/resume') return RUNNERS.runners[1];
       if (path === '/api/runners/rn_local/pause') return RUNNERS.runners[2];
@@ -58,6 +91,13 @@ describe('RunnerPanel', () => {
 
     expect(el.querySelectorAll('[data-testid="runner"]')).toHaveLength(4);
     expect(el.querySelector('[data-runner="rn_online"]')?.getAttribute('data-online')).toBe('true');
+
+    // Each row lists the chunks that runner holds a route on — short name + node —
+    // and only its own: rn_online holds one claim, at build.
+    const claims = el.querySelectorAll('[data-runner="rn_online"] [data-testid="runner-claim"]');
+    expect(claims).toHaveLength(1);
+    expect(claims[0].textContent).toContain('build');
+    expect(el.querySelectorAll('[data-runner="rn_local"] [data-testid="runner-claim"]')).toHaveLength(0);
     expect(el.querySelector('[data-runner="rn_paused"] [data-testid="runner-hub-paused"]')).not.toBeNull();
   });
 
@@ -129,7 +169,11 @@ describe('RunnerPanel seenLabel (bzh:utc-instants)', () => {
         { runner_id: 'r1', workspace_id: 'ws_a', registered_at: lastSeenAt, last_seen_at: lastSeenAt, online, paused: false },
       ],
     };
-    stub = stubHubClient((method, path) => (method === 'GET' && path === '/api/runners' ? runners : {}));
+    stub = stubHubClient((method, path) => {
+      if (method === 'GET' && path === '/api/runners') return runners;
+      if (method === 'GET' && path === '/api/chunks') return [];
+      return {};
+    });
     return TestBed.configureTestingModule({
       imports: [RunnerPanel],
       providers: [

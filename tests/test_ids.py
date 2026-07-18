@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.foundation.ids import CHUNK_PREFIX, has_prefix, mint, ulid
+from blizzard.foundation.ids import CHUNK_PREFIX, has_prefix, mint, minted_at, ulid
 
 pytestmark = pytest.mark.unit
 
@@ -43,3 +43,24 @@ def test_ulid_is_lexically_time_ordered() -> None:
 
 def test_ulid_is_26_chars() -> None:
     assert len(ulid(_clock())) == 26
+
+
+def test_minted_at_round_trips_the_mint_instant() -> None:
+    instant = datetime(2026, 1, 1, tzinfo=UTC) + timedelta(seconds=42)
+    decoded = minted_at(mint(CHUNK_PREFIX, FixedClock(instant)))
+    assert decoded is not None
+    # The ULID keeps millisecond precision, so the decode lands on the instant exactly.
+    assert decoded == instant
+
+
+def test_minted_at_accepts_lowercase_ids() -> None:
+    chunk_id = mint(CHUNK_PREFIX, _clock())
+    assert minted_at(chunk_id.lower()) == minted_at(chunk_id)
+
+
+def test_minted_at_rejects_malformed_ids() -> None:
+    assert minted_at("nounderscore") is None
+    assert minted_at("ch_tooshort") is None
+    # An `I` is outside the Crockford alphabet — a well-shaped id with an
+    # undecodable timestamp is malformed, not zero.
+    assert minted_at("ch_" + "I" * 26) is None

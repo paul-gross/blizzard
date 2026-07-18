@@ -14,6 +14,7 @@ hidden ``datetime.now()`` here.
 from __future__ import annotations
 
 import os
+from datetime import UTC, datetime
 
 from blizzard.foundation.clock import IClock
 
@@ -63,3 +64,20 @@ def has_prefix(value: str, prefix: str) -> bool:
     """True when ``value`` is a well-formed ``<prefix>_<ulid>`` id."""
     head, sep, tail = value.partition("_")
     return sep == "_" and head == prefix and len(tail) == _ULID_CHARS
+
+
+def minted_at(value: str) -> datetime | None:
+    """The UTC instant a prefixed-ULID id was minted, decoded from its leading
+    48 timestamp bits — the id *is* the creation record, so entities that store no
+    separate timestamp column still have one. ``None`` when ``value`` is not a
+    well-formed prefixed ULID."""
+    _, sep, tail = value.partition("_")
+    if sep != "_" or len(tail) != _ULID_CHARS:
+        return None
+    millis = 0
+    for char in tail[:_TIME_CHARS]:
+        index = _CROCKFORD.find(char.upper())
+        if index < 0:
+            return None
+        millis = millis * 32 + index
+    return datetime.fromtimestamp(millis / 1000, tz=UTC)

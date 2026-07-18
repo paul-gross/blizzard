@@ -216,14 +216,23 @@ describe('ChunkDetailPanel', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    // The transition history reads oldest-first and shows both edges, including the fail loop.
+    // The history reads oldest-first, one row per judged node, including the fail loop:
+    // BUILD pass → review, then REVIEW fail → build.
     const steps = el.querySelectorAll('[data-testid="history-step"]');
     expect(steps).toHaveLength(2);
-    expect(steps[0].textContent).toContain('nd_review');
+    expect(steps[0].querySelector('.nd')?.textContent).toContain('nd_build');
     const failStep = el.querySelector('[data-testid="history-step"][data-choice="fail"]');
-    expect(failStep?.textContent).toContain('nd_review');
-    expect(failStep?.textContent).toContain('nd_build');
+    expect(failStep?.querySelector('.nd')?.textContent).toContain('nd_review');
     expect(failStep?.querySelector('[data-testid="history-choice"]')?.textContent).toContain('fail');
+    // The verdict's consequence — where it routed the chunk — rides the same row.
+    expect(failStep?.querySelector('.jg-to')?.textContent).toContain('nd_build');
+
+    // The node currently in flight caps the timeline as a synthetic RUN row (cyan via
+    // the data-choice color table), distinct from the recorded transitions.
+    const active = el.querySelector('[data-testid="history-active"]');
+    expect(active?.getAttribute('data-choice')).toBe('run');
+    expect(active?.querySelector('.nd')?.textContent).toContain('nd_build');
+    expect(active?.querySelector('[data-testid="history-active-verb"]')?.textContent).toContain('run');
 
     // The review-findings asset content is shown inline.
     const findings = el.querySelector('[data-kind="asset"] [data-testid="artifact-content"]');
@@ -243,12 +252,14 @@ describe('ChunkDetailPanel', () => {
 
     const step = el.querySelector('[data-testid="history-step"]')!;
     // The visible text is the human graph names, not the nd_ ULIDs.
-    expect(step.querySelector('.from')?.textContent?.trim()).toBe('build');
-    expect(step.querySelector('.to')?.textContent?.trim()).toBe('code-review');
+    expect(step.querySelector('.nd')?.textContent?.trim()).toBe('build');
+    expect(step.querySelector('.jg-to')?.textContent).toContain('code-review');
     expect(step.textContent).not.toContain('nd_');
     // The raw node id stays reachable as the label's title.
-    expect(step.querySelector('.from')?.getAttribute('title')).toBe('nd_build');
-    expect(step.querySelector('.to')?.getAttribute('title')).toBe('nd_review');
+    expect(step.querySelector('.nd')?.getAttribute('title')).toBe('nd_build');
+    expect(step.querySelector('.jg-to')?.getAttribute('title')).toBe('nd_review');
+    // The in-flight row resolves the current node's human name the same way.
+    expect(el.querySelector('[data-testid="history-active"] .nd')?.textContent?.trim()).toBe('review');
   });
 
   it('falls back to the raw node id when a transition has no resolved name', async () => {
@@ -258,7 +269,8 @@ describe('ChunkDetailPanel', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     const step = el.querySelector('[data-testid="history-step"]')!;
-    expect(step.querySelector('.to')?.textContent?.trim()).toBe('nd_review');
+    expect(step.querySelector('.nd')?.textContent?.trim()).toBe('nd_build');
+    expect(step.querySelector('.jg-to')?.textContent).toContain('nd_review');
   });
 
   it('shows the artifact branch name and links it to the forge, degrading when no url (issue #23)', async () => {
@@ -679,7 +691,7 @@ describe('ChunkDetailPanel', () => {
 
   // --- The chunk's own facts -------------------------------------------------
 
-  it('states the chunk facts, naming the runner holding its route as the agent', async () => {
+  it('states the chunk facts, naming the runner holding its route', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', { ...ROUTED_DETAIL, current_node_name: 'build' });
     await fixture.whenStable();
@@ -689,7 +701,7 @@ describe('ChunkDetailPanel', () => {
     expect(fact('status')).toBe('running');
     expect(fact('node')).toBe('build');
     // The same route the header's Detach control acts on, read here as a plain fact.
-    expect(fact('agent')).toBe('rn_01');
+    expect(fact('runner')).toBe('rn_01');
     expect(fact('attempts')).toBe('1');
   });
 
@@ -704,7 +716,7 @@ describe('ChunkDetailPanel', () => {
 
     expect(el.querySelector('[data-testid="fact-attempts"]')?.textContent?.trim()).toBe('—');
     // Nothing holds it, so there is no agent and no Detach control to release one.
-    expect(el.querySelector('[data-testid="fact-agent"]')?.textContent?.trim()).toBe('—');
+    expect(el.querySelector('[data-testid="fact-runner"]')?.textContent?.trim()).toBe('—');
     expect(el.querySelector('[data-testid="detach-chunk"]')).toBeNull();
   });
 
@@ -714,10 +726,13 @@ describe('ChunkDetailPanel', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    // The short name, with the full ULID kept reachable rather than spelled out.
-    expect(el.querySelector('[data-testid="detail-id"]')?.textContent?.trim()).toBe('ch_…0000');
-    expect(el.querySelector('[data-testid="detail-id"]')?.getAttribute('title')).toBe(ISSUE_DETAIL.chunk_id);
-    expect(el.querySelector('[data-testid="detail-pointer"]')?.textContent?.trim()).toBe('widget#42');
+    // The detail spells out the full chunk id — this is the one view wide enough for
+    // it; the board card keeps the short name.
+    expect(el.querySelector('[data-testid="detail-id"]')?.textContent?.trim()).toBe(ISSUE_DETAIL.chunk_id);
+    // The pointer links out to its PM source from the detail (the card stays plain).
+    const pointer = el.querySelector<HTMLAnchorElement>('a[data-testid="detail-pointer"]');
+    expect(pointer?.textContent?.trim()).toBe('widget#42');
+    expect(pointer?.getAttribute('href')).toBe('https://github.com/acme/widget/issues/42');
   });
 
   // --- Graph / model edit (issue #27) -----------------------------------------

@@ -1,8 +1,17 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 
 import type { RunnerView } from '../api/hub';
+import { shortChunkId } from '../chunk-id';
+import { injectHubChunksQuery } from '../chunks/chunks.query';
 import { injectHubRunnersQuery } from './runners.query';
 import { injectRunnerPauseMutation } from './runners.mutations';
+
+/** One claim line under a registry row: the chunk a runner holds and where it sits. */
+interface ClaimLine {
+  readonly chunkId: string;
+  readonly shortId: string;
+  readonly node: string;
+}
 
 /**
  * The runner panel — the fleet registry in the board's right rail: each
@@ -54,6 +63,21 @@ import { injectRunnerPauseMutation } from './runners.mutations';
                 <div class="r2">
                   <span class="wid">{{ runner.workspace_id }}</span>
                 </div>
+                <!-- The chunks this runner currently holds a route on, and the node each
+                     sits at — read off the board's own chunk list, so the registry and
+                     the board can never disagree about who is working what. -->
+                @if (claimsFor(runner.runner_id); as claims) {
+                  @if (claims.length > 0) {
+                    <ul class="claims" data-testid="runner-claims">
+                      @for (claim of claims; track claim.chunkId) {
+                        <li class="claim" data-testid="runner-claim">
+                          <span class="c-id" [attr.title]="claim.chunkId">{{ claim.shortId }}</span>
+                          <span class="c-node">{{ claim.node }}</span>
+                        </li>
+                      }
+                    </ul>
+                  }
+                }
                 <div class="r3">
                   <span class="badges">
                     <!-- Two brakes, two badges: a runner stopped by both shows both, because
@@ -156,11 +180,11 @@ import { injectRunnerPauseMutation } from './runners.mutations';
       align-items: baseline;
       gap: 6px;
     }
+    /* A square, per the mockup's status indicators — not a dot. */
     .dot {
       display: inline-block;
       width: 7px;
       height: 7px;
-      border-radius: 50%;
       margin-right: 6px;
     }
     .dot.online {
@@ -201,6 +225,31 @@ import { injectRunnerPauseMutation } from './runners.mutations';
       font-size: var(--fs-label);
       white-space: nowrap;
     }
+    /* The runner's claims: chunk short name — node, one line each, dim so the
+       registry row's own identity stays the loudest thing in it. */
+    .claims {
+      list-style: none;
+      margin: 0;
+      padding: 0 0 0 13px;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+    .claim {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      font-size: var(--fs-xs);
+    }
+    .claim .c-id {
+      color: var(--amber-hi);
+    }
+    .claim .c-node {
+      color: var(--label);
+      font-size: var(--fs-label);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
     .badges {
       display: flex;
       flex-wrap: wrap;
@@ -235,10 +284,32 @@ import { injectRunnerPauseMutation } from './runners.mutations';
 })
 export class RunnerPanel {
   private readonly runnersQuery = injectHubRunnersQuery();
+  private readonly chunksQuery = injectHubChunksQuery();
   private readonly pauseMutation = injectRunnerPauseMutation();
 
   /** The fleet registry; empty until the first read resolves. */
   protected readonly runners = computed<readonly RunnerView[]>(() => this.runnersQuery.data() ?? []);
+
+  /** Every routed chunk grouped by the runner holding it — each as a claim line
+   * (short name + current node) for the registry rows. */
+  private readonly claims = computed<Map<string, ClaimLine[]>>(() => {
+    const grouped = new Map<string, ClaimLine[]>();
+    for (const chunk of this.chunksQuery.data() ?? []) {
+      if (!chunk.runner_id) continue;
+      const lines = grouped.get(chunk.runner_id) ?? [];
+      lines.push({
+        chunkId: chunk.chunk_id,
+        shortId: shortChunkId(chunk.chunk_id),
+        node: chunk.current_node_name ?? chunk.current_node_id ?? '—',
+      });
+      grouped.set(chunk.runner_id, lines);
+    }
+    return grouped;
+  });
+
+  protected claimsFor(runnerId: string): readonly ClaimLine[] {
+    return this.claims().get(runnerId) ?? [];
+  }
 
   protected toggle(runner: RunnerView): void {
     this.pauseMutation.mutate({ runnerId: runner.runner_id, paused: !runner.hub_paused });
