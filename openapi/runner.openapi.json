@@ -789,6 +789,87 @@
         "title": "RunnerStatusView",
         "type": "object"
       },
+      "SelfTestCheckView": {
+        "description": "One check's pass/fail result (openapi-ts consumes this).",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "passed",
+          "detail"
+        ],
+        "title": "SelfTestCheckView",
+        "type": "object"
+      },
+      "SelfTestStartRequest": {
+        "description": "Which coding harness to run the canary against.",
+        "properties": {
+          "harness": {
+            "title": "Harness",
+            "type": "string"
+          }
+        },
+        "required": [
+          "harness"
+        ],
+        "title": "SelfTestStartRequest",
+        "type": "object"
+      },
+      "SelfTestView": {
+        "description": "A selftest run's current state \u2014 ``running`` until every check has resolved.",
+        "properties": {
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/SelfTestCheckView"
+            },
+            "title": "Checks",
+            "type": "array"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "harness": {
+            "title": "Harness",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "harness",
+          "status",
+          "checks"
+        ],
+        "title": "SelfTestView",
+        "type": "object"
+      },
       "SessionEndResponse": {
         "description": "The recorded acknowledgement (openapi-ts consumes this).",
         "properties": {
@@ -1667,6 +1748,91 @@
           }
         },
         "summary": "Patch Runner",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/selftests": {
+      "post": {
+        "description": "Mint a selftest run against ``harness`` and begin it off the request thread.",
+        "operationId": "start_selftest_api_selftests_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SelfTestStartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfTestView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Selftest",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/selftests/{selftest_id}": {
+      "get": {
+        "description": "Read back a selftest run's current state.",
+        "operationId": "get_selftest_api_selftests__selftest_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "selftest_id",
+            "required": true,
+            "schema": {
+              "title": "Selftest Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelfTestView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Selftest",
         "tags": [
           "runner"
         ]

@@ -30,6 +30,7 @@ from blizzard.runner.api.leases import router as leases_router
 from blizzard.runner.api.pm_items import router as pm_items_router
 from blizzard.runner.api.readiness import router as readiness_router
 from blizzard.runner.api.requeues import router as requeues_router
+from blizzard.runner.api.selftests import router as selftests_router
 from blizzard.runner.api.session_end import router as session_end_router
 from blizzard.runner.api.takeovers import router as takeovers_router
 from blizzard.runner.api.transcripts import router as transcripts_router
@@ -46,11 +47,18 @@ from blizzard.runner.harness.adapter import IHarnessAdapter
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.loop.process import LinuxProcessProbe
 from blizzard.runner.runtime import migration_runner
+from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
+from blizzard.runner.selftest.service import SelfTestService
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 from blizzard.runner.store.repository import IWriteRunnerStore
 from blizzard.runner.transcripts.internal.jsonl_transcript_repository import JsonlTranscriptRepository
 from blizzard.runner.transcripts.repository import TranscriptErrorFactory
 from blizzard.runner.transcripts.service import LocalTranscriptService
+
+# The one coding-harness name a selftest may target today (issue #54) — OpenCode and
+# Codex adapters are out of scope, so the registry `create_app` builds carries at
+# most this single entry, bound to whatever `harness` the app was actually built with.
+CLAUDE_CODE_HARNESS_NAME = "claude_code"
 
 
 def create_app(
@@ -65,6 +73,7 @@ def create_app(
     runner_status: RunnerStatusService | None = None,
     takeover: TakeoverService | None = None,
     requeue: RequeueService | None = None,
+    selftests: SelfTestService | None = None,
 ) -> FastAPI:
     """Build a fully wired runner app from resolved config.
 
@@ -90,6 +99,12 @@ def create_app(
 
     ``requeue`` is the store-backed operator-requeue service (issue #53) —
     ``blizzard runner requeue``'s backing service, wired the same way.
+
+    ``selftests`` is the adapter-drift canary's in-memory job service (issue #54).
+    Unlike the seams above it needs no store, so it is always wired here — its
+    harness registry carries only ``harness`` under :data:`CLAUDE_CODE_HARNESS_NAME`
+    when one was passed, empty otherwise, so the store-free app still answers both
+    routes (naming no configured harnesses on ``POST`` rather than 503ing).
     """
     log = get_logger("blizzard.runner")
 
@@ -117,6 +132,14 @@ def create_app(
     # The operator-requeue service (issue #53) — ``blizzard runner requeue``'s backing
     # service.
     app.state.requeue = requeue
+    # The adapter-drift canary (issue #54): a store-free in-memory job service, wired
+    # unconditionally so `POST`/`GET /api/selftests` answer even on the store-free app.
+    app.state.selftests = selftests or SelfTestService(
+        adapters={CLAUDE_CODE_HARNESS_NAME: harness} if harness is not None else {},
+        scratch_git=SubprocessScratchGit(),
+        process=LinuxProcessProbe(),
+        clock=SystemClock(),
+    )
 
     # API routers first, so /api/* always wins over the web mount at /.
     app.include_router(health_router)
@@ -126,6 +149,7 @@ def create_app(
     app.include_router(asks_router)
     app.include_router(leases_router)
     app.include_router(transcripts_router)
+    app.include_router(selftests_router)
     # The PM-item pass-through proxy: a build worker reads its issue through
     # this route, which forwards to the hub — the worker never crosses a layer.
     app.include_router(pm_items_router)

@@ -552,6 +552,66 @@ export type RunnerStatusView = {
 };
 
 /**
+ * SelfTestCheckView
+ *
+ * One check's pass/fail result (openapi-ts consumes this).
+ */
+export type SelfTestCheckView = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Passed
+     */
+    passed: boolean;
+};
+
+/**
+ * SelfTestStartRequest
+ *
+ * Which coding harness to run the canary against.
+ */
+export type SelfTestStartRequest = {
+    /**
+     * Harness
+     */
+    harness: string;
+};
+
+/**
+ * SelfTestView
+ *
+ * A selftest run's current state — ``running`` until every check has resolved.
+ */
+export type SelfTestView = {
+    /**
+     * Checks
+     */
+    checks: Array<SelfTestCheckView>;
+    /**
+     * Error
+     */
+    error?: string | null;
+    /**
+     * Harness
+     */
+    harness: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Status
+     */
+    status: string;
+};
+
+/**
  * SessionEndResponse
  *
  * The recorded acknowledgement (openapi-ts consumes this).
@@ -1132,6 +1192,61 @@ export type PatchRunnerApiRunnerPatchResponses = {
 };
 
 export type PatchRunnerApiRunnerPatchResponse = PatchRunnerApiRunnerPatchResponses[keyof PatchRunnerApiRunnerPatchResponses];
+
+export type StartSelftestApiSelftestsPostData = {
+    body: SelfTestStartRequest;
+    path?: never;
+    query?: never;
+    url: '/api/selftests';
+};
+
+export type StartSelftestApiSelftestsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type StartSelftestApiSelftestsPostError = StartSelftestApiSelftestsPostErrors[keyof StartSelftestApiSelftestsPostErrors];
+
+export type StartSelftestApiSelftestsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: SelfTestView;
+};
+
+export type StartSelftestApiSelftestsPostResponse = StartSelftestApiSelftestsPostResponses[keyof StartSelftestApiSelftestsPostResponses];
+
+export type GetSelftestApiSelftestsSelftestIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Selftest Id
+         */
+        selftest_id: string;
+    };
+    query?: never;
+    url: '/api/selftests/{selftest_id}';
+};
+
+export type GetSelftestApiSelftestsSelftestIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetSelftestApiSelftestsSelftestIdGetError = GetSelftestApiSelftestsSelftestIdGetErrors[keyof GetSelftestApiSelftestsSelftestIdGetErrors];
+
+export type GetSelftestApiSelftestsSelftestIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SelfTestView;
+};
+
+export type GetSelftestApiSelftestsSelftestIdGetResponse = GetSelftestApiSelftestsSelftestIdGetResponses[keyof GetSelftestApiSelftestsSelftestIdGetResponses];
 
 export type ListOpenTakeoversApiTakeoversGetData = {
     body?: never;

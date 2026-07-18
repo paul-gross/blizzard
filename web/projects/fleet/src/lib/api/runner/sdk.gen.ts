@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchData, EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchErrors, EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchResponses, GetPmItemsApiChunksChunkIdPmItemsGetData, GetPmItemsApiChunksChunkIdPmItemsGetErrors, GetPmItemsApiChunksChunkIdPmItemsGetResponses, GetRunnerApiRunnerGetData, GetRunnerApiRunnerGetResponses, GetTranscriptApiLeasesLeaseIdTranscriptGetData, GetTranscriptApiLeasesLeaseIdTranscriptGetErrors, GetTranscriptApiLeasesLeaseIdTranscriptGetResponses, HealthApiHealthGetData, HealthApiHealthGetResponses, HeartbeatApiHeartbeatPostData, HeartbeatApiHeartbeatPostErrors, HeartbeatApiHeartbeatPostResponses, ListAsksApiAsksGetData, ListAsksApiAsksGetErrors, ListAsksApiAsksGetResponses, ListEnvironmentsApiEnvironmentsGetData, ListEnvironmentsApiEnvironmentsGetResponses, ListEscalationsApiEscalationsGetData, ListEscalationsApiEscalationsGetResponses, ListLeasesApiLeasesGetData, ListLeasesApiLeasesGetResponses, ListOpenTakeoversApiTakeoversGetData, ListOpenTakeoversApiTakeoversGetResponses, OpenTakeoverApiChunksChunkIdTakeoversPostData, OpenTakeoverApiChunksChunkIdTakeoversPostErrors, OpenTakeoverApiChunksChunkIdTakeoversPostResponses, PatchRunnerApiRunnerPatchData, PatchRunnerApiRunnerPatchErrors, PatchRunnerApiRunnerPatchResponses, ReadWorkspacePromptApiWorkspacePromptGetData, ReadWorkspacePromptApiWorkspacePromptGetResponses, ReadyApiReadyGetData, ReadyApiReadyGetResponses, RecordAskApiLeasesLeaseIdAsksPostData, RecordAskApiLeasesLeaseIdAsksPostErrors, RecordAskApiLeasesLeaseIdAsksPostResponses, ReplaceWorkspacePromptApiWorkspacePromptPutData, ReplaceWorkspacePromptApiWorkspacePromptPutErrors, ReplaceWorkspacePromptApiWorkspacePromptPutResponses, RequeueChunkApiChunksChunkIdRequeuesPostData, RequeueChunkApiChunksChunkIdRequeuesPostErrors, RequeueChunkApiChunksChunkIdRequeuesPostResponses, SessionEndApiLeasesLeaseIdSessionEndPostData, SessionEndApiLeasesLeaseIdSessionEndPostErrors, SessionEndApiLeasesLeaseIdSessionEndPostResponses } from './types.gen';
+import type { EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchData, EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchErrors, EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchResponses, GetPmItemsApiChunksChunkIdPmItemsGetData, GetPmItemsApiChunksChunkIdPmItemsGetErrors, GetPmItemsApiChunksChunkIdPmItemsGetResponses, GetRunnerApiRunnerGetData, GetRunnerApiRunnerGetResponses, GetSelftestApiSelftestsSelftestIdGetData, GetSelftestApiSelftestsSelftestIdGetErrors, GetSelftestApiSelftestsSelftestIdGetResponses, GetTranscriptApiLeasesLeaseIdTranscriptGetData, GetTranscriptApiLeasesLeaseIdTranscriptGetErrors, GetTranscriptApiLeasesLeaseIdTranscriptGetResponses, HealthApiHealthGetData, HealthApiHealthGetResponses, HeartbeatApiHeartbeatPostData, HeartbeatApiHeartbeatPostErrors, HeartbeatApiHeartbeatPostResponses, ListAsksApiAsksGetData, ListAsksApiAsksGetErrors, ListAsksApiAsksGetResponses, ListEnvironmentsApiEnvironmentsGetData, ListEnvironmentsApiEnvironmentsGetResponses, ListEscalationsApiEscalationsGetData, ListEscalationsApiEscalationsGetResponses, ListLeasesApiLeasesGetData, ListLeasesApiLeasesGetResponses, ListOpenTakeoversApiTakeoversGetData, ListOpenTakeoversApiTakeoversGetResponses, OpenTakeoverApiChunksChunkIdTakeoversPostData, OpenTakeoverApiChunksChunkIdTakeoversPostErrors, OpenTakeoverApiChunksChunkIdTakeoversPostResponses, PatchRunnerApiRunnerPatchData, PatchRunnerApiRunnerPatchErrors, PatchRunnerApiRunnerPatchResponses, ReadWorkspacePromptApiWorkspacePromptGetData, ReadWorkspacePromptApiWorkspacePromptGetResponses, ReadyApiReadyGetData, ReadyApiReadyGetResponses, RecordAskApiLeasesLeaseIdAsksPostData, RecordAskApiLeasesLeaseIdAsksPostErrors, RecordAskApiLeasesLeaseIdAsksPostResponses, ReplaceWorkspacePromptApiWorkspacePromptPutData, ReplaceWorkspacePromptApiWorkspacePromptPutErrors, ReplaceWorkspacePromptApiWorkspacePromptPutResponses, RequeueChunkApiChunksChunkIdRequeuesPostData, RequeueChunkApiChunksChunkIdRequeuesPostErrors, RequeueChunkApiChunksChunkIdRequeuesPostResponses, SessionEndApiLeasesLeaseIdSessionEndPostData, SessionEndApiLeasesLeaseIdSessionEndPostErrors, SessionEndApiLeasesLeaseIdSessionEndPostResponses, StartSelftestApiSelftestsPostData, StartSelftestApiSelftestsPostErrors, StartSelftestApiSelftestsPostResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -191,6 +191,27 @@ export const patchRunnerApiRunnerPatch = <ThrowOnError extends boolean = false>(
         ...options.headers
     }
 });
+
+/**
+ * Start Selftest
+ *
+ * Mint a selftest run against ``harness`` and begin it off the request thread.
+ */
+export const startSelftestApiSelftestsPost = <ThrowOnError extends boolean = false>(options: Options<StartSelftestApiSelftestsPostData, ThrowOnError>): RequestResult<StartSelftestApiSelftestsPostResponses, StartSelftestApiSelftestsPostErrors, ThrowOnError> => (options.client ?? client).post<StartSelftestApiSelftestsPostResponses, StartSelftestApiSelftestsPostErrors, ThrowOnError>({
+    url: '/api/selftests',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Get Selftest
+ *
+ * Read back a selftest run's current state.
+ */
+export const getSelftestApiSelftestsSelftestIdGet = <ThrowOnError extends boolean = false>(options: Options<GetSelftestApiSelftestsSelftestIdGetData, ThrowOnError>): RequestResult<GetSelftestApiSelftestsSelftestIdGetResponses, GetSelftestApiSelftestsSelftestIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetSelftestApiSelftestsSelftestIdGetResponses, GetSelftestApiSelftestsSelftestIdGetErrors, ThrowOnError>({ url: '/api/selftests/{selftest_id}', ...options });
 
 /**
  * List Open Takeovers

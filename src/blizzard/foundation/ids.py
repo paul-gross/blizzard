@@ -36,6 +36,7 @@ DECISION_PREFIX = "dec"
 QUESTION_PREFIX = "qn"
 LEASE_PREFIX = "lease"
 TAKEOVER_PREFIX = "tko"
+SELFTEST_PREFIX = "self"
 
 
 def _encode(value: int, length: int) -> str:

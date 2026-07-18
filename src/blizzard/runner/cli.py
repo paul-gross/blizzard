@@ -13,6 +13,7 @@ from __future__ import annotations
 import os
 import signal
 import subprocess
+import time
 import types
 from pathlib import Path
 
@@ -63,10 +64,14 @@ _PM_ITEMS_TIMEOUT = 20.0
 # API (issue #43) — a machine-local round trip, so they get a hook-scale budget rather
 # than the hub-client one.
 _LOCAL_CLIENT_TIMEOUT = 5.0
-
-
-def _stub(verb: str) -> None:
-    raise click.ClickException(f"`blizzard runner {verb}` is not yet implemented (scaffold stub).")
+# `selftest` (issue #54) polls its job resource at this cadence — each poll is a
+# machine-local read of already-computed state, so a short interval costs nothing.
+_SELFTEST_POLL_INTERVAL = 0.2
+# A CLI-side backstop above the server's own run budget (`SelfTestService`'s
+# `run_budget_seconds`): the server-side budget is authoritative and always resolves
+# the run, but a bounded poll here means the CLI itself never spins forever even
+# against a runner that can't reach that code (an old daemon, a stuck event loop).
+_SELFTEST_POLL_TIMEOUT = 600.0
 
 
 # The local verbs address the runner's own API through one of its two doors: the
@@ -631,6 +636,59 @@ def requeue(chunk_id: str, directory: str, runner_url: str | None) -> None:
 
 @runner.command()
 @click.argument("coding_harness")
-def selftest(coding_harness: str) -> None:
-    """Adapter-drift canary before an unattended period."""
-    _stub("selftest")
+@click.option(
+    "--dir",
+    "directory",
+    default=DEFAULT_DIR,
+    envvar=ENV_RUNNER_DIR,
+    help="Runner runtime directory (overrides $BZ_RUNNER_DIR).",
+)
+@click.option(
+    "--runner-url",
+    "runner_url",
+    default=None,
+    envvar=ENV_LOCAL_API_URL,
+    help="Runner local API over TCP (overrides $BZ_RUNNER_URL).",
+)
+def selftest(coding_harness: str, directory: str, runner_url: str | None) -> None:
+    """Adapter-drift canary before an unattended period (issue #54).
+
+    Exercises CODING_HARNESS against a throwaway scratch repo — spawn with a
+    pre-assigned session id and exit-is-done detection, a trivial end-to-end
+    edit+commit, verdict elicitation, an automated follow-up resume, and
+    resume-command composition — touching no chunk, lease, environment, or hub. A
+    pure client of the runner's local API (``POST``/``GET /selftests``): it posts the
+    run, polls it to completion, prints each check's pass/fail, and exits non-zero on
+    any failure.
+    """
+    client, where = _local_api_client(directory, runner_url)
+    try:
+        with client:
+            resp = client.post("/api/selftests", json={"harness": coding_harness})
+            if resp.status_code == 422:
+                raise click.ClickException(resp.json().get("detail", "unknown coding harness"))
+            resp.raise_for_status()
+            run = resp.json()
+            deadline = time.monotonic() + _SELFTEST_POLL_TIMEOUT
+            while run["status"] == "running":
+                if time.monotonic() > deadline:
+                    raise click.ClickException(
+                        f"selftest {run['id']} did not finish within {_SELFTEST_POLL_TIMEOUT:g}s "
+                        "— the runner may be wedged"
+                    )
+                time.sleep(_SELFTEST_POLL_INTERVAL)
+                resp = client.get(f"/api/selftests/{run['id']}")
+                resp.raise_for_status()
+                run = resp.json()
+    except httpx.HTTPError as exc:
+        raise click.ClickException(f"selftest: could not reach the runner at {where} ({exc})") from exc
+
+    for check in run["checks"]:
+        mark = "PASS" if check["passed"] else "FAIL"
+        click.echo(f"[{mark}] {check['name']}: {check['detail']}")
+    if run["status"] != "passed":
+        if run.get("error"):
+            click.echo(f"selftest error: {run['error']}", err=True)
+        click.echo(f"selftest {run['id']} FAILED for {coding_harness}", err=True)
+        raise click.exceptions.Exit(1)
+    click.echo(f"selftest {run['id']} passed for {coding_harness}")

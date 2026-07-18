@@ -182,15 +182,6 @@ def test_hub_host_help_shows_directory_argument() -> None:
     assert "DIRECTORY" in result.output
 
 
-def test_stub_verb_reports_not_implemented() -> None:
-    # `runner selftest` is still a scaffold stub (`status` is a real verb as of
-    # issue #51, `takeover` as of issue #52, `requeue` as of issue #53); a stub names
-    # itself.
-    result = CliRunner().invoke(blizzard, ["runner", "selftest", "claude"])
-    assert result.exit_code != 0
-    assert "not yet implemented" in result.output
-
-
 def test_runner_status_errors_cleanly_with_no_daemon_serving(tmp_path: Path) -> None:
     # `status` is a pure client of the local API (issue #51), same as `pause`/`start` —
     # no socket, no store fallback, a clean error naming the missing daemon.
