@@ -20,7 +20,7 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.graph import classify_choice_target, parse_graph_doc, target_graph_of
 from blizzard.hub.domain.graph_authoring import reify_graph
 from blizzard.hub.domain.graph_validation import validate_graph
-from tests.support import build_hub, pointer_token, report_lease
+from tests.support import build_hub
 
 unit = pytest.mark.unit
 component = pytest.mark.component
@@ -181,26 +181,7 @@ def test_cross_graph_edge_round_trips_through_the_store(tmp_path: Path) -> None:
     assert edge.model == "claude-sonnet-5"
 
 
-@component
-def test_interim_cross_graph_choice_falls_through_to_a_clean_failure(tmp_path: Path) -> None:
-    """Phase 2→4 interim: authoring accepts a cross-graph choice, but the apply-path
-    migration branch does not land until Phase 4. Selecting the choice must fall through
-    to a safe failure — ``_resolve`` finds no same-graph node for ``graph:triage`` and
-    ``apply`` returns its ``routes to unknown node`` rejection — never crash."""
-    hub = build_hub(tmp_path)
-    assert hub.client.post("/api/graphs", json={"definition_yaml": _CROSS_GRAPH_YAML}).status_code == 201
-    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
-    node_id = hub.client.post(
-        "/api/fleet/routes",
-        json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
-    ).json()["envelope"]["node"]["node_id"]
-    report_lease(hub, chunk_id, epoch=1, seq=1)
-
-    resp = hub.client.post(
-        f"/api/fleet/chunks/{chunk_id}/completions",
-        json={"choice": "migrate", "epoch": 1, "runner_id": "r1", "from_node_id": node_id, "artifacts": []},
-    )
-    assert resp.status_code == 200
-    assert resp.json()["outcome"] == "failure"
-    # The chunk never advanced — no migration happened, and it stays claimable/running.
-    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "running"
+# The Phase 2→4 interim (a cross-graph choice falling through to a clean ``apply``
+# failure before the migration branch existed) is superseded once Phase 4 lands the
+# apply path: the choice now migrates, or escalates on an unresolvable target. That
+# end-to-end behaviour is covered by ``tests/test_migration_apply.py``.

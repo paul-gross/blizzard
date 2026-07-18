@@ -1620,6 +1620,13 @@ def _apply_response(
         _spawn_attempt(ctx, chunk_id, next_envelope, envs, via="apply-response")
     elif outcome == ApplyOutcome.HUB_NODE_TAKEN:
         _log.info("hub node took over — holding envs until terminal", chunk_id=chunk_id)
+    elif outcome == ApplyOutcome.MIGRATED:
+        # A cross-graph migration re-pinned + re-queued the chunk hub-side (#90) and
+        # already released its route — tear the attempt down and do NOT continue in
+        # place; the chunk is claimed afresh under the new graph. Like DONE (release
+        # envs), but the chunk re-queues rather than finalizing.
+        _log.info("chunk migrated to another graph — releasing envs", chunk_id=chunk_id)
+        _release_all(ctx, chunk_id)
     elif outcome == ApplyOutcome.DONE:
         _release_all(ctx, chunk_id)
     elif outcome == ApplyOutcome.PARKED_AT_GATE:
