@@ -322,6 +322,17 @@ class IReadRunnerStore(Protocol):
         what "open" means here."""
         ...
 
+    def open_escalation_for_chunk(self, chunk_id: str) -> EscalationRecord | None:
+        """The chunk's open escalation, or ``None`` (issue #53).
+
+        The single-chunk narrowing of :meth:`open_escalations` — :class:`RequeueService`'s
+        needs_human guard: a closed-``escalated`` lease not yet superseded by a later mint.
+        Unaffected by a takeover opening or ending over the chunk in between — a takeover
+        never writes a closure or mints a lease, so this reads the same whether or not one
+        happened, covering both the pasted-command and the ended-takeover requeue flows with
+        the one predicate."""
+        ...
+
     def hub_contact_at(self, runner_id: str) -> datetime | None:
         """When PULL last **successfully** reached the hub, or ``None`` if never (issue #51).
 
@@ -416,6 +427,18 @@ class IReadRunnerStore(Protocol):
         otherwise wedge its chunk with no visible way to find the ``takeover_id`` back
         — this is the read that names it, alongside the chunk and how long it has been
         held, mirroring :meth:`open_escalations`'s widened-to-the-fleet shape."""
+        ...
+
+    def pending_requeue_chunk_ids(self) -> set[str]:
+        """Every chunk id carrying a requeue mark not yet consumed by a later lease mint
+        (issue #53).
+
+        FILL's own hoisted-once read (mirroring ``pause_parked_lease_ids``'s convention):
+        :func:`~blizzard.runner.loop.steps._reconcile_interrupted_claims` spawns a fresh
+        attempt for each — the ordinary :func:`~blizzard.runner.loop.steps._spawn_attempt`
+        mint that follows both consumes the mark (its ``created_at`` lands at or after the
+        requeue) and, via its outbound ``lease.minted`` fact, supersedes the escalation at
+        the hub."""
         ...
 
 
@@ -552,4 +575,14 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
 
     def record_takeover_end(self, *, takeover_id: str, ended_at: datetime) -> None:
         """Close a takeover — the CLI calls this once its exec'd interactive child exits."""
+        ...
+
+    def record_requeue(self, *, chunk_id: str, at: datetime) -> None:
+        """Append the clearing fact for a chunk's local needs_human hold (issue #53).
+
+        Recorded before anything else runs (``bzh:crash-correctness``): the fact alone is
+        durable the instant this returns, and the next FILL's
+        :func:`~blizzard.runner.loop.steps._reconcile_interrupted_claims` reads it back via
+        :meth:`pending_requeue_chunk_ids` to spawn the fresh attempt — this call never spawns
+        anything itself."""
         ...

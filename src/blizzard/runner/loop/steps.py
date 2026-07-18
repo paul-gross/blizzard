@@ -947,15 +947,18 @@ def _reconcile_interrupted_claims(ctx: LoopContext) -> None:
         orphaned binding (the claim never landed, or we lost the race before retracting
         it) so the environment frees this tick and the chunk re-derives ``ready``.
 
-    A chunk at a hub node (``delivering``) or awaiting a human keeps its binding and is
-    left to ADVANCE — only a chunk the runner should be actively working, but isn't, is
-    reconciled here.
+    A chunk at a hub node (``delivering``) keeps its binding and is left to ADVANCE — only
+    a chunk the runner should be actively working, but isn't, is reconciled here. A chunk
+    awaiting a human is likewise left to ADVANCE **unless** a local requeue mark clears
+    it first (issue #53, below) — that mark is exactly what tells "awaiting a human" from
+    "the human is done, spawn it": a requeued chunk is no longer awaiting anyone.
 
     A 404 (:class:`ChunkNotFoundError`) is a third, terminal shape, same as
     :func:`_advance_held_chunk` (blizzard#9): the hub no longer knows this chunk, so the
     orphaned binding is released rather than left for this reconciler to keep re-asking
     about forever — the generic :class:`HubClientError` branch below is for a transport
     failure alone, not this one."""
+    requeue_pending = ctx.store.pending_requeue_chunk_ids()  # hoisted: one read per FILL, not per chunk
     for chunk_id in ctx.store.live_tenure_chunk_ids():
         if ctx.store.active_lease_for_chunk(chunk_id) is not None:
             continue  # a live worker holds it — REAP/ADVANCE own it
@@ -967,6 +970,18 @@ def _reconcile_interrupted_claims(ctx: LoopContext) -> None:
             continue
         except HubClientError:
             continue  # hub unreachable — the binding is durable; retry next tick
+        if chunk_id in requeue_pending:
+            # The human cleared this chunk's local hold (``blizzard runner requeue``,
+            # issue #53) — spawn its fresh attempt ahead of every other branch below, the
+            # same priority the gate/hub-node guard gets: no other case in this function
+            # should second-guess an explicit human decision.
+            ours = detail.route is not None and detail.route.runner_id == ctx.config.runner_id
+            if not ours:
+                _log.info("releasing binding — chunk requeued locally but no longer routed here", chunk_id=chunk_id)
+                _release_all(ctx, chunk_id)
+                continue
+            _resume_requeued_chunk(ctx, chunk_id)
+            continue
         if detail.decision is not None:
             # A chunk carrying a live gate decision — open (``waiting_on_human``) or
             # resolved-but-not-transitioned — is owned by ADVANCE's :func:`_advance_held_chunk`,
@@ -1550,6 +1565,38 @@ def _adopt_interrupted_claim(ctx: LoopContext, chunk_id: str) -> None:
         return  # hub unreachable — the binding is durable; retry next tick
     _log.info("adopting interrupted claim — spawning current node", chunk_id=chunk_id)
     _spawn_attempt(ctx, chunk_id, envelope, _bindings_as_environments(bindings), via="adopt")
+
+
+def _resume_requeued_chunk(ctx: LoopContext, chunk_id: str) -> None:
+    """Spawn a fresh attempt at the chunk's current node — the human cleared its local
+    needs_human hold (issue #53: ``blizzard runner requeue``).
+
+    The hold-clearing fact was already durable before this runs (``RequeueService``
+    records it fact-first, ``bzh:crash-correctness``); this is the next tick's own
+    read-back of it, exactly mirroring :func:`_adopt_interrupted_claim`'s recovery shape —
+    a chunk this runner already holds, spawned fresh into its warm environment. The
+    retry budget is **carried, not reset**: this is an ordinary :func:`_spawn_attempt`
+    mint, so :meth:`~blizzard.runner.store.repository.IReadRunnerStore.attempt_count`
+    simply gains one more entry against the node's existing ``retries_max`` — a human
+    requeue buys exactly one more try, not a fresh budget.
+
+    A 404 (:class:`ChunkNotFoundError`) here is terminal the same way it is for
+    :func:`_adopt_interrupted_claim` (blizzard#9): the hub no longer knows this chunk, so
+    the held binding is released rather than retried forever."""
+    bindings = ctx.store.bindings_for_chunk(chunk_id)
+    if not bindings:
+        _log.warning("requeue-resume with no bound env — cannot spawn", chunk_id=chunk_id)
+        return
+    try:
+        envelope = ctx.hub.get_envelope(chunk_id)
+    except ChunkNotFoundError:
+        _log.warning("hub reports requeued chunk unknown — releasing envs", chunk_id=chunk_id)
+        _release_all(ctx, chunk_id)
+        return
+    except HubClientError:
+        return  # hub unreachable — the requeue fact is durable; retry next tick
+    _log.info("resuming requeued chunk — spawning current node", chunk_id=chunk_id)
+    _spawn_attempt(ctx, chunk_id, envelope, _bindings_as_environments(bindings), via="requeue-resume")
 
 
 def _reclaim_interrupted(ctx: LoopContext, chunk_id: str, bindings: list[EnvBindingRecord]) -> None:

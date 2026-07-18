@@ -591,9 +591,42 @@ def takeover(chunk_id: str, force: bool, directory: str, runner_url: str | None)
 
 @runner.command()
 @click.argument("chunk_id")
-def requeue(chunk_id: str) -> None:
-    """Hand a taken-over chunk back to the fleet."""
-    _stub("requeue")
+@click.option(
+    "--dir",
+    "directory",
+    default=DEFAULT_DIR,
+    envvar=ENV_RUNNER_DIR,
+    help="Runner runtime directory (overrides $BZ_RUNNER_DIR).",
+)
+@click.option(
+    "--runner-url",
+    "runner_url",
+    default=None,
+    envvar=ENV_LOCAL_API_URL,
+    help="Runner local API over TCP (overrides $BZ_RUNNER_URL).",
+)
+def requeue(chunk_id: str, directory: str, runner_url: str | None) -> None:
+    """Hand a needs_human chunk back to the fleet: a fresh attempt at its current node (issue #53).
+
+    A pure client of the runner's local API — the same door ``status``/``pause``/``takeover``
+    use. ``POST /chunks/{id}/requeues`` appends the fact that clears the chunk's local
+    needs_human hold (escalated, or held by an ended takeover — the pasted-command flow
+    works too, with no recorded takeover at all); the next FILL spawns a fresh attempt —
+    new session, new lease, fresh epoch — at the chunk's current node. The chunk's route
+    is never released and it never re-enters the hub's queue; it resumes exactly where it
+    stood. Refused with ``409`` while the chunk's takeover is still open (end the
+    interactive session first — one process per session) or while the chunk is not
+    parked needs_human."""
+    client, where = _local_api_client(directory, runner_url)
+    try:
+        with client:
+            resp = client.post(f"/api/chunks/{chunk_id}/requeues")
+            if resp.status_code == 409:
+                raise click.ClickException(f"requeue: {resp.json().get('detail', 'chunk is not requeueable')}")
+            resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise click.ClickException(f"requeue: could not reach the runner at {where} ({exc})") from exc
+    click.echo(f"requeued chunk {chunk_id} — a fresh attempt will spawn at its current node")
 
 
 @runner.command()

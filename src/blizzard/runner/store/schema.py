@@ -430,3 +430,26 @@ takeover_ends = Table(
     Column("takeover_id", String, nullable=False),
     Column("ended_at", UtcDateTime, nullable=False),
 )
+
+# --- Requeues (the operator's explicit hand-back after a human hold — issue #53) ----
+#
+# ``blizzard runner requeue <chunk-id>`` appends this fact to clear a chunk's local
+# needs_human hold — whether the chunk is escalated outright or was escalated and is
+# now held by an *ended* takeover; either way the underlying shape is the same closed-
+# ``escalated`` lease with no later mint (``domain/requeue.py``), so one fact and one
+# openness predicate cover both. Facts-only (``bzh:facts-not-status``): a requeue mark
+# is *pending* while no later lease was minted for the chunk — the same "no later mint"
+# openness :func:`open_escalation`-equivalent reads at the hub — so the next FILL's
+# fresh spawn (an ordinary lease mint) both consumes this mark and, via its outbound
+# ``lease.minted`` fact, supersedes the escalation at the hub. Distinct from the hub's
+# own ``requeues`` table (``blizzard hub requeue``, a different verb that also releases
+# the route so *any* runner may reclaim the chunk): this mark never leaves the runner
+# and never touches the route.
+
+requeues = Table(
+    "requeues",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("chunk_id", String, nullable=False),
+    Column("requeued_at", UtcDateTime, nullable=False),  # supersedes an earlier escalation
+)

@@ -29,6 +29,7 @@ from blizzard.runner.api.heartbeat import router as heartbeat_router
 from blizzard.runner.api.leases import router as leases_router
 from blizzard.runner.api.pm_items import router as pm_items_router
 from blizzard.runner.api.readiness import router as readiness_router
+from blizzard.runner.api.requeues import router as requeues_router
 from blizzard.runner.api.session_end import router as session_end_router
 from blizzard.runner.api.takeovers import router as takeovers_router
 from blizzard.runner.api.transcripts import router as transcripts_router
@@ -36,6 +37,7 @@ from blizzard.runner.api.workspace_prompt import router as workspace_prompt_rout
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.leases import LocalLeaseService
 from blizzard.runner.domain.readiness import ReadinessService
+from blizzard.runner.domain.requeue import RequeueService
 from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.domain.takeover import TakeoverService
 from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
@@ -62,6 +64,7 @@ def create_app(
     transcripts: LocalTranscriptService | None = None,
     runner_status: RunnerStatusService | None = None,
     takeover: TakeoverService | None = None,
+    requeue: RequeueService | None = None,
 ) -> FastAPI:
     """Build a fully wired runner app from resolved config.
 
@@ -84,6 +87,9 @@ def create_app(
     ``takeover`` is the store-, harness-, and process-probe-backed operator-takeover
     service (issue #52) — ``blizzard runner takeover``'s backing service, wired the
     same way.
+
+    ``requeue`` is the store-backed operator-requeue service (issue #53) —
+    ``blizzard runner requeue``'s backing service, wired the same way.
     """
     log = get_logger("blizzard.runner")
 
@@ -108,6 +114,9 @@ def create_app(
     # The operator-takeover service (issue #52) — ``blizzard runner takeover``'s backing
     # service.
     app.state.takeover = takeover
+    # The operator-requeue service (issue #53) — ``blizzard runner requeue``'s backing
+    # service.
+    app.state.requeue = requeue
 
     # API routers first, so /api/* always wins over the web mount at /.
     app.include_router(health_router)
@@ -134,6 +143,9 @@ def create_app(
     # The operator takeover (issue #52): open/close a chunk's interactive session over
     # the local API — the CLI is a pure client of these two routes.
     app.include_router(takeovers_router)
+    # The operator requeue (issue #53): clear a needs_human chunk's local hold so the
+    # next FILL spawns a fresh attempt at its current node.
+    app.include_router(requeues_router)
 
     # The runner-served web app (post-MVP); the mount point is live from the
     # scaffold so the seam is exercised.
@@ -197,6 +209,10 @@ def build_hosted_app(config: RunnerConfig) -> FastAPI:
     # ``LinuxProcessProbe()``/``SystemClock()`` instances, like ``leases``/``runner_status``
     # above: stateless, so a second instance is equivalent to sharing one.
     takeover = TakeoverService(runner_store, SystemClock(), harness, LinuxProcessProbe())
+    # ``blizzard runner requeue``'s backing service (issue #53). Its own ``SystemClock()``
+    # instance, like the siblings above: stateless, so a second instance is equivalent to
+    # sharing one.
+    requeue = RequeueService(runner_store, SystemClock())
     return create_app(
         config,
         readiness=readiness,
@@ -207,6 +223,7 @@ def build_hosted_app(config: RunnerConfig) -> FastAPI:
         transcripts=transcripts,
         runner_status=runner_status,
         takeover=takeover,
+        requeue=requeue,
     )
 
 

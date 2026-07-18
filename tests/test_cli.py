@@ -34,7 +34,7 @@ def test_hub_lists_its_verbs() -> None:
 def test_runner_lists_its_verbs() -> None:
     result = CliRunner().invoke(blizzard, ["runner", "--help"])
     assert result.exit_code == 0
-    for verb in ("init", "migrate", "host", "heartbeat", "ask", "takeover"):
+    for verb in ("init", "migrate", "host", "heartbeat", "ask", "takeover", "requeue"):
         assert verb in result.output
 
 
@@ -183,9 +183,10 @@ def test_hub_host_help_shows_directory_argument() -> None:
 
 
 def test_stub_verb_reports_not_implemented() -> None:
-    # `runner requeue` is still a scaffold stub (`status` is a real verb as of
-    # issue #51, `takeover` as of issue #52); a stub names itself.
-    result = CliRunner().invoke(blizzard, ["runner", "requeue", "ch_1"])
+    # `runner selftest` is still a scaffold stub (`status` is a real verb as of
+    # issue #51, `takeover` as of issue #52, `requeue` as of issue #53); a stub names
+    # itself.
+    result = CliRunner().invoke(blizzard, ["runner", "selftest", "claude"])
     assert result.exit_code != 0
     assert "not yet implemented" in result.output
 

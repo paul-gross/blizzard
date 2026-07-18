@@ -47,6 +47,7 @@ from blizzard.runner.store.schema import (
     park_resumes,
     pause_park_resumes,
     pause_parks,
+    requeues,
     resume_clears,
     resume_intents,
     session_ends,
@@ -129,6 +130,34 @@ def _takeover_is_open():  # type: ignore[no-untyped-def]
     correlation: ``takeover_id`` is a fresh ULID per open (mirroring ``asks``'
     ``question_id``), so there is no re-open-under-the-same-key hazard to mask."""
     return takeovers.c.takeover_id.not_in(select(takeover_ends.c.takeover_id))
+
+
+def _escalation_not_superseded():  # type: ignore[no-untyped-def]
+    """An escalated ``lease_closures`` row not yet superseded by a later-epoch mint for
+    the same chunk — correlated against the outer ``leases``/``lease_closures`` join
+    (``open_escalations``'s and ``open_escalation_for_chunk``'s shared predicate)."""
+    later = leases.alias("later_escalation_leases")
+    return ~(
+        select(later.c.lease_id)
+        .where(later.c.chunk_id == leases.c.chunk_id)
+        .where(later.c.epoch > leases.c.epoch)
+        .exists()
+    )
+
+
+def _requeue_not_consumed():  # type: ignore[no-untyped-def]
+    """A requeue mark not yet consumed by a later lease mint for the same chunk.
+
+    ``>=`` keeps a same-instant mint winning, mirroring ``_pause_park_is_open``'s and
+    ``_intent_is_open``'s timestamp correlation: the fresh spawn :func:`_reconcile_
+    interrupted_claims` triggers off this mark stamps its lease no earlier than the mark
+    itself, so a mint at or after the mark is always the one it caused."""
+    return ~(
+        select(leases.c.lease_id)
+        .where(leases.c.chunk_id == requeues.c.chunk_id)
+        .where(leases.c.created_at >= requeues.c.requeued_at)
+        .exists()
+    )
 
 
 class SqlAlchemyRunnerStore:
@@ -318,38 +347,18 @@ class SqlAlchemyRunnerStore:
         ]
 
     def open_escalations(self) -> list[EscalationRecord]:
-        later = leases.alias("later_leases")
-        superseded = (
-            select(later.c.lease_id)
-            .where(later.c.chunk_id == leases.c.chunk_id)
-            .where(later.c.epoch > leases.c.epoch)
-            .exists()
-        )
+        stmt = self._escalation_select().where(_escalation_not_superseded()).order_by(lease_closures.c.closed_at.desc())
+        return [self._row_to_escalation(r) for r in self._all(stmt)]
+
+    def open_escalation_for_chunk(self, chunk_id: str) -> EscalationRecord | None:
         stmt = (
-            select(
-                lease_closures.c.lease_id,
-                lease_closures.c.chunk_id,
-                lease_closures.c.node_id,
-                lease_closures.c.closed_at,
-                leases.c.epoch,
-                leases.c.session_id,
-            )
-            .select_from(lease_closures.join(leases, leases.c.lease_id == lease_closures.c.lease_id))
-            .where(lease_closures.c.reason == _ESCALATED_REASON)
-            .where(~superseded)
+            self._escalation_select()
+            .where(lease_closures.c.chunk_id == chunk_id)
+            .where(_escalation_not_superseded())
             .order_by(lease_closures.c.closed_at.desc())
         )
-        return [
-            EscalationRecord(
-                lease_id=str(r.lease_id),
-                chunk_id=str(r.chunk_id),
-                node_id=str(r.node_id),
-                epoch=int(r.epoch),
-                session_id=str(r.session_id) if r.session_id is not None else None,
-                closed_at=r.closed_at,
-            )
-            for r in self._all(stmt)
-        ]
+        rows = self._all(stmt)
+        return self._row_to_escalation(rows[0]) if rows else None
 
     def open_takeover_for_chunk(self, chunk_id: str) -> TakeoverRecord | None:
         stmt = (
@@ -368,6 +377,10 @@ class SqlAlchemyRunnerStore:
     def open_takeovers(self) -> list[TakeoverRecord]:
         stmt = select(takeovers).where(_takeover_is_open()).order_by(takeovers.c.opened_at.desc())
         return [self._row_to_takeover(r) for r in self._all(stmt)]
+
+    def pending_requeue_chunk_ids(self) -> set[str]:
+        stmt = select(requeues.c.chunk_id).where(_requeue_not_consumed()).distinct()
+        return {str(r.chunk_id) for r in self._all(stmt)}
 
     def hub_contact_at(self, runner_id: str) -> datetime | None:
         rows = self._all(select(hub_control.c.updated_at).where(hub_control.c.runner_id == runner_id))
@@ -660,6 +673,11 @@ class SqlAlchemyRunnerStore:
             conn.execute(takeover_ends.insert().values(takeover_id=takeover_id, ended_at=ended_at))
         _log.info("takeover ended", takeover_id=takeover_id)
 
+    def record_requeue(self, *, chunk_id: str, at: datetime) -> None:
+        with self._begin() as conn:
+            conn.execute(requeues.insert().values(chunk_id=chunk_id, requeued_at=at))
+        _log.info("chunk requeued locally", chunk_id=chunk_id)
+
     # --- plumbing -----------------------------------------------------------
 
     @staticmethod
@@ -672,6 +690,32 @@ class SqlAlchemyRunnerStore:
             options=json.loads(r.options) if r.options else [],
             session_id=str(r.session_id) if r.session_id is not None else None,
             asked_at=r.asked_at,
+        )
+
+    @staticmethod
+    def _escalation_select():  # type: ignore[no-untyped-def]
+        return (
+            select(
+                lease_closures.c.lease_id,
+                lease_closures.c.chunk_id,
+                lease_closures.c.node_id,
+                lease_closures.c.closed_at,
+                leases.c.epoch,
+                leases.c.session_id,
+            )
+            .select_from(lease_closures.join(leases, leases.c.lease_id == lease_closures.c.lease_id))
+            .where(lease_closures.c.reason == _ESCALATED_REASON)
+        )
+
+    @staticmethod
+    def _row_to_escalation(r) -> EscalationRecord:  # type: ignore[no-untyped-def]
+        return EscalationRecord(
+            lease_id=str(r.lease_id),
+            chunk_id=str(r.chunk_id),
+            node_id=str(r.node_id),
+            epoch=int(r.epoch),
+            session_id=str(r.session_id) if r.session_id is not None else None,
+            closed_at=r.closed_at,
         )
 
     @staticmethod

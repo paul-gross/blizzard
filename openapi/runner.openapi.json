@@ -679,6 +679,25 @@
         "title": "ReadinessResponse",
         "type": "object"
       },
+      "RequeueResponse": {
+        "description": "``POST /chunks/{id}/requeues`` \u2014 the local hold is cleared; the next FILL spawns\na fresh attempt at the chunk's current node.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "requeued": {
+            "title": "Requeued",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "requeued"
+        ],
+        "title": "RequeueResponse",
+        "type": "object"
+      },
       "RunnerControlPatch": {
         "description": "Declarative controls on the runner singleton \u2014 ``paused`` now, routing knobs post-MVP.",
         "properties": {
@@ -1145,6 +1164,49 @@
           }
         },
         "summary": "Get Pm Items",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/chunks/{chunk_id}/requeues": {
+      "post": {
+        "description": "Clear a needs_human chunk's local hold \u2014 the next FILL spawns a fresh attempt.\n\n``409`` while the chunk's takeover is still open (end the interactive session first),\nor while the chunk carries no open escalation (nothing needs_human to clear).",
+        "operationId": "requeue_chunk_api_chunks__chunk_id__requeues_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequeueResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Requeue Chunk",
         "tags": [
           "runner"
         ]
