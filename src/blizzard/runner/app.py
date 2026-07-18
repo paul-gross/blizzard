@@ -22,6 +22,8 @@ from blizzard.foundation.store.internal.store_status_reader import SqlAlchemySto
 from blizzard.foundation.web import mount_web_app
 from blizzard.runner.api.asks import router as asks_router
 from blizzard.runner.api.control import router as control_router
+from blizzard.runner.api.environments import router as environments_router
+from blizzard.runner.api.escalations import router as escalations_router
 from blizzard.runner.api.health import router as health_router
 from blizzard.runner.api.heartbeat import router as heartbeat_router
 from blizzard.runner.api.leases import router as leases_router
@@ -33,6 +35,7 @@ from blizzard.runner.api.workspace_prompt import router as workspace_prompt_rout
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.leases import LocalLeaseService
 from blizzard.runner.domain.readiness import ReadinessService
+from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.harness.adapter import IHarnessAdapter
@@ -55,6 +58,7 @@ def create_app(
     runner_store: IWriteRunnerStore | None = None,
     leases: LocalLeaseService | None = None,
     transcripts: LocalTranscriptService | None = None,
+    runner_status: RunnerStatusService | None = None,
 ) -> FastAPI:
     """Build a fully wired runner app from resolved config.
 
@@ -70,6 +74,9 @@ def create_app(
     ``transcripts`` is the store- and filesystem-backed transcript read (issue #29),
     wired the same way — optional so the store-free paths leave the transcript route
     answering 503 rather than pretending.
+
+    ``runner_status`` is the store-backed, hub-free machine-local status view
+    (issue #51) — ``blizzard runner status``'s backing service — wired the same way.
     """
     log = get_logger("blizzard.runner")
 
@@ -88,6 +95,9 @@ def create_app(
     app.state.leases = leases
     # The panel's transcript read (issue #29) — hub-free, filesystem-backed.
     app.state.transcripts = transcripts
+    # The machine-local status view (issue #51) — ``blizzard runner status``'s backing
+    # service, hub-free but for the derived reachability read.
+    app.state.runner_status = runner_status
 
     # API routers first, so /api/* always wins over the web mount at /.
     app.include_router(health_router)
@@ -104,8 +114,13 @@ def create_app(
     # prompt, or replace the override so the next spawn picks it up with no restart.
     app.include_router(workspace_prompt_router)
     # The runner's own declarative pause brake (issue #43): local, distinct from the hub's,
-    # and reachable with the hub down — the operator contract's standing requirement.
+    # and reachable with the hub down — the operator contract's standing requirement. Also
+    # carries `GET /runner` (issue #51), the status summary.
     app.include_router(control_router)
+    # The machine-local status view's remaining list routes (issue #51): held
+    # environments and parked escalations. `GET /asks` rides the existing `asks_router`.
+    app.include_router(environments_router)
+    app.include_router(escalations_router)
 
     # The runner-served web app (post-MVP); the mount point is live from the
     # scaffold so the seam is exercised.
@@ -154,6 +169,17 @@ def build_hosted_app(config: RunnerConfig) -> FastAPI:
     transcripts = LocalTranscriptService(
         store=runner_store, transcripts=transcript_repository, workspace_root=config.workspace_root
     )
+    # The machine-local status view (issue #51) — ``blizzard runner status``'s backing
+    # service. Its own ``SystemClock()`` instance, like ``leases`` above: stateless, so a
+    # second instance is equivalent to sharing one.
+    runner_status = RunnerStatusService(
+        store=runner_store,
+        clock=SystemClock(),
+        harness=harness,
+        runner_id=config.runner_id,
+        workspace_id=config.workspace_id,
+        max_agents=config.max_agents,
+    )
     return create_app(
         config,
         readiness=readiness,
@@ -162,6 +188,7 @@ def build_hosted_app(config: RunnerConfig) -> FastAPI:
         runner_store=runner_store,
         leases=leases,
         transcripts=transcripts,
+        runner_status=runner_status,
     )
 
 

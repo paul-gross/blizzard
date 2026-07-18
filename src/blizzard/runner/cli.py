@@ -391,9 +391,80 @@ def pm_items(chunk_id: str) -> None:
 
 
 @runner.command()
-def status() -> None:
-    """The machine-local view: capacities, held environments, open asks, escalations."""
-    _stub("status")
+@click.option(
+    "--dir",
+    "directory",
+    default=DEFAULT_DIR,
+    envvar=ENV_RUNNER_DIR,
+    help="Runner runtime directory (overrides $BZ_RUNNER_DIR).",
+)
+@click.option(
+    "--runner-url",
+    "runner_url",
+    default=None,
+    envvar=ENV_LOCAL_API_URL,
+    help="Runner local API over TCP (overrides $BZ_RUNNER_URL).",
+)
+def status(directory: str, runner_url: str | None) -> None:
+    """The machine-local view: capacities, held environments, open asks, escalations (issue #51).
+
+    A pure client of the runner's local API — socket or ``--runner-url``, the same
+    door ``pause``/``start`` use — so every section here is this runner's own local
+    read and the view renders fully with the hub unreachable; hub reachability itself
+    is reported, not assumed. ``GET /runner`` + ``GET /leases`` + ``GET /environments``
+    + ``GET /asks?open=true`` + ``GET /escalations`` — no store access, no hub call.
+    """
+    client, where = _local_api_client(directory, runner_url)
+    try:
+        with client:
+            runner_resp = client.get("/api/runner")
+            runner_resp.raise_for_status()
+            leases_resp = client.get("/api/leases")
+            leases_resp.raise_for_status()
+            envs_resp = client.get("/api/environments")
+            envs_resp.raise_for_status()
+            asks_resp = client.get("/api/asks", params={"open": "true"})
+            asks_resp.raise_for_status()
+            escalations_resp = client.get("/api/escalations")
+            escalations_resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise click.ClickException(f"status: could not reach the runner at {where} ({exc})") from exc
+
+    view = runner_resp.json()
+    click.echo(f"runner {view['runner_id']}  workspace={view['workspace_id']}")
+    pause = view["pause"]
+    brakes = [name for name, on in (("local", pause["local"]), ("hub", pause["hub"])) if on]
+    brake_state = f"paused [{'+'.join(brakes)}]" if pause["effective"] else "running"
+    click.echo(f"  {brake_state}")
+    cap = view["capacities"]
+    click.echo(f"  capacity: {cap['used']}/{cap['max_agents']} used, {cap['free']} free")
+    hub = view["hub"]
+    reachability = "reachable" if hub["reachable"] else "unreachable"
+    contact = hub["last_contact_at"] or "never"
+    click.echo(f"  hub: {reachability} (last contact {contact}), {hub['buffer_depth']} fact(s) buffered")
+    click.echo(f"  last tick: {view['last_tick_at'] or 'never'}")
+
+    leases = [lease for lease in leases_resp.json().get("items", []) if lease.get("state") != "closed"]
+    click.echo(f"\nleases ({len(leases)}):")
+    for lease in leases:
+        click.echo(f"  {lease['lease_id']}  {lease['state']:<12} chunk={lease['chunk_id']} node={lease['node_name']}")
+
+    envs = envs_resp.json().get("items", [])
+    click.echo(f"\nheld environments ({len(envs)}):")
+    for env in envs:
+        click.echo(f"  {env['environment_id']}  chunk={env['chunk_id']}  held since {env['held_since']}")
+
+    asks = asks_resp.json().get("items", [])
+    click.echo(f"\nopen asks ({len(asks)}):")
+    for ask in asks:
+        opts = f"  [{'|'.join(ask.get('options') or [])}]" if ask.get("options") else ""
+        click.echo(f"  {ask['question_id']}  (chunk {ask['chunk_id']}): {ask['question']}{opts}")
+
+    escalations = escalations_resp.json().get("items", [])
+    click.echo(f"\nescalations ({len(escalations)}):")
+    for esc in escalations:
+        click.echo(f"  chunk {esc['chunk_id']}  node={esc['node_id']}  since {esc['closed_at']}")
+        click.echo(f"    resume: {esc['resume_command']}")
 
 
 @runner.command()

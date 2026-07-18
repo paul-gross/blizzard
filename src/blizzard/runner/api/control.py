@@ -1,4 +1,4 @@
-"""The runner-local declarative control endpoint — ``PATCH /api/runner`` (issue #43).
+"""The runner-local control + summary endpoints on ``/api/runner`` (issue #43; ``GET`` issue #51).
 
 The runner's own half of the pause brake, and the declarative pattern applied
 locally: pause/start is *state on the runner singleton*, not a directive queue. Two
@@ -20,6 +20,12 @@ The edge is read-only over its wiring (``bzh:controller-read-only``): it writes 
 the store the ``host`` composition root wired on ``app.state``. Without a store (the
 store-free app used for OpenAPI export and unit tests) it answers 503 rather than
 pretending. The CLI is a pure client of this route — it never opens the store itself.
+
+``GET /api/runner`` (issue #51) is this same singleton's read side — ``blizzard runner
+status``'s summary section: identity, both pause states, capacities, hub connectivity,
+and the last tick. It holds the composition-root-wired :class:`~blizzard.runner.domain.status.RunnerStatusService`
+rather than the store directly, since deriving hub reachability and capacity counts is
+more than the store-facing ``_view`` below does for the pause fields alone.
 """
 
 from __future__ import annotations
@@ -32,8 +38,10 @@ from pydantic import BaseModel
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.store.repository import IWriteRunnerStore
 from blizzard.wire.facts import RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED
+from blizzard.wire.runner_status import CapacitiesView, HubConnectivityView, PauseStateView, RunnerStatusView
 
 router = APIRouter(prefix="/api", tags=["runner"])
 
@@ -99,6 +107,40 @@ def patch_runner(request_body: RunnerControlPatch, request: Request) -> RunnerCo
         report_payload=json.dumps({"runner_id": config.runner_id, "by": request_body.by, "at": iso_utc(now)}),
     )
     return _view(store, config.runner_id)
+
+
+@router.get("/runner", response_model=RunnerStatusView)
+def get_runner(request: Request) -> RunnerStatusView:
+    """The runner's machine-local summary: identity, pause states, capacities, hub
+    connectivity, last tick (issue #51).
+
+    Read-only over its wiring (``bzh:controller-read-only``): the edge holds only the
+    composition-root-wired :class:`RunnerStatusService`, derived entirely from local
+    store facts plus the injected clock — no hub call, so it is truthful with the hub
+    unreachable. On the store-free app (OpenAPI export / unit tests) the service is
+    unwired and the probe answers 503 rather than pretending.
+    """
+    service: RunnerStatusService | None = getattr(request.app.state, "runner_status", None)
+    if service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="runner status service not wired — start via `blizzard runner host`",
+        )
+    summary = service.summary()
+    return RunnerStatusView(
+        runner_id=summary.runner_id,
+        workspace_id=summary.workspace_id,
+        pause=PauseStateView(local=summary.pause.local, hub=summary.pause.hub, effective=summary.pause.effective),
+        capacities=CapacitiesView(
+            max_agents=summary.capacities.max_agents, used=summary.capacities.used, free=summary.capacities.free
+        ),
+        hub=HubConnectivityView(
+            reachable=summary.hub.reachable,
+            last_contact_at=iso_utc(summary.hub.last_contact_at) if summary.hub.last_contact_at is not None else None,
+            buffer_depth=summary.hub.buffer_depth,
+        ),
+        last_tick_at=iso_utc(summary.last_tick_at) if summary.last_tick_at is not None else None,
+    )
 
 
 def _view(store: IWriteRunnerStore, runner_id: str) -> RunnerControlView:

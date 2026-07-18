@@ -130,6 +130,26 @@ class ParkRecord:
     parked_at: datetime
 
 
+@dataclass(frozen=True)
+class EscalationRecord:
+    """A closed-``escalated`` lease not yet superseded — the status view's read (issue #51).
+
+    An escalation is recorded by closing its lease with ``reason="escalated"``
+    (``runner/loop/steps.py``'s ``_escalate``); the chunk's environments stay bound
+    for a human takeover. It stays *open* until a later lease is minted for the same
+    chunk (a requeue) — the highest ``epoch`` for the chunk still being this one's is
+    exactly that "no later mint" fact (``bzh:facts-not-status``), so no separate
+    resolution flag is stored. ``session_id`` is the dormant session a resume command
+    is built around; ``None`` only if the escalated lease never reached spawn-return."""
+
+    lease_id: str
+    chunk_id: str
+    node_id: str
+    epoch: int
+    session_id: str | None
+    closed_at: datetime
+
+
 class IReadRunnerStore(Protocol):
     """Read-only runner-store queries (held by read-path edges)."""
 
@@ -248,6 +268,41 @@ class IReadRunnerStore(Protocol):
 
     def open_park(self, lease_id: str) -> ParkRecord | None:
         """The lease's open park (park fact, no resume), or None — its question_id."""
+        ...
+
+    def open_asks(self) -> list[AskRecord]:
+        """Every ask with no answer yet — forwarded-and-parked or still unforwarded (issue #51).
+
+        The status view's read: an ask is open while its ``question_id`` carries no
+        :meth:`record_park_resume`, whether or not it has been forwarded up via
+        :meth:`record_park` yet — mirrors :meth:`unforwarded_ask`'s and
+        :meth:`open_park`'s per-lease reads, widened to every lease."""
+        ...
+
+    def held_bindings(self) -> list[EnvBindingRecord]:
+        """Every currently-held env binding, across every chunk (issue #51).
+
+        The status view's read — :meth:`bindings_for_chunk` widened from one chunk to
+        the whole fleet this runner holds, the same ``held`` predicate
+        :meth:`held_environment_ids` and :meth:`live_tenure_chunk_ids` already use."""
+        ...
+
+    def open_escalations(self) -> list[EscalationRecord]:
+        """Every escalated chunk not yet superseded by a later lease mint (issue #51).
+
+        The status view's read of :class:`EscalationRecord` — see its docstring for
+        what "open" means here."""
+        ...
+
+    def hub_contact_at(self, runner_id: str) -> datetime | None:
+        """When PULL last **successfully** reached the hub, or ``None`` if never (issue #51).
+
+        :meth:`set_hub_paused` is only called after a successful
+        ``register_runner``/``fetch_runner_paused`` round trip
+        (``runner/loop/steps.py``'s ``_sync_registry``), so its ``updated_at`` **is**
+        the last-successful-contact instant — no separate fact needed
+        (``bzh:facts-not-status``). The status view derives reachability from how stale
+        this reads against ``now``."""
         ...
 
     def hub_paused(self, runner_id: str) -> bool:

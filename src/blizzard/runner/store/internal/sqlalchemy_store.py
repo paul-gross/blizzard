@@ -22,6 +22,7 @@ from blizzard.runner.store.repository import (
     BufferedFact,
     ClosedLeaseRecord,
     EnvBindingRecord,
+    EscalationRecord,
     IWriteRunnerStore,
     LeaseRecord,
     NewLease,
@@ -52,6 +53,11 @@ from blizzard.runner.store.schema import (
 )
 
 _log = get_logger("blizzard.runner.store")
+
+# The closure reason `_escalate` (`runner/loop/steps.py`) records — the vocabulary is
+# caller-owned (docstring precedent: `ClosedLeaseRecord`), this is the one place the
+# store itself reads it back to derive "open escalation" (issue #51).
+_ESCALATED_REASON = "escalated"
 
 
 def _binding_is_held():  # type: ignore[no-untyped-def]
@@ -270,6 +276,62 @@ class SqlAlchemyRunnerStore:
             question_id=str(r.question_id),
             parked_at=r.parked_at,
         )
+
+    def open_asks(self) -> list[AskRecord]:
+        stmt = (
+            select(asks).where(asks.c.question_id.not_in(select(park_resumes.c.question_id))).order_by(asks.c.id.desc())
+        )
+        return [self._row_to_ask(r) for r in self._all(stmt)]
+
+    def held_bindings(self) -> list[EnvBindingRecord]:
+        stmt = select(env_bindings).where(_binding_is_held()).order_by(env_bindings.c.bound_at)
+        return [
+            EnvBindingRecord(
+                chunk_id=str(r.chunk_id),
+                environment_id=str(r.environment_id),
+                workdir=str(r.workdir),
+                bound_at=r.bound_at,
+            )
+            for r in self._all(stmt)
+        ]
+
+    def open_escalations(self) -> list[EscalationRecord]:
+        later = leases.alias("later_leases")
+        superseded = (
+            select(later.c.lease_id)
+            .where(later.c.chunk_id == leases.c.chunk_id)
+            .where(later.c.epoch > leases.c.epoch)
+            .exists()
+        )
+        stmt = (
+            select(
+                lease_closures.c.lease_id,
+                lease_closures.c.chunk_id,
+                lease_closures.c.node_id,
+                lease_closures.c.closed_at,
+                leases.c.epoch,
+                leases.c.session_id,
+            )
+            .select_from(lease_closures.join(leases, leases.c.lease_id == lease_closures.c.lease_id))
+            .where(lease_closures.c.reason == _ESCALATED_REASON)
+            .where(~superseded)
+            .order_by(lease_closures.c.closed_at.desc())
+        )
+        return [
+            EscalationRecord(
+                lease_id=str(r.lease_id),
+                chunk_id=str(r.chunk_id),
+                node_id=str(r.node_id),
+                epoch=int(r.epoch),
+                session_id=str(r.session_id) if r.session_id is not None else None,
+                closed_at=r.closed_at,
+            )
+            for r in self._all(stmt)
+        ]
+
+    def hub_contact_at(self, runner_id: str) -> datetime | None:
+        rows = self._all(select(hub_control.c.updated_at).where(hub_control.c.runner_id == runner_id))
+        return rows[0].updated_at if rows else None
 
     def hub_paused(self, runner_id: str) -> bool:
         rows = self._all(select(hub_control.c.paused).where(hub_control.c.runner_id == runner_id))

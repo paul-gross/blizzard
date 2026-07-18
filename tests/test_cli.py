@@ -183,11 +183,23 @@ def test_hub_host_help_shows_directory_argument() -> None:
 
 
 def test_stub_verb_reports_not_implemented() -> None:
-    # `runner status` is still a scaffold stub (ingest and the declarative pause are
-    # implemented in this wave); a stub names itself.
-    result = CliRunner().invoke(blizzard, ["runner", "status"])
+    # `runner takeover` is still a scaffold stub (`status` is a real verb as of
+    # issue #51); a stub names itself.
+    result = CliRunner().invoke(blizzard, ["runner", "takeover", "ch_1"])
     assert result.exit_code != 0
     assert "not yet implemented" in result.output
+
+
+def test_runner_status_errors_cleanly_with_no_daemon_serving(tmp_path: Path) -> None:
+    # `status` is a pure client of the local API (issue #51), same as `pause`/`start` —
+    # no socket, no store fallback, a clean error naming the missing daemon.
+    root = tmp_path / "runner"
+    assert CliRunner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
+
+    result = CliRunner().invoke(blizzard, ["runner", "status", "--dir", str(root)])
+
+    assert result.exit_code != 0
+    assert "no runner daemon is serving" in result.output
 
 
 def test_hub_host_reports_an_unset_pm_source_token_env_as_a_clean_error(

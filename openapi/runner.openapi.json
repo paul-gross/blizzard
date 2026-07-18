@@ -1,6 +1,21 @@
 {
   "components": {
     "schemas": {
+      "AskListResponse": {
+        "description": "Every ask still awaiting an answer.",
+        "properties": {
+          "items": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AskView"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "title": "AskListResponse",
+        "type": "object"
+      },
       "AskRequest": {
         "description": "A worker's ask: the question and its optional pipe-separated choices.",
         "properties": {
@@ -47,6 +62,153 @@
         "title": "AskResponse",
         "type": "object"
       },
+      "AskView": {
+        "description": "One open ask \u2014 ``GET /api/asks?open=true``.",
+        "properties": {
+          "asked_at": {
+            "title": "Asked At",
+            "type": "string"
+          },
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "lease_id": {
+            "title": "Lease Id",
+            "type": "string"
+          },
+          "options": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "question_id": {
+            "title": "Question Id",
+            "type": "string"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          }
+        },
+        "required": [
+          "question_id",
+          "chunk_id",
+          "lease_id",
+          "question",
+          "session_id",
+          "asked_at"
+        ],
+        "title": "AskView",
+        "type": "object"
+      },
+      "CapacitiesView": {
+        "description": "Agent slots \u2014 the same math FILL claims against.",
+        "properties": {
+          "free": {
+            "title": "Free",
+            "type": "integer"
+          },
+          "max_agents": {
+            "title": "Max Agents",
+            "type": "integer"
+          },
+          "used": {
+            "title": "Used",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "max_agents",
+          "used",
+          "free"
+        ],
+        "title": "CapacitiesView",
+        "type": "object"
+      },
+      "EnvironmentListResponse": {
+        "description": "Every environment this runner currently holds.",
+        "properties": {
+          "items": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/HeldEnvironmentView"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "title": "EnvironmentListResponse",
+        "type": "object"
+      },
+      "EscalationListResponse": {
+        "description": "Every escalation still open \u2014 no later lease mint has superseded it.",
+        "properties": {
+          "items": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/EscalationView"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "title": "EscalationListResponse",
+        "type": "object"
+      },
+      "EscalationView": {
+        "description": "One parked escalation, carrying its literal takeover command \u2014 ``GET /api/escalations``.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "closed_at": {
+            "title": "Closed At",
+            "type": "string"
+          },
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "lease_id": {
+            "title": "Lease Id",
+            "type": "string"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "resume_command": {
+            "title": "Resume Command",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "lease_id",
+          "node_id",
+          "epoch",
+          "closed_at",
+          "resume_command"
+        ],
+        "title": "EscalationView",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -91,6 +253,61 @@
           "lease_id"
         ],
         "title": "HeartbeatResponse",
+        "type": "object"
+      },
+      "HeldEnvironmentView": {
+        "description": "One environment this runner currently holds \u2014 ``GET /api/environments``.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "environment_id": {
+            "title": "Environment Id",
+            "type": "string"
+          },
+          "held_since": {
+            "title": "Held Since",
+            "type": "string"
+          }
+        },
+        "required": [
+          "environment_id",
+          "chunk_id",
+          "held_since"
+        ],
+        "title": "HeldEnvironmentView",
+        "type": "object"
+      },
+      "HubConnectivityView": {
+        "description": "Hub reachability (derived, not probed) plus the outbound backlog depth.",
+        "properties": {
+          "buffer_depth": {
+            "title": "Buffer Depth",
+            "type": "integer"
+          },
+          "last_contact_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Contact At"
+          },
+          "reachable": {
+            "title": "Reachable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "reachable",
+          "last_contact_at",
+          "buffer_depth"
+        ],
+        "title": "HubConnectivityView",
         "type": "object"
       },
       "LeaseListResponse": {
@@ -247,6 +464,30 @@
           "closure_reason"
         ],
         "title": "LeaseView",
+        "type": "object"
+      },
+      "PauseStateView": {
+        "description": "The pause brake's two independent surfaces, plus their effective OR.",
+        "properties": {
+          "effective": {
+            "title": "Effective",
+            "type": "boolean"
+          },
+          "hub": {
+            "title": "Hub",
+            "type": "boolean"
+          },
+          "local": {
+            "title": "Local",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "local",
+          "hub",
+          "effective"
+        ],
+        "title": "PauseStateView",
         "type": "object"
       },
       "PmItemEntry": {
@@ -445,6 +686,49 @@
           "paused"
         ],
         "title": "RunnerControlView",
+        "type": "object"
+      },
+      "RunnerStatusView": {
+        "description": "``GET /api/runner`` \u2014 identity, pause states, capacities, hub connectivity, last tick.",
+        "properties": {
+          "capacities": {
+            "$ref": "#/components/schemas/CapacitiesView"
+          },
+          "hub": {
+            "$ref": "#/components/schemas/HubConnectivityView"
+          },
+          "last_tick_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Tick At"
+          },
+          "pause": {
+            "$ref": "#/components/schemas/PauseStateView"
+          },
+          "runner_id": {
+            "title": "Runner Id",
+            "type": "string"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runner_id",
+          "workspace_id",
+          "pause",
+          "capacities",
+          "hub",
+          "last_tick_at"
+        ],
+        "title": "RunnerStatusView",
         "type": "object"
       },
       "SessionEndResponse": {
@@ -685,6 +969,50 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/asks": {
+      "get": {
+        "description": "Every ask still awaiting an answer \u2014 ``GET /api/asks?open=true`` (issue #51).\n\nDerived, hub-free: an ask reads open while its ``question_id`` carries no answer\nfact (:meth:`~blizzard.runner.store.repository.IReadRunnerStore.open_asks`), whether\nor not it has been forwarded to the hub yet. There is no closed-ask history to serve,\nso ``open=false`` is refused rather than silently answered as if it were true.",
+        "operationId": "list_asks_api_asks_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "open",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Open",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AskListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Asks",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
     "/api/chunks/{chunk_id}/pm-items": {
       "get": {
         "description": "Forward a chunk's PM-items read to the hub \u2014 the layered pass-through.",
@@ -723,6 +1051,50 @@
           }
         },
         "summary": "Get Pm Items",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/environments": {
+      "get": {
+        "description": "Every environment this runner currently holds, across every chunk.",
+        "operationId": "list_environments_api_environments_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvironmentListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Environments",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/escalations": {
+      "get": {
+        "description": "Every escalation still open \u2014 no later lease mint has superseded it.",
+        "operationId": "list_escalations_api_escalations_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EscalationListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Escalations",
         "tags": [
           "runner"
         ]
@@ -978,6 +1350,26 @@
       }
     },
     "/api/runner": {
+      "get": {
+        "description": "The runner's machine-local summary: identity, pause states, capacities, hub\nconnectivity, last tick (issue #51).\n\nRead-only over its wiring (``bzh:controller-read-only``): the edge holds only the\ncomposition-root-wired :class:`RunnerStatusService`, derived entirely from local\nstore facts plus the injected clock \u2014 no hub call, so it is truthful with the hub\nunreachable. On the store-free app (OpenAPI export / unit tests) the service is\nunwired and the probe answers 503 rather than pretending.",
+        "operationId": "get_runner_api_runner_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerStatusView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Runner",
+        "tags": [
+          "runner"
+        ]
+      },
       "patch": {
         "description": "Set this runner's own pause brake \u2014 it starts no new workers (issue #45).\n\nLocal to this machine and independent of the hub's brake: it works with the hub\nunreachable, and it neither reads nor writes the hub's flag. Every spawn site honors\nit \u2014 FILL, restart-resume, an answer-resume, ADVANCE's next-node, a requeue or\nclaim-adopt respawn, and the judgement resume that elicits a verdict from an exited\nworker's session. REAP still reaps an orphan lease (nothing to kill, and its respawn\nis itself suppressed), but does not kill a worker that is merely stalled \u2014 pause is\nnot a drain. Escalating a chunk to a human at an exhausted retry budget is deferred\ntoo, wherever it would happen (REAP, a rejected flush at PULL): a paused runner does\nnot hand work off as unrecoverable while it waits. No retry is consumed at all: the\nbudget counts lease mints, and the one mint site sits below the gate.\n\nA worker that *exits* while paused is **not** judged until the brake clears \u2014 judging\nit resumes its session headlessly, which is itself a spawn the brake forbids. It waits\nexactly like a suppressed respawn: the lease stays active, and ADVANCE retries the\njudgement every tick until the brake clears. A live worker already running is left\nalone throughout \u2014 this is not a drain, and it does not kill. Leases, routes, epochs,\nenvironments, and retry budgets are otherwise unchanged.",
         "operationId": "patch_runner_api_runner_patch",
