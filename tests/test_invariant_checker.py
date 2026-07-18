@@ -209,6 +209,7 @@ def test_transition_epoch_beyond_latest_lease_is_a_violation(tmp_path: Path) -> 
             insert(hub.transitions).values(
                 transition_id="tr_1",
                 chunk_id="ch_1",
+                graph_id="gr_1",
                 from_node_id="nd_a",
                 to_node_id="nd_b",
                 choice_name="pass",
@@ -239,6 +240,7 @@ def test_landed_fact_without_terminal_transition_is_a_two_state_violation(tmp_pa
             insert(hub.transitions).values(
                 transition_id="tr_1",
                 chunk_id="ch_1",
+                graph_id="gr_1",
                 from_node_id="nd_deliver",
                 to_node_id="nd_verify",
                 choice_name="landed",
@@ -268,6 +270,7 @@ def test_merged_into_post_merge_node_is_not_a_violation(tmp_path: Path) -> None:
             insert(hub.transitions).values(
                 transition_id="tr_1",
                 chunk_id="ch_1",
+                graph_id="gr_1",
                 from_node_id="nd_deliver",
                 to_node_id="nd_verify",
                 choice_name="landed",

@@ -7,16 +7,18 @@ commit -> deliver -> land loop derives every chunk status from
 this revision creates exactly this revision's subset in FK-dependency order, so a
 later revision that adds tables to the same metadata does not get re-created here.
 
-``chunk_pm_pointers``, ``route_created``, ``route_released``, and ``chunks`` are the
-exceptions (as of ``0013_pm_pointer_source_ref``, ``0015_route_seq_tiebreak``, and
-``0018_chunk_model_selection`` respectively): importing them from ``schema.py`` here
-would mean this revision's *historical* shape silently follows whatever ``schema.py``
-says today — exactly the bug 0013's own docstring names and refuses to repeat. This
-revision instead declares its own frozen literal for each — ``{provider, url}`` for
-pointers, no ``seq`` column for the two route tables, no ``model`` column for
-``chunks`` — so upgrading from ``base`` always recreates the column shape this
-revision actually shipped with; 0013, 0014, and 0018 are the revisions that reshape
-them from there. The frozen literals still declare their ``chunk_id``/``graph_id``
+``chunk_pm_pointers``, ``route_created``, ``route_released``, ``chunks``, and
+``transitions`` are the exceptions (as of ``0013_pm_pointer_source_ref``,
+``0015_route_seq_tiebreak``, ``0018_chunk_model_selection``, and
+``transition_graph_id`` — issue #90 — respectively): importing them from ``schema.py``
+here would mean this revision's *historical* shape silently follows whatever
+``schema.py`` says today — exactly the bug 0013's own docstring names and refuses to
+repeat. This revision instead declares its own frozen literal for each — ``{provider,
+url}`` for pointers, no ``seq`` column for the two route tables, no ``model`` column for
+``chunks``, no ``graph_id`` column for ``transitions`` — so upgrading from ``base``
+always recreates the column shape this revision actually shipped with; 0013, 0014,
+0018, and the graph-provenance revision are the revisions that reshape them from there.
+The frozen literals still declare their ``chunk_id``/``graph_id``
 foreign keys (via same-MetaData resolution stubs, not live imports — see below) so a
 fresh store's schema matches ``schema.py``'s declared FKs (``bzh:sql-portable``:
 postgres is the same schema under a different URL).
@@ -45,7 +47,6 @@ from blizzard.hub.store.schema import (
     graphs,
     lease_facts,
     route_environments,
-    transitions,
 )
 
 revision: str = "20260713_1218_hub_walking_skeleton"
@@ -98,6 +99,22 @@ _route_released = sa.Table(
     sa.Column("chunk_id", sa.String, sa.ForeignKey("chunks.chunk_id"), nullable=False),
     sa.Column("released_at", UtcDateTime, nullable=False),
 )
+# This revision's own frozen shape — no ``graph_id`` column — reshaped by the
+# transition-graph-id revision (issue #90). Not imported from schema.py (see the module
+# docstring). Its ``chunk_id`` FK resolves against the same-MetaData ``_chunks`` stub above.
+_transitions = sa.Table(
+    "transitions",
+    _frozen_metadata,
+    sa.Column("transition_id", sa.String, primary_key=True),
+    sa.Column("chunk_id", sa.String, sa.ForeignKey("chunks.chunk_id"), nullable=False),
+    sa.Column("from_node_id", sa.String, nullable=True),
+    sa.Column("to_node_id", sa.String, nullable=False),
+    sa.Column("choice_name", sa.String, nullable=True),
+    sa.Column("decision_id", sa.String, nullable=True),
+    sa.Column("epoch", sa.Integer, nullable=False),
+    sa.Column("runner_id", sa.String, nullable=False),
+    sa.Column("recorded_at", UtcDateTime, nullable=False),
+)
 
 # Parents before children so the FK constraints resolve.
 _TABLES = [
@@ -107,7 +124,7 @@ _TABLES = [
     graph_edges,
     _chunks,
     _chunk_pm_pointers,
-    transitions,
+    _transitions,
     artifacts,
     lease_facts,
     _route_created,

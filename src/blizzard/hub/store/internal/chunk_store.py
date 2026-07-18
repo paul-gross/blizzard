@@ -80,11 +80,20 @@ class ChunkStore:
             chunk = conn.execute(select(s.chunks).where(s.chunks.c.chunk_id == chunk_id)).one_or_none()
             if chunk is None or chunk_id in self._grouped_ids(conn):
                 return None
+            transition_rows = conn.execute(select(s.transitions).where(s.transitions.c.chunk_id == chunk_id)).all()
+            # Resolve each transition's executor against *its own* graph (issue #90):
+            # after a cross-graph migration re-pins ``chunk.graph_id``, an old-graph
+            # transition's ``to_node_id`` lives in a graph the chunk no longer points at,
+            # so the executor map must span the set of graphs the chunk's transitions
+            # touched, not only its current pin. Node ids are globally-unique ULIDs, so a
+            # single node_id -> executor dict keyed across graphs resolves each transition
+            # unambiguously (no silent ``RUNNER`` fallback for a known node).
+            graph_ids = {chunk.graph_id} | {t.graph_id for t in transition_rows}
             executors = {
                 r.node_id: Executor(r.executor)
                 for r in conn.execute(
                     select(s.graph_nodes.c.node_id, s.graph_nodes.c.executor).where(
-                        s.graph_nodes.c.graph_id == chunk.graph_id
+                        s.graph_nodes.c.graph_id.in_(graph_ids)
                     )
                 ).all()
             }
@@ -96,8 +105,9 @@ class ChunkStore:
                     recorded_at=t.recorded_at,
                     from_node_id=t.from_node_id,
                     choice_name=t.choice_name,
+                    graph_id=t.graph_id,
                 )
-                for t in conn.execute(select(s.transitions).where(s.transitions.c.chunk_id == chunk_id)).all()
+                for t in transition_rows
             ]
             leases = [
                 LeaseFact(epoch=lease.epoch, minted_at=lease.minted_at)
@@ -545,6 +555,7 @@ class ChunkStore:
                 insert(s.transitions).values(
                     transition_id=transition_id,
                     chunk_id=chunk_id,
+                    graph_id=self._graph_id_of(conn, chunk_id),
                     from_node_id=from_node_id,
                     to_node_id=to_node_id,
                     choice_name=choice_name,
@@ -618,6 +629,7 @@ class ChunkStore:
                 insert(s.transitions).values(
                     transition_id=transition_id,
                     chunk_id=chunk_id,
+                    graph_id=self._graph_id_of(conn, chunk_id),
                     from_node_id=from_node_id,
                     to_node_id=to_node_id,
                     choice_name=choice_name,
@@ -1030,6 +1042,7 @@ class ChunkStore:
                 insert(s.transitions).values(
                     transition_id=transition_id,
                     chunk_id=chunk_id,
+                    graph_id=self._graph_id_of(conn, chunk_id),
                     from_node_id=from_node_id,
                     to_node_id=to_node_id,
                     choice_name=choice_name,
@@ -1069,6 +1082,14 @@ class ChunkStore:
             conn.execute(insert(s.hub_node_poll).values(chunk_id=chunk_id, node_id=node_id, epoch=epoch, polled_at=at))
 
     # --- helpers ------------------------------------------------------------
+
+    @staticmethod
+    def _graph_id_of(conn: Connection, chunk_id: str) -> str:
+        """The chunk's then-current graph pin — the provenance a transition is stamped
+        with (issue #90). Read inside the writing transaction so a transition always
+        carries the graph it actually moved within, even as a later migration re-pins
+        ``chunks.graph_id`` in a subsequent write."""
+        return conn.execute(select(s.chunks.c.graph_id).where(s.chunks.c.chunk_id == chunk_id)).scalar_one()
 
     @staticmethod
     def _grouped_ids(conn) -> set[str]:  # type: ignore[no-untyped-def]

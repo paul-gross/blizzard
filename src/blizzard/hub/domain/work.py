@@ -165,6 +165,13 @@ class TransitionFact:
     derivations read only ``to_node_id``/``to_node_executor``/``epoch``/``recorded_at``;
     the edge fields feed the chunk's transition-history view and default to
     ``None`` so a derivation unit test never has to supply them.
+
+    ``graph_id`` is the graph the transition happened in (issue #90 — graph-provenance).
+    The hydrating repository resolves ``to_node_executor`` and the history view resolves
+    the node names against *this* graph rather than the chunk's current pin, so a chunk
+    that later migrates to another graph still reads its old-graph steps correctly.
+    Defaults to ``None`` so a derivation unit test that supplies its own
+    ``to_node_executor`` need not name a graph.
     """
 
     to_node_id: str
@@ -173,6 +180,7 @@ class TransitionFact:
     recorded_at: datetime
     from_node_id: str | None = None
     choice_name: str | None = None
+    graph_id: str | None = None
 
 
 @dataclass(frozen=True)

@@ -126,6 +126,14 @@ transitions = Table(
     metadata,
     Column("transition_id", String, primary_key=True),  # tr_<ulid>
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
+    # The graph this transition happened in (issue #90 — graph-provenance). A movement
+    # fact carries the identity of the graph it moved within, so a later cross-graph
+    # migration (which re-pins ``chunks.graph_id``) never strands an old-graph transition's
+    # node ids against the new pin: hydration resolves each transition's executor/name
+    # against *its own* graph, not the chunk's current one. No ForeignKey — the sibling
+    # ``from_node_id``/``to_node_id`` columns carry none either (``to_node_id`` may be the
+    # reserved terminal), and the invariant-checker seeds transitions with a bare graph id.
+    Column("graph_id", String, nullable=False),
     Column("from_node_id", String, nullable=True),  # null on the first transition out of entry
     Column("to_node_id", String, nullable=False),  # a node_id, or 'done' terminal
     Column("choice_name", String, nullable=True),  # the judgement's selected choice

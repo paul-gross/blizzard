@@ -131,23 +131,39 @@ def _node_name(graph: Graph | None, node_id: str | None) -> str | None:
     return node.name if node is not None else None
 
 
-def _history_views(facts: ChunkFacts, graph: Graph | None) -> list[TransitionView]:
+def _history_views(facts: ChunkFacts, graphs: dict[str | None, Graph | None]) -> list[TransitionView]:
     """The chunk's transitions oldest-first — the board's node-history timeline.
 
-    Each edge's node ids are resolved to their human graph names against the chunk's
-    pinned graph so the timeline reads ``build -> review``."""
+    Each edge's node ids are resolved to their human graph names against *the graph the
+    transition happened in* (issue #90), keyed by ``TransitionFact.graph_id`` — not the
+    chunk's current pin. A single-graph history keys every step to the one graph exactly
+    as before; a chunk that later migrates still reads its old-graph steps' names, rather
+    than degrading them to raw ``nd_`` ids against the new pin."""
     return [
         TransitionView(
             from_node_id=t.from_node_id,
-            from_node_name=_node_name(graph, t.from_node_id),
+            from_node_name=_node_name(graphs.get(t.graph_id), t.from_node_id),
             to_node_id=t.to_node_id,
-            to_node_name=_node_name(graph, t.to_node_id),
+            to_node_name=_node_name(graphs.get(t.graph_id), t.to_node_id),
             choice_name=t.choice_name,
             epoch=t.epoch,
             recorded_at=iso_utc(t.recorded_at),
         )
         for t in transition_history(facts)
     ]
+
+
+def _history_graphs(services: HubServices, chunk: Chunk, facts: ChunkFacts) -> dict[str | None, Graph | None]:
+    """The graphs a chunk's transition history spans, by id (issue #90).
+
+    The chunk's current pin plus every distinct graph its transitions were recorded in
+    (only ever the one, until a cross-graph migration lands) — each resolved once so
+    :func:`_history_views` can name nodes against their own graph."""
+    graphs: dict[str | None, Graph | None] = {chunk.graph_id: services.graphs.get(chunk.graph_id)}
+    for t in facts.transitions:
+        if t.graph_id is not None and t.graph_id not in graphs:
+            graphs[t.graph_id] = services.graphs.get(t.graph_id)
+    return graphs
 
 
 def _usage_total_view(facts: ChunkFacts) -> ChunkUsageTotalView:
@@ -351,7 +367,7 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
         else None,
         pause=PauseView(by=pause.set_by, set_at=iso_utc(pause.set_at)) if pause is not None else None,
         decision=to_decision_view(decision) if decision is not None else None,
-        history=_history_views(facts, graph),
+        history=_history_views(facts, _history_graphs(services, chunk, facts)),
         artifacts=_artifact_views(artifacts, web_base),
         questions=[question_view(q) for q in services.chunks.load_questions(chunk_id) if not q.answered],
         awaiting_external_merge=awaiting_external_merge(facts),
