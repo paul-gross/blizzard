@@ -1,9 +1,9 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { settle } from 'fleet/testing';
 import { vi } from 'vitest';
 
 import { HeartbeatFreshness } from './heartbeat-freshness';
-import { settle } from './testing/settle';
 
 const REF = Date.parse('2026-07-16T12:00:00.000Z');
 

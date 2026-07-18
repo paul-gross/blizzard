@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 
 import type { QueuePeekEntry } from '../api/hub';
+import { compactRef } from '../compact-ref';
 import { KitButton } from '../kit/kit-button';
 import { KitPanel } from '../kit/kit-panel';
 
@@ -152,7 +153,7 @@ export class QueuePanelView {
   }
 
   protected shortId(chunkId: string): string {
-    return chunkId.slice(0, 12);
+    return compactRef(chunkId);
   }
 
   protected pointerLabel(entry: QueuePeekEntry): string {

@@ -3,7 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
 import { settle } from '../testing/settle';
-import { type HubClientStub, stubHubClient } from '../testing/stub-hub-client';
+import { client as hubClient } from '../api/hub/client.gen';
+import { type RequestClientStub, stubRequestClient } from '../testing/stub-request-client';
 import { GraphExplorer } from './graph-explorer';
 
 const GRAPHS = [
@@ -13,10 +14,10 @@ const GRAPHS = [
 ];
 
 describe('GraphExplorer', () => {
-  let stub: HubClientStub;
+  let stub: RequestClientStub;
 
   async function mount(graphs: unknown[] = GRAPHS) {
-    stub = stubHubClient((method, path) => {
+    stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/graphs') return graphs;
       return {};
     });

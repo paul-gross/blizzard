@@ -4,7 +4,8 @@ import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-exper
 import { vi } from 'vitest';
 
 import { settle } from '../testing/settle';
-import { type HubClientStub, stubHubClient } from '../testing/stub-hub-client';
+import { client as hubClient } from '../api/hub/client.gen';
+import { type RequestClientStub, stubRequestClient } from '../testing/stub-request-client';
 import { RunnerPanel } from './runner-panel';
 
 const NOW = new Date().toISOString();
@@ -68,10 +69,10 @@ const CHUNKS = [
 ];
 
 describe('RunnerPanel', () => {
-  let stub: HubClientStub;
+  let stub: RequestClientStub;
 
   beforeEach(async () => {
-    stub = stubHubClient((method, path) => {
+    stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/runners') return RUNNERS;
       if (method === 'GET' && path === '/api/chunks') return CHUNKS;
       if (path === '/api/runners/rn_online/pause') return RUNNERS.runners[0];
@@ -180,7 +181,7 @@ describe('RunnerPanel seenLabel (bzh:utc-instants)', () => {
   // computed against the browser's clock, so `Date.now()` is pinned rather than the
   // wall clock, and `last_seen_at` is placed relative to it.
   const REF = Date.parse('2026-07-16T12:00:00.000Z');
-  let stub: HubClientStub;
+  let stub: RequestClientStub;
 
   function render(lastSeenAt: string, online: boolean): Promise<HTMLElement> {
     const runners = {
@@ -188,7 +189,7 @@ describe('RunnerPanel seenLabel (bzh:utc-instants)', () => {
         { runner_id: 'r1', workspace_id: 'ws_a', registered_at: lastSeenAt, last_seen_at: lastSeenAt, online, paused: false },
       ],
     };
-    stub = stubHubClient((method, path) => {
+    stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/runners') return runners;
       if (method === 'GET' && path === '/api/chunks') return [];
       return {};

@@ -1,7 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
-import { compactRef, KitAsyncState, type KitAsyncStateValue, type runnerApi } from 'fleet';
+import { ageMs, compactRef, formatHeldFor, KitAsyncState, type KitAsyncStateValue, type runnerApi } from 'fleet';
 
-import { ageMs, formatHeldFor } from './age';
 import { injectRunnerAsksQuery } from './status.query';
 
 /**

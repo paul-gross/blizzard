@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
 import { KitPanel } from '../kit/kit-panel';
+import { formatSeenAgo } from '../when';
 import type { RunnerRow } from './runner-panel';
 
 /**
@@ -266,28 +267,15 @@ export class RunnerPanelView {
   }
 
   /**
-   * A compact "seen 12s ago" liveness label from `last_seen_at`.
+   * A compact "seen 12s ago" liveness label from `last_seen_at` (`bzh:utc-instants`).
    *
    * Liveness is decided where both instants share one clock — the hub, via `online`
    * (`derive_online` compares `last_seen_at` against the hub's own clock); this
-   * label is decoration computed against the *browser's* clock, and a browser's clock
-   * must never make a correctness call. A small negative age (`-60s <= age < 0`) is
-   * benign browser-vs-hub skew — `last_seen_at` is hub-stamped and an unsynced laptop
-   * is genuinely minutes off — so it reads as "just now". A larger negative age is
-   * *not* skew (a wire timestamp missing its UTC offset would produce exactly this,
-   * `bzh:utc-instants`), and confidently printing `0s` would mask a runner that has
-   * actually been unreachable for hours — so it falls through to the hub-derived
-   * `online` state instead of guessing.
+   * label is decoration computed against the *browser's* clock, so it defers to the
+   * shared skew-tolerant `formatSeenAgo` (`when.ts`) rather than re-deriving its own
+   * tolerance window.
    */
   protected seenLabel(row: RunnerRow): string {
-    const seen = Date.parse(row.last_seen_at);
-    if (Number.isNaN(seen)) return row.online ? 'online' : 'offline';
-    const secondsAgo = Math.round((Date.now() - seen) / 1000);
-    if (secondsAgo < -60) return row.online ? 'online' : 'offline';
-    const clamped = Math.max(0, secondsAgo);
-    if (clamped < 60) return `seen ${clamped}s ago`;
-    const minutesAgo = Math.round(clamped / 60);
-    if (minutesAgo < 60) return `seen ${minutesAgo}m ago`;
-    return `seen ${Math.round(minutesAgo / 60)}h ago`;
+    return formatSeenAgo(row.last_seen_at, row.online);
   }
 }

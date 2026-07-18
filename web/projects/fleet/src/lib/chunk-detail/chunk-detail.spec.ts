@@ -5,7 +5,8 @@ import { vi } from 'vitest';
 
 import type { ChunkDetail as ChunkDetailModel } from '../api/hub';
 import { settle } from '../testing/settle';
-import { type HubClientStub, stubError, stubHubClient } from '../testing/stub-hub-client';
+import { client as hubClient } from '../api/hub/client.gen';
+import { type RequestClientStub, stubError, stubRequestClient } from '../testing/stub-request-client';
 import { ChunkDetail } from './chunk-detail';
 
 const ROUTED_DETAIL: ChunkDetailModel = {
@@ -69,7 +70,7 @@ const NOT_READY_DETAIL: ChunkDetailModel = {
 };
 
 describe('ChunkDetail container', () => {
-  let stub: HubClientStub;
+  let stub: RequestClientStub;
   // Mutated per-test to drive the detach mutation's response (200/404/409); the stub
   // closure below reads it live, so a test can set it after the fixture is mounted.
   let detachResponse: unknown = {};
@@ -85,7 +86,7 @@ describe('ChunkDetail container', () => {
     editGraphResponse = {};
     editModelResponse = {};
     // The generated client's transport is stubbed so we can assert the exact call the button fires.
-    stub = stubHubClient((method, path) => {
+    stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/chunks/ch_gate') return GATE_DETAIL;
       if (method === 'GET' && path === '/api/chunks/ch_routed') return ROUTED_DETAIL;
       if (method === 'GET' && path === '/api/chunks/ch_paused') return PAUSED_ASKING_DETAIL;

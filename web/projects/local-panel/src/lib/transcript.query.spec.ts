@@ -1,10 +1,10 @@
 import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import { runnerClient } from 'fleet';
+import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 
 import { runnerTranscriptKey } from './query-keys';
-import { settle } from './testing/settle';
-import { RouteError, type RunnerClientStub, stubRunnerClient } from './testing/stub-runner-client';
 import { injectTranscriptQuery } from './transcript.query';
 
 const TRANSCRIPT = {
@@ -40,7 +40,7 @@ class TranscriptQueryHost {
 }
 
 describe('injectTranscriptQuery', () => {
-  let stub: RunnerClientStub | undefined;
+  let stub: RequestClientStub | undefined;
 
   afterEach(() => stub?.restore());
 
@@ -49,7 +49,7 @@ describe('injectTranscriptQuery', () => {
   });
 
   it('does not fire while leaseId is null — no selection, no request', async () => {
-    stub = stubRunnerClient(() => TRANSCRIPT);
+    stub = stubRequestClient(runnerClient, () => TRANSCRIPT);
     await TestBed.configureTestingModule({
       imports: [TranscriptQueryHost],
       providers: [
@@ -65,7 +65,7 @@ describe('injectTranscriptQuery', () => {
   });
 
   it('reads GET /api/leases/{lease_id}/transcript once a lease id is set', async () => {
-    stub = stubRunnerClient((method, path) =>
+    stub = stubRequestClient(runnerClient, (method, path) =>
       method === 'GET' && path === '/api/leases/L-903/transcript' ? TRANSCRIPT : {},
     );
     await TestBed.configureTestingModule({
@@ -84,7 +84,7 @@ describe('injectTranscriptQuery', () => {
   });
 
   it('re-fetches under a distinct cache key when the lease id changes — switching rows, not a poll', async () => {
-    stub = stubRunnerClient((method, path) => {
+    stub = stubRequestClient(runnerClient, (method, path) => {
       if (method === 'GET' && path === '/api/leases/L-903/transcript') return TRANSCRIPT;
       if (method === 'GET' && path === '/api/leases/L-905/transcript') return { ...TRANSCRIPT, lease_id: 'L-905' };
       return {};
@@ -112,7 +112,7 @@ describe('injectTranscriptQuery', () => {
   it('never polls — no second request without a lease-id change', async () => {
     // Real-time transcript refresh is out of scope for this issue; unlike the
     // leases query's 5s floor, this must sit still.
-    stub = stubRunnerClient((method, path) =>
+    stub = stubRequestClient(runnerClient, (method, path) =>
       method === 'GET' && path === '/api/leases/L-903/transcript' ? TRANSCRIPT : {},
     );
     await TestBed.configureTestingModule({
@@ -136,8 +136,8 @@ describe('injectTranscriptQuery', () => {
   });
 
   it('surfaces a 503 as an error', async () => {
-    stub = stubRunnerClient((method, path) => {
-      if (method === 'GET' && path === '/api/leases/L-903/transcript') throw new RouteError(503, 'not wired');
+    stub = stubRequestClient(runnerClient, (method, path) => {
+      if (method === 'GET' && path === '/api/leases/L-903/transcript') return stubError(503, { detail: 'not wired' });
       return {};
     });
     await TestBed.configureTestingModule({

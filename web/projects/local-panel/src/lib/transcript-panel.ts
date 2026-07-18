@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
-import { KitAsyncState, type runnerApi } from 'fleet';
+import { formatUtcClock, KitAsyncState, type runnerApi } from 'fleet';
 
 import { injectTranscriptQuery } from './transcript.query';
 
@@ -12,13 +12,13 @@ import { injectTranscriptQuery } from './transcript.query';
  * local zone and labeled as such: an operator can be anywhere, but the wire is
  * UTC end to end, so a fixed, explicitly-labeled zone reads the same turn the
  * same way regardless of who is looking, instead of silently matching
- * whichever browser happens to be open.
+ * whichever browser happens to be open. The `HH:MM:SS` parse/slice itself is
+ * `fleet`'s shared {@link formatUtcClock} (issue #81); this wrapper owns only
+ * the panel's own `UTC`-suffixed / `—` display shape.
  */
 function formatTurnTimestamp(iso: string | null): string {
-  if (iso === null) return '—';
-  const ms = Date.parse(iso);
-  if (Number.isNaN(ms)) return '—';
-  return `${new Date(ms).toISOString().slice(11, 19)} UTC`;
+  const clock = formatUtcClock(iso);
+  return clock ? `${clock} UTC` : '—';
 }
 
 /**

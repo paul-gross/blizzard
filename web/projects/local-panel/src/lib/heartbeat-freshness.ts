@@ -1,6 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
-
-import { ageMs, formatAge } from './age';
+import { ageMs, formatAge } from 'fleet';
 
 /**
  * How stale a heartbeat may read before REAP calls it dead — mirrors the

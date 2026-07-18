@@ -1,4 +1,4 @@
-import type { runnerApi } from 'fleet';
+import type { Tone, runnerApi } from 'fleet';
 
 /**
  * The machine-side derived status of a chunk this runner holds — folded at
@@ -7,13 +7,14 @@ import type { runnerApi } from 'fleet';
  * `ChunkStatus` of its own (that enum is the hub's); this is the local panel's
  * projection of the same idea from the facts this box holds.
  *
- * `tone` picks the color class, matching the hub board's status→color scheme
- * (board-shell/chunk-detail-panel): live work amber, human-blocked red,
- * human-waiting amber-hi, landed green, spawning cyan, spent rows dim.
+ * `tone` is the shared {@link Tone} vocabulary (issue #81, `fleet/lib/kit/tone.ts`) —
+ * matching the hub board's status→color scheme (board-shell/chunk-detail-panel): live
+ * work amber, human-blocked red, human-waiting amber-hi, landed green, spawning cyan,
+ * spent rows dim.
  */
 export interface MachineChunkStatus {
   readonly label: string;
-  readonly tone: 'running' | 'needs' | 'waiting' | 'takeover' | 'spawning' | 'stale' | 'done' | 'idle';
+  readonly tone: Tone;
 }
 
 /** The facts the fold reads beyond the lease itself. */

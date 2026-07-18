@@ -1,7 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
-import { KitAsyncState, type KitAsyncStateValue } from 'fleet';
+import { ageMs, formatAge, KitAsyncState, type KitAsyncStateValue } from 'fleet';
 
-import { ageMs, formatAge } from './age';
 import { injectRunnerStatusQuery } from './status.query';
 
 /**

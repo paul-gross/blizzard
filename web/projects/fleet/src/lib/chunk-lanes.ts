@@ -1,4 +1,5 @@
 import type { ChunkStatus } from './api/hub';
+import type { Tone } from './kit/tone';
 
 /** The board's lanes, left → right: the not-ready backlog, then dispatch → done. */
 export interface Lane {
@@ -49,3 +50,27 @@ export const STATUS_LANE: Record<ChunkStatus, string | null> = {
 export function laneFor(status: ChunkStatus): string | null {
   return STATUS_LANE[status];
 }
+
+/**
+ * Every chunk status folded onto the shared {@link Tone} vocabulary (issue #81) —
+ * the fleet-side half of "one status-to-tone mapping consumed by both libraries";
+ * `local-panel`'s `deriveMachineChunkStatus` (`chunk-status.ts`) is the other half,
+ * folding the runner's own lease-state derivation onto the same `Tone` union rather
+ * than inventing a second one. Grouped by the same lane intent as {@link STATUS_LANE}:
+ * live work reads `running`, human-waiting reads `waiting`, a blocking escalation
+ * reads `needs`, and a landed/backlog status reads `done`/`idle`.
+ *
+ * Typed `Record<ChunkStatus, Tone>` for the same reason as `STATUS_LANE`: a new wire
+ * status is then a compile error here instead of silently missing a color.
+ */
+export const STATUS_TONE: Record<ChunkStatus, Tone> = {
+  not_ready: 'idle',
+  ready: 'idle',
+  running: 'running',
+  delivering: 'running',
+  waiting_on_human: 'waiting',
+  needs_human: 'needs',
+  paused: 'waiting',
+  stopped: 'done',
+  done: 'done',
+};

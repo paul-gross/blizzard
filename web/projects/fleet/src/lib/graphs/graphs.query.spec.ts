@@ -3,7 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
 import { settle } from '../testing/settle';
-import { type HubClientStub, stubError, stubHubClient } from '../testing/stub-hub-client';
+import { client as hubClient } from '../api/hub/client.gen';
+import { type RequestClientStub, stubError, stubRequestClient } from '../testing/stub-request-client';
 import { GraphFetchError, injectHubGraphQuery, shouldRetryGraphFetch } from './graphs.query';
 
 describe('shouldRetryGraphFetch', () => {
@@ -35,11 +36,11 @@ class TestGraphQueryHost {
 }
 
 describe('injectHubGraphQuery (404 wiring)', () => {
-  let stub: HubClientStub;
+  let stub: RequestClientStub;
   afterEach(() => stub?.restore());
 
   it('issues exactly one request for an unknown graph id — no retries against the real query client', async () => {
-    stub = stubHubClient(() => stubError(404, { detail: 'unknown graph' }));
+    stub = stubRequestClient(hubClient, () => stubError(404, { detail: 'unknown graph' }));
     TestBed.configureTestingModule({
       imports: [TestGraphQueryHost],
       providers: [provideZonelessChangeDetection(), provideTanStackQuery(new QueryClient())],

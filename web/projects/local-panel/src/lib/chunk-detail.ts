@@ -1,7 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
-import { compactRef, type runnerApi } from 'fleet';
+import { ageMs, compactRef, formatAge, type runnerApi } from 'fleet';
 
-import { ageMs, formatAge } from './age';
 import type { MachineChunkStatus } from './chunk-status';
 import { HeartbeatFreshness } from './heartbeat-freshness';
 import { TranscriptPanel } from './transcript-panel';

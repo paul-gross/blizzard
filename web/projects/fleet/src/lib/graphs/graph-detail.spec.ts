@@ -3,7 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
 import { settle } from '../testing/settle';
-import { type HubClientStub, stubError, stubHubClient } from '../testing/stub-hub-client';
+import { client as hubClient } from '../api/hub/client.gen';
+import { type RequestClientStub, stubError, stubRequestClient } from '../testing/stub-request-client';
 import { GraphDetail } from './graph-detail';
 
 const GRAPH = {
@@ -42,10 +43,10 @@ const GRAPH = {
 };
 
 describe('GraphDetail', () => {
-  let stub: HubClientStub;
+  let stub: RequestClientStub;
 
   async function mount(graphId: string, route: (m: string, p: string) => unknown) {
-    stub = stubHubClient(route);
+    stub = stubRequestClient(hubClient, route);
     await TestBed.configureTestingModule({
       imports: [GraphDetail],
       providers: [

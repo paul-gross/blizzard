@@ -1,11 +1,11 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import { runnerClient } from 'fleet';
+import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
 import { LocalPanel } from './local-panel';
-import { settle } from './testing/settle';
-import { RouteError, type RunnerClientStub, stubRunnerClient } from './testing/stub-runner-client';
 
 /** Matches `GET /api/chunks/{chunk_id}/pm-items` for any chunk id. */
 const PM_ITEMS_ROUTE = /^\/api\/chunks\/[^/]+\/pm-items$/;
@@ -68,7 +68,7 @@ async function render() {
 }
 
 describe('LocalPanel', () => {
-  let stub: RunnerClientStub;
+  let stub: RequestClientStub;
 
   beforeEach(() => {
     vi.spyOn(Date, 'now').mockReturnValue(REF);
@@ -80,7 +80,7 @@ describe('LocalPanel', () => {
   });
 
   it('reflects the connection input in the header', async () => {
-    stub = stubRunnerClient(routes([]));
+    stub = stubRequestClient(runnerClient, routes([]));
     await setUp();
     const fixture = TestBed.createComponent(LocalPanel);
     fixture.componentRef.setInput('connection', 'ok');
@@ -91,7 +91,7 @@ describe('LocalPanel', () => {
   });
 
   it('shows a loading line before the first read resolves, not the empty state', async () => {
-    stub = stubRunnerClient(routes([]));
+    stub = stubRequestClient(runnerClient, routes([]));
     await setUp();
     const fixture = TestBed.createComponent(LocalPanel);
     // Right after creation the stubbed fetch's promise hasn't resolved yet — the
@@ -105,7 +105,7 @@ describe('LocalPanel', () => {
   });
 
   it('renders the genuinely-idle empty state only once the read resolves with zero leases', async () => {
-    stub = stubRunnerClient(routes([]));
+    stub = stubRequestClient(runnerClient, routes([]));
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -114,8 +114,8 @@ describe('LocalPanel', () => {
   });
 
   it('shows a distinct degraded line on a 503 — the empty state must never appear on a failed read', async () => {
-    stub = stubRunnerClient((method, path) => {
-      if (method === 'GET' && path === '/api/leases') throw new RouteError(503);
+    stub = stubRequestClient(runnerClient, (method, path) => {
+      if (method === 'GET' && path === '/api/leases') return stubError(503, { detail: 'stubbed route error (503)' });
       return { items: [] };
     });
     const fixture = await render();
@@ -133,7 +133,7 @@ describe('LocalPanel', () => {
       closed_at: '2026-07-16T11:30:00.000Z',
       closure_reason: 'transitioned',
     });
-    stub = stubRunnerClient(routes([LEASE(), closed]));
+    stub = stubRequestClient(runnerClient, routes([LEASE(), closed]));
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -156,7 +156,7 @@ describe('LocalPanel', () => {
       state: 'closed',
       closure_reason: 'transitioned',
     });
-    stub = stubRunnerClient(routes([LEASE(), otherChunk, older]));
+    stub = stubRequestClient(runnerClient, routes([LEASE(), otherChunk, older]));
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -169,7 +169,7 @@ describe('LocalPanel', () => {
   });
 
   it('derives NEEDS HUMAN from an open escalation, outranking the lease state', async () => {
-    stub = stubRunnerClient(
+    stub = stubRequestClient(runnerClient,
       routes([LEASE({ state: 'closed', closure_reason: 'escalated' })], (method, path) =>
         method === 'GET' && path === '/api/escalations'
           ? {
@@ -195,7 +195,7 @@ describe('LocalPanel', () => {
 
   describe('selection drives the machine detail dock', () => {
     it('shows the SELECT A CHUNK placeholder before anything is selected', async () => {
-      stub = stubRunnerClient(routes([LEASE()]));
+      stub = stubRequestClient(runnerClient, routes([LEASE()]));
       const fixture = await render();
       const el = fixture.nativeElement as HTMLElement;
 
@@ -203,7 +203,7 @@ describe('LocalPanel', () => {
     });
 
     it('selecting a chunk row renders its execution facts and fires the transcript read for its lease', async () => {
-      stub = stubRunnerClient(routes([LEASE()]));
+      stub = stubRequestClient(runnerClient, routes([LEASE()]));
       const fixture = await render();
       const el = fixture.nativeElement as HTMLElement;
 
@@ -222,7 +222,7 @@ describe('LocalPanel', () => {
     });
 
     it('selecting a lease row selects its chunk — one shared selection across both rails', async () => {
-      stub = stubRunnerClient(routes([LEASE()]));
+      stub = stubRequestClient(runnerClient, routes([LEASE()]));
       const fixture = await render();
       const el = fixture.nativeElement as HTMLElement;
 
@@ -235,7 +235,7 @@ describe('LocalPanel', () => {
     });
 
     it('shows the escalation resume command in the dock for an escalated selected chunk', async () => {
-      stub = stubRunnerClient(
+      stub = stubRequestClient(runnerClient,
         routes([LEASE({ state: 'closed', closure_reason: 'escalated' })], (method, path) =>
           method === 'GET' && path === '/api/escalations'
             ? {
@@ -267,9 +267,9 @@ describe('LocalPanel', () => {
 
   describe('the PM enrichment stays severable (issue #28)', () => {
     it('renders chunk rows on chunk_id alone when every pm-items read 502s — the panel must not depend on the hub', async () => {
-      stub = stubRunnerClient(
+      stub = stubRequestClient(runnerClient,
         routes([LEASE()], (method, path) => {
-          if (method === 'GET' && PM_ITEMS_ROUTE.test(path)) throw new RouteError(502);
+          if (method === 'GET' && PM_ITEMS_ROUTE.test(path)) return stubError(502, { detail: 'stubbed route error (502)' });
           return undefined;
         }),
       );
@@ -281,7 +281,7 @@ describe('LocalPanel', () => {
     });
 
     it('renders the pointer label as a link to the work item when web_url arrived', async () => {
-      stub = stubRunnerClient(
+      stub = stubRequestClient(runnerClient,
         routes([LEASE()], (method, path) =>
           method === 'GET' && PM_ITEMS_ROUTE.test(path)
             ? {
@@ -310,7 +310,7 @@ describe('LocalPanel', () => {
 
     it('issues one pm-items request per distinct chunk even with several leases for it', async () => {
       const older = LEASE({ lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNBBBB', epoch: 1, state: 'closed' });
-      stub = stubRunnerClient(routes([LEASE(), older]));
+      stub = stubRequestClient(runnerClient, routes([LEASE(), older]));
       const fixture = await render();
       await settle(fixture);
 
@@ -321,7 +321,7 @@ describe('LocalPanel', () => {
 
   describe('the right rail', () => {
     it('renders the hub link panel off GET /api/runner, endpoint and board link included', async () => {
-      stub = stubRunnerClient(
+      stub = stubRequestClient(runnerClient,
         routes([], (method, path) =>
           method === 'GET' && path === '/api/runner'
             ? {
@@ -351,7 +351,7 @@ describe('LocalPanel', () => {
     });
 
     it('renders open asks with their chunk refs and age', async () => {
-      stub = stubRunnerClient(
+      stub = stubRequestClient(runnerClient,
         routes([], (method, path) =>
           method === 'GET' && path === '/api/asks'
             ? {
@@ -380,7 +380,7 @@ describe('LocalPanel', () => {
     });
 
     it('renders the fact log off the outbound ledger with flush markers', async () => {
-      stub = stubRunnerClient(
+      stub = stubRequestClient(runnerClient,
         routes([], (method, path) =>
           method === 'GET' && path === '/api/facts'
             ? {
@@ -418,7 +418,7 @@ describe('LocalPanel', () => {
     });
 
     it('renders the held environments with chunk ref and held-for age', async () => {
-      stub = stubRunnerClient(
+      stub = stubRequestClient(runnerClient,
         routes([], (method, path) =>
           method === 'GET' && path === '/api/environments'
             ? {

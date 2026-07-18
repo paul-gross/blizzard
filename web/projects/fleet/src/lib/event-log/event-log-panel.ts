@@ -1,7 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 
+import { compactRef } from '../compact-ref';
 import { KitPanel } from '../kit/kit-panel';
 import { FleetLiveUpdates, type LoggedEvent } from '../sse/fleet-live';
+import { formatClockTime } from '../when';
 
 /** One rendered Event log row — the logged frame plus its display strings. */
 interface LogRow {
@@ -11,25 +13,13 @@ interface LogRow {
   readonly message: string;
 }
 
-/** Zero-padded `HH:MM:SS` for a row's arrival time — legible and locale-stable. */
-function clockTime(at: number): string {
-  const d = new Date(at);
-  const pad = (n: number): string => `${n}`.padStart(2, '0');
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
-
-/** A short, legible chunk/runner id — the leading segment operators recognize. */
-function short(id: string): string {
-  return id.slice(0, 12);
-}
-
 /**
  * A human-readable one-line summary of a hub event (issue #25 — "a legible summary").
  * Maps the board's live vocabulary (events/broker.py) onto plain phrasing; an unknown
  * type degrades to its raw name rather than dropping the row.
  */
 function summarize(event: LoggedEvent): string {
-  const chunk = event.data.chunk_id ? short(event.data.chunk_id) : '';
+  const chunk = event.data.chunk_id ? compactRef(event.data.chunk_id) : '';
   switch (event.type) {
     case 'chunk-changed':
       return `${chunk} → ${event.data.status ?? '—'}`;
@@ -44,7 +34,7 @@ function summarize(event: LoggedEvent): string {
     case 'queue-changed':
       return 'ready queue changed';
     case 'runner-changed':
-      return `runner ${short(event.data.runner_id ?? '—')} changed`;
+      return `runner ${compactRef(event.data.runner_id ?? '—')} changed`;
     default:
       return event.type;
   }
@@ -135,7 +125,12 @@ export class EventLogPanel {
   protected readonly rows = computed<readonly LogRow[]>(() =>
     this.live
       .log()
-      .map((event) => ({ seq: event.seq, type: event.type, time: clockTime(event.at), message: summarize(event) }))
+      .map((event) => ({
+        seq: event.seq,
+        type: event.type,
+        time: formatClockTime(event.at),
+        message: summarize(event),
+      }))
       .reverse(),
   );
 }

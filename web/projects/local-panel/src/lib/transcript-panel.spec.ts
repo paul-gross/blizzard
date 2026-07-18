@@ -1,12 +1,12 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import { runnerClient } from 'fleet';
+import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 
-import { settle } from './testing/settle';
-import { RouteError, type RunnerClientStub, stubRunnerClient } from './testing/stub-runner-client';
 import { TranscriptPanel } from './transcript-panel';
 
-let stub: RunnerClientStub | undefined;
+let stub: RequestClientStub | undefined;
 
 afterEach(() => stub?.restore());
 
@@ -14,7 +14,7 @@ async function render(
   leaseId: string | null,
   route: (method: string, path: string) => unknown,
 ): Promise<{ el: HTMLElement; fixture: ComponentFixture<TranscriptPanel> }> {
-  stub = stubRunnerClient(route);
+  stub = stubRequestClient(runnerClient, route);
   await TestBed.configureTestingModule({
     imports: [TranscriptPanel],
     providers: [
@@ -37,7 +37,7 @@ describe('TranscriptPanel', () => {
   });
 
   it('shows LOADING TRANSCRIPT… before the read resolves', async () => {
-    stub = stubRunnerClient((method, path) =>
+    stub = stubRequestClient(runnerClient, (method, path) =>
       method === 'GET' && path === '/api/leases/L-903/transcript'
         ? { lease_id: 'L-903', session_id: 'sess-77', available: true, reason: null, truncated: false, turns: [] }
         : {},
@@ -59,7 +59,7 @@ describe('TranscriptPanel', () => {
 
   it('shows a distinct error line on a 503 — never mistaken for the empty state', async () => {
     const { el } = await render('L-903', (method, path) => {
-      if (method === 'GET' && path === '/api/leases/L-903/transcript') throw new RouteError(503, 'not wired');
+      if (method === 'GET' && path === '/api/leases/L-903/transcript') return stubError(503, { detail: 'not wired' });
       return {};
     });
 

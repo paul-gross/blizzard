@@ -3,7 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
 import { settle } from '../testing/settle';
-import { type HubClientStub, stubHubClient } from '../testing/stub-hub-client';
+import { client as hubClient } from '../api/hub/client.gen';
+import { type RequestClientStub, stubRequestClient } from '../testing/stub-request-client';
 import { QuestionsPanel } from './questions-panel';
 
 const QUESTIONS = [
@@ -29,10 +30,10 @@ const QUESTIONS = [
 ];
 
 describe('QuestionsPanel', () => {
-  let stub: HubClientStub;
+  let stub: RequestClientStub;
 
   const render = async (questions: unknown = QUESTIONS) => {
-    stub = stubHubClient((method, path) => (method === 'GET' && path === '/api/questions' ? questions : {}));
+    stub = stubRequestClient(hubClient, (method, path) => (method === 'GET' && path === '/api/questions' ? questions : {}));
     await TestBed.configureTestingModule({
       imports: [QuestionsPanel],
       providers: [

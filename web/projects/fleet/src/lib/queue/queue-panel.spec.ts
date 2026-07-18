@@ -3,7 +3,8 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
 import { settle } from '../testing/settle';
-import { type HubClientStub, stubHubClient } from '../testing/stub-hub-client';
+import { client as hubClient } from '../api/hub/client.gen';
+import { type RequestClientStub, stubRequestClient } from '../testing/stub-request-client';
 import { QueuePanel } from './queue-panel';
 
 const QUEUE = {
@@ -15,10 +16,10 @@ const QUEUE = {
 };
 
 describe('QueuePanel', () => {
-  let stub: HubClientStub;
+  let stub: RequestClientStub;
 
   beforeEach(async () => {
-    stub = stubHubClient((method, path) => {
+    stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/queue/peek') return QUEUE;
       if (path === '/api/queue/reorder') return { entries: QUEUE.entries };
       if (path.endsWith('/group')) return { chunk_id: 'ch_mid', merged_chunk_ids: ['ch_low'] };

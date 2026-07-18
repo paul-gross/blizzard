@@ -1,11 +1,11 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import type { runnerApi } from 'fleet';
+import { runnerClient, type runnerApi } from 'fleet';
+import { type RequestClientStub, stubRequestClient } from 'fleet/testing';
 
 import { LocalPanelLayout } from './local-panel-layout';
 import type { MachineChunkRow } from './local-panel';
-import { type RunnerClientStub, stubRunnerClient } from './testing/stub-runner-client';
 
 const LEASE = (overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseView => ({
   lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
@@ -59,12 +59,12 @@ async function render(overrides: Record<string, unknown> = {}) {
 }
 
 describe('LocalPanelLayout', () => {
-  let stub: RunnerClientStub;
+  let stub: RequestClientStub;
 
   beforeEach(() => {
     // Same reason as the provider above: only `ChunkRow`'s own PM-title read needs
     // an answer, so every route resolves to the empty shape.
-    stub = stubRunnerClient(() => ({ items: [] }));
+    stub = stubRequestClient(runnerClient, () => ({ items: [] }));
   });
 
   afterEach(() => stub.restore());

@@ -1,12 +1,12 @@
 import { ChangeDetectionStrategy, Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import { runnerClient } from 'fleet';
+import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
 import { injectRunnerLeasesQuery } from './leases.query';
 import { runnerLeasesKey } from './query-keys';
-import { settle } from './testing/settle';
-import { RouteError, type RunnerClientStub, stubRunnerClient } from './testing/stub-runner-client';
 
 const LEASES = {
   items: [
@@ -40,7 +40,7 @@ class LeasesQueryHost {
 }
 
 describe('injectRunnerLeasesQuery', () => {
-  let stub: RunnerClientStub | undefined;
+  let stub: RequestClientStub | undefined;
 
   afterEach(() => stub?.restore());
 
@@ -49,7 +49,7 @@ describe('injectRunnerLeasesQuery', () => {
   });
 
   it('reads GET /api/leases through the generated runner client and returns its items', async () => {
-    stub = stubRunnerClient((method, path) => (method === 'GET' && path === '/api/leases' ? LEASES : {}));
+    stub = stubRequestClient(runnerClient, (method, path) => (method === 'GET' && path === '/api/leases' ? LEASES : {}));
     await TestBed.configureTestingModule({
       imports: [LeasesQueryHost],
       providers: [
@@ -65,7 +65,7 @@ describe('injectRunnerLeasesQuery', () => {
   });
 
   it('returns an empty array when the runner genuinely holds no active leases', async () => {
-    stub = stubRunnerClient((method, path) => (method === 'GET' && path === '/api/leases' ? { items: [] } : {}));
+    stub = stubRequestClient(runnerClient, (method, path) => (method === 'GET' && path === '/api/leases' ? { items: [] } : {}));
     await TestBed.configureTestingModule({
       imports: [LeasesQueryHost],
       providers: [
@@ -87,7 +87,7 @@ describe('injectRunnerLeasesQuery', () => {
     // (a second request actually fires), not as a constant equal to 5000.
     vi.useFakeTimers();
     try {
-      stub = stubRunnerClient((method, path) => (method === 'GET' && path === '/api/leases' ? LEASES : {}));
+      stub = stubRequestClient(runnerClient, (method, path) => (method === 'GET' && path === '/api/leases' ? LEASES : {}));
       await TestBed.configureTestingModule({
         imports: [LeasesQueryHost],
         providers: [
@@ -117,8 +117,8 @@ describe('injectRunnerLeasesQuery', () => {
   });
 
   it('surfaces a 503 (store unwired) as an error — never a silent empty list', async () => {
-    stub = stubRunnerClient((method, path) => {
-      if (method === 'GET' && path === '/api/leases') throw new RouteError(503, 'lease store not wired');
+    stub = stubRequestClient(runnerClient, (method, path) => {
+      if (method === 'GET' && path === '/api/leases') return stubError(503, { detail: 'lease store not wired' });
       return {};
     });
     await TestBed.configureTestingModule({

@@ -1,10 +1,10 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type { runnerApi } from 'fleet';
+import { settle } from 'fleet/testing';
 import { vi } from 'vitest';
 
 import { AgentRow } from './agent-row';
-import { settle } from './testing/settle';
 
 const REF = Date.parse('2026-07-16T12:00:00.000Z');
 

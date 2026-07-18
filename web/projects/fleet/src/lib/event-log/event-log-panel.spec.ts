@@ -41,7 +41,8 @@ describe('EventLogPanel', () => {
     const messages = [...el.querySelectorAll('[data-testid="event-log-message"]')].map((n) => n.textContent?.trim());
     // Newest first: the question-asked (seq 2) renders above the chunk-changed (seq 1).
     expect(messages[0]).toContain('asked a question');
-    expect(messages[0]).toContain('ch_beta');
+    // The chunk id renders through compactRef (issue #81), not the raw id.
+    expect(messages[0]).toContain('C-beta');
     expect(messages[1]).toContain('running');
     expect(el.querySelector('[data-testid="event-log-count"]')?.textContent).toContain('2 ev');
   });

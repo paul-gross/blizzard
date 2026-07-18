@@ -6,6 +6,7 @@
     "strict": true,
     "paths": {
       "fleet": ["./projects/fleet/src/public-api.ts"],
+      "fleet/testing": ["./projects/fleet/src/lib/testing/public-api.ts"],
       "local-panel": ["./projects/local-panel/src/public-api.ts"]
     },
     "noImplicitOverride": true,

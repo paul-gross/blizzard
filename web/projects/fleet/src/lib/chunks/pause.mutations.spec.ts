@@ -3,15 +3,16 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { type HubClientStub, stubHubClient } from '../testing/stub-hub-client';
+import { client as hubClient } from '../api/hub/client.gen';
+import { type RequestClientStub, stubRequestClient } from '../testing/stub-request-client';
 import { injectChunkPauseMutation } from './pause.mutations';
 
 describe('injectChunkPauseMutation (issue #46)', () => {
-  let stub: HubClientStub;
+  let stub: RequestClientStub;
   let queryClient: QueryClient;
 
   beforeEach(() => {
-    stub = stubHubClient((method, path) => {
+    stub = stubRequestClient(hubClient, (method, path) => {
       if (path === '/api/chunks/ch_1/pause') return {};
       if (path === '/api/chunks/ch_1/resume') return {};
       return {};

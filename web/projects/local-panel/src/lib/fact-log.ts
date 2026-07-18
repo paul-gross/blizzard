@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
-import { compactRef, KitAsyncState, type KitAsyncStateValue, type runnerApi } from 'fleet';
+import { compactRef, formatUtcClock, KitAsyncState, type KitAsyncStateValue, type runnerApi } from 'fleet';
 
 import { injectRunnerFactsQuery } from './status.query';
 
@@ -109,8 +109,6 @@ export class FactLog {
 
   /** `12:41:03` — the fact's UTC clock time; the ledger reads as a tail -f. */
   protected timeLabel(fact: runnerApi.FactView): string {
-    const parsed = Date.parse(fact.created_at);
-    if (Number.isNaN(parsed)) return '—';
-    return new Date(parsed).toISOString().slice(11, 19);
+    return formatUtcClock(fact.created_at) || '—';
   }
 }
