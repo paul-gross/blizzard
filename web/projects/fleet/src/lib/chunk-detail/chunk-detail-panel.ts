@@ -4,6 +4,7 @@ import type {
   ArtifactView,
   ChunkDetail,
   ChunkStatus,
+  ChunkUsageTotalView,
   DecisionView,
   EscalationView,
   PauseView,
@@ -12,7 +13,28 @@ import type {
   QuestionView,
   RouteView,
 } from '../api/hub';
+import { formatCost, formatTokens } from '../cost-format';
 import { formatWhen } from '../when';
+
+/** The all-zero, non-partial total — the panel's default before `detail().cost`
+ * carries a real read (mirrors the hub's own `_zero_usage_total`, `wire/chunk.py`). */
+const ZERO_USAGE_TOTAL: ChunkUsageTotalView = {
+  input_tokens: 0,
+  output_tokens: 0,
+  cache_read_tokens: 0,
+  cache_create_tokens: 0,
+  cost_usd: 0,
+  cost_partial: false,
+};
+
+/** One history step's summed usage (issue #60) — every invocation (spawn/resume/judge)
+ * recorded at that step's own `(from_node_id, epoch)`, folded into one tokens+cost
+ * figure so the timeline reads one lap's cost per line. */
+interface StepUsageTotal {
+  readonly tokens: number;
+  readonly costUsd: number;
+  readonly costPartial: boolean;
+}
 
 /** Statuses the hub's `PauseService` refuses to pause (`ChunkNotPausable`), mirrored
  * here so the dock never offers a Pause the server would answer with a 409 (issue #46).
@@ -266,6 +288,46 @@ export interface EditModelEvent {
             <dd data-testid="fact-runner">{{ runner() }}</dd>
             <dt>Attempts</dt>
             <dd data-testid="fact-attempts">{{ attempts() }}</dd>
+            <!-- The chunk's derived usage/cost total (issue #60) — token classes always
+                 exact, cost visibly marked PARTIAL (never silently understated) when any
+                 summed invocation's envelope-less cost was absent. -->
+            <dt>Cost</dt>
+            <dd data-testid="fact-cost">
+              <span data-testid="cost-total-usd">{{ formatCost(cost().cost_usd, cost().cost_partial) }}</span>
+              @if (cost().cost_partial) {
+                <span
+                  class="partial-badge"
+                  data-testid="cost-partial-badge"
+                  title="At least one invocation's cost was absent (a crash/reap-path exit) — this total is a lower bound, not the true spend."
+                  >PARTIAL</span
+                >
+              }
+            </dd>
+            <dt>Tokens</dt>
+            <dd data-testid="fact-tokens">
+              <button
+                type="button"
+                class="tok-toggle"
+                data-testid="tokens-expand-toggle"
+                [attr.aria-label]="(tokensExpanded() ? 'Collapse' : 'Expand') + ' token breakdown'"
+                (click)="tokensExpanded.set(!tokensExpanded())"
+              >
+                <span class="caret">{{ tokensExpanded() ? '▾' : '▸' }}</span>
+                <span data-testid="tokens-total">{{ formatTokens(totalTokens()) }}</span>
+              </button>
+              @if (tokensExpanded()) {
+                <dl class="kv tok-breakdown" data-testid="tokens-breakdown">
+                  <dt>Input</dt>
+                  <dd data-testid="tokens-input">{{ formatTokens(cost().input_tokens) }}</dd>
+                  <dt>Output</dt>
+                  <dd data-testid="tokens-output">{{ formatTokens(cost().output_tokens) }}</dd>
+                  <dt>Cache read</dt>
+                  <dd data-testid="tokens-cache-read">{{ formatTokens(cost().cache_read_tokens) }}</dd>
+                  <dt>Cache create</dt>
+                  <dd data-testid="tokens-cache-create">{{ formatTokens(cost().cache_create_tokens) }}</dd>
+                </dl>
+              }
+            </dd>
             <!-- Graph and model are always shown; the edit row only while the chunk is
                  still not_ready (issue #27) — the same shape as the open-question
                  answer control, gated on the fact rather than confirmed. -->
@@ -392,6 +454,23 @@ export interface EditModelEvent {
                     <span class="jg-to" [attr.title]="row.toId">→ {{ row.toName }}</span>
                   </span>
                   <span class="ts" data-testid="history-when">{{ row.when }}</span>
+                  <!-- That node-step's own usage (issue #60) — every invocation recorded at
+                       this step's (node, epoch) summed inline, so a review-fail cycle visibly
+                       shows what each lap cost. Absent when no usage fact landed for it yet. -->
+                  @if (usageForStep(row); as u) {
+                    <span class="step-usage" data-testid="history-step-usage">
+                      <span data-testid="history-step-tokens">{{ formatTokens(u.tokens) }} tok</span>
+                      <span data-testid="history-step-cost">{{ formatCost(u.costUsd, u.costPartial) }}</span>
+                      @if (u.costPartial) {
+                        <span
+                          class="partial-badge"
+                          data-testid="history-step-cost-partial"
+                          title="At least one invocation's cost was absent (a crash/reap-path exit) — this step's cost is a lower bound."
+                          >PARTIAL</span
+                        >
+                      }
+                    </span>
+                  }
                 </li>
               }
               <!-- The node currently in flight — synthetic, not a recorded transition:
@@ -1000,6 +1079,40 @@ export interface EditModelEvent {
       color: var(--amber);
       overflow-wrap: anywhere;
     }
+    /* The PARTIAL badge marks a cost total whose sum is a lower bound (issue #60) —
+       never silently understated, whether on the header total or one history step. */
+    .partial-badge {
+      margin-left: 4px;
+      padding: 0 4px;
+      border: 1px solid var(--red-dim);
+      color: var(--red);
+      font-size: var(--fs-label);
+      letter-spacing: 0.1em;
+      cursor: help;
+    }
+    .tok-toggle {
+      border: 0;
+      background: transparent;
+      padding: 0;
+      color: var(--amber);
+      font: inherit;
+      cursor: pointer;
+    }
+    .tok-toggle .caret {
+      color: var(--label-dim);
+      margin-right: 3px;
+    }
+    .tok-breakdown {
+      margin-top: 3px;
+      grid-template-columns: 84px 1fr;
+    }
+    /* A history step's own usage — tucked onto the same line as its judgement choice. */
+    .step-usage {
+      display: flex;
+      gap: 6px;
+      color: var(--label);
+      font-size: var(--fs-xs);
+    }
     .i-title {
       margin: 2px 0 6px;
       color: var(--text);
@@ -1177,6 +1290,43 @@ export class ChunkDetailPanel {
       .sort((a, b) => (a.recorded_at ?? '').localeCompare(b.recorded_at ?? ''))
       .map((art) => ({ ...art, when: art.recorded_at ? formatWhen(art.recorded_at) : '' })),
   );
+
+  protected readonly formatCost = formatCost;
+  protected readonly formatTokens = formatTokens;
+
+  /** The chunk's derived usage/cost total (issue #60) — never absent: the hub API
+   * always populates `cost`, and {@link ZERO_USAGE_TOTAL} covers a construction-site
+   * fixture that predates it. */
+  protected readonly cost = computed<ChunkUsageTotalView>(() => this.detail().cost ?? ZERO_USAGE_TOTAL);
+
+  /** The chunk-total token count across every class — the header's collapsed reading. */
+  protected readonly totalTokens = computed<number>(() => {
+    const c = this.cost();
+    return c.input_tokens + c.output_tokens + c.cache_read_tokens + c.cache_create_tokens;
+  });
+
+  /** Whether the header's token total is broken out by class. Collapsed by default —
+   * the chunk-facts column stays scannable until the operator asks for the detail. */
+  protected readonly tokensExpanded = signal(false);
+
+  /** One history row's summed usage, or `null` when no usage fact has landed for its
+   * `(nodeId, epoch)` yet — matches {@link ChunkUsageView.node_id}/`epoch` against the
+   * row's own origin node (the node the invocation ran at, before the edge it took out
+   * of it). Multiple invocations at one step (spawn/resume/judge) fold into one figure
+   * so the timeline reads one lap's cost per line. */
+  protected usageForStep(row: HistoryRow): StepUsageTotal | null {
+    if (!row.nodeId) return null;
+    const rows = (this.detail().usage ?? []).filter((u) => u.node_id === row.nodeId && u.epoch === row.epoch);
+    if (rows.length === 0) return null;
+    return {
+      tokens: rows.reduce(
+        (sum, u) => sum + u.input_tokens + u.output_tokens + u.cache_read_tokens + u.cache_create_tokens,
+        0,
+      ),
+      costUsd: rows.reduce((sum, u) => sum + (u.cost_usd ?? 0), 0),
+      costPartial: rows.some((u) => u.cost_usd === null),
+    };
+  }
 
   /** The chunk's open (unanswered) questions — the ask a parked chunk waits on. */
   protected readonly openQuestions = computed<readonly QuestionView[]>(() =>

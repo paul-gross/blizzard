@@ -112,14 +112,22 @@ def test_registry_changes_emit_runner_changed_events(tmp_path: Path) -> None:
 # holds, and a fact that lands invisibly is a runner shown as claiming when it has stopped).
 
 
-def _report_local_pause(hub: HubHarness, *, paused: bool, seq: int = 1, runner_id: str = "runner-a") -> dict:
+def _report_local_pause(
+    hub: HubHarness,
+    *,
+    paused: bool,
+    seq: int = 1,
+    runner_id: str = "runner-a",
+    by: str = "alice",
+    reason: str | None = None,
+) -> dict:
     kind = "runner.locally_paused" if paused else "runner.locally_resumed"
+    payload: dict[str, object] = {"runner_id": runner_id, "by": by}
+    if reason is not None:
+        payload["reason"] = reason
     resp = hub.client.post(
         "/api/events",
-        json={
-            "runner_id": runner_id,
-            "facts": [{"seq": seq, "kind": kind, "payload": {"runner_id": runner_id, "by": "alice"}}],
-        },
+        json={"runner_id": runner_id, "facts": [{"seq": seq, "kind": kind, "payload": payload}]},
     )
     assert resp.status_code == 200, resp.text
     return resp.json()
@@ -145,6 +153,68 @@ def test_a_reported_local_resume_clears_only_the_local_brake(tmp_path: Path) -> 
     view = hub.client.get("/api/runners/runner-a").json()
     assert view["locally_paused"] is False
     assert view["hub_paused"] is True  # untouched — each brake is cleared where it was set
+
+
+def test_a_ceiling_pause_reason_rides_the_report_and_lands_on_the_view(tmp_path: Path) -> None:
+    """A spend-ceiling escalation's cause (issue #61) round-trips runner -> hub and is
+    distinguishable from a manual pause: `by` names "runner-ceiling" and `reason` carries
+    the composed ceiling+spend string, exactly the payload `check_spend_ceiling` composes."""
+    hub = build_hub(tmp_path)
+    _register(hub)
+
+    reason = "spend ceiling $5.00 reached over the trailing 24h (spend $7.00)"
+    _report_local_pause(hub, paused=True, by="runner-ceiling", reason=reason)
+
+    view = hub.client.get("/api/runners/runner-a").json()
+    assert view["locally_paused"] is True
+    assert view["locally_paused_by"] == "runner-ceiling"
+    assert view["locally_paused_reason"] == reason
+
+
+def test_a_manual_pause_carries_no_reason_and_renders_bare(tmp_path: Path) -> None:
+    """A manual `blizzard runner pause` payload carries no `reason` key at all — the
+    column reads back `None` rather than some stale or fabricated value."""
+    hub = build_hub(tmp_path)
+    _register(hub)
+
+    _report_local_pause(hub, paused=True, by="operator")
+
+    view = hub.client.get("/api/runners/runner-a").json()
+    assert view["locally_paused"] is True
+    assert view["locally_paused_by"] == "operator"
+    assert view["locally_paused_reason"] is None
+
+
+def test_a_local_resume_clears_the_reason_alongside_the_brake(tmp_path: Path) -> None:
+    """Once resumed, a stale ceiling reason must not keep rendering — the cause is nulled
+    out together with `locally_paused`, not just left dangling on the old fact."""
+    hub = build_hub(tmp_path)
+    _register(hub)
+    _report_local_pause(hub, paused=True, seq=1, by="runner-ceiling", reason="spend ceiling $5.00 reached")
+
+    _report_local_pause(hub, paused=False, seq=2, by="operator")
+
+    view = hub.client.get("/api/runners/runner-a").json()
+    assert view["locally_paused"] is False
+    assert view["locally_paused_by"] is None
+    assert view["locally_paused_reason"] is None
+
+
+def test_a_replayed_ceiling_pause_records_the_reason_exactly_once(tmp_path: Path) -> None:
+    """Idempotent ingest (the high-water mark) applies a re-delivered ceiling pause fact
+    only once — a replay must not double-record or corrupt the landed reason."""
+    hub = build_hub(tmp_path)
+    _register(hub)
+    reason = "spend ceiling $5.00 reached over the trailing 24h (spend $7.00)"
+
+    first = _report_local_pause(hub, paused=True, seq=1, by="runner-ceiling", reason=reason)
+    assert first["applied"] == [1]
+    replay = _report_local_pause(hub, paused=True, seq=1, by="runner-ceiling", reason=reason)
+    assert replay["applied"] == [] and replay["already_applied"] == [1]
+
+    view = hub.client.get("/api/runners/runner-a").json()
+    assert view["locally_paused_by"] == "runner-ceiling"
+    assert view["locally_paused_reason"] == reason
 
 
 def test_a_reported_local_pause_publishes_runner_changed(tmp_path: Path) -> None:

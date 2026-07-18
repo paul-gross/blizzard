@@ -40,6 +40,7 @@ from blizzard.hub.domain.work import (
     awaiting_external_merge,
     current_node_id,
     derive_chunk_status,
+    derive_chunk_usage,
     latest_epoch,
     open_escalation,
     open_pause,
@@ -59,6 +60,8 @@ from blizzard.wire.chunk import (
     ChunkModelView,
     ChunkPauseRequest,
     ChunkSummary,
+    ChunkUsageTotalView,
+    ChunkUsageView,
     EscalationView,
     PauseView,
     PmItemEntry,
@@ -127,6 +130,38 @@ def _history_views(facts: ChunkFacts, graph: Graph | None) -> list[TransitionVie
             recorded_at=iso_utc(t.recorded_at),
         )
         for t in transition_history(facts)
+    ]
+
+
+def _usage_total_view(facts: ChunkFacts) -> ChunkUsageTotalView:
+    """A chunk's derived usage/cost total, wired onto both the summary and detail views."""
+    usage = derive_chunk_usage(facts)
+    return ChunkUsageTotalView(
+        input_tokens=usage.input_tokens,
+        output_tokens=usage.output_tokens,
+        cache_read_tokens=usage.cache_read_tokens,
+        cache_create_tokens=usage.cache_create_tokens,
+        cost_usd=usage.cost_usd,
+        cost_partial=usage.cost_partial,
+    )
+
+
+def _usage_history_views(facts: ChunkFacts) -> list[ChunkUsageView]:
+    """The chunk's per-node-step usage facts, oldest first — the detail's future
+    cost timeline (issue #59)."""
+    return [
+        ChunkUsageView(
+            node_id=u.node_id,
+            epoch=u.epoch,
+            kind=u.kind,
+            model=u.model,
+            input_tokens=u.input_tokens,
+            output_tokens=u.output_tokens,
+            cache_read_tokens=u.cache_read_tokens,
+            cache_create_tokens=u.cache_create_tokens,
+            cost_usd=u.cost_usd,
+        )
+        for u in sorted(facts.usage, key=lambda u: u.recorded_at)
     ]
 
 
@@ -249,6 +284,7 @@ def list_chunks(services: Annotated[HubServices, Depends(get_services)]) -> list
                 pm_pointers=_pointer_views(chunk, services.pm),
                 model=chunk.model,
                 runner_id=route.runner_id if route is not None else None,
+                cost=_usage_total_view(facts),
             )
         )
     return summaries
@@ -295,6 +331,8 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
         questions=[question_view(q) for q in services.chunks.load_questions(chunk_id) if not q.answered],
         awaiting_external_merge=awaiting_external_merge(facts),
         open_prs=[PrView(repo=pr.repo, number=pr.number, url=pr.url) for pr in facts.pr_opened],
+        cost=_usage_total_view(facts),
+        usage=_usage_history_views(facts),
     )
 
 

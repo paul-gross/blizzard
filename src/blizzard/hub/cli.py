@@ -49,6 +49,22 @@ def _api_error(operation: str, exc: Exception) -> click.ClickException:
     return click.ClickException(f"{operation} failed: {exc}")
 
 
+# The since-the-beginning-of-time cutoff `hub status` passes ``GET /api/fleet/spend``
+# for its fleet-total line (issue #60) — a full-fleet overview, not a "today" window
+# (the board's own spend-today figure picks its own local-midnight ``since``).
+_FLEET_SPEND_SINCE = "1970-01-01T00:00:00+00:00"
+
+
+def _format_cost(cost_usd: float, cost_partial: bool) -> str:
+    """A derived cost total's terminal-legible form (issue #60) — always to the cent,
+    with a leading ``~`` when ``cost_partial`` (a crash/reap-path row had no envelope,
+    so the summed figure is a lower bound, never presented as exact). Mirrors
+    ``web/projects/fleet/src/lib/cost-format.ts``'s ``formatCost`` — the same marker,
+    both surfaces."""
+    amount = f"${cost_usd:.2f}"
+    return f"~{amount}" if cost_partial else amount
+
+
 @click.group(invoke_without_command=True)
 @click.pass_context
 def hub(ctx: click.Context) -> None:
@@ -157,7 +173,8 @@ def status(url: str | None) -> None:
     """The fleet view: every chunk with its derived status, the runners, and open questions.
 
     A pure client of the hub API: ``GET /chunks`` + ``GET /runners`` +
-    ``GET /questions``, the same facts the board renders, in the terminal."""
+    ``GET /questions`` + ``GET /fleet/spend`` (issue #60), the same facts the board
+    renders, in the terminal."""
     base = _hub_url(url)
     try:
         with httpx.Client(base_url=base, timeout=_CLIENT_TIMEOUT) as client:
@@ -167,6 +184,8 @@ def status(url: str | None) -> None:
             runners.raise_for_status()
             questions = client.get("/api/questions")
             questions.raise_for_status()
+            spend = client.get("/api/fleet/spend", params={"since": _FLEET_SPEND_SINCE})
+            spend.raise_for_status()
     except httpx.HTTPError as exc:
         raise click.ClickException(f"hub status: could not reach the hub at {base} ({exc})") from exc
 
@@ -174,14 +193,24 @@ def status(url: str | None) -> None:
     click.echo(f"chunks ({len(rows)}):")
     for chunk in rows:
         node = chunk.get("current_node_id") or "-"
-        click.echo(f"  {chunk['chunk_id']}  {chunk['status']:<16} @ {node}")
+        cost = chunk.get("cost") or {}
+        cost_str = _format_cost(cost.get("cost_usd", 0.0), cost.get("cost_partial", False))
+        click.echo(f"  {chunk['chunk_id']}  {chunk['status']:<16} @ {node}  {cost_str:>10}")
     fleet = runners.json().get("runners", [])
     click.echo(f"\nrunners ({len(fleet)}):")
     for r in fleet:
         liveness = "online" if r.get("online") else "offline"
         # Name which brake is on (issue #43): "paused" alone would hide whether the fleet
         # stopped this runner or it stopped itself — and they are cleared by different verbs.
-        brakes = [name for name, on in (("hub", r.get("hub_paused")), ("local", r.get("locally_paused"))) if on]
+        # A local brake's own reason (issue #61) rides inline — a spend-ceiling trip names
+        # the ceiling and the spend; a manual `blizzard runner pause` carries none, so it
+        # still renders bare.
+        brakes = []
+        if r.get("hub_paused"):
+            brakes.append("hub")
+        if r.get("locally_paused"):
+            reason = r.get("locally_paused_reason")
+            brakes.append(f"local — {reason}" if reason else "local")
         brake = f" [paused: {'+'.join(brakes)}]" if brakes else ""
         click.echo(f"  {r['runner_id']:<16} {liveness:<8} ws={r.get('workspace_id', '-')}{brake}")
     open_qs = questions.json()
@@ -189,6 +218,8 @@ def status(url: str | None) -> None:
     for q in open_qs:
         opts = f"  [{'|'.join(q.get('options') or [])}]" if q.get("options") else ""
         click.echo(f"  {q['question_id']}  (chunk {q['chunk_id']}): {q['question']}{opts}")
+    fleet_spend = spend.json()
+    click.echo(f"\nfleet spend (all time): {_format_cost(fleet_spend['cost_usd'], fleet_spend['cost_partial'])}")
 
 
 @hub.command()

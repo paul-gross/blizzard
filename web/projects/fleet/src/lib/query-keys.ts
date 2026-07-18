@@ -9,6 +9,10 @@ export const hubChunksKey = ['hub', 'chunks'] as const;
 export const hubQueueKey = ['hub', 'queue'] as const;
 export const hubRunnersKey = ['hub', 'runners'] as const;
 export const hubQuestionsKey = ['hub', 'questions'] as const;
+/** The fleet spend-since read's key prefix (issue #60) — the actual query key appends
+ * the `since` instant, so an SSE invalidation naming just this prefix closes every
+ * cached window at once (TanStack's default prefix match on `invalidateQueries`). */
+export const hubFleetSpendKey = ['hub', 'fleet-spend'] as const;
 
 /** One chunk's full aggregate, keyed by id. */
 export function hubChunkKey(chunkId: string | null): readonly unknown[] {

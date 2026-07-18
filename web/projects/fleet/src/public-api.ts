@@ -11,6 +11,7 @@ export { BoardHeader } from './lib/board-header/board-header';
 export { BrandMark } from './lib/design/brand-mark';
 export { BoardShell } from './lib/board-shell/board-shell';
 export { compactRef, ENTITY_DISPLAY, type EntityDisplay } from './lib/compact-ref';
+export { formatCost, formatTokens } from './lib/cost-format';
 export { LANES, STATUS_LANE, laneFor, type Lane } from './lib/chunk-lanes';
 export type { BoardCard } from './lib/board-shell/board-shell';
 export { ChunkDetailPanel } from './lib/chunk-detail/chunk-detail-panel';
@@ -54,6 +55,7 @@ export { injectHubRunnersQuery } from './lib/runners/runners.query';
 export { injectRunnerPauseMutation } from './lib/runners/runners.mutations';
 export type { RunnerPauseVars } from './lib/runners/runners.mutations';
 export { injectHubQuestionsQuery } from './lib/questions/questions.query';
+export { injectHubFleetSpendQuery } from './lib/fleet-spend/fleet-spend.query';
 
 export {
   hubHealthKey,
@@ -75,6 +77,9 @@ export type {
   EscalationView,
   QueuePeekEntry,
   RunnerView,
+  ChunkUsageTotalView,
+  ChunkUsageView,
+  FleetSpendView,
 } from './lib/api/hub';
 
 export * as hubApi from './lib/api/hub';

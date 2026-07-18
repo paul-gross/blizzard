@@ -45,6 +45,12 @@ class RunnerView(BaseModel):
     online: bool
     hub_paused: bool  # the fleet paused it — `blizzard hub pause`, cleared by `hub resume`
     locally_paused: bool = False  # it paused itself — spawns nothing, `blizzard runner pause`/`start`
+    # The local pause's own cause, populated only alongside a true `locally_paused` (issue
+    # #61): `by` is "operator" for `blizzard runner pause`, "runner-ceiling" for a spend-
+    # ceiling crossing; `reason` is the composed ceiling+spend string, `None` for a manual
+    # pause.
+    locally_paused_by: str | None = None
+    locally_paused_reason: str | None = None
 
 
 class RunnerListResponse(BaseModel):

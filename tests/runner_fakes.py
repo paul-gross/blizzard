@@ -9,6 +9,7 @@ type — pyright rejects drift.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, datetime
 
 from sqlalchemy import MetaData
@@ -23,6 +24,7 @@ from blizzard.runner.environments.provider import (
     WorkspaceAcquisitionError,
 )
 from blizzard.runner.harness.adapter import IHarnessAdapter, WorkerHandle, WorkerPreamble
+from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError, IHubClient, RouteClaimOutcome
 from blizzard.runner.loop.process import IProcessProbe
@@ -30,6 +32,7 @@ from blizzard.runner.loop.worktree import GitArtifact, IWorktreeGit
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 from blizzard.runner.store.repository import IWriteRunnerStore
 from blizzard.runner.store.schema import metadata as runner_metadata
+from blizzard.runner.transcripts.repository import Transcript
 from blizzard.wire.chunk import ChunkDetail, RouteView
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
@@ -199,12 +202,35 @@ class FakeProvider:
 
 
 class FakeHarness:
-    """A scriptable :class:`IHarnessAdapter`: canned spawn handle + verdict."""
+    """A scriptable :class:`IHarnessAdapter`: canned spawn handle + verdict.
 
-    def __init__(self, *, handle: WorkerHandle, verdict: str | None, assessment: str = "") -> None:
+    ``usage`` is the blanket ``parse_usage``/``sum_transcript_usage`` reply used by
+    most tests (one sample regardless of ``kind`` or which stdout/transcript is read);
+    ``usage_by_kind`` (issue #58) overrides it per :class:`UsageKind` for a test that
+    needs to tell the spawn/resume fact from the judge fact apart, or to force one
+    ``kind`` envelope-less (``None`` in the map) while another still parses — a
+    per-kind entry set to ``None`` explicitly returns no envelope for that kind rather
+    than falling back to ``usage``.
+    """
+
+    def __init__(
+        self,
+        *,
+        handle: WorkerHandle,
+        verdict: str | None,
+        assessment: str = "",
+        usage: UsageSample | None = None,
+        usage_by_kind: dict[str, UsageSample | None] | None = None,
+        transcript_usage: UsageSample | None = None,
+    ) -> None:
         self._handle = handle
         self.verdict = verdict
         self.assessment = assessment
+        self.usage = usage
+        self.usage_by_kind = usage_by_kind
+        # The envelope-less fallback's own reply — distinct from `usage` so a test can
+        # script "no envelope, but the transcript sums to this" without the two colliding.
+        self.transcript_usage = transcript_usage
         self.spawns: list[tuple[NodeEnvelope, WorkerPreamble]] = []
         self.judged: list[tuple[str, str, str]] = []
         self.resumed: list[tuple[str, str, str]] = []  # (workdir, session_id, message)
@@ -222,7 +248,7 @@ class FakeHarness:
         self.judged.append((environment_id, session_id, judgement_prompt))
         return "<judged output>"
 
-    def resume_with_message(self, environment_id: str, session_id: str, message: str) -> int:
+    def resume_with_message(self, environment_id: str, session_id: str, message: str, stdout_path: str = "") -> int:
         self.resumed.append((environment_id, session_id, message))
         return self.resume_pid
 
@@ -234,6 +260,37 @@ class FakeHarness:
 
     def parse_assessment(self, output: str) -> str:
         return self.assessment
+
+    def parse_usage(self, output: str, kind: UsageKind) -> UsageSample | None:
+        if self.usage_by_kind is not None and kind in self.usage_by_kind:
+            return self.usage_by_kind[kind]
+        return self.usage
+
+    def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind) -> UsageSample:
+        return self.transcript_usage or UsageSample(
+            kind=kind,
+            model="fake-model",
+            input_tokens=0,
+            output_tokens=0,
+            cache_read_tokens=0,
+            cache_create_tokens=0,
+            cost_usd=None,
+        )
+
+
+class FakeTranscripts:
+    """A scriptable :class:`IReadTranscriptRepository`: canned raw lines by session id
+    (issue #58's envelope-less usage fallback). ``read_turns`` is unused by the loop —
+    stubbed only to satisfy the Protocol."""
+
+    def __init__(self, lines_by_session: dict[str, list[str]] | None = None) -> None:
+        self._lines = lines_by_session or {}
+
+    def read_turns(self, session_id: str, *, spawn_cwd: str | None) -> Transcript:
+        return Transcript(session_id=session_id, available=False, reason="not_found", turns=[], truncated=False)
+
+    def read_raw_lines(self, session_id: str, *, spawn_cwd: str | None) -> list[str]:
+        return list(self._lines.get(session_id, []))
 
 
 class FakeProbe:
@@ -281,6 +338,7 @@ def make_context(
     worktree_git: FakeWorktreeGit | None = None,
     clock: FixedClock | None = None,
     config: LoopConfig | None = None,
+    transcripts: FakeTranscripts | None = None,
 ) -> LoopContext:
     """Assemble a :class:`LoopContext` from a real store and injected fakes."""
     resolved_config = config if config is not None else LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1)
@@ -302,6 +360,7 @@ def make_context(
         process=_probe,
         worktree_git=_wt,
         config=resolved_config,
+        transcripts=transcripts,
     )
 
 

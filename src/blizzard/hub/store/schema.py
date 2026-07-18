@@ -286,6 +286,35 @@ escalations = Table(
     Column("recorded_at", UtcDateTime, nullable=False),
 )
 
+# --- Usage facts (usage.recorded — issue #59) --------------------------------
+#
+# One append-only row per harness invocation's usage/cost telemetry the runner
+# reported up, ridden on the same store-and-forward rails as ``lease_facts``. Never
+# aggregated here: a chunk's total is derived at read time by summing these
+# (``derive_chunk_usage``, ``bzh:facts-not-status``). Deliberately **not** epoch-fenced —
+# unlike ``lease_facts``/``escalations``, a stale-epoch row still lands: it is real spend
+# by a fenced-out zombie attempt, not a rejected transition. No dedup column: the runner's
+# per-runner outbound-buffer seq high-water mark already makes a replayed batch land
+# each fact exactly once, so a second idempotency key here would be redundant.
+
+usage_facts = Table(
+    "usage_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
+    Column("node_id", String, nullable=False),
+    Column("epoch", Integer, nullable=False),  # the row's own epoch — carried, never fenced against
+    Column("runner_id", String, nullable=False),  # the reporting runner — audit/attribution only
+    Column("kind", String, nullable=False),  # spawn | resume | judge
+    Column("model", String, nullable=False),
+    Column("input_tokens", Integer, nullable=False),
+    Column("output_tokens", Integer, nullable=False),
+    Column("cache_read_tokens", Integer, nullable=False),
+    Column("cache_create_tokens", Integer, nullable=False),
+    Column("cost_usd", Float, nullable=True),  # None = no envelope for this invocation — never fabricated
+    Column("recorded_at", UtcDateTime, nullable=False),
+)
+
 # --- Questions and answers (the ask/answer rendezvous) ----------------------
 #
 # A worker facing an undecidable choice runs ``blizzard runner ask`` and exits; the
@@ -497,4 +526,8 @@ runner_local_pause_facts = Table(
     Column("paused", Boolean, nullable=False),  # locally_paused derives from the newest fact
     Column("set_at", UtcDateTime, nullable=False),  # the runner's clock, off the fact's payload
     Column("set_by", String, nullable=False),
+    # The composed cause string off the fact's payload (issue #61's spend-ceiling escalation
+    # names the ceiling + spend here) — nullable because a manual `blizzard runner pause`
+    # carries none, and every pre-#61 row predates the column.
+    Column("reason", Text, nullable=True),
 )

@@ -239,6 +239,31 @@ class PauseFact:
 
 
 @dataclass(frozen=True)
+class UsageFact:
+    """A ``usage.recorded`` fact — one harness invocation's usage/cost telemetry (issue #59).
+
+    Unlike :class:`LeaseFact`/:class:`EscalationFact`, usage is deliberately **not**
+    epoch-fenced: a row whose epoch trails the chunk's latest is real spend incurred by a
+    fenced-out zombie attempt, and must be attributed and summed exactly like every other
+    row — never dropped (the completion path's stale-epoch rejection, ``apply.py``, is the
+    contrast). ``node_id``/``epoch``/``kind``/``model`` identify the invocation for the
+    per-node-step history view; the chunk-level total (:func:`derive_chunk_usage`) sums
+    every row's tokens/cost regardless of epoch.
+    """
+
+    node_id: str
+    epoch: int
+    kind: str
+    model: str
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int
+    cache_create_tokens: int
+    cost_usd: float | None
+    recorded_at: datetime
+
+
+@dataclass(frozen=True)
 class DecisionChoice:
     """One selectable gate outcome — a button on the board/bot."""
 
@@ -296,6 +321,7 @@ class ChunkFacts:
     requeues: list[RequeueFact] = field(default_factory=list)
     pr_opened: list[PrOpenedFact] = field(default_factory=list)
     pauses: list[PauseFact] = field(default_factory=list)
+    usage: list[UsageFact] = field(default_factory=list)
 
 
 # --- The derivation queries -----------------------------------------
@@ -513,6 +539,68 @@ def latest_epoch(facts: ChunkFacts) -> int | None:
     return max(lease.epoch for lease in facts.leases)
 
 
+@dataclass(frozen=True)
+class UsageTotal:
+    """A usage/cost total summed over a set of usage facts at read time — never a
+    stored column (``bzh:facts-not-status``, the same precedent :func:`derive_chunk_status`
+    sets). Neutrally named (not ``ChunkUsage``) because it is shared by
+    :func:`derive_chunk_usage` (one chunk's own facts) and :func:`derive_fleet_usage`
+    (an arbitrary, fleet-wide set of rows) alike — describing a fleet-wide total in
+    chunk terms would be a truthful-name smell (``canon:truthful-names``).
+
+    **This is the one canonical owner of the lower-bound + PARTIAL cost contract**
+    (``canon:one-owner``) — every other usage total on the wire
+    (:class:`~blizzard.wire.chunk.ChunkUsageTotalView`,
+    :class:`~blizzard.wire.fleet.FleetSpendView`) and in the runner store
+    (:class:`~blizzard.runner.store.repository.UsageTotals`) points back to this
+    docstring rather than restating it: token counts are always exact; ``cost_usd``
+    sums only the rows that carry one — a cost-absent row (the envelope-less
+    transcript-sum fallback) contributes ``$0``, never a fabricated figure — so
+    ``cost_partial`` (True iff any summed row's ``cost_usd`` was absent) tells the
+    caller ``cost_usd`` is then a **lower bound**, never the true spend, and must be
+    surfaced as PARTIAL rather than presented as exact."""
+
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int
+    cache_create_tokens: int
+    cost_usd: float
+    cost_partial: bool
+
+
+def _sum_usage(rows: list[UsageFact]) -> UsageTotal:
+    """Sum ``rows`` into one total — see :class:`UsageTotal` for the lower-bound +
+    PARTIAL contract this implements. Shared by :func:`derive_chunk_usage` (one
+    chunk's facts) and :func:`derive_fleet_usage` (an arbitrary set of rows, e.g.
+    fleet spend-since)."""
+    return UsageTotal(
+        input_tokens=sum(u.input_tokens for u in rows),
+        output_tokens=sum(u.output_tokens for u in rows),
+        cache_read_tokens=sum(u.cache_read_tokens for u in rows),
+        cache_create_tokens=sum(u.cache_create_tokens for u in rows),
+        cost_usd=sum(u.cost_usd for u in rows if u.cost_usd is not None),
+        cost_partial=any(u.cost_usd is None for u in rows),
+    )
+
+
+def derive_chunk_usage(facts: ChunkFacts) -> UsageTotal:
+    """Sum a chunk's usage facts into its derived total — tokens by class + cost.
+
+    Deliberately unfenced by epoch (unlike the status derivations above): every recorded
+    usage row is real spend, so every row is summed regardless of which epoch minted it.
+    A pure function of already-loaded facts, unit-testable with zero store.
+    """
+    return _sum_usage(facts.usage)
+
+
+def derive_fleet_usage(rows: list[UsageFact]) -> UsageTotal:
+    """Sum usage facts across the whole fleet into one total (issue #60) — the fleet
+    spend-since read's derivation. Same summation as :func:`derive_chunk_usage`, over an
+    arbitrary set of rows (here: every usage fact at or after a cutoff instant,
+    :meth:`IReadChunkRepository.usage_since`) rather than one chunk's own facts."""
+    return _sum_usage(rows)
+
+
 # --- Question rows (the ask/answer rendezvous) -------------------------------
 
 
@@ -629,6 +717,12 @@ class IReadChunkRepository(Protocol):
         """Every unresolved decision across the fleet — the ``blizzard hub decisions`` view."""
         ...
 
+    def usage_since(self, since: datetime) -> list[UsageFact]:
+        """Every usage fact recorded at or after ``since``, across every chunk — the
+        fleet spend-since read's input (issue #60); the caller derives the total via
+        :func:`derive_fleet_usage`."""
+        ...
+
 
 class IWriteChunkRepository(IReadChunkRepository, Protocol):
     """Read-write chunk access. Only the domain layer depends on this variant."""
@@ -726,6 +820,31 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         Retries exhausted (or a dead worker past the cap): the chunk derives
         ``needs_human`` until a later lease mint supersedes it. The runner-composed
         takeover command rides along so the parked session is resumable."""
+        ...
+
+    def record_usage(
+        self,
+        chunk_id: str,
+        *,
+        node_id: str,
+        epoch: int,
+        runner_id: str,
+        kind: str,
+        model: str,
+        input_tokens: int,
+        output_tokens: int,
+        cache_read_tokens: int,
+        cache_create_tokens: int,
+        cost_usd: float | None,
+        at: datetime,
+    ) -> None:
+        """Append one ``usage.recorded`` fact (issue #59) — never a stored aggregate.
+
+        Deliberately **not** epoch-fenced: called for every landed usage fact regardless
+        of whether ``epoch`` is the chunk's latest, since it is real spend either way.
+        Idempotency rides the caller's per-runner outbound-buffer seq high-water mark
+        (:class:`FactIngestService`) — a seq already applied never reaches this method a
+        second time, so no second dedup key is needed here."""
         ...
 
     def record_question(

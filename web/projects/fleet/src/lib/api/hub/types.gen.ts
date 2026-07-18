@@ -216,6 +216,7 @@ export type ChunkDetail = {
      * Chunk Id
      */
     chunk_id: string;
+    cost?: ChunkUsageTotalView;
     /**
      * Current Node Id
      */
@@ -257,6 +258,10 @@ export type ChunkDetail = {
     questions?: Array<QuestionView>;
     route?: RouteView | null;
     status: ChunkStatus;
+    /**
+     * Usage
+     */
+    usage?: Array<ChunkUsageView>;
 };
 
 /**
@@ -416,12 +421,16 @@ export type ChunkStatus = 'not_ready' | 'ready' | 'running' | 'delivering' | 'wa
  * :class:`ChunkDetail`, the one place a board action lives. ``runner_id`` (the live
  * route's holder, null when unrouted) is a passive where-is-it fact in that same
  * sense — it lets the fleet registry list each runner's claims — not an action key.
+ * ``cost`` is the one exception (issue #59): the derived spend total is cheap to carry
+ * on every card and is not itself an operator fact, so it rides the summary rather than
+ * waiting for the detail fetch.
  */
 export type ChunkSummary = {
     /**
      * Chunk Id
      */
     chunk_id: string;
+    cost?: ChunkUsageTotalView;
     /**
      * Current Node Id
      */
@@ -447,6 +456,92 @@ export type ChunkSummary = {
      */
     runner_id?: string | null;
     status: ChunkStatus;
+};
+
+/**
+ * ChunkUsageTotalView
+ *
+ * A chunk's derived usage/cost total — summed over every recorded invocation
+ * (issue #59). Never a stored column: computed at read time by
+ * ``derive_chunk_usage``.
+ *
+ * ``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd`` —
+ * see :class:`~blizzard.hub.domain.work.UsageTotal` for the one canonical
+ * statement of it, which this view's fields mirror verbatim.
+ */
+export type ChunkUsageTotalView = {
+    /**
+     * Cache Create Tokens
+     */
+    cache_create_tokens: number;
+    /**
+     * Cache Read Tokens
+     */
+    cache_read_tokens: number;
+    /**
+     * Cost Partial
+     */
+    cost_partial: boolean;
+    /**
+     * Cost Usd
+     */
+    cost_usd: number;
+    /**
+     * Input Tokens
+     */
+    input_tokens: number;
+    /**
+     * Output Tokens
+     */
+    output_tokens: number;
+};
+
+/**
+ * ChunkUsageView
+ *
+ * One node-step's usage/cost telemetry (issue #59) — one harness invocation's
+ * tokens-by-class and cost, oldest first on :class:`ChunkDetail`.
+ *
+ * ``cost_usd`` is ``None`` exactly when no result envelope existed for this
+ * invocation (the envelope-less transcript-summation fallback) — never fabricated.
+ */
+export type ChunkUsageView = {
+    /**
+     * Cache Create Tokens
+     */
+    cache_create_tokens: number;
+    /**
+     * Cache Read Tokens
+     */
+    cache_read_tokens: number;
+    /**
+     * Cost Usd
+     */
+    cost_usd: number | null;
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * Input Tokens
+     */
+    input_tokens: number;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Model
+     */
+    model: string;
+    /**
+     * Node Id
+     */
+    node_id: string;
+    /**
+     * Output Tokens
+     */
+    output_tokens: number;
 };
 
 /**
@@ -728,6 +823,45 @@ export type EscalationView = {
  * Where a node's step runs.
  */
 export type Executor = 'runner' | 'hub';
+
+/**
+ * FleetSpendView
+ *
+ * The fleet's usage/cost total since ``since``. ``cost_partial`` carries the
+ * lower-bound + PARTIAL contract on ``cost_usd`` — see
+ * :class:`~blizzard.hub.domain.work.UsageTotal` for the one canonical statement of
+ * it, which this view's fields mirror verbatim.
+ */
+export type FleetSpendView = {
+    /**
+     * Cache Create Tokens
+     */
+    cache_create_tokens: number;
+    /**
+     * Cache Read Tokens
+     */
+    cache_read_tokens: number;
+    /**
+     * Cost Partial
+     */
+    cost_partial: boolean;
+    /**
+     * Cost Usd
+     */
+    cost_usd: number;
+    /**
+     * Input Tokens
+     */
+    input_tokens: number;
+    /**
+     * Output Tokens
+     */
+    output_tokens: number;
+    /**
+     * Since
+     */
+    since: string;
+};
 
 /**
  * GraphMintRequest
@@ -1508,6 +1642,14 @@ export type RunnerView = {
      */
     locally_paused?: boolean;
     /**
+     * Locally Paused By
+     */
+    locally_paused_by?: string | null;
+    /**
+     * Locally Paused Reason
+     */
+    locally_paused_reason?: string | null;
+    /**
      * Online
      */
     online: boolean;
@@ -2256,6 +2398,36 @@ export type IngestRunnerFactsApiEventsPostResponses = {
 };
 
 export type IngestRunnerFactsApiEventsPostResponse = IngestRunnerFactsApiEventsPostResponses[keyof IngestRunnerFactsApiEventsPostResponses];
+
+export type FleetSpendApiFleetSpendGetData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Since
+         */
+        since: string;
+    };
+    url: '/api/fleet/spend';
+};
+
+export type FleetSpendApiFleetSpendGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type FleetSpendApiFleetSpendGetError = FleetSpendApiFleetSpendGetErrors[keyof FleetSpendApiFleetSpendGetErrors];
+
+export type FleetSpendApiFleetSpendGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: FleetSpendView;
+};
+
+export type FleetSpendApiFleetSpendGetResponse = FleetSpendApiFleetSpendGetResponses[keyof FleetSpendApiFleetSpendGetResponses];
 
 export type MintGraphApiGraphsPostData = {
     body: GraphMintRequest;

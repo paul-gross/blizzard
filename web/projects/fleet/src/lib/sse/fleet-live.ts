@@ -1,7 +1,7 @@
 import { DestroyRef, EnvironmentInjector, Injectable, type Signal, effect, inject, signal } from '@angular/core';
 import { QueryClient } from '@tanstack/angular-query-experimental';
 
-import { hubChunkKey, hubChunksKey, hubQuestionsKey, hubQueueKey, hubRunnersKey } from '../query-keys';
+import { hubChunkKey, hubChunksKey, hubFleetSpendKey, hubQuestionsKey, hubQueueKey, hubRunnersKey } from '../query-keys';
 import { type SseHandle, type SseStatus, SseService } from './sse.service';
 
 /** The hub's SSE stream endpoint (deliberately not in OpenAPI — native EventSource). */
@@ -63,7 +63,9 @@ const LOG_LIMIT = 256;
  * the {@link SseService} transport to the query cache — the one place SSE meets reads.
  *
  * - a `chunk-changed` invalidates the fleet list, that chunk's detail, and the queue
- *   (a status flip can add or remove a chunk from the ready queue);
+ *   (a status flip can add or remove a chunk from the ready queue), plus the fleet
+ *   spend-since read (issue #60) — a chunk's derived cost total and the fleet-wide
+ *   spend both derive from the same usage facts, so a chunk-changed re-queries both;
  * - question/decision events invalidate that chunk's detail and the list (they flip
  *   the derived status to/from `waiting_on_human`);
  * - `queue-changed` re-peeks the queue; `runner-changed` re-reads the registry.
@@ -155,6 +157,9 @@ export class FleetLiveUpdates {
         invalidate(hubChunksKey);
         invalidate(hubQueueKey);
         if (data.chunk_id) invalidate(hubChunkKey(data.chunk_id));
+        // Usage rides the same fact, so a chunk's cost total and the fleet-wide spend
+        // derive from it too (issue #60) — the prefix key closes every cached window.
+        invalidate(hubFleetSpendKey);
         break;
       case 'question-asked':
       case 'question-answered':

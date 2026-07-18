@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.store.repository import NewLease
 from tests.runner_fakes import make_store
 
@@ -205,3 +206,156 @@ def test_workspace_prompt_empty_override_is_distinct_from_absent(tmp_path) -> No
     store = _store(tmp_path)
     store.set_workspace_prompt("ws1", prompt="", at=_NOW)
     assert store.workspace_prompt_override("ws1") == ""
+
+
+def _sample(kind: UsageKind = "spawn", cost: float | None = 1.5, model: str = "claude-x") -> UsageSample:
+    return UsageSample(
+        kind=kind,
+        model=model,
+        input_tokens=10,
+        output_tokens=20,
+        cache_read_tokens=3,
+        cache_create_tokens=4,
+        cost_usd=cost,
+    )
+
+
+@pytest.mark.unit
+def test_lease_generation_counts_spawn_facts(tmp_path):  # type: ignore[no-untyped-def]
+    """Generation 1 at the initial spawn, incrementing at each resume (issue #13's own
+    tracking, reused as usage's idempotency co-key)."""
+    store = _store(tmp_path)
+    _mint(store)
+    assert store.lease_generation("lease_1") == 0  # minted, not yet spawned
+    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="s1", spawned_at=_NOW)
+    assert store.lease_generation("lease_1") == 1
+    store.record_spawn("lease_1", pid=2, process_start_time="2", session_id="s1", spawned_at=_NOW)
+    assert store.lease_generation("lease_1") == 2
+
+
+@pytest.mark.unit
+def test_record_usage_lands_fact_and_buffers_outbound(tmp_path):  # type: ignore[no-untyped-def]
+    """The atomic local-write + outbound-enqueue pairing (mirrors ``record_local_pause``)."""
+    store = _store(tmp_path)
+    _mint(store)
+    store.record_usage(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        generation=1,
+        sample=_sample(),
+        recorded_at=_NOW,
+    )
+    totals = store.usage_since(_NOW)
+    assert totals.input_tokens == 10
+    assert totals.cost_usd == 1.5
+    assert totals.cost_partial is False
+    pending = store.pending_outbound()
+    assert len(pending) == 1
+    assert pending[0].kind == "usage.recorded"
+    assert pending[0].chunk_id == "ch_1"
+    assert pending[0].lease_id == "lease_1"
+
+
+@pytest.mark.unit
+def test_record_usage_is_idempotent_per_lease_generation_kind(tmp_path):  # type: ignore[no-untyped-def]
+    """A replay of the exact same invocation (same lease/generation/kind) is a no-op."""
+    store = _store(tmp_path)
+    _mint(store)
+    store.record_usage(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        generation=1,
+        sample=_sample(),
+        recorded_at=_NOW,
+    )
+    store.record_usage(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        generation=1,
+        sample=_sample(),
+        recorded_at=_NOW,
+    )
+    totals = store.usage_since(_NOW)
+    assert totals.input_tokens == 10  # not doubled
+    assert len(store.pending_outbound()) == 1  # not buffered twice
+
+
+@pytest.mark.unit
+def test_record_usage_appends_a_new_row_for_a_new_generation(tmp_path):  # type: ignore[no-untyped-def]
+    """A retry/resume within the same lease mints a new generation — a genuinely new row."""
+    store = _store(tmp_path)
+    _mint(store)
+    store.record_usage(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        generation=1,
+        sample=_sample(kind="spawn"),
+        recorded_at=_NOW,
+    )
+    store.record_usage(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        generation=2,
+        sample=_sample(kind="resume"),
+        recorded_at=_NOW,
+    )
+    totals = store.usage_since(_NOW)
+    assert totals.input_tokens == 20  # both rows summed
+    assert len(store.pending_outbound()) == 2
+
+
+@pytest.mark.unit
+def test_usage_since_flags_partial_on_absent_cost(tmp_path):  # type: ignore[no-untyped-def]
+    """A cost-absent row (envelope-less fallback) contributes tokens but flags PARTIAL —
+    never fabricated as zero-cost (issue #61's lower-bound + PARTIAL treatment)."""
+    store = _store(tmp_path)
+    _mint(store)
+    store.record_usage(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        generation=1,
+        sample=_sample(cost=None),
+        recorded_at=_NOW,
+    )
+    totals = store.usage_since(_NOW)
+    assert totals.cost_usd == 0.0
+    assert totals.cost_partial is True
+
+
+@pytest.mark.unit
+def test_usage_since_excludes_facts_before_the_window(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _mint(store)
+    earlier = _NOW - timedelta(hours=1)
+    store.record_usage(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        generation=1,
+        sample=_sample(),
+        recorded_at=earlier,
+    )
+    assert store.usage_since(_NOW).input_tokens == 0
+    assert store.usage_since(earlier).input_tokens == 10
+
+
+@pytest.mark.unit
+def test_lease_ids_for_chunk_spans_active_and_closed(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _mint(store, lease="lease_1", epoch=1)
+    _mint(store, lease="lease_2", epoch=2)
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="reaped", closed_at=_NOW)
+    assert sorted(store.lease_ids_for_chunk("ch_1")) == ["lease_1", "lease_2"]

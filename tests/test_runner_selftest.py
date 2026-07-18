@@ -28,7 +28,7 @@ import json
 import stat
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -44,6 +44,7 @@ from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
+from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.listeners import bind_listeners, unlink_socket
 from blizzard.runner.selftest.checks import run_selftest_checks
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
@@ -272,7 +273,7 @@ class _HangingAdapter:
         threading.Event().wait()  # blocks forever
         raise AssertionError("unreachable")
 
-    def resume_with_message(self, environment_id: str, session_id: str, message: str) -> int:
+    def resume_with_message(self, environment_id: str, session_id: str, message: str, stdout_path: str = "") -> int:
         raise AssertionError("unreachable — spawn never returns")
 
     def resume_command(self, environment_id: str, session_id: str) -> str:
@@ -285,6 +286,12 @@ class _HangingAdapter:
         raise AssertionError("unreachable — spawn never returns")
 
     def parse_assessment(self, output: str) -> str:
+        raise AssertionError("unreachable — spawn never returns")
+
+    def parse_usage(self, output: str, kind: UsageKind) -> UsageSample | None:
+        raise AssertionError("unreachable — spawn never returns")
+
+    def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind) -> UsageSample:
         raise AssertionError("unreachable — spawn never returns")
 
 
@@ -322,7 +329,7 @@ class _FixedPidAdapter:
     def spawn(self, envelope: object, preamble: object, session_hint: str | None) -> WorkerHandle:
         return WorkerHandle(session_id=session_hint or "sid", pid=self.spawn_pid, process_start_time="spawn-t")
 
-    def resume_with_message(self, environment_id: str, session_id: str, message: str) -> int:
+    def resume_with_message(self, environment_id: str, session_id: str, message: str, stdout_path: str = "") -> int:
         return self.resume_pid
 
     def resume_command(self, environment_id: str, session_id: str) -> str:
@@ -336,6 +343,20 @@ class _FixedPidAdapter:
 
     def parse_assessment(self, output: str) -> str:
         return ""
+
+    def parse_usage(self, output: str, kind: UsageKind) -> UsageSample | None:
+        return None
+
+    def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind) -> UsageSample:
+        return UsageSample(
+            kind=kind,
+            model="",
+            input_tokens=0,
+            output_tokens=0,
+            cache_read_tokens=0,
+            cache_create_tokens=0,
+            cost_usd=None,
+        )
 
 
 class _RecordingProcessProbe:

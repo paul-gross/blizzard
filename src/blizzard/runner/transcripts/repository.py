@@ -113,3 +113,14 @@ class IReadTranscriptRepository(Protocol):
         does not need it at all.
         """
         ...
+
+    def read_raw_lines(self, session_id: str, *, spawn_cwd: str | None) -> list[str]:
+        """The session's raw transcript lines, unparsed — empty when none exist or the
+        file is unreadable (issue #58's envelope-less usage fallback).
+
+        Same location rule as :meth:`read_turns` (session-id glob, ``spawn_cwd`` an
+        optional disambiguation hint only); this sibling skips :func:`~blizzard.runner.
+        transcripts.parser.parse_turns` entirely — the caller (``sum_transcript_usage``)
+        wants the raw per-message ``usage`` objects, not the panel's collapsed turns.
+        """
+        ...

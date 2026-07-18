@@ -41,6 +41,7 @@ from blizzard.wire.facts import (
     QUESTION_ASKED,
     RUNNER_LOCALLY_PAUSED,
     RUNNER_LOCALLY_RESUMED,
+    USAGE_RECORDED,
     RunnerFactAck,
     RunnerFactBatch,
 )
@@ -146,6 +147,27 @@ class FactIngestService:
                 asked_at=_parse_at(payload.get("asked_at"), now),
             )
             return True
+        if kind == USAGE_RECORDED:
+            # Deliberately NO epoch fence (contrast the completion path, apply.py, which
+            # rejects a stale-epoch submission before it writes anything): a usage row
+            # whose epoch trails the chunk's latest is real spend a fenced-out zombie
+            # attempt already incurred, and it must be attributed to *its own* epoch, not
+            # dropped. The chunk-level total (derive_chunk_usage) sums every row regardless.
+            self._chunks.record_usage(
+                str(payload["chunk_id"]),
+                node_id=str(payload["node_id"]),
+                epoch=int(payload["epoch"]),  # type: ignore[arg-type]
+                runner_id=runner_id,
+                kind=str(payload["kind"]),
+                model=str(payload["model"]),
+                input_tokens=int(payload["input_tokens"]),  # type: ignore[arg-type]
+                output_tokens=int(payload["output_tokens"]),  # type: ignore[arg-type]
+                cache_read_tokens=int(payload["cache_read_tokens"]),  # type: ignore[arg-type]
+                cache_create_tokens=int(payload["cache_create_tokens"]),  # type: ignore[arg-type]
+                cost_usd=_opt_float(payload.get("cost_usd")),
+                at=now,
+            )
+            return True
         if kind == ANSWER_DELIVERED:
             # Board detail: the resume-with-answer ran; status flipped at question.answered.
             self._chunks.record_answer_delivered(
@@ -162,6 +184,7 @@ class FactIngestService:
                 paused=kind == RUNNER_LOCALLY_PAUSED,
                 at=_parse_at(payload.get("at"), now),
                 by=str(payload.get("by", "operator")),
+                reason=_opt(payload.get("reason")),
             )
             return True
         _log.warning("unknown runner fact kind", kind=kind)
@@ -170,6 +193,11 @@ class FactIngestService:
 
 def _opt(value: object) -> str | None:
     return str(value) if value is not None else None
+
+
+def _opt_float(value: object) -> float | None:
+    """A usage fact's ``cost_usd`` — ``None`` stays ``None`` (no envelope), never fabricated."""
+    return float(value) if value is not None else None  # type: ignore[arg-type]
 
 
 def _parse_at(value: object, fallback: datetime) -> datetime:

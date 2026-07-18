@@ -6,12 +6,18 @@ a real fake-harness binary that mimics ``mock-claude-code``'s CLI surface — sp
 launches a real process (its pid + start time stamped) in the acquired
 workdir, and the judgement resume's output is parsed into a choice. The real
 ``mock-claude-code`` façade is bound in the e2e (``blizzard:e2e``).
+
+The bottom section (epic #57 phase 1) covers ``parse_usage``/``sum_transcript_usage``
+in isolation (unit) and the injected per-lease stdout-file redirect on ``spawn``/
+``resume_with_message`` against the same real fake-harness binary (component).
 """
 
 from __future__ import annotations
 
+import json
 import os
 import stat
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -219,3 +225,315 @@ def test_spawn_falls_back_to_env_workdir_without_a_workspace_root(tmp_path: Path
 
     # No prefix and no workspace root: cwd is the env workdir, prompt is the envelope prompt alone.
     assert (env_workdir / "spawned-here.txt").read_text() == (envelope.prompt or "")
+
+
+# --------------------------------------------------------------------------- #
+# Usage extraction (epic #57, phase 1 of #58): parse_usage, sum_transcript_usage
+# --------------------------------------------------------------------------- #
+
+_USAGE_ENVELOPE = json.dumps(
+    {
+        "type": "result",
+        "subtype": "success",
+        "is_error": False,
+        "result": "<Choice>pass</Choice>",
+        "session_id": "s1",
+        "model": "claude-opus-4-8",
+        "usage": {
+            "input_tokens": 120,
+            "output_tokens": 45,
+            "cache_read_input_tokens": 30,
+            "cache_creation_input_tokens": 15,
+        },
+        "total_cost_usd": 0.042,
+    }
+)
+
+
+@pytest.mark.unit
+def test_parse_usage_extracts_tokens_and_cost_from_json_envelope() -> None:
+    sample = ClaudeCodeAdapter().parse_usage(_USAGE_ENVELOPE, "judge")
+    assert sample is not None
+    assert sample.kind == "judge"
+    assert sample.model == "claude-opus-4-8"
+    assert sample.input_tokens == 120
+    assert sample.output_tokens == 45
+    assert sample.cache_read_tokens == 30
+    assert sample.cache_create_tokens == 15
+    assert sample.cost_usd == 0.042
+
+
+@pytest.mark.unit
+def test_parse_usage_returns_none_without_a_result_envelope() -> None:
+    assert ClaudeCodeAdapter().parse_usage("not json at all", "spawn") is None
+    assert ClaudeCodeAdapter().parse_usage("", "spawn") is None
+
+
+@pytest.mark.unit
+def test_parse_usage_returns_none_when_envelope_has_no_usage_object() -> None:
+    # A killed/verdict-less worker's envelope (if any) carries no `usage` at all —
+    # the caller's cue to fall back to `sum_transcript_usage`.
+    envelope = json.dumps({"type": "result", "result": "<Choice>pass</Choice>", "session_id": "s1"})
+    assert ClaudeCodeAdapter().parse_usage(envelope, "spawn") is None
+
+
+@pytest.mark.unit
+def test_parse_usage_falls_back_to_the_configured_model_when_envelope_omits_it() -> None:
+    envelope = json.dumps(
+        {
+            "type": "result",
+            "result": "ok",
+            "session_id": "s1",
+            "usage": {
+                "input_tokens": 1,
+                "output_tokens": 2,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0,
+            },
+        }
+    )
+    sample = ClaudeCodeAdapter(model="claude-sonnet-5").parse_usage(envelope, "resume")
+    assert sample is not None
+    assert sample.model == "claude-sonnet-5"
+    assert sample.cost_usd is None  # no `total_cost_usd` in this envelope — absent, never fabricated
+
+
+@pytest.mark.unit
+def test_parse_usage_missing_token_fields_default_to_zero() -> None:
+    envelope = json.dumps({"type": "result", "result": "ok", "session_id": "s1", "usage": {}})
+    sample = ClaudeCodeAdapter().parse_usage(envelope, "spawn")
+    assert sample is not None
+    counts = (sample.input_tokens, sample.output_tokens, sample.cache_read_tokens, sample.cache_create_tokens)
+    assert counts == (0, 0, 0, 0)
+
+
+@pytest.mark.unit
+def test_sum_transcript_usage_sums_multiple_assistant_messages() -> None:
+    lines = [
+        json.dumps({"type": "user", "message": {"role": "user", "content": "hi"}}),
+        json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "model": "claude-opus-4-8",
+                    "usage": {
+                        "input_tokens": 10,
+                        "output_tokens": 5,
+                        "cache_read_input_tokens": 1,
+                        "cache_creation_input_tokens": 2,
+                    },
+                    "content": [{"type": "text", "text": "ok"}],
+                },
+            }
+        ),
+        json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "role": "assistant",
+                    "model": "claude-opus-4-8",
+                    "usage": {
+                        "input_tokens": 20,
+                        "output_tokens": 8,
+                        "cache_read_input_tokens": 3,
+                        "cache_creation_input_tokens": 4,
+                    },
+                    "content": [{"type": "text", "text": "more"}],
+                },
+            }
+        ),
+    ]
+
+    sample = ClaudeCodeAdapter().sum_transcript_usage(lines, "resume")
+
+    assert sample.kind == "resume"
+    assert sample.model == "claude-opus-4-8"
+    assert sample.input_tokens == 30
+    assert sample.output_tokens == 13
+    assert sample.cache_read_tokens == 4
+    assert sample.cache_create_tokens == 6
+    assert sample.cost_usd is None  # a transcript carries no dollar figure — the envelope-less fallback
+
+
+@pytest.mark.unit
+def test_sum_transcript_usage_ignores_non_assistant_and_malformed_lines() -> None:
+    lines = [
+        "",
+        "not json",
+        json.dumps({"type": "user", "message": {"role": "user", "content": "hi"}}),
+        json.dumps([1, 2, 3]),  # valid JSON, not a dict record
+        json.dumps({"type": "assistant", "message": "not-a-dict"}),
+        json.dumps({"type": "assistant", "message": {"usage": "not-a-dict"}}),
+    ]
+
+    sample = ClaudeCodeAdapter().sum_transcript_usage(lines, "spawn")
+
+    counts = (sample.input_tokens, sample.output_tokens, sample.cache_read_tokens, sample.cache_create_tokens)
+    assert counts == (0, 0, 0, 0)
+    assert sample.cost_usd is None
+
+
+@pytest.mark.unit
+def test_sum_transcript_usage_of_empty_transcript_is_zeroed() -> None:
+    sample = ClaudeCodeAdapter(model="claude-sonnet-5").sum_transcript_usage([], "judge")
+
+    assert sample.kind == "judge"
+    assert sample.model == "claude-sonnet-5"  # nothing to read — falls back to the configured default
+    assert sample.input_tokens == 0
+    assert sample.cost_usd is None
+
+
+# --------------------------------------------------------------------------- #
+# Injected per-lease stdout redirect (epic #57): spawn / resume_with_message
+# --------------------------------------------------------------------------- #
+
+_FAKE_HARNESS_WITH_USAGE = """#!/usr/bin/env python3
+import sys, json
+args = sys.argv[1:]
+session = resume = prompt = None
+output_format = "text"
+i = 0
+while i < len(args):
+    a = args[i]
+    if a == "--session-id": session = args[i + 1]; i += 2
+    elif a == "--resume": resume = args[i + 1]; i += 2
+    elif a == "--output-format": output_format = args[i + 1]; i += 2
+    elif a == "--settings": i += 2
+    elif a == "--permission-mode": i += 2
+    elif a == "--model": i += 2
+    elif a in ("-p", "--print"): i += 1
+    else: prompt = a; i += 1
+sid = resume or session or "auto"
+result_text = "<Choice>pass</Choice>" if resume else ""
+if output_format != "json":
+    print(result_text)
+else:
+    envelope = {
+        "type": "result",
+        "subtype": "success",
+        "is_error": False,
+        "result": result_text,
+        "session_id": sid,
+        "model": "claude-opus-4-8",
+        "usage": {
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "cache_read_input_tokens": 10,
+            "cache_creation_input_tokens": 5,
+        },
+        "total_cost_usd": 0.0123,
+    }
+    print(json.dumps(envelope))
+"""
+
+
+def _fake_binary_with_usage(tmp_path: Path) -> str:
+    script = tmp_path / "fake-claude-usage"
+    script.write_text(_FAKE_HARNESS_WITH_USAGE)
+    script.chmod(script.stat().st_mode | stat.S_IEXEC | stat.S_IRUSR)
+    return str(script)
+
+
+@pytest.mark.component
+def test_spawn_redirects_stdout_to_the_injected_stdout_path(tmp_path: Path) -> None:
+    binary = _fake_binary_with_usage(tmp_path)
+    workdir = tmp_path / "e1"
+    workdir.mkdir()
+    stdout_path = tmp_path / "lease-1.stdout"
+    adapter = ClaudeCodeAdapter(binary=binary)
+    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
+    preamble = WorkerPreamble(
+        environments=[AcquiredEnvironment(environment_id="e1", workdir=str(workdir))],
+        lease_id="lease_1",
+        local_api_url="http://127.0.0.1:8431",
+        stdout_path=str(stdout_path),
+    )
+
+    handle = adapter.spawn(envelope, preamble, session_hint="sess-usage")
+    os.waitpid(handle.pid, 0)
+
+    assert stdout_path.exists()
+    sample = adapter.parse_usage(stdout_path.read_text(), "spawn")
+    assert sample is not None
+    assert sample.input_tokens == 100
+    assert sample.cost_usd == 0.0123
+
+
+@pytest.mark.component
+def test_spawn_without_a_stdout_path_still_discards_output(tmp_path: Path) -> None:
+    # Empty `stdout_path` keeps today's behavior (DEVNULL) — nothing is left on disk.
+    binary = _fake_binary_with_usage(tmp_path)
+    workdir = tmp_path / "e1"
+    workdir.mkdir()
+    adapter = ClaudeCodeAdapter(binary=binary)
+    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
+    preamble = WorkerPreamble(
+        environments=[AcquiredEnvironment(environment_id="e1", workdir=str(workdir))],
+        lease_id="lease_1",
+        local_api_url="http://127.0.0.1:8431",
+    )
+
+    handle = adapter.spawn(envelope, preamble, session_hint="sess-usage")
+    os.waitpid(handle.pid, 0)
+
+    assert list(workdir.glob("*.stdout")) == []
+
+
+@pytest.mark.component
+def test_resume_with_message_redirects_stdout_to_the_injected_path(tmp_path: Path) -> None:
+    binary = _fake_binary_with_usage(tmp_path)
+    workdir = tmp_path / "e1"
+    workdir.mkdir()
+    stdout_path = tmp_path / "lease-1-resume.stdout"
+    adapter = ClaudeCodeAdapter(binary=binary)
+
+    pid = adapter.resume_with_message(str(workdir), "sess-usage", "deliver the answer", stdout_path=str(stdout_path))
+    os.waitpid(pid, 0)
+
+    assert stdout_path.exists()
+    sample = adapter.parse_usage(stdout_path.read_text(), "resume")
+    assert sample is not None
+    assert sample.output_tokens == 50
+
+
+@pytest.mark.component
+def test_resume_with_message_passes_output_format_json_so_cost_is_real(tmp_path: Path) -> None:
+    """Regression pin: ``resume_with_message`` must pass ``--output-format json``
+    (mirroring ``spawn``/``judge``) so its stdout is a JSON result envelope and
+    ``parse_usage`` reads the *real* ``total_cost_usd`` — not just token counts.
+    Without the flag the fake (like the real ``claude``/``mock-claude-code``
+    binaries) falls back to plain text and `parse_usage` returns `None`."""
+    binary = _fake_binary_with_usage(tmp_path)
+    workdir = tmp_path / "e1"
+    workdir.mkdir()
+    stdout_path = tmp_path / "lease-1-resume-cost.stdout"
+    adapter = ClaudeCodeAdapter(binary=binary)
+
+    pid = adapter.resume_with_message(str(workdir), "sess-usage", "deliver the answer", stdout_path=str(stdout_path))
+    os.waitpid(pid, 0)
+
+    sample = adapter.parse_usage(stdout_path.read_text(), "resume")
+    assert sample is not None
+    assert sample.cost_usd == 0.0123
+
+
+@pytest.mark.component
+def test_resume_without_output_format_json_yields_no_envelope(tmp_path: Path) -> None:
+    """The other side of the regression: a resume invocation that omits
+    ``--output-format json`` (the bug ``resume_with_message`` used to carry) emits
+    plain text, not an envelope — so ``parse_usage`` returns ``None`` and the
+    caller's transcript-summation fallback (cost absent) is what sets the cost."""
+    binary = _fake_binary_with_usage(tmp_path)
+    workdir = tmp_path / "e1"
+    workdir.mkdir()
+    adapter = ClaudeCodeAdapter(binary=binary)
+
+    result = subprocess.run(
+        [binary, "-p", "--resume", "sess-usage", "deliver the answer"],
+        cwd=workdir,
+        capture_output=True,
+        text=True,
+    )
+
+    assert adapter.parse_usage(result.stdout, "resume") is None

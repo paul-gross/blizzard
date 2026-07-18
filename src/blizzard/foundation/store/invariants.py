@@ -100,6 +100,23 @@ def check_runner_store(engine: Engine) -> list[Violation]:
                     Violation("runner:one-open-pause-park-per-lease", f"lease {lease_id} has {n} open pause-parks")
                 )
 
+        # runner:usage-attributed-once — a harness invocation's usage is attributed
+        # exactly once per (lease, generation, kind) (epic #57, issue #58). Append-only by
+        # design (a retry/resume within a lease mints a new generation and so a genuinely
+        # new row) and idempotent by construction (`record_usage`'s own check-then-insert,
+        # not a DB constraint — `bzh:sql-portable`) — a duplicate here means that guard was
+        # bypassed, e.g. by a second writer never routing through `record_usage`.
+        usage_rows = select(runner.usage_facts.c.lease_id, runner.usage_facts.c.generation, runner.usage_facts.c.kind)
+        usage_key = Counter((row[0], row[1], row[2]) for row in conn.execute(usage_rows))
+        for (lease_id, generation, kind), n in usage_key.items():
+            if n > 1:
+                violations.append(
+                    Violation(
+                        "runner:usage-attributed-once",
+                        f"lease {lease_id} generation {generation} kind {kind} has {n} usage facts",
+                    )
+                )
+
         # NOT checked, deliberately: "a pause-parked lease has no closure" (issue #46 plan §7).
         # It reads like the natural companion to the rule above, and it is **false on a legal
         # history**: pause a chunk, then detach it. `_reconcile_leases` abandons the lease —

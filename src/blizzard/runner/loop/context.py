@@ -19,6 +19,7 @@ from blizzard.runner.loop.hub import IHubClient
 from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.loop.worktree import IWorktreeGit
 from blizzard.runner.store.repository import IWriteRunnerStore
+from blizzard.runner.transcripts.repository import IReadTranscriptRepository
 
 #: The retry budget a node with no ``retries.max`` falls back to (a chosen constant,
 #: not derived from a formula): an execution-attempt cap of 2 before escalation to
@@ -53,6 +54,25 @@ class LoopConfig:
     #: builds one context and reuses it for its lifetime, so there a config edit needs a
     #: restart to take effect, not just a new tick.
     gates: tuple[str, ...] = ()
+    #: The directory the per-lease harness-stdout files live in (issue #58) — resolved
+    #: once at the composition root from the runner's own data directory, empty meaning
+    #: "no redirect" (today's discard/inherit behavior, Phase 1's default). A worker's
+    #: stdout is redirected to ``<this>/<lease_id>.<generation>.stdout`` so a killed/reaped
+    #: worker's result envelope survives the process for ADVANCE's usage extraction to
+    #: read back.
+    worker_stdout_dir: str = ""
+    #: The per-chunk spend cap (issue #61a), mirrored from ``RunnerConfig.chunk_cap_usd``.
+    #: ``None`` means no cap — ADVANCE's step boundary (:func:`blizzard.runner.loop.steps.
+    #: _park_on_cost_cap`) never parks a chunk on spend.
+    chunk_cap_usd: float | None = None
+    #: The runner-wide spend ceiling (issue #61b), mirrored from ``RunnerConfig.
+    #: runner_ceiling_usd``. ``None`` means no ceiling — the tick's ceiling check
+    #: (:func:`blizzard.runner.loop.steps.check_spend_ceiling`) never engages the local
+    #: pause brake on spend alone.
+    runner_ceiling_usd: float | None = None
+    #: The runner ceiling's rolling window, in hours, mirrored from ``RunnerConfig.
+    #: runner_ceiling_window_hours``. Unused while :attr:`runner_ceiling_usd` is ``None``.
+    runner_ceiling_window_hours: float = 24.0
 
 
 @dataclass(frozen=True)
@@ -67,3 +87,7 @@ class LoopContext:
     process: IProcessProbe
     worktree_git: IWorktreeGit
     config: LoopConfig
+    #: The read-only transcript seam (issue #58's envelope-less usage fallback) — ``None``
+    #: when not wired (every test that does not exercise the fallback), so the loop's
+    #: other collaborators stay untouched by this addition.
+    transcripts: IReadTranscriptRepository | None = None

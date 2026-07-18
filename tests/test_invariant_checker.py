@@ -104,6 +104,47 @@ def test_gapped_outbound_seq_is_a_violation(tmp_path: Path) -> None:
     assert "runner:gapless-outbound-seq" in slugs
 
 
+def _usage_row(*, generation: int = 1, kind: str = "spawn") -> dict:
+    return {
+        "lease_id": "lease_1",
+        "chunk_id": "ch_1",
+        "node_id": "nd_build",
+        "epoch": 1,
+        "generation": generation,
+        "kind": kind,
+        "model": "claude-x",
+        "input_tokens": 100,
+        "output_tokens": 50,
+        "cache_read_tokens": 0,
+        "cache_create_tokens": 0,
+        "cost_usd": 0.1,
+        "recorded_at": _NOW,
+    }
+
+
+def test_duplicate_usage_attribution_for_one_lease_generation_kind_is_a_violation(tmp_path: Path) -> None:
+    """Usage is append-only and idempotent by ``record_usage``'s own check-then-insert, not
+    a DB constraint (``bzh:sql-portable``, epic #57) — so two rows for the same
+    ``(lease, generation, kind)`` mean that guard was bypassed, and the checker names it."""
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        for _ in range(2):  # two facts for the same (lease_1, generation 1, spawn)
+            conn.execute(insert(runner.usage_facts).values(**_usage_row()))
+    slugs = {v.invariant for v in check_runner_store(engine)}
+    assert "runner:usage-attributed-once" in slugs
+
+
+def test_distinct_generation_or_kind_usage_rows_are_not_a_violation(tmp_path: Path) -> None:
+    """A retry/resume within a lease mints a new generation, and a judgement a different
+    kind — each a genuinely new row, not a duplicate. The checker stays green over them."""
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(insert(runner.usage_facts).values(**_usage_row(generation=1, kind="spawn")))
+        conn.execute(insert(runner.usage_facts).values(**_usage_row(generation=2, kind="resume")))
+        conn.execute(insert(runner.usage_facts).values(**_usage_row(generation=1, kind="judge")))
+    assert check_runner_store(engine) == []
+
+
 def test_duplicate_repo_land_is_a_violation(tmp_path: Path) -> None:
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:

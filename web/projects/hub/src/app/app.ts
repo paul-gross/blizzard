@@ -9,9 +9,17 @@ import {
   QueuePanel,
   RunnerPanel,
   injectHubChunksQuery,
+  injectHubFleetSpendQuery,
   injectHubHealthQuery,
   injectPromoteChunkMutation,
 } from 'fleet';
+
+/** Local midnight, as the ISO-8601 instant `GET /api/fleet/spend?since=` expects
+ * (issue #60) — the board's "spend today" is the operator's own calendar day, not UTC's. */
+function startOfLocalDayIso(): string {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+}
 
 /**
  * The hub board app — the mission-control fleet surface. It composes the
@@ -40,7 +48,7 @@ import {
   imports: [BoardHeader, BoardShell, ChunkDetail, EventLogPanel, QuestionsPanel, QueuePanel, RunnerPanel],
   template: `
     <div class="layout">
-      <fleet-board-header [connection]="connection()" [chunks]="chunks()" />
+      <fleet-board-header [connection]="connection()" [chunks]="chunks()" [spendToday]="spendToday.data() ?? null" />
       <main class="main">
         <div class="col rail-left">
           <fleet-queue-panel class="rail-queue" />
@@ -128,6 +136,11 @@ export class App {
   private readonly health = injectHubHealthQuery();
   private readonly chunksQuery = injectHubChunksQuery();
   private readonly live = inject(FleetLiveUpdates);
+
+  /** The fleet's spend-today read (issue #60) — `since` is local start-of-day,
+   * recomputed each time the query re-derives its key (a day rollover moves the
+   * window forward, same as any other calendar-relative read). */
+  protected readonly spendToday = injectHubFleetSpendQuery(() => startOfLocalDayIso());
 
   /** Promote a not-ready chunk to ready from its board card. */
   protected readonly promoteChunk = injectPromoteChunkMutation();

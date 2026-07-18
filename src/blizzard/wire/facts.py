@@ -40,6 +40,14 @@ ANSWER_DELIVERED = "answer.delivered"
 # Runner-scoped: no chunk_id, no lease_id.
 RUNNER_LOCALLY_PAUSED = "runner.locally_paused"
 RUNNER_LOCALLY_RESUMED = "runner.locally_resumed"
+# One harness invocation's usage/cost telemetry (epic #57, issue #58) — a fact, never a
+# stored aggregate: the hub derives a chunk's total by summing these at read time
+# (Phase 3 of the epic). Payload: {chunk_id, node_id, epoch, kind, model, input_tokens,
+# output_tokens, cache_read_tokens, cache_create_tokens, cost_usd|null}. Idempotency
+# rides the same per-runner outbound seq every other fact here does — the runner-local
+# `(lease_id, generation, kind)` key is a *local* write-once guard
+# (`IWriteRunnerStore.record_usage`), not part of this wire shape.
+USAGE_RECORDED = "usage.recorded"
 
 
 class LeaseMintReport(BaseModel):

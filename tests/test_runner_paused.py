@@ -21,9 +21,10 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.work import DEFAULT_MODEL, ChunkStatus
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.hub import HubClientError, RouteClaimOutcome
-from blizzard.runner.loop.steps import advance, fill, mark_resume_intents, pull, reap, resume
+from blizzard.runner.loop.steps import advance, check_spend_ceiling, fill, mark_resume_intents, pull, reap, resume
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.store.repository import NewLease
 from blizzard.wire.chunk import ChunkDetail, PauseView, RouteView
@@ -1088,3 +1089,294 @@ def test_fill_denial_logs_distinctly_from_a_race_conflict(tmp_path):  # type: ig
     assert denied[0]["chunk_id"] == "ch_1"
     assert denied[0]["runner_id"] == "r1"
     assert lost_race == []  # the two outcomes are logged legibly apart, not conflated
+
+
+# --------------------------------------------------------------------------- #
+# Runner spend ceiling (issue #61b) — the tick-level kill-switch over the SAME
+# local pause brake this whole module exercises, engaged by `check_spend_ceiling`
+# rather than the operator's own `PATCH /runner` / `blizzard runner pause`.
+# --------------------------------------------------------------------------- #
+
+
+def _ceiling_config(cap, *, window_hours=24.0, max_agents=1):  # type: ignore[no-untyped-def]
+    return LoopConfig(
+        runner_id="r1",
+        workspace_id="ws1",
+        max_agents=max_agents,
+        runner_ceiling_usd=cap,
+        runner_ceiling_window_hours=window_hours,
+    )
+
+
+def _sample(*, cost, kind: UsageKind = "spawn"):  # type: ignore[no-untyped-def]
+    return UsageSample(
+        kind=kind,
+        model="claude-x",
+        input_tokens=10,
+        output_tokens=20,
+        cache_read_tokens=0,
+        cache_create_tokens=0,
+        cost_usd=cost,
+    )
+
+
+def _record_usage(store, *, lease_id="lease_1", chunk_id="ch_1", cost, recorded_at):  # type: ignore[no-untyped-def]
+    store.record_usage(
+        lease_id=lease_id,
+        chunk_id=chunk_id,
+        node_id="nd_build",
+        epoch=1,
+        generation=1,
+        sample=_sample(cost=cost),
+        recorded_at=recorded_at,
+    )
+
+
+@pytest.mark.unit
+def test_ceiling_crossing_engages_the_local_brake_and_logs_ceiling_and_spend(tmp_path):  # type: ignore[no-untyped-def]
+    """Crossing `runner_ceiling_usd` engages the SAME local pause brake `blizzard runner
+    pause` sets, and the log line names both the configured ceiling and the spend that
+    tripped it (the escalation the plan calls for — issue #61b)."""
+    store = _store(tmp_path)
+    _record_usage(store, cost=7.0, recorded_at=_NOW)
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({}),
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
+        probe=FakeProbe(),
+        clock=FixedClock(_NOW),
+        config=_ceiling_config(5.0),
+    )
+
+    assert store.local_paused("r1") is False
+    with capture_logs() as logs:
+        check_spend_ceiling(ctx)
+
+    assert store.local_paused("r1") is True
+    reports = [f for f in store.pending_outbound() if f.kind == RUNNER_LOCALLY_PAUSED]
+    assert len(reports) == 1
+    payload = json.loads(reports[0].payload)
+    assert payload["by"] == "runner-ceiling"
+    assert "5.00" in payload["reason"] and "7.00" in payload["reason"]
+    warnings = [e for e in logs if "runner locally paused" in e["event"]]
+    assert len(warnings) == 1
+    assert warnings[0]["ceiling_usd"] == 5.0
+    assert warnings[0]["spend_usd"] == 7.0
+
+
+@pytest.mark.unit
+def test_ceiling_absent_never_engages_regardless_of_spend(tmp_path):  # type: ignore[no-untyped-def]
+    """`runner_ceiling_usd` unset (today's default) never engages the brake, however much
+    this runner has spent — mirroring the per-chunk cap's identical absent-means-off rule."""
+    store = _store(tmp_path)
+    _record_usage(store, cost=9999.0, recorded_at=_NOW)
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({}),
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
+        probe=FakeProbe(),
+        clock=FixedClock(_NOW),
+    )
+
+    check_spend_ceiling(ctx)
+
+    assert store.local_paused("r1") is False
+    assert [f for f in store.pending_outbound() if f.kind == RUNNER_LOCALLY_PAUSED] == []
+
+
+@pytest.mark.unit
+def test_ceiling_under_cap_does_not_engage(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _record_usage(store, cost=1.0, recorded_at=_NOW)
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({}),
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
+        probe=FakeProbe(),
+        clock=FixedClock(_NOW),
+        config=_ceiling_config(5.0),
+    )
+
+    check_spend_ceiling(ctx)
+
+    assert store.local_paused("r1") is False
+
+
+@pytest.mark.unit
+def test_ceiling_partial_total_trips_the_lower_bound_and_flags_partial(tmp_path):  # type: ignore[no-untyped-def]
+    """A cost-absent row (envelope-less fallback) still contributes its tokens to the
+    window but $0 to the cost sum — the ceiling trips on that LOWER BOUND, and both the
+    log line and the buffered report say PARTIAL, so an operator is never told a partial
+    total is the whole spend (issue #61's lower-bound + PARTIAL treatment, carried into
+    the runner ceiling from the per-chunk cap)."""
+    store = _store(tmp_path)
+    _record_usage(store, cost=None, recorded_at=_NOW)  # $0 lower bound, cost_partial=True
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({}),
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
+        probe=FakeProbe(),
+        clock=FixedClock(_NOW),
+        config=_ceiling_config(0.0),  # any spend at all trips it
+    )
+
+    with capture_logs() as logs:
+        check_spend_ceiling(ctx)
+
+    assert store.local_paused("r1") is True
+    warnings = [e for e in logs if "runner locally paused" in e["event"]]
+    assert warnings[0]["cost_partial"] is True
+    assert "PARTIAL" in warnings[0]["event"]
+    reports = [f for f in store.pending_outbound() if f.kind == RUNNER_LOCALLY_PAUSED]
+    assert "PARTIAL" in json.loads(reports[0].payload)["reason"]
+
+
+@pytest.mark.unit
+def test_ceiling_engages_once_no_thrash_on_later_ticks(tmp_path):  # type: ignore[no-untyped-def]
+    """Once engaged, a later tick's check must neither re-engage nor re-log — engaging is a
+    one-time transition, not a per-tick assertion, even while the window's sum stays over
+    the ceiling for as long as it holds (issue #61b's engage-once requirement)."""
+    store = _store(tmp_path)
+    _record_usage(store, cost=7.0, recorded_at=_NOW)
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({}),
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
+        probe=FakeProbe(),
+        clock=FixedClock(_NOW),
+        config=_ceiling_config(5.0),
+    )
+
+    check_spend_ceiling(ctx)
+    assert store.local_paused("r1") is True
+    assert len([f for f in store.pending_outbound() if f.kind == RUNNER_LOCALLY_PAUSED]) == 1
+
+    with capture_logs() as logs:
+        check_spend_ceiling(ctx)  # a second, and later a third, tick's check
+        check_spend_ceiling(ctx)
+
+    assert [e for e in logs if "runner locally paused" in e["event"]] == []  # not re-logged
+    # Still exactly one pause report ever buffered — no re-engage fact either.
+    assert len([f for f in store.pending_outbound() if f.kind == RUNNER_LOCALLY_PAUSED]) == 1
+
+
+@pytest.mark.unit
+def test_ceiling_does_not_auto_lift_when_the_window_rolls_the_spend_back_under_cap(tmp_path):  # type: ignore[no-untyped-def]
+    """Once engaged, the brake stays engaged even after the rolling window later excludes
+    the very usage fact that tripped it (the sum genuinely drops back under the cap) —
+    `blizzard runner start` is the ONLY conscious clear (issue #61's locked design)."""
+    store = _store(tmp_path)
+    _record_usage(store, cost=7.0, recorded_at=_NOW)
+    clock = FixedClock(_NOW)
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({}),
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
+        probe=FakeProbe(),
+        clock=clock,
+        config=_ceiling_config(5.0, window_hours=1.0),
+    )
+
+    check_spend_ceiling(ctx)
+    assert store.local_paused("r1") is True
+
+    # Move the clock two hours on — the 1h window now excludes the tripping fact entirely,
+    # so a fresh, unpaused check of the same config would find $0 spend, well under cap.
+    clock.advance(timedelta(hours=2))
+    assert store.usage_since(clock.now() - timedelta(hours=1)).cost_usd == 0.0  # confirms the rollover
+
+    check_spend_ceiling(ctx)
+
+    assert store.local_paused("r1") is True  # still engaged — nothing lifts it automatically
+
+
+@pytest.mark.unit
+def test_ceiling_engaged_defers_reap_kill_and_suppresses_fill_in_the_same_tick(tmp_path):  # type: ignore[no-untyped-def]
+    """Driven as a full tick: a live worker whose runner just crossed its ceiling is left
+    running untouched (a ceiling is not a drain, exactly like a manual pause), consumes no
+    retry, and a second, otherwise-claimable chunk is not spawned into either — the fresh
+    engagement is already visible to every later step in the SAME tick it fires in."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)  # lease_1 / ch_1, a live worker (pid 100)
+    _record_usage(store, cost=7.0, recorded_at=_NOW)
+    hub = FakeHub()
+    hub.paused = False
+    hub.chunks["ch_1"] = _running_chunk()
+    hub.queue = [QueuePeekEntry(chunk_id="ch_2", graph_id="gr_1", position=0)]
+    ch_2_env = make_envelope("ch_2", "build", node_id="nd_build", choices=_CHOICES)
+    hub.claim_outcome = claimed_outcome("ch_2", ch_2_env)
+    hub.envelopes["ch_2"] = ch_2_env
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    probe = FakeProbe(alive={(100, "start-100")})  # the ch_1 worker is still running
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1", "e2": "/ws/e2"}),
+        harness=harness,
+        probe=probe,
+        clock=FixedClock(_NOW),
+        config=_ceiling_config(5.0, max_agents=2),
+    )
+
+    tick(ctx)
+
+    assert store.local_paused("r1") is True  # the ceiling engaged this very tick
+    assert probe.killed == []  # not a drain — the live worker was left alone
+    assert harness.spawns == []  # and nothing new was spawned into the free second env either
+    assert store.attempt_count("ch_1", "nd_build") == 1  # no retry consumed
+    assert hub.claims == []
+    lease = store.active_lease("lease_1")
+    assert lease is not None and lease.pid == 100  # untouched
+
+
+@pytest.mark.unit
+def test_runner_start_clears_the_ceiling_brake_exactly_like_a_manual_pause(tmp_path):  # type: ignore[no-untyped-def]
+    """`blizzard runner start` (``PATCH /api/runner`` with ``paused=False`` — the same
+    write :func:`_pause_locally` makes here) clears a ceiling-engaged brake exactly as it
+    clears an operator's own pause: the ceiling reuses the one brake, so `start` needs no
+    ceiling-specific code path at all. Once cleared and the window itself no longer holds
+    the tripping spend, FILL claims again."""
+    store = _store(tmp_path)
+    _record_usage(store, cost=7.0, recorded_at=_NOW)
+    clock = FixedClock(_NOW)
+    hub = FakeHub()
+    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    env = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
+    hub.claim_outcome = claimed_outcome("ch_1", env)
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
+        probe=FakeProbe(),
+        clock=clock,
+        config=_ceiling_config(5.0, window_hours=1.0),
+    )
+
+    check_spend_ceiling(ctx)
+    assert store.local_paused("r1") is True
+    fill(ctx)
+    assert hub.claims == []  # suppressed while engaged
+
+    # `blizzard runner start` — the exact PATCH /api/runner write (`_set_local_paused` in
+    # `runner/cli.py`, `patch_runner` in `runner/api/control.py`) `record_local_pause`
+    # with `paused=False`; no ceiling-aware code exists or is needed anywhere in that path.
+    _pause_locally(store, ctx, paused=False)
+    assert store.local_paused("r1") is False
+
+    # The window has since moved past the tripping fact, so a fresh ceiling check does not
+    # immediately re-engage the brake out from under the operator's own clear.
+    clock.advance(timedelta(hours=2))
+    check_spend_ceiling(ctx)
+    assert store.local_paused("r1") is False
+
+    fill(ctx)
+
+    assert store.local_paused("r1") is False
+    assert len(hub.claims) == 1  # FILL claims again — work resumed

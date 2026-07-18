@@ -60,6 +60,10 @@ DEFAULT_HARNESS_PERMISSION_MODE = "bypassPermissions"
 DEFAULT_MAX_AGENTS = 1
 DEFAULT_BASE_BRANCH = "main"
 DEFAULT_ENV_POOL: tuple[str, ...] = ("e1",)
+# The runner-ceiling rolling window's default length (issue #61b) — used only when
+# `runner_ceiling_usd` is set and `window_hours` is not given alongside it; a ceiling with
+# no window still needs one to sum over, and a day is the least surprising default.
+DEFAULT_RUNNER_CEILING_WINDOW_HOURS = 24.0
 
 
 def socket_path_for(root: Path) -> Path:
@@ -118,6 +122,31 @@ class RunnerConfig:
     #: takes effect on the next service start; a bare process restart without that
     #: delete would keep the stale value.
     transcripts_root: str = ""
+    #: The per-chunk spend cap (epic #57, issue #61a) — read from the ``[cost]`` table's
+    #: ``chunk_cap_usd`` key. Absent (``None``, the fresh-scaffold default) means no cap,
+    #: today's behavior unchanged. When set, ADVANCE's step boundary parks a chunk whose
+    #: hub-derived total cost (``ChunkDetail.cost.cost_usd``) reaches or exceeds this value
+    #: ``needs_human`` rather than spawning its next attempt, instead of killing the live
+    #: worker that just finished it. The ``[cost]`` table is shared with
+    #: ``runner_ceiling_usd`` — one section for the epic's two spend controls.
+    chunk_cap_usd: float | None = None
+    #: The runner-wide spend ceiling (epic #57, issue #61b) — read from the ``[cost]``
+    #: table's ``runner_ceiling_usd`` key. Absent (``None``, the fresh-scaffold default)
+    #: means no ceiling, today's behavior unchanged. When set, the tick's ceiling check
+    #: (:func:`blizzard.runner.loop.steps.check_spend_ceiling`) sums this runner's own
+    #: LOCAL usage facts over the trailing :attr:`runner_ceiling_window_hours` (a rolling
+    #: window off the injected clock, never wall time) and, once that sum reaches this
+    #: value, engages the existing local pause brake (the same one ``blizzard runner
+    #: pause`` sets) rather than inventing a second suppression mechanism — every spawn
+    #: site already honors it. There is no auto-unpause: the brake stays engaged even
+    #: after the rolling window later drops back under the ceiling, until an operator
+    #: consciously runs ``blizzard runner start``.
+    runner_ceiling_usd: float | None = None
+    #: The runner ceiling's rolling window length in hours (issue #61b) — read from
+    #: ``[cost].window_hours``. Meaningless (and unused) while :attr:`runner_ceiling_usd`
+    #: is ``None``; defaults to :data:`DEFAULT_RUNNER_CEILING_WINDOW_HOURS` when a ceiling
+    #: is set but no window is given alongside it.
+    runner_ceiling_window_hours: float = DEFAULT_RUNNER_CEILING_WINDOW_HOURS
 
     @property
     def config_path(self) -> Path:
@@ -225,6 +254,24 @@ class RunnerConfig:
             "\n# Where the coding harness writes session transcripts (issue #29);\n"
             "# empty = ~/.claude/projects.\n"
             f'transcripts_root = "{self.transcripts_root}"\n'
+            "\n# Spend controls (epic #57); absent = no cap. `chunk_cap_usd` parks a chunk\n"
+            "# needs_human at its next step boundary once its derived spend reaches this cap.\n"
+            "# `runner_ceiling_usd` engages this runner's own local pause brake (the same one\n"
+            "# `blizzard runner pause` sets) once its rolling `window_hours`-long spend reaches\n"
+            "# this value; `blizzard runner start` is the only clear — it does not lift itself\n"
+            "# when the window later rolls the spend back under the ceiling.\n"
+            "[cost]\n"
+            + (
+                f"chunk_cap_usd = {self.chunk_cap_usd}\n"
+                if self.chunk_cap_usd is not None
+                else "# chunk_cap_usd = 5.0\n"
+            )
+            + (
+                f"runner_ceiling_usd = {self.runner_ceiling_usd}\n"
+                if self.runner_ceiling_usd is not None
+                else "# runner_ceiling_usd = 50.0\n"
+            )
+            + f"window_hours = {self.runner_ceiling_window_hours}\n"
         )
 
     @classmethod
@@ -258,6 +305,9 @@ class RunnerConfig:
             workspace_prompt=str(raw.get("workspace_prompt", "")),
             workspace_prompt_file=str(raw.get("workspace_prompt_file", "")),
             transcripts_root=str(raw.get("transcripts_root", "")),
+            chunk_cap_usd=_parse_chunk_cap_usd(raw.get("cost", {})),
+            runner_ceiling_usd=_parse_runner_ceiling_usd(raw.get("cost", {})),
+            runner_ceiling_window_hours=_parse_runner_ceiling_window_hours(raw.get("cost", {})),
         )
 
 
@@ -265,3 +315,27 @@ def _as_env_tuple(value: object) -> tuple[str, ...]:
     if isinstance(value, (list, tuple)):
         return tuple(str(v) for v in value)
     return DEFAULT_ENV_POOL
+
+
+def _parse_chunk_cap_usd(cost: object) -> float | None:
+    """``[cost].chunk_cap_usd`` — absent (the table, or just this key) means no cap."""
+    if not isinstance(cost, dict) or cost.get("chunk_cap_usd") is None:
+        return None
+    return float(cost["chunk_cap_usd"])
+
+
+def _parse_runner_ceiling_usd(cost: object) -> float | None:
+    """``[cost].runner_ceiling_usd`` (issue #61b) — absent (the table, or just this key)
+    means no ceiling, mirroring :func:`_parse_chunk_cap_usd`'s shape exactly."""
+    if not isinstance(cost, dict) or cost.get("runner_ceiling_usd") is None:
+        return None
+    return float(cost["runner_ceiling_usd"])
+
+
+def _parse_runner_ceiling_window_hours(cost: object) -> float:
+    """``[cost].window_hours`` (issue #61b) — defaults to
+    :data:`DEFAULT_RUNNER_CEILING_WINDOW_HOURS` when absent (whether or not a ceiling is
+    set alongside it); meaningless while ``runner_ceiling_usd`` is ``None``."""
+    if not isinstance(cost, dict) or cost.get("window_hours") is None:
+        return DEFAULT_RUNNER_CEILING_WINDOW_HOURS
+    return float(cost["window_hours"])

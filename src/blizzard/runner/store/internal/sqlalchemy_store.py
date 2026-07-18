@@ -13,10 +13,11 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
-from sqlalchemy import Engine, and_, func, or_, select
+from sqlalchemy import Engine, and_, case, func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 
 from blizzard.foundation.logging import get_logger
+from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.store.repository import (
     AskRecord,
     BufferedFact,
@@ -30,6 +31,7 @@ from blizzard.runner.store.repository import (
     ParkRecord,
     RunnerStoreError,
     TakeoverRecord,
+    UsageTotals,
 )
 from blizzard.runner.store.schema import (
     asks,
@@ -54,8 +56,10 @@ from blizzard.runner.store.schema import (
     session_ends,
     takeover_ends,
     takeovers,
+    usage_facts,
     workspace_prompt,
 )
+from blizzard.wire.facts import USAGE_RECORDED
 
 _log = get_logger("blizzard.runner.store")
 
@@ -443,6 +447,35 @@ class SqlAlchemyRunnerStore:
         rows = self._all(select(func.max(daemon_liveness.c.alive_at).label("alive_at")))
         return rows[0].alive_at if rows and rows[0].alive_at is not None else None
 
+    def lease_generation(self, lease_id: str) -> int:
+        stmt = select(func.count()).select_from(lease_spawns).where(lease_spawns.c.lease_id == lease_id)
+        with self._connect() as conn:
+            return int(conn.execute(stmt).scalar_one())
+
+    def lease_ids_for_chunk(self, chunk_id: str) -> list[str]:
+        stmt = select(leases.c.lease_id).where(leases.c.chunk_id == chunk_id)
+        return [str(r.lease_id) for r in self._all(stmt)]
+
+    def usage_since(self, at: datetime) -> UsageTotals:
+        stmt = select(
+            func.coalesce(func.sum(usage_facts.c.input_tokens), 0),
+            func.coalesce(func.sum(usage_facts.c.output_tokens), 0),
+            func.coalesce(func.sum(usage_facts.c.cache_read_tokens), 0),
+            func.coalesce(func.sum(usage_facts.c.cache_create_tokens), 0),
+            func.coalesce(func.sum(usage_facts.c.cost_usd), 0.0),
+            func.coalesce(func.sum(case((usage_facts.c.cost_usd.is_(None), 1), else_=0)), 0),
+        ).where(usage_facts.c.recorded_at >= at)
+        with self._connect() as conn:
+            row = conn.execute(stmt).one()
+        return UsageTotals(
+            input_tokens=int(row[0]),
+            output_tokens=int(row[1]),
+            cache_read_tokens=int(row[2]),
+            cache_create_tokens=int(row[3]),
+            cost_usd=float(row[4]),
+            cost_partial=bool(row[5]),
+        )
+
     # --- writes -------------------------------------------------------------
 
     def record_lease(self, lease: NewLease) -> None:
@@ -692,6 +725,84 @@ class SqlAlchemyRunnerStore:
         with self._begin() as conn:
             conn.execute(requeues.insert().values(chunk_id=chunk_id, requeued_at=at))
         _log.info("chunk requeued locally", chunk_id=chunk_id)
+
+    def record_usage(
+        self,
+        *,
+        lease_id: str,
+        chunk_id: str,
+        node_id: str,
+        epoch: int,
+        generation: int,
+        sample: UsageSample,
+        recorded_at: datetime,
+    ) -> None:
+        # Both writes, one transaction — the same atomic local+outbound pairing
+        # `record_local_pause` uses: a usage fact the hub is never told about is a chunk
+        # whose board total silently under-reports, and nothing later reconciles it.
+        with self._begin() as conn:
+            existing = conn.execute(
+                select(usage_facts.c.id).where(
+                    and_(
+                        usage_facts.c.lease_id == lease_id,
+                        usage_facts.c.generation == generation,
+                        usage_facts.c.kind == sample.kind,
+                    )
+                )
+            ).one_or_none()
+            if existing is not None:
+                # A replay of the exact same invocation (a crash between this write and
+                # the outbound enqueue, re-run by the next tick before the completion is
+                # buffered) — the row is already durable; write nothing a second time.
+                return
+            conn.execute(
+                usage_facts.insert().values(
+                    lease_id=lease_id,
+                    chunk_id=chunk_id,
+                    node_id=node_id,
+                    epoch=epoch,
+                    generation=generation,
+                    kind=sample.kind,
+                    model=sample.model,
+                    input_tokens=sample.input_tokens,
+                    output_tokens=sample.output_tokens,
+                    cache_read_tokens=sample.cache_read_tokens,
+                    cache_create_tokens=sample.cache_create_tokens,
+                    cost_usd=sample.cost_usd,
+                    recorded_at=recorded_at,
+                )
+            )
+            payload = json.dumps(
+                {
+                    "chunk_id": chunk_id,
+                    "node_id": node_id,
+                    "epoch": epoch,
+                    "kind": sample.kind,
+                    "model": sample.model,
+                    "input_tokens": sample.input_tokens,
+                    "output_tokens": sample.output_tokens,
+                    "cache_read_tokens": sample.cache_read_tokens,
+                    "cache_create_tokens": sample.cache_create_tokens,
+                    "cost_usd": sample.cost_usd,
+                }
+            )
+            conn.execute(
+                outbound_buffer.insert().values(
+                    kind=USAGE_RECORDED,
+                    chunk_id=chunk_id,
+                    lease_id=lease_id,
+                    payload=payload,
+                    created_at=recorded_at,
+                )
+            )
+        _log.info(
+            "usage fact recorded",
+            lease_id=lease_id,
+            chunk_id=chunk_id,
+            generation=generation,
+            kind=sample.kind,
+            cost_usd=sample.cost_usd,
+        )
 
     # --- plumbing -----------------------------------------------------------
 

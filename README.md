@@ -4,6 +4,8 @@ The main application — the **hub**, the **runner**, the **CLI**, and the web b
 
 One repo, one wheel: the single distributable ships both daemons, the CLI, and the compiled frontend as embedded assets — no Node at install or runtime.
 
+Spend is metered and boundable: every attempt's token usage and cost are recorded as facts, surfaced per chunk and fleet-wide on the board and `blizzard hub status`, and optionally capped — a per-chunk spend cap and a runner spend kill-switch (see [`docs/deployment.md`](docs/deployment.md) → "Bounding fleet spend").
+
 ## Install
 
 Milestone builds are published as [GitHub Releases](https://github.com/paul-gross/blizzard/releases) with the wheel attached — no package index. Prerelease candidates are tagged `v0.1.0-rc.N`. Grab the wheel and install it into any Python ≥ 3.12 environment (no Node needed at install or runtime):

@@ -20,6 +20,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.runner.harness.usage import UsageSample
+
 
 class RunnerStoreError(RuntimeError):
     """A runner-store operation failed — the domain-facing error the loop sees.
@@ -133,6 +135,24 @@ class AskRecord:
     options: list[str]
     session_id: str | None
     asked_at: datetime
+
+
+@dataclass(frozen=True)
+class UsageTotals:
+    """A summed window of usage facts — the runner-ceiling read (:meth:`IReadRunnerStore.
+    usage_since`, issue #58, Phase 5b's ceiling check).
+
+    ``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd`` — see
+    :class:`~blizzard.hub.domain.work.UsageTotal` for the one canonical statement of
+    it, which this store-side total mirrors verbatim (a caller must check
+    ``cost_partial`` before treating ``cost_usd`` as exact)."""
+
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int
+    cache_create_tokens: int
+    cost_usd: float
+    cost_partial: bool
 
 
 @dataclass(frozen=True)
@@ -460,6 +480,30 @@ class IReadRunnerStore(Protocol):
         the hub."""
         ...
 
+    def lease_generation(self, lease_id: str) -> int:
+        """This lease's current spawn generation — the count of its ``lease_spawns`` rows
+        (issue #58, reusing issue #13's own generation tracking rather than duplicating
+        it): 1 at the initial FILL spawn, incrementing at each resume that calls
+        ``record_spawn`` again under this lease. Usage's idempotency co-key
+        (:meth:`IWriteRunnerStore.record_usage`) and its kind discriminator — generation 1
+        is a ``spawn``, every later generation a ``resume``."""
+        ...
+
+    def lease_ids_for_chunk(self, chunk_id: str) -> list[str]:
+        """Every lease id ever minted for this chunk, active or closed (issue #58).
+
+        A chunk's tenure can span several node-steps and retries, each its own lease —
+        this is the release-time read that finds every one of them so their per-lease
+        usage-stdout files (:meth:`~blizzard.runner.loop.steps._stdout_path`) can all be
+        cleaned up, not just the currently-active lease's."""
+        ...
+
+    def usage_since(self, at: datetime) -> UsageTotals:
+        """Sum every local usage fact recorded at or after ``at`` (issue #58's
+        runner-ceiling read, Phase 5b) — see :class:`UsageTotals` for the lower-bound +
+        PARTIAL contract on ``cost_usd``."""
+        ...
+
 
 class IWriteRunnerStore(IReadRunnerStore, Protocol):
     """Read-write runner store — held only by the domain (the loop steps)."""
@@ -604,4 +648,27 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         :func:`~blizzard.runner.loop.steps._reconcile_interrupted_claims` reads it back via
         :meth:`pending_requeue_chunk_ids` to spawn the fresh attempt — this call never spawns
         anything itself."""
+
+    def record_usage(
+        self,
+        *,
+        lease_id: str,
+        chunk_id: str,
+        node_id: str,
+        epoch: int,
+        generation: int,
+        sample: UsageSample,
+        recorded_at: datetime,
+    ) -> None:
+        """Idempotently record one usage fact **and** buffer its outbound report, atomically
+        (issue #58) — mirrors :meth:`record_local_pause`'s atomic local-write + outbound-
+        enqueue pairing: a fact the hub is never told about is a board that silently
+        drifts, and nothing later reconciles it.
+
+        Keyed on ``(lease_id, generation, sample.kind)``: a resume within the same lease
+        mints a new ``generation`` (:meth:`IReadRunnerStore.lease_generation`) and so is a
+        genuinely new row (append-only); a replay of the exact same invocation — a crash
+        between this write and the outbound enqueue, re-run by the next tick reaching the
+        same exited worker again before its completion is buffered — finds the row already
+        there and writes nothing a second time, buffering no duplicate report either."""
         ...

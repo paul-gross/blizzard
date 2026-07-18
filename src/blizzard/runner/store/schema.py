@@ -18,6 +18,7 @@ from __future__ import annotations
 from sqlalchemy import (
     Boolean,
     Column,
+    Float,
     Integer,
     MetaData,
     String,
@@ -452,4 +453,39 @@ requeues = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("chunk_id", String, nullable=False),
     Column("requeued_at", UtcDateTime, nullable=False),  # supersedes an earlier escalation
+)
+
+# --- Usage facts (harness cost/token telemetry per invocation — epic #57 / issue #58) --
+#
+# One append-only row per harness invocation (spawn / resume / judge) whose usage was
+# extracted — either straight off the harness's own result envelope (``parse_usage``) or,
+# when no envelope survived a killed/reaped worker, summed off the raw session transcript
+# with ``cost_usd`` left absent (``sum_transcript_usage``) — never fabricated
+# (``bzh:facts-not-status``). Keyed on ``(lease_id, generation, kind)``: ``generation`` is
+# this lease's spawn ordinal (``lease_spawns``' own counting, issue #13, reused rather than
+# duplicated) — a resume within the same lease mints a new generation and so a genuinely
+# new row, while a replay of the exact same invocation (a crash between this write and its
+# outbound-buffer pairing, re-run by the next tick before the completion is buffered)
+# finds the row already there and writes nothing twice (``record_usage``'s own check, not
+# a DB constraint — the store stays portable-SQL, ``bzh:sql-portable``). ``cost_usd`` NULL
+# is the envelope-less fallback's honest "unknown", read by a summing caller as a lower
+# bound, never as zero.
+
+usage_facts = Table(
+    "usage_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("lease_id", String, nullable=False),
+    Column("chunk_id", String, nullable=False),
+    Column("node_id", String, nullable=False),
+    Column("epoch", Integer, nullable=False),
+    Column("generation", Integer, nullable=False),  # this lease's spawn ordinal (1 = the initial spawn)
+    Column("kind", String, nullable=False),  # spawn | resume | judge
+    Column("model", String, nullable=False),
+    Column("input_tokens", Integer, nullable=False),
+    Column("output_tokens", Integer, nullable=False),
+    Column("cache_read_tokens", Integer, nullable=False),
+    Column("cache_create_tokens", Integer, nullable=False),
+    Column("cost_usd", Float, nullable=True),  # None = no envelope for this invocation — never fabricated
+    Column("recorded_at", UtcDateTime, nullable=False),
 )

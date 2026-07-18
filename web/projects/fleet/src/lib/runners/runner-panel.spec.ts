@@ -20,12 +20,18 @@ const runner = (id: string, over: Partial<Record<string, unknown>> = {}) => ({
   locally_paused: false,
   ...over,
 });
+const CEILING_REASON = 'spend ceiling $5.00 reached over the trailing 24h (spend $7.00)';
 const RUNNERS = {
   runners: [
     runner('rn_online'),
     runner('rn_paused', { hub_paused: true }),
     runner('rn_local', { locally_paused: true }),
     runner('rn_both', { hub_paused: true, locally_paused: true }),
+    runner('rn_ceiling', {
+      locally_paused: true,
+      locally_paused_by: 'runner-ceiling',
+      locally_paused_reason: CEILING_REASON,
+    }),
   ],
 };
 
@@ -89,7 +95,7 @@ describe('RunnerPanel', () => {
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelectorAll('[data-testid="runner"]')).toHaveLength(4);
+    expect(el.querySelectorAll('[data-testid="runner"]')).toHaveLength(5);
     expect(el.querySelector('[data-runner="rn_online"]')?.getAttribute('data-online')).toBe('true');
 
     // Each row lists the chunks that runner holds a route on — short name + node —
@@ -114,6 +120,19 @@ describe('RunnerPanel', () => {
     expect(badges('rn_paused')).toEqual({ hub: true, local: false });
     expect(badges('rn_local')).toEqual({ hub: false, local: true });
     expect(badges('rn_both')).toEqual({ hub: true, local: true }); // both, not one collapsed badge
+  });
+
+  it("names a spend-ceiling escalation's reason on the locally-paused badge (#61)", async () => {
+    const fixture = TestBed.createComponent(RunnerPanel);
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+    const title = (id: string) =>
+      el.querySelector(`[data-runner="${id}"] [data-testid="runner-locally-paused"]`)?.getAttribute('title');
+
+    expect(title('rn_ceiling')).toBe(CEILING_REASON);
+    // A manual pause carries no reason — the badge falls back to the generic hint rather
+    // than showing nothing or a stale reason.
+    expect(title('rn_local')).toBe('This runner paused itself. Clear it on the runner: blizzard runner start');
   });
 
   it('offers to pause a locally-paused runner at the hub — the board cannot clear its own brake', async () => {

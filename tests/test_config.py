@@ -15,8 +15,8 @@ import pytest
 from blizzard.hub.config import ENV_PORT as HUB_ENV_PORT
 from blizzard.hub.config import ConfigError as HubConfigError
 from blizzard.hub.config import HubConfig, PmSourceConfig
+from blizzard.runner.config import DEFAULT_RUNNER_CEILING_WINDOW_HOURS, RunnerConfig
 from blizzard.runner.config import ENV_PORT as RUNNER_ENV_PORT
-from blizzard.runner.config import RunnerConfig
 
 
 @pytest.mark.unit
@@ -141,6 +141,97 @@ def test_transcripts_root_defaults_empty_and_round_trips(tmp_path: Path) -> None
 def test_transcripts_root_env_seeds_scaffold(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BZ_TRANSCRIPTS_ROOT", "/seeded/claude/projects")
     assert RunnerConfig.scaffold(tmp_path).transcripts_root == "/seeded/claude/projects"
+
+
+@pytest.mark.unit
+def test_chunk_cap_usd_defaults_absent(tmp_path: Path) -> None:
+    # No `[cost]` table at all on a fresh scaffold — absent means no cap (issue #61a).
+    assert RunnerConfig.scaffold(tmp_path).chunk_cap_usd is None
+
+
+@pytest.mark.unit
+def test_chunk_cap_usd_absent_when_cost_table_omits_the_key(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    (root / "blizzard-runner.toml").write_text(f'db_url = "{RunnerConfig.default_db_url(root)}"\n\n[cost]\n')
+    assert RunnerConfig.load(root).chunk_cap_usd is None
+
+
+@pytest.mark.unit
+def test_chunk_cap_usd_round_trips_through_to_toml_and_load(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    edited = RunnerConfig(root=root, db_url=RunnerConfig.default_db_url(root), chunk_cap_usd=12.5)
+    (root / "blizzard-runner.toml").write_text(edited.to_toml())
+    reloaded = RunnerConfig.load(root)
+    assert reloaded.chunk_cap_usd == 12.5
+
+
+@pytest.mark.unit
+def test_chunk_cap_usd_parses_from_a_hand_written_cost_table(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    (root / "blizzard-runner.toml").write_text(
+        f'db_url = "{RunnerConfig.default_db_url(root)}"\n\n[cost]\nchunk_cap_usd = 3\n'
+    )
+    config = RunnerConfig.load(root)
+    assert config.chunk_cap_usd == 3.0
+
+
+@pytest.mark.unit
+def test_runner_ceiling_usd_defaults_absent(tmp_path: Path) -> None:
+    # No `[cost]` table at all on a fresh scaffold — absent means no ceiling (issue #61b).
+    config = RunnerConfig.scaffold(tmp_path)
+    assert config.runner_ceiling_usd is None
+    assert config.runner_ceiling_window_hours == DEFAULT_RUNNER_CEILING_WINDOW_HOURS
+
+
+@pytest.mark.unit
+def test_runner_ceiling_usd_absent_when_cost_table_omits_the_key(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    (root / "blizzard-runner.toml").write_text(f'db_url = "{RunnerConfig.default_db_url(root)}"\n\n[cost]\n')
+    assert RunnerConfig.load(root).runner_ceiling_usd is None
+
+
+@pytest.mark.unit
+def test_runner_ceiling_usd_round_trips_through_to_toml_and_load(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    edited = RunnerConfig(
+        root=root,
+        db_url=RunnerConfig.default_db_url(root),
+        runner_ceiling_usd=50.0,
+        runner_ceiling_window_hours=6.0,
+    )
+    (root / "blizzard-runner.toml").write_text(edited.to_toml())
+    reloaded = RunnerConfig.load(root)
+    assert reloaded.runner_ceiling_usd == 50.0
+    assert reloaded.runner_ceiling_window_hours == 6.0
+
+
+@pytest.mark.unit
+def test_runner_ceiling_usd_parses_from_a_hand_written_cost_table(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    (root / "blizzard-runner.toml").write_text(
+        f'db_url = "{RunnerConfig.default_db_url(root)}"\n\n[cost]\nrunner_ceiling_usd = 20\nwindow_hours = 12\n'
+    )
+    config = RunnerConfig.load(root)
+    assert config.runner_ceiling_usd == 20.0
+    assert config.runner_ceiling_window_hours == 12.0
+
+
+@pytest.mark.unit
+def test_runner_ceiling_window_hours_defaults_when_ceiling_set_but_window_omitted(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    (root / "blizzard-runner.toml").write_text(
+        f'db_url = "{RunnerConfig.default_db_url(root)}"\n\n[cost]\nrunner_ceiling_usd = 20\n'
+    )
+    config = RunnerConfig.load(root)
+    assert config.runner_ceiling_usd == 20.0
+    assert config.runner_ceiling_window_hours == DEFAULT_RUNNER_CEILING_WINDOW_HOURS
 
 
 @pytest.mark.unit

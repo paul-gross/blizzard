@@ -86,7 +86,7 @@ interface ClaimLine {
                       <span
                         class="badge paused local"
                         data-testid="runner-locally-paused"
-                        title="This runner paused itself. Clear it on the runner: blizzard runner start"
+                        [title]="localPauseHint(runner)"
                         >LOCALLY PAUSED</span
                       >
                     }
@@ -313,6 +313,15 @@ export class RunnerPanel {
 
   protected toggle(runner: RunnerView): void {
     this.pauseMutation.mutate({ runnerId: runner.runner_id, paused: !runner.hub_paused });
+  }
+
+  /**
+   * Why the runner stopped itself (issue #61): a spend-ceiling crossing names the ceiling
+   * and the spend it reported (`locally_paused_reason`); a manual `blizzard runner pause`
+   * carries none, so this falls back to the generic clear-it-yourself hint.
+   */
+  protected localPauseHint(runner: RunnerView): string {
+    return runner.locally_paused_reason ?? 'This runner paused itself. Clear it on the runner: blizzard runner start';
   }
 
   /** Why resuming at the hub may not start a runner: its own brake is not ours to clear. */

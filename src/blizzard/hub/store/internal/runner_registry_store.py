@@ -41,13 +41,15 @@ class RunnerRegistryStore:
             ).one_or_none()
             if row is None:
                 return None
-            return self._registration(row, self._paused(conn, runner_id), self._locally_paused(conn, runner_id))
+            return self._registration(row, self._paused(conn, runner_id), self._local_pause_detail(conn, runner_id))
 
     def list_runners(self) -> list[RunnerRegistration]:
         with self._engine.connect() as conn:
             rows = conn.execute(select(s.runner_registrations).order_by(s.runner_registrations.c.registered_at)).all()
             return [
-                self._registration(row, self._paused(conn, row.runner_id), self._locally_paused(conn, row.runner_id))
+                self._registration(
+                    row, self._paused(conn, row.runner_id), self._local_pause_detail(conn, row.runner_id)
+                )
                 for row in rows
             ]
 
@@ -85,10 +87,14 @@ class RunnerRegistryStore:
         with self._engine.begin() as conn:
             conn.execute(insert(s.runner_pause_facts).values(runner_id=runner_id, paused=paused, set_at=at, set_by=by))
 
-    def record_local_pause(self, runner_id: str, *, paused: bool, at: datetime, by: str) -> None:
+    def record_local_pause(
+        self, runner_id: str, *, paused: bool, at: datetime, by: str, reason: str | None = None
+    ) -> None:
         with self._engine.begin() as conn:
             conn.execute(
-                insert(s.runner_local_pause_facts).values(runner_id=runner_id, paused=paused, set_at=at, set_by=by)
+                insert(s.runner_local_pause_facts).values(
+                    runner_id=runner_id, paused=paused, set_at=at, set_by=by, reason=reason
+                )
             )
 
     # --- helpers ------------------------------------------------------------
@@ -99,12 +105,28 @@ class RunnerRegistryStore:
         return RunnerRegistryStore._newest(conn, s.runner_pause_facts, runner_id)
 
     @staticmethod
-    def _locally_paused(conn, runner_id: str) -> bool:  # type: ignore[no-untyped-def]
-        """Derive the runner's own brake from the newest fact it reported (issue #43).
+    def _local_pause_detail(conn, runner_id: str) -> tuple[bool, str | None, str | None]:  # type: ignore[no-untyped-def]
+        """The runner's own brake plus its cause, off the newest fact it reported (issue #43,
+        cause+reason issue #61).
 
-        Defaults False: a runner that has never reported one is not locally paused — and a
-        runner the hub has never heard from at all is simply not claiming anyway."""
-        return RunnerRegistryStore._newest(conn, s.runner_local_pause_facts, runner_id)
+        Defaults ``(False, None, None)``: a runner that has never reported one is not
+        locally paused — and a runner the hub has never heard from at all is simply not
+        claiming anyway. ``by``/``reason`` are nulled out (not just left at the fact's own
+        value) once the newest fact is a *resume* — a stale cause must not outlive the brake
+        it named."""
+        row = conn.execute(
+            select(
+                s.runner_local_pause_facts.c.paused,
+                s.runner_local_pause_facts.c.set_by,
+                s.runner_local_pause_facts.c.reason,
+            )
+            .where(s.runner_local_pause_facts.c.runner_id == runner_id)
+            .order_by(s.runner_local_pause_facts.c.id.desc())
+            .limit(1)
+        ).one_or_none()
+        if row is None or not row.paused:
+            return False, None, None
+        return True, row.set_by, row.reason
 
     @staticmethod
     def _newest(conn, table, runner_id: str) -> bool:  # type: ignore[no-untyped-def]
@@ -114,7 +136,12 @@ class RunnerRegistryStore:
         return bool(row.paused) if row is not None else False
 
     @staticmethod
-    def _registration(row, hub_paused: bool, locally_paused: bool) -> RunnerRegistration:  # type: ignore[no-untyped-def]
+    def _registration(
+        row,  # type: ignore[no-untyped-def]
+        hub_paused: bool,
+        local_pause_detail: tuple[bool, str | None, str | None],
+    ) -> RunnerRegistration:
+        locally_paused, locally_paused_by, locally_paused_reason = local_pause_detail
         return RunnerRegistration(
             runner_id=row.runner_id,
             workspace_id=row.workspace_id,
@@ -122,6 +149,8 @@ class RunnerRegistryStore:
             last_seen_at=row.last_seen_at,
             hub_paused=hub_paused,
             locally_paused=locally_paused,
+            locally_paused_by=locally_paused_by,
+            locally_paused_reason=locally_paused_reason,
         )
 
 

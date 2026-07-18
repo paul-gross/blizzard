@@ -1,8 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import type { ChunkSummary } from '../api/hub';
+import type { ChunkSummary, FleetSpendView } from '../api/hub';
 import { LANES, laneFor } from '../chunk-lanes';
 import { BrandMark } from '../design/brand-mark';
+import { formatCost } from '../cost-format';
 
 /** One header stat cell — a label over its live count. */
 interface StatCell {
@@ -37,6 +38,15 @@ interface StatCell {
         </div>
       }
       <div class="spacer"></div>
+      @if (spendToday(); as spend) {
+        <!-- The fleet-wide spend-since read (issue #60) — "today" is whatever local
+             start-of-day instant the caller passed as since; the cost-absent lower
+             bound is marked, never presented as exact (a leading tilde, formatCost). -->
+        <div class="cell spend" data-testid="spend-today">
+          <span class="lbl">Spend today</span>
+          <span class="v" data-testid="spend-today-value">{{ formatCost(spend.cost_usd, spend.cost_partial) }}</span>
+        </div>
+      }
       <div class="cell conn" data-testid="conn">
         <span class="lbl">Hub</span>
         <span class="v">{{ connection() }}</span>
@@ -121,14 +131,23 @@ interface StatCell {
     .conn .v {
       color: var(--cyan);
     }
+    .spend .v {
+      color: var(--amber-hi);
+    }
   `,
 })
 export class BoardHeader {
+  protected readonly formatCost = formatCost;
+
   /** A short connection/health status shown in the header (e.g. `ok`, `offline`). */
   readonly connection = input('—');
 
   /** The fleet chunk list the counts are derived from. */
   readonly chunks = input<readonly ChunkSummary[]>([]);
+
+  /** The fleet-wide spend-since read (issue #60), or `null` before the first read
+   * resolves — the cell withholds itself rather than show a misleading `$0.00`. */
+  readonly spendToday = input<FleetSpendView | null>(null);
 
   /**
    * The live fleet counts, left → right: the whole fleet, the ready rail, then one

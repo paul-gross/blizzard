@@ -45,6 +45,12 @@ class FakeTranscriptRepository:
             return self._by_session_id[session_id]
         return Transcript(session_id=session_id, available=False, reason="not_found", turns=[], truncated=False)
 
+    def read_raw_lines(self, session_id: str, *, spawn_cwd: str | None) -> list[str]:
+        # Not exercised by the route tier (issue #58's usage fallback reads it, not this
+        # HTTP surface); present so the fake conforms to the full read protocol.
+        self.calls.append((session_id, spawn_cwd))
+        return []
+
 
 def _app_with_transcripts(tmp_path: Path, *, repo: FakeTranscriptRepository | None = None, workspace_root: str = ""):  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")

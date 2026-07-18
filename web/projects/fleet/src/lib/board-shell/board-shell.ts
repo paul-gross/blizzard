@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 import type { ChunkStatus, ChunkSummary } from '../api/hub';
 import { compactRef } from '../compact-ref';
 import { LANES, STATUS_LANE } from '../chunk-lanes';
+import { formatCost } from '../cost-format';
 
 /** One rendered board card — the derived-status view of a chunk. */
 export interface BoardCard {
@@ -16,6 +17,11 @@ export interface BoardCard {
   /** The chunk's PM work item — the server-derived `{source}#{ref}` label,
    * empty when no pointer names a configured source. Plural pointers join with a space. */
   readonly pointerLabel: string;
+  /** The chunk's derived spend total (issue #60), from `ChunkSummary.cost`. */
+  readonly costUsd: number;
+  /** Whether {@link costUsd} is a lower bound — a summed invocation's envelope-less
+   * cost was absent (crash/reap path); never presented as exact. */
+  readonly costPartial: boolean;
 }
 
 /**
@@ -82,7 +88,14 @@ export interface BoardCard {
                           card.pointerLabel
                         }}</span>
                       }
-                      <span class="st" data-testid="chunk-status" [title]="card.status">{{ card.status }}</span>
+                      <span class="st-row">
+                        <span class="st" data-testid="chunk-status" [title]="card.status">{{ card.status }}</span>
+                        @if (card.costUsd > 0 || card.costPartial) {
+                          <span class="cost" data-testid="card-cost">{{
+                            formatCost(card.costUsd, card.costPartial)
+                          }}</span>
+                        }
+                      </span>
                     </button>
                     @if (card.status === 'not_ready') {
                       <button
@@ -338,11 +351,26 @@ export interface BoardCard {
       color: var(--cyan);
       font-size: var(--fs-xs);
     }
+    .st-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 6px;
+      min-width: 0;
+    }
     .st {
       color: var(--label);
       font-size: var(--fs-label);
       letter-spacing: 0.14em;
       text-transform: uppercase;
+    }
+    /* The chunk's derived spend total (issue #60) — the leading-tilde lower-bound
+       prefix (formatCost) is the card's whole PARTIAL marker; no separate badge on a
+       card this small. */
+    .cost {
+      color: var(--amber-hi);
+      font-size: var(--fs-xs);
+      white-space: nowrap;
     }
     .empty {
       position: absolute;
@@ -357,6 +385,8 @@ export interface BoardCard {
   `,
 })
 export class BoardShell {
+  protected readonly formatCost = formatCost;
+
   /** The fleet chunk list (derived status + current node); empty when the fleet is idle. */
   readonly chunks = input<readonly ChunkSummary[]>([]);
 
@@ -399,6 +429,8 @@ export class BoardShell {
         pointerLabel: (chunk.pm_pointers ?? [])
           .flatMap((p) => (p.label ? [p.label] : []))
           .join(' '),
+        costUsd: chunk.cost?.cost_usd ?? 0,
+        costPartial: chunk.cost?.cost_partial ?? false,
       });
     }
     return grouped;

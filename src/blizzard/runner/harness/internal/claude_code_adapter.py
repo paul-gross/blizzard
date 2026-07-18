@@ -15,6 +15,16 @@ Implements :class:`~blizzard.runner.harness.adapter.IHarnessAdapter` against the
   record.
 * **parse_verdict** — extract the ``<Choice>{name}</Choice>`` from the harness-native
   output; missing/unparseable → ``None`` (a failure to the core).
+* **parse_usage** — a result envelope's ``usage`` + ``total_cost_usd``, translated
+  into a :class:`~blizzard.runner.harness.usage.UsageSample`; ``None`` when no
+  envelope is present. **sum_transcript_usage** is the envelope-less fallback,
+  summing per-message ``usage`` off the raw session transcript (``cost_usd`` always
+  ``None`` there — a transcript carries no dollar figure). Both epic #57.
+
+``spawn``/``resume_with_message`` redirect the worker's stdout to an **injected**
+per-lease file (``preamble.stdout_path`` / the ``stdout_path`` param) rather than
+discarding it, so a killed/reaped worker's result envelope survives the process for
+``parse_usage`` to read back later; empty keeps the prior discard/inherit behavior.
 
 In verification ``binary`` points at the ``blizzard-mock`` ``mock-claude-code``
 façade (the prompt is a behavior script it ``exec``s), so the seam is exercised
@@ -30,9 +40,12 @@ the chunk→env binding and supplies for the op.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import subprocess
+from collections.abc import Iterator, Sequence
+from typing import IO
 
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.process import read_process_start_time
@@ -42,6 +55,7 @@ from blizzard.runner.harness.adapter import (
     WorkerPreamble,
 )
 from blizzard.runner.harness.spawn_cwd import resolve_spawn_cwd
+from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.wire.envelope import NodeEnvelope
 
 _log = get_logger("blizzard.runner.harness")
@@ -58,6 +72,43 @@ DEFAULT_WORKER_MODEL = "claude-opus-4-8"
 
 class HarnessSpawnError(RuntimeError):
     """The harness binary could not be launched (missing binary, bad workdir)."""
+
+
+def _result_envelope(output: str) -> dict[str, object] | None:
+    """The last JSON-object line carrying a ``result`` key, else ``None``.
+
+    The one JSON-line-scanning walk shared by ``_result_text`` (``parse_verdict``/
+    ``parse_assessment``'s plumbing) and ``parse_usage`` — a killed/verdict-less
+    worker's stdout can carry partial or non-JSON lines ahead of (or instead of)
+    the final envelope, so scanning in reverse and skipping anything that fails to
+    parse as a ``result``-bearing object is the one tolerant rule both callers need.
+    """
+    for line in reversed(output.splitlines()):
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            envelope = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(envelope, dict) and "result" in envelope:
+            return envelope
+    return None
+
+
+@contextlib.contextmanager
+def _stdout_target(path: str) -> Iterator[IO[bytes] | None]:
+    """The injected per-lease stdout file, opened for append, else ``None`` (no redirect).
+
+    A shared context manager so ``spawn``/``resume_with_message`` never leak the file
+    descriptor across a failed ``Popen`` (``bzh:dependency-injection`` — the path is
+    always supplied by the caller, never computed here).
+    """
+    if not path:
+        yield None
+        return
+    with open(path, "ab") as f:
+        yield f
 
 
 class ClaudeCodeAdapter:
@@ -110,11 +161,21 @@ class ClaudeCodeAdapter:
         cmd.append("\n\n".join(part for part in (preamble.prompt_prefix, envelope.prompt or "") if part))
 
         env = self._spawn_env(envelope, preamble, session_id)
-        try:
-            proc = subprocess.Popen(cmd, cwd=workdir, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        except OSError as exc:
-            _log.error("harness spawn failed", binary=self._binary, cwd=workdir, detail=str(exc))
-            raise HarnessSpawnError(f"failed to spawn {self._binary} in {workdir}: {exc}") from exc
+        # Stdout rides to the injected per-lease file (epic #57) so the result
+        # envelope survives the process for `parse_usage` — never computed here
+        # (`bzh:dependency-injection`); empty keeps today's DEVNULL behavior.
+        with _stdout_target(preamble.stdout_path) as stdout_file:
+            try:
+                proc = subprocess.Popen(
+                    cmd,
+                    cwd=workdir,
+                    env=env,
+                    stdout=stdout_file if stdout_file is not None else subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            except OSError as exc:
+                _log.error("harness spawn failed", binary=self._binary, cwd=workdir, detail=str(exc))
+                raise HarnessSpawnError(f"failed to spawn {self._binary} in {workdir}: {exc}") from exc
 
         start_time = read_process_start_time(proc.pid) or ""
         _log.info("spawned worker", binary=self._binary, pid=proc.pid, session_id=session_id, cwd=workdir)
@@ -126,12 +187,16 @@ class ClaudeCodeAdapter:
         _log.info("judgement resume", pid_returncode=result.returncode, session_id=session_id, cwd=environment_id)
         return result.stdout
 
-    def resume_with_message(self, environment_id: str, session_id: str, message: str) -> int:
-        cmd = [self._binary, "-p", "--resume", session_id]
+    def resume_with_message(self, environment_id: str, session_id: str, message: str, stdout_path: str = "") -> int:
+        cmd = [self._binary, "-p", "--output-format", "json", "--resume", session_id]
         if self._permission_mode:
             cmd += ["--permission-mode", self._permission_mode]
         cmd.append(message)
-        proc = subprocess.Popen(cmd, cwd=environment_id, env=os.environ.copy())
+        # Injected per-lease file (epic #57), mirroring `spawn`'s `preamble.stdout_path` —
+        # this op has no preamble, so the path rides as a direct param; empty keeps
+        # today's behavior (stdout inherited).
+        with _stdout_target(stdout_path) as stdout_file:
+            proc = subprocess.Popen(cmd, cwd=environment_id, env=os.environ.copy(), stdout=stdout_file)
         return proc.pid
 
     def resume_command(self, environment_id: str, session_id: str) -> str:
@@ -156,22 +221,68 @@ class ClaudeCodeAdapter:
             return ""
         return text[close + len(_CHOICE_CLOSE) :].strip()
 
+    def parse_usage(self, output: str, kind: UsageKind) -> UsageSample | None:
+        envelope = _result_envelope(output)
+        if envelope is None:
+            return None
+        usage = envelope.get("usage")
+        if not isinstance(usage, dict):
+            return None
+        cost = envelope.get("total_cost_usd")
+        model = envelope.get("model")
+        return UsageSample(
+            kind=kind,
+            model=str(model) if isinstance(model, str) and model else self._model,
+            input_tokens=int(usage.get("input_tokens") or 0),
+            output_tokens=int(usage.get("output_tokens") or 0),
+            cache_read_tokens=int(usage.get("cache_read_input_tokens") or 0),
+            cache_create_tokens=int(usage.get("cache_creation_input_tokens") or 0),
+            cost_usd=float(cost) if isinstance(cost, int | float) else None,
+        )
+
+    def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind) -> UsageSample:
+        input_tokens = output_tokens = cache_read_tokens = cache_create_tokens = 0
+        model = self._model
+        for raw_line in lines:
+            line = raw_line.strip()
+            if not line.startswith("{"):
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(record, dict) or record.get("type") != "assistant":
+                continue
+            message = record.get("message")
+            if not isinstance(message, dict):
+                continue
+            record_model = message.get("model")
+            if isinstance(record_model, str) and record_model:
+                model = record_model
+            usage = message.get("usage")
+            if not isinstance(usage, dict):
+                continue
+            input_tokens += int(usage.get("input_tokens") or 0)
+            output_tokens += int(usage.get("output_tokens") or 0)
+            cache_read_tokens += int(usage.get("cache_read_input_tokens") or 0)
+            cache_create_tokens += int(usage.get("cache_creation_input_tokens") or 0)
+        return UsageSample(
+            kind=kind,
+            model=model,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cache_read_tokens=cache_read_tokens,
+            cache_create_tokens=cache_create_tokens,
+            cost_usd=None,
+        )
+
     # --- plumbing -----------------------------------------------------------
 
     @staticmethod
     def _result_text(output: str) -> str:
         """The assistant's final message: the ``result`` field of the JSON envelope, else raw."""
-        for line in reversed(output.splitlines()):
-            line = line.strip()
-            if not line.startswith("{"):
-                continue
-            try:
-                envelope = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(envelope, dict) and "result" in envelope:
-                return str(envelope["result"])
-        return output
+        envelope = _result_envelope(output)
+        return str(envelope["result"]) if envelope is not None else output
 
     def _spawn_env(self, envelope: NodeEnvelope, preamble: WorkerPreamble, session_id: str) -> dict[str, str]:
         env = os.environ.copy()

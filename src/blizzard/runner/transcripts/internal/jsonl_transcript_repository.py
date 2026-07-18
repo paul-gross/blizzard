@@ -85,6 +85,18 @@ class JsonlTranscriptRepository:
             truncated=parsed.truncated or file_truncated,
         )
 
+    def read_raw_lines(self, session_id: str, *, spawn_cwd: str | None) -> list[str]:
+        matches = sorted(self._projects_root.glob(f"*/{session_id}.jsonl"))
+        if not matches:
+            return []
+        try:
+            path = matches[0] if len(matches) == 1 else self._disambiguate(matches, spawn_cwd)
+            lines, _ = _read_tail_lines(path)
+        except OSError as exc:
+            self._errors.from_io(exc, f"transcript unreadable: {session_id}", session_id=session_id)
+            return []
+        return lines
+
     @staticmethod
     def _disambiguate(matches: list[Path], spawn_cwd: str | None) -> Path:
         """Multi-match tie-break: the spawn-cwd hint, else newest by mtime."""

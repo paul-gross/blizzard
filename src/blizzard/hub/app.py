@@ -32,6 +32,7 @@ from blizzard.foundation.web import mount_web_app
 from blizzard.hub.api.chunks import router as chunks_router
 from blizzard.hub.api.decisions import router as decisions_router
 from blizzard.hub.api.events import router as events_router
+from blizzard.hub.api.fleet import router as fleet_router
 from blizzard.hub.api.graphs import router as graphs_router
 from blizzard.hub.api.health import router as health_router
 from blizzard.hub.api.questions import router as questions_router
@@ -140,6 +141,7 @@ def create_app(
     app.include_router(queue_router)
     app.include_router(questions_router)
     app.include_router(runners_router)
+    app.include_router(fleet_router)
 
     # The embedded frontend, served from the same process and origin.
     mount_web_app(app, frontend_dir("hub"), app_name="blizzard-hub")

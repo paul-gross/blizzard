@@ -58,7 +58,10 @@ describe('FleetLiveUpdates', () => {
     });
   });
 
-  it('invalidates the fleet list, the chunk detail, and the queue on a chunk-changed event', () => {
+  it('invalidates the fleet list, the chunk detail, the queue, and the fleet spend read on a chunk-changed event', () => {
+    // Usage rides the same fact a chunk-changed reports (issue #60): a chunk's derived
+    // cost total and the fleet-wide spend both derive from it, so this event must
+    // re-query both, not just status-shaped reads.
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
     TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
 
@@ -70,6 +73,7 @@ describe('FleetLiveUpdates', () => {
     expect(keys).toContainEqual(['hub', 'chunks']);
     expect(keys).toContainEqual(['hub', 'queue']);
     expect(keys).toContainEqual(['hub', 'chunk', 'ch_live']);
+    expect(keys).toContainEqual(['hub', 'fleet-spend']);
   });
 
   it('re-reads the registry on a runner-changed event and the queue on queue-changed', () => {

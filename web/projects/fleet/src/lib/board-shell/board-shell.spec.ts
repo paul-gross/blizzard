@@ -187,4 +187,70 @@ describe('BoardShell', () => {
     expect(compactRef('ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9')).toBe('C-3YJ9');
     expect(compactRef('ch_01KXKVVF1J3D6H6VYZ3XYN3YAB')).toBe('C-3YAB');
   });
+
+  it("shows the chunk's derived cost total as a badge on its card (issue #60)", async () => {
+    const chunks: ChunkSummary[] = [
+      {
+        chunk_id: 'ch_01running000000000000000000',
+        graph_id: 'gr_1',
+        model: 'claude-opus-4-8',
+        status: 'running',
+        current_node_id: 'nd_build',
+        pm_pointers: [],
+        cost: {
+          input_tokens: 100,
+          output_tokens: 50,
+          cache_read_tokens: 0,
+          cache_create_tokens: 0,
+          cost_usd: 1.23,
+          cost_partial: false,
+        },
+      },
+    ];
+    const fixture = TestBed.createComponent(BoardShell);
+    fixture.componentRef.setInput('chunks', chunks);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="card-cost"]')?.textContent).toContain('$1.23');
+  });
+
+  it("marks a card's cost badge with the lower-bound prefix when the total is PARTIAL (issue #60)", async () => {
+    const chunks: ChunkSummary[] = [
+      {
+        chunk_id: 'ch_01running000000000000000000',
+        graph_id: 'gr_1',
+        model: 'claude-opus-4-8',
+        status: 'running',
+        current_node_id: 'nd_build',
+        pm_pointers: [],
+        cost: {
+          input_tokens: 100,
+          output_tokens: 50,
+          cache_read_tokens: 0,
+          cache_create_tokens: 0,
+          cost_usd: 0.1,
+          cost_partial: true,
+        },
+      },
+    ];
+    const fixture = TestBed.createComponent(BoardShell);
+    fixture.componentRef.setInput('chunks', chunks);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="card-cost"]')?.textContent).toContain('~$0.10');
+  });
+
+  it('shows no cost badge for a chunk with zero, non-partial spend', async () => {
+    const chunks: ChunkSummary[] = [
+      { chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', model: 'claude-opus-4-8', status: 'running', current_node_id: 'nd_build', pm_pointers: [] },
+    ];
+    const fixture = TestBed.createComponent(BoardShell);
+    fixture.componentRef.setInput('chunks', chunks);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="card-cost"]')).toBeNull();
+  });
 });

@@ -87,4 +87,45 @@ describe('BoardHeader', () => {
     expect(el.querySelector('[data-testid="stat-total"]')?.textContent?.trim()).toBe('0');
     expect(el.querySelector('[data-testid="stat-needs"]')?.textContent?.trim()).toBe('0');
   });
+
+  it('shows no spend-today cell before the fleet-spend read resolves (issue #60)', async () => {
+    const el = await render([]);
+    expect(el.querySelector('[data-testid="spend-today"]')).toBeNull();
+  });
+
+  it("renders the fleet's spend-today figure once the read resolves (issue #60)", async () => {
+    const fixture = TestBed.createComponent(BoardHeader);
+    fixture.componentRef.setInput('chunks', []);
+    fixture.componentRef.setInput('spendToday', {
+      since: '2026-07-17T00:00:00Z',
+      input_tokens: 100,
+      output_tokens: 50,
+      cache_read_tokens: 0,
+      cache_create_tokens: 0,
+      cost_usd: 3.5,
+      cost_partial: false,
+    });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="spend-today-value"]')?.textContent).toContain('$3.50');
+  });
+
+  it('marks the spend-today figure with the lower-bound prefix when PARTIAL (issue #60)', async () => {
+    const fixture = TestBed.createComponent(BoardHeader);
+    fixture.componentRef.setInput('chunks', []);
+    fixture.componentRef.setInput('spendToday', {
+      since: '2026-07-17T00:00:00Z',
+      input_tokens: 100,
+      output_tokens: 50,
+      cache_read_tokens: 0,
+      cache_create_tokens: 0,
+      cost_usd: 0.1,
+      cost_partial: true,
+    });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="spend-today-value"]')?.textContent).toContain('~$0.10');
+  });
 });

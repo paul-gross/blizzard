@@ -47,6 +47,7 @@ from blizzard.hub.domain.work import (
     RouteCreatedFact,
     RouteReleasedFact,
     TransitionFact,
+    UsageFact,
     derive_chunk_status,
     newest_live_route,
 )
@@ -152,6 +153,21 @@ class ChunkStore:
                     select(s.delivery_pr_opened).where(s.delivery_pr_opened.c.chunk_id == chunk_id)
                 ).all()
             ]
+            usage = [
+                UsageFact(
+                    node_id=u.node_id,
+                    epoch=u.epoch,
+                    kind=u.kind,
+                    model=u.model,
+                    input_tokens=u.input_tokens,
+                    output_tokens=u.output_tokens,
+                    cache_read_tokens=u.cache_read_tokens,
+                    cache_create_tokens=u.cache_create_tokens,
+                    cost_usd=u.cost_usd,
+                    recorded_at=u.recorded_at,
+                )
+                for u in conn.execute(select(s.usage_facts).where(s.usage_facts.c.chunk_id == chunk_id)).all()
+            ]
             return ChunkFacts(
                 minted=True,
                 promoted=self._exists(conn, s.chunk_promoted, chunk_id),
@@ -168,6 +184,7 @@ class ChunkStore:
                 requeues=requeues,
                 pr_opened=pr_opened,
                 pauses=pauses,
+                usage=usage,
             )
 
     def load_artifacts(self, chunk_id: str) -> list[ArtifactRow]:
@@ -377,6 +394,24 @@ class ChunkStore:
             rows = conn.execute(select(s.decisions).order_by(s.decisions.c.submitted_at)).all()
             decisions = [self._decision_row(conn, row) for row in rows]
             return [d for d in decisions if not d.resolved]
+
+    def usage_since(self, since: datetime) -> list[UsageFact]:
+        with self._engine.connect() as conn:
+            return [
+                UsageFact(
+                    node_id=u.node_id,
+                    epoch=u.epoch,
+                    kind=u.kind,
+                    model=u.model,
+                    input_tokens=u.input_tokens,
+                    output_tokens=u.output_tokens,
+                    cache_read_tokens=u.cache_read_tokens,
+                    cache_create_tokens=u.cache_create_tokens,
+                    cost_usd=u.cost_usd,
+                    recorded_at=u.recorded_at,
+                )
+                for u in conn.execute(select(s.usage_facts).where(s.usage_facts.c.recorded_at >= since)).all()
+            ]
 
     # --- writes -------------------------------------------------------------
 
@@ -657,6 +692,43 @@ class ChunkStore:
             conn.execute(
                 insert(s.escalations).values(
                     chunk_id=chunk_id, epoch=epoch, takeover_command=takeover_command, recorded_at=at
+                )
+            )
+
+    def record_usage(
+        self,
+        chunk_id: str,
+        *,
+        node_id: str,
+        epoch: int,
+        runner_id: str,
+        kind: str,
+        model: str,
+        input_tokens: int,
+        output_tokens: int,
+        cache_read_tokens: int,
+        cache_create_tokens: int,
+        cost_usd: float | None,
+        at: datetime,
+    ) -> None:
+        # Append-only, no epoch fence, no second dedup key — see IWriteChunkRepository's
+        # docstring: the caller's per-runner seq high-water mark already guarantees this
+        # is called at most once per landed fact.
+        with self._engine.begin() as conn:
+            conn.execute(
+                insert(s.usage_facts).values(
+                    chunk_id=chunk_id,
+                    node_id=node_id,
+                    epoch=epoch,
+                    runner_id=runner_id,
+                    kind=kind,
+                    model=model,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    cache_read_tokens=cache_read_tokens,
+                    cache_create_tokens=cache_create_tokens,
+                    cost_usd=cost_usd,
+                    recorded_at=at,
                 )
             )
 

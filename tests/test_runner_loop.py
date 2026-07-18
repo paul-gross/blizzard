@@ -24,7 +24,7 @@ from blizzard.runner.loop.steps import advance, fill, pull, reap
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.loop.worktree import GitArtifact
 from blizzard.runner.store.repository import NewLease
-from blizzard.wire.chunk import ChunkDetail
+from blizzard.wire.chunk import ChunkDetail, ChunkUsageTotalView, RouteView
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from blizzard.wire.facts import ESCALATION_RECORDED, LEASE_MINTED
 from blizzard.wire.queue import QueuePeekEntry
@@ -71,6 +71,35 @@ def _seed_running_lease(store, *, chunk="ch_1", lease="lease_1", pid=100, start=
     )
     store.record_spawn(lease, pid=pid, process_start_time=start, session_id=session, spawned_at=_NOW)
     store.record_binding(chunk_id=chunk, environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+
+
+def _chunk_with_cost(  # type: ignore[no-untyped-def]
+    chunk_id="ch_1",
+    *,
+    cost_usd,
+    cost_partial=False,
+    status=ChunkStatus.RUNNING,
+    route_runner_id="r1",
+    epoch=1,
+):
+    """A hub-derived ``ChunkDetail`` carrying a scripted usage/cost total (issue #61a)."""
+    return ChunkDetail(
+        chunk_id=chunk_id,
+        graph_id="gr_1",
+        status=status,
+        current_node_id="nd_build",
+        latest_epoch=epoch,
+        model=DEFAULT_MODEL,
+        route=RouteView(runner_id=route_runner_id, workspace_id="ws1", environment_ids=["e1"]),
+        cost=ChunkUsageTotalView(
+            input_tokens=0,
+            output_tokens=0,
+            cache_read_tokens=0,
+            cache_create_tokens=0,
+            cost_usd=cost_usd,
+            cost_partial=cost_partial,
+        ),
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -679,6 +708,245 @@ def test_retries_exhausted_escalates_and_holds_envs(tmp_path):  # type: ignore[n
     payload = json.loads(escalations[0].payload)
     assert payload["chunk_id"] == "ch_1"
     assert payload["takeover_command"].startswith("cd /ws/e1 &&") and "--resume" in payload["takeover_command"]
+
+
+# --------------------------------------------------------------------------- #
+# Per-chunk spend cap (issue #61a)
+# --------------------------------------------------------------------------- #
+
+
+def _cap_config(cap):  # type: ignore[no-untyped-def]
+    return LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1, chunk_cap_usd=cap)
+
+
+@pytest.mark.unit
+def test_cost_cap_parks_needs_human_at_next_step_boundary(tmp_path):  # type: ignore[no-untyped-def]
+    """Crossing the cap parks the chunk `needs_human` instead of spawning its next attempt."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = _build_envelope()
+    next_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES)
+    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
+    hub.chunks["ch_1"] = _chunk_with_cost(cost_usd=7.0)  # over the $5 cap
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=_cap_config(5.0),
+    )
+
+    advance(ctx)  # the attempt finishes and its completion is buffered — not yet applied
+    pull(ctx)  # the flush applies it (NEXT); the cap check runs at that boundary and parks
+
+    # No next attempt spawned — the cap parked before `_spawn_attempt`, not by killing anyone.
+    assert harness.spawns == []
+    assert store.active_lease_for_chunk("ch_1") is None
+    escalations = [b for b in store.pending_outbound() if b.kind == ESCALATION_RECORDED]
+    assert len(escalations) == 1
+    payload = json.loads(escalations[0].payload)
+    assert payload["chunk_id"] == "ch_1"
+    # The takeover resumes the just-finished attempt's own session — a human's entry point
+    # back into the chunk, the same shape a retries-exhausted escalation carries.
+    assert payload["takeover_command"].startswith("cd /ws/e1 &&") and "--resume sess-a" in payload["takeover_command"]
+    # Envs stay held for the takeover; nothing was released on a cap park.
+    assert store.held_environment_ids() == ["e1"]
+
+
+@pytest.mark.unit
+def test_cost_cap_park_does_not_consume_a_retry(tmp_path):  # type: ignore[no-untyped-def]
+    """A cap park is not a failed attempt: the closed lease reads `transitioned`, not
+    `escalated`/`failed`, and the next node's attempt count stays at zero — a later
+    resume mints its first real attempt at that node, not a second one."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = _build_envelope()
+    next_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES)
+    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
+    hub.chunks["ch_1"] = _chunk_with_cost(cost_usd=7.0)
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=_cap_config(5.0),
+    )
+
+    advance(ctx)
+    pull(ctx)
+
+    assert store.attempt_count("ch_1", "nd_review") == 0  # no lease ever minted for the next node
+
+
+@pytest.mark.unit
+def test_cost_cap_never_kills_a_live_worker(tmp_path):  # type: ignore[no-untyped-def]
+    """The cap is checked between attempts only: a chunk still mid-attempt (worker alive)
+    is left running untouched even though the hub already reports it over cap."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = _build_envelope()
+    hub.chunks["ch_1"] = _chunk_with_cost(cost_usd=99.0)  # far over cap, but the worker is alive
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    probe = FakeProbe(alive={_ALIVE})  # the worker is still running
+    ctx = make_context(
+        store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=probe, config=_cap_config(5.0)
+    )
+
+    advance(ctx)
+
+    # ADVANCE never even looked at this lease — still running, no judgement, no park.
+    assert harness.judged == []
+    assert store.pending_outbound() == []
+    assert store.active_lease_for_chunk("ch_1") is not None
+    assert probe.killed == []
+
+
+@pytest.mark.unit
+def test_cost_cap_under_cap_continues_normally(tmp_path):  # type: ignore[no-untyped-def]
+    """Spend below the cap spawns the next node exactly as an uncapped runner would."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = _build_envelope()
+    next_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES)
+    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
+    hub.chunks["ch_1"] = _chunk_with_cost(cost_usd=1.0)  # well under the $5 cap
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-b", pid=200, process_start_time="start-200"), verdict="pass"
+    )
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=_cap_config(5.0),
+    )
+
+    advance(ctx)
+    pull(ctx)
+
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None and lease.node_name == "review" and lease.epoch == 2
+    assert ESCALATION_RECORDED not in [b.kind for b in store.pending_outbound()]
+
+
+@pytest.mark.unit
+def test_cost_cap_absent_never_parks_regardless_of_spend(tmp_path):  # type: ignore[no-untyped-def]
+    """`chunk_cap_usd` unset (today's default) never parks a chunk, however much it spent."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = _build_envelope()
+    next_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES)
+    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
+    hub.chunks["ch_1"] = _chunk_with_cost(cost_usd=9999.0)
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-b", pid=200, process_start_time="start-200"), verdict="pass"
+    )
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
+
+    advance(ctx)
+    pull(ctx)
+
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None and lease.node_name == "review"
+    assert ESCALATION_RECORDED not in [b.kind for b in store.pending_outbound()]
+
+
+@pytest.mark.unit
+def test_cost_cap_partial_total_trips_the_lower_bound_and_logs_partial(tmp_path):  # type: ignore[no-untyped-def]
+    """A cost-absent row makes the total PARTIAL (a lower bound); the cap still trips on
+    that lower bound, and the escalation log line states PARTIAL so an operator reading
+    the takeover is never told a partial total is the whole spend."""
+    from structlog.testing import capture_logs
+
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = _build_envelope()
+    next_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES)
+    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
+    hub.chunks["ch_1"] = _chunk_with_cost(cost_usd=5.0, cost_partial=True)  # exactly at the cap, partial
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=_cap_config(5.0),
+    )
+
+    advance(ctx)
+    with capture_logs() as captured:
+        pull(ctx)
+
+    assert store.active_lease_for_chunk("ch_1") is None  # parked despite being only a lower bound
+    escalations = [b for b in store.pending_outbound() if b.kind == ESCALATION_RECORDED]
+    assert len(escalations) == 1
+    park_events = [e for e in captured if "spend cap exceeded" in e.get("event", "")]
+    assert len(park_events) == 1
+    assert park_events[0]["cost_partial"] is True
+    assert "PARTIAL" in park_events[0]["event"]
+    escalate_events = [e for e in captured if e.get("event", "").startswith("escalated to needs-human")]
+    assert len(escalate_events) == 1
+    assert "PARTIAL" in escalate_events[0]["event"] and "spend cap" in escalate_events[0]["event"]
+
+
+@pytest.mark.unit
+def test_cost_cap_raised_then_requeued_resumes_normally(tmp_path):  # type: ignore[no-untyped-def]
+    """A capped-then-requeued chunk resumes normally once the cap is raised — no special
+    un-park logic beyond the standard requeue path FILL's interrupted-claim reconciler
+    already drives."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = _build_envelope()
+    next_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES)
+    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
+    hub.chunks["ch_1"] = _chunk_with_cost(cost_usd=7.0)
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=_cap_config(5.0),
+    )
+    advance(ctx)
+    pull(ctx)
+    assert store.active_lease_for_chunk("ch_1") is None  # parked
+
+    # The operator raises the cap and requeues at the hub — the hub closes the escalation
+    # by supersession and the chunk's route stays live (`_has_live_route`), so it re-derives
+    # `running` with no active lease here: exactly FILL's interrupted-claim shape. The hub's
+    # current node is now `review` (the completion already applied before the park), so its
+    # idempotent envelope re-read reflects that.
+    hub.envelopes["ch_1"] = next_env
+    hub.chunks["ch_1"] = _chunk_with_cost(cost_usd=7.0, status=ChunkStatus.RUNNING, route_runner_id="r1")
+    ctx2 = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=_cap_config(100.0),  # raised well above the $7 spend
+    )
+
+    fill(ctx2)  # `_reconcile_interrupted_claims` adopts — spawns the current (review) node
+
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None and lease.node_name == "review"
+    assert len(harness.spawns) == 1
 
 
 # --------------------------------------------------------------------------- #

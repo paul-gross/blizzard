@@ -13,7 +13,7 @@ stored.
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from blizzard.hub.domain.work import ChunkStatus
 from blizzard.wire.decision import DecisionView
@@ -69,6 +69,50 @@ class ChunkIngestConflict(BaseModel):
     detail: str = "pointer already held by a live chunk"
 
 
+class ChunkUsageTotalView(BaseModel):
+    """A chunk's derived usage/cost total — summed over every recorded invocation
+    (issue #59). Never a stored column: computed at read time by
+    ``derive_chunk_usage``.
+
+    ``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd`` —
+    see :class:`~blizzard.hub.domain.work.UsageTotal` for the one canonical
+    statement of it, which this view's fields mirror verbatim."""
+
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int
+    cache_create_tokens: int
+    cost_usd: float
+    cost_partial: bool
+
+
+def _zero_usage_total() -> ChunkUsageTotalView:
+    """The all-zero, non-partial total — the default for a construction site (mostly
+    fakes in the runner-side test suite) that predates usage telemetry and never sets
+    ``cost`` itself; the real hub API always populates it from ``derive_chunk_usage``."""
+    return ChunkUsageTotalView(
+        input_tokens=0, output_tokens=0, cache_read_tokens=0, cache_create_tokens=0, cost_usd=0.0, cost_partial=False
+    )
+
+
+class ChunkUsageView(BaseModel):
+    """One node-step's usage/cost telemetry (issue #59) — one harness invocation's
+    tokens-by-class and cost, oldest first on :class:`ChunkDetail`.
+
+    ``cost_usd`` is ``None`` exactly when no result envelope existed for this
+    invocation (the envelope-less transcript-summation fallback) — never fabricated."""
+
+    node_id: str
+    epoch: int
+    kind: str
+    model: str
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int
+    cache_create_tokens: int
+    cost_usd: float | None
+
+
 class ChunkSummary(BaseModel):
     """One row of the fleet chunk list — derived status + current node.
 
@@ -81,7 +125,10 @@ class ChunkSummary(BaseModel):
     every other fact an operator action keys on — reaches the chunk detail dock through
     :class:`ChunkDetail`, the one place a board action lives. ``runner_id`` (the live
     route's holder, null when unrouted) is a passive where-is-it fact in that same
-    sense — it lets the fleet registry list each runner's claims — not an action key."""
+    sense — it lets the fleet registry list each runner's claims — not an action key.
+    ``cost`` is the one exception (issue #59): the derived spend total is cheap to carry
+    on every card and is not itself an operator fact, so it rides the summary rather than
+    waiting for the detail fetch."""
 
     chunk_id: str
     graph_id: str
@@ -93,6 +140,8 @@ class ChunkSummary(BaseModel):
     # the store column is non-nullable and every mint sets DEFAULT_MODEL.
     model: str
     runner_id: str | None = None
+    # The chunk's derived usage/cost total (issue #59) — see ChunkUsageTotalView.
+    cost: ChunkUsageTotalView = Field(default_factory=_zero_usage_total)
 
 
 class RouteView(BaseModel):
@@ -269,6 +318,10 @@ class ChunkDetail(BaseModel):
     # a human reviews and merges; ``check-delivery`` then drives the chunk to ``done``.
     awaiting_external_merge: bool = False
     open_prs: list[PrView] = []
+    # The chunk's derived usage/cost total (issue #59) — see ChunkUsageTotalView.
+    cost: ChunkUsageTotalView = Field(default_factory=_zero_usage_total)
+    # Per-node-step usage history, oldest first — the board's future cost timeline.
+    usage: list[ChunkUsageView] = []
 
 
 class PmItemEntry(BaseModel):

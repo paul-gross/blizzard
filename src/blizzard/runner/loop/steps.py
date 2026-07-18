@@ -20,9 +20,11 @@ live pid, plus (pid, start_time) to survive pid reuse.
 
 from __future__ import annotations
 
+import contextlib
 import json
+import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.ids import LEASE_PREFIX, mint
@@ -37,6 +39,8 @@ from blizzard.runner.environments.provider import (
 )
 from blizzard.runner.harness.adapter import WorkerPreamble
 from blizzard.runner.harness.preamble import render_worker_preamble
+from blizzard.runner.harness.spawn_cwd import resolve_spawn_cwd
+from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.process import IProcessProbe
@@ -56,6 +60,7 @@ from blizzard.wire.facts import (
     ESCALATION_RECORDED,
     LEASE_MINTED,
     QUESTION_ASKED,
+    RUNNER_LOCALLY_PAUSED,
     RunnerFact,
     RunnerFactBatch,
 )
@@ -66,6 +71,7 @@ from blizzard.wire.route import RouteClaim
 #: module no longer re-exports it — importers (tests included) reach it there.
 __all__ = [
     "advance",
+    "check_spend_ceiling",
     "fill",
     "flush_outbound",
     "mark_resume_intents",
@@ -184,7 +190,25 @@ _CP_ADV_AFTER_PUSH = crashpoint(
     "advance.after-artifact-push.before-judgement", "artifacts pushed; verdict not elicited"
 )
 _CP_ADV_AFTER_JUDGE = crashpoint("advance.after-judgement.before-buffer", "verdict parsed; completion not buffered")
+# Usage recording (issue #58) sits between the verdict and the completion buffer: a crash
+# here either finds this attempt's usage facts already durable (idempotent re-run, keyed
+# on lease/generation/kind) or reaches neither them nor the completion — never a
+# double-count. Named for the window it opens, not the step whose call site reaches it
+# (``bzh:crash-point-registry``).
+_CP_ADV_AFTER_USAGE = crashpoint("advance.after-usage.before-buffer", "usage facts recorded; completion not buffered")
 _CP_ADV_AFTER_BUFFER = crashpoint("advance.after-buffer.before-flush", "completion buffered; not yet flushed")
+
+# The between-attempts step boundary the per-chunk spend cap checks at (issue #61a), inside
+# the flush's apply-response consumption: the prior attempt's closure is already durable
+# (reason=transitioned — it genuinely completed) when this is reached, and neither the cap
+# check (a hub read) nor its outcome (park via `_escalate`, or spawn the next attempt) has
+# happened yet. A crash here leaves exactly that shape — a chunk with no active lease, no
+# escalation, no next lease — which FILL's `_reconcile_interrupted_claims` already recovers
+# by adopting (spawning) the chunk's current node the same as any other interrupted-claim
+# window; the recovered attempt re-reaches this same boundary and is checked again.
+_CP_ADV_AFTER_CLOSURE = crashpoint(
+    "advance.after-closure.before-cost-cap-check", "attempt closed; cap check and next-step decision not yet made"
+)
 
 # FLUSH (of the buffered completion, inside PULL) — submit -> ack -> apply-response. The
 # after-submit.before-ack window is the lost-ack replay the hub's idempotency must absorb.
@@ -192,6 +216,212 @@ _CP_FLUSH_BEFORE_SUBMIT = crashpoint("flush.before-submit", "completion at head 
 _CP_FLUSH_AFTER_SUBMIT = crashpoint("flush.after-submit.before-ack", "hub applied the completion; ack not recorded")
 _CP_FLUSH_AFTER_ACK = crashpoint("flush.after-ack.before-apply-response", "ack recorded; apply-response not consumed")
 _CP_FLUSH_AFTER_APPLY = crashpoint("flush.after-apply-response", "apply-response consumed; chunk continued in place")
+
+
+# --------------------------------------------------------------------------- #
+# Usage telemetry (issue #58) — the per-lease stdout redirect and its readback.
+# --------------------------------------------------------------------------- #
+
+
+def _stdout_path(ctx: LoopContext, lease_id: str, generation: int) -> str:
+    """This lease's per-generation harness-stdout redirect target, or ``""`` for no
+    redirect.
+
+    Empty when ``worker_stdout_dir`` is unset (Phase 1's discard/inherit default, and
+    every test that does not wire one) — the composition root (``loop/build.py``)
+    resolves the real directory and creates it once. Scoped to ``(lease_id,
+    generation)``, not just ``lease_id``: each spawn/resume gets its own file, so
+    ADVANCE's readback for a given attempt (:func:`_worker_usage_sample`) sees only
+    that attempt's own envelope line, never a prior generation's — a generation whose
+    own invocation exited without writing one correctly falls through to the
+    transcript-sum fallback instead of replaying a stale envelope (the bug this
+    per-generation split fixes). The adapter still opens the file in append mode, so a
+    retry that lands before this attempt's own ``record_spawn`` is durable (the
+    un-armable spawn-record gap every resume site's docstring calls out, e.g.
+    :func:`_resume_in_place`) safely reuses the same generation number and the same
+    file rather than colliding with a different attempt's."""
+    if not ctx.config.worker_stdout_dir:
+        return ""
+    return os.path.join(ctx.config.worker_stdout_dir, f"{lease_id}.{generation}.stdout")
+
+
+def _pending_generation(ctx: LoopContext, lease_id: str) -> int:
+    """The spawn generation this lease's next spawn/resume is about to mint — one past
+    :meth:`~blizzard.runner.store.repository.IReadRunnerStore.lease_generation`'s
+    durably-recorded count, read *before* this attempt's own ``record_spawn`` call
+    lands. Every write call site (:func:`_spawn_attempt`, and each resume family
+    member) reads this to name its own :func:`_stdout_path` ahead of that call."""
+    return ctx.store.lease_generation(lease_id) + 1
+
+
+def _read_stdout(path: str) -> str:
+    """The per-lease stdout file's full text, or ``""`` when absent/unreadable.
+
+    Never raises: a missing file (nothing was ever redirected, or it was already
+    cleaned up at release) is the ordinary "no envelope" case the caller falls back
+    from, not a fault to log."""
+    if not path:
+        return ""
+    try:
+        with open(path, "rb") as f:
+            return f.read().decode("utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
+def _record_worker_usage(ctx: LoopContext, lease: LeaseRecord, bindings: list[EnvBindingRecord]) -> None:
+    """Record just this attempt's spawn/resume invocation usage — no judgement ran.
+
+    The token-burning invocation whose exit ADVANCE is handling, attributed to this
+    lease's current spawn generation (``spawn`` on generation 1, ``resume`` after —
+    issue #58, reusing issue #13's generation tracking). Every exit path through
+    ADVANCE that burned a spawn/resume invocation records this, whether or not a
+    judgement follows: a worker that asked-and-exited (:func:`_park_on_ask`) elicited
+    no verdict, so it records this alone; the judged paths add the judge fact on top
+    (:func:`_record_attempt_usage`). Keyed on ``(lease, generation, kind)`` it is
+    idempotent across a re-run and distinct from the *next* generation's resume fact,
+    so an ask-park's spawn usage and its later answer-resume usage never collide.
+    """
+    generation = ctx.store.lease_generation(lease.lease_id)
+    kind: UsageKind = "spawn" if generation <= 1 else "resume"
+    worker_sample = _worker_usage_sample(ctx, lease, bindings, generation=generation, kind=kind)
+    if worker_sample is not None:
+        _store_usage(ctx, lease, generation=generation, sample=worker_sample)
+
+
+def _record_attempt_usage(
+    ctx: LoopContext, lease: LeaseRecord, bindings: list[EnvBindingRecord], *, judge_output: str
+) -> None:
+    """Record this attempt's harness usage: the spawn/resume invocation whose exit
+    ADVANCE is judging, and the judgement resume that elicited its verdict — each its
+    own fact, keyed on this lease's current spawn generation (issue #58, reusing issue
+    #13's own generation tracking). Called just before the completion is buffered
+    (``_CP_ADV_AFTER_USAGE``) and equally on the verdict-less-fail exit (both burned the
+    judge invocation): a crash between the two either finds these facts already durable
+    — idempotent re-run, keyed on ``(lease, generation, kind)`` — or reaches neither,
+    never a double-count.
+    """
+    _record_worker_usage(ctx, lease, bindings)
+    generation = ctx.store.lease_generation(lease.lease_id)
+    judge_sample = ctx.harness.parse_usage(judge_output, "judge")
+    if judge_sample is not None:
+        _store_usage(ctx, lease, generation=generation, sample=judge_sample)
+
+
+def _store_usage(ctx: LoopContext, lease: LeaseRecord, *, generation: int, sample: UsageSample) -> None:
+    ctx.store.record_usage(
+        lease_id=lease.lease_id,
+        chunk_id=lease.chunk_id,
+        node_id=lease.node_id,
+        epoch=lease.epoch,
+        generation=generation,
+        sample=sample,
+        recorded_at=ctx.clock.now(),
+    )
+
+
+def _worker_usage_sample(
+    ctx: LoopContext, lease: LeaseRecord, bindings: list[EnvBindingRecord], *, generation: int, kind: UsageKind
+) -> UsageSample | None:
+    """This attempt's own spawn/resume usage: parsed off *this generation's own*
+    stdout file's result envelope, falling back to a transcript-summed, cost-absent
+    sample when no envelope survived — the worker was killed or reaped before it ever
+    wrote one (never fabricated: no envelope and no transcript is simply no fact).
+    Scoped to ``generation`` (not just the lease), so a generation whose own
+    invocation wrote no envelope of its own can never read back a *prior*
+    generation's — see :func:`_stdout_path`."""
+    output = _read_stdout(_stdout_path(ctx, lease.lease_id, generation))
+    sample = ctx.harness.parse_usage(output, kind) if output else None
+    if sample is not None:
+        return sample
+    if ctx.transcripts is None or lease.session_id is None:
+        return None
+    fallback_workdir = bindings[0].workdir if bindings else None
+    spawn_cwd = resolve_spawn_cwd(ctx.config.workspace_root, fallback_workdir)
+    lines = ctx.transcripts.read_raw_lines(lease.session_id, spawn_cwd=spawn_cwd)
+    if not lines:
+        return None
+    return ctx.harness.sum_transcript_usage(lines, kind)
+
+
+# --------------------------------------------------------------------------- #
+# Runner spend ceiling (issue #61b) — the tick-level kill-switch, first in the tick.
+# --------------------------------------------------------------------------- #
+
+
+def check_spend_ceiling(ctx: LoopContext) -> None:
+    """Engage the local pause brake once this runner's rolling-window spend reaches
+    ``cost.runner_ceiling_usd`` — the runner-wide counterpart to :func:`_park_on_cost_cap`'s
+    per-chunk cap, sharing the ``[cost]`` table and its identical lower-bound + PARTIAL
+    cost-absent treatment.
+
+    Runs **first** in the tick (:func:`blizzard.runner.loop.tick.tick`, ahead of REAP,
+    RESUME, PULL, FILL and ADVANCE) so a crossing detected this tick is already visible to
+    every spawn primitive gated by :func:`_spawn_suppressed` and to REAP's kill-a-stalled-
+    worker deferral, within the *same* pass — no worker is newly spawned, and no live
+    worker is killed, on the strength of a check that ran too late in its own tick.
+
+    Reuses the existing local pause brake rather than inventing a second suppression
+    mechanism (the locked design, issue #61): the exact ``record_local_pause`` call
+    ``blizzard runner pause`` itself makes, so every existing spawn-suppression site
+    already honors it and no retry budget is touched. Reads ``local_paused`` first and
+    returns immediately when already engaged — engaging is a one-time transition, not a
+    per-tick assertion, so a runner already paused (by this ceiling or by an operator's own
+    ``blizzard runner pause``) is left alone rather than re-escalated on every later tick,
+    even while the rolling window's sum stays over the ceiling for as long as it holds.
+    **No auto-unpause**: this function never calls ``record_local_pause(paused=False,
+    ...)`` — ``blizzard runner start`` is the only conscious clear, and the brake does not
+    lift itself when the window later rolls the spend back under the ceiling.
+
+    ``cost.runner_ceiling_usd`` absent means no ceiling — unchanged pre-#61b behavior. The
+    window is summed **locally** (unlike the per-chunk cap's hub-derived read): this
+    runner's own :meth:`~blizzard.runner.store.repository.IReadRunnerStore.usage_since`
+    over the trailing ``runner_ceiling_window_hours``, off the injected clock, never wall
+    time, so a timezone or DST change never moves the boundary.
+
+    Crash safety: the only durable write here is the single-transaction
+    ``record_local_pause`` (local pause fact + its hub-bound report, atomic by
+    construction — the same call the manual pause route makes, which carries no crash
+    point of its own for the same reason). Everything before it (``local_paused``,
+    ``usage_since``) is a plain read with no observable partial state, so a crash at any
+    point up to the write leaves nothing to recover: the next tick simply re-derives the
+    identical decision from the same durable facts and the (now later) clock. This opens
+    no new crash window, so no new crash-point-registry point is added.
+    """
+    cap = ctx.config.runner_ceiling_usd
+    if cap is None:
+        return
+    if ctx.store.local_paused(ctx.config.runner_id):
+        return  # already engaged — engage-once; `blizzard runner start` is the only clear
+    now = ctx.clock.now()
+    since = now - timedelta(hours=ctx.config.runner_ceiling_window_hours)
+    totals = ctx.store.usage_since(since)
+    if totals.cost_usd < cap:
+        return
+    partial_note = " (PARTIAL — true spend may be higher)" if totals.cost_partial else ""
+    window_hours = ctx.config.runner_ceiling_window_hours
+    reason = (
+        f"spend ceiling ${cap:.2f} reached over the trailing {window_hours:g}h "
+        f"(spend ${totals.cost_usd:.2f}{partial_note})"
+    )
+    _log.warning(
+        f"runner locally paused — {reason}",
+        runner_id=ctx.config.runner_id,
+        ceiling_usd=cap,
+        spend_usd=totals.cost_usd,
+        window_hours=ctx.config.runner_ceiling_window_hours,
+        cost_partial=totals.cost_partial,
+    )
+    ctx.store.record_local_pause(
+        ctx.config.runner_id,
+        paused=True,
+        at=now,
+        by="runner-ceiling",
+        report_kind=RUNNER_LOCALLY_PAUSED,
+        report_payload=json.dumps(
+            {"runner_id": ctx.config.runner_id, "by": "runner-ceiling", "at": iso_utc(now), "reason": reason}
+        ),
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -517,7 +747,12 @@ def _resume_in_place(ctx: LoopContext, lease: LeaseRecord) -> None:
         return
     # The resume-with-message → record_spawn gap is the un-armable spawn-record window (see the
     # docstring): the same one SPAWN and answer-resume carry, not a new one this step introduces.
-    pid = ctx.harness.resume_with_message(bindings[0].workdir, lease.session_id, _RESTART_RESUME_MESSAGE)
+    pid = ctx.harness.resume_with_message(
+        bindings[0].workdir,
+        lease.session_id,
+        _RESTART_RESUME_MESSAGE,
+        stdout_path=_stdout_path(ctx, lease.lease_id, _pending_generation(ctx, lease.lease_id)),
+    )
     ctx.store.record_spawn(
         lease.lease_id,
         pid=pid,
@@ -861,7 +1096,15 @@ def _flush_decision(ctx: LoopContext, fact: BufferedFact) -> bool:
 
 
 def _consume_apply_response(ctx: LoopContext, lease: LeaseRecord, response: ApplyResponse) -> None:
-    """Record the closure and continue in place per the hub's apply-response."""
+    """Record the closure and continue in place per the hub's apply-response.
+
+    Between the closure below and any next-attempt spawn is the between-attempts
+    step boundary the per-chunk spend cap checks at (issue #61a, :func:`_park_on_cost_cap`):
+    the attempt just closed is genuinely done — its worker already exited, its completion
+    already applied at the hub — so parking it here kills nothing live. This is deliberately
+    not inside :func:`_spawn_attempt`, whose silent-``None`` return (issue #45) forbids a
+    diverting escalation.
+    """
     if response.outcome == ApplyOutcome.FAILURE:
         # A semantic rejection — a stale-epoch (zombie) or terminal completion. The
         # attempt failed; requeue or escalate. The chunk never advanced and never
@@ -873,8 +1116,59 @@ def _consume_apply_response(ctx: LoopContext, lease: LeaseRecord, response: Appl
     ctx.store.record_closure(
         lease_id=lease.lease_id, chunk_id=lease.chunk_id, node_id=lease.node_id, reason=_TRANSITIONED, closed_at=now
     )
+    _CP_ADV_AFTER_CLOSURE.reached()
+    if response.outcome == ApplyOutcome.NEXT and _park_on_cost_cap(ctx, lease):
+        return  # capped — needs_human; the next attempt is not spawned
     bindings = ctx.store.bindings_for_chunk(lease.chunk_id)
     _apply_response(ctx, lease.chunk_id, response.outcome, response.next_envelope, bindings)
+
+
+def _park_on_cost_cap(ctx: LoopContext, lease: LeaseRecord) -> bool:
+    """True — chunk parked ``needs_human`` — iff its spend has reached ``cost.chunk_cap_usd``.
+
+    Reads the hub-**derived** total (``ChunkDetail.cost``, ``bzh:facts-not-status``): usage
+    is a fact and a chunk's cost is a read-time aggregate over it, never a stored column, so
+    this is the single source of truth for "how much has this chunk spent" and the runner
+    never sums usage locally to answer that question.
+
+    **Cost-absent conservative treatment (epic #57 phase 5, resolved product decision):** a
+    usage row with no ``cost_usd`` (the harness-envelope-less transcript-token fallback, e.g.
+    after a reaped crash) contributes its tokens to the total but **$0** to the cost sum — so
+    the summed ``cost_usd`` is a LOWER BOUND, never an over-estimate, and ``cost_partial`` is
+    set whenever any such row fed it. The cap trips on this lower bound (a capped chunk's true
+    spend may be higher still); the escalation log line below states PARTIAL whenever that is
+    so, so an operator reading the takeover is never told a partial total is the whole spend.
+
+    ``cost.chunk_cap_usd`` absent means no cap — unchanged pre-#61a behavior. A transport
+    failure reading the chunk detail defers the check to the next boundary (the same
+    "last-known-directive holds" rule every other hub-unreachable branch in this module
+    follows) rather than blocking the chunk's advance on a flaky poll.
+
+    Reuses :func:`_escalate` — the same ``escalation.recorded`` fact, pasteable takeover
+    command, and held environments as a retries-exhausted escalation — over ``lease``, whose
+    closure this function's caller already recorded as ``transitioned`` (the attempt genuinely
+    succeeded; this is not a failure and consumes no retry).
+    """
+    cap = ctx.config.chunk_cap_usd
+    if cap is None:
+        return False
+    try:
+        detail = ctx.hub.get_chunk(lease.chunk_id)
+    except HubClientError:
+        return False  # hub unreachable — re-checked at the next step boundary
+    cost = detail.cost
+    if cost.cost_usd < cap:
+        return False
+    partial_note = " (PARTIAL — true spend may be higher)" if cost.cost_partial else ""
+    _log.warning(
+        f"chunk parked — spend cap exceeded{partial_note}",
+        chunk_id=lease.chunk_id,
+        cap_usd=cap,
+        spend_usd=cost.cost_usd,
+        cost_partial=cost.cost_partial,
+    )
+    _escalate(ctx, lease, reason=f"spend cap ${cap:.2f} reached (spend ${cost.cost_usd:.2f}{partial_note})")
+    return True
 
 
 # --------------------------------------------------------------------------- #
@@ -1223,12 +1517,23 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
     # The adapter works in a directory; the runner resolves the provider-returned
     # workdir from the binding and supplies it.
     output = ctx.harness.judge(bindings[0].workdir, lease.session_id, prompt)
+
+    # 2c. Record this attempt's harness usage (issue #58) — the spawn/resume invocation
+    #     that just exited and the judgement resume above, each its own fact. Recorded
+    #     *before* the verdict is parsed so it lands on the verdict-less-fail exit too:
+    #     that attempt burned the same spawn + judge invocations, so failing it into a
+    #     fresh retry (which mints a new lease and discards this one's stdout) must not
+    #     also discard its spend. Idempotent on ``(lease, generation, kind)``, so the
+    #     success path re-running it below is harmless.
+    _record_attempt_usage(ctx, lease, bindings, judge_output=output)
+
     choice = ctx.harness.parse_verdict(output)
     if choice is None:
         _log.warning("verdict-less judgement — failing attempt", chunk_id=lease.chunk_id, lease_id=lease.lease_id)
         _fail_attempt(ctx, lease, reason=_FAILED, via="advance")
         return
     _CP_ADV_AFTER_JUDGE.reached()
+    _CP_ADV_AFTER_USAGE.reached()
 
     # 2b. Harvest the node's asset artifacts: a node that `produces` a name no
     #     pushed git commit covers (the review node's `findings`) emits the worker's
@@ -1472,6 +1777,7 @@ def _spawn_attempt(
         local_api_url=ctx.config.local_api_url,
         workspace_root=ctx.config.workspace_root,
         prompt_prefix=prompt_prefix,
+        stdout_path=_stdout_path(ctx, lease_id, _pending_generation(ctx, lease_id)),
     )
     handle = ctx.harness.spawn(envelope, preamble, session_hint=str(uuid.uuid4()))
     ctx.store.record_spawn(
@@ -1659,7 +1965,7 @@ def _requeue(ctx: LoopContext, lease: LeaseRecord) -> None:
     _spawn_attempt(ctx, lease.chunk_id, envelope, _bindings_as_environments(bindings), via="requeue")
 
 
-def _escalate(ctx: LoopContext, lease: LeaseRecord) -> None:
+def _escalate(ctx: LoopContext, lease: LeaseRecord, *, reason: str = "retries exhausted") -> None:
     """Park the chunk needs-human at the hub, envs held for takeover.
 
     The escalation rides the outbound buffer as an ``escalation.recorded`` fact,
@@ -1669,6 +1975,10 @@ def _escalate(ctx: LoopContext, lease: LeaseRecord) -> None:
     adapter's session surface — so a human resumes the
     parked session in the agent's own warm worktrees; a requeue's later lease mint
     closes it by supersession. Environments stay bound throughout.
+
+    ``reason`` is log-line prose only — every caller's escalation (retries-exhausted,
+    :func:`_park_on_cost_cap`'s spend cap) rides the identical wire fact and takeover
+    composition; only why it happened differs.
     """
     now = ctx.clock.now()
     bindings = ctx.store.bindings_for_chunk(lease.chunk_id)
@@ -1679,7 +1989,7 @@ def _escalate(ctx: LoopContext, lease: LeaseRecord) -> None:
     ctx.store.enqueue_outbound(
         kind=ESCALATION_RECORDED, chunk_id=lease.chunk_id, lease_id=lease.lease_id, payload=payload, created_at=now
     )
-    _log.info("escalated to needs-human — retries exhausted", chunk_id=lease.chunk_id, takeover=takeover)
+    _log.info(f"escalated to needs-human — {reason}", chunk_id=lease.chunk_id, takeover=takeover)
 
 
 def _park_on_ask(ctx: LoopContext, lease: LeaseRecord, ask: AskRecord) -> None:
@@ -1691,8 +2001,15 @@ def _park_on_ask(ctx: LoopContext, lease: LeaseRecord, ask: AskRecord) -> None:
     and the local park fact keeps REAP off the dormant lease and ADVANCE from re-parking
     or eliciting a verdict. The env bindings stay held so the session is warm for
     the resume. No retry is consumed — a park is not a failed attempt.
+
+    The spawn/resume invocation that asked-and-exited still burned real tokens, so its
+    usage is recorded here (issue #58) before the park — the same honesty the judged
+    exit gets. No judgement ran, so only the worker's own sample is recorded; keyed on
+    ``(lease, generation, kind)`` it is idempotent across a re-park and distinct from the
+    answer-resume generation's later fact, so an ask-and-answer round never double-counts.
     """
     now = ctx.clock.now()
+    _record_worker_usage(ctx, lease, ctx.store.bindings_for_chunk(lease.chunk_id))
     payload = json.dumps(
         {
             "question_id": ask.question_id,
@@ -1752,7 +2069,12 @@ def _resume_if_answered(ctx: LoopContext, lease: LeaseRecord) -> None:
     # as ordinary resume text (the exact prose is unpinned).
     who = question.answered_by or "operator"
     message = f"# Answer from {who}. Continue.\n{question.answer}"
-    pid = ctx.harness.resume_with_message(bindings[0].workdir, lease.session_id or "", message)
+    pid = ctx.harness.resume_with_message(
+        bindings[0].workdir,
+        lease.session_id or "",
+        message,
+        stdout_path=_stdout_path(ctx, lease.lease_id, _pending_generation(ctx, lease.lease_id)),
+    )
     now = ctx.clock.now()
     # The resumed worker runs under the same lease and session; record its new pid so the
     # lease reads live again (REAP/ADVANCE treat it as any running worker from here).
@@ -1838,7 +2160,12 @@ def _resume_if_unpaused(ctx: LoopContext, lease: LeaseRecord) -> None:
         return
     # The un-armable spawn-record gap (see the docstring) — the same one SPAWN, restart-resume
     # and answer-resume carry, not a new one this step introduces.
-    pid = ctx.harness.resume_with_message(bindings[0].workdir, lease.session_id, _PAUSE_RESUME_MESSAGE)
+    pid = ctx.harness.resume_with_message(
+        bindings[0].workdir,
+        lease.session_id,
+        _PAUSE_RESUME_MESSAGE,
+        stdout_path=_stdout_path(ctx, lease.lease_id, _pending_generation(ctx, lease.lease_id)),
+    )
     ctx.store.record_spawn(
         lease.lease_id,
         pid=pid,
@@ -1898,11 +2225,33 @@ def _push_and_collect_artifacts(ctx: LoopContext, bindings: list[EnvBindingRecor
 
 
 def _release_all(ctx: LoopContext, chunk_id: str) -> None:
-    """Release every held environment at the chunk's tenure end."""
+    """Release every held environment at the chunk's tenure end, and clean up every
+    lease this chunk ever minted's per-generation usage-stdout files (issue #58) —
+    bounded, one file per attempt ever made under each lease, no longer needed once
+    its usage facts are durable."""
     now = ctx.clock.now()
     for binding in ctx.store.bindings_for_chunk(chunk_id):
         ctx.provider.release(binding.environment_id)
         ctx.store.record_release(chunk_id=chunk_id, environment_id=binding.environment_id, released_at=now)
+    for lease_id in ctx.store.lease_ids_for_chunk(chunk_id):
+        _cleanup_stdout(ctx, lease_id)
+
+
+def _cleanup_stdout(ctx: LoopContext, lease_id: str) -> None:
+    """Remove every one of a lease's per-generation stdout files, if any.
+
+    Bounded to the durably recorded generation count (:meth:`IReadRunnerStore.
+    lease_generation`) plus one: the un-armable spawn-record gap every resume site's
+    docstring calls out (e.g. :func:`_resume_in_place`) can leave a file on disk for a
+    generation whose own ``record_spawn`` never landed, so the ``+1`` also catches that
+    one stray file. A missing file at any of those generations is a no-op — never
+    redirected (``worker_stdout_dir`` unset), already cleaned up, or that ``+1`` slot
+    was never actually written."""
+    if not ctx.config.worker_stdout_dir:
+        return
+    for generation in range(1, ctx.store.lease_generation(lease_id) + 2):
+        with contextlib.suppress(OSError):
+            os.remove(_stdout_path(ctx, lease_id, generation))
 
 
 def _release_acquired(ctx: LoopContext, acquired: list[AcquiredEnvironment]) -> None:

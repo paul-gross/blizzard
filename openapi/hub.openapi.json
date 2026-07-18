@@ -286,6 +286,9 @@
             "title": "Chunk Id",
             "type": "string"
           },
+          "cost": {
+            "$ref": "#/components/schemas/ChunkUsageTotalView"
+          },
           "current_node_id": {
             "anyOf": [
               {
@@ -401,6 +404,14 @@
           },
           "status": {
             "$ref": "#/components/schemas/ChunkStatus"
+          },
+          "usage": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ChunkUsageView"
+            },
+            "title": "Usage",
+            "type": "array"
           }
         },
         "required": [
@@ -587,11 +598,14 @@
         "type": "string"
       },
       "ChunkSummary": {
-        "description": "One row of the fleet chunk list \u2014 derived status + current node.\n\n``current_node_name`` is the node's human graph name (``build``, ``review``) the\nboard renders in place of the raw ``nd_`` ULID; null when the chunk has no\ncurrent node or its pinned graph cannot resolve the id.\n\nDeliberately status-only: the summary feeds the board **card**, which is a passive\nstatus view (issue #42), so no operator *fact* is carried here. The pause fact \u2014 and\nevery other fact an operator action keys on \u2014 reaches the chunk detail dock through\n:class:`ChunkDetail`, the one place a board action lives. ``runner_id`` (the live\nroute's holder, null when unrouted) is a passive where-is-it fact in that same\nsense \u2014 it lets the fleet registry list each runner's claims \u2014 not an action key.",
+        "description": "One row of the fleet chunk list \u2014 derived status + current node.\n\n``current_node_name`` is the node's human graph name (``build``, ``review``) the\nboard renders in place of the raw ``nd_`` ULID; null when the chunk has no\ncurrent node or its pinned graph cannot resolve the id.\n\nDeliberately status-only: the summary feeds the board **card**, which is a passive\nstatus view (issue #42), so no operator *fact* is carried here. The pause fact \u2014 and\nevery other fact an operator action keys on \u2014 reaches the chunk detail dock through\n:class:`ChunkDetail`, the one place a board action lives. ``runner_id`` (the live\nroute's holder, null when unrouted) is a passive where-is-it fact in that same\nsense \u2014 it lets the fleet registry list each runner's claims \u2014 not an action key.\n``cost`` is the one exception (issue #59): the derived spend total is cheap to carry\non every card and is not itself an operator fact, so it rides the summary rather than\nwaiting for the detail fetch.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
             "type": "string"
+          },
+          "cost": {
+            "$ref": "#/components/schemas/ChunkUsageTotalView"
           },
           "current_node_id": {
             "anyOf": [
@@ -654,6 +668,106 @@
           "model"
         ],
         "title": "ChunkSummary",
+        "type": "object"
+      },
+      "ChunkUsageTotalView": {
+        "description": "A chunk's derived usage/cost total \u2014 summed over every recorded invocation\n(issue #59). Never a stored column: computed at read time by\n``derive_chunk_usage``.\n\n``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd`` \u2014\nsee :class:`~blizzard.hub.domain.work.UsageTotal` for the one canonical\nstatement of it, which this view's fields mirror verbatim.",
+        "properties": {
+          "cache_create_tokens": {
+            "title": "Cache Create Tokens",
+            "type": "integer"
+          },
+          "cache_read_tokens": {
+            "title": "Cache Read Tokens",
+            "type": "integer"
+          },
+          "cost_partial": {
+            "title": "Cost Partial",
+            "type": "boolean"
+          },
+          "cost_usd": {
+            "title": "Cost Usd",
+            "type": "number"
+          },
+          "input_tokens": {
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "output_tokens": {
+            "title": "Output Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "input_tokens",
+          "output_tokens",
+          "cache_read_tokens",
+          "cache_create_tokens",
+          "cost_usd",
+          "cost_partial"
+        ],
+        "title": "ChunkUsageTotalView",
+        "type": "object"
+      },
+      "ChunkUsageView": {
+        "description": "One node-step's usage/cost telemetry (issue #59) \u2014 one harness invocation's\ntokens-by-class and cost, oldest first on :class:`ChunkDetail`.\n\n``cost_usd`` is ``None`` exactly when no result envelope existed for this\ninvocation (the envelope-less transcript-summation fallback) \u2014 never fabricated.",
+        "properties": {
+          "cache_create_tokens": {
+            "title": "Cache Create Tokens",
+            "type": "integer"
+          },
+          "cache_read_tokens": {
+            "title": "Cache Read Tokens",
+            "type": "integer"
+          },
+          "cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Usd"
+          },
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "input_tokens": {
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "output_tokens": {
+            "title": "Output Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "node_id",
+          "epoch",
+          "kind",
+          "model",
+          "input_tokens",
+          "output_tokens",
+          "cache_read_tokens",
+          "cache_create_tokens",
+          "cost_usd"
+        ],
+        "title": "ChunkUsageView",
         "type": "object"
       },
       "CompletionSubmission": {
@@ -1038,6 +1152,50 @@
         ],
         "title": "Executor",
         "type": "string"
+      },
+      "FleetSpendView": {
+        "description": "The fleet's usage/cost total since ``since``. ``cost_partial`` carries the\nlower-bound + PARTIAL contract on ``cost_usd`` \u2014 see\n:class:`~blizzard.hub.domain.work.UsageTotal` for the one canonical statement of\nit, which this view's fields mirror verbatim.",
+        "properties": {
+          "cache_create_tokens": {
+            "title": "Cache Create Tokens",
+            "type": "integer"
+          },
+          "cache_read_tokens": {
+            "title": "Cache Read Tokens",
+            "type": "integer"
+          },
+          "cost_partial": {
+            "title": "Cost Partial",
+            "type": "boolean"
+          },
+          "cost_usd": {
+            "title": "Cost Usd",
+            "type": "number"
+          },
+          "input_tokens": {
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "output_tokens": {
+            "title": "Output Tokens",
+            "type": "integer"
+          },
+          "since": {
+            "title": "Since",
+            "type": "string"
+          }
+        },
+        "required": [
+          "since",
+          "input_tokens",
+          "output_tokens",
+          "cache_read_tokens",
+          "cache_create_tokens",
+          "cost_usd",
+          "cost_partial"
+        ],
+        "title": "FleetSpendView",
+        "type": "object"
       },
       "GraphMintRequest": {
         "description": "A graph definition to mint \u2014 the raw YAML body.",
@@ -2106,6 +2264,28 @@
             "default": false,
             "title": "Locally Paused",
             "type": "boolean"
+          },
+          "locally_paused_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locally Paused By"
+          },
+          "locally_paused_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locally Paused Reason"
           },
           "online": {
             "title": "Online",
@@ -3310,6 +3490,49 @@
         "summary": "Ingest Runner Facts",
         "tags": [
           "meta"
+        ]
+      }
+    },
+    "/api/fleet/spend": {
+      "get": {
+        "description": "The fleet's total usage/cost since ``since`` (an ISO-8601 instant) \u2014 summed\nover every usage fact recorded at or after it, across every chunk.",
+        "operationId": "fleet_spend_api_fleet_spend_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "since",
+            "required": true,
+            "schema": {
+              "title": "Since",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FleetSpendView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Fleet Spend",
+        "tags": [
+          "fleet"
         ]
       }
     },

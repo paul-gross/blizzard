@@ -16,16 +16,24 @@ Four operations cover every headless-run + persisted-session + resume harness:
    — a missing or unparseable ``<Choice>`` is ``None``, which the core
   treats as a failure.
 
+Two more (epic #57) translate harness output into cost/token telemetry, never
+recording anything themselves: ``parse_usage`` reads a result envelope's own
+``usage`` + ``total_cost_usd``; ``sum_transcript_usage`` is the envelope-less
+fallback, summing per-message ``usage`` off the raw session transcript. Cost always
+comes from the harness — blizzard never maintains a pricing table.
+
 Adapters stay dumb (``bzh:deterministic-shell``): ``parse_verdict`` returns the
 choice *name*, not a graph decision — resolving it to an edge is the core's job.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
 from blizzard.runner.environments.provider import AcquiredEnvironment
+from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.wire.envelope import NodeEnvelope
 
 
@@ -47,6 +55,13 @@ class WorkerPreamble:
     workspace prompt + info table the adapter prepends to the envelope prompt (rendered
     by :func:`blizzard.runner.harness.preamble.render_worker_preamble`); empty prepends
     nothing.
+
+    ``stdout_path`` (epic #57) is the per-lease file the spawned worker's stdout is
+    redirected to, so a killed/reaped worker's result envelope survives the process
+    for :meth:`IHarnessAdapter.parse_usage` to read back later — the path is
+    **injected**, never computed inside the adapter (``bzh:dependency-injection`);
+    the runner composition root resolves the concrete path (phase 2 of issue #58).
+    Empty keeps today's behavior (stdout discarded).
     """
 
     environments: list[AcquiredEnvironment]
@@ -54,6 +69,7 @@ class WorkerPreamble:
     local_api_url: str
     workspace_root: str = ""
     prompt_prefix: str = ""
+    stdout_path: str = ""
 
 
 @dataclass(frozen=True)
@@ -72,12 +88,17 @@ class IHarnessAdapter(Protocol):
         """Start a headless worker; return its session id, pid, and start time."""
         ...
 
-    def resume_with_message(self, environment_id: str, session_id: str, message: str) -> int:
+    def resume_with_message(self, environment_id: str, session_id: str, message: str, stdout_path: str = "") -> int:
         """Headless resume-with-message; returns the new pid. Kill first.
 
         The fire-and-forget resume behind answer delivery and the CI feedback loop
         (P7). The two-phase judgement elicitation — which needs the reply captured
         synchronously for :meth:`parse_verdict` — is :meth:`judge`.
+
+        ``stdout_path`` (epic #57) is the injected per-lease file the resumed
+        worker's stdout is redirected to, mirroring :attr:`WorkerPreamble.stdout_path`
+        — this operation has no preamble to carry it on, so it rides as a direct
+        param instead. Empty keeps today's behavior (stdout inherited).
         """
         ...
 
@@ -109,4 +130,31 @@ class IHarnessAdapter(Protocol):
         ``produces`` an **asset** (the review node's findings) carries that assessment
         as the asset's content; the core harvests it into the completion. Empty string
         when the reply carries no assessment."""
+        ...
+
+    def parse_usage(self, output: str, kind: UsageKind) -> UsageSample | None:
+        """Translate a result envelope's ``usage`` + ``total_cost_usd`` into a sample.
+
+        ``kind`` names which invocation produced ``output`` (the caller knows —
+        spawn, resume, or judge — the adapter never infers it). Returns ``None``
+        when ``output`` carries no result envelope at all (e.g. a killed worker
+        whose process never reached completion) — the caller's cue to fall back to
+        :meth:`sum_transcript_usage`. Dumb translation only (``bzh:deterministic-
+        shell``): never a model call, never a cost estimate — cost rides verbatim
+        off the harness's own ``total_cost_usd``.
+        """
+        ...
+
+    def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind) -> UsageSample:
+        """Sum per-message ``usage`` across a session transcript's raw JSONL lines.
+
+        The envelope-less fallback: when a worker is killed/reaped before it ever
+        produces a result envelope, its transcript still carries a ``usage`` object
+        on every assistant message — summed here into token counts with
+        ``cost_usd=None`` (a transcript carries no dollar figure). Takes
+        already-read lines, mirroring :func:`blizzard.runner.transcripts.parser.
+        parse_turns`'s ``lines: list[str]`` shape, so the file locate/read step
+        (:mod:`blizzard.runner.transcripts.internal.jsonl_transcript_repository`)
+        is never duplicated here.
+        """
         ...

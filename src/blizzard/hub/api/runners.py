@@ -44,6 +44,8 @@ def _view(liveness: RunnerLiveness) -> RunnerView:
         online=liveness.online,
         hub_paused=r.hub_paused,
         locally_paused=r.locally_paused,
+        locally_paused_by=r.locally_paused_by,
+        locally_paused_reason=r.locally_paused_reason,
     )
 
 

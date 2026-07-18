@@ -55,6 +55,70 @@ const REVIEW_FAIL_DETAIL: ChunkDetail = {
   ],
 };
 
+const COST_DETAIL: ChunkDetail = {
+  chunk_id: 'ch_01cost00000000000000000000000',
+  graph_id: 'gr_1',
+  model: 'claude-opus-4-8',
+  status: 'running',
+  current_node_id: 'nd_review',
+  latest_epoch: 2,
+  pm_pointers: [],
+  history: [
+    { from_node_id: 'nd_build', to_node_id: 'nd_review', choice_name: 'pass', epoch: 1, recorded_at: '2026-07-13T00:00:01Z' },
+    { from_node_id: 'nd_review', to_node_id: 'nd_build', choice_name: 'fail', epoch: 2, recorded_at: '2026-07-13T00:00:02Z' },
+  ],
+  artifacts: [],
+  cost: {
+    input_tokens: 1200,
+    output_tokens: 800,
+    cache_read_tokens: 300,
+    cache_create_tokens: 100,
+    cost_usd: 0.42,
+    cost_partial: false,
+  },
+  // Only the first (nd_build, epoch 1) step recorded usage — the second step
+  // (nd_review, epoch 2) has none yet, so its inline usage must stay absent.
+  usage: [
+    {
+      node_id: 'nd_build',
+      epoch: 1,
+      kind: 'spawn',
+      model: 'claude-opus-4-8',
+      input_tokens: 1200,
+      output_tokens: 800,
+      cache_read_tokens: 300,
+      cache_create_tokens: 100,
+      cost_usd: 0.42,
+    },
+  ],
+};
+
+const PARTIAL_COST_DETAIL: ChunkDetail = {
+  ...COST_DETAIL,
+  chunk_id: 'ch_01partial00000000000000000000',
+  cost: {
+    input_tokens: 100,
+    output_tokens: 50,
+    cache_read_tokens: 0,
+    cache_create_tokens: 0,
+    cost_usd: 0.1,
+    cost_partial: true,
+  },
+  usage: [
+    {
+      node_id: 'nd_build',
+      epoch: 1,
+      kind: 'spawn',
+      model: 'claude-opus-4-8',
+      input_tokens: 100,
+      output_tokens: 50,
+      cache_read_tokens: 0,
+      cache_create_tokens: 0,
+      cost_usd: null,
+    },
+  ],
+};
+
 const NAMED_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01named000000000000000000000',
   graph_id: 'gr_1',
@@ -927,5 +991,69 @@ describe('ChunkDetailPanel', () => {
     const el = await renderWithPmItems({ status: 'error', items: [] });
     expect(el.querySelector('[data-testid="issue-error"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="issue-body"]')).toBeNull();
+  });
+
+  it('renders the chunk-total cost and expands the token total into its per-class breakdown (issue #60)', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', COST_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="cost-total-usd"]')?.textContent).toContain('$0.42');
+    expect(el.querySelector('[data-testid="cost-partial-badge"]')).toBeNull();
+
+    // Collapsed by default: the chunk-total token count, not the per-class breakdown.
+    expect(el.querySelector('[data-testid="tokens-total"]')?.textContent).toContain('2.4k');
+    expect(el.querySelector('[data-testid="tokens-breakdown"]')).toBeNull();
+
+    el.querySelector<HTMLButtonElement>('[data-testid="tokens-expand-toggle"]')?.click();
+    await fixture.whenStable();
+
+    const breakdown = el.querySelector('[data-testid="tokens-breakdown"]');
+    expect(breakdown).not.toBeNull();
+    expect(el.querySelector('[data-testid="tokens-input"]')?.textContent).toContain('1.2k');
+    expect(el.querySelector('[data-testid="tokens-output"]')?.textContent).toContain('800');
+    expect(el.querySelector('[data-testid="tokens-cache-read"]')?.textContent).toContain('300');
+    expect(el.querySelector('[data-testid="tokens-cache-create"]')?.textContent).toContain('100');
+  });
+
+  it('marks the chunk-total cost as PARTIAL when the derived total is a lower bound (issue #60)', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', PARTIAL_COST_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="cost-total-usd"]')?.textContent).toContain('~$0.10');
+    expect(el.querySelector('[data-testid="cost-partial-badge"]')).not.toBeNull();
+  });
+
+  it("shows each history step's own usage inline, matched by its (node, epoch) — absent for a step with none yet (issue #60)", async () => {
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', COST_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const steps = el.querySelectorAll('[data-testid="history-step"]');
+    expect(steps).toHaveLength(2);
+    // The first step (nd_build -> nd_review, epoch 1) recorded usage.
+    const firstStepUsage = steps[0].querySelector('[data-testid="history-step-usage"]');
+    expect(firstStepUsage).not.toBeNull();
+    expect(firstStepUsage?.querySelector('[data-testid="history-step-cost"]')?.textContent).toContain('$0.42');
+    expect(firstStepUsage?.querySelector('[data-testid="history-step-tokens"]')?.textContent).toContain('2.4k');
+    // The second step (nd_review -> nd_build, epoch 2) has none yet.
+    expect(steps[1].querySelector('[data-testid="history-step-usage"]')).toBeNull();
+  });
+
+  it("marks a history step's own usage as PARTIAL when its cost was absent (issue #60)", async () => {
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', PARTIAL_COST_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const firstStepUsage = el.querySelectorAll('[data-testid="history-step"]')[0].querySelector(
+      '[data-testid="history-step-usage"]',
+    );
+    expect(firstStepUsage?.querySelector('[data-testid="history-step-cost"]')?.textContent).toContain('~$0.00');
+    expect(firstStepUsage?.querySelector('[data-testid="history-step-cost-partial"]')).not.toBeNull();
   });
 });

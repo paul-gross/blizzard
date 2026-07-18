@@ -13,6 +13,7 @@ engine directly.
 from __future__ import annotations
 
 import threading
+from pathlib import Path
 
 import httpx
 
@@ -30,6 +31,8 @@ from blizzard.runner.loop.process import LinuxProcessProbe
 from blizzard.runner.loop.steps import mark_crash_resume_intents, mark_resume_intents
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
+from blizzard.runner.transcripts.internal.jsonl_transcript_repository import JsonlTranscriptRepository
+from blizzard.runner.transcripts.repository import TranscriptErrorFactory
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -52,6 +55,11 @@ def build_loop_context(config: RunnerConfig, hub: IHubClient) -> LoopContext:
         settings_path=config.worker_settings_path,
         permission_mode=config.harness_permission_mode,
     )
+    # The per-lease harness-stdout directory (issue #58) — under the runner's own data
+    # directory, created once here (never inside the adapter), so a worker's stdout
+    # redirect target always exists by the time a spawn/resume opens it.
+    worker_stdout_dir = config.root / "worker-stdout"
+    worker_stdout_dir.mkdir(parents=True, exist_ok=True)
     loop_config = LoopConfig(
         runner_id=config.runner_id,
         workspace_id=config.workspace_id,
@@ -63,7 +71,17 @@ def build_loop_context(config: RunnerConfig, hub: IHubClient) -> LoopContext:
         # resolved once here at loop-context build, not re-read per spawn.
         workspace_root=config.workspace_root,
         workspace_prompt=config.resolved_workspace_prompt(),
+        worker_stdout_dir=str(worker_stdout_dir),
+        chunk_cap_usd=config.chunk_cap_usd,
+        runner_ceiling_usd=config.runner_ceiling_usd,
+        runner_ceiling_window_hours=config.runner_ceiling_window_hours,
     )
+    # The envelope-less usage fallback's transcript read (issue #58), mirroring
+    # `runner/app.py`'s own construction of the panel's transcript seam (issue #29):
+    # `transcripts_root` empty means Claude Code's own default, resolved once here.
+    projects_root = config.transcripts_root or str(Path.home() / ".claude" / "projects")
+    error_factory = TranscriptErrorFactory(get_logger("blizzard.runner.transcripts"))
+    transcripts = JsonlTranscriptRepository(projects_root, error_factory)
     return LoopContext(
         store=store,
         clock=SystemClock(),
@@ -73,6 +91,7 @@ def build_loop_context(config: RunnerConfig, hub: IHubClient) -> LoopContext:
         process=LinuxProcessProbe(),
         worktree_git=SubprocessWorktreeGit(),
         config=loop_config,
+        transcripts=transcripts,
     )
 
 

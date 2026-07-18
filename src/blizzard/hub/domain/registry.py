@@ -51,6 +51,12 @@ class RunnerRegistration:
       hub only ever reads this one.
 
     Either stops new claims, so a reader wanting "is it claiming?" wants both.
+
+    ``locally_paused_by``/``locally_paused_reason`` are the newest local-pause fact's cause
+    (issue #61's spend-ceiling escalation composes a reason naming the ceiling and the
+    spend; a manual ``blizzard runner pause`` carries none) — populated only alongside a
+    *true* ``locally_paused`` (``None``/``None`` once resumed or if never paused), so a
+    stale cause never renders past its brake clearing.
     """
 
     runner_id: str
@@ -59,6 +65,8 @@ class RunnerRegistration:
     last_seen_at: datetime
     hub_paused: bool
     locally_paused: bool = False
+    locally_paused_by: str | None = None
+    locally_paused_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -108,8 +116,13 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
         """Append a fleet pause/resume fact; ``hub_paused`` derives from the newest."""
         ...
 
-    def record_local_pause(self, runner_id: str, *, paused: bool, at: datetime, by: str) -> None:
-        """Land a runner-reported local pause/start fact; ``locally_paused`` derives (issue #43)."""
+    def record_local_pause(
+        self, runner_id: str, *, paused: bool, at: datetime, by: str, reason: str | None = None
+    ) -> None:
+        """Land a runner-reported local pause/start fact; ``locally_paused`` derives (issue #43).
+
+        ``reason`` is the fact's own composed cause (issue #61) — ``None`` for a manual
+        pause/start, and always ``None`` on a start (a resume carries no reason)."""
         ...
 
 
@@ -139,20 +152,26 @@ class FleetService:
         _log.info("runner pause set", runner_id=runner_id, paused=paused, by=by)
         return True
 
-    def record_local_pause(self, runner_id: str, *, paused: bool, at: datetime, by: str) -> None:
+    def record_local_pause(
+        self, runner_id: str, *, paused: bool, at: datetime, by: str, reason: str | None = None
+    ) -> None:
         """Land a runner's report that it paused or started *itself* (issue #43).
 
         Not a control: the runner has already stopped claiming by the time this arrives, and
         the hub cannot set this brake. Landing it is what lets the board show a runner that
         is declining work rather than silently rendering it as running.
 
+        ``reason`` (issue #61) carries the fact's own composed cause — e.g. a spend-ceiling
+        crossing names the ceiling and the spend — so an operator sees *why*, not just
+        *that*. ``None`` for a manual pause and always on a start.
+
         Unlike ``set_paused`` this does not require a known runner. The fact rides the
         outbound buffer, which replays an outage in FIFO order, so a pause can legitimately
         arrive before the registration that follows it — dropping it would lose the brake
         exactly when the board most needs it.
         """
-        self._registry.record_local_pause(runner_id, paused=paused, at=at, by=by)
-        _log.info("runner local pause reported", runner_id=runner_id, paused=paused, by=by)
+        self._registry.record_local_pause(runner_id, paused=paused, at=at, by=by, reason=reason)
+        _log.info("runner local pause reported", runner_id=runner_id, paused=paused, by=by, reason=reason)
 
     def get_liveness(self, runner_id: str) -> RunnerLiveness | None:
         """One runner with its derived liveness — the runner's own pull read."""

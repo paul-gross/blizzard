@@ -297,6 +297,14 @@ exactly where it left off once the brake clears — see `blizzard-runner pause -
 the full contract. Each brake is cleared only where it was set — `runner start` locally,
 `blizzard hub resume` at the hub.
 
+The local brake has one **non-operator** trigger too: a configured runner spend ceiling
+engages this same brake automatically when the fleet's rolling-window spend crosses it (see
+"Bounding fleet spend" below). It is the identical brake — same "start no processes on this
+machine" semantics, live workers left to finish — so a runner can come back `[paused: local]`
+with no `runner pause` ever issued. It clears the same way, and *only* that way: an explicit
+`runner start`. `blizzard hub status` names the reason on a ceiling-engaged runner so you can
+tell it apart from a hand-issued pause.
+
 With no daemon running, the verbs report that rather than reading the store behind its
 back — the store is reached only through the daemon that owns it, in every case. What you
 see depends on how the daemon left:
@@ -383,6 +391,54 @@ While a chunk rests `not_ready` — minted but not yet promoted into the queue �
 pinned **graph** and **model** are editable, both from the chunk detail dock and via
 `POST /api/chunks/{id}/graph` / `POST /api/chunks/{id}/model`. Once the chunk leaves
 `not_ready` (promoted, claimed, running, or later) both edits are refused with `409`.
+
+## Bounding fleet spend — cost caps and the spend kill-switch
+
+An unattended overnight fleet spends against the operator's harness billing with no ceiling
+by default. Two optional caps bound it, both configured in a `[cost]` table in
+`blizzard-runner.toml` and both **absent by default — no `[cost]` table means no cap and no
+ceiling, exactly the prior behavior**. Cost figures are the harness's own `total_cost_usd`;
+blizzard maintains no pricing table and never fabricates a cost.
+
+```toml
+[cost]
+# Per-chunk spend cap. When a chunk's total cost crosses this, it parks needs_human
+# at its next step boundary. Absent = no per-chunk cap.
+chunk_cap_usd = 5.0
+
+# Runner spend ceiling over a rolling window. When this runner's spend across the
+# trailing window crosses this, the local pause brake engages. Absent = no ceiling.
+runner_ceiling_usd = 50.0
+
+# The rolling window the ceiling sums over, in hours. Defaults to 24.0; only
+# consulted when runner_ceiling_usd is set.
+window_hours = 24.0
+```
+
+- **Per-chunk cap (`chunk_cap_usd`).** Checked **between attempts**, never by killing a live
+  worker: when a chunk's derived total cost reaches the cap, the runner parks it `needs_human`
+  at the next step boundary with an escalation naming the cap and the spend, and the usual
+  takeover command to resume. A capped chunk is not a failed one — no retry is consumed.
+  Resuming is a human decision: raise or clear the cap, then requeue the chunk and it proceeds.
+- **Runner ceiling (`runner_ceiling_usd`, `window_hours`).** Checked at each tick: when this
+  runner's spend over the trailing `window_hours` crosses the ceiling, the runner's **local
+  pause brake** engages (the same brake `runner pause` sets — every spawn site suppressed, no
+  retries consumed, live workers left to finish) and an escalation records the ceiling and the
+  spend. The window is a rolling last-N-hours sum; **it does not auto-unpause** when the window
+  later rolls the spend back under the ceiling. Clearing the brake is an explicit operator
+  decision — `blizzard runner start`, exactly as for a hand-issued pause. `GET /api/runners`
+  and `blizzard hub status` surface the ceiling reason on the paused runner, so it reads
+  differently from a manual pause.
+- **Cost-absent rows are a conservative lower bound.** When a worker crashes or is `kill -9`ed
+  before the harness emits its final usage envelope, blizzard records the attempt's tokens from
+  the session transcript but its **cost is genuinely unknown** — so an absent-cost row
+  contributes its tokens but **$0** to the cost sum, making the total a lower bound, flagged
+  **PARTIAL** wherever it is shown (a `~` marker on the board and in `hub status`). Both caps
+  trip on this lower bound and surface PARTIAL in the escalation, so an operator knows the true
+  spend may be higher — a cap never silently under-counts a crash-heavy chunk into looking cheap.
+
+See `blizzard hub status` for the per-chunk cost column, the fleet total, and a paused runner's
+ceiling reason; the board's chunk cards and detail dock show the same figures live.
 
 ## The recovery contract
 
