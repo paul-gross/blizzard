@@ -8,6 +8,7 @@
  */
 
 export { BoardHeader } from './lib/board-header/board-header';
+export { BrandMark } from './lib/design/brand-mark';
 export { BoardShell } from './lib/board-shell/board-shell';
 export { compactRef, ENTITY_DISPLAY, type EntityDisplay } from './lib/compact-ref';
 export { LANES, STATUS_LANE, laneFor, type Lane } from './lib/chunk-lanes';

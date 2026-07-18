@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 
 import type { ChunkSummary } from '../api/hub';
 import { LANES, laneFor } from '../chunk-lanes';
+import { BrandMark } from '../design/brand-mark';
 
 /** One header stat cell — a label over its live count. */
 interface StatCell {
@@ -22,10 +23,12 @@ interface StatCell {
 @Component({
   selector: 'fleet-board-header',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [BrandMark],
   template: `
     <header class="mc-header" data-testid="board-header">
       <div class="brand">
-        blizzard<small>fleet hub · mission control</small>
+        <fleet-brand-mark [size]="30" />
+        <div class="brand-text">blizzard<small>fleet hub · mission control</small></div>
       </div>
       @for (cell of stats(); track cell.key) {
         <div class="cell" [attr.data-stat]="cell.key">
@@ -64,15 +67,20 @@ interface StatCell {
     }
     .brand {
       display: flex;
-      flex-direction: column;
-      justify-content: center;
+      align-items: center;
+      gap: 10px;
       padding: 0 14px;
       border-right: 1px solid var(--line);
+      white-space: nowrap;
+    }
+    .brand-text {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
       color: var(--amber-hi);
       font-size: var(--fs-lg);
       letter-spacing: 0.28em;
       text-transform: uppercase;
-      white-space: nowrap;
     }
     .brand small {
       color: var(--label);

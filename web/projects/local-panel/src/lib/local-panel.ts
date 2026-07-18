@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 import type { runnerApi } from 'fleet';
 
+import { BrandMark } from 'fleet';
+
 import { AgentRow } from './agent-row';
 import { ChunkDetail } from './chunk-detail';
 import { ChunkRow } from './chunk-row';
@@ -39,12 +41,13 @@ import {
 @Component({
   selector: 'fleet-local-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [AgentRow, ChunkDetail, ChunkRow, EnvList, FactLog, LocalAsks, LocalInfo],
+  imports: [AgentRow, BrandMark, ChunkDetail, ChunkRow, EnvList, FactLog, LocalAsks, LocalInfo],
   template: `
     <div class="lp" data-testid="local-panel">
       <header class="lp-header">
         <div class="brand">
-          blizzard<small>runner · machine panel</small>
+          <fleet-brand-mark [size]="24" />
+          <div class="brand-text">blizzard<small>runner · machine panel</small></div>
         </div>
         <div class="spacer"></div>
         <div class="conn" data-testid="conn">
@@ -181,10 +184,16 @@ import {
     }
     .brand {
       display: flex;
-      flex-direction: column;
-      justify-content: center;
+      align-items: center;
+      gap: 9px;
       padding: 0 14px;
       border-right: 1px solid var(--line);
+      white-space: nowrap;
+    }
+    .brand-text {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
       color: var(--amber-hi);
       font-size: var(--fs-lg);
       letter-spacing: 0.28em;
