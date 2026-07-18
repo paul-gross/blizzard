@@ -14,6 +14,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from fastapi import FastAPI
 
 from blizzard.hub.config import RUNNER_AUTH_ENFORCE
 from tests.support import build_hub
@@ -156,13 +157,21 @@ def test_moved_write_verbs_404_or_405_at_their_old_path(tmp_path: Path) -> None:
         assert resp.status_code in (404, 405), f"{method.upper()} {path} still reachable: {resp.status_code}"
 
 
-def test_moved_read_verbs_no_longer_serve_json_at_their_old_path(tmp_path: Path) -> None:
+def test_moved_read_verbs_are_gone_from_the_route_inventory(tmp_path: Path) -> None:
     """The moved GET reads (envelope, the runner's answer poll, the runner's own pull
-    read) fall through to the SPA catch-all mount at an unmatched GET path — 200 with
-    an HTML body, never the route's JSON — proof they no longer resolve as API
-    routes, distinct from a still-live JSON 200."""
+    read) no longer resolve as API routes: their old path templates are absent from
+    the app's OpenAPI path inventory, and the fleet-side counterparts are present.
+    Asserted against the inventory rather than over HTTP because what a dead GET path
+    serves depends on whether the SPA bundle is built (catch-all HTML) or not (a
+    JSON 404)."""
     hub = build_hub(tmp_path)
-    for path in ["/api/chunks/ch_x/envelope", "/api/questions/qn_x", "/api/runners/ghost"]:
-        resp = hub.client.get(path)
-        content_type = resp.headers.get("content-type", "")
-        assert not content_type.startswith("application/json"), f"GET {path} still served JSON: {content_type}"
+    app = hub.client.app
+    assert isinstance(app, FastAPI)
+    paths = app.openapi()["paths"]
+    for old, new in [
+        ("/api/chunks/{chunk_id}/envelope", "/api/fleet/chunks/{chunk_id}/envelope"),
+        ("/api/questions/{question_id}", "/api/fleet/questions/{question_id}"),
+        ("/api/runners/{runner_id}", "/api/fleet/runners/{runner_id}"),
+    ]:
+        assert "get" not in paths.get(old, {}), f"GET {old} still resolves as an API route"
+        assert "get" in paths.get(new, {}), f"GET {new} missing from the fleet router"
