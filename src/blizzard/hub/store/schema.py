@@ -92,8 +92,14 @@ graph_edges = Table(
     Column("edge_id", String, primary_key=True),
     Column("from_node_id", String, ForeignKey("graph_nodes.node_id"), nullable=False),
     Column("choice_id", String, ForeignKey("graph_choices.choice_id"), nullable=False),
-    Column("to_node_name", String, nullable=False),  # a node name, or the reserved 'done'
+    Column("to_node_name", String, nullable=False),  # a node name, the reserved 'done', or 'graph:<name>' (#90)
     Column("prompt_addendum", Text, nullable=True),  # inlined arrival context
+    # The optional per-choice model override applied when a cross-graph migration edge
+    # (#90) re-pins the chunk — null keeps the chunk's current model. The cross-graph
+    # *target* itself needs no column: it rides in ``to_node_name`` as ``graph:<name>``
+    # and is re-derived on load (``graph.target_graph_of``); the model, not being encoded
+    # there, is the one authored value a migration edge must persist separately.
+    Column("to_graph_model", String, nullable=True),
 )
 
 # --- Chunks and their PM pointers (chunk.minted) ------------------------------

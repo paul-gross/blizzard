@@ -7,18 +7,20 @@ commit -> deliver -> land loop derives every chunk status from
 this revision creates exactly this revision's subset in FK-dependency order, so a
 later revision that adds tables to the same metadata does not get re-created here.
 
-``chunk_pm_pointers``, ``route_created``, ``route_released``, ``chunks``, and
-``transitions`` are the exceptions (as of ``0013_pm_pointer_source_ref``,
-``0015_route_seq_tiebreak``, ``0018_chunk_model_selection``, and
-``transition_graph_id`` — issue #90 — respectively): importing them from ``schema.py``
-here would mean this revision's *historical* shape silently follows whatever
-``schema.py`` says today — exactly the bug 0013's own docstring names and refuses to
-repeat. This revision instead declares its own frozen literal for each — ``{provider,
-url}`` for pointers, no ``seq`` column for the two route tables, no ``model`` column for
-``chunks``, no ``graph_id`` column for ``transitions`` — so upgrading from ``base``
-always recreates the column shape this revision actually shipped with; 0013, 0014,
-0018, and the graph-provenance revision are the revisions that reshape them from there.
-The frozen literals still declare their ``chunk_id``/``graph_id``
+``chunk_pm_pointers``, ``route_created``, ``route_released``, ``chunks``,
+``transitions``, and ``graph_edges`` are the exceptions (as of
+``0013_pm_pointer_source_ref``, ``0015_route_seq_tiebreak``,
+``0018_chunk_model_selection``, ``transition_graph_id``, and
+``edge_target_graph_model`` — the last two issue #90 — respectively): importing them
+from ``schema.py`` here would mean this revision's *historical* shape silently follows
+whatever ``schema.py`` says today — exactly the bug 0013's own docstring names and
+refuses to repeat. This revision instead declares its own frozen literal for each —
+``{provider, url}`` for pointers, no ``seq`` column for the two route tables, no
+``model`` column for ``chunks``, no ``graph_id`` column for ``transitions``, no
+``to_graph_model`` column for ``graph_edges`` — so upgrading from ``base`` always
+recreates the column shape this revision actually shipped with; 0013, 0014, 0018, and
+the two graph-provenance/migration revisions are the revisions that reshape them from
+there. The frozen literals still declare their ``chunk_id``/``graph_id``
 foreign keys (via same-MetaData resolution stubs, not live imports — see below) so a
 fresh store's schema matches ``schema.py``'s declared FKs (``bzh:sql-portable``:
 postgres is the same schema under a different URL).
@@ -42,7 +44,6 @@ from blizzard.hub.store.schema import (
     delivery_repo_landed,
     escalations,
     graph_choices,
-    graph_edges,
     graph_nodes,
     graphs,
     lease_facts,
@@ -99,6 +100,30 @@ _route_released = sa.Table(
     sa.Column("chunk_id", sa.String, sa.ForeignKey("chunks.chunk_id"), nullable=False),
     sa.Column("released_at", UtcDateTime, nullable=False),
 )
+# This revision's own frozen shape — no ``to_graph_model`` column — reshaped by the
+# edge-target-graph-model revision (issue #90). Not imported from schema.py (see the
+# module docstring). Its ``from_node_id``/``choice_id`` FKs (to ``graph_nodes`` /
+# ``graph_choices``, both created below from the real schema.py import, unreshaped) each
+# need a same-MetaData resolution stub here — never added to ``_TABLES``, never created.
+sa.Table(
+    "graph_nodes",
+    _frozen_metadata,
+    sa.Column("node_id", sa.String, primary_key=True),
+)
+sa.Table(
+    "graph_choices",
+    _frozen_metadata,
+    sa.Column("choice_id", sa.String, primary_key=True),
+)
+_graph_edges = sa.Table(
+    "graph_edges",
+    _frozen_metadata,
+    sa.Column("edge_id", sa.String, primary_key=True),
+    sa.Column("from_node_id", sa.String, sa.ForeignKey("graph_nodes.node_id"), nullable=False),
+    sa.Column("choice_id", sa.String, sa.ForeignKey("graph_choices.choice_id"), nullable=False),
+    sa.Column("to_node_name", sa.String, nullable=False),
+    sa.Column("prompt_addendum", sa.Text, nullable=True),
+)
 # This revision's own frozen shape — no ``graph_id`` column — reshaped by the
 # transition-graph-id revision (issue #90). Not imported from schema.py (see the module
 # docstring). Its ``chunk_id`` FK resolves against the same-MetaData ``_chunks`` stub above.
@@ -121,7 +146,7 @@ _TABLES = [
     graphs,
     graph_nodes,
     graph_choices,
-    graph_edges,
+    _graph_edges,
     _chunks,
     _chunk_pm_pointers,
     _transitions,

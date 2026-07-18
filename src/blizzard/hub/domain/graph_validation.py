@@ -24,6 +24,7 @@ from blizzard.hub.domain.graph import (
     JudgedBy,
     NodeDoc,
     RetriesExhausted,
+    classify_choice_target,
 )
 
 
@@ -118,14 +119,23 @@ def _check_node(node: NodeDoc, node_names: set[str], errors: list[str]) -> None:
                 f"(its outcome choices — at least the edges its commands route)"
             )
 
-    # Every choice entry has a description and a `to` that resolves.
+    # Every choice entry has a description and a `to` that resolves. A `to` is one of:
+    # a same-graph node name, the reserved terminal, or a well-formed cross-graph
+    # `graph:<name>` target (issue #90) — a malformed `graph:` form is rejected here.
     if judgement is not None:
         for choice in judgement.choices:
             if not choice.description:
                 errors.append(f"node `{node.name}` choice `{choice.name}`: missing `description`")
             if choice.to is None:
                 errors.append(f"node `{node.name}` choice `{choice.name}`: missing `to`")
-            elif choice.to != RESERVED_TERMINAL and choice.to not in node_names:
+                continue
+            kind, _ = classify_choice_target(choice.to)
+            if kind == "malformed":
+                errors.append(
+                    f"node `{node.name}` choice `{choice.name}`: malformed cross-graph target "
+                    f"`to: {choice.to}` — expected `graph:<name>`"
+                )
+            elif kind == "node" and choice.to != RESERVED_TERMINAL and choice.to not in node_names:
                 errors.append(
                     f"node `{node.name}` choice `{choice.name}`: `to: {choice.to}` resolves to no node "
                     f"(and is not the reserved terminal `{RESERVED_TERMINAL}`)"
@@ -163,7 +173,10 @@ def _edges(doc: GraphDoc) -> dict[str, set[str]]:
     for node in doc.nodes:
         if node.judgement is not None:
             for choice in node.judgement.choices:
-                if choice.to is not None:
+                # A cross-graph target (issue #90) is an exit *out* of this graph, not an
+                # intra-graph edge — like the terminal, it never contributes adjacency to
+                # a sibling node, so reachability is computed over same-graph targets only.
+                if choice.to is not None and classify_choice_target(choice.to)[0] == "node":
                     out[node.name].add(choice.to)
     return out
 
