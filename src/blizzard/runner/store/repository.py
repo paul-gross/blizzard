@@ -150,6 +150,25 @@ class EscalationRecord:
     closed_at: datetime
 
 
+@dataclass(frozen=True)
+class TakeoverRecord:
+    """An open operator takeover — the human-in-session fact (issue #52).
+
+    ``lease_id``/``session_id`` name the lease and session the interactive command
+    resumes; ``lease_id`` is ``None`` for the needs_human and gate-parked shapes, whose
+    lease already closed before the takeover was opened. ``fence_epoch`` is set only
+    when a live worker was force-killed — the epoch reported to the hub so the killed
+    worker's in-flight completion is fenced as stale."""
+
+    takeover_id: str
+    chunk_id: str
+    lease_id: str | None
+    session_id: str | None
+    workdir: str
+    fence_epoch: int | None
+    opened_at: datetime
+
+
 class IReadRunnerStore(Protocol):
     """Read-only runner-store queries (held by read-path edges)."""
 
@@ -168,6 +187,15 @@ class IReadRunnerStore(Protocol):
         already-closed lease means the completion applied on an earlier flush whose
         ack was lost — the re-flush is a no-op past the ack.
         """
+        ...
+
+    def latest_lease_for_chunk(self, chunk_id: str) -> LeaseRecord | None:
+        """The chunk's most-recently-minted lease, active or closed (issue #52).
+
+        Unlike :meth:`active_lease_for_chunk`, spans closed leases too — the
+        needs_human (escalated) and gate-parked (``reason="parked"``) shapes have no
+        active lease by the time a takeover is requested, but their closed lease still
+        carries the session id a takeover resumes."""
         ...
 
     def lease(self, lease_id: str) -> LeaseRecord | None:
@@ -365,6 +393,31 @@ class IReadRunnerStore(Protocol):
         wins over config, so an operator can clear the prompt to table-only at runtime."""
         ...
 
+    def open_takeover_for_chunk(self, chunk_id: str) -> TakeoverRecord | None:
+        """The chunk's open takeover, or ``None`` — a ``takeovers`` row with no
+        ``takeover_ends`` row for the same ``takeover_id`` (issue #52).
+
+        At most one open takeover per chunk by construction: ``TakeoverService`` refuses
+        a second ``POST`` while one is already open."""
+        ...
+
+    def open_takeover_chunk_ids(self) -> set[str]:
+        """Every chunk id currently under an open takeover (issue #52).
+
+        The loop's per-tick skip set: REAP and ADVANCE read this once per phase so no
+        step touches a chunk's session while the human holds it."""
+        ...
+
+    def open_takeovers(self) -> list[TakeoverRecord]:
+        """Every open takeover, across every chunk (issue #51).
+
+        The status view's recovery surface: a takeover left open by a stranded CLI
+        (e.g. an interrupted terminal that never reached the end-PATCH) would
+        otherwise wedge its chunk with no visible way to find the ``takeover_id`` back
+        — this is the read that names it, alongside the chunk and how long it has been
+        held, mirroring :meth:`open_escalations`'s widened-to-the-fleet shape."""
+        ...
+
 
 class IWriteRunnerStore(IReadRunnerStore, Protocol):
     """Read-write runner store — held only by the domain (the loop steps)."""
@@ -480,4 +533,23 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
 
     def record_session_end(self, *, lease_id: str, ended_at: datetime) -> None:
         """Record a worker's session-end — the ``SessionEnd`` hook fired on exit."""
+        ...
+
+    def record_takeover(
+        self,
+        *,
+        takeover_id: str,
+        chunk_id: str,
+        lease_id: str | None,
+        session_id: str | None,
+        workdir: str,
+        fence_epoch: int | None,
+        opened_at: datetime,
+    ) -> None:
+        """Open a takeover — recorded before any kill and before the interactive command
+        is returned (issue #52), so no later tick can race the human for the chunk."""
+        ...
+
+    def record_takeover_end(self, *, takeover_id: str, ended_at: datetime) -> None:
+        """Close a takeover — the CLI calls this once its exec'd interactive child exits."""
         ...

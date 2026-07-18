@@ -30,12 +30,14 @@ from blizzard.runner.api.leases import router as leases_router
 from blizzard.runner.api.pm_items import router as pm_items_router
 from blizzard.runner.api.readiness import router as readiness_router
 from blizzard.runner.api.session_end import router as session_end_router
+from blizzard.runner.api.takeovers import router as takeovers_router
 from blizzard.runner.api.transcripts import router as transcripts_router
 from blizzard.runner.api.workspace_prompt import router as workspace_prompt_router
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.leases import LocalLeaseService
 from blizzard.runner.domain.readiness import ReadinessService
 from blizzard.runner.domain.status import RunnerStatusService
+from blizzard.runner.domain.takeover import TakeoverService
 from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.harness.adapter import IHarnessAdapter
@@ -59,6 +61,7 @@ def create_app(
     leases: LocalLeaseService | None = None,
     transcripts: LocalTranscriptService | None = None,
     runner_status: RunnerStatusService | None = None,
+    takeover: TakeoverService | None = None,
 ) -> FastAPI:
     """Build a fully wired runner app from resolved config.
 
@@ -77,6 +80,10 @@ def create_app(
 
     ``runner_status`` is the store-backed, hub-free machine-local status view
     (issue #51) — ``blizzard runner status``'s backing service — wired the same way.
+
+    ``takeover`` is the store-, harness-, and process-probe-backed operator-takeover
+    service (issue #52) — ``blizzard runner takeover``'s backing service, wired the
+    same way.
     """
     log = get_logger("blizzard.runner")
 
@@ -98,6 +105,9 @@ def create_app(
     # The machine-local status view (issue #51) — ``blizzard runner status``'s backing
     # service, hub-free but for the derived reachability read.
     app.state.runner_status = runner_status
+    # The operator-takeover service (issue #52) — ``blizzard runner takeover``'s backing
+    # service.
+    app.state.takeover = takeover
 
     # API routers first, so /api/* always wins over the web mount at /.
     app.include_router(health_router)
@@ -121,6 +131,9 @@ def create_app(
     # environments and parked escalations. `GET /asks` rides the existing `asks_router`.
     app.include_router(environments_router)
     app.include_router(escalations_router)
+    # The operator takeover (issue #52): open/close a chunk's interactive session over
+    # the local API — the CLI is a pure client of these two routes.
+    app.include_router(takeovers_router)
 
     # The runner-served web app (post-MVP); the mount point is live from the
     # scaffold so the seam is exercised.
@@ -180,6 +193,10 @@ def build_hosted_app(config: RunnerConfig) -> FastAPI:
         workspace_id=config.workspace_id,
         max_agents=config.max_agents,
     )
+    # ``blizzard runner takeover``'s backing service (issue #52). Its own
+    # ``LinuxProcessProbe()``/``SystemClock()`` instances, like ``leases``/``runner_status``
+    # above: stateless, so a second instance is equivalent to sharing one.
+    takeover = TakeoverService(runner_store, SystemClock(), harness, LinuxProcessProbe())
     return create_app(
         config,
         readiness=readiness,
@@ -189,6 +206,7 @@ def build_hosted_app(config: RunnerConfig) -> FastAPI:
         leases=leases,
         transcripts=transcripts,
         runner_status=runner_status,
+        takeover=takeover,
     )
 
 

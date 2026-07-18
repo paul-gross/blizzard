@@ -387,3 +387,46 @@ daemon_liveness = Table(
     Column("runner_id", String, primary_key=True),
     Column("alive_at", UtcDateTime, nullable=False),  # injected-clock stamp of the newest tick
 )
+
+# --- Takeovers (the operator's interactive session over a parked chunk — issue #52) --
+#
+# Recorded by ``POST /chunks/{id}/takeovers`` **before** any kill and before the interactive
+# command is returned, so no later tick can race the human for the chunk (facts-not-status):
+# while a takeover is open, REAP and ADVANCE (judgement, ask-resume, pause-resume, the
+# gate/hub-node poll) all skip the chunk. ``lease_id`` is the lease taken over, when one
+# exists (a live worker, force-killed, or a dormant ask-parked lease); ``None`` for the
+# needs_human and gate-parked shapes, whose lease already closed before the takeover. Mirrors
+# ``asks``' natural-key openness (a fresh ``takeover_id`` per open, unlike a pause's key-less
+# fact pair): a plain ``takeover_id NOT IN (select takeover_id from takeover_ends)`` is safe
+# here, since a chunk cannot carry two simultaneously-open takeovers (the open check refuses
+# a second one).
+#
+# ``fence_epoch`` is set only on a **forced** takeover of a live worker: the epoch this
+# chunk's takeover fact reports to the hub via a ``lease.minted``-kind outbound fact, so the
+# killed worker's in-flight completion is fenced as stale exactly like a reaped lease —
+# without counting as an execution attempt (no ``lease_context`` row is written, so
+# ``attempt_count`` — the retry budget — never sees it). ``None`` on a non-forced takeover of
+# an already-dormant lease, which needs no fence: nothing live can submit late.
+# :meth:`~blizzard.runner.store.repository.IReadRunnerStore.latest_epoch` folds this in
+# alongside ``leases.epoch`` so a later real spawn never reuses an epoch this fence already
+# reported to the hub.
+
+takeovers = Table(
+    "takeovers",
+    metadata,
+    Column("takeover_id", String, primary_key=True),  # tko_<ulid>
+    Column("chunk_id", String, nullable=False),
+    Column("lease_id", String, nullable=True),  # the lease taken over, if any
+    Column("session_id", String, nullable=True),  # the session the interactive command resumes
+    Column("workdir", String, nullable=False),
+    Column("fence_epoch", Integer, nullable=True),  # set only when a live worker was force-killed
+    Column("opened_at", UtcDateTime, nullable=False),
+)
+
+takeover_ends = Table(
+    "takeover_ends",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("takeover_id", String, nullable=False),
+    Column("ended_at", UtcDateTime, nullable=False),
+)

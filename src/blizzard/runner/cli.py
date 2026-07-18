@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import signal
+import subprocess
 import types
 from pathlib import Path
 
@@ -406,13 +407,17 @@ def pm_items(chunk_id: str) -> None:
     help="Runner local API over TCP (overrides $BZ_RUNNER_URL).",
 )
 def status(directory: str, runner_url: str | None) -> None:
-    """The machine-local view: capacities, held environments, open asks, escalations (issue #51).
+    """The machine-local view: capacities, held environments, open asks, escalations,
+    open takeovers (issue #51).
 
     A pure client of the runner's local API — socket or ``--runner-url``, the same
     door ``pause``/``start`` use — so every section here is this runner's own local
     read and the view renders fully with the hub unreachable; hub reachability itself
     is reported, not assumed. ``GET /runner`` + ``GET /leases`` + ``GET /environments``
-    + ``GET /asks?open=true`` + ``GET /escalations`` — no store access, no hub call.
+    + ``GET /asks?open=true`` + ``GET /escalations`` + ``GET /takeovers`` — no store
+    access, no hub call. The open-takeovers section is the recovery surface for a
+    takeover a stranded CLI (an interrupted terminal that never reached the end-PATCH,
+    issue #52) left open with no other way to find its ``takeover_id``.
     """
     client, where = _local_api_client(directory, runner_url)
     try:
@@ -427,6 +432,8 @@ def status(directory: str, runner_url: str | None) -> None:
             asks_resp.raise_for_status()
             escalations_resp = client.get("/api/escalations")
             escalations_resp.raise_for_status()
+            takeovers_resp = client.get("/api/takeovers")
+            takeovers_resp.raise_for_status()
     except httpx.HTTPError as exc:
         raise click.ClickException(f"status: could not reach the runner at {where} ({exc})") from exc
 
@@ -465,6 +472,11 @@ def status(directory: str, runner_url: str | None) -> None:
     for esc in escalations:
         click.echo(f"  chunk {esc['chunk_id']}  node={esc['node_id']}  since {esc['closed_at']}")
         click.echo(f"    resume: {esc['resume_command']}")
+
+    takeovers = takeovers_resp.json().get("items", [])
+    click.echo(f"\nopen takeovers ({len(takeovers)}):")
+    for tko in takeovers:
+        click.echo(f"  chunk {tko['chunk_id']}  takeover={tko['takeover_id']}  held since {tko['held_since']}")
 
 
 @runner.command()
@@ -528,9 +540,53 @@ def start(directory: str, runner_url: str | None, by: str) -> None:
 
 @runner.command()
 @click.argument("chunk_id")
-def takeover(chunk_id: str) -> None:
-    """Take over a parked chunk, returning the interactive resume command."""
-    _stub("takeover")
+@click.option("--force", is_flag=True, default=False, help="Supersede a live worker attempt instead of refusing.")
+@click.option(
+    "--dir",
+    "directory",
+    default=DEFAULT_DIR,
+    envvar=ENV_RUNNER_DIR,
+    help="Runner runtime directory (overrides $BZ_RUNNER_DIR).",
+)
+@click.option(
+    "--runner-url",
+    "runner_url",
+    default=None,
+    envvar=ENV_LOCAL_API_URL,
+    help="Runner local API over TCP (overrides $BZ_RUNNER_URL).",
+)
+def takeover(chunk_id: str, force: bool, directory: str, runner_url: str | None) -> None:
+    """Take over a parked chunk: exec the interactive resume command in this terminal (issue #52).
+
+    A pure client of the runner's local API — the same door ``status``/``pause`` use.
+    ``POST /chunks/{id}/takeovers`` records the takeover fact before anything else runs
+    (so no loop step can respawn or judge the session while it is open) and returns the
+    adapter-composed interactive command; this verb then execs that command as its own
+    child, inheriting this terminal — the daemon itself never touches a TTY. ``--force``
+    supersedes a live worker attempt instead of refusing (``409``): the runner kills it
+    itself, after the fact lands, consuming no retry and recording no escalation. Once
+    the child exits — or this terminal is interrupted (``Ctrl-C``) — ``PATCH
+    .../takeovers/{tid}`` marks the takeover ended, whatever the child's exit status: the
+    end-PATCH runs in a ``finally`` around the child so a stranded open takeover (which
+    REAP/ADVANCE would otherwise skip forever) cannot outlive an interrupted session."""
+    client, where = _local_api_client(directory, runner_url)
+    try:
+        with client:
+            resp = client.post(f"/api/chunks/{chunk_id}/takeovers", json={"force": force})
+            if resp.status_code == 409:
+                raise click.ClickException(f"takeover: {resp.json().get('detail', 'chunk is not takeable')}")
+            resp.raise_for_status()
+            view = resp.json()
+            click.echo(f"taking over chunk {chunk_id} in {view['workdir']}")
+            try:
+                exit_code = subprocess.call(view["command"], shell=True, cwd=view["workdir"])
+            finally:
+                end_resp = client.patch(f"/api/chunks/{chunk_id}/takeovers/{view['takeover_id']}")
+                end_resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise click.ClickException(f"takeover: could not reach the runner at {where} ({exc})") from exc
+    if exit_code != 0:
+        raise SystemExit(exit_code)
 
 
 @runner.command()

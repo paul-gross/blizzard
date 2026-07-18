@@ -34,6 +34,7 @@ __all__ = [
     "EscalationView",
     "HeldEnvironment",
     "HubConnectivity",
+    "OpenTakeoverView",
     "PauseState",
     "RunnerStatusService",
     "RunnerStatusSummary",
@@ -111,6 +112,20 @@ class EscalationView:
     resume_command: str
 
 
+@dataclass(frozen=True)
+class OpenTakeoverView:
+    """One open operator takeover — ``GET /takeovers`` (issue #51, recovery for #52).
+
+    The recovery surface for a takeover a stranded CLI (an interrupted terminal, or
+    any path that never reached the end-PATCH) left open with no other way to find its
+    ``takeover_id``: this is what lets an operator spot the wedged chunk and pass the
+    id back to ``blizzard runner takeover`` to re-adopt or to a manual end-PATCH."""
+
+    chunk_id: str
+    takeover_id: str
+    held_since: datetime
+
+
 class RunnerStatusService:
     """Composition-root-wired: the store, clock, harness, and this runner's own
     identity/config — everything ``blizzard runner status`` renders (issue #51)."""
@@ -161,6 +176,12 @@ class RunnerStatusService:
 
     def open_asks(self) -> list[AskRecord]:
         return self._store.open_asks()
+
+    def open_takeovers(self) -> list[OpenTakeoverView]:
+        return [
+            OpenTakeoverView(chunk_id=t.chunk_id, takeover_id=t.takeover_id, held_since=t.opened_at)
+            for t in self._store.open_takeovers()
+        ]
 
     def escalations(self) -> list[EscalationView]:
         views = []

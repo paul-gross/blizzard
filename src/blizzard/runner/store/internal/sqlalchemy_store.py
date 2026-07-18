@@ -28,6 +28,7 @@ from blizzard.runner.store.repository import (
     NewLease,
     ParkRecord,
     RunnerStoreError,
+    TakeoverRecord,
 )
 from blizzard.runner.store.schema import (
     asks,
@@ -49,6 +50,8 @@ from blizzard.runner.store.schema import (
     resume_clears,
     resume_intents,
     session_ends,
+    takeover_ends,
+    takeovers,
     workspace_prompt,
 )
 
@@ -119,6 +122,15 @@ def _pause_park_is_open():  # type: ignore[no-untyped-def]
     )
 
 
+def _takeover_is_open():  # type: ignore[no-untyped-def]
+    """A takeover is **open** iff no end fact names its ``takeover_id``.
+
+    A plain ``NOT IN`` is safe here, unlike ``_pause_park_is_open``'s timestamp
+    correlation: ``takeover_id`` is a fresh ULID per open (mirroring ``asks``'
+    ``question_id``), so there is no re-open-under-the-same-key hazard to mask."""
+    return takeovers.c.takeover_id.not_in(select(takeover_ends.c.takeover_id))
+
+
 class SqlAlchemyRunnerStore:
     """Read-write runner store over a SQLAlchemy engine."""
 
@@ -147,6 +159,11 @@ class SqlAlchemyRunnerStore:
             .where(leases.c.lease_id == lease_id)
             .where(leases.c.lease_id.not_in(select(lease_closures.c.lease_id)))
         )
+        rows = self._all(stmt)
+        return self._row_to_lease(rows[0]) if rows else None
+
+    def latest_lease_for_chunk(self, chunk_id: str) -> LeaseRecord | None:
+        stmt = self._lease_select().where(leases.c.chunk_id == chunk_id).order_by(leases.c.created_at.desc())
         rows = self._all(stmt)
         return self._row_to_lease(rows[0]) if rows else None
 
@@ -219,10 +236,15 @@ class SqlAlchemyRunnerStore:
             return int(conn.execute(stmt).scalar_one())
 
     def latest_epoch(self, chunk_id: str) -> int:
-        stmt = select(func.max(leases.c.epoch)).where(leases.c.chunk_id == chunk_id)
+        lease_stmt = select(func.max(leases.c.epoch)).where(leases.c.chunk_id == chunk_id)
+        # A forced takeover's fence bump (issue #52) reports a new epoch to the hub
+        # without minting a local lease, so a later real spawn must still see it —
+        # folded in here alongside the lease-minted epochs, the fence source's one home.
+        fence_stmt = select(func.max(takeovers.c.fence_epoch)).where(takeovers.c.chunk_id == chunk_id)
         with self._connect() as conn:
-            value = conn.execute(stmt).scalar_one_or_none()
-        return int(value) if value is not None else 0
+            lease_max = conn.execute(lease_stmt).scalar_one_or_none()
+            fence_max = conn.execute(fence_stmt).scalar_one_or_none()
+        return max(int(lease_max) if lease_max is not None else 0, int(fence_max) if fence_max is not None else 0)
 
     def pending_outbound(self) -> list[BufferedFact]:
         stmt = select(outbound_buffer).where(outbound_buffer.c.acked_at.is_(None)).order_by(outbound_buffer.c.seq)
@@ -328,6 +350,24 @@ class SqlAlchemyRunnerStore:
             )
             for r in self._all(stmt)
         ]
+
+    def open_takeover_for_chunk(self, chunk_id: str) -> TakeoverRecord | None:
+        stmt = (
+            select(takeovers)
+            .where(takeovers.c.chunk_id == chunk_id)
+            .where(_takeover_is_open())
+            .order_by(takeovers.c.opened_at.desc())
+        )
+        rows = self._all(stmt)
+        return self._row_to_takeover(rows[0]) if rows else None
+
+    def open_takeover_chunk_ids(self) -> set[str]:
+        stmt = select(takeovers.c.chunk_id).where(_takeover_is_open()).distinct()
+        return {str(r.chunk_id) for r in self._all(stmt)}
+
+    def open_takeovers(self) -> list[TakeoverRecord]:
+        stmt = select(takeovers).where(_takeover_is_open()).order_by(takeovers.c.opened_at.desc())
+        return [self._row_to_takeover(r) for r in self._all(stmt)]
 
     def hub_contact_at(self, runner_id: str) -> datetime | None:
         rows = self._all(select(hub_control.c.updated_at).where(hub_control.c.runner_id == runner_id))
@@ -590,6 +630,36 @@ class SqlAlchemyRunnerStore:
             conn.execute(session_ends.insert().values(lease_id=lease_id, ended_at=ended_at))
         _log.info("session end recorded", lease_id=lease_id)
 
+    def record_takeover(
+        self,
+        *,
+        takeover_id: str,
+        chunk_id: str,
+        lease_id: str | None,
+        session_id: str | None,
+        workdir: str,
+        fence_epoch: int | None,
+        opened_at: datetime,
+    ) -> None:
+        with self._begin() as conn:
+            conn.execute(
+                takeovers.insert().values(
+                    takeover_id=takeover_id,
+                    chunk_id=chunk_id,
+                    lease_id=lease_id,
+                    session_id=session_id,
+                    workdir=workdir,
+                    fence_epoch=fence_epoch,
+                    opened_at=opened_at,
+                )
+            )
+        _log.info("takeover opened", takeover_id=takeover_id, chunk_id=chunk_id, lease_id=lease_id, forced=fence_epoch)
+
+    def record_takeover_end(self, *, takeover_id: str, ended_at: datetime) -> None:
+        with self._begin() as conn:
+            conn.execute(takeover_ends.insert().values(takeover_id=takeover_id, ended_at=ended_at))
+        _log.info("takeover ended", takeover_id=takeover_id)
+
     # --- plumbing -----------------------------------------------------------
 
     @staticmethod
@@ -602,6 +672,18 @@ class SqlAlchemyRunnerStore:
             options=json.loads(r.options) if r.options else [],
             session_id=str(r.session_id) if r.session_id is not None else None,
             asked_at=r.asked_at,
+        )
+
+    @staticmethod
+    def _row_to_takeover(r) -> TakeoverRecord:  # type: ignore[no-untyped-def]
+        return TakeoverRecord(
+            takeover_id=str(r.takeover_id),
+            chunk_id=str(r.chunk_id),
+            lease_id=str(r.lease_id) if r.lease_id is not None else None,
+            session_id=str(r.session_id) if r.session_id is not None else None,
+            workdir=str(r.workdir),
+            fence_epoch=int(r.fence_epoch) if r.fence_epoch is not None else None,
+            opened_at=r.opened_at,
         )
 
     @staticmethod

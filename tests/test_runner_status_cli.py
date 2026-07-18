@@ -141,6 +141,20 @@ def test_status_renders_the_full_view_with_the_hub_unreachable(tmp_path: Path, m
         closed_at=_NOW + timedelta(minutes=1),
     )
 
+    # A third chunk, currently under an open operator takeover — the stranded-takeover
+    # recovery surface (issue #52) status renders regardless of how the takeover got left
+    # open.
+    store.record_binding(chunk_id="ch_3", environment_id="e3", workdir="/ws/e3", bound_at=_NOW)
+    store.record_takeover(
+        takeover_id="tko_1",
+        chunk_id="ch_3",
+        lease_id=None,
+        session_id="sess-c",
+        workdir="/ws/e3",
+        fence_epoch=None,
+        opened_at=_NOW + timedelta(minutes=2),
+    )
+
     with _serve_local_api(root):
         result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
 
@@ -150,13 +164,15 @@ def test_status_renders_the_full_view_with_the_hub_unreachable(tmp_path: Path, m
     assert "running" in out  # not paused
     assert "capacity: 1/1 used, 0 free" in out  # only lease_1 is active; lease_2 closed
     assert "hub: unreachable" in out  # never synced — honest, not assumed
-    assert "held environments (2):" in out
-    assert "e1" in out and "e2" in out
+    assert "held environments (3):" in out
+    assert "e1" in out and "e2" in out and "e3" in out
     assert "open asks (1):" in out
     assert "which branch?" in out
     assert "escalations (1):" in out
     assert "ch_2" in out
     assert "resume: cd /ws/e2 && claude --resume sess-b" in out  # the literal takeover command
+    assert "open takeovers (1):" in out
+    assert "chunk ch_3" in out and "takeover=tko_1" in out
 
 
 @pytest.mark.component
@@ -171,6 +187,7 @@ def test_status_renders_empty_sections_on_a_fresh_runner(tmp_path: Path, monkeyp
     assert "held environments (0):" in result.output
     assert "open asks (0):" in result.output
     assert "escalations (0):" in result.output
+    assert "open takeovers (0):" in result.output
 
 
 @pytest.mark.unit

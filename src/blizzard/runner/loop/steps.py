@@ -241,13 +241,23 @@ def reap(ctx: LoopContext) -> None:
     burning a retry on a brake" — false: the retry budget was never at risk, since it
     counts mints and every mint site already sits below :func:`_spawn_suppressed`. The
     real reason to suspend anything here is the kill, not the retry.)
+
+    **A chunk under an open takeover (issue #52) is skipped outright**, ahead of every
+    other case: the human already holds the session (a forced takeover already killed
+    and closed it; a non-forced one only ever takes a dormant lease already excluded by
+    the ``parked`` check below), so this is defense-in-depth, not the primary guard —
+    but it is what keeps REAP off a chunk the moment a takeover opens, with no
+    dependency on which shape the park was.
     """
     _CP_REAP_BEFORE.reached()
     local_paused = ctx.store.local_paused(ctx.config.runner_id)
     now = ctx.clock.now()
     parked = ctx.store.parked_lease_ids()
+    taken_over = ctx.store.open_takeover_chunk_ids()
     deferred = 0
     for lease in ctx.store.list_active_leases():
+        if lease.chunk_id in taken_over:
+            continue  # the human holds this session — no loop step touches it
         if lease.lease_id in parked:
             # Dormant on a question (ask-and-exit): no live worker to stall, so the
             # reap clock is stopped — a parked chunk is never reaped for inactivity.
@@ -1098,12 +1108,19 @@ def advance(ctx: LoopContext) -> None:
     (:meth:`ctx.harness.judge` resumes the session headlessly, a real spawn the local
     brake forbids), and a worker killed mid-work is not a done declaration even
     though its process is gone.
+
+    **A chunk under an open takeover (issue #52) is skipped in both loops below**: the
+    human holds the session, so neither the judgement/resume elicitation nor the
+    held-chunk gate/hub-node poll may touch it until the takeover ends.
     """
     pending = ctx.store.pending_submission_lease_ids()
     ask_parked = ctx.store.ask_parked_lease_ids()
     pause_parked = ctx.store.pause_parked_lease_ids()
     resume_intents = ctx.store.resume_intent_lease_ids()
+    taken_over = ctx.store.open_takeover_chunk_ids()
     for lease in ctx.store.list_active_leases():
+        if lease.chunk_id in taken_over:
+            continue  # the human holds this session — no loop step touches it
         if lease.pid is None or lease.session_id is None:
             continue  # REAP's residue
         if lease.lease_id in resume_intents:
@@ -1121,6 +1138,8 @@ def advance(ctx: LoopContext) -> None:
         _advance_exited_worker(ctx, lease)
 
     for chunk_id in ctx.store.live_tenure_chunk_ids():
+        if chunk_id in taken_over:
+            continue  # the human holds this chunk — no gate/hub-node poll while they do
         if ctx.store.active_lease_for_chunk(chunk_id) is None:
             _advance_held_chunk(ctx, chunk_id)
 

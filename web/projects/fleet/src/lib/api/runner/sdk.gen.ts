@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { GetPmItemsApiChunksChunkIdPmItemsGetData, GetPmItemsApiChunksChunkIdPmItemsGetErrors, GetPmItemsApiChunksChunkIdPmItemsGetResponses, GetTranscriptApiLeasesLeaseIdTranscriptGetData, GetTranscriptApiLeasesLeaseIdTranscriptGetErrors, GetTranscriptApiLeasesLeaseIdTranscriptGetResponses, HealthApiHealthGetData, HealthApiHealthGetResponses, HeartbeatApiHeartbeatPostData, HeartbeatApiHeartbeatPostErrors, HeartbeatApiHeartbeatPostResponses, ListLeasesApiLeasesGetData, ListLeasesApiLeasesGetResponses, PatchRunnerApiRunnerPatchData, PatchRunnerApiRunnerPatchErrors, PatchRunnerApiRunnerPatchResponses, ReadWorkspacePromptApiWorkspacePromptGetData, ReadWorkspacePromptApiWorkspacePromptGetResponses, ReadyApiReadyGetData, ReadyApiReadyGetResponses, RecordAskApiLeasesLeaseIdAsksPostData, RecordAskApiLeasesLeaseIdAsksPostErrors, RecordAskApiLeasesLeaseIdAsksPostResponses, ReplaceWorkspacePromptApiWorkspacePromptPutData, ReplaceWorkspacePromptApiWorkspacePromptPutErrors, ReplaceWorkspacePromptApiWorkspacePromptPutResponses, SessionEndApiLeasesLeaseIdSessionEndPostData, SessionEndApiLeasesLeaseIdSessionEndPostErrors, SessionEndApiLeasesLeaseIdSessionEndPostResponses } from './types.gen';
+import type { EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchData, EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchErrors, EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchResponses, GetPmItemsApiChunksChunkIdPmItemsGetData, GetPmItemsApiChunksChunkIdPmItemsGetErrors, GetPmItemsApiChunksChunkIdPmItemsGetResponses, GetRunnerApiRunnerGetData, GetRunnerApiRunnerGetResponses, GetTranscriptApiLeasesLeaseIdTranscriptGetData, GetTranscriptApiLeasesLeaseIdTranscriptGetErrors, GetTranscriptApiLeasesLeaseIdTranscriptGetResponses, HealthApiHealthGetData, HealthApiHealthGetResponses, HeartbeatApiHeartbeatPostData, HeartbeatApiHeartbeatPostErrors, HeartbeatApiHeartbeatPostResponses, ListAsksApiAsksGetData, ListAsksApiAsksGetErrors, ListAsksApiAsksGetResponses, ListEnvironmentsApiEnvironmentsGetData, ListEnvironmentsApiEnvironmentsGetResponses, ListEscalationsApiEscalationsGetData, ListEscalationsApiEscalationsGetResponses, ListLeasesApiLeasesGetData, ListLeasesApiLeasesGetResponses, ListOpenTakeoversApiTakeoversGetData, ListOpenTakeoversApiTakeoversGetResponses, OpenTakeoverApiChunksChunkIdTakeoversPostData, OpenTakeoverApiChunksChunkIdTakeoversPostErrors, OpenTakeoverApiChunksChunkIdTakeoversPostResponses, PatchRunnerApiRunnerPatchData, PatchRunnerApiRunnerPatchErrors, PatchRunnerApiRunnerPatchResponses, ReadWorkspacePromptApiWorkspacePromptGetData, ReadWorkspacePromptApiWorkspacePromptGetResponses, ReadyApiReadyGetData, ReadyApiReadyGetResponses, RecordAskApiLeasesLeaseIdAsksPostData, RecordAskApiLeasesLeaseIdAsksPostErrors, RecordAskApiLeasesLeaseIdAsksPostResponses, ReplaceWorkspacePromptApiWorkspacePromptPutData, ReplaceWorkspacePromptApiWorkspacePromptPutErrors, ReplaceWorkspacePromptApiWorkspacePromptPutResponses, RequeueChunkApiChunksChunkIdRequeuesPostData, RequeueChunkApiChunksChunkIdRequeuesPostErrors, RequeueChunkApiChunksChunkIdRequeuesPostResponses, SessionEndApiLeasesLeaseIdSessionEndPostData, SessionEndApiLeasesLeaseIdSessionEndPostErrors, SessionEndApiLeasesLeaseIdSessionEndPostResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -19,11 +19,73 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
 };
 
 /**
+ * List Asks
+ *
+ * Every ask still awaiting an answer — ``GET /api/asks?open=true`` (issue #51).
+ *
+ * Derived, hub-free: an ask reads open while its ``question_id`` carries no answer
+ * fact (:meth:`~blizzard.runner.store.repository.IReadRunnerStore.open_asks`), whether
+ * or not it has been forwarded to the hub yet. There is no closed-ask history to serve,
+ * so ``open=false`` is refused rather than silently answered as if it were true.
+ */
+export const listAsksApiAsksGet = <ThrowOnError extends boolean = false>(options?: Options<ListAsksApiAsksGetData, ThrowOnError>): RequestResult<ListAsksApiAsksGetResponses, ListAsksApiAsksGetErrors, ThrowOnError> => (options?.client ?? client).get<ListAsksApiAsksGetResponses, ListAsksApiAsksGetErrors, ThrowOnError>({ url: '/api/asks', ...options });
+
+/**
  * Get Pm Items
  *
  * Forward a chunk's PM-items read to the hub — the layered pass-through.
  */
 export const getPmItemsApiChunksChunkIdPmItemsGet = <ThrowOnError extends boolean = false>(options: Options<GetPmItemsApiChunksChunkIdPmItemsGetData, ThrowOnError>): RequestResult<GetPmItemsApiChunksChunkIdPmItemsGetResponses, GetPmItemsApiChunksChunkIdPmItemsGetErrors, ThrowOnError> => (options.client ?? client).get<GetPmItemsApiChunksChunkIdPmItemsGetResponses, GetPmItemsApiChunksChunkIdPmItemsGetErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/pm-items', ...options });
+
+/**
+ * Requeue Chunk
+ *
+ * Clear a needs_human chunk's local hold — the next FILL spawns a fresh attempt.
+ *
+ * ``409`` while the chunk's takeover is still open (end the interactive session first),
+ * or while the chunk carries no open escalation (nothing needs_human to clear).
+ */
+export const requeueChunkApiChunksChunkIdRequeuesPost = <ThrowOnError extends boolean = false>(options: Options<RequeueChunkApiChunksChunkIdRequeuesPostData, ThrowOnError>): RequestResult<RequeueChunkApiChunksChunkIdRequeuesPostResponses, RequeueChunkApiChunksChunkIdRequeuesPostErrors, ThrowOnError> => (options.client ?? client).post<RequeueChunkApiChunksChunkIdRequeuesPostResponses, RequeueChunkApiChunksChunkIdRequeuesPostErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/requeues', ...options });
+
+/**
+ * Open Takeover
+ *
+ * Open a takeover over a parked chunk with no running attempt (``409`` otherwise).
+ *
+ * ``force`` supersedes a live worker attempt instead of refusing: the runner kills it
+ * after recording the takeover fact, fencing its in-flight submission at the hub as a
+ * stale epoch, exactly like a reaped lease — but consuming no retry and recording no
+ * escalation.
+ */
+export const openTakeoverApiChunksChunkIdTakeoversPost = <ThrowOnError extends boolean = false>(options: Options<OpenTakeoverApiChunksChunkIdTakeoversPostData, ThrowOnError>): RequestResult<OpenTakeoverApiChunksChunkIdTakeoversPostResponses, OpenTakeoverApiChunksChunkIdTakeoversPostErrors, ThrowOnError> => (options.client ?? client).post<OpenTakeoverApiChunksChunkIdTakeoversPostResponses, OpenTakeoverApiChunksChunkIdTakeoversPostErrors, ThrowOnError>({
+    url: '/api/chunks/{chunk_id}/takeovers',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * End Takeover
+ *
+ * Mark a takeover ended — the CLI calls this once its exec'd interactive child exits.
+ */
+export const endTakeoverApiChunksChunkIdTakeoversTakeoverIdPatch = <ThrowOnError extends boolean = false>(options: Options<EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchData, ThrowOnError>): RequestResult<EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchResponses, EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchErrors, ThrowOnError> => (options.client ?? client).patch<EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchResponses, EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/takeovers/{takeover_id}', ...options });
+
+/**
+ * List Environments
+ *
+ * Every environment this runner currently holds, across every chunk.
+ */
+export const listEnvironmentsApiEnvironmentsGet = <ThrowOnError extends boolean = false>(options?: Options<ListEnvironmentsApiEnvironmentsGetData, ThrowOnError>): RequestResult<ListEnvironmentsApiEnvironmentsGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListEnvironmentsApiEnvironmentsGetResponses, unknown, ThrowOnError>({ url: '/api/environments', ...options });
+
+/**
+ * List Escalations
+ *
+ * Every escalation still open — no later lease mint has superseded it.
+ */
+export const listEscalationsApiEscalationsGet = <ThrowOnError extends boolean = false>(options?: Options<ListEscalationsApiEscalationsGetData, ThrowOnError>): RequestResult<ListEscalationsApiEscalationsGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListEscalationsApiEscalationsGetResponses, unknown, ThrowOnError>({ url: '/api/escalations', ...options });
 
 /**
  * Health
@@ -85,6 +147,20 @@ export const getTranscriptApiLeasesLeaseIdTranscriptGet = <ThrowOnError extends 
 export const readyApiReadyGet = <ThrowOnError extends boolean = false>(options?: Options<ReadyApiReadyGetData, ThrowOnError>): RequestResult<ReadyApiReadyGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ReadyApiReadyGetResponses, unknown, ThrowOnError>({ url: '/api/ready', ...options });
 
 /**
+ * Get Runner
+ *
+ * The runner's machine-local summary: identity, pause states, capacities, hub
+ * connectivity, last tick (issue #51).
+ *
+ * Read-only over its wiring (``bzh:controller-read-only``): the edge holds only the
+ * composition-root-wired :class:`RunnerStatusService`, derived entirely from local
+ * store facts plus the injected clock — no hub call, so it is truthful with the hub
+ * unreachable. On the store-free app (OpenAPI export / unit tests) the service is
+ * unwired and the probe answers 503 rather than pretending.
+ */
+export const getRunnerApiRunnerGet = <ThrowOnError extends boolean = false>(options?: Options<GetRunnerApiRunnerGetData, ThrowOnError>): RequestResult<GetRunnerApiRunnerGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetRunnerApiRunnerGetResponses, unknown, ThrowOnError>({ url: '/api/runner', ...options });
+
+/**
  * Patch Runner
  *
  * Set this runner's own pause brake — it starts no new workers (issue #45).
@@ -115,6 +191,13 @@ export const patchRunnerApiRunnerPatch = <ThrowOnError extends boolean = false>(
         ...options.headers
     }
 });
+
+/**
+ * List Open Takeovers
+ *
+ * Every takeover still open — the recovery surface for a stranded one.
+ */
+export const listOpenTakeoversApiTakeoversGet = <ThrowOnError extends boolean = false>(options?: Options<ListOpenTakeoversApiTakeoversGetData, ThrowOnError>): RequestResult<ListOpenTakeoversApiTakeoversGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListOpenTakeoversApiTakeoversGetResponses, unknown, ThrowOnError>({ url: '/api/takeovers', ...options });
 
 /**
  * Read Workspace Prompt

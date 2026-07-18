@@ -466,6 +466,45 @@
         "title": "LeaseView",
         "type": "object"
       },
+      "OpenTakeoverListResponse": {
+        "description": "Every takeover still open across this runner's held chunks.",
+        "properties": {
+          "items": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/OpenTakeoverView"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "title": "OpenTakeoverListResponse",
+        "type": "object"
+      },
+      "OpenTakeoverView": {
+        "description": "One open operator takeover \u2014 ``GET /api/takeovers``, the stranded-takeover\nrecovery surface (issue #52): the chunk it holds, the ``takeover_id`` an\ninterrupted terminal never PATCHed closed, and how long it has been held.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "held_since": {
+            "title": "Held Since",
+            "type": "string"
+          },
+          "takeover_id": {
+            "title": "Takeover Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "takeover_id",
+          "held_since"
+        ],
+        "title": "OpenTakeoverView",
+        "type": "object"
+      },
       "PauseStateView": {
         "description": "The pause brake's two independent surfaces, plus their effective OR.",
         "properties": {
@@ -748,6 +787,61 @@
           "lease_id"
         ],
         "title": "SessionEndResponse",
+        "type": "object"
+      },
+      "TakeoverEndResponse": {
+        "description": "``PATCH /chunks/{id}/takeovers/{tid}`` \u2014 the CLI calls this once its child exits.",
+        "properties": {
+          "ended": {
+            "title": "Ended",
+            "type": "boolean"
+          },
+          "takeover_id": {
+            "title": "Takeover Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "takeover_id",
+          "ended"
+        ],
+        "title": "TakeoverEndResponse",
+        "type": "object"
+      },
+      "TakeoverOpenResponse": {
+        "description": "``POST /chunks/{id}/takeovers`` \u2014 the CLI execs ``command`` verbatim in ``workdir``.",
+        "properties": {
+          "command": {
+            "title": "Command",
+            "type": "string"
+          },
+          "takeover_id": {
+            "title": "Takeover Id",
+            "type": "string"
+          },
+          "workdir": {
+            "title": "Workdir",
+            "type": "string"
+          }
+        },
+        "required": [
+          "takeover_id",
+          "command",
+          "workdir"
+        ],
+        "title": "TakeoverOpenResponse",
+        "type": "object"
+      },
+      "TakeoverRequest": {
+        "description": "The takeover request body \u2014 ``force`` kills a live worker attempt first.",
+        "properties": {
+          "force": {
+            "default": false,
+            "title": "Force",
+            "type": "boolean"
+          }
+        },
+        "title": "TakeoverRequest",
         "type": "object"
       },
       "TranscriptResponse": {
@@ -1051,6 +1145,111 @@
           }
         },
         "summary": "Get Pm Items",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/chunks/{chunk_id}/takeovers": {
+      "post": {
+        "description": "Open a takeover over a parked chunk with no running attempt (``409`` otherwise).\n\n``force`` supersedes a live worker attempt instead of refusing: the runner kills it\nafter recording the takeover fact, fencing its in-flight submission at the hub as a\nstale epoch, exactly like a reaped lease \u2014 but consuming no retry and recording no\nescalation.",
+        "operationId": "open_takeover_api_chunks__chunk_id__takeovers_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TakeoverRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TakeoverOpenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Open Takeover",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/chunks/{chunk_id}/takeovers/{takeover_id}": {
+      "patch": {
+        "description": "Mark a takeover ended \u2014 the CLI calls this once its exec'd interactive child exits.",
+        "operationId": "end_takeover_api_chunks__chunk_id__takeovers__takeover_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "takeover_id",
+            "required": true,
+            "schema": {
+              "title": "Takeover Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TakeoverEndResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "End Takeover",
         "tags": [
           "runner"
         ]
@@ -1406,6 +1605,28 @@
           }
         },
         "summary": "Patch Runner",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/takeovers": {
+      "get": {
+        "description": "Every takeover still open \u2014 the recovery surface for a stranded one.",
+        "operationId": "list_open_takeovers_api_takeovers_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenTakeoverListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Open Takeovers",
         "tags": [
           "runner"
         ]

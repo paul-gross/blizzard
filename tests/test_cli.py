@@ -183,9 +183,9 @@ def test_hub_host_help_shows_directory_argument() -> None:
 
 
 def test_stub_verb_reports_not_implemented() -> None:
-    # `runner takeover` is still a scaffold stub (`status` is a real verb as of
-    # issue #51); a stub names itself.
-    result = CliRunner().invoke(blizzard, ["runner", "takeover", "ch_1"])
+    # `runner requeue` is still a scaffold stub (`status` is a real verb as of
+    # issue #51, `takeover` as of issue #52); a stub names itself.
+    result = CliRunner().invoke(blizzard, ["runner", "requeue", "ch_1"])
     assert result.exit_code != 0
     assert "not yet implemented" in result.output
 
@@ -197,6 +197,18 @@ def test_runner_status_errors_cleanly_with_no_daemon_serving(tmp_path: Path) -> 
     assert CliRunner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
 
     result = CliRunner().invoke(blizzard, ["runner", "status", "--dir", str(root)])
+
+    assert result.exit_code != 0
+    assert "no runner daemon is serving" in result.output
+
+
+def test_runner_takeover_errors_cleanly_with_no_daemon_serving(tmp_path: Path) -> None:
+    # `takeover` is a pure client of the local API too (issue #52) — no socket, no store
+    # fallback, a clean error naming the missing daemon.
+    root = tmp_path / "runner"
+    assert CliRunner().invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
+
+    result = CliRunner().invoke(blizzard, ["runner", "takeover", "ch_1", "--dir", str(root)])
 
     assert result.exit_code != 0
     assert "no runner daemon is serving" in result.output

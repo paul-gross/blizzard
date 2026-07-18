@@ -2,11 +2,12 @@
 
 Behind ``GET /api/runner`` (identity, pause states, capacities, hub connectivity,
 last tick), ``GET /api/environments`` (held bindings), ``GET /api/asks?open=true``
-(open questions), and ``GET /api/escalations`` (parked escalations with their
-literal resume command) — ``blizzard runner status``'s four reads. Modeled on
-``wire/lease.py``'s and ``wire/runner.py``'s shapes; datetimes are ISO-8601
-strings with an explicit UTC offset, serialized via ``foundation/store/utc.py``'s
-``iso_utc`` (``bzh:utc-instants``).
+(open questions), ``GET /api/escalations`` (parked escalations with their
+literal resume command), and ``GET /api/takeovers`` (open operator takeovers —
+the stranded-takeover recovery surface, issue #52) — ``blizzard runner status``'s
+five reads. Modeled on ``wire/lease.py``'s and ``wire/runner.py``'s shapes;
+datetimes are ISO-8601 strings with an explicit UTC offset, serialized via
+``foundation/store/utc.py``'s ``iso_utc`` (``bzh:utc-instants``).
 """
 
 from __future__ import annotations
@@ -96,3 +97,19 @@ class EscalationListResponse(BaseModel):
     """Every escalation still open — no later lease mint has superseded it."""
 
     items: list[EscalationView] = []
+
+
+class OpenTakeoverView(BaseModel):
+    """One open operator takeover — ``GET /api/takeovers``, the stranded-takeover
+    recovery surface (issue #52): the chunk it holds, the ``takeover_id`` an
+    interrupted terminal never PATCHed closed, and how long it has been held."""
+
+    chunk_id: str
+    takeover_id: str
+    held_since: str
+
+
+class OpenTakeoverListResponse(BaseModel):
+    """Every takeover still open across this runner's held chunks."""
+
+    items: list[OpenTakeoverView] = []

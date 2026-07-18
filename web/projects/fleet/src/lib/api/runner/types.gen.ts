@@ -5,6 +5,18 @@ export type ClientOptions = {
 };
 
 /**
+ * AskListResponse
+ *
+ * Every ask still awaiting an answer.
+ */
+export type AskListResponse = {
+    /**
+     * Items
+     */
+    items?: Array<AskView>;
+};
+
+/**
  * AskRequest
  *
  * A worker's ask: the question and its optional pipe-separated choices.
@@ -38,6 +50,118 @@ export type AskResponse = {
      * Recorded
      */
     recorded: boolean;
+};
+
+/**
+ * AskView
+ *
+ * One open ask — ``GET /api/asks?open=true``.
+ */
+export type AskView = {
+    /**
+     * Asked At
+     */
+    asked_at: string;
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Lease Id
+     */
+    lease_id: string;
+    /**
+     * Options
+     */
+    options?: Array<string>;
+    /**
+     * Question
+     */
+    question: string;
+    /**
+     * Question Id
+     */
+    question_id: string;
+    /**
+     * Session Id
+     */
+    session_id: string | null;
+};
+
+/**
+ * CapacitiesView
+ *
+ * Agent slots — the same math FILL claims against.
+ */
+export type CapacitiesView = {
+    /**
+     * Free
+     */
+    free: number;
+    /**
+     * Max Agents
+     */
+    max_agents: number;
+    /**
+     * Used
+     */
+    used: number;
+};
+
+/**
+ * EnvironmentListResponse
+ *
+ * Every environment this runner currently holds.
+ */
+export type EnvironmentListResponse = {
+    /**
+     * Items
+     */
+    items?: Array<HeldEnvironmentView>;
+};
+
+/**
+ * EscalationListResponse
+ *
+ * Every escalation still open — no later lease mint has superseded it.
+ */
+export type EscalationListResponse = {
+    /**
+     * Items
+     */
+    items?: Array<EscalationView>;
+};
+
+/**
+ * EscalationView
+ *
+ * One parked escalation, carrying its literal takeover command — ``GET /api/escalations``.
+ */
+export type EscalationView = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Closed At
+     */
+    closed_at: string;
+    /**
+     * Epoch
+     */
+    epoch: number;
+    /**
+     * Lease Id
+     */
+    lease_id: string;
+    /**
+     * Node Id
+     */
+    node_id: string;
+    /**
+     * Resume Command
+     */
+    resume_command: string;
 };
 
 /**
@@ -76,6 +200,46 @@ export type HeartbeatResponse = {
      * Recorded
      */
     recorded: boolean;
+};
+
+/**
+ * HeldEnvironmentView
+ *
+ * One environment this runner currently holds — ``GET /api/environments``.
+ */
+export type HeldEnvironmentView = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Environment Id
+     */
+    environment_id: string;
+    /**
+     * Held Since
+     */
+    held_since: string;
+};
+
+/**
+ * HubConnectivityView
+ *
+ * Hub reachability (derived, not probed) plus the outbound backlog depth.
+ */
+export type HubConnectivityView = {
+    /**
+     * Buffer Depth
+     */
+    buffer_depth: number;
+    /**
+     * Last Contact At
+     */
+    last_contact_at: string | null;
+    /**
+     * Reachable
+     */
+    reachable: boolean;
 };
 
 /**
@@ -157,6 +321,60 @@ export type LeaseView = {
      * Workdir
      */
     workdir: string | null;
+};
+
+/**
+ * OpenTakeoverListResponse
+ *
+ * Every takeover still open across this runner's held chunks.
+ */
+export type OpenTakeoverListResponse = {
+    /**
+     * Items
+     */
+    items?: Array<OpenTakeoverView>;
+};
+
+/**
+ * OpenTakeoverView
+ *
+ * One open operator takeover — ``GET /api/takeovers``, the stranded-takeover
+ * recovery surface (issue #52): the chunk it holds, the ``takeover_id`` an
+ * interrupted terminal never PATCHed closed, and how long it has been held.
+ */
+export type OpenTakeoverView = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Held Since
+     */
+    held_since: string;
+    /**
+     * Takeover Id
+     */
+    takeover_id: string;
+};
+
+/**
+ * PauseStateView
+ *
+ * The pause brake's two independent surfaces, plus their effective OR.
+ */
+export type PauseStateView = {
+    /**
+     * Effective
+     */
+    effective: boolean;
+    /**
+     * Hub
+     */
+    hub: boolean;
+    /**
+     * Local
+     */
+    local: boolean;
 };
 
 /**
@@ -254,6 +472,23 @@ export type ReadinessResponse = {
 };
 
 /**
+ * RequeueResponse
+ *
+ * ``POST /chunks/{id}/requeues`` — the local hold is cleared; the next FILL spawns
+ * a fresh attempt at the chunk's current node.
+ */
+export type RequeueResponse = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Requeued
+     */
+    requeued: boolean;
+};
+
+/**
  * RunnerControlPatch
  *
  * Declarative controls on the runner singleton — ``paused`` now, routing knobs post-MVP.
@@ -294,6 +529,29 @@ export type RunnerControlView = {
 };
 
 /**
+ * RunnerStatusView
+ *
+ * ``GET /api/runner`` — identity, pause states, capacities, hub connectivity, last tick.
+ */
+export type RunnerStatusView = {
+    capacities: CapacitiesView;
+    hub: HubConnectivityView;
+    /**
+     * Last Tick At
+     */
+    last_tick_at: string | null;
+    pause: PauseStateView;
+    /**
+     * Runner Id
+     */
+    runner_id: string;
+    /**
+     * Workspace Id
+     */
+    workspace_id: string;
+};
+
+/**
  * SessionEndResponse
  *
  * The recorded acknowledgement (openapi-ts consumes this).
@@ -307,6 +565,54 @@ export type SessionEndResponse = {
      * Recorded
      */
     recorded: boolean;
+};
+
+/**
+ * TakeoverEndResponse
+ *
+ * ``PATCH /chunks/{id}/takeovers/{tid}`` — the CLI calls this once its child exits.
+ */
+export type TakeoverEndResponse = {
+    /**
+     * Ended
+     */
+    ended: boolean;
+    /**
+     * Takeover Id
+     */
+    takeover_id: string;
+};
+
+/**
+ * TakeoverOpenResponse
+ *
+ * ``POST /chunks/{id}/takeovers`` — the CLI execs ``command`` verbatim in ``workdir``.
+ */
+export type TakeoverOpenResponse = {
+    /**
+     * Command
+     */
+    command: string;
+    /**
+     * Takeover Id
+     */
+    takeover_id: string;
+    /**
+     * Workdir
+     */
+    workdir: string;
+};
+
+/**
+ * TakeoverRequest
+ *
+ * The takeover request body — ``force`` kills a live worker attempt first.
+ */
+export type TakeoverRequest = {
+    /**
+     * Force
+     */
+    force?: boolean;
 };
 
 /**
@@ -433,6 +739,36 @@ export type WorkspacePromptResponse = {
     prompt: string;
 };
 
+export type ListAsksApiAsksGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Open
+         */
+        open?: boolean;
+    };
+    url: '/api/asks';
+};
+
+export type ListAsksApiAsksGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListAsksApiAsksGetError = ListAsksApiAsksGetErrors[keyof ListAsksApiAsksGetErrors];
+
+export type ListAsksApiAsksGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: AskListResponse;
+};
+
+export type ListAsksApiAsksGetResponse = ListAsksApiAsksGetResponses[keyof ListAsksApiAsksGetResponses];
+
 export type GetPmItemsApiChunksChunkIdPmItemsGetData = {
     body?: never;
     path: {
@@ -462,6 +798,132 @@ export type GetPmItemsApiChunksChunkIdPmItemsGetResponses = {
 };
 
 export type GetPmItemsApiChunksChunkIdPmItemsGetResponse = GetPmItemsApiChunksChunkIdPmItemsGetResponses[keyof GetPmItemsApiChunksChunkIdPmItemsGetResponses];
+
+export type RequeueChunkApiChunksChunkIdRequeuesPostData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/requeues';
+};
+
+export type RequeueChunkApiChunksChunkIdRequeuesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RequeueChunkApiChunksChunkIdRequeuesPostError = RequeueChunkApiChunksChunkIdRequeuesPostErrors[keyof RequeueChunkApiChunksChunkIdRequeuesPostErrors];
+
+export type RequeueChunkApiChunksChunkIdRequeuesPostResponses = {
+    /**
+     * Successful Response
+     */
+    202: RequeueResponse;
+};
+
+export type RequeueChunkApiChunksChunkIdRequeuesPostResponse = RequeueChunkApiChunksChunkIdRequeuesPostResponses[keyof RequeueChunkApiChunksChunkIdRequeuesPostResponses];
+
+export type OpenTakeoverApiChunksChunkIdTakeoversPostData = {
+    body: TakeoverRequest;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/takeovers';
+};
+
+export type OpenTakeoverApiChunksChunkIdTakeoversPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type OpenTakeoverApiChunksChunkIdTakeoversPostError = OpenTakeoverApiChunksChunkIdTakeoversPostErrors[keyof OpenTakeoverApiChunksChunkIdTakeoversPostErrors];
+
+export type OpenTakeoverApiChunksChunkIdTakeoversPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: TakeoverOpenResponse;
+};
+
+export type OpenTakeoverApiChunksChunkIdTakeoversPostResponse = OpenTakeoverApiChunksChunkIdTakeoversPostResponses[keyof OpenTakeoverApiChunksChunkIdTakeoversPostResponses];
+
+export type EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+        /**
+         * Takeover Id
+         */
+        takeover_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/takeovers/{takeover_id}';
+};
+
+export type EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchError = EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchErrors[keyof EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchErrors];
+
+export type EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: TakeoverEndResponse;
+};
+
+export type EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchResponse = EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchResponses[keyof EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchResponses];
+
+export type ListEnvironmentsApiEnvironmentsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/environments';
+};
+
+export type ListEnvironmentsApiEnvironmentsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: EnvironmentListResponse;
+};
+
+export type ListEnvironmentsApiEnvironmentsGetResponse = ListEnvironmentsApiEnvironmentsGetResponses[keyof ListEnvironmentsApiEnvironmentsGetResponses];
+
+export type ListEscalationsApiEscalationsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/escalations';
+};
+
+export type ListEscalationsApiEscalationsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: EscalationListResponse;
+};
+
+export type ListEscalationsApiEscalationsGetResponse = ListEscalationsApiEscalationsGetResponses[keyof ListEscalationsApiEscalationsGetResponses];
 
 export type HealthApiHealthGetData = {
     body?: never;
@@ -630,6 +1092,22 @@ export type ReadyApiReadyGetResponses = {
 
 export type ReadyApiReadyGetResponse = ReadyApiReadyGetResponses[keyof ReadyApiReadyGetResponses];
 
+export type GetRunnerApiRunnerGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/runner';
+};
+
+export type GetRunnerApiRunnerGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: RunnerStatusView;
+};
+
+export type GetRunnerApiRunnerGetResponse = GetRunnerApiRunnerGetResponses[keyof GetRunnerApiRunnerGetResponses];
+
 export type PatchRunnerApiRunnerPatchData = {
     body: RunnerControlPatch;
     path?: never;
@@ -654,6 +1132,22 @@ export type PatchRunnerApiRunnerPatchResponses = {
 };
 
 export type PatchRunnerApiRunnerPatchResponse = PatchRunnerApiRunnerPatchResponses[keyof PatchRunnerApiRunnerPatchResponses];
+
+export type ListOpenTakeoversApiTakeoversGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/takeovers';
+};
+
+export type ListOpenTakeoversApiTakeoversGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: OpenTakeoverListResponse;
+};
+
+export type ListOpenTakeoversApiTakeoversGetResponse = ListOpenTakeoversApiTakeoversGetResponses[keyof ListOpenTakeoversApiTakeoversGetResponses];
 
 export type ReadWorkspacePromptApiWorkspacePromptGetData = {
     body?: never;

@@ -35,6 +35,7 @@ TRANSITION_PREFIX = "tr"
 DECISION_PREFIX = "dec"
 QUESTION_PREFIX = "qn"
 LEASE_PREFIX = "lease"
+TAKEOVER_PREFIX = "tko"
 
 
 def _encode(value: int, length: int) -> str:

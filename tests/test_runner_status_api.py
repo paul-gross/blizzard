@@ -94,7 +94,7 @@ def test_summary_defaults_on_an_empty_store(tmp_path: Path) -> None:
 def test_503_when_status_service_unwired(tmp_path: Path) -> None:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
     with TestClient(create_app(config)) as client:
-        for path in ("/api/runner", "/api/environments", "/api/escalations"):
+        for path in ("/api/runner", "/api/environments", "/api/escalations", "/api/takeovers"):
             assert client.get(path).status_code == 503, path
 
 
@@ -352,5 +352,66 @@ def test_a_non_escalated_closure_does_not_appear(tmp_path: Path) -> None:
 
     with TestClient(app) as client:
         resp = client.get("/api/escalations")
+
+    assert resp.json()["items"] == []
+
+
+# --------------------------------------------------------------------------- #
+# GET /takeovers — the stranded-takeover recovery surface (issue #52)
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.component
+def test_an_open_takeover_appears_with_its_id_and_held_since(tmp_path: Path) -> None:
+    app, store = _app_with_status(tmp_path)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    opened_at = _NOW + timedelta(minutes=5)
+    store.record_takeover(
+        takeover_id="tko_1",
+        chunk_id="ch_1",
+        lease_id=None,
+        session_id="sess-a",
+        workdir="/ws/e1",
+        fence_epoch=None,
+        opened_at=opened_at,
+    )
+
+    with TestClient(app) as client:
+        resp = client.get("/api/takeovers")
+
+    assert resp.status_code == 200, resp.text
+    items = resp.json()["items"]
+    assert len(items) == 1
+    assert items[0] == {"chunk_id": "ch_1", "takeover_id": "tko_1", "held_since": opened_at.isoformat()}
+    assert_all_timestamps_utc(resp.json())
+
+
+@pytest.mark.component
+def test_a_closed_takeover_does_not_appear(tmp_path: Path) -> None:
+    app, store = _app_with_status(tmp_path)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_takeover(
+        takeover_id="tko_1",
+        chunk_id="ch_1",
+        lease_id=None,
+        session_id="sess-a",
+        workdir="/ws/e1",
+        fence_epoch=None,
+        opened_at=_NOW,
+    )
+    store.record_takeover_end(takeover_id="tko_1", ended_at=_NOW + timedelta(minutes=1))
+
+    with TestClient(app) as client:
+        resp = client.get("/api/takeovers")
+
+    assert resp.json()["items"] == []
+
+
+@pytest.mark.component
+def test_no_open_takeovers_is_an_empty_list(tmp_path: Path) -> None:
+    app, _store = _app_with_status(tmp_path)
+
+    with TestClient(app) as client:
+        resp = client.get("/api/takeovers")
 
     assert resp.json()["items"] == []
