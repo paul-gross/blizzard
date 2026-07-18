@@ -4,7 +4,7 @@ import type { runnerApi } from 'fleet';
 import { BrandMark, KitAsyncState, type KitAsyncStateValue, KitPanel } from 'fleet';
 
 import { AgentRow } from './agent-row';
-import { ChunkDetail } from './chunk-detail';
+import { MachineDetail } from './chunk-detail';
 import type { MachineChunkStatus } from './chunk-status';
 import { ChunkRow } from './chunk-row';
 import { EnvList } from './env-list';
@@ -35,9 +35,9 @@ import type { MachineChunkRow } from './local-panel';
  * design/tokens.css), never hard-coded hex.
  */
 @Component({
-  selector: 'fleet-local-panel-layout',
+  selector: 'local-panel-layout',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [AgentRow, BrandMark, ChunkDetail, ChunkRow, EnvList, FactLog, KitAsyncState, KitPanel, LocalAsks, LocalInfo],
+  imports: [AgentRow, BrandMark, MachineDetail, ChunkRow, EnvList, FactLog, KitAsyncState, KitPanel, LocalAsks, LocalInfo],
   template: `
     <div class="lp" data-testid="local-panel">
       <header class="lp-header">
@@ -70,7 +70,7 @@ import type { MachineChunkRow } from './local-panel';
             >
               <div class="rows" data-testid="lease-rows">
                 @for (lease of activeLeases(); track lease.lease_id) {
-                  <fleet-agent-row
+                  <local-agent-row
                     [agent]="lease"
                     [selected]="lease.chunk_id === selectedChunkId()"
                     (selectLease)="selectLease.emit($event)"
@@ -80,7 +80,7 @@ import type { MachineChunkRow } from './local-panel';
             </fleet-kit-async-state>
           </fleet-kit-panel>
           <fleet-kit-panel class="envs-panel" label="environments · bindings ride the lease">
-            <fleet-env-list />
+            <local-env-list />
           </fleet-kit-panel>
         </section>
         <section class="col center">
@@ -93,7 +93,7 @@ import type { MachineChunkRow } from './local-panel';
               emptyTestid="chunks-empty"
             >
               @for (chunk of machineChunks(); track chunk.lease.chunk_id) {
-                <fleet-chunk-row
+                <local-chunk-row
                   [lease]="chunk.lease"
                   [status]="chunk.status"
                   [selected]="chunk.lease.chunk_id === selectedChunkId()"
@@ -103,7 +103,7 @@ import type { MachineChunkRow } from './local-panel';
             </fleet-kit-async-state>
           </fleet-kit-panel>
           <div class="detail-frame">
-            <fleet-chunk-detail
+            <local-machine-detail
               [lease]="selectedLease()"
               [status]="selectedStatus()"
               [escalation]="selectedEscalation()"
@@ -112,14 +112,14 @@ import type { MachineChunkRow } from './local-panel';
         </section>
         <section class="col right">
           <fleet-kit-panel class="hub-panel" label="hub · outbound only, nothing dials in">
-            <fleet-local-info />
+            <local-info />
           </fleet-kit-panel>
           <fleet-kit-panel class="asks-panel" label="local asks · answers live at the hub">
             <span header class="p-note">{{ openAskCount() }} open</span>
-            <fleet-local-asks />
+            <local-asks />
           </fleet-kit-panel>
           <fleet-kit-panel class="facts-panel" label="local fact log · runner store">
-            <fleet-fact-log />
+            <local-fact-log />
           </fleet-kit-panel>
         </section>
       </main>

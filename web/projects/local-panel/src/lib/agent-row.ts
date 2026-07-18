@@ -19,7 +19,7 @@ import { HeartbeatFreshness } from './heartbeat-freshness';
  * container's current mark.
  */
 @Component({
-  selector: 'fleet-agent-row',
+  selector: 'local-agent-row',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [HeartbeatFreshness],
   template: `
@@ -44,7 +44,7 @@ import { HeartbeatFreshness } from './heartbeat-freshness';
         node <b>{{ agent().node_name }}</b> · env <b>{{ agent().environment_id ?? '—' }}</b> · pid
         <b>{{ agent().pid ?? '—' }}</b> · session <b>{{ agent().session_id ?? '—' }}</b>
       </div>
-      <fleet-heartbeat-freshness [lastHeartbeatAt]="agent().last_heartbeat_at" [stale]="isStale()" />
+      <local-heartbeat-freshness [lastHeartbeatAt]="agent().last_heartbeat_at" [stale]="isStale()" />
     </div>
   `,
   styles: `

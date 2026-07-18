@@ -10,7 +10,7 @@ import { LocalPanel } from 'local-panel';
   selector: 'app-root',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [LocalPanel],
-  template: `<fleet-local-panel />`,
+  template: `<local-panel />`,
   styles: `:host { display: block; height: 100%; }`,
 })
 export class App {}

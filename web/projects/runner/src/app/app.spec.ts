@@ -34,7 +34,7 @@ describe('runner App', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('fleet-local-panel')).toBeTruthy();
+    expect(el.querySelector('local-panel')).toBeTruthy();
     expect(el.querySelector('[data-testid="local-panel"]')).toBeTruthy();
   });
 });

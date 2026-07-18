@@ -31,7 +31,7 @@ const LEASES = {
 /** A minimal host so the query — a `Component` field initializer concern — runs
  * inside a real injection context, mirroring how every consumer actually calls it. */
 @Component({
-  selector: 'fleet-test-leases-query-host',
+  selector: 'local-test-leases-query-host',
   template: '',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })

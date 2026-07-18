@@ -56,7 +56,7 @@ function formatTurnTimestamp(iso: string | null): string {
  * Only a genuine fault (`isError()`, `unreadable`) is `--red`.
  */
 @Component({
-  selector: 'fleet-transcript-panel',
+  selector: 'local-transcript-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [KitAsyncState],
   template: `

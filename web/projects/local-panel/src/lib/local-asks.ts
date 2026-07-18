@@ -10,7 +10,7 @@ import { injectRunnerAsksQuery } from './status.query';
  * read-only by design — it surfaces the wait, it never answers.
  */
 @Component({
-  selector: 'fleet-local-asks',
+  selector: 'local-asks',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [KitAsyncState],
   template: `

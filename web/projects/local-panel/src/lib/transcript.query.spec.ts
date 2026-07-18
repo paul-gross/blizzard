@@ -30,7 +30,7 @@ const TRANSCRIPT = {
 /** Mirrors `leases.query.spec.ts`'s host pattern — the query is a `Component`
  * field initializer concern and needs a real injection context. */
 @Component({
-  selector: 'fleet-test-transcript-query-host',
+  selector: 'local-test-transcript-query-host',
   template: '',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })

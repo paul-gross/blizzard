@@ -18,7 +18,7 @@ import { TranscriptPanel } from './transcript-panel';
  * the id and never branches on the transcript's states.
  */
 @Component({
-  selector: 'fleet-chunk-detail',
+  selector: 'local-machine-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [HeartbeatFreshness, TranscriptPanel],
   template: `
@@ -50,7 +50,7 @@ import { TranscriptPanel } from './transcript-panel';
             <dd>
               <span class="hb-line">
                 <span>{{ heartbeatLabel() }}</span>
-                <fleet-heartbeat-freshness
+                <local-heartbeat-freshness
                   class="hb-bar"
                   [lastHeartbeatAt]="l.last_heartbeat_at"
                   [stale]="l.state === 'stale'"
@@ -66,7 +66,7 @@ import { TranscriptPanel } from './transcript-panel';
           }
         </div>
         <div class="transcript" data-testid="detail-transcript">
-          <fleet-transcript-panel [leaseId]="l.lease_id" />
+          <local-transcript-panel [leaseId]="l.lease_id" />
         </div>
       } @else {
         <p class="status" data-testid="detail-empty">SELECT A CHUNK</p>
@@ -208,7 +208,7 @@ import { TranscriptPanel } from './transcript-panel';
     }
   `,
 })
-export class ChunkDetail {
+export class MachineDetail {
   /** The selected chunk's newest lease, or null when nothing is selected. */
   readonly lease = input.required<runnerApi.LeaseView | null>();
 

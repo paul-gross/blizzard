@@ -17,7 +17,7 @@ import { injectRunnerStatusQuery } from './status.query';
  * a hub-side decision this panel must not preempt.
  */
 @Component({
-  selector: 'fleet-local-info',
+  selector: 'local-info',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [KitAsyncState],
   template: `

@@ -29,11 +29,11 @@ export interface MachineChunkRow {
  * plain inputs, so it is testable without a runner-client stub.
  */
 @Component({
-  selector: 'fleet-local-panel',
+  selector: 'local-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [LocalPanelLayout],
   template: `
-    <fleet-local-panel-layout
+    <local-panel-layout
       [connection]="connection()"
       [activeLeases]="activeLeases()"
       [leasesTriadState]="leasesTriadState()"

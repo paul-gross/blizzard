@@ -12,7 +12,7 @@ import { injectRunnerEnvironmentsQuery } from './status.query';
  * wire doesn't carry.
  */
 @Component({
-  selector: 'fleet-env-list',
+  selector: 'local-env-list',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [KitAsyncState],
   template: `

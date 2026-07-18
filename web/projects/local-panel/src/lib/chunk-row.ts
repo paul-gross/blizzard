@@ -17,7 +17,7 @@ import type { MachineChunkStatus } from './chunk-status';
  * anchor stops propagation.
  */
 @Component({
-  selector: 'fleet-chunk-row',
+  selector: 'local-chunk-row',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [KitBadge],
   template: `

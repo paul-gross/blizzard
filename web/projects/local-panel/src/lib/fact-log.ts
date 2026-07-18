@@ -11,7 +11,7 @@ import { injectRunnerFactsQuery } from './status.query';
  * store's own ledger, not a synthesized feed.
  */
 @Component({
-  selector: 'fleet-fact-log',
+  selector: 'local-fact-log',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [KitAsyncState],
   template: `

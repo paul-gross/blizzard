@@ -27,7 +27,7 @@ export const STALE_AFTER_MS = 60 * 60_000;
  * claiming no freshness fact that doesn't exist (`bzh:utc-instants`).
  */
 @Component({
-  selector: 'fleet-heartbeat-freshness',
+  selector: 'local-heartbeat-freshness',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <span class="hb" data-testid="hb-freshness">
