@@ -262,6 +262,7 @@ class Graph:
     entry_node_id: str
     nodes: list[Node]
     edges: list[Edge]
+    created_at: datetime
 
     def node_by_name(self, name: str) -> Node | None:
         return next((n for n in self.nodes if n.name == name), None)
@@ -278,6 +279,25 @@ class Graph:
             c.choice_id for n in self.nodes if n.node_id == node_id for c in n.choices if c.name == choice_name
         }
         return next((e for e in self.edges if e.from_node_id == node_id and e.choice_id in choice_ids), None)
+
+
+def mark_effective(graphs: list[Graph]) -> dict[str, bool]:
+    """Mark the newest ``created_at`` graph per ``name`` as effective.
+
+    Keyed by ``graph_id``. Encodes the same "newest-per-name" rule
+    :meth:`IReadGraphRepository.get_enabled_by_name` applies at lookup time — a pure
+    domain function so the read-listing surface (``GET /graphs``) does not re-derive
+    it at the edge (``bzh:domain-core``).
+    """
+    newest_by_name: dict[str, Graph] = {}
+    for graph in graphs:
+        current = newest_by_name.get(graph.name)
+        # Tie-break on graph_id descending (ULIDs sort lexically by creation) — kept in
+        # lockstep with IReadGraphRepository.get_enabled_by_name's ORDER BY.
+        if current is None or (graph.created_at, graph.graph_id) > (current.created_at, current.graph_id):
+            newest_by_name[graph.name] = graph
+    effective_ids = {g.graph_id for g in newest_by_name.values()}
+    return {g.graph_id: g.graph_id in effective_ids for g in graphs}
 
 
 # --- Repository seams (I-prefix, read/write split — bzh:repository-split) ----

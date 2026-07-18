@@ -29,7 +29,7 @@ blizzard hub host .          # serve the API + embedded mission-control board
 Then open <http://127.0.0.1:8421/> — the default port from the `blizzard-hub.toml` that `blizzard hub init` scaffolds.
 
 - **sqlite is the default store** — postgres is configuration (the `db_url` knob), not a requirement.
-- **The mission-control frontend is embedded in the wheel** — no Node install or runtime.
+- **The mission-control frontend is embedded in the wheel** — no Node install or runtime. It ships the mission-control board plus a read-only graph explorer.
 - The same `init` / `migrate` / `host` verbs exist under `blizzard runner`.
 
 ## Layout (screaming architecture — `bzh:screaming-architecture`)
@@ -54,7 +54,7 @@ uv run ruff format --check .   # format
 uv run pyright                 # typecheck
 uv run pytest                  # unit + component tiers (hermetic, token-free)
 mise run service-test          # the service tier — a running daemon vs. its mocked counterpart (see below)
-mise run e2e                   # the standing e2e smoke suite — six full-stack scenarios (see below)
+mise run e2e                   # the standing e2e smoke suite — eight full-stack scenarios (see below)
 
 blizzard hub init ./hub-data   # scaffold config + data dir + migrated DB (idempotent)
 blizzard hub migrate           # apply pending store migrations (--down <rev> reverses schema; some revisions are lossy — see the revision's docstring)
@@ -67,16 +67,18 @@ The same `init` / `migrate` / `host` verbs exist under `blizzard runner`. A daem
 
 ## The standing e2e smoke suite (`mise run e2e`)
 
-`mise run e2e` (`BLIZZARD_E2E=1 uv run pytest tests/e2e/`) is the standing end-to-end smoke suite — the acceptance criterion for the whole system. It grew from the P6 acceptance loop to **six** full-stack scenarios over the `build → review → deliver` default shape and its human-loop and operator-surface variants:
+`mise run e2e` (`BLIZZARD_E2E=1 uv run pytest tests/e2e/`) is the standing end-to-end smoke suite — the acceptance criterion for the whole system. It grew from the P6 acceptance loop to **eight** full-stack scenarios over the `build → review → deliver` default shape and its human-loop and operator-surface variants:
 
 1. `test_acceptance_loop` — the happy path: one chunk travels ingest → acquire → mock-scripted commit → review (PASS) → deliver → landed on bare `main`;
 2. `test_review_cycle_e2e` — review fails once, the findings + prompt_addendum thread back into build, then it lands on the second pass;
 3. `test_escalation_e2e` — two verdict-less exits exhaust the retry budget, the chunk derives `needs_human`, and the surfaced takeover command resumes the parked session;
 4. `test_ask_answer_e2e` — a build worker asks and parks `waiting_on_human`; `blizzard hub answer` resumes the dormant session and it lands;
 5. `test_gate_decision_e2e` — a human `approve-gate` parks a Decision; `blizzard hub decide` approves and it delivers;
-6. `test_board_browser_e2e` — the **browser tier**: a real Chromium (Playwright) drives the served mission-control board — a live status chip that flips over SSE with no reload, the detail drawer's history + artifacts, queue grouping + reorder that the next FILL honors (the grouped plural-pointer survivor claimed first), answering a question from the board, pausing and resuming a running chunk from the board (its chip flips to `paused` over SSE with no reload, and back on resume — the claim-keeping per-chunk lever, distinct from the runner pause/resume brake covered next), and that runner-level brake itself.
+6. `test_board_browser_e2e` — the **browser tier**: a real Chromium (Playwright) drives the served mission-control board — a live status chip that flips over SSE with no reload, the detail drawer's history + artifacts, queue grouping + reorder that the next FILL honors (the grouped plural-pointer survivor claimed first), answering a question from the board, pausing and resuming a running chunk from the board (its chip flips to `paused` over SSE with no reload, and back on resume — the claim-keeping per-chunk lever, distinct from the runner pause/resume brake covered next), and that runner-level brake itself;
+7. `test_board_cost_live_e2e` — the **cost render**: the served board renders the fleet cost figures (card badge, header spend-today, detail dock totals) and updates them live over SSE with no reload;
+8. `test_graphs_diagram_renders_in_the_browser` — the **graph-explorer diagram**: a real Chromium visits `/graphs` and asserts the static SVG DAG renders against the built bundle from real minted graph data; it needs no runner or forge.
 
-Each holds at **both ends** — git truth on the bare origin and the hub's derived facts. The suite is **self-managed and token-free**: it mints its own disposable `blizzard-mock` fixture workspace, starts the real forge + hub + runner, and drives the reconciliation loop one synchronous tick at a time — every seam real (git over `file://`, the forge over HTTP, the `mock-claude-code` façade over its CLI). It needs the sibling **`blizzard-mock`** worktree provisioned (`winter provision <env>`) and a local winter source; scenario 6 also needs a Chromium (`uv run playwright install chromium`). Any scenario **skips cleanly** when its prerequisites are absent (e.g. a single-repo CI checkout, or no browser installed), so the default `uv run pytest` gate stays hermetic. To drive the same loop against the live tmux services instead, `winter service up <env> --wait` brings up forge + hub + runner (see the workspace's service manifest).
+Each holds at **both ends** — git truth on the bare origin and the hub's derived facts. The suite is **self-managed and token-free**: it mints its own disposable `blizzard-mock` fixture workspace, starts the real forge + hub + runner, and drives the reconciliation loop one synchronous tick at a time — every seam real (git over `file://`, the forge over HTTP, the `mock-claude-code` façade over its CLI). It needs the sibling **`blizzard-mock`** worktree provisioned (`winter provision <env>`) and a local winter source; scenarios 6–8 also need a Chromium (`uv run playwright install chromium`). Any scenario **skips cleanly** when its prerequisites are absent (e.g. a single-repo CI checkout, or no browser installed), so the default `uv run pytest` gate stays hermetic. To drive the same loop against the live tmux services instead, `winter service up <env> --wait` brings up forge + hub + runner (see the workspace's service manifest).
 
 ## The service tier (`mise run service-test`)
 

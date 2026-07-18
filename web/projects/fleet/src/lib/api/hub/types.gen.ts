@@ -864,6 +864,50 @@ export type FleetSpendView = {
 };
 
 /**
+ * GraphChoiceView
+ *
+ * One selectable outcome of a node's judgement.
+ */
+export type GraphChoiceView = {
+    /**
+     * Choice Id
+     */
+    choice_id: string;
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
+ * GraphEdgeView
+ *
+ * A directed, choice-keyed connection between two nodes of one graph.
+ */
+export type GraphEdgeView = {
+    /**
+     * Choice Id
+     */
+    choice_id: string;
+    /**
+     * From Node Id
+     */
+    from_node_id: string;
+    /**
+     * Prompt Addendum
+     */
+    prompt_addendum?: string | null;
+    /**
+     * To Node Name
+     */
+    to_node_name: string;
+};
+
+/**
  * GraphMintRequest
  *
  * A graph definition to mint — the raw YAML body.
@@ -878,9 +922,17 @@ export type GraphMintRequest = {
 /**
  * GraphNodeView
  *
- * A reified node in a minted graph.
+ * A reified node in a minted graph — the full immutable definition.
  */
 export type GraphNodeView = {
+    /**
+     * Checks
+     */
+    checks?: Array<string>;
+    /**
+     * Choices
+     */
+    choices?: Array<GraphChoiceView>;
     /**
      * Executor
      */
@@ -890,6 +942,14 @@ export type GraphNodeView = {
      */
     judged_by: string;
     /**
+     * Judgement Prompt
+     */
+    judgement_prompt?: string | null;
+    /**
+     * Mode
+     */
+    mode?: string | null;
+    /**
      * Name
      */
     name: string;
@@ -897,14 +957,66 @@ export type GraphNodeView = {
      * Node Id
      */
     node_id: string;
+    /**
+     * Produces
+     */
+    produces?: Array<string>;
+    /**
+     * Prompt
+     */
+    prompt?: string | null;
+    /**
+     * Retries Exhausted
+     */
+    retries_exhausted?: string | null;
+    /**
+     * Retries Max
+     */
+    retries_max?: number | null;
+    /**
+     * Session
+     */
+    session: string;
+};
+
+/**
+ * GraphSummaryView
+ *
+ * One graph's summary row — a name-lineage entry as served by ``GET /graphs``.
+ */
+export type GraphSummaryView = {
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Effective
+     */
+    effective: boolean;
+    /**
+     * Entry Node Id
+     */
+    entry_node_id: string;
+    /**
+     * Graph Id
+     */
+    graph_id: string;
+    /**
+     * Name
+     */
+    name: string;
 };
 
 /**
  * GraphView
  *
- * A minted graph as served by ``GET /graphs`` and the mint response.
+ * A minted graph as served by ``GET /graphs/{graph_id}`` and the mint response.
  */
 export type GraphView = {
+    /**
+     * Edges
+     */
+    edges?: Array<GraphEdgeView>;
     /**
      * Enabled
      */
@@ -2429,6 +2541,24 @@ export type FleetSpendApiFleetSpendGetResponses = {
 
 export type FleetSpendApiFleetSpendGetResponse = FleetSpendApiFleetSpendGetResponses[keyof FleetSpendApiFleetSpendGetResponses];
 
+export type ListGraphsApiGraphsGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/graphs';
+};
+
+export type ListGraphsApiGraphsGetResponses = {
+    /**
+     * Response List Graphs Api Graphs Get
+     *
+     * Successful Response
+     */
+    200: Array<GraphSummaryView>;
+};
+
+export type ListGraphsApiGraphsGetResponse = ListGraphsApiGraphsGetResponses[keyof ListGraphsApiGraphsGetResponses];
+
 export type MintGraphApiGraphsPostData = {
     body: GraphMintRequest;
     path?: never;
@@ -2453,6 +2583,36 @@ export type MintGraphApiGraphsPostResponses = {
 };
 
 export type MintGraphApiGraphsPostResponse = MintGraphApiGraphsPostResponses[keyof MintGraphApiGraphsPostResponses];
+
+export type GetGraphApiGraphsGraphIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Graph Id
+         */
+        graph_id: string;
+    };
+    query?: never;
+    url: '/api/graphs/{graph_id}';
+};
+
+export type GetGraphApiGraphsGraphIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetGraphApiGraphsGraphIdGetError = GetGraphApiGraphsGraphIdGetErrors[keyof GetGraphApiGraphsGraphIdGetErrors];
+
+export type GetGraphApiGraphsGraphIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: GraphView;
+};
+
+export type GetGraphApiGraphsGraphIdGetResponse = GetGraphApiGraphsGraphIdGetResponses[keyof GetGraphApiGraphsGraphIdGetResponses];
 
 export type HealthApiHealthGetData = {
     body?: never;

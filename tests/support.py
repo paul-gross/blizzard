@@ -36,12 +36,35 @@ from blizzard.hub.delivery.forge import (
     PrHandle,
     PrState,
 )
+from blizzard.hub.domain.graph import Edge, Graph, Node
 from blizzard.hub.domain.work import PmPointer
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.pm.registry import PmSourceRegistry
 from blizzard.hub.pm.source import IPmSource, PmItem, PmSourceError
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema
+
+_GRAPH_T0 = datetime(2026, 1, 1, tzinfo=UTC)
+
+
+def make_graph(
+    graph_id: str,
+    name: str,
+    *,
+    entry_node_id: str = "nd_entry",
+    nodes: list[Node] | None = None,
+    edges: list[Edge] | None = None,
+    created_at: datetime = _GRAPH_T0,
+) -> Graph:
+    """A minimal :class:`Graph` — defaults to no nodes/edges, a fixed ``created_at``."""
+    return Graph(
+        graph_id=graph_id,
+        name=name,
+        entry_node_id=entry_node_id,
+        nodes=nodes if nodes is not None else [],
+        edges=edges if edges is not None else [],
+        created_at=created_at,
+    )
 
 
 class FakeForge:

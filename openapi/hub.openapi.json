@@ -1197,6 +1197,65 @@
         "title": "FleetSpendView",
         "type": "object"
       },
+      "GraphChoiceView": {
+        "description": "One selectable outcome of a node's judgement.",
+        "properties": {
+          "choice_id": {
+            "title": "Choice Id",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "choice_id",
+          "name",
+          "description"
+        ],
+        "title": "GraphChoiceView",
+        "type": "object"
+      },
+      "GraphEdgeView": {
+        "description": "A directed, choice-keyed connection between two nodes of one graph.",
+        "properties": {
+          "choice_id": {
+            "title": "Choice Id",
+            "type": "string"
+          },
+          "from_node_id": {
+            "title": "From Node Id",
+            "type": "string"
+          },
+          "prompt_addendum": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Addendum"
+          },
+          "to_node_name": {
+            "title": "To Node Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from_node_id",
+          "choice_id",
+          "to_node_name"
+        ],
+        "title": "GraphEdgeView",
+        "type": "object"
+      },
       "GraphMintRequest": {
         "description": "A graph definition to mint \u2014 the raw YAML body.",
         "properties": {
@@ -1212,8 +1271,24 @@
         "type": "object"
       },
       "GraphNodeView": {
-        "description": "A reified node in a minted graph.",
+        "description": "A reified node in a minted graph \u2014 the full immutable definition.",
         "properties": {
+          "checks": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Checks",
+            "type": "array"
+          },
+          "choices": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GraphChoiceView"
+            },
+            "title": "Choices",
+            "type": "array"
+          },
           "executor": {
             "title": "Executor",
             "type": "string"
@@ -1222,6 +1297,28 @@
             "title": "Judged By",
             "type": "string"
           },
+          "judgement_prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Judgement Prompt"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -1229,20 +1326,108 @@
           "node_id": {
             "title": "Node Id",
             "type": "string"
+          },
+          "produces": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Produces",
+            "type": "array"
+          },
+          "prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt"
+          },
+          "retries_exhausted": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retries Exhausted"
+          },
+          "retries_max": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retries Max"
+          },
+          "session": {
+            "title": "Session",
+            "type": "string"
           }
         },
         "required": [
           "node_id",
           "name",
           "executor",
+          "session",
           "judged_by"
         ],
         "title": "GraphNodeView",
         "type": "object"
       },
-      "GraphView": {
-        "description": "A minted graph as served by ``GET /graphs`` and the mint response.",
+      "GraphSummaryView": {
+        "description": "One graph's summary row \u2014 a name-lineage entry as served by ``GET /graphs``.",
         "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "effective": {
+            "title": "Effective",
+            "type": "boolean"
+          },
+          "entry_node_id": {
+            "title": "Entry Node Id",
+            "type": "string"
+          },
+          "graph_id": {
+            "title": "Graph Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "graph_id",
+          "name",
+          "entry_node_id",
+          "created_at",
+          "effective"
+        ],
+        "title": "GraphSummaryView",
+        "type": "object"
+      },
+      "GraphView": {
+        "description": "A minted graph as served by ``GET /graphs/{graph_id}`` and the mint response.",
+        "properties": {
+          "edges": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GraphEdgeView"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
           "enabled": {
             "title": "Enabled",
             "type": "boolean"
@@ -3537,6 +3722,30 @@
       }
     },
     "/api/graphs": {
+      "get": {
+        "description": "Every minted graph, newest first, newest per name marked ``effective``.",
+        "operationId": "list_graphs_api_graphs_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GraphSummaryView"
+                  },
+                  "title": "Response List Graphs Api Graphs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Graphs",
+        "tags": [
+          "graphs"
+        ]
+      },
       "post": {
         "description": "Validate and mint an immutable graph; 422 on validation errors.",
         "operationId": "mint_graph_api_graphs_post",
@@ -3573,6 +3782,49 @@
           }
         },
         "summary": "Mint Graph",
+        "tags": [
+          "graphs"
+        ]
+      }
+    },
+    "/api/graphs/{graph_id}": {
+      "get": {
+        "description": "One graph's full reified definition; 404 on unknown id.",
+        "operationId": "get_graph_api_graphs__graph_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "graph_id",
+            "required": true,
+            "schema": {
+              "title": "Graph Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Graph",
         "tags": [
           "graphs"
         ]

@@ -18,7 +18,6 @@ from typing import Any, cast
 import pytest
 
 from blizzard.hub.domain.edit import ChunkNotEditable, EditService
-from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
@@ -28,12 +27,13 @@ from blizzard.hub.domain.work import (
     QuestionFact,
     RouteCreatedFact,
 )
+from tests.support import make_graph
 
 pytestmark = pytest.mark.unit
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_1", pm_pointers=[], minted_at=_T0, model="claude-opus-4-8")
-_TARGET_GRAPH = Graph(graph_id="gr_2", name="alt", entry_node_id="nd_1", nodes=[], edges=[])
+_TARGET_GRAPH = make_graph("gr_2", "alt", entry_node_id="nd_1", created_at=_T0)
 
 
 @dataclass

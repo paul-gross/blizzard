@@ -1,18 +1,14 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { RouterOutlet } from '@angular/router';
 import {
   BoardHeader,
-  BoardShell,
-  ChunkDetail,
-  EventLogPanel,
   FleetLiveUpdates,
-  QuestionsPanel,
-  QueuePanel,
-  RunnerPanel,
   injectHubChunksQuery,
   injectHubFleetSpendQuery,
   injectHubHealthQuery,
-  injectPromoteChunkMutation,
 } from 'fleet';
+
+import { AppNav } from './nav/app-nav';
 
 /** Local midnight, as the ISO-8601 instant `GET /api/fleet/spend?since=` expects
  * (issue #60) — the board's "spend today" is the operator's own calendar day, not UTC's. */
@@ -22,53 +18,28 @@ function startOfLocalDayIso(): string {
 }
 
 /**
- * The hub board app — the mission-control fleet surface. It composes the
- * shared fleet library over live reads from the generated client (TanStack Query)
- * and the hub's SSE stream:
+ * The hub app shell — the titlebar, the top nav, and the routed content.
  *
- * The window is three columns under a full-width titlebar
- * ({@link BoardHeader} — the brand, the live fleet counts, and the hub connection):
+ * The window is a full-width titlebar ({@link BoardHeader} — the brand, the live
+ * fleet counts, and the hub connection) over a tab strip ({@link AppNav}), with the
+ * active route rendered below via `<router-outlet>`:
  *
- * - the **left rail** holds {@link QueuePanel}, which shapes the ready queue
- *   (prioritize + group), over {@link EventLogPanel}'s live feed;
- * - the **centre** stacks {@link BoardShell} — every chunk in its derived-status
- *   column — over the {@link ChunkDetail} dock. The dock is always mounted:
- *   selecting a card fills it (the work item, node history, artifacts, and the
- *   human-loop actions) and deselecting clears it to a rest state, so the board
- *   never resizes or reflows;
- * - the **right rail** holds {@link RunnerPanel}, the registry with pause/resume
- *   (MVP criterion 11), over {@link QuestionsPanel}, the fleet's open agent asks —
- *   clicking one opens its chunk in the dock, where it is answered;
  * - the {@link FleetLiveUpdates} spine subscribes to `GET /api/events/stream` and
- *   invalidates the reads on every hub fact, so the whole board streams live.
+ *   invalidates the reads on every hub fact, so the whole app streams live;
+ * - both the SSE subscription and the TanStack `QueryClient` (the app-config
+ *   singleton, see `app.config.ts`) are scoped to this root component, never to a
+ *   routed page, so navigating between tabs never restarts the stream or drops the
+ *   query cache.
  */
 @Component({
   selector: 'app-root',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BoardHeader, BoardShell, ChunkDetail, EventLogPanel, QuestionsPanel, QueuePanel, RunnerPanel],
+  imports: [BoardHeader, AppNav, RouterOutlet],
   template: `
     <div class="layout">
       <fleet-board-header [connection]="connection()" [chunks]="chunks()" [spendToday]="spendToday.data() ?? null" />
-      <main class="main">
-        <div class="col rail-left">
-          <fleet-queue-panel class="rail-queue" />
-          <fleet-event-log-panel class="rail-log" />
-        </div>
-        <div class="col col-center">
-          <fleet-board-shell
-            class="board"
-            [chunks]="chunks()"
-            [selectedChunkId]="selected()"
-            (selectChunk)="selected.set($event)"
-            (promote)="promoteChunk.mutate({ chunkId: $event })"
-          />
-          <fleet-chunk-detail class="dock" [chunkId]="selected()" (dismiss)="selected.set(null)" />
-        </div>
-        <div class="col rail-right">
-          <fleet-runner-panel />
-          <fleet-questions-panel (selectChunk)="selected.set($event)" />
-        </div>
-      </main>
+      <app-nav />
+      <router-outlet />
     </div>
   `,
   styles: `
@@ -76,10 +47,10 @@ function startOfLocalDayIso(): string {
       display: block;
       height: 100%;
     }
-    /* The titlebar spans the window, and the three columns fill everything under
-       it (a 330px / 1fr / 330px main grid). The layout is height-capped
-       to the viewport and every panel scrolls its own body, so the page itself
-       never scrolls — an operator's board does not move under them. */
+    /* The titlebar and nav span the window, and the routed page fills everything
+       under them. The layout is height-capped to the viewport and the routed page
+       scrolls its own content, so the page itself never scrolls — an operator's
+       board does not move under them. */
     .layout {
       display: flex;
       flex-direction: column;
@@ -87,48 +58,10 @@ function startOfLocalDayIso(): string {
       min-height: 0;
       overflow: hidden;
     }
-    .main {
-      flex: 1;
-      min-height: 0;
-      display: grid;
-      /* 330px rails, but allowed to give ground on a narrow window:
-         held rigid they starve the board, which is the column that matters. */
-      grid-template-columns: minmax(260px, 330px) 1fr minmax(260px, 330px);
-      gap: 6px;
-      padding: 6px;
-    }
-    .col {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      min-height: 0;
-      min-width: 0;
-    }
-    /* The rails run the full height of the workspace, from the titlebar to the
-       bottom of the window; the ready queue takes the larger share and the event
-       log the rest, each scrolling its own body. */
-    .rail-queue {
-      flex: 1.35;
-      min-height: 0;
-      overflow-y: auto;
-    }
-    .rail-log {
-      flex: 1;
-      min-height: 0;
-    }
-    /* The centre column stacks the board over the chunk detail, so the detail sits
-       to the right of the rails rather than spanning the window beneath them. Both
-       are permanently mounted and hold their share of the column, so selecting or
-       clearing a chunk never resizes or reflows the board. */
-    .board {
-      flex: 1.15;
-      min-height: 0;
-      min-width: 0;
-    }
-    .dock {
-      flex: 1;
-      min-height: 0;
-      min-width: 0;
+    /* router-outlet is an empty anchor element the router inserts routed
+       components after — it carries no visual size of its own. */
+    router-outlet {
+      display: none;
     }
   `,
 })
@@ -142,16 +75,11 @@ export class App {
    * window forward, same as any other calendar-relative read). */
   protected readonly spendToday = injectHubFleetSpendQuery(() => startOfLocalDayIso());
 
-  /** Promote a not-ready chunk to ready from its board card. */
-  protected readonly promoteChunk = injectPromoteChunkMutation();
 
   constructor() {
     // Open the SSE stream and wire it to the query cache for the app's lifetime.
     this.live.start();
   }
-
-  /** The board card the operator opened, or `null` when the dock is dismissed. */
-  protected readonly selected = signal<string | null>(null);
 
   /** Header status: the live stream's connection state, falling back to the health read. */
   protected readonly connection = computed(() => {

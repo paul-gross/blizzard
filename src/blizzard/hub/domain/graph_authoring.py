@@ -47,6 +47,7 @@ def reify_graph(doc: GraphDoc, clock: IClock) -> Graph:
     """
     graph_id = mint(GRAPH_PREFIX, clock)
     node_ids = {node.name: mint(NODE_PREFIX, clock) for node in doc.nodes}
+    created_at = clock.now()
 
     nodes: list[Node] = []
     edges: list[Edge] = []
@@ -82,7 +83,14 @@ def reify_graph(doc: GraphDoc, clock: IClock) -> Graph:
                 choices=choices,
             )
         )
-    return Graph(graph_id=graph_id, name=doc.name, entry_node_id=node_ids[doc.entry], nodes=nodes, edges=edges)
+    return Graph(
+        graph_id=graph_id,
+        name=doc.name,
+        entry_node_id=node_ids[doc.entry],
+        nodes=nodes,
+        edges=edges,
+        created_at=created_at,
+    )
 
 
 class GraphMintService:
@@ -103,7 +111,7 @@ class GraphMintService:
         if not result.ok:
             raise GraphValidationError(result)
         graph = reify_graph(doc, self._clock)
-        self._graphs.mint(graph, definition_yaml=definition_yaml, at=self._clock.now())
+        self._graphs.mint(graph, definition_yaml=definition_yaml, at=graph.created_at)
         return graph, result.warnings
 
     def ensure_default(self, doc: GraphDoc, *, definition_yaml: str) -> Graph:

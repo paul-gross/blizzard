@@ -95,7 +95,13 @@ class GraphStore:
 
     def get_enabled_by_name(self, name: str) -> Graph | None:
         with self._engine.connect() as conn:
-            row = conn.execute(select(graphs).where(graphs.c.name == name).order_by(graphs.c.created_at.desc())).first()
+            # Tie-break on graph_id descending (ULIDs sort lexically by creation) — kept
+            # in lockstep with domain.graph.mark_effective's tie order.
+            row = conn.execute(
+                select(graphs)
+                .where(graphs.c.name == name)
+                .order_by(graphs.c.created_at.desc(), graphs.c.graph_id.desc())
+            ).first()
             if row is None:
                 return None
             return self._reify(conn, row)
@@ -147,6 +153,7 @@ class GraphStore:
             entry_node_id=graph_row.entry_node_id,
             nodes=nodes,
             edges=edges,
+            created_at=graph_row.created_at,
         )
 
 

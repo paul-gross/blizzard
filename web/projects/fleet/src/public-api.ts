@@ -21,6 +21,22 @@ export { EventLogPanel } from './lib/event-log/event-log-panel';
 export { QueuePanel } from './lib/queue/queue-panel';
 export { RunnerPanel } from './lib/runners/runner-panel';
 export { QuestionsPanel } from './lib/questions/questions-panel';
+export { GraphExplorer } from './lib/graphs/graph-explorer';
+export { GraphDetail } from './lib/graphs/graph-detail';
+export { GraphDiagram, GRAPH_LAYOUT, GRAPH_TEXT_MEASURER } from './lib/graphs/graph-diagram';
+export {
+  layoutGraph,
+  type LayoutOutcome,
+  type LaidOutGraph,
+  type LaidOutNode,
+  type LaidOutEdge,
+  type LaidOutSelfLoop,
+  type LaidOutLabel,
+  type LaidOutDone,
+  type EdgeKind,
+  type TextMeasurer,
+  type TextKind,
+} from './lib/graphs/graph-layout';
 
 export {
   SseService,
@@ -56,6 +72,7 @@ export { injectRunnerPauseMutation } from './lib/runners/runners.mutations';
 export type { RunnerPauseVars } from './lib/runners/runners.mutations';
 export { injectHubQuestionsQuery } from './lib/questions/questions.query';
 export { injectHubFleetSpendQuery } from './lib/fleet-spend/fleet-spend.query';
+export { injectHubGraphsQuery, injectHubGraphQuery } from './lib/graphs/graphs.query';
 
 export {
   hubHealthKey,
@@ -64,6 +81,8 @@ export {
   hubRunnersKey,
   hubQuestionsKey,
   hubChunkKey,
+  hubGraphsKey,
+  hubGraphKey,
 } from './lib/query-keys';
 
 export type {
@@ -80,14 +99,22 @@ export type {
   ChunkUsageTotalView,
   ChunkUsageView,
   FleetSpendView,
+  GraphSummaryView,
+  GraphView,
+  GraphNodeView,
+  GraphEdgeView,
+  GraphChoiceView,
 } from './lib/api/hub';
 
 export * as hubApi from './lib/api/hub';
 export * as runnerApi from './lib/api/runner';
 
 /*
- * The runner client instance itself. The generated `index.ts` re-exports the SDK
+ * The client instances themselves. The generated `index.ts` re-exports the SDK
  * functions and types but not the client, so a consumer outside this library has no
- * handle to configure its transport or stub it in a test. `local-panel` needs both.
+ * handle to configure its transport or stub it in a test. `local-panel` needs the
+ * runner one; the `hub` app needs the hub one (e.g. `graphs-page.spec.ts` stubs the
+ * hub transport to settle the graph-detail query deterministically).
  */
 export { client as runnerClient } from './lib/api/runner/client.gen';
+export { client as hubClient } from './lib/api/hub/client.gen';

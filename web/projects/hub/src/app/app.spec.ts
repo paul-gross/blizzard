@@ -1,10 +1,14 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
+import { provideRouter, Router } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { EVENT_SOURCE_FACTORY, type EventSourceFactory } from 'fleet';
+import { EVENT_SOURCE_FACTORY, FleetLiveUpdates, type EventSourceFactory } from 'fleet';
+import { vi } from 'vitest';
 
 import { App } from './app';
+import { routes } from './app.routes';
+import { BoardPage } from './board/board-page';
 
 /** A do-nothing EventSource so the live-update spine can open without a real stream. */
 class FakeEventSource {
@@ -20,89 +24,109 @@ class FakeEventSource {
 }
 
 describe('hub App', () => {
+  let queryClient: QueryClient;
+
   beforeEach(async () => {
     const factory: EventSourceFactory = () => new FakeEventSource() as unknown as EventSource;
+    queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     await TestBed.configureTestingModule({
       imports: [App],
       providers: [
         provideZonelessChangeDetection(),
-        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideTanStackQuery(queryClient),
+        provideRouter(routes),
         { provide: EVENT_SOURCE_FACTORY, useValue: factory },
       ],
     }).compileComponents();
   });
 
-  it('renders the shared fleet board shell and the operator controls', async () => {
+  it('renders the titlebar and nav, and redirects the empty path to /board', async () => {
     const fixture = TestBed.createComponent(App);
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/');
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('fleet-board-shell')).toBeTruthy();
-    expect(el.querySelector('[data-testid="board-shell"]')).toBeTruthy();
-    // The titlebar spans the window above the columns, and the two rails compose
-    // alongside the board: queue + event log at the left, runners + asks at the right.
     expect(el.querySelector('[data-testid="board-header"]')).toBeTruthy();
-    expect(el.querySelector('[data-testid="queue-panel"]')).toBeTruthy();
-    expect(el.querySelector('[data-testid="event-log-panel"]')).toBeTruthy();
-    expect(el.querySelector('[data-testid="runner-panel"]')).toBeTruthy();
-    expect(el.querySelector('[data-testid="questions-panel"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="app-nav"]')).toBeTruthy();
+
+    expect(router.url).toBe('/board');
+    expect(el.querySelector('[data-testid="board-shell"]')).toBeTruthy();
   });
 
-  it('lays the board out as three columns under the titlebar', async () => {
+  it('resolves the /graphs route to the graph explorer', async () => {
     const fixture = TestBed.createComponent(App);
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/');
+    await fixture.whenStable();
+
+    await router.navigateByUrl('/graphs');
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    // The titlebar is a sibling of the columns, not nested in one of them — a header
-    // inside the board column would leave the rails starting above it.
-    const header = el.querySelector('fleet-board-header');
-    expect(header?.parentElement?.classList.contains('layout')).toBe(true);
-    expect(header?.closest('.main')).toBeNull();
-
-    // Each rail and the centre are their own full-height column of the main grid, so
-    // the rails run titlebar → bottom rather than stopping at the detail dock.
-    const rails = el.querySelectorAll('.main > .col');
-    expect(rails.length).toBe(3);
-    expect(el.querySelector('[data-testid="queue-panel"]')?.closest('.col')).toBe(rails[0]);
-    expect(el.querySelector('fleet-board-shell')?.closest('.col')).toBe(rails[1]);
-    expect(el.querySelector('[data-testid="runner-panel"]')?.closest('.col')).toBe(rails[2]);
+    expect(el.querySelector('[data-testid="graph-explorer"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="board-shell"]')).toBeNull();
   });
 
-  it('docks chunk detail beside the rails, so selecting never resizes the board (issue #21)', async () => {
+  it('marks the active route on the nav tabs (routerLinkActive)', async () => {
     const fixture = TestBed.createComponent(App);
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/');
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    // Nothing selected: the dock is already mounted, stacked under the board inside
-    // the centre column — never spanning the window beneath the rails — and holds a
-    // rest state prompting the operator to pick a chunk.
-    const dockBefore = el.querySelector('fleet-chunk-detail.dock');
-    expect(dockBefore).toBeTruthy();
-    expect(dockBefore?.closest('.col')).toBe(el.querySelector('fleet-board-shell')?.closest('.col'));
-    expect(el.querySelector('fleet-chunk-detail-panel')).toBeNull();
-    expect(el.querySelector('[data-testid="chunk-detail-empty"]')?.textContent).toContain('SELECT');
+    const boardTab = () => el.querySelector('[data-testid="nav-board"]');
+    const graphsTab = () => el.querySelector('[data-testid="nav-graphs"]');
 
-    // Selecting a card fills the SAME dock element — the layout gains no node, so the
-    // board columns cannot resize or shift.
-    fixture.debugElement.query(By.css('fleet-board-shell')).componentInstance.selectChunk.emit('ch_1');
+    expect(boardTab()?.classList.contains('active')).toBe(true);
+    expect(graphsTab()?.classList.contains('active')).toBe(false);
+
+    await router.navigateByUrl('/graphs');
     await fixture.whenStable();
 
-    const dockAfter = el.querySelector('fleet-chunk-detail.dock');
-    expect(dockAfter).toBe(dockBefore);
-    expect(el.querySelector('[data-testid="chunk-detail-empty"]')?.textContent ?? '').not.toContain('SELECT');
+    expect(boardTab()?.classList.contains('active')).toBe(false);
+    expect(graphsTab()?.classList.contains('active')).toBe(true);
   });
 
-  it('opens a chunk from an ask in the right rail (MVP criterion 7)', async () => {
+  it('starts FleetLiveUpdates once from the app root and does not restart it on navigation', async () => {
+    // Spy before the component is created: App's constructor calls `start()`
+    // immediately, so the spy must be attached to the singleton beforehand.
+    const live = TestBed.inject(FleetLiveUpdates);
+    const startSpy = vi.spyOn(live, 'start');
+
     const fixture = TestBed.createComponent(App);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    // An ask names a chunk nobody has selected; activating it fills the same dock the
-    // board cards fill, which is where the answer is given.
-    expect(el.querySelector('fleet-chunk-detail-panel')).toBeNull();
-    fixture.debugElement.query(By.css('fleet-questions-panel')).componentInstance.selectChunk.emit('ch_asked');
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/');
     await fixture.whenStable();
 
-    expect(el.querySelector('[data-testid="chunk-detail-empty"]')?.textContent ?? '').not.toContain('SELECT');
+    expect(startSpy).toHaveBeenCalledTimes(1);
+
+    await router.navigateByUrl('/graphs');
+    await fixture.whenStable();
+    await router.navigateByUrl('/board');
+    await fixture.whenStable();
+
+    expect(startSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the same QueryClient instance across navigation (query cache survives tab switches)', async () => {
+    const fixture = TestBed.createComponent(App);
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/');
+    await fixture.whenStable();
+
+    // Resolve through the routed component's own injector, not TestBed's — a
+    // regression where a routed component re-provides QueryClient would still
+    // leave TestBed.inject(QueryClient) resolving the root singleton.
+    const boardBefore = fixture.debugElement.query(By.directive(BoardPage));
+    expect(boardBefore.injector.get(QueryClient)).toBe(queryClient);
+
+    await router.navigateByUrl('/graphs');
+    await fixture.whenStable();
+    await router.navigateByUrl('/board');
+    await fixture.whenStable();
+
+    const boardAfter = fixture.debugElement.query(By.directive(BoardPage));
+    expect(boardAfter.injector.get(QueryClient)).toBe(queryClient);
   });
 });

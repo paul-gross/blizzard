@@ -13,6 +13,7 @@ export const hubQuestionsKey = ['hub', 'questions'] as const;
  * the `since` instant, so an SSE invalidation naming just this prefix closes every
  * cached window at once (TanStack's default prefix match on `invalidateQueries`). */
 export const hubFleetSpendKey = ['hub', 'fleet-spend'] as const;
+export const hubGraphsKey = ['hub', 'graphs'] as const;
 
 /** One chunk's full aggregate, keyed by id. */
 export function hubChunkKey(chunkId: string | null): readonly unknown[] {
@@ -22,4 +23,9 @@ export function hubChunkKey(chunkId: string | null): readonly unknown[] {
 /** One chunk's related PM items (issue body + comments), keyed by id. */
 export function hubChunkPmItemsKey(chunkId: string | null): readonly unknown[] {
   return ['hub', 'chunk', chunkId, 'pm-items'];
+}
+
+/** One minted graph's full structure, keyed by id. */
+export function hubGraphKey(graphId: string | null): readonly unknown[] {
+  return ['hub', 'graph', graphId];
 }
