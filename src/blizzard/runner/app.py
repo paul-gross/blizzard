@@ -24,6 +24,7 @@ from blizzard.runner.api.asks import router as asks_router
 from blizzard.runner.api.control import router as control_router
 from blizzard.runner.api.environments import router as environments_router
 from blizzard.runner.api.escalations import router as escalations_router
+from blizzard.runner.api.facts import router as facts_router
 from blizzard.runner.api.health import router as health_router
 from blizzard.runner.api.heartbeat import router as heartbeat_router
 from blizzard.runner.api.leases import router as leases_router
@@ -164,6 +165,8 @@ def create_app(
     # environments and parked escalations. `GET /asks` rides the existing `asks_router`.
     app.include_router(environments_router)
     app.include_router(escalations_router)
+    # The local fact log: the outbound buffer read as a ledger, for the local panel.
+    app.include_router(facts_router)
     # The operator takeover (issue #52): open/close a chunk's interactive session over
     # the local API — the CLI is a pure client of these two routes.
     app.include_router(takeovers_router)
@@ -228,6 +231,7 @@ def build_hosted_app(config: RunnerConfig) -> FastAPI:
         runner_id=config.runner_id,
         workspace_id=config.workspace_id,
         max_agents=config.max_agents,
+        hub_url=config.hub_url,
     )
     # ``blizzard runner takeover``'s backing service (issue #52). Its own
     # ``LinuxProcessProbe()``/``SystemClock()`` instances, like ``leases``/``runner_status``

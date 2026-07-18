@@ -103,6 +103,21 @@ class BufferedFact:
 
 
 @dataclass(frozen=True)
+class OutboundFactRecord:
+    """One hub-bound fact off the outbound buffer, acked or not — the local fact log's row.
+
+    :class:`BufferedFact` is the *pending* tail DRAIN posts; this is the same table read as
+    a ledger (``acked_at`` kept, ``payload`` dropped — log readers want the event, not the body)."""
+
+    seq: int
+    kind: str
+    chunk_id: str | None
+    lease_id: str | None
+    created_at: datetime
+    acked_at: datetime | None
+
+
+@dataclass(frozen=True)
 class AskRecord:
     """The worker's local open-ask fact.
 
@@ -259,6 +274,10 @@ class IReadRunnerStore(Protocol):
 
     def pending_outbound(self) -> list[BufferedFact]:
         """The unacked outbound buffer, FIFO by seq."""
+        ...
+
+    def recent_outbound(self, limit: int) -> list[OutboundFactRecord]:
+        """The newest ``limit`` outbound facts, acked or not, newest first — the local fact log."""
         ...
 
     def unforwarded_ask(self, lease_id: str) -> AskRecord | None:

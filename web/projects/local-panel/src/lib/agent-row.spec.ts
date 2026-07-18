@@ -1,19 +1,17 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import type { runnerApi } from 'fleet';
 import { vi } from 'vitest';
 
 import { AgentRow } from './agent-row';
 import { settle } from './testing/settle';
-import { RouteError, type RunnerClientStub, stubRunnerClient } from './testing/stub-runner-client';
 
 const REF = Date.parse('2026-07-16T12:00:00.000Z');
 
 function lease(overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseView {
   return {
-    lease_id: 'L-903',
-    chunk_id: 'C-125',
+    lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
+    chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
     graph_id: 'gr_1',
     node_id: 'nd_build',
     node_name: 'build',
@@ -31,28 +29,15 @@ function lease(overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseVie
   };
 }
 
-let activeStubs: RunnerClientStub[] = [];
-
 /**
- * `AgentRow` injects {@link injectChunkTitleQuery} internally (issue #28 phase 7),
- * so every render needs a `TanStack` provider and a stubbed runner transport for
- * the `GET /api/chunks/{chunk_id}/pm-items` read the title/chips decoration reads.
- * Defaults to `{ items: [] }` — the "no title arrived" case — so every test that
- * doesn't care about the title reads the row's identity alone, exactly like a
- * genuinely title-free chunk. The stub is tracked and torn down in `afterEach`
- * below, so call sites don't each need to remember to restore it.
+ * The lease row is presentational since the machine-panel redesign — the PM
+ * title enrichment moved to `ChunkRow`, so no TanStack provider or stubbed
+ * transport is needed; the row renders its lease input alone.
  */
-async function render(
-  agent: runnerApi.LeaseView,
-  route: (method: string, path: string) => unknown = () => ({ items: [] }),
-): Promise<HTMLElement> {
-  activeStubs.push(stubRunnerClient(route));
+async function render(agent: runnerApi.LeaseView): Promise<HTMLElement> {
   await TestBed.configureTestingModule({
     imports: [AgentRow],
-    providers: [
-      provideZonelessChangeDetection(),
-      provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-    ],
+    providers: [provideZonelessChangeDetection()],
   }).compileComponents();
   const fixture = TestBed.createComponent(AgentRow);
   fixture.componentRef.setInput('agent', agent);
@@ -66,22 +51,23 @@ describe('AgentRow', () => {
   });
 
   afterEach(() => {
-    activeStubs.forEach((s) => s.restore());
-    activeStubs = [];
     vi.restoreAllMocks();
   });
 
-  it('renders the lease/chunk/epoch identity and the data-lease-id hook (issue #28, shaped for #29)', async () => {
+  it('renders compact refs for the lease and chunk while data-lease-id keeps the full id', async () => {
     const el = await render(lease());
 
     const row = el.querySelector('[data-testid="agent-row"]');
-    expect(row?.getAttribute('data-lease-id')).toBe('L-903');
-    expect(row?.textContent).toContain('L-903');
-    expect(row?.textContent).toContain('C-125');
+    // The stable e2e hook stays the raw id (`bzh:sweep-release-only-tiers`);
+    // only the *rendered* name compacts (compactRef — the app-wide mechanism).
+    expect(row?.getAttribute('data-lease-id')).toBe('lease_01KXKVVF1J3D6H6VYZ3XYNZPRR');
+    expect(row?.textContent).toContain('L-ZPRR');
+    expect(row?.textContent).toContain('C-3YJ9');
+    expect(row?.textContent).not.toContain('lease_01KXKVVF1J3D6H6VYZ3XYNZPRR');
     expect(row?.textContent).toContain('epoch 2');
   });
 
-  it('renders node, env, pid, and session on the second line — the title lives on its own line, not here', async () => {
+  it('renders node, env, pid, and session on the second line', async () => {
     const el = await render(lease());
 
     const l2 = el.querySelector('.l2')?.textContent ?? '';
@@ -91,19 +77,37 @@ describe('AgentRow', () => {
     expect(l2).toContain('sess-77');
   });
 
-  describe('selection (issue #29 C1)', () => {
-    /**
-     * Like {@link render}, but returns the fixture too so a test can subscribe
-     * to the `selectLease` output or flip the `selected` input mid-test.
-     */
+  it('renders the server-derived state as the right-aligned chip', async () => {
+    const el = await render(lease({ state: 'parked' }));
+
+    const chip = el.querySelector('[data-testid="agent-state"]');
+    expect(chip?.textContent?.trim()).toBe('PARKED');
+    expect(chip?.classList.contains('st-parked')).toBe(true);
+  });
+
+  it('carries a heartbeat freshness bar fed by last_heartbeat_at', async () => {
+    const el = await render(lease());
+
+    const fill = el.querySelector('[data-testid="hb-fill"]');
+    expect(fill).not.toBeNull();
+    // -34s old under a 1h log drain: partially drained, nowhere near empty.
+    const percent = Number(fill?.getAttribute('data-hb-percent'));
+    expect(percent).toBeGreaterThan(0);
+    expect(percent).toBeLessThan(100);
+    expect(el.querySelector('[data-testid="hb-age"]')?.textContent).toContain('-34s');
+  });
+
+  it('colors the bar red for a server-derived stale lease', async () => {
+    const el = await render(lease({ state: 'stale', last_heartbeat_at: '2026-07-16T09:00:00.000Z' }));
+
+    expect(el.querySelector('[data-testid="hb-fill"]')?.classList.contains('stale')).toBe(true);
+  });
+
+  describe('selection', () => {
     async function renderRow(agent: runnerApi.LeaseView) {
-      activeStubs.push(stubRunnerClient(() => ({ items: [] })));
       await TestBed.configureTestingModule({
         imports: [AgentRow],
-        providers: [
-          provideZonelessChangeDetection(),
-          provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-        ],
+        providers: [provideZonelessChangeDetection()],
       }).compileComponents();
       const fixture = TestBed.createComponent(AgentRow);
       fixture.componentRef.setInput('agent', agent);
@@ -111,354 +115,42 @@ describe('AgentRow', () => {
       return fixture;
     }
 
-    it('is a keyboard-reachable button by role, with the stable data-lease-id hook kept alongside', async () => {
+    it('is a keyboard-reachable button by role', async () => {
       const el = await render(lease());
       const row = el.querySelector('[data-testid="agent-row"]');
       expect(row?.getAttribute('role')).toBe('button');
       expect(row?.getAttribute('tabindex')).toBe('0');
-      expect(row?.getAttribute('data-lease-id')).toBe('L-903');
     });
 
-    it('emits (selectLease) with the row\'s lease_id on click, Enter, and Space', async () => {
+    it('emits selectLease with the full lease_id on click', async () => {
       const fixture = await renderRow(lease());
       const emitted: string[] = [];
-      fixture.componentInstance.selectLease.subscribe((leaseId) => emitted.push(leaseId));
-      const row = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="agent-row"]') as HTMLElement;
+      fixture.componentInstance.selectLease.subscribe((id: string) => emitted.push(id));
 
-      row.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-      row.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true }));
+      (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="agent-row"]')?.click();
 
-      expect(emitted).toEqual(['L-903', 'L-903', 'L-903']);
+      expect(emitted).toEqual(['lease_01KXKVVF1J3D6H6VYZ3XYNZPRR']);
     });
 
-    it('adds the selected class when the selected input is true, and omits it otherwise', async () => {
+    it('emits selectLease on Enter and Space', async () => {
       const fixture = await renderRow(lease());
-      const row = () => (fixture.nativeElement as HTMLElement).querySelector('[data-testid="agent-row"]');
+      const emitted: string[] = [];
+      fixture.componentInstance.selectLease.subscribe((id: string) => emitted.push(id));
+      const row = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('[data-testid="agent-row"]');
 
-      expect(row()?.classList.contains('selected')).toBe(false);
+      row?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      row?.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
 
+      expect(emitted).toHaveLength(2);
+    });
+
+    it('reflects the selected input as the selected class', async () => {
+      const fixture = await renderRow(lease());
       fixture.componentRef.setInput('selected', true);
       await settle(fixture);
-      expect(row()?.classList.contains('selected')).toBe(true);
-    });
-  });
 
-  it.each([
-    ['running', 'st-running'],
-    ['stale', 'st-stale'],
-    ['parked', 'st-parked'],
-    ['spawning', 'st-spawning'],
-    ['exited', 'st-exited'],
-    ['closed', 'st-closed'],
-  ] as const)('renders the %s state with its %s class', async (state, cls) => {
-    const el = await render(lease({ state }));
-    const stEl = el.querySelector('[data-testid="agent-state"]');
-    expect(stEl?.classList.contains(cls)).toBe(true);
-    expect(stEl?.textContent?.trim()).toBe(state.toUpperCase());
-  });
-
-  describe('closed rows (issue #29 slice C)', () => {
-    it('renders the closure reason on the .l2 line', async () => {
-      const el = await render(lease({ state: 'closed', closed_at: '2026-07-16T11:59:00.000Z', closure_reason: 'failed' }));
-      expect(el.querySelector('[data-testid="agent-closure"]')?.textContent).toBe('closed · failed');
-    });
-
-    it('renders no closure hook for a non-closed row', async () => {
-      const el = await render(lease());
-      expect(el.querySelector('[data-testid="agent-closure"]')).toBeNull();
-    });
-
-    it('renders "—" for the heartbeat age on a closed row, even with a stale-looking last_heartbeat_at', async () => {
-      const el = await render(
-        lease({ state: 'closed', closed_at: '2026-07-16T11:59:00.000Z', closure_reason: 'reaped', last_heartbeat_at: '2026-07-16T08:00:00.000Z' }),
-      );
-      expect(el.querySelector('[data-testid="agent-hb-age"]')?.textContent?.trim()).toBe('—');
-    });
-  });
-
-  describe('heartbeat age', () => {
-    it('renders "—" (not "-0s") for a spawning lease with no heartbeat yet', async () => {
-      const el = await render(lease({ state: 'spawning', last_heartbeat_at: null, pid: null, session_id: null }));
-      expect(el.querySelector('[data-testid="agent-hb-age"]')?.textContent?.trim()).toBe('—');
-    });
-
-    it('does not fall back to created_at for a spawning lease', async () => {
-      // created_at is hours before REF; if the row fell back to it the age would be
-      // a large number, not the honest "—".
-      const el = await render(
-        lease({ state: 'spawning', last_heartbeat_at: null, created_at: '2026-07-16T09:00:00.000Z' }),
-      );
-      expect(el.querySelector('[data-testid="agent-hb-age"]')?.textContent?.trim()).toBe('—');
-    });
-
-    it('formats a sub-minute age as -Ns', async () => {
-      const el = await render(lease({ last_heartbeat_at: '2026-07-16T11:59:26.000Z' })); // -34s
-      expect(el.querySelector('[data-testid="agent-hb-age"]')?.textContent?.trim()).toBe('-34s');
-    });
-
-    it('formats a sub-hour age as -Nm', async () => {
-      const el = await render(lease({ last_heartbeat_at: '2026-07-16T11:48:00.000Z' })); // -12m
-      expect(el.querySelector('[data-testid="agent-hb-age"]')?.textContent?.trim()).toBe('-12m');
-    });
-
-    it('formats an hour-plus age as -HhMMm', async () => {
-      const el = await render(lease({ last_heartbeat_at: '2026-07-16T10:55:56.000Z' })); // -1h04m
-      expect(el.querySelector('[data-testid="agent-hb-age"]')?.textContent?.trim()).toBe('-1h04m');
-    });
-
-    it('colors a stale lease\'s age --red via the "stale" class, not the state label alone', async () => {
-      const el = await render(lease({ state: 'stale', last_heartbeat_at: '2026-07-16T11:00:00.000Z' }));
-      const ageEl = el.querySelector('[data-testid="agent-hb-age"]');
-      expect(ageEl?.classList.contains('stale')).toBe(true);
-      expect(ageEl?.classList.contains('dim')).toBe(false);
-    });
-
-    it('dims a parked lease\'s age instead of using the stale color, even though the age keeps growing', async () => {
-      // The reap clock is stopped for a parked lease — a large age is expected, not alarming.
-      const el = await render(lease({ state: 'parked', last_heartbeat_at: '2026-07-16T08:00:00.000Z' }));
-      const ageEl = el.querySelector('[data-testid="agent-hb-age"]');
-      expect(ageEl?.classList.contains('dim')).toBe(true);
-      expect(ageEl?.classList.contains('stale')).toBe(false);
-      expect(ageEl?.textContent?.trim()).toBe('-4h00m');
-    });
-
-    it('renders a running lease\'s age undecorated (no stale, no dim)', async () => {
-      const el = await render(lease({ state: 'running', last_heartbeat_at: '2026-07-16T11:59:26.000Z' }));
-      const ageEl = el.querySelector('[data-testid="agent-hb-age"]');
-      expect(ageEl?.classList.contains('stale')).toBe(false);
-      expect(ageEl?.classList.contains('dim')).toBe(false);
-    });
-
-    // bzh:utc-instants — the bounded-tolerance region agent-row.ts must mirror from
-    // runner-panel.ts's seenLabel: a positive age (above), a small negative age
-    // (benign browser-vs-hub skew, reads as "-0s"), and a large negative age (not
-    // skew — falls through to "—" rather than a confident "-0s").
-    it('reads a small browser-vs-hub skew (last_heartbeat_at up to 60s in the future) as "-0s"', async () => {
-      const el = await render(lease({ last_heartbeat_at: '2026-07-16T12:00:30.000Z' })); // 30s after REF
-      expect(el.querySelector('[data-testid="agent-hb-age"]')?.textContent?.trim()).toBe('-0s');
-    });
-
-    it('still reads "-0s" at exactly the 60s tolerance boundary', async () => {
-      const el = await render(lease({ last_heartbeat_at: '2026-07-16T12:01:00.000Z' })); // 60s after REF
-      expect(el.querySelector('[data-testid="agent-hb-age"]')?.textContent?.trim()).toBe('-0s');
-    });
-
-    it('does not render a confident "-0s" for a heartbeat stamp hours in the future — falls through to "—"', async () => {
-      // The naive-timestamp bug this guards against: a naive wire stamp on a UTC-5
-      // box reads five hours ahead of the true instant (bzh:utc-instants).
-      const el = await render(lease({ last_heartbeat_at: '2026-07-16T17:00:00.000Z' })); // 5h after REF
-      expect(el.querySelector('[data-testid="agent-hb-age"]')?.textContent?.trim()).toBe('—');
-    });
-  });
-
-  describe('issue title (issue #28 phase 7, pass-through)', () => {
-    it('renders chips + title once the pm-items read resolves — success case', async () => {
-      const el = await render(lease(), (method, path) =>
-        method === 'GET' && path === '/api/chunks/C-125/pm-items'
-          ? { items: [{ provider: 'github', url: 'https://github.com/acme/widget/issues/8', label: 'gh:widget#8', title: 'Fix the flaky retry', fetched_at: 't', body: 'x', comments: [] }] }
-          : {},
-      );
-
-      const ttl = el.querySelector('[data-testid="agent-title"]');
-      expect(ttl?.textContent).toContain('gh:widget#8');
-      expect(ttl?.textContent).toContain('Fix the flaky retry');
-      expect(el.querySelector('[data-testid="agent-title"] .chips')?.textContent).toBe('gh:widget#8');
-    });
-
-    it('shows chunk_id immediately while pm-items is in flight, with the title slot empty until it resolves, then fills', async () => {
-      activeStubs.push(
-        stubRunnerClient((method, path) =>
-          method === 'GET' && path === '/api/chunks/C-125/pm-items'
-            ? {
-                items: [
-                  {
-                    provider: 'github',
-                    url: 'https://github.com/acme/widget/issues/8',
-                    label: 'gh:widget#8',
-                    title: 'Fix the flaky retry',
-                    fetched_at: 't',
-                    body: 'x',
-                    comments: [],
-                  },
-                ],
-              }
-            : {},
-        ),
-      );
-      await TestBed.configureTestingModule({
-        imports: [AgentRow],
-        providers: [
-          provideZonelessChangeDetection(),
-          provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-        ],
-      }).compileComponents();
-      const fixture = TestBed.createComponent(AgentRow);
-      fixture.componentRef.setInput('agent', lease());
-      // Right after creation the stubbed fetch's promise hasn't resolved yet — the
-      // title query is still pending. The row must already show chunk_id, with no
-      // title element and nothing blocking on it (no spinner, no loading state).
-      fixture.detectChanges();
-      const el = fixture.nativeElement as HTMLElement;
-
-      expect(el.querySelector('[data-testid="agent-row"]')?.textContent).toContain('C-125');
-      expect(el.querySelector('[data-testid="agent-title"]')).toBeNull();
-
-      await settle(fixture);
-      expect(el.querySelector('[data-testid="agent-title"]')?.textContent).toContain('Fix the flaky retry');
-    });
-
-    it('falls back to chunk_id alone when the pm-items read has no items', async () => {
-      const el = await render(lease(), (method, path) =>
-        method === 'GET' && path === '/api/chunks/C-125/pm-items' ? { items: [] } : {},
-      );
-
-      expect(el.querySelector('[data-testid="agent-title"]')).toBeNull();
-      expect(el.querySelector('[data-testid="agent-row"]')?.textContent).toContain('C-125');
-    });
-
-    it('falls back to chunk_id alone when the pm-items read 502s — never surfaces the failure', async () => {
-      const el = await render(lease(), (method, path) => {
-        if (method === 'GET' && path === '/api/chunks/C-125/pm-items') throw new RouteError(502, 'hub unreachable');
-        return {};
-      });
-
-      expect(el.querySelector('[data-testid="agent-title"]')).toBeNull();
-      expect(el.querySelector('[data-testid="agent-row"]')?.textContent).toContain('C-125');
-    });
-
-    // ★ The no-branching guard (issue #28, decision 1: the title is "optional, may
-    // not work, and when it doesn't work the rest of the web app still functions").
-    //
-    // Deliberately markup-agnostic: it compares rendered *text* against a title-free
-    // baseline rather than asserting some known testid is absent. An assertion keyed
-    // to `[data-testid="agent-title"]` passes happily while the template grows a
-    // *differently* named error/spinner element — so it cannot pin "the row renders
-    // chunk_id regardless, and never branches on isError()/isPending()". Text
-    // equality can: any error text, spinner, or placeholder the title slot grows in
-    // a degraded state makes the row differ from the row that never had a title.
-    //
-    // 502 (hub down), 503 (runner not wired to a hub) and 404 (no work-source) are
-    // one code path — the query settles `error` and the row ignores it — but each is
-    // a row in the plan's degradation table, so each is exercised rather than
-    // resting on the other two's behalf.
-    it.each([
-      [502, 'hub down'],
-      [503, 'runner not wired to a hub'],
-      [404, 'no work-source'],
-    ])('renders a %i (%s) row textually identically to a title-free row — no error text, no spinner', async (status) => {
-      const rowText = (el: HTMLElement) =>
-        (el.querySelector('[data-testid="agent-row"]')?.textContent ?? '').replace(/\s+/g, ' ').trim();
-
-      const baseline = rowText(await render(lease(), () => ({ items: [] })));
-      expect(baseline).toContain('C-125');
-
-      TestBed.resetTestingModule();
-      const degraded = await render(lease(), (method, path) => {
-        if (method === 'GET' && path === '/api/chunks/C-125/pm-items') throw new RouteError(status, 'unavailable');
-        return {};
-      });
-
-      expect(rowText(degraded)).toBe(baseline);
-    });
-
-    it('renders an in-flight row textually identically to a title-free row — nothing blocks, no spinner', async () => {
-      const rowText = (el: HTMLElement) =>
-        (el.querySelector('[data-testid="agent-row"]')?.textContent ?? '').replace(/\s+/g, ' ').trim();
-
-      const baseline = rowText(await render(lease(), () => ({ items: [] })));
-
-      TestBed.resetTestingModule();
-      activeStubs.push(
-        stubRunnerClient((method, path) =>
-          method === 'GET' && path === '/api/chunks/C-125/pm-items'
-            ? {
-                items: [
-                  {
-                    provider: 'github',
-                    url: 'https://github.com/acme/widget/issues/8',
-                    label: 'gh:widget#8',
-                    title: 'Fix the flaky retry',
-                    fetched_at: 't',
-                    body: 'x',
-                    comments: [],
-                  },
-                ],
-              }
-            : {},
-        ),
-      );
-      await TestBed.configureTestingModule({
-        imports: [AgentRow],
-        providers: [
-          provideZonelessChangeDetection(),
-          provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
-        ],
-      }).compileComponents();
-      const fixture = TestBed.createComponent(AgentRow);
-      fixture.componentRef.setInput('agent', lease());
-      // The stubbed fetch's promise has not resolved: the title query is pending.
-      fixture.detectChanges();
-
-      expect(rowText(fixture.nativeElement as HTMLElement)).toBe(baseline);
-    });
-
-    it('shows the label chip alone, not the title, on a per-pointer forge degrade (label survives, title/body go null)', async () => {
-      const el = await render(lease(), (method, path) =>
-        method === 'GET' && path === '/api/chunks/C-125/pm-items'
-          ? {
-              items: [
-                {
-                  provider: 'github',
-                  url: 'https://github.com/acme/widget/issues/9',
-                  label: 'gh:widget#9',
-                  title: null,
-                  body: null,
-                  error: 'forge unreachable for issues/9',
-                  fetched_at: 't',
-                  comments: [],
-                },
-              ],
-            }
-          : {},
-      );
-
-      const ttl = el.querySelector('[data-testid="agent-title"]');
-      expect(ttl?.querySelector('.chips')?.textContent).toBe('gh:widget#9');
-      expect(ttl?.textContent?.replace('gh:widget#9', '').trim()).toBe('');
-    });
-
-    it('falls back to chunk_id alone when a pointer has neither a title nor a label', async () => {
-      const el = await render(lease(), (method, path) =>
-        method === 'GET' && path === '/api/chunks/C-125/pm-items'
-          ? {
-              items: [
-                {
-                  provider: 'github',
-                  url: 'not-issue-shaped',
-                  label: null,
-                  title: null,
-                  body: null,
-                  error: 'forge unreachable',
-                  fetched_at: 't',
-                  comments: [],
-                },
-              ],
-            }
-          : {},
-      );
-
-      expect(el.querySelector('[data-testid="agent-title"]')).toBeNull();
-      expect(el.querySelector('[data-testid="agent-row"]')?.textContent).toContain('C-125');
-    });
-
-    it('makes exactly one pm-items request for the row\'s chunk_id — never polled, never retried', async () => {
-      const el = await render(lease(), (method, path) =>
-        method === 'GET' && path === '/api/chunks/C-125/pm-items' ? { items: [] } : {},
-      );
-      expect(el).not.toBeNull();
-      const stub = activeStubs[activeStubs.length - 1];
-      expect(stub.forRoute('/api/chunks/C-125/pm-items', 'GET')).toHaveLength(1);
+      const row = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="agent-row"]');
+      expect(row?.classList.contains('selected')).toBe(true);
     });
   });
 });

@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
 import type { ChunkSummary } from '../api/hub';
-import { shortChunkId } from '../chunk-id';
+import { compactRef } from '../compact-ref';
 import { BoardShell } from './board-shell';
 
 describe('BoardShell', () => {
@@ -153,7 +153,7 @@ describe('BoardShell', () => {
     expect(item?.textContent?.trim()).toBe('blizzard#8 widget#9');
     expect(el.querySelectorAll('[data-testid="chunk-card"] a')).toHaveLength(0);
     // The short chunk id stays visible as the stable handle.
-    expect(el.querySelector('[data-testid="chunk-id"]')?.textContent).toContain('ch_…0000');
+    expect(el.querySelector('[data-testid="chunk-id"]')?.textContent).toContain('C-0000');
   });
 
   it('degrades to the short chunk id when a chunk has no labeled pointer', async () => {
@@ -178,13 +178,13 @@ describe('BoardShell', () => {
     expect(el.querySelectorAll('[data-testid="pm-chip"]')).toHaveLength(0);
     expect(el.querySelectorAll('[data-testid="chunk-card"]')).toHaveLength(2);
     const running = el.querySelector('[data-col="running"] [data-testid="chunk-card"]');
-    expect(running?.querySelector('[data-testid="chunk-id"]')?.textContent).toContain('ch_…');
+    expect(running?.querySelector('[data-testid="chunk-id"]')?.textContent).toContain('C-');
   });
 
   it('names a chunk by its ULID tail, where the entropy that tells chunks apart lives', () => {
     // A leading slice would print the same timestamp prefix on every card minted in
     // the same millisecond-ish window; the tail is what actually discriminates them.
-    expect(shortChunkId('ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9')).toBe('ch_…3YJ9');
-    expect(shortChunkId('ch_01KXKVVF1J3D6H6VYZ3XYN3YAB')).toBe('ch_…3YAB');
+    expect(compactRef('ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9')).toBe('C-3YJ9');
+    expect(compactRef('ch_01KXKVVF1J3D6H6VYZ3XYN3YAB')).toBe('C-3YAB');
   });
 });

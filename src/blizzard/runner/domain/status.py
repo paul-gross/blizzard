@@ -26,7 +26,7 @@ from datetime import datetime, timedelta
 
 from blizzard.foundation.clock import IClock
 from blizzard.runner.harness.adapter import IHarnessAdapter
-from blizzard.runner.store.repository import AskRecord, IReadRunnerStore
+from blizzard.runner.store.repository import AskRecord, IReadRunnerStore, OutboundFactRecord
 
 __all__ = [
     "HUB_CONTACT_STALENESS_THRESHOLD",
@@ -72,8 +72,12 @@ class Capacities:
 
 @dataclass(frozen=True)
 class HubConnectivity:
-    """Hub reachability, derived from staleness, plus the outbound backlog depth."""
+    """Hub reachability, derived from staleness, plus the outbound backlog depth.
 
+    ``endpoint`` is the configured hub base URL — identity config, not a probe result;
+    the local panel's one handle on where the fleet board lives."""
+
+    endpoint: str
     reachable: bool
     last_contact_at: datetime | None
     buffer_depth: int
@@ -139,6 +143,7 @@ class RunnerStatusService:
         runner_id: str,
         workspace_id: str,
         max_agents: int,
+        hub_url: str,
         contact_staleness: timedelta = HUB_CONTACT_STALENESS_THRESHOLD,
     ) -> None:
         self._store = store
@@ -147,6 +152,7 @@ class RunnerStatusService:
         self._runner_id = runner_id
         self._workspace_id = workspace_id
         self._max_agents = max_agents
+        self._hub_url = hub_url
         self._contact_staleness = contact_staleness
 
     def summary(self) -> RunnerStatusSummary:
@@ -161,6 +167,7 @@ class RunnerStatusService:
             pause=PauseState(local=local_paused, hub=hub_paused, effective=local_paused or hub_paused),
             capacities=Capacities(max_agents=self._max_agents, used=used, free=max(self._max_agents - used, 0)),
             hub=HubConnectivity(
+                endpoint=self._hub_url,
                 reachable=reachable,
                 last_contact_at=contact_at,
                 buffer_depth=len(self._store.pending_outbound()),
@@ -176,6 +183,10 @@ class RunnerStatusService:
 
     def open_asks(self) -> list[AskRecord]:
         return self._store.open_asks()
+
+    def recent_facts(self, limit: int) -> list[OutboundFactRecord]:
+        """The newest hub-bound facts, acked or not — the local panel's fact log."""
+        return self._store.recent_outbound(limit)
 
     def open_takeovers(self) -> list[OpenTakeoverView]:
         return [

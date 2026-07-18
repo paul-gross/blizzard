@@ -60,7 +60,7 @@ describe('QuestionsPanel', () => {
     const first = el.querySelectorAll('[data-testid="rail-question"]')[0];
     expect(first.querySelector('[data-testid="rail-question-text"]')?.textContent).toContain('Which API style');
     // The chunk is named the way the board names it, so the two surfaces agree.
-    expect(first.querySelector('[data-testid="rail-question-chunk"]')?.textContent).toContain('ch_…3YJ9');
+    expect(first.querySelector('[data-testid="rail-question-chunk"]')?.textContent).toContain('C-3YJ9');
     expect(first.querySelector('[data-testid="rail-question-options"]')?.textContent).toContain('rest · graphql');
   });
 

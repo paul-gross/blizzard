@@ -165,6 +165,53 @@ export type EscalationView = {
 };
 
 /**
+ * FactListResponse
+ *
+ * The most recent hub-bound facts, newest first.
+ */
+export type FactListResponse = {
+    /**
+     * Items
+     */
+    items?: Array<FactView>;
+};
+
+/**
+ * FactView
+ *
+ * One hub-bound fact off the runner store's outbound buffer — ``GET /api/facts``.
+ *
+ * The local fact log: the record itself minus its JSON ``payload`` (the panel
+ * reads the ledger, not the bodies). ``acked_at`` null means still buffered.
+ */
+export type FactView = {
+    /**
+     * Acked At
+     */
+    acked_at: string | null;
+    /**
+     * Chunk Id
+     */
+    chunk_id: string | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Lease Id
+     */
+    lease_id: string | null;
+    /**
+     * Seq
+     */
+    seq: number;
+};
+
+/**
  * HTTPValidationError
  */
 export type HttpValidationError = {
@@ -226,12 +273,19 @@ export type HeldEnvironmentView = {
  * HubConnectivityView
  *
  * Hub reachability (derived, not probed) plus the outbound backlog depth.
+ *
+ * ``endpoint`` is the configured hub base URL (``RunnerConfig.hub_url``) — the
+ * local panel's link out to the fleet board; connectivity facts, not a probe.
  */
 export type HubConnectivityView = {
     /**
      * Buffer Depth
      */
     buffer_depth: number;
+    /**
+     * Endpoint
+     */
+    endpoint: string;
     /**
      * Last Contact At
      */
@@ -984,6 +1038,36 @@ export type ListEscalationsApiEscalationsGetResponses = {
 };
 
 export type ListEscalationsApiEscalationsGetResponse = ListEscalationsApiEscalationsGetResponses[keyof ListEscalationsApiEscalationsGetResponses];
+
+export type ListFactsApiFactsGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/facts';
+};
+
+export type ListFactsApiFactsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListFactsApiFactsGetError = ListFactsApiFactsGetErrors[keyof ListFactsApiFactsGetErrors];
+
+export type ListFactsApiFactsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: FactListResponse;
+};
+
+export type ListFactsApiFactsGetResponse = ListFactsApiFactsGetResponses[keyof ListFactsApiFactsGetResponses];
 
 export type HealthApiHealthGetData = {
     body?: never;

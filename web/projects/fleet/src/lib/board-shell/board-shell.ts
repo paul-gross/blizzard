@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
 import type { ChunkStatus, ChunkSummary } from '../api/hub';
-import { shortChunkId } from '../chunk-id';
+import { compactRef } from '../compact-ref';
 import { LANES, STATUS_LANE } from '../chunk-lanes';
 
 /** One rendered board card — the derived-status view of a chunk. */
@@ -390,7 +390,7 @@ export class BoardShell {
       if (!column) continue;
       grouped.get(column)?.push({
         chunkId: chunk.chunk_id,
-        shortId: shortChunkId(chunk.chunk_id),
+        shortId: compactRef(chunk.chunk_id),
         status: chunk.status,
         node: chunk.current_node_name ?? chunk.current_node_id ?? '—',
         nodeId: chunk.current_node_id ?? '',

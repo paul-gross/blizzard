@@ -48,6 +48,7 @@ def _app_with_status(
         runner_id=config.runner_id,
         workspace_id=config.workspace_id,
         max_agents=config.max_agents,
+        hub_url=config.hub_url,
     )
     return create_app(config, runner_store=store, runner_status=service), store
 
@@ -85,7 +86,12 @@ def test_summary_defaults_on_an_empty_store(tmp_path: Path) -> None:
     assert body["workspace_id"] == "workspace-local"
     assert body["pause"] == {"local": False, "hub": False, "effective": False}
     assert body["capacities"] == {"max_agents": 3, "used": 0, "free": 3}
-    assert body["hub"] == {"reachable": False, "last_contact_at": None, "buffer_depth": 0}
+    assert body["hub"] == {
+        "endpoint": "http://127.0.0.1:8421",
+        "reachable": False,
+        "last_contact_at": None,
+        "buffer_depth": 0,
+    }
     assert body["last_tick_at"] is None
     assert_all_timestamps_utc(body)
 
@@ -415,3 +421,61 @@ def test_no_open_takeovers_is_an_empty_list(tmp_path: Path) -> None:
         resp = client.get("/api/takeovers")
 
     assert resp.json()["items"] == []
+
+
+# --------------------------------------------------------------------------- #
+# GET /facts — the local fact log
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.component
+def test_facts_lists_recent_outbound_newest_first_including_acked(tmp_path: Path) -> None:
+    """The fact log is a ledger, not the pending queue — an acked fact still appears."""
+    app, store = _app_with_status(tmp_path)
+    store.enqueue_outbound(kind="lease.minted", chunk_id="ch_1", lease_id="lease_1", payload="{}", created_at=_NOW)
+    store.enqueue_outbound(
+        kind="completion.submitted",
+        chunk_id="ch_1",
+        lease_id="lease_1",
+        payload="{}",
+        created_at=_NOW + timedelta(minutes=1),
+    )
+    acked_at = _NOW + timedelta(minutes=2)
+    store.ack_outbound(1, acked_at=acked_at)
+
+    with TestClient(app) as client:
+        resp = client.get("/api/facts")
+
+    assert resp.status_code == 200, resp.text
+    items = resp.json()["items"]
+    assert [item["seq"] for item in items] == [2, 1]
+    assert items[1] == {
+        "seq": 1,
+        "kind": "lease.minted",
+        "chunk_id": "ch_1",
+        "lease_id": "lease_1",
+        "created_at": _NOW.isoformat(),
+        "acked_at": acked_at.isoformat(),
+    }
+    assert items[0]["acked_at"] is None
+    assert "payload" not in items[0]
+    assert_all_timestamps_utc(resp.json())
+
+
+@pytest.mark.component
+def test_facts_honors_the_limit_query(tmp_path: Path) -> None:
+    app, store = _app_with_status(tmp_path)
+    for i in range(3):
+        store.enqueue_outbound(kind="lease.minted", chunk_id=f"ch_{i}", lease_id=None, payload="{}", created_at=_NOW)
+
+    with TestClient(app) as client:
+        resp = client.get("/api/facts", params={"limit": 2})
+
+    assert [item["seq"] for item in resp.json()["items"]] == [3, 2]
+
+
+@pytest.mark.component
+def test_facts_503_when_status_service_unwired(tmp_path: Path) -> None:
+    config = RunnerConfig(root=tmp_path, db_url="sqlite://")
+    with TestClient(create_app(config)) as client:
+        assert client.get("/api/facts").status_code == 503

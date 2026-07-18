@@ -26,6 +26,7 @@ from blizzard.runner.store.repository import (
     IWriteRunnerStore,
     LeaseRecord,
     NewLease,
+    OutboundFactRecord,
     ParkRecord,
     RunnerStoreError,
     TakeoverRecord,
@@ -285,6 +286,20 @@ class SqlAlchemyRunnerStore:
                 lease_id=str(r.lease_id) if r.lease_id is not None else None,
                 payload=str(r.payload),
                 created_at=r.created_at,
+            )
+            for r in self._all(stmt)
+        ]
+
+    def recent_outbound(self, limit: int) -> list[OutboundFactRecord]:
+        stmt = select(outbound_buffer).order_by(outbound_buffer.c.seq.desc()).limit(limit)
+        return [
+            OutboundFactRecord(
+                seq=int(r.seq),
+                kind=str(r.kind),
+                chunk_id=str(r.chunk_id) if r.chunk_id is not None else None,
+                lease_id=str(r.lease_id) if r.lease_id is not None else None,
+                created_at=r.created_at,
+                acked_at=r.acked_at,
             )
             for r in self._all(stmt)
         ]

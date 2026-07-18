@@ -209,6 +209,81 @@
         "title": "EscalationView",
         "type": "object"
       },
+      "FactListResponse": {
+        "description": "The most recent hub-bound facts, newest first.",
+        "properties": {
+          "items": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FactView"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "title": "FactListResponse",
+        "type": "object"
+      },
+      "FactView": {
+        "description": "One hub-bound fact off the runner store's outbound buffer \u2014 ``GET /api/facts``.\n\nThe local fact log: the record itself minus its JSON ``payload`` (the panel\nreads the ledger, not the bodies). ``acked_at`` null means still buffered.",
+        "properties": {
+          "acked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acked At"
+          },
+          "chunk_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Id"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "lease_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lease Id"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "seq",
+          "kind",
+          "chunk_id",
+          "lease_id",
+          "created_at",
+          "acked_at"
+        ],
+        "title": "FactView",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -280,11 +355,15 @@
         "type": "object"
       },
       "HubConnectivityView": {
-        "description": "Hub reachability (derived, not probed) plus the outbound backlog depth.",
+        "description": "Hub reachability (derived, not probed) plus the outbound backlog depth.\n\n``endpoint`` is the configured hub base URL (``RunnerConfig.hub_url``) \u2014 the\nlocal panel's link out to the fleet board; connectivity facts, not a probe.",
         "properties": {
           "buffer_depth": {
             "title": "Buffer Depth",
             "type": "integer"
+          },
+          "endpoint": {
+            "title": "Endpoint",
+            "type": "string"
           },
           "last_contact_at": {
             "anyOf": [
@@ -303,6 +382,7 @@
           }
         },
         "required": [
+          "endpoint",
           "reachable",
           "last_contact_at",
           "buffer_depth"
@@ -1437,6 +1517,52 @@
           }
         },
         "summary": "List Escalations",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/facts": {
+      "get": {
+        "description": "The newest ``limit`` hub-bound facts recorded by this runner, newest first.",
+        "operationId": "list_facts_api_facts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FactListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Facts",
         "tags": [
           "runner"
         ]

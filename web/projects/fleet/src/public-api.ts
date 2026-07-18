@@ -9,7 +9,7 @@
 
 export { BoardHeader } from './lib/board-header/board-header';
 export { BoardShell } from './lib/board-shell/board-shell';
-export { shortChunkId } from './lib/chunk-id';
+export { compactRef, ENTITY_DISPLAY, type EntityDisplay } from './lib/compact-ref';
 export { LANES, STATUS_LANE, laneFor, type Lane } from './lib/chunk-lanes';
 export type { BoardCard } from './lib/board-shell/board-shell';
 export { ChunkDetailPanel } from './lib/chunk-detail/chunk-detail-panel';

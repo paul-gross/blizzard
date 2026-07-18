@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 
 import type { RunnerView } from '../api/hub';
-import { shortChunkId } from '../chunk-id';
+import { compactRef } from '../compact-ref';
 import { injectHubChunksQuery } from '../chunks/chunks.query';
 import { injectHubRunnersQuery } from './runners.query';
 import { injectRunnerPauseMutation } from './runners.mutations';
@@ -299,7 +299,7 @@ export class RunnerPanel {
       const lines = grouped.get(chunk.runner_id) ?? [];
       lines.push({
         chunkId: chunk.chunk_id,
-        shortId: shortChunkId(chunk.chunk_id),
+        shortId: compactRef(chunk.chunk_id),
         node: chunk.current_node_name ?? chunk.current_node_id ?? '—',
       });
       grouped.set(chunk.runner_id, lines);

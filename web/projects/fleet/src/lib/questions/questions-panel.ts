@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, output } from '@angular/core';
 
-import { shortChunkId } from '../chunk-id';
+import { compactRef } from '../compact-ref';
 import { injectHubQuestionsQuery } from './questions.query';
 
 /**
@@ -163,6 +163,6 @@ export class QuestionsPanel {
   protected readonly questions = computed(() => this.query.data() ?? []);
 
   protected shortId(chunkId: string): string {
-    return shortChunkId(chunkId);
+    return compactRef(chunkId);
   }
 }

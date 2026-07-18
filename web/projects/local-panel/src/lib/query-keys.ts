@@ -6,6 +6,24 @@
  */
 export const runnerLeasesKey = ['runner', 'leases'] as const;
 
+/** `GET /api/runner` — identity, capacities, hub connectivity, last tick. */
+export const runnerStatusKey = ['runner', 'status'] as const;
+
+/** `GET /api/environments` — the held env bindings. */
+export const runnerEnvironmentsKey = ['runner', 'environments'] as const;
+
+/** `GET /api/asks?open=true` — the open local asks. */
+export const runnerAsksKey = ['runner', 'asks'] as const;
+
+/** `GET /api/escalations` — parked escalations with their resume commands. */
+export const runnerEscalationsKey = ['runner', 'escalations'] as const;
+
+/** `GET /api/takeovers` — open operator takeovers. */
+export const runnerTakeoversKey = ['runner', 'takeovers'] as const;
+
+/** `GET /api/facts` — the local fact log off the outbound ledger. */
+export const runnerFactsKey = ['runner', 'facts'] as const;
+
 /**
  * One chunk's pass-through PM items (issue title + labels), keyed by chunk id.
  * Deliberately its own key — never invalidated or refetched by the leases poll

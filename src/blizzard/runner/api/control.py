@@ -135,6 +135,7 @@ def get_runner(request: Request) -> RunnerStatusView:
             max_agents=summary.capacities.max_agents, used=summary.capacities.used, free=summary.capacities.free
         ),
         hub=HubConnectivityView(
+            endpoint=summary.hub.endpoint,
             reachable=summary.hub.reachable,
             last_contact_at=iso_utc(summary.hub.last_contact_at) if summary.hub.last_contact_at is not None else None,
             buffer_depth=summary.hub.buffer_depth,

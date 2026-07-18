@@ -1,59 +1,30 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import type { runnerApi } from 'fleet';
+import { compactRef, type runnerApi } from 'fleet';
 
-import { injectChunkTitleQuery } from './chunk-title.query';
-
-/** Bounded tolerance for benign browser-vs-hub clock skew (`bzh:utc-instants`). */
-const SKEW_TOLERANCE_MS = 60_000;
+import { HeartbeatFreshness } from './heartbeat-freshness';
 
 /**
- * Formats a millisecond age as the `.hb-age` shorthand (`-34s` / `-12m` /
- * `-1h04m`). Only ever called with a `deltaMs` already inside the bounded skew
- * tolerance (see {@link AgentRow.heartbeatAge}), so a small negative input —
- * genuine browser-vs-hub clock skew, never more than the tolerance — floors
- * at zero rather than rendering a confusing double-negative age.
- */
-function formatHeartbeatAge(deltaMs: number): string {
-  const totalSeconds = Math.max(0, Math.floor(deltaMs / 1000));
-  if (totalSeconds < 60) return `-${totalSeconds}s`;
-  const totalMinutes = Math.floor(totalSeconds / 60);
-  if (totalMinutes < 60) return `-${totalMinutes}m`;
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return `-${hours}h${String(minutes).padStart(2, '0')}m`;
-}
-
-/**
- * One active lease — presentational, `OnPush`. Shaped like a `.lease` row:
- * lease id + chunk id + epoch on the first line, the derived `state`
- * right-aligned with its heartbeat age; node/env/pid/session on the last.
- * `chunk_id` is the row's identity — always rendered, never conditional
- * on anything below.
- *
- * The issue title is layered on top (issue #28, decision 1) via
- * {@link injectChunkTitleQuery} — a severable, volatile read (the PM
- * pass-through's own). Per the chip+title shape,
- * `chunk_id` alone is what the row *is*; chips/title are decoration that
- * *arrived*, so this template never branches on the title query's
- * `isError()`/`isPending()` — it reads `data()?.items` optimistically and renders
- * whatever it finds, or nothing. Every degraded case (hub down, no work-source,
- * empty items, a per-pointer forge failure) collapses to "render nothing extra";
- * the row itself, and the panel around it, are never aware anything failed.
+ * One active lease — presentational, `OnPush`. Shaped like the discovery
+ * mock's `.lease` row: compact refs (`L-ZPRR · C-7S5D · epoch 2` —
+ * `compactRef`, the app-wide short-name mechanism) with the server-derived
+ * `state` right-aligned on the first line, `node / env / pid / session` on the
+ * second, and a {@link HeartbeatFreshness} bar under both. Deliberately free of
+ * issue chips/titles — the lease list is the *liveness* rail; what a chunk is
+ * about lives on the machine-chunks list, which carries the PM enrichment.
  *
  * `data-lease-id` remains a stable hook for the e2e tier to select a row by
- * (`bzh:sweep-release-only-tiers` — `data-*` is the sanctioned e2e seam). The row is itself the
- * selection affordance for #29: `role="button"` + `tabindex="0"` make it a
- * keyboard-reachable target, `(click)`/Enter/Space all emit {@link selectLease}
- * with this row's `lease_id`, and the `selected` input lets a container mark
- * it current via `[class.selected]`. #29's transcript panel is the consumer;
- * this row only ever emits its own identity, never reaches for the panel.
+ * (`bzh:sweep-release-only-tiers` — `data-*` is the sanctioned e2e seam). The
+ * row is the selection affordance: `role="button"` + `tabindex="0"`,
+ * click/Enter/Space all emit {@link selectLease}, and `selected` reflects the
+ * container's current mark.
  */
 @Component({
   selector: 'fleet-agent-row',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [HeartbeatFreshness],
   template: `
     <div
-      class="lease c-row"
+      class="lease"
       data-testid="agent-row"
       [attr.data-lease-id]="agent().lease_id"
       [class.selected]="selected()"
@@ -65,27 +36,15 @@ function formatHeartbeatAge(deltaMs: number): string {
     >
       <div class="l1">
         <span class="lid">
-          {{ agent().lease_id }} <small>· {{ agent().chunk_id }} · epoch {{ agent().epoch }}</small>
+          {{ leaseRef() }} <small>· {{ chunkRef() }} · epoch {{ agent().epoch }}</small>
         </span>
-        <span class="st-wrap">
-          <span class="st" [class]="stateClass()" [attr.data-testid]="'agent-state'">{{ stateLabel() }}</span>
-          <span class="hb-age" [class.stale]="isStale()" [class.dim]="isParked()" data-testid="agent-hb-age">
-            {{ heartbeatAge() }}
-          </span>
-        </span>
+        <span class="st" [class]="stateClass()" [attr.data-testid]="'agent-state'">{{ stateLabel() }}</span>
       </div>
-      @if (chips() || titleText()) {
-        <div class="ttl" data-testid="agent-title">
-          <span class="chips">{{ chips() }}</span> {{ titleText() }}
-        </div>
-      }
       <div class="l2">
         node <b>{{ agent().node_name }}</b> · env <b>{{ agent().environment_id ?? '—' }}</b> · pid
         <b>{{ agent().pid ?? '—' }}</b> · session <b>{{ agent().session_id ?? '—' }}</b>
-        @if (closureLabel(); as label) {
-          · <span data-testid="agent-closure">{{ label }}</span>
-        }
       </div>
+      <fleet-heartbeat-freshness [lastHeartbeatAt]="agent().last_heartbeat_at" [stale]="isStale()" />
     </div>
   `,
   styles: `
@@ -95,7 +54,7 @@ function formatHeartbeatAge(deltaMs: number): string {
       font-variant-numeric: tabular-nums;
     }
     .lease {
-      padding: 5px 8px;
+      padding: 6px 8px;
       border-bottom: 1px solid var(--line);
       cursor: pointer;
     }
@@ -123,13 +82,8 @@ function formatHeartbeatAge(deltaMs: number): string {
       color: var(--label);
       font-size: var(--fs-label);
     }
-    .st-wrap {
-      display: flex;
-      align-items: baseline;
-      gap: 6px;
-      flex: none;
-    }
     .st {
+      flex: none;
       font-size: var(--fs-label);
       letter-spacing: 0.14em;
       text-transform: uppercase;
@@ -152,33 +106,10 @@ function formatHeartbeatAge(deltaMs: number): string {
     .st-closed {
       color: var(--label-dim);
     }
-    .hb-age {
-      width: 46px;
-      text-align: right;
-      font-size: var(--fs-xs);
-      color: var(--label);
-    }
-    .hb-age.stale {
-      color: var(--red);
-    }
-    .hb-age.dim {
-      color: var(--label-dim);
-    }
-    .ttl {
-      color: var(--text);
-      font-size: var(--fs-sm);
-      margin-top: 2px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .ttl .chips {
-      color: var(--cyan);
-    }
     .l2 {
       color: var(--label);
       font-size: var(--fs-xs);
-      margin-top: 2px;
+      margin: 2px 0 4px;
     }
     .l2 b {
       color: var(--cyan);
@@ -208,31 +139,8 @@ export class AgentRow {
     this.selectLease.emit(this.agent().lease_id);
   }
 
-  /**
-   * The severable title read (issue #28, decision 1) — one query per row, keyed
-   * on this row's own `chunk_id`. Never awaited, never branched on for
-   * `isError()`/`isPending()`; see {@link injectChunkTitleQuery} for the
-   * severability guarantee this rests on.
-   */
-  protected readonly titleQuery = injectChunkTitleQuery(() => this.agent().chunk_id);
-
-  /**
-   * Space-joined pointer labels (`gh:winter#412`) from whatever pm-items arrived
-   * — empty when the read hasn't resolved, failed, returned no items, or every
-   * item lacks a board-legible label. A per-pointer forge failure still
-   * carries its `label` (parsed from the pointer URL, not fetched), so one bad
-   * pointer degrading to `title: null` doesn't blind this chip.
-   */
-  protected readonly chips = computed<string>(() => {
-    const items = this.titleQuery.data()?.items ?? [];
-    return items
-      .map((item) => item.label)
-      .filter((label): label is string => !!label)
-      .join(' ');
-  });
-
-  /** The first pm-item's title, or empty when unresolved/failed/absent. */
-  protected readonly titleText = computed<string>(() => this.titleQuery.data()?.items?.[0]?.title ?? '');
+  protected readonly leaseRef = computed(() => compactRef(this.agent().lease_id));
+  protected readonly chunkRef = computed(() => compactRef(this.agent().chunk_id));
 
   /** `st-running` / `st-stale` / `st-parked` / `st-spawning` / `st-exited` / `st-closed`. */
   protected readonly stateClass = computed(() => `st-${this.agent().state}`);
@@ -240,51 +148,4 @@ export class AgentRow {
   protected readonly stateLabel = computed(() => this.agent().state.toUpperCase());
 
   protected readonly isStale = computed(() => this.agent().state === 'stale');
-  protected readonly isParked = computed(() => this.agent().state === 'parked');
-
-  /**
-   * `closed · failed` etc. — the closure fact's `reason` (issue #29 slice C),
-   * rendered alongside node/env/pid/session on `.l2`; empty for any
-   * non-closed row (`closure_reason` is `null` iff active).
-   */
-  protected readonly closureLabel = computed<string>(() => {
-    const reason = this.agent().closure_reason;
-    return reason ? `closed · ${reason}` : '';
-  });
-
-  /**
-   * `-34s` / `-12m` / `-1h04m` from `last_heartbeat_at` vs `Date.now()`.
-   *
-   * `spawning` leases have never heartbeat (`last_heartbeat_at` is `null` until the
-   * first beat lands) — rendering `-0s`, or an age computed off `created_at`,
-   * would claim a heartbeat fact that doesn't exist yet, so this renders `—`
-   * instead. The backend's own `created_at` fallback (`derive_lease_state`) is a
-   * *reaping* rule, not a heartbeat fact, and must not leak into this label.
-   *
-   * A `closed` row renders `—` for the same reason (issue #29 slice C): a
-   * last-beat age on a finished agent implies staleness that no longer means
-   * anything, and a closed lease's `pid` may have been reused, so trusting
-   * anything liveness-shaped about it is wrong.
-   *
-   * Liveness is decided where both instants share one clock — the hub, via the
-   * server-derived `state` this row already renders (`agent-state` admits a
-   * Tailnet-reachable browser, so "same machine, no skew" isn't a given); this
-   * label is decoration computed against the *browser's* clock, and a browser's
-   * clock must never make a correctness call (`bzh:utc-instants`). A small negative
-   * delta (up to {@link SKEW_TOLERANCE_MS}) is benign browser-vs-hub clock skew, so
-   * it reads as `-0s`, same as `seenLabel` in `runner-panel.ts`. Past that bound it
-   * is not skew — it is the naive-timestamp failure the rule exists to catch — so
-   * this falls through to the same `—` the "never heartbeat yet" case renders,
-   * leaving the adjacent `state` to carry the meaning instead of guessing.
-   */
-  protected readonly heartbeatAge = computed<string>(() => {
-    if (this.agent().state === 'closed') return '—';
-    const lastHeartbeatAt = this.agent().last_heartbeat_at;
-    if (lastHeartbeatAt === null) return '—';
-    const beatMs = Date.parse(lastHeartbeatAt);
-    if (Number.isNaN(beatMs)) return '—';
-    const deltaMs = Date.now() - beatMs;
-    if (deltaMs < -SKEW_TOLERANCE_MS) return '—';
-    return formatHeartbeatAge(deltaMs);
-  });
 }

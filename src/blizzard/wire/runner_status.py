@@ -32,8 +32,12 @@ class CapacitiesView(BaseModel):
 
 
 class HubConnectivityView(BaseModel):
-    """Hub reachability (derived, not probed) plus the outbound backlog depth."""
+    """Hub reachability (derived, not probed) plus the outbound backlog depth.
 
+    ``endpoint`` is the configured hub base URL (``RunnerConfig.hub_url``) — the
+    local panel's link out to the fleet board; connectivity facts, not a probe."""
+
+    endpoint: str
     reachable: bool
     last_contact_at: str | None
     buffer_depth: int
@@ -113,3 +117,23 @@ class OpenTakeoverListResponse(BaseModel):
     """Every takeover still open across this runner's held chunks."""
 
     items: list[OpenTakeoverView] = []
+
+
+class FactView(BaseModel):
+    """One hub-bound fact off the runner store's outbound buffer — ``GET /api/facts``.
+
+    The local fact log: the record itself minus its JSON ``payload`` (the panel
+    reads the ledger, not the bodies). ``acked_at`` null means still buffered."""
+
+    seq: int
+    kind: str
+    chunk_id: str | None
+    lease_id: str | None
+    created_at: str
+    acked_at: str | None
+
+
+class FactListResponse(BaseModel):
+    """The most recent hub-bound facts, newest first."""
+
+    items: list[FactView] = []
