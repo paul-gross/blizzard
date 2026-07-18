@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Blizzard "drift": wind-driven work — tasks streaming from the hub to agents -->
+  <g stroke-linecap="round">
+    <line x1="10" y1="20" x2="38" y2="20" stroke="#f2b25c" stroke-width="3"/>
+    <circle cx="46" cy="20" r="3.4" fill="#5cd1e5"/>
+    <line x1="16" y1="32" x2="48" y2="32" stroke="#f2b25c" stroke-width="3"/>
+    <circle cx="56" cy="32" r="3.4" fill="#5cd1e5"/>
+    <line x1="8" y1="44" x2="32" y2="44" stroke="#f2b25c" stroke-width="3"/>
+    <circle cx="40" cy="44" r="3.4" fill="#5cd1e5"/>
+    <line x1="26" y1="8" x2="26" y2="14" stroke="#8f7548" stroke-width="2.4" opacity="0.9"/>
+    <line x1="40" y1="52" x2="40" y2="57" stroke="#8f7548" stroke-width="2.4" opacity="0.9"/>
+  </g>
+</svg>
