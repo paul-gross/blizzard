@@ -6,8 +6,9 @@
 #   ruff format --check · ruff check · pyright · pytest (unit + component)
 #   · OpenAPI spec drift · eslint · vitest · structural gate · generated-client drift
 #
-# Invoke as `mise run gate` or `./scripts/ci-gate.sh`. Frontend steps are a
-# clearly-labeled no-op until the P5 frontend workspace lands (see WEB_DIR).
+# Invoke as `mise run gate` or `./scripts/ci-gate.sh`. Frontend steps run live
+# against the Angular workspace at $WEB_DIR, guarded only so a checkout without
+# it (e.g. a stripped-down clone) still gets a green no-op.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -43,11 +44,11 @@ if ! git diff --quiet -- openapi/; then
 fi
 echo "OK: committed OpenAPI specs match the exporter."
 
-# --- Frontend: eslint + vitest + generated-client drift ----------------------
-# Declared interface (P5 frontend builder owns it; integrate reconciles exact
-# names): $WEB_DIR is the Angular workspace with `npm run lint` (eslint),
-# `npm run test` (vitest), and `npm run generate:client` (openapi-ts codegen of
-# the committed client). Guarded so its absence is a green no-op today.
+# --- Frontend: eslint + vitest + structural gate + generated-client drift ---
+# $WEB_DIR is the Angular workspace with `npm run lint` (eslint), `npm run test`
+# (vitest), `npm run structural-gate` (chrome-duplication + max-lines sweep),
+# and `npm run generate:client` (openapi-ts codegen of the committed client).
+# Guarded so a checkout without $WEB_DIR is still a green no-op.
 if [ -f "$WEB_DIR/package.json" ]; then
   # `npm ci` wipes node_modules and reinstalls even when nothing changed —
   # minutes on a cold cache. The install is a pure function of the lockfile, so

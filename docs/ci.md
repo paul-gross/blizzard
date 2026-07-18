@@ -24,12 +24,10 @@ external package-index publish.
 
 ### Pending pieces, named not hidden
 
-- **Frontend gate steps** (eslint, vitest, generated-client drift) and the
-  frontend half of the build activate when the P5 frontend builder lands the
-  Angular workspace at `web/` with `npm run lint`, `npm run test`, and
-  `npm run generate:client`. Until then each is a clearly-labeled no-op. The
-  path and script names are the declared interface; the P5 integrate step
-  reconciles them.
+- **Frontend gate steps** (eslint, vitest, the structural gate, and
+  generated-client drift) are live: the `frontend` job runs `npm run lint`,
+  `npm run test`, `npm run structural-gate`, and `npm run generate:client`
+  against the `web/` Angular workspace on every push.
 - **Service tier and crash sweep** are real gate jobs as of P6/P7: `pr.yml` and
   `push.yml` both run them (via `upper-tiers.yml`) at the bounded CI crash-sweep
   profile, and `release.yml` runs them at full strength. Only the **e2e tier**
@@ -71,7 +69,7 @@ uv run ruff check .                            # lint
 uv run pyright                                 # typecheck
 uv run pytest -n auto                          # unit + component tiers, parallel
 uv run blizzard-export-openapi --out-dir openapi && git diff --exit-code openapi/   # spec drift
-# frontend (once web/ lands): cd web && npm ci && npm run lint && npm run test && npm run generate:client && git diff --exit-code web/
+cd web && npm ci && npm run lint && npm run test && npm run structural-gate && npm run generate:client && git diff --exit-code web/   # frontend
 ```
 
 The `pr` and `push` workflows also run the service tier and the crash sweep's CI

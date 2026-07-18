@@ -1,16 +1,21 @@
 // @ts-check
 /*
- * The structural gate (issue #78, blizzard-harness bzh:frontend-kit) — the
- * tooled half of `blizzard-harness:/verification/blizzard.md`'s
- * `web:structural-gate` method.
+ * The structural gate (issue #78) — the tooled half of
+ * `blizzard-harness:/verification/blizzard.md`'s `web:structural-gate`
+ * method.
  *
  * Two halves, both live:
  *
- *   1. The chrome-duplication sweep: the retired `.panel`/`.p-hdr`/
- *      `.p-body`/`.status`/`.lbl` chrome-class blocks — the copy-pasted panel
- *      shell and async-state styling the `fleet/lib/kit/` components now own
- *      — come up empty in every component style outside the kit directory.
- *   2. A `max-lines` ceiling (the ~400-line cap) over every Angular component
+ *   1. The chrome-duplication sweep (blizzard-harness bzh:frontend-kit): the
+ *      retired `.panel`/`.p-hdr`/`.p-body`/`.status`/`.lbl` chrome-class
+ *      blocks — the copy-pasted panel shell and async-state styling the
+ *      `fleet/lib/kit/` components now own — come up empty in every
+ *      component style outside the kit directory. The sweep only scans
+ *      inline `styles: \`...\`` template literals (the codebase uses inline
+ *      component styles exclusively); a separate `styleUrls` file would be
+ *      outside this coverage.
+ *   2. A `max-lines` ceiling (the ~400-line cap, blizzard-harness
+ *      bzh:frontend-container-presentational) over every Angular component
  *      file (one declaring `@Component(`) — armed in phase 3 (#80) now that
  *      the chunk-detail decomposition (#79) and the panel splits (#80) have
  *      brought every in-scope file under the cap. `board-shell.ts` is a
@@ -53,7 +58,7 @@ const EXEMPT_FILES = [
 ];
 
 /** The `max-lines` ceiling every Angular component file is held to (the
- * ~400-line cap, blizzard-harness `bzh:frontend-kit`). */
+ * ~400-line cap, blizzard-harness `bzh:frontend-container-presentational`). */
 const MAX_LINES = 400;
 
 /**
@@ -63,7 +68,10 @@ const MAX_LINES = 400;
  * - `board-shell.ts` (437 lines) predates this half's arming and is outside
  *   both #79's (chunk-detail) and #80's (runner/queue/questions/local-panel)
  *   file lists — shrinking it is a standing gap for a future pass, not
- *   silently exempted by omission.
+ *   silently exempted by omission. `BoardShell` is already presentational
+ *   (not a container split), so the follow-up it needs is a further
+ *   presentational sub-view extraction — e.g. a board-card child — not a
+ *   container/presentational split.
  */
 const MAX_LINES_EXEMPT_FILES = [path.join('fleet', 'src', 'lib', 'board-shell', 'board-shell.ts')];
 
