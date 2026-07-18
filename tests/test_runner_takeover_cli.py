@@ -58,6 +58,7 @@ def test_takeover_execs_the_command_and_marks_it_ended(tmp_path: Path, monkeypat
     calls: list[tuple[str, bool, str]] = []
 
     def fake_call(command: str, shell: bool = False, cwd: str | None = None) -> int:
+        assert cwd is not None
         calls.append((command, shell, cwd))
         return 0
 
