@@ -36,6 +36,50 @@ interface RunnerEvent {
 }
 type HubEventPayload = Partial<ChunkChanged & QuestionEvent & DecisionEvent & RunnerEvent>;
 
+/** One of the named event types the hub broadcasts ({@link HUB_EVENT_TYPES}). */
+export type HubEventType = (typeof HUB_EVENT_TYPES)[number];
+
+/** A chunk-changed frame invalidates the fleet list, the ready queue (a status flip
+ * can add or remove a chunk from it), that chunk's own detail when the payload names
+ * one, and the fleet spend-since read: usage rides the same fact a chunk-changed
+ * reports (issue #60), so a chunk's derived cost total and the fleet-wide spend both
+ * derive from it — the prefix key closes every cached window. */
+function chunkChangedKeys(data: HubEventPayload): readonly (readonly unknown[])[] {
+  return [hubChunksKey, hubQueueKey, ...(data.chunk_id ? [hubChunkKey(data.chunk_id)] : []), hubFleetSpendKey];
+}
+
+/** A question-asked/-answered frame invalidates the fleet-wide ask list (the right
+ * rail surfaces an ask on a chunk nobody has selected, so it cannot ride on the
+ * chunk's own detail read), the fleet list, and that chunk's detail when named —
+ * both flip the derived status to/from `waiting_on_human`. */
+function chunkQuestionKeys(data: HubEventPayload): readonly (readonly unknown[])[] {
+  return [hubQuestionsKey, hubChunksKey, ...(data.chunk_id ? [hubChunkKey(data.chunk_id)] : [])];
+}
+
+/** A decision-opened/-resolved frame invalidates the fleet list and that chunk's
+ * detail when named — same status-flip reasoning as {@link chunkQuestionKeys}. */
+function chunkDecisionKeys(data: HubEventPayload): readonly (readonly unknown[])[] {
+  return [hubChunksKey, ...(data.chunk_id ? [hubChunkKey(data.chunk_id)] : [])];
+}
+
+/**
+ * The event → query-key invalidation registry (issue #82) — the single place a live
+ * event names what it stales, so wiring a new live feature into the SSE spine is
+ * adding a row here, not a `case` in {@link FleetLiveUpdates.dispatch}. Exhaustive
+ * over {@link HubEventType} (a compile-time guard, same intent as `STATUS_LANE`): a
+ * new event type added to {@link HUB_EVENT_TYPES} is then a compile error here until
+ * it is given a row, instead of silently dispatching to nothing.
+ */
+const EVENT_INVALIDATION_REGISTRY: Record<HubEventType, (data: HubEventPayload) => readonly (readonly unknown[])[]> = {
+  'chunk-changed': chunkChangedKeys,
+  'question-asked': chunkQuestionKeys,
+  'question-answered': chunkQuestionKeys,
+  'decision-opened': chunkDecisionKeys,
+  'decision-resolved': chunkDecisionKeys,
+  'queue-changed': () => [hubQueueKey],
+  'runner-changed': () => [hubRunnersKey],
+};
+
 /**
  * One event recorded for the Event log feed (issue #25): its stream arrival order
  * (`seq` — a stable, monotonic client key), its board vocabulary `type`, the parsed
@@ -62,13 +106,8 @@ const LOG_LIMIT = 256;
  * keeps streaming while the cache stays truthful. It is the sanctioned bridge from
  * the {@link SseService} transport to the query cache — the one place SSE meets reads.
  *
- * - a `chunk-changed` invalidates the fleet list, that chunk's detail, and the queue
- *   (a status flip can add or remove a chunk from the ready queue), plus the fleet
- *   spend-since read (issue #60) — a chunk's derived cost total and the fleet-wide
- *   spend both derive from the same usage facts, so a chunk-changed re-queries both;
- * - question/decision events invalidate that chunk's detail and the list (they flip
- *   the derived status to/from `waiting_on_human`);
- * - `queue-changed` re-peeks the queue; `runner-changed` re-reads the registry.
+ * `dispatch` is a lookup into {@link EVENT_INVALIDATION_REGISTRY}, not a per-event
+ * branch — see that registry's doc for what each event type stales.
  *
  * Gap recovery is reconnect-then-re-GET: on every reconnect the service invalidates
  * the whole `hub` tree, so any events missed while the socket was down are closed by
@@ -149,39 +188,9 @@ export class FleetLiveUpdates {
   }
 
   private dispatch(type: string, data: HubEventPayload): void {
-    const invalidate = (queryKey: readonly unknown[]): void => {
+    const keys = EVENT_INVALIDATION_REGISTRY[type as HubEventType]?.(data) ?? [];
+    for (const queryKey of keys) {
       void this.queryClient.invalidateQueries({ queryKey });
-    };
-    switch (type) {
-      case 'chunk-changed':
-        invalidate(hubChunksKey);
-        invalidate(hubQueueKey);
-        if (data.chunk_id) invalidate(hubChunkKey(data.chunk_id));
-        // Usage rides the same fact, so a chunk's cost total and the fleet-wide spend
-        // derive from it too (issue #60) — the prefix key closes every cached window.
-        invalidate(hubFleetSpendKey);
-        break;
-      case 'question-asked':
-      case 'question-answered':
-        // The fleet-wide ask list too: the right rail surfaces an ask on a chunk
-        // nobody has selected, so it cannot ride on the chunk's own detail read.
-        invalidate(hubQuestionsKey);
-        invalidate(hubChunksKey);
-        if (data.chunk_id) invalidate(hubChunkKey(data.chunk_id));
-        break;
-      case 'decision-opened':
-      case 'decision-resolved':
-        invalidate(hubChunksKey);
-        if (data.chunk_id) invalidate(hubChunkKey(data.chunk_id));
-        break;
-      case 'queue-changed':
-        invalidate(hubQueueKey);
-        break;
-      case 'runner-changed':
-        invalidate(hubRunnersKey);
-        break;
-      default:
-        break;
     }
   }
 }

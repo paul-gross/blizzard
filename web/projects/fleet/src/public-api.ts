@@ -5,82 +5,31 @@
  * the generated API clients live here once so both the hub app and the runner
  * app compose them. The two generated clients are re-exported under namespaces because
  * the hub and runner SDKs share operation names (e.g. `healthApiHealthGet`).
+ *
+ * This barrel (issue #82) is deliberately thin: every feature directory under `lib/`
+ * owns its own `index.ts` sub-barrel — including the domain view types it re-exports
+ * from the generated hub client — and is re-exported here one line each, so two
+ * features landing in parallel touch different sub-barrels instead of colliding on
+ * this file (`architecture/frontend-structure.md`'s disjoint-diffs mechanism). Only
+ * what has no single feature owner — the query-key registry and the generated-client
+ * surface itself — stays exported directly at root.
  */
 
-export { KitPanel } from './lib/kit/kit-panel';
-export { KitAsyncState, type KitAsyncStateValue } from './lib/kit/kit-async-state';
-export { KitBadge } from './lib/kit/kit-badge';
-export { KitButton } from './lib/kit/kit-button';
-export { KitChip, KitChips, type KitChipOption } from './lib/kit/kit-chips';
-export type { Tone } from './lib/kit/tone';
-
-export { BoardHeader } from './lib/board-header/board-header';
-export { BrandMark } from './lib/design/brand-mark';
-export { BoardShell } from './lib/board-shell/board-shell';
-export { compactRef, ENTITY_DISPLAY, type EntityDisplay } from './lib/compact-ref';
-export { formatCost, formatTokens } from './lib/cost-format';
-export { formatWhen, formatAge, formatHeldFor, ageMs, formatUtcClock, SKEW_TOLERANCE_MS } from './lib/when';
-export { LANES, STATUS_LANE, STATUS_TONE, laneFor, type Lane } from './lib/chunk-lanes';
-export type { BoardCard } from './lib/board-shell/board-shell';
-export { ChunkDetailPanel } from './lib/chunk-detail/chunk-detail-panel';
-export type { AnswerQuestionEvent, ResolveDecisionEvent } from './lib/chunk-detail/chunk-detail-panel';
-export { ChunkDetail } from './lib/chunk-detail/chunk-detail';
-export { EventLogPanel } from './lib/event-log/event-log-panel';
-export { QueuePanel } from './lib/queue/queue-panel';
-export { RunnerPanel } from './lib/runners/runner-panel';
-export { QuestionsPanel } from './lib/questions/questions-panel';
-export { GraphExplorer } from './lib/graphs/graph-explorer';
-export { GraphDetail } from './lib/graphs/graph-detail';
-export { GraphDiagram, GRAPH_LAYOUT, GRAPH_TEXT_MEASURER } from './lib/graphs/graph-diagram';
-export {
-  layoutGraph,
-  type LayoutOutcome,
-  type LaidOutGraph,
-  type LaidOutNode,
-  type LaidOutEdge,
-  type LaidOutSelfLoop,
-  type LaidOutLabel,
-  type LaidOutDone,
-  type EdgeKind,
-  type TextMeasurer,
-  type TextKind,
-} from './lib/graphs/graph-layout';
-
-export {
-  SseService,
-  EVENT_SOURCE_FACTORY,
-  backoffDelay,
-  withLastEventId,
-  type EventSourceFactory,
-  type SseBackoff,
-  type SseConnectOptions,
-  type SseEvent,
-  type SseHandle,
-  type SseStatus,
-} from './lib/sse/sse.service';
-export { FleetLiveUpdates, HUB_EVENT_STREAM_URL, HUB_EVENT_TYPES, type LoggedEvent } from './lib/sse/fleet-live';
-
-export { injectHubHealthQuery } from './lib/health/health.query';
-export { injectHubChunksQuery } from './lib/chunks/chunks.query';
-export { injectHubChunkDetailQuery } from './lib/chunks/chunk-detail.query';
-export { injectAnswerQuestionMutation, injectResolveDecisionMutation } from './lib/chunks/human.mutations';
-export type { AnswerVars, ResolveVars } from './lib/chunks/human.mutations';
-export { injectDetachChunkMutation } from './lib/chunks/detach.mutations';
-export type { DetachVars } from './lib/chunks/detach.mutations';
-
-export { injectPromoteChunkMutation } from './lib/chunks/promote.mutations';
-export type { PromoteVars } from './lib/chunks/promote.mutations';
-export { injectChunkPauseMutation } from './lib/chunks/pause.mutations';
-export type { ChunkPauseVars } from './lib/chunks/pause.mutations';
-export { injectHubQueueQuery } from './lib/queue/queue.query';
-export { injectReorderQueueMutation, injectGroupChunksMutation } from './lib/queue/queue.mutations';
-export type { ReorderVars, GroupVars } from './lib/queue/queue.mutations';
-export { injectHubRunnersQuery } from './lib/runners/runners.query';
-export { injectRunnerPauseMutation } from './lib/runners/runners.mutations';
-export type { RunnerPauseVars } from './lib/runners/runners.mutations';
-export { injectHubQuestionsQuery } from './lib/questions/questions.query';
-export { injectHubFleetSpendQuery } from './lib/fleet-spend/fleet-spend.query';
-export { injectHubGraphsQuery, injectHubGraphQuery } from './lib/graphs/graphs.query';
+export * from './lib/kit';
+export * from './lib/design';
+export * from './lib/format';
+export * from './lib/board-header';
+export * from './lib/board-shell';
+export * from './lib/chunk-detail';
+export * from './lib/event-log';
+export * from './lib/queue';
+export * from './lib/runners';
+export * from './lib/questions';
+export * from './lib/graphs';
+export * from './lib/sse';
+export * from './lib/health';
+export * from './lib/fleet-spend';
+export * from './lib/chunks';
 
 export {
   hubHealthKey,
@@ -92,27 +41,6 @@ export {
   hubGraphsKey,
   hubGraphKey,
 } from './lib/query-keys';
-
-export type {
-  ChunkSummary,
-  ChunkStatus,
-  ChunkDetail as ChunkDetailModel,
-  TransitionView,
-  ArtifactView,
-  DecisionView,
-  QuestionView,
-  EscalationView,
-  QueuePeekEntry,
-  RunnerView,
-  ChunkUsageTotalView,
-  ChunkUsageView,
-  FleetSpendView,
-  GraphSummaryView,
-  GraphView,
-  GraphNodeView,
-  GraphEdgeView,
-  GraphChoiceView,
-} from './lib/api/hub';
 
 export * as hubApi from './lib/api/hub';
 export * as runnerApi from './lib/api/runner';
