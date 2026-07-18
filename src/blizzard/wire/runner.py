@@ -7,6 +7,10 @@ The registry surface the CLI's fleet verbs, the board, and the runners themselve
 ``/resume``); and the runner reads its own declarative state back on its pull
 (``GET /runners/{id}``). ``online`` and ``paused`` are **derived** — liveness
 from ``last_seen_at`` against the staleness threshold, paused from the newest pause fact.
+
+``POST /runners/{id}/enrollments`` (issue #86a) mints or rotates the runner's bearer
+token, returning :class:`RunnerEnrollmentResponse` — the one response that ever carries
+the plaintext.
 """
 
 from __future__ import annotations
@@ -26,6 +30,17 @@ class RunnerRegistrationResponse(BaseModel):
 
     runner_id: str
     first_registration: bool
+
+
+class RunnerEnrollmentResponse(BaseModel):
+    """A freshly minted (or rotated) bearer token — issue #86a.
+
+    ``token`` is the plaintext; the hub keeps only its sha256 hash from here on, so
+    this response is the one and only place it is ever visible again. A re-enroll
+    call rotates: the old token stops resolving the moment this response lands."""
+
+    runner_id: str
+    token: str
 
 
 class RunnerView(BaseModel):

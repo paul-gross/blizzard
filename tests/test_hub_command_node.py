@@ -475,7 +475,7 @@ def _to_merge_node(hub, pointer=_POINTER, graph_yaml: str = _HUB_CMD_GRAPH_YAML)
     chunk_id = resp.json()["chunk_id"]
     assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
     claim = hub.client.post(
-        "/api/routes",
+        "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["env-a"]},
     )
     assert claim.status_code == 201, claim.text
@@ -490,7 +490,7 @@ def _to_merge_node(hub, pointer=_POINTER, graph_yaml: str = _HUB_CMD_GRAPH_YAML)
 
 def _submit_build_pass(hub, chunk_id: str, build_node_id: str, epoch: int):  # type: ignore[no-untyped-def]
     return hub.client.post(
-        f"/api/chunks/{chunk_id}/completions",
+        f"/api/fleet/chunks/{chunk_id}/completions",
         json={
             "choice": "pass",
             "epoch": epoch,
@@ -590,7 +590,7 @@ def _submit_build_pass_with_commit(hub, chunk_id: str, build_node_id: str, epoch
     ``repo`` — the shape a hub node's kick-back accounting reads to tell a genuine
     delivery attempt (#64) from a bare hub-command smoke test."""
     return hub.client.post(
-        f"/api/chunks/{chunk_id}/completions",
+        f"/api/fleet/chunks/{chunk_id}/completions",
         json={
             "choice": "pass",
             "epoch": epoch,
@@ -754,7 +754,7 @@ def test_hub_advance_endpoint_no_ops_off_a_non_hub_command_node(tmp_path: Path) 
     assert hub.client.post("/api/graphs", json={"definition_yaml": _HUB_CMD_GRAPH_YAML}).status_code == 201
     resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]})
     chunk_id = resp.json()["chunk_id"]
-    result = hub.client.post(f"/api/chunks/{chunk_id}/hub-advance")
+    result = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
     assert result.status_code == 200
     assert result.json()["ran"] is False
 
@@ -784,7 +784,7 @@ def test_serialization_barrier_two_chunks_never_run_hub_commands_concurrently(tm
         chunk_id = resp.json()["chunk_id"]
         assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
         claim = hub.client.post(
-            "/api/routes",
+            "/api/fleet/routes",
             json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["env-a"]},
         )
         build_node_id = claim.json()["envelope"]["node"]["node_id"]
@@ -907,7 +907,7 @@ def _to_poll_merge_node(hub, pointer):  # type: ignore[no-untyped-def]
     chunk_id = resp.json()["chunk_id"]
     assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
     claim = hub.client.post(
-        "/api/routes",
+        "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["env-a"]},
     )
     assert claim.status_code == 201, claim.text
@@ -960,12 +960,12 @@ def test_hub_advance_respects_the_poll_interval_then_succeeds(tmp_path: Path) ->
     assert len(runner.calls) == 1
 
     # Not yet due (poll_interval: 30) — hub-advance no-ops, the command does not re-run.
-    too_soon = hub.client.post(f"/api/chunks/{chunk_id}/hub-advance")
+    too_soon = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
     assert too_soon.json()["ran"] is False
     assert len(runner.calls) == 1
 
     hub.clock.advance(timedelta(seconds=31))
-    due = hub.client.post(f"/api/chunks/{chunk_id}/hub-advance")
+    due = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
     assert due.json()["ran"] is True
     assert due.json()["outcome_choice"] == "success"
     assert len(runner.calls) == 2
@@ -1017,14 +1017,14 @@ def test_poll_timeout_routes_the_failure_edge_via_the_kickback_path(tmp_path: Pa
     assert apply.json()["outcome"] == "hub_node_taken"  # poll #1 at t0
 
     hub.clock.advance(timedelta(seconds=31))
-    hub.client.post(f"/api/chunks/{chunk_id}/hub-advance")  # poll #2 at t0+31
+    hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")  # poll #2 at t0+31
     hub.clock.advance(timedelta(seconds=31))
-    hub.client.post(f"/api/chunks/{chunk_id}/hub-advance")  # poll #3 at t0+62
+    hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")  # poll #3 at t0+62
     assert len(runner.calls) == 3
 
     # poll_timeout: 90, measured from the FIRST poll (t0) — elapsed is now 62 + 31 = 93 >= 90.
     hub.clock.advance(timedelta(seconds=31))
-    timed_out = hub.client.post(f"/api/chunks/{chunk_id}/hub-advance")
+    timed_out = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
     assert timed_out.json()["ran"] is True
     assert timed_out.json()["outcome_choice"] == "failure"
     # The command itself is NOT re-run a 4th time — the timeout check pre-empts it.
@@ -1052,7 +1052,7 @@ def test_poll_timeout_escalates_once_the_bounce_cap_is_crossed(tmp_path: Path) -
     chunk_id = resp.json()["chunk_id"]
     assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
     claim = hub.client.post(
-        "/api/routes",
+        "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["env-a"]},
     )
     build_node_id = claim.json()["envelope"]["node"]["node_id"]
@@ -1061,7 +1061,7 @@ def test_poll_timeout_escalates_once_the_bounce_cap_is_crossed(tmp_path: Path) -
     # Bounce #1 (poll_timeout: 30, one poll at t0 then straight past the bound).
     _submit_build_pass(hub, chunk_id, build_node_id, 1)
     hub.clock.advance(timedelta(seconds=31))
-    first_timeout = hub.client.post(f"/api/chunks/{chunk_id}/hub-advance")
+    first_timeout = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
     assert first_timeout.json()["outcome_choice"] == "failure"
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "running"  # below the cap (1) — routed back, not escalated
@@ -1077,7 +1077,7 @@ def test_poll_timeout_escalates_once_the_bounce_cap_is_crossed(tmp_path: Path) -
     second_build_node = hub.client.get(f"/api/chunks/{chunk_id}").json()["current_node_id"]
     _submit_build_pass(hub, chunk_id, second_build_node, 2)
     hub.clock.advance(timedelta(seconds=31))
-    second_timeout = hub.client.post(f"/api/chunks/{chunk_id}/hub-advance")
+    second_timeout = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
     assert second_timeout.json()["outcome_choice"] == "failure"
     detail2 = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail2["status"] == "needs_human"

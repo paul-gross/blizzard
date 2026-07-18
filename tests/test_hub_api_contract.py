@@ -24,18 +24,32 @@ _NEW_PATHS = [
     "/api/graphs",
     "/api/chunks",
     "/api/chunks/{chunk_id}",
-    "/api/chunks/{chunk_id}/envelope",
-    "/api/chunks/{chunk_id}/completions",
     "/api/chunks/{chunk_id}/pm-items",
     "/api/queue/peek",
     "/api/queue/reorder",
     "/api/chunks/{chunk_id}/group",
-    "/api/routes",
     "/api/runners",
-    "/api/runners/{runner_id}",
-    "/api/runners/{runner_id}/heartbeats",
     "/api/runners/{runner_id}/pause",
     "/api/runners/{runner_id}/resume",
+    "/api/runners/{runner_id}/enrollments",
+    "/api/spend",
+    # The runner-authenticated fleet router (issue #87) — mounted once with
+    # `require_runner_principal` at router level.
+    "/api/fleet/queue/peek",
+    "/api/fleet/chunks/{chunk_id}",
+    "/api/fleet/chunks/{chunk_id}/pm-items",
+    "/api/fleet/chunks/{chunk_id}/envelope",
+    "/api/fleet/chunks/{chunk_id}/completions",
+    "/api/fleet/chunks/{chunk_id}/decisions",
+    "/api/fleet/chunks/{chunk_id}/leases",
+    "/api/fleet/chunks/{chunk_id}/escalations",
+    "/api/fleet/questions/{question_id}",
+    "/api/fleet/events",
+    "/api/fleet/routes",
+    "/api/fleet/runners",
+    "/api/fleet/runners/{runner_id}",
+    "/api/fleet/runners/{runner_id}/heartbeats",
+    "/api/fleet/chunks/{chunk_id}/hub-advance",
 ]
 
 
@@ -60,5 +74,5 @@ def test_store_free_app_reports_fleet_routes_unwired() -> None:
 def test_missing_body_is_422_on_a_wired_route(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     # A body-less POST to a body-taking route fails validation against the wire model.
-    assert hub.client.post("/api/routes", json={}).status_code == 422
+    assert hub.client.post("/api/fleet/routes", json={}).status_code == 422
     assert hub.client.post("/api/chunks", json={}).status_code == 422

@@ -57,9 +57,9 @@ import httpx
 import pytest
 import uvicorn
 
-from blizzard.hub.config import PmSourceConfig
+from blizzard.hub.config import HubConfig, PmSourceConfig
 from blizzard.runner.app import build_hosted_app
-from blizzard.runner.config import RunnerConfig
+from blizzard.runner.config import ENV_TRANSCRIPTS_ROOT, RunnerConfig
 from blizzard.runner.loop.build import run_single_tick
 from blizzard.runner.runtime import init_environment as init_runner_environment
 from tests.support import write_pm_sources
@@ -84,6 +84,20 @@ REPO = f"{OWNER}/{REPO_NAME}"
 # INNER env (``e1``, the runner's default pool) inside the fixture workspace.
 FIXTURE_ENV = "e2e"
 RUNNER_ENV = "e1"
+
+# The mock harness's fence var (``blizzard_mock.harness.engine.FENCE_ENV_VAR``):
+# scaffolding sets it in the daemon's own ``os.environ`` before driving a tick, and the
+# adapter's spawn-environment allowlist (issue #88) only forwards it to the child because
+# every scenario's ``_runner_config``/``write_runner_config`` declares it in
+# ``worker_env_passthrough`` — the deliberate, test-only counterpart of the real
+# fleet's ``[worker] env_passthrough``.
+MOCK_HARNESS_FENCE_VAR = "BLIZZARD_MOCK_HARNESS_FENCE"
+# The vars every scripted mock-fleet scenario's worker child needs — the mock façade
+# reads its own fence plus (when a scenario overrides it) the transcripts-root
+# location straight from its process env (``blizzard_mock.harness.facades._transcript
+# .transcripts_root``), so both ride the allowlist's operator-extension knob rather
+# than the base allowlist growing mock-only names.
+MOCK_HARNESS_ENV_PASSTHROUGH = (MOCK_HARNESS_FENCE_VAR, ENV_TRANSCRIPTS_ROOT)
 
 # The env var every scenario's ``[[pm_source]]`` names as its credential —
 # a dummy value suffices, since the mock forge checks no token.
@@ -286,7 +300,7 @@ def _forge(bin_dir: Path, origins: Path, port: int) -> Iterator[httpx.Client]:
 
 
 @contextlib.contextmanager
-def _hub(hub_dir: Path, forge_port: int, port: int) -> Iterator[httpx.Client]:
+def _hub(hub_dir: Path, forge_port: int, port: int, *, route_token_mode: str | None = None) -> Iterator[httpx.Client]:
     env = {
         **os.environ,
         "BZ_FORGE_URL": f"http://127.0.0.1:{forge_port}",
@@ -309,6 +323,13 @@ def _hub(hub_dir: Path, forge_port: int, port: int) -> Iterator[httpx.Client]:
             )
         ],
     )
+    if route_token_mode is not None:
+        # issue #84b — the route-token enforcement brake, a separate flag from
+        # runner_auth_mode; a service-tier scenario proving `enforce` end to end sets
+        # this before the daemon starts (the config is read once, at `host` startup).
+        config = HubConfig.load(hub_dir)
+        config = dataclasses.replace(config, route_token_mode=route_token_mode)
+        config.config_path.write_text(config.to_toml())
     proc = subprocess.Popen(
         [hub_bin, "host", "--dir", str(hub_dir), "--host", "127.0.0.1", "--port", str(port)],
         env=env,
@@ -435,6 +456,11 @@ def _runner_config(runner_dir: Path, workspace: Path, bin_dir: Path, hub_port: i
         # (``bypassPermissions``): None omits the flag so the mock is unaffected.
         harness_permission_mode=None,
         base_branch="main",
+        # The adapter's spawn-environment allowlist (issue #88) forwards only what is
+        # declared here — the mock's fence var and transcripts-root override are not real
+        # fleet needs, so they ride the same operator extension knob a real deployment
+        # would use for its own harness quirks.
+        worker_env_passthrough=MOCK_HARNESS_ENV_PASSTHROUGH,
     )
 
 

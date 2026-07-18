@@ -22,8 +22,10 @@ from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import ARTIFACT_PREFIX, DECISION_PREFIX, mint
+from blizzard.hub.config import ROUTE_TOKEN_WARN
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.graph import Graph
+from blizzard.hub.domain.route_auth import check_route_token
 from blizzard.hub.domain.work import (
     Chunk,
     ChunkStatus,
@@ -64,7 +66,9 @@ class DecisionService:
         self._chunks = chunks
         self._clock = clock
 
-    def submit(self, chunk: Chunk, graph: Graph, submission: DecisionSubmission) -> ApplyResponse:
+    def submit(
+        self, chunk: Chunk, graph: Graph, submission: DecisionSubmission, *, route_token_mode: str = ROUTE_TOKEN_WARN
+    ) -> ApplyResponse:
         """Runner-config gate: park the chunk on a decision instead of transitioning."""
         node = graph.node_by_id(submission.from_node_id)
         if node is None:
@@ -72,14 +76,29 @@ class DecisionService:
         if not node.choices:
             return _failure(f"node {node.name} has no choices to gate")
 
+        facts = self._chunks.load_facts(chunk.chunk_id)
+        if facts is None:
+            return _failure(f"unknown chunk {chunk.chunk_id}")
+
+        # Route-token authorization (issue #84b) — same order and rationale as
+        # ``apply.py``'s own check: ahead of the idempotent-replay probe (a
+        # post-release zombie's replayed decision is rejected too) and the epoch fence.
+        route = self._chunks.route_of(chunk.chunk_id)
+        detail = check_route_token(
+            facts,
+            presented_token=submission.route_token,
+            submission_runner_id=submission.runner_id,
+            route_runner_id=route.runner_id if route is not None else None,
+            mode=route_token_mode,
+        )
+        if detail is not None:
+            return _failure(detail)
+
         # Idempotent replay: a decision already open at this (node, epoch) — a
         # lost-ack re-submission — returns the parked outcome without a second row.
         if self._chunks.find_decision(chunk.chunk_id, node_id=node.node_id, epoch=submission.epoch) is not None:
             return ApplyResponse(outcome=ApplyOutcome.PARKED_AT_GATE, detail=f"parked at gate `{node.name}`")
 
-        facts = self._chunks.load_facts(chunk.chunk_id)
-        if facts is None:
-            return _failure(f"unknown chunk {chunk.chunk_id}")
         if derive_chunk_status(facts) in _TERMINAL_STATUSES:
             return _failure("chunk is terminal")
         latest = latest_epoch(facts)

@@ -32,8 +32,10 @@ from datetime import datetime
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import as_utc
+from blizzard.hub.config import ROUTE_TOKEN_WARN
 from blizzard.hub.domain.registry import FleetService
-from blizzard.hub.domain.work import IWriteChunkRepository
+from blizzard.hub.domain.route_auth import check_route_token
+from blizzard.hub.domain.work import ChunkFacts, IWriteChunkRepository
 from blizzard.wire.facts import (
     ANSWER_DELIVERED,
     ESCALATION_RECORDED,
@@ -47,6 +49,13 @@ from blizzard.wire.facts import (
 )
 
 _log = get_logger("blizzard.hub.facts")
+
+# Chunk-scoped, fence-advancing/status-deriving kinds route-token-gated on intake
+# (issue #84b): a fabricated fact of one of these from a non-holder must not be able
+# to advance the fence or open a decision. `usage.recorded` is deliberately excluded —
+# see the code comment at its branch below. Runner-scoped kinds
+# (`runner.locally_paused`/`resumed`) carry no chunk_id and are never gated.
+_ROUTE_TOKEN_GATED_KINDS = frozenset({LEASE_MINTED, ESCALATION_RECORDED, QUESTION_ASKED})
 
 
 class RunnerFactsService:
@@ -78,7 +87,7 @@ class FactIngestService:
         self._fleet = fleet
         self._clock = clock
 
-    def ingest(self, batch: RunnerFactBatch) -> RunnerFactAck:
+    def ingest(self, batch: RunnerFactBatch, *, route_token_mode: str = ROUTE_TOKEN_WARN) -> RunnerFactAck:
         mark = self._chunks.runner_high_water(batch.runner_id)
         applied: list[int] = []
         already: list[int] = []
@@ -88,9 +97,10 @@ class FactIngestService:
             if fact.seq <= mark:
                 already.append(fact.seq)
                 continue
-            if not self._apply(batch.runner_id, fact.kind, fact.payload):
-                # An unknown kind is a contract mismatch, not an idempotency skip: do
-                # not advance the mark past it, and name it so the runner surfaces it.
+            if not self._apply(batch.runner_id, fact.kind, fact.payload, route_token_mode=route_token_mode):
+                # An unknown kind or a route-token rejection (issue #84b) is a contract
+                # mismatch, not an idempotency skip: do not advance the mark past it,
+                # and name it so the runner surfaces it.
                 rejected.append(fact.seq)
                 continue
             mark = fact.seq
@@ -114,8 +124,12 @@ class FactIngestService:
             rejected=rejected,
         )
 
-    def _apply(self, runner_id: str, kind: str, payload: dict[str, object]) -> bool:
+    def _apply(self, runner_id: str, kind: str, payload: dict[str, object], *, route_token_mode: str) -> bool:
         now = self._clock.now()
+        if kind in _ROUTE_TOKEN_GATED_KINDS:
+            chunk_id = _opt(payload.get("chunk_id"))
+            if chunk_id is None or not self._route_token_ok(chunk_id, runner_id, payload, mode=route_token_mode):
+                return False
         if kind == LEASE_MINTED:
             self._chunks.record_lease(
                 str(payload["chunk_id"]),
@@ -153,6 +167,15 @@ class FactIngestService:
             # whose epoch trails the chunk's latest is real spend a fenced-out zombie
             # attempt already incurred, and it must be attributed to *its own* epoch, not
             # dropped. The chunk-level total (derive_chunk_usage) sums every row regardless.
+            #
+            # Deliberately NOT route-token-gated either (issue #84b — do not add this kind
+            # to `_ROUTE_TOKEN_GATED_KINDS` above, notwithstanding issue #84's own
+            # acceptance-criterion list, which named `usage` among the chunk-scoped facts a
+            # non-holder's call should have rejected; that AC is overridden here). The same
+            # no-fence rationale two lines up applies to the token exactly as it does to the
+            # epoch: a fenced-out (or route-invalidated) zombie's real spend still happened
+            # and must still be attributed to its own epoch — epic #57/#60's cost figures
+            # depend on every incurred cost landing, not just the winning attempt's.
             self._chunks.record_usage(
                 str(payload["chunk_id"]),
                 node_id=str(payload["node_id"]),
@@ -189,6 +212,28 @@ class FactIngestService:
             return True
         _log.warning("unknown runner fact kind", kind=kind)
         return False
+
+    def _route_token_ok(self, chunk_id: str, runner_id: str, payload: dict[str, object], *, mode: str) -> bool:
+        """Route-token authorization for a chunk-scoped, fence-advancing fact (issue
+        #84b) — the buffered-push counterpart of ``apply.py``'s own check. A chunk the
+        hub has never minted (``load_facts`` returns ``None``, e.g. a malformed/stale
+        payload) falls back to an empty :class:`ChunkFacts`, which
+        :func:`check_route_token` already rejects as having no live route."""
+        facts = self._chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
+        route = self._chunks.route_of(chunk_id)
+        detail = check_route_token(
+            facts,
+            presented_token=_opt(payload.get("route_token")),
+            submission_runner_id=runner_id,
+            route_runner_id=route.runner_id if route is not None else None,
+            mode=mode,
+        )
+        if detail is not None:
+            _log.warning(
+                "route token check rejected buffered fact", chunk_id=chunk_id, runner_id=runner_id, detail=detail
+            )
+            return False
+        return True
 
 
 def _opt(value: object) -> str | None:

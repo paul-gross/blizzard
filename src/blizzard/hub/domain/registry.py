@@ -18,6 +18,16 @@ Two things derive over the registry, never stored as columns:
 clock. The :class:`RunnerRegistration` it returns already carries the **derived**
 ``paused`` (resolved in the store adapter, like a decision's resolved-ness); liveness is
 returned alongside it by the service because it needs the clock.
+
+``token_hash`` (issue #86a) is the one deliberate exception to facts-only
+(``bzh:facts-not-status``): the registration row is already a mutable upsert
+(``last_seen_at``/``workspace_id`` rewritten in place), so a rotating hash column is
+consistent with the rest of the row, unlike the route capability token (#84's
+append-only fact table) — a re-enrollment overwrites it, and the prior token stops
+resolving immediately. It is minted and rotated by the separate
+:class:`~blizzard.hub.domain.enrollment.RunnerEnrollmentService`, not
+:class:`FleetService`, since enrollment is an operator act on identity, not a fleet
+registration event.
 """
 
 from __future__ import annotations
@@ -67,6 +77,10 @@ class RunnerRegistration:
     locally_paused: bool = False
     locally_paused_by: str | None = None
     locally_paused_reason: str | None = None
+    #: The enrolled bearer token's sha256 hex digest (issue #86a) — ``None`` for an
+    #: unenrolled runner. Never the plaintext: the token is returned once, at enroll
+    #: time, and this is the only copy the hub ever keeps.
+    token_hash: str | None = None
 
 
 @dataclass(frozen=True)
@@ -94,6 +108,15 @@ class IReadRunnerRegistry(Protocol):
 
     def get_runner(self, runner_id: str) -> RunnerRegistration | None: ...
     def list_runners(self) -> list[RunnerRegistration]: ...
+
+    def registration_for_token_hash(self, token_hash: str) -> RunnerRegistration | None:
+        """The reverse, hash-indexed lookup a presented bearer token resolves through
+        (issue #86a) — the mirror image of every other read here, which key on
+        ``runner_id``. This is what ``require_runner_principal``
+        (``hub/api/auth.py``) resolves a principal with, from the token alone; a
+        router-level dependency cannot uniformly read a declared ``runner_id`` (it
+        lives in request bodies for some routes, path params for others)."""
+        ...
 
 
 class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
@@ -123,6 +146,17 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
 
         ``reason`` is the fact's own composed cause (issue #61) — ``None`` for a manual
         pause/start, and always ``None`` on a start (a resume carries no reason)."""
+        ...
+
+    def set_token_hash(self, runner_id: str, *, token_hash: str, at: datetime) -> None:
+        """Overwrite the registration's bearer-token hash (issue #86a) — a rotation, not
+        a fact append (the registration row is already a mutable upsert; see this
+        module's docstring). Re-enrolling a runner calls this again: the new hash
+        replaces the old one in place, so the prior token stops resolving via
+        ``registration_for_token_hash`` immediately. ``at`` is threaded from the
+        injected clock (``bzh:injected-clock``) for signature symmetry with this
+        seam's other writes; no separate rotation-audit column exists yet to stamp
+        it into."""
         ...
 
 

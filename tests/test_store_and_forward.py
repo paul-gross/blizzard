@@ -61,7 +61,7 @@ def _claim(hub) -> tuple[str, str]:  # type: ignore[no-untyped-def]
     assert hub.client.post("/api/graphs", json={"definition_yaml": _BUILD_DELIVER_YAML}).status_code == 201
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
     node_id = hub.client.post(
-        "/api/routes",
+        "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
     ).json()["envelope"]["node"]["node_id"]
     return chunk_id, node_id
@@ -99,7 +99,7 @@ def test_events_reack_is_idempotent_by_seq_high_water(tmp_path: Path) -> None:
     second = report_lease(hub, chunk_id, epoch=2, seq=2)
     assert second["applied"] == [2] and second["high_water"] == 2
     redrain = hub.client.post(
-        "/api/events",
+        "/api/fleet/events",
         json={
             "runner_id": "r1",
             "facts": [
@@ -118,7 +118,7 @@ def test_reflushed_completion_applies_exactly_once(tmp_path: Path) -> None:
     chunk_id, build_node_id = _claim(hub)
     report_lease(hub, chunk_id, epoch=1, seq=1)
 
-    first = hub.client.post(f"/api/chunks/{chunk_id}/completions", json=_completion(build_node_id, epoch=1))
+    first = hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(build_node_id, epoch=1))
     assert first.json()["outcome"] == "hub_node_taken"
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "done"
@@ -128,7 +128,7 @@ def test_reflushed_completion_applies_exactly_once(tmp_path: Path) -> None:
     # hub returns the original outcome from the idempotency probe — no second
     # transition, and the hub node does not re-run (the deliver->done transition never
     # double-records).
-    replay = hub.client.post(f"/api/chunks/{chunk_id}/completions", json=_completion(build_node_id, epoch=1))
+    replay = hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(build_node_id, epoch=1))
     assert replay.json()["outcome"] == "hub_node_taken"
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "done"
@@ -142,7 +142,7 @@ def test_escalation_fact_rides_events_and_derives_needs_human(tmp_path: Path) ->
     report_lease(hub, chunk_id, epoch=1, seq=1)
 
     push = hub.client.post(
-        "/api/events",
+        "/api/fleet/events",
         json={
             "runner_id": "r1",
             "facts": [{"seq": 2, "kind": "escalation.recorded", "payload": {"chunk_id": chunk_id, "epoch": 1}}],
@@ -153,7 +153,7 @@ def test_escalation_fact_rides_events_and_derives_needs_human(tmp_path: Path) ->
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "needs_human"
 
     replay = hub.client.post(
-        "/api/events",
+        "/api/fleet/events",
         json={
             "runner_id": "r1",
             "facts": [{"seq": 2, "kind": "escalation.recorded", "payload": {"chunk_id": chunk_id, "epoch": 1}}],

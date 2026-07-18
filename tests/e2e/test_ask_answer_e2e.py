@@ -297,7 +297,7 @@ def test_ask_parks_then_answer_resumes_session_to_done(tmp_path: Path) -> None:
             assert status == "done", f"chunk did not reach done after the answer (last status {status!r})"
 
         # Fleet truth: the answered question is closed.
-        assert hub.get(f"/api/questions/{question_id}").json()["answered"] is True
+        assert hub.get(f"/api/fleet/questions/{question_id}").json()["answered"] is True
         pulls = forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json()
         assert any(p.get("merged") for p in pulls), f"no PR merged at the forge: {pulls}"
 

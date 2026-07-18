@@ -235,6 +235,46 @@ def test_runner_ceiling_window_hours_defaults_when_ceiling_set_but_window_omitte
 
 
 @pytest.mark.unit
+def test_worker_env_passthrough_defaults_absent(tmp_path: Path) -> None:
+    # No `[worker]` table at all on a fresh scaffold — absent means no operator
+    # extension to the spawn-environment allowlist (issue #88).
+    assert RunnerConfig.scaffold(tmp_path).worker_env_passthrough == ()
+
+
+@pytest.mark.unit
+def test_worker_env_passthrough_absent_when_worker_table_omits_the_key(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    (root / "blizzard-runner.toml").write_text(f'db_url = "{RunnerConfig.default_db_url(root)}"\n\n[worker]\n')
+    assert RunnerConfig.load(root).worker_env_passthrough == ()
+
+
+@pytest.mark.unit
+def test_worker_env_passthrough_round_trips_through_to_toml_and_load(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    edited = RunnerConfig(
+        root=root,
+        db_url=RunnerConfig.default_db_url(root),
+        worker_env_passthrough=("MY_HARNESS_QUIRK", "ANOTHER_VAR"),
+    )
+    (root / "blizzard-runner.toml").write_text(edited.to_toml())
+    reloaded = RunnerConfig.load(root)
+    assert reloaded.worker_env_passthrough == ("MY_HARNESS_QUIRK", "ANOTHER_VAR")
+
+
+@pytest.mark.unit
+def test_worker_env_passthrough_parses_from_a_hand_written_worker_table(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    (root / "blizzard-runner.toml").write_text(
+        f'db_url = "{RunnerConfig.default_db_url(root)}"\n\n[worker]\nenv_passthrough = ["MY_HARNESS_QUIRK"]\n'
+    )
+    config = RunnerConfig.load(root)
+    assert config.worker_env_passthrough == ("MY_HARNESS_QUIRK",)
+
+
+@pytest.mark.unit
 def test_missing_workspace_prompt_file_raises(tmp_path: Path) -> None:
     from blizzard.runner.config import ConfigError
 
@@ -352,3 +392,156 @@ def test_pm_source_unknown_provider_raises(tmp_path: Path) -> None:
     )
     with pytest.raises(HubConfigError, match="jira"):
         HubConfig.load(root)
+
+
+# --------------------------------------------------------------------------- #
+# `runner_auth_mode` — the runner-authentication rollout brake (issue #86a).
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.unit
+def test_runner_auth_mode_defaults_to_warn(tmp_path: Path) -> None:
+    config = _hub_config(tmp_path)
+    assert config.runner_auth_mode == "warn"
+
+
+@pytest.mark.unit
+def test_runner_auth_mode_round_trips_through_to_toml_and_load(tmp_path: Path) -> None:
+    config = _hub_config(tmp_path)
+    config.config_path.write_text(config.to_toml())
+    loaded = HubConfig.load(config.root)
+    assert loaded.runner_auth_mode == "warn"
+
+    edited = dataclasses.replace(loaded, runner_auth_mode="enforce")
+    edited.config_path.write_text(edited.to_toml())
+    reloaded = HubConfig.load(edited.root)
+    assert reloaded.runner_auth_mode == "enforce"
+
+
+@pytest.mark.unit
+def test_runner_auth_mode_absent_from_toml_defaults_to_warn(tmp_path: Path) -> None:
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///x"\n')
+    assert HubConfig.load(root).runner_auth_mode == "warn"
+
+
+@pytest.mark.unit
+def test_runner_auth_mode_unknown_value_raises(tmp_path: Path) -> None:
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///x"\nrunner_auth_mode = "block"\n')
+    with pytest.raises(HubConfigError, match="runner_auth_mode"):
+        HubConfig.load(root)
+
+
+# --------------------------------------------------------------------------- #
+# `route_token_mode` — the route-capability-token rollout brake (issue #84b), a
+# separate flag from `runner_auth_mode` above.
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.unit
+def test_route_token_mode_defaults_to_warn(tmp_path: Path) -> None:
+    config = _hub_config(tmp_path)
+    assert config.route_token_mode == "warn"
+
+
+@pytest.mark.unit
+def test_route_token_mode_round_trips_through_to_toml_and_load(tmp_path: Path) -> None:
+    config = _hub_config(tmp_path)
+    config.config_path.write_text(config.to_toml())
+    loaded = HubConfig.load(config.root)
+    assert loaded.route_token_mode == "warn"
+
+    edited = dataclasses.replace(loaded, route_token_mode="enforce")
+    edited.config_path.write_text(edited.to_toml())
+    reloaded = HubConfig.load(edited.root)
+    assert reloaded.route_token_mode == "enforce"
+
+
+@pytest.mark.unit
+def test_route_token_mode_absent_from_toml_defaults_to_warn(tmp_path: Path) -> None:
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///x"\n')
+    assert HubConfig.load(root).route_token_mode == "warn"
+
+
+@pytest.mark.unit
+def test_route_token_mode_unknown_value_raises(tmp_path: Path) -> None:
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///x"\nroute_token_mode = "block"\n')
+    with pytest.raises(HubConfigError, match="route_token_mode"):
+        HubConfig.load(root)
+
+
+@pytest.mark.unit
+def test_route_token_mode_enforces_independently_of_runner_auth_mode(tmp_path: Path) -> None:
+    """The two flags are separate — setting one leaves the other at its own default."""
+    config = _hub_config(tmp_path)
+    edited = dataclasses.replace(config, runner_auth_mode="enforce")
+    edited.config_path.write_text(edited.to_toml())
+    reloaded = HubConfig.load(edited.root)
+    assert reloaded.runner_auth_mode == "enforce"
+    assert reloaded.route_token_mode == "warn"
+
+
+# --------------------------------------------------------------------------- #
+# `token_env` / `hub_token` — the runner presents its bearer token (issue #86b).
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.unit
+def test_token_env_defaults_to_bz_hub_token(tmp_path: Path) -> None:
+    config = RunnerConfig.scaffold(tmp_path)
+    assert config.token_env == "BZ_HUB_TOKEN"
+
+
+@pytest.mark.unit
+def test_hub_token_absent_from_environment_resolves_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("BZ_HUB_TOKEN", raising=False)
+    config = RunnerConfig.scaffold(tmp_path)
+    assert config.hub_token == ""
+    assert config.auth_headers() == {}
+
+
+@pytest.mark.unit
+def test_hub_token_resolves_from_the_named_env_var_at_scaffold(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BZ_HUB_TOKEN", "sekret-token")
+    config = RunnerConfig.scaffold(tmp_path)
+    assert config.hub_token == "sekret-token"
+    assert config.auth_headers() == {"Authorization": "Bearer sekret-token"}
+
+
+@pytest.mark.unit
+def test_token_env_round_trips_through_to_toml_but_never_the_secret(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # `token_env` (the variable NAME) round-trips through toml; the secret itself never
+    # does — it is re-resolved from the (possibly renamed) env var at every `load`.
+    root = tmp_path / "runner"
+    root.mkdir()
+    edited = RunnerConfig(
+        root=root, db_url=RunnerConfig.default_db_url(root), token_env="MY_CUSTOM_HUB_TOKEN", hub_token="unwritten"
+    )
+    (root / "blizzard-runner.toml").write_text(edited.to_toml())
+    assert "unwritten" not in (root / "blizzard-runner.toml").read_text()
+
+    monkeypatch.delenv("MY_CUSTOM_HUB_TOKEN", raising=False)
+    reloaded = RunnerConfig.load(root)
+    assert reloaded.token_env == "MY_CUSTOM_HUB_TOKEN"
+    assert reloaded.hub_token == ""
+
+    monkeypatch.setenv("MY_CUSTOM_HUB_TOKEN", "reloaded-secret")
+    reloaded_with_env = RunnerConfig.load(root)
+    assert reloaded_with_env.hub_token == "reloaded-secret"
+
+
+@pytest.mark.unit
+def test_token_env_absent_from_toml_defaults_to_bz_hub_token(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    (root / "blizzard-runner.toml").write_text('db_url = "sqlite:///x"\n')
+    assert RunnerConfig.load(root).token_env == "BZ_HUB_TOKEN"

@@ -172,6 +172,10 @@ _CI_SUBSET = (
     "spawn.after-lease-mint.before-spawn",
     "advance.after-buffer.before-flush",
     "flush.after-submit.before-ack",
+    # `claim.*` (issue #84b) is a new boundary family within `_GENERIC_POINTS` — its
+    # lone member is its own CI representative, so it never ships with zero CI-subset
+    # coverage, the same convention `_ABANDON_CI_SUBSET`/`_PAUSE_CI_SUBSET` follow.
+    "claim.after-persist.before-response",
 )
 
 # The resume CI subset: the recovery-critical kill-first window. The full graceful-restart
@@ -281,37 +285,55 @@ def _ingest_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str) -> s
     return chunk_id
 
 
+# `claim.*` fires inside the HUB process (`ClaimService._claim_locked`, issue #84b) —
+# the one `_GENERIC_POINTS` family that arms the hub rather than the runner, since the
+# generic `build -> deliver` scenario's claim is a hub-side POST /routes handler, not a
+# runner-loop step. `test_kill9_at_crash_point` below reads this to pick which daemon
+# to arm and restart.
+_HUB_SIDE_GENERIC_PREFIXES = ("claim.",)
+
+
 @pytest.mark.parametrize("point", _POINTS)
 def test_kill9_at_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
     """A ``kill -9`` at ``point`` recovers to a correct state and the chunk lands once."""
     landed_file = f"LANDED-{point.replace('.', '_')}.md"
     hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
     hub_port, runner_port = free_port(), free_port()
+    on_hub = point.startswith(_HUB_SIDE_GENERIC_PREFIXES)
 
-    # Every point in `_GENERIC_POINTS` fires inside the runner loop — the dedicated
-    # families (resume./abandon./pause./hubnode.) are excluded above, and arm their own
-    # daemon in their own scenarios.
-    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+    # Every point in `_GENERIC_POINTS` fires inside the runner loop, except the
+    # `claim.*` family above, which fires inside the hub's claim handler — the
+    # dedicated families (resume./abandon./pause./hubnode.) are excluded above, and
+    # arm their own daemon in their own scenarios.
+    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point if on_hub else None)
     runner_proc = None
     hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
     try:
         await_http(hub, "/api/health", proc=hub_proc)
+        # For a `claim.*` point, ingest+promote alone leaves the chunk ready; the
+        # runner's own FILL claim below — the same call every scenario makes on the
+        # way to delivery — is what drives the hub into the armed window.
         chunk_id = _ingest_chunk(hub, crash_env.forge, landed_file)
 
         write_runner_config(
             runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
         )
-        runner_proc = start_runner(runner_dir, crash_point=point)
+        runner_proc = start_runner(runner_dir, crash_point=None if on_hub else point)
 
-        # Wait for the ARMED runner to reach its point and self-SIGKILL.
-        code = wait_death(runner_proc)
+        # Wait for whichever ARMED daemon reaches its point and self-SIGKILLs.
+        code = wait_death(hub_proc if on_hub else runner_proc)
         assert code == -9, f"armed daemon at {point} exited {code}, not SIGKILL (-9); point never reached?"
 
         # Invariant checker green right after the crash — the durable facts are consistent.
         _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}")
 
-        # Restart the killed runner unarmed (startup = REAP first) and let it converge.
-        runner_proc = start_runner(runner_dir, crash_point=None)
+        # Restart the killed daemon unarmed (startup = REAP first, for the runner) and
+        # let it converge.
+        if on_hub:
+            hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+            await_http(hub, "/api/health", proc=hub_proc)
+        else:
+            runner_proc = start_runner(runner_dir, crash_point=None)
 
         status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"})
         assert status == "done", f"chunk did not converge to done after kill at {point} (last {status!r})"

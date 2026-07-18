@@ -91,6 +91,7 @@ def all_points() -> list[CrashPoint]:
 _INSTRUMENTED_MODULES = (
     "blizzard.runner.loop.steps",
     "blizzard.hub.delivery.hub_node",
+    "blizzard.hub.domain.claim",
 )
 
 

@@ -59,7 +59,7 @@ def _claim(hub) -> str:  # type: ignore[no-untyped-def]
     assert hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_YAML}).status_code == 201
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
     claim = hub.client.post(
-        "/api/routes",
+        "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
     )
     assert claim.status_code == 201, claim.text
@@ -103,7 +103,7 @@ def test_forwarded_question_parks_chunk_and_surfaces(tmp_path: Path) -> None:
     assert_all_timestamps_utc(open_resp.json())  # bzh:utc-instants — asked_at
 
     # GET /questions/{id} is the runner's answer poll — open until answered.
-    poll = hub.client.get("/api/questions/qn_1").json()
+    poll = hub.client.get("/api/fleet/questions/qn_1").json()
     assert poll["answered"] is False
 
 
@@ -129,7 +129,7 @@ def test_ask_question_normalizes_a_naive_asked_at(tmp_path: Path) -> None:
         },
     )
     assert resp.status_code == 201, resp.text
-    poll = hub.client.get("/api/questions/qn_also_naive").json()
+    poll = hub.client.get("/api/fleet/questions/qn_also_naive").json()
     assert poll["asked_at"] == "2026-07-13T00:00:00+00:00"
 
 
@@ -138,7 +138,7 @@ def test_question_asked_via_events_batch_lands(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = _claim(hub)
     resp = hub.client.post(
-        "/api/events",
+        "/api/fleet/events",
         json={
             "runner_id": "r1",
             "facts": [
@@ -174,7 +174,7 @@ def test_question_asked_via_events_batch_normalizes_a_naive_asked_at(tmp_path: P
     hub = build_hub(tmp_path)
     chunk_id = _claim(hub)
     resp = hub.client.post(
-        "/api/events",
+        "/api/fleet/events",
         json={
             "runner_id": "r1",
             "facts": [
@@ -198,7 +198,7 @@ def test_question_asked_via_events_batch_normalizes_a_naive_asked_at(tmp_path: P
     assert resp.status_code == 200, resp.text
     assert resp.json()["applied"] == [5]
 
-    poll = hub.client.get("/api/questions/qn_legacy").json()
+    poll = hub.client.get("/api/fleet/questions/qn_legacy").json()
     assert poll["asked_at"] == "2026-07-13T00:00:00+00:00"
 
 
@@ -231,7 +231,7 @@ def test_answer_first_write_wins_second_gets_409_with_winner(tmp_path: Path) -> 
     assert detail["status"] == "running"
     assert detail["questions"] == []
     assert hub.client.get("/api/questions").json() == []
-    poll = hub.client.get("/api/questions/qn_1").json()
+    poll = hub.client.get("/api/fleet/questions/qn_1").json()
     assert poll["answered"] is True
     assert poll["answer"] == "rest"
 
@@ -244,7 +244,7 @@ def test_answer_delivered_fact_is_accepted(tmp_path: Path) -> None:
     _ask(hub, chunk_id)
     hub.client.post("/api/questions/qn_1/answer", json={"answer": "rest"})
     resp = hub.client.post(
-        "/api/events",
+        "/api/fleet/events",
         json={
             "runner_id": "r1",
             "facts": [{"seq": 9, "kind": "answer.delivered", "payload": {"chunk_id": chunk_id, "question_id": "qn_1"}}],

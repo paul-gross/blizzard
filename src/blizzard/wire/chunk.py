@@ -239,7 +239,8 @@ class BounceView(BaseModel):
 
 
 class HubAdvanceResponse(BaseModel):
-    """The result of one on-demand ``POST /chunks/{id}/hub-advance`` (#65).
+    """The result of one on-demand ``POST /api/fleet/chunks/{id}/hub-advance`` (#65,
+    moved under the fleet router by #87).
 
     A generic hub command node runs ``run:`` to completion, one call at a time,
     behind the fleet-wide serialization slot: ``ran=False`` means the slot was held

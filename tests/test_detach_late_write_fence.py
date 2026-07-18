@@ -91,7 +91,7 @@ def test_a_detached_runners_late_completion_is_rejected_and_does_not_resurrect_t
 
     # Runner A claims the chunk and mints its lease at epoch 1 — the initial floor.
     claim_a = hub.client.post(
-        "/api/routes",
+        "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e1"]},
     )
     assert claim_a.status_code == 201, claim_a.text
@@ -112,7 +112,7 @@ def test_a_detached_runners_late_completion_is_rejected_and_does_not_resurrect_t
     # current); the fence only bites from here on.
     hub.clock.advance(timedelta(seconds=1))
     claim_b = hub.client.post(
-        "/api/routes",
+        "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r2", "workspace_id": "w2", "environment_ids": ["e2"]},
     )
     assert claim_b.status_code == 201, claim_b.text
@@ -122,7 +122,7 @@ def test_a_detached_runners_late_completion_is_rejected_and_does_not_resurrect_t
     # Runner A's late completion arrives — its buffered fact, carrying the now-stale
     # epoch 1.
     late = hub.client.post(
-        f"/api/chunks/{chunk_id}/completions",
+        f"/api/fleet/chunks/{chunk_id}/completions",
         json=_completion(build_node_id, epoch=1, runner_id="r1"),
     )
     assert late.status_code == 200, late.text
@@ -145,7 +145,7 @@ def test_a_detached_runners_late_completion_is_rejected_and_does_not_resurrect_t
     # And the legitimate holder (fresh epoch) still delivers normally afterward — the
     # fence blocked only the zombie, not the live attempt.
     winner = hub.client.post(
-        f"/api/chunks/{chunk_id}/completions",
+        f"/api/fleet/chunks/{chunk_id}/completions",
         json=_completion(build_node_id, epoch=2, runner_id="r2"),
     )
     assert winner.json()["outcome"] == "hub_node_taken", winner.text

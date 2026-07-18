@@ -161,6 +161,35 @@ def test_spawn_preamble_carries_lease_and_local_api(tmp_path):  # type: ignore[n
 
 
 @pytest.mark.unit
+def test_route_token_never_reaches_the_worker_preamble_or_prompt(tmp_path):  # type: ignore[no-untyped-def]
+    """Containment (issue #84a): the route token lives only in the runner store and
+    stamped outbound payloads — never in ``WorkerPreamble``, so it can never reach the
+    worker's environment or its rendered prompt (``WorkerPreamble`` carries no such
+    field by construction; this pins the behavior, not just the shape)."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    env = _build_envelope()
+    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.claim_outcome = claimed_outcome("ch_1", env, route_token="super-secret-route-token")
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
+
+    fill(ctx)
+
+    assert store.route_token("ch_1") == "super-secret-route-token"  # stashed locally, as expected
+    _, preamble = harness.spawns[0]
+    for field_value in (
+        preamble.lease_id,
+        preamble.local_api_url,
+        preamble.workspace_root,
+        preamble.prompt_prefix,
+        preamble.stdout_path,
+    ):
+        assert "super-secret-route-token" not in field_value
+    assert not hasattr(preamble, "route_token")
+
+
+@pytest.mark.unit
 def test_fill_reports_lease_mint_to_hub(tmp_path):  # type: ignore[no-untyped-def]
     """Every node-step spawn reports its lease.minted so the hub's fence tracks it."""
     store = _store(tmp_path)
@@ -181,9 +210,74 @@ def test_fill_reports_lease_mint_to_hub(tmp_path):  # type: ignore[no-untyped-de
     # flusher reports it up to POST /events, so it is not pushed inline at spawn.
     buffered = [b for b in store.pending_outbound() if b.kind == LEASE_MINTED]
     assert len(buffered) == 1
-    assert json.loads(buffered[0].payload) == {"chunk_id": "ch_1", "epoch": 1}
+    assert json.loads(buffered[0].payload) == {"chunk_id": "ch_1", "epoch": 1, "route_token": "rtok_test"}
     pull(ctx)
     assert [(f.kind, f.payload["epoch"]) for f in hub.pushed] == [(LEASE_MINTED, 1)]
+
+
+@pytest.mark.unit
+def test_fill_stashes_the_claims_route_token(tmp_path):  # type: ignore[no-untyped-def]
+    """A won claim's plaintext route token (issue #84a) is stashed locally, keyed by
+    chunk — the read the store's own :meth:`route_token` serves back."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.claim_outcome = claimed_outcome("ch_1", _build_envelope(), route_token="rtok-abc123")
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
+        probe=FakeProbe(),
+    )
+
+    fill(ctx)
+
+    assert store.route_token("ch_1") == "rtok-abc123"
+
+
+@pytest.mark.unit
+def test_completion_and_decision_submissions_carry_the_stashed_route_token(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    hub = FakeHub()
+    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.claim_outcome = claimed_outcome("ch_1", _build_envelope(), route_token="rtok-abc123")
+    hub.envelopes["ch_1"] = _build_envelope()
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
+        probe=FakeProbe(),
+    )
+
+    fill(ctx)  # claims and stashes the token, spawns the worker
+    advance(ctx)  # worker "exited" (FakeProbe reports it dead) — judged and buffered
+
+    buffered = [b for b in store.pending_outbound() if b.kind == "completion.submitted"]
+    assert len(buffered) == 1
+    submission = json.loads(buffered[0].payload)["submission"]
+    assert submission["route_token"] == "rtok-abc123"
+
+
+@pytest.mark.unit
+def test_same_runner_requeue_after_failure_reuses_the_same_route_token(tmp_path):  # type: ignore[no-untyped-def]
+    """A same-runner requeue re-spawns under the route already held — no fresh claim —
+    so it must keep presenting the token that claim minted (issue #84a)."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.claim_outcome = claimed_outcome("ch_1", _build_envelope(), route_token="rtok-abc123")
+    hub.envelopes["ch_1"] = _build_envelope()
+    harness = FakeHarness(handle=_HANDLE, verdict=None)  # no parseable <Choice> -> fail -> requeue
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
+
+    fill(ctx)  # claims (epoch 1), stashes the token
+    advance(ctx)  # verdict-less exit -> fail attempt -> requeue in place (fresh lease, epoch 2)
+
+    lease_mints = [json.loads(b.payload) for b in store.pending_outbound() if b.kind == LEASE_MINTED]
+    assert [m["epoch"] for m in lease_mints] == [1, 2]
+    assert all(m["route_token"] == "rtok-abc123" for m in lease_mints)  # same token both times
 
 
 @pytest.mark.unit

@@ -443,6 +443,13 @@ class IReadRunnerStore(Protocol):
         wins over config, so an operator can clear the prompt to table-only at runtime."""
         ...
 
+    def route_token(self, chunk_id: str) -> str | None:
+        """The chunk's stashed route capability token, or ``None`` if never claimed here
+        (issue #84a). Stamped onto every chunk-scoped outbound payload at enqueue —
+        completion, decision, ``lease.minted``, ``escalation.recorded``,
+        ``question.asked``. ``None`` is presented as an absent field, never fabricated."""
+        ...
+
     def open_takeover_for_chunk(self, chunk_id: str) -> TakeoverRecord | None:
         """The chunk's open takeover, or ``None`` — a ``takeovers`` row with no
         ``takeover_ends`` row for the same ``takeover_id`` (issue #52).
@@ -607,6 +614,17 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
 
     def set_workspace_prompt(self, workspace_id: str, *, prompt: str, at: datetime) -> None:
         """Set the runtime workspace-prompt override (upsert) — read at spawn (issue #17)."""
+        ...
+
+    def set_route_token(self, chunk_id: str, *, token: str, at: datetime) -> None:
+        """Stash a won claim's plaintext route token (upsert) — issue #84a.
+
+        Called on a won claim (FILL's fresh claim, the interrupted-claim reclaim path)
+        with the token the claim response returned once. A fresh claim overwrites a
+        prior row for the same chunk; a same-runner requeue/takeover/retry re-spawns
+        under the route already held and never calls this again, so
+        :meth:`~IReadRunnerStore.route_token` keeps returning the same value across
+        those paths."""
         ...
 
     def record_resume_intent(self, *, lease_id: str, marked_at: datetime) -> None:

@@ -1,14 +1,24 @@
-"""Chunk routes — ingest, list, detail, envelope, completion, PM pass-through.
+"""Chunk routes — ingest, list, detail, PM pass-through — the anonymous **operator**
+surface (issue #87).
 
 The chunk-facing surface of the hub API. Controllers stay read-only
-over the store (``bzh:controller-read-only``): ingest and completion delegate to
-domain services that hold the write repository; the list/detail/envelope reads
+over the store (``bzh:controller-read-only``): ingest delegates to
+domain services that hold the write repository; the list/detail reads
 derive status and current node from facts (``bzh:facts-not-status``), never a stored
 column. The PM read is a vendor-native pass-through whose contents are never stored.
 ``POST /chunks/{id}/graph`` and ``POST /chunks/{id}/model`` (issue #27) repin a
 not-ready chunk's workflow graph or model selection — read is already carried on the
 list/detail views' ``graph_id``/``model`` fields; write is refused (409) once the chunk
 has left ``not_ready``.
+
+The envelope read, the completion/decision/lease/escalation writes, and ``hub-advance``
+(#65/#66, driven by the runner's own ADVANCE poll) moved to the runner-authenticated
+fleet router (:mod:`blizzard.hub.api.fleet`, issue #87) — no board or CLI caller ever
+reached any of them. ``get_chunk`` and ``get_pm_items`` stay here (the board's own
+reads) *and* gain fleet-side counterparts, since the runner reads both too;
+``dependencies=[Depends(reject_runner_principal)]`` on this router rejects a runner's
+bearer token here rather than treating it as anonymous-plus-credential — a runner's
+token is confined to the fleet router.
 """
 
 from __future__ import annotations
@@ -20,6 +30,7 @@ from fastapi.responses import JSONResponse
 
 from blizzard.foundation.ids import minted_at
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.decisions import to_decision_view
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.api.questions import question_view
@@ -29,7 +40,6 @@ from blizzard.hub.domain.artifacts import ArtifactRow, GitCommitArtifact, from_r
 from blizzard.hub.domain.decisions import NotEscalated
 from blizzard.hub.domain.detach import NotRouted
 from blizzard.hub.domain.edit import ChunkNotEditable
-from blizzard.hub.domain.envelope import addendum_for_transition, build_node_envelope
 from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.ingest import IngestConflict
 from blizzard.hub.domain.pause import ChunkNotPausable
@@ -45,7 +55,6 @@ from blizzard.hub.domain.work import (
     has_landed_repos,
     hub_node_pending,
     latest_epoch,
-    newest_transition,
     open_escalation,
     open_pause,
     transition_history,
@@ -67,7 +76,6 @@ from blizzard.wire.chunk import (
     ChunkUsageTotalView,
     ChunkUsageView,
     EscalationView,
-    HubAdvanceResponse,
     HubMarkerRequest,
     HubMarkerResponse,
     PauseView,
@@ -79,12 +87,8 @@ from blizzard.wire.chunk import (
     RouteView,
     TransitionView,
 )
-from blizzard.wire.completion import CompletionSubmission
-from blizzard.wire.decision import DecisionSubmission
-from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
-from blizzard.wire.facts import EscalationReport, LeaseMintReport
 
-router = APIRouter(prefix="/api", tags=["chunks"])
+router = APIRouter(prefix="/api", tags=["chunks"], dependencies=[Depends(reject_runner_principal)])
 
 
 def _pointer_views(chunk: Chunk, pm: IPmSourceRegistry) -> list[PmPointerView]:
@@ -107,8 +111,13 @@ def _pointer_views(chunk: Chunk, pm: IPmSourceRegistry) -> list[PmPointerView]:
     return views
 
 
-def _publish_open_decision(services: HubServices, chunk_id: str) -> None:
-    """Emit ``decision-opened`` if the chunk now carries a live, unresolved gate."""
+def publish_open_decision(services: HubServices, chunk_id: str) -> None:
+    """Emit ``decision-opened`` if the chunk now carries a live, unresolved gate.
+
+    Public (issue #87): the fleet router's completion/decision writes
+    (:mod:`blizzard.hub.api.fleet`) call this the same way this module's own
+    ``get_chunk``/``to_decision_view`` reuse crosses the chunks/decisions/questions
+    module boundary."""
     decision = services.chunks.decision_for_chunk(chunk_id)
     if decision is not None and not decision.resolved and not decision.transitioned:
         services.events.publish_decision_opened(chunk_id, decision.decision_id)
@@ -358,107 +367,6 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
     )
 
 
-@router.get("/chunks/{chunk_id}/envelope", response_model=NodeEnvelope)
-def get_envelope(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> NodeEnvelope:
-    """The chunk's current node envelope, idempotent — the lost-apply re-read."""
-    chunk = services.chunks.get(chunk_id)
-    if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
-    graph = services.graphs.get(chunk.graph_id)
-    if graph is None:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
-    facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
-    node_id = current_node_id(facts) or graph.entry_node_id
-    node = graph.node_by_id(node_id)
-    if node is None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="chunk has no current runner node (terminal)")
-    return build_node_envelope(
-        chunk=chunk,
-        node=node,
-        artifacts=services.chunks.load_artifacts(chunk_id),
-        epoch=latest_epoch(facts) or 0,
-        arrival_addendum=addendum_for_transition(graph, newest_transition(facts)),
-    )
-
-
-@router.post("/chunks/{chunk_id}/completions", response_model=ApplyResponse)
-def submit_completion(
-    chunk_id: str,
-    submission: CompletionSubmission,
-    services: Annotated[HubServices, Depends(get_services)],
-) -> ApplyResponse:
-    """Apply a node-step's completion atomically; reply carries the next envelope."""
-    chunk = services.chunks.get(chunk_id)
-    if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
-    graph = services.graphs.get(chunk.graph_id)
-    if graph is None:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
-    response = services.apply.apply(chunk, graph, submission)
-    facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
-    services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
-    # A completion landing on a human-judged node opens a graph gate: surface it.
-    _publish_open_decision(services, chunk_id)
-    return response
-
-
-@router.post("/chunks/{chunk_id}/hub-advance", response_model=HubAdvanceResponse)
-def hub_advance(
-    chunk_id: str,
-    services: Annotated[HubServices, Depends(get_services)],
-) -> HubAdvanceResponse:
-    """Drive a chunk parked at a generic hub command node one step (#65).
-
-    Runs :class:`~blizzard.hub.delivery.hub_node.HubNodeExecutor` once, respecting the
-    fleet-wide serialization slot: ``ran=False`` means a different chunk holds the
-    slot right now, OR (#66) the node reported ``pending`` on a prior call and
-    ``poll_interval`` has not yet elapsed — either way not an error, the runner's
-    ADVANCE poll (``_advance_held_chunk``) simply calls this again on a later tick. A
-    no-op (``ran=False``, ``detail`` names it) when the chunk is not currently parked
-    at a generic hub command node — every hub node is this shape since #67; no other
-    delivery route remains.
-    """
-    chunk = services.chunks.get(chunk_id)
-    if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
-    graph = services.graphs.get(chunk.graph_id)
-    if graph is None:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
-    facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
-    node_id = current_node_id(facts)
-    node = graph.node_by_id(node_id) if node_id is not None else None
-    if node is None or not node.is_hub_command_node:
-        derived = derive_chunk_status(facts)
-        return HubAdvanceResponse(
-            chunk_id=chunk_id, status=derived, ran=False, detail="not parked at a hub command node"
-        )
-    epoch = latest_epoch(facts) or 0
-    result = services.hub_node.run(chunk, graph, node, epoch=epoch)
-    facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
-    derived = derive_chunk_status(facts)
-    services.events.publish_chunk_changed(chunk_id, derived.value)
-    if result is None:
-        pending = hub_node_pending(facts)
-        next_poll_at = pending.polled_at + poll_interval_for(node) if pending is not None else None
-        # `next_poll_at` in the future distinguishes "not yet due to poll" (#66, gated
-        # before the slot was even attempted) from a genuinely busy slot — a pending
-        # node whose interval already elapsed but lost the slot race falls through to
-        # the busy message, same as a fresh hub node would.
-        if next_poll_at is not None and next_poll_at > services.clock.now():
-            detail = f"pending — next poll at {iso_utc(next_poll_at)}"
-        else:
-            detail = "hub-execution slot busy — try again"
-        return HubAdvanceResponse(chunk_id=chunk_id, status=derived, ran=False, detail=detail)
-    return HubAdvanceResponse(
-        chunk_id=chunk_id,
-        status=derived,
-        ran=True,
-        outcome_choice=result.outcome_choice,
-        to_node_name=result.to_node_name or None,
-        detail=result.detail,
-    )
-
-
 @router.post("/chunks/{chunk_id}/hub-markers", response_model=HubMarkerResponse)
 def record_hub_marker(
     chunk_id: str,
@@ -492,27 +400,6 @@ def record_hub_marker(
         content=request_body.content,
     )
     return HubMarkerResponse(recorded=recorded, chunk_id=chunk_id, name=request_body.name)
-
-
-@router.post("/chunks/{chunk_id}/decisions", response_model=ApplyResponse)
-def submit_decision(
-    chunk_id: str,
-    submission: DecisionSubmission,
-    services: Annotated[HubServices, Depends(get_services)],
-) -> ApplyResponse:
-    """Runner-config gate: park the chunk on a decision in place of a transition."""
-    chunk = services.chunks.get(chunk_id)
-    if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
-    graph = services.graphs.get(chunk.graph_id)
-    if graph is None:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
-    response = services.decisions.submit(chunk, graph, submission)
-    facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
-    services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
-    # The runner-config gate parked the chunk on an open decision: surface it.
-    _publish_open_decision(services, chunk_id)
-    return response
 
 
 @router.post("/chunks/{chunk_id}/requeues", status_code=status.HTTP_202_ACCEPTED)
@@ -638,34 +525,6 @@ def set_chunk_model(
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
     return ChunkModelView(chunk_id=chunk_id, model=model)
-
-
-@router.post("/chunks/{chunk_id}/leases", status_code=status.HTTP_202_ACCEPTED)
-def report_lease(
-    chunk_id: str,
-    report: LeaseMintReport,
-    services: Annotated[HubServices, Depends(get_services)],
-) -> dict[str, str]:
-    """Land a runner's ``lease.minted`` — keeps the epoch fence in lockstep."""
-    if services.chunks.get(chunk_id) is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
-    services.runner_facts.record_lease_minted(chunk_id, epoch=report.epoch, runner_id=report.runner_id)
-    return {"chunk_id": chunk_id}
-
-
-@router.post("/chunks/{chunk_id}/escalations", status_code=status.HTTP_202_ACCEPTED)
-def report_escalation(
-    chunk_id: str,
-    report: EscalationReport,
-    services: Annotated[HubServices, Depends(get_services)],
-) -> dict[str, str]:
-    """Land a runner's ``escalation.recorded`` — the chunk derives ``needs_human``."""
-    if services.chunks.get(chunk_id) is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
-    services.runner_facts.record_escalation(chunk_id, epoch=report.epoch, takeover_command=report.takeover_command)
-    facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
-    services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
-    return {"chunk_id": chunk_id}
 
 
 @router.get("/chunks/{chunk_id}/pm-items", response_model=PmItemsView)

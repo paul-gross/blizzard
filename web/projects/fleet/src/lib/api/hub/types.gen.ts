@@ -584,6 +584,10 @@ export type CompletionSubmission = {
      */
     from_node_id: string;
     /**
+     * Route Token
+     */
+    route_token?: string | null;
+    /**
      * Runner Id
      */
     runner_id: string;
@@ -667,6 +671,10 @@ export type DecisionSubmission = {
      * From Node Id
      */
     from_node_id: string;
+    /**
+     * Route Token
+     */
+    route_token?: string | null;
     /**
      * Runner Id
      */
@@ -1065,7 +1073,8 @@ export type HttpValidationError = {
 /**
  * HubAdvanceResponse
  *
- * The result of one on-demand ``POST /chunks/{id}/hub-advance`` (#65).
+ * The result of one on-demand ``POST /api/fleet/chunks/{id}/hub-advance`` (#65,
+ * moved under the fleet router by #87).
  *
  * A generic hub command node runs ``run:`` to completion, one call at a time,
  * behind the fleet-wide serialization slot: ``ran=False`` means the slot was held
@@ -1656,7 +1665,9 @@ export type RouteClaim = {
 /**
  * RouteClaimResponse
  *
- * The winning claim's reply — the route plus the first node envelope.
+ * The winning claim's reply — the route, its first node envelope, and the
+ * route's plaintext capability token (issue #84a), returned exactly once here. The
+ * runner stashes it and presents it on every subsequent chunk-scoped write.
  */
 export type RouteClaimResponse = {
     /**
@@ -1669,6 +1680,10 @@ export type RouteClaimResponse = {
      */
     environment_ids: Array<string>;
     /**
+     * Route Token
+     */
+    route_token: string;
+    /**
      * Runner Id
      */
     runner_id: string;
@@ -1676,6 +1691,26 @@ export type RouteClaimResponse = {
      * Workspace Id
      */
     workspace_id: string;
+};
+
+/**
+ * RouteTokenRekeyResponse
+ *
+ * ``POST /api/fleet/chunks/{id}/route-token``'s reply — a fresh plaintext route
+ * capability token for the chunk's live route (issue #84b), returned exactly once
+ * here, same as the claim response's own ``route_token``. Covers the
+ * crash-after-mint-before-response case: the holding runner re-keys rather than
+ * being permanently locked out of a token it never read back.
+ */
+export type RouteTokenRekeyResponse = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Route Token
+     */
+    route_token: string;
 };
 
 /**
@@ -1699,13 +1734,36 @@ export type RouteView = {
 };
 
 /**
+ * RunnerEnrollmentResponse
+ *
+ * A freshly minted (or rotated) bearer token — issue #86a.
+ *
+ * ``token`` is the plaintext; the hub keeps only its sha256 hash from here on, so
+ * this response is the one and only place it is ever visible again. A re-enroll
+ * call rotates: the old token stops resolving the moment this response lands.
+ */
+export type RunnerEnrollmentResponse = {
+    /**
+     * Runner Id
+     */
+    runner_id: string;
+    /**
+     * Token
+     */
+    token: string;
+};
+
+/**
  * RunnerFact
  *
  * One buffered runner fact: its per-runner seq, its kind, and its payload.
  *
- * ``payload`` is the kind-specific body — for ``lease.minted`` ``{chunk_id, epoch}``,
- * for ``escalation.recorded`` ``{chunk_id, epoch, takeover_command}`` — kept open so a
- * new runner fact kind bolts on without a wire change.
+ * ``payload`` is the kind-specific body — for ``lease.minted`` ``{chunk_id, epoch,
+ * route_token}``, for ``escalation.recorded`` ``{chunk_id, epoch, takeover_command,
+ * route_token}``, for ``question.asked`` the ask fields plus ``route_token`` — kept
+ * open so a new runner fact kind bolts on without a wire change. ``route_token``
+ * (issue #84a) is the chunk-scoped fact's route capability token, stamped at
+ * enqueue; present-only in this phase (the hub does not yet reject on it).
  */
 export type RunnerFact = {
     /**
@@ -2063,66 +2121,6 @@ export type GetChunkApiChunksChunkIdGetResponses = {
 
 export type GetChunkApiChunksChunkIdGetResponse = GetChunkApiChunksChunkIdGetResponses[keyof GetChunkApiChunksChunkIdGetResponses];
 
-export type SubmitCompletionApiChunksChunkIdCompletionsPostData = {
-    body: CompletionSubmission;
-    path: {
-        /**
-         * Chunk Id
-         */
-        chunk_id: string;
-    };
-    query?: never;
-    url: '/api/chunks/{chunk_id}/completions';
-};
-
-export type SubmitCompletionApiChunksChunkIdCompletionsPostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type SubmitCompletionApiChunksChunkIdCompletionsPostError = SubmitCompletionApiChunksChunkIdCompletionsPostErrors[keyof SubmitCompletionApiChunksChunkIdCompletionsPostErrors];
-
-export type SubmitCompletionApiChunksChunkIdCompletionsPostResponses = {
-    /**
-     * Successful Response
-     */
-    200: ApplyResponse;
-};
-
-export type SubmitCompletionApiChunksChunkIdCompletionsPostResponse = SubmitCompletionApiChunksChunkIdCompletionsPostResponses[keyof SubmitCompletionApiChunksChunkIdCompletionsPostResponses];
-
-export type SubmitDecisionApiChunksChunkIdDecisionsPostData = {
-    body: DecisionSubmission;
-    path: {
-        /**
-         * Chunk Id
-         */
-        chunk_id: string;
-    };
-    query?: never;
-    url: '/api/chunks/{chunk_id}/decisions';
-};
-
-export type SubmitDecisionApiChunksChunkIdDecisionsPostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type SubmitDecisionApiChunksChunkIdDecisionsPostError = SubmitDecisionApiChunksChunkIdDecisionsPostErrors[keyof SubmitDecisionApiChunksChunkIdDecisionsPostErrors];
-
-export type SubmitDecisionApiChunksChunkIdDecisionsPostResponses = {
-    /**
-     * Successful Response
-     */
-    200: ApplyResponse;
-};
-
-export type SubmitDecisionApiChunksChunkIdDecisionsPostResponse = SubmitDecisionApiChunksChunkIdDecisionsPostResponses[keyof SubmitDecisionApiChunksChunkIdDecisionsPostResponses];
-
 export type DetachChunkApiChunksChunkIdDetachPostData = {
     body?: never;
     path: {
@@ -2156,70 +2154,6 @@ export type DetachChunkApiChunksChunkIdDetachPostResponses = {
 };
 
 export type DetachChunkApiChunksChunkIdDetachPostResponse = DetachChunkApiChunksChunkIdDetachPostResponses[keyof DetachChunkApiChunksChunkIdDetachPostResponses];
-
-export type GetEnvelopeApiChunksChunkIdEnvelopeGetData = {
-    body?: never;
-    path: {
-        /**
-         * Chunk Id
-         */
-        chunk_id: string;
-    };
-    query?: never;
-    url: '/api/chunks/{chunk_id}/envelope';
-};
-
-export type GetEnvelopeApiChunksChunkIdEnvelopeGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type GetEnvelopeApiChunksChunkIdEnvelopeGetError = GetEnvelopeApiChunksChunkIdEnvelopeGetErrors[keyof GetEnvelopeApiChunksChunkIdEnvelopeGetErrors];
-
-export type GetEnvelopeApiChunksChunkIdEnvelopeGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: NodeEnvelope;
-};
-
-export type GetEnvelopeApiChunksChunkIdEnvelopeGetResponse = GetEnvelopeApiChunksChunkIdEnvelopeGetResponses[keyof GetEnvelopeApiChunksChunkIdEnvelopeGetResponses];
-
-export type ReportEscalationApiChunksChunkIdEscalationsPostData = {
-    body: EscalationReport;
-    path: {
-        /**
-         * Chunk Id
-         */
-        chunk_id: string;
-    };
-    query?: never;
-    url: '/api/chunks/{chunk_id}/escalations';
-};
-
-export type ReportEscalationApiChunksChunkIdEscalationsPostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ReportEscalationApiChunksChunkIdEscalationsPostError = ReportEscalationApiChunksChunkIdEscalationsPostErrors[keyof ReportEscalationApiChunksChunkIdEscalationsPostErrors];
-
-export type ReportEscalationApiChunksChunkIdEscalationsPostResponses = {
-    /**
-     * Response Report Escalation Api Chunks  Chunk Id  Escalations Post
-     *
-     * Successful Response
-     */
-    202: {
-        [key: string]: string;
-    };
-};
-
-export type ReportEscalationApiChunksChunkIdEscalationsPostResponse = ReportEscalationApiChunksChunkIdEscalationsPostResponses[keyof ReportEscalationApiChunksChunkIdEscalationsPostResponses];
 
 export type SetChunkGraphApiChunksChunkIdGraphPostData = {
     body: ChunkGraphUpdateRequest;
@@ -2281,36 +2215,6 @@ export type GroupChunksApiChunksChunkIdGroupPostResponses = {
 
 export type GroupChunksApiChunksChunkIdGroupPostResponse = GroupChunksApiChunksChunkIdGroupPostResponses[keyof GroupChunksApiChunksChunkIdGroupPostResponses];
 
-export type HubAdvanceApiChunksChunkIdHubAdvancePostData = {
-    body?: never;
-    path: {
-        /**
-         * Chunk Id
-         */
-        chunk_id: string;
-    };
-    query?: never;
-    url: '/api/chunks/{chunk_id}/hub-advance';
-};
-
-export type HubAdvanceApiChunksChunkIdHubAdvancePostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type HubAdvanceApiChunksChunkIdHubAdvancePostError = HubAdvanceApiChunksChunkIdHubAdvancePostErrors[keyof HubAdvanceApiChunksChunkIdHubAdvancePostErrors];
-
-export type HubAdvanceApiChunksChunkIdHubAdvancePostResponses = {
-    /**
-     * Successful Response
-     */
-    200: HubAdvanceResponse;
-};
-
-export type HubAdvanceApiChunksChunkIdHubAdvancePostResponse = HubAdvanceApiChunksChunkIdHubAdvancePostResponses[keyof HubAdvanceApiChunksChunkIdHubAdvancePostResponses];
-
 export type RecordHubMarkerApiChunksChunkIdHubMarkersPostData = {
     body: HubMarkerRequest;
     path: {
@@ -2349,40 +2253,6 @@ export type RecordHubMarkerApiChunksChunkIdHubMarkersPostResponses = {
 };
 
 export type RecordHubMarkerApiChunksChunkIdHubMarkersPostResponse = RecordHubMarkerApiChunksChunkIdHubMarkersPostResponses[keyof RecordHubMarkerApiChunksChunkIdHubMarkersPostResponses];
-
-export type ReportLeaseApiChunksChunkIdLeasesPostData = {
-    body: LeaseMintReport;
-    path: {
-        /**
-         * Chunk Id
-         */
-        chunk_id: string;
-    };
-    query?: never;
-    url: '/api/chunks/{chunk_id}/leases';
-};
-
-export type ReportLeaseApiChunksChunkIdLeasesPostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ReportLeaseApiChunksChunkIdLeasesPostError = ReportLeaseApiChunksChunkIdLeasesPostErrors[keyof ReportLeaseApiChunksChunkIdLeasesPostErrors];
-
-export type ReportLeaseApiChunksChunkIdLeasesPostResponses = {
-    /**
-     * Response Report Lease Api Chunks  Chunk Id  Leases Post
-     *
-     * Successful Response
-     */
-    202: {
-        [key: string]: string;
-    };
-};
-
-export type ReportLeaseApiChunksChunkIdLeasesPostResponse = ReportLeaseApiChunksChunkIdLeasesPostResponses[keyof ReportLeaseApiChunksChunkIdLeasesPostResponses];
 
 export type SetChunkModelApiChunksChunkIdModelPostData = {
     body: ChunkModelUpdateRequest;
@@ -2626,60 +2496,464 @@ export type ResolveDecisionApiDecisionsDecisionIdResolutionPostResponses = {
 
 export type ResolveDecisionApiDecisionsDecisionIdResolutionPostResponse = ResolveDecisionApiDecisionsDecisionIdResolutionPostResponses[keyof ResolveDecisionApiDecisionsDecisionIdResolutionPostResponses];
 
-export type IngestRunnerFactsApiEventsPostData = {
-    body: RunnerFactBatch;
-    path?: never;
+export type GetChunkApiFleetChunksChunkIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
     query?: never;
-    url: '/api/events';
+    url: '/api/fleet/chunks/{chunk_id}';
 };
 
-export type IngestRunnerFactsApiEventsPostErrors = {
+export type GetChunkApiFleetChunksChunkIdGetErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type IngestRunnerFactsApiEventsPostError = IngestRunnerFactsApiEventsPostErrors[keyof IngestRunnerFactsApiEventsPostErrors];
+export type GetChunkApiFleetChunksChunkIdGetError = GetChunkApiFleetChunksChunkIdGetErrors[keyof GetChunkApiFleetChunksChunkIdGetErrors];
 
-export type IngestRunnerFactsApiEventsPostResponses = {
+export type GetChunkApiFleetChunksChunkIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ChunkDetail;
+};
+
+export type GetChunkApiFleetChunksChunkIdGetResponse = GetChunkApiFleetChunksChunkIdGetResponses[keyof GetChunkApiFleetChunksChunkIdGetResponses];
+
+export type SubmitCompletionApiFleetChunksChunkIdCompletionsPostData = {
+    body: CompletionSubmission;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/fleet/chunks/{chunk_id}/completions';
+};
+
+export type SubmitCompletionApiFleetChunksChunkIdCompletionsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SubmitCompletionApiFleetChunksChunkIdCompletionsPostError = SubmitCompletionApiFleetChunksChunkIdCompletionsPostErrors[keyof SubmitCompletionApiFleetChunksChunkIdCompletionsPostErrors];
+
+export type SubmitCompletionApiFleetChunksChunkIdCompletionsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ApplyResponse;
+};
+
+export type SubmitCompletionApiFleetChunksChunkIdCompletionsPostResponse = SubmitCompletionApiFleetChunksChunkIdCompletionsPostResponses[keyof SubmitCompletionApiFleetChunksChunkIdCompletionsPostResponses];
+
+export type SubmitDecisionApiFleetChunksChunkIdDecisionsPostData = {
+    body: DecisionSubmission;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/fleet/chunks/{chunk_id}/decisions';
+};
+
+export type SubmitDecisionApiFleetChunksChunkIdDecisionsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SubmitDecisionApiFleetChunksChunkIdDecisionsPostError = SubmitDecisionApiFleetChunksChunkIdDecisionsPostErrors[keyof SubmitDecisionApiFleetChunksChunkIdDecisionsPostErrors];
+
+export type SubmitDecisionApiFleetChunksChunkIdDecisionsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ApplyResponse;
+};
+
+export type SubmitDecisionApiFleetChunksChunkIdDecisionsPostResponse = SubmitDecisionApiFleetChunksChunkIdDecisionsPostResponses[keyof SubmitDecisionApiFleetChunksChunkIdDecisionsPostResponses];
+
+export type GetEnvelopeApiFleetChunksChunkIdEnvelopeGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/fleet/chunks/{chunk_id}/envelope';
+};
+
+export type GetEnvelopeApiFleetChunksChunkIdEnvelopeGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetEnvelopeApiFleetChunksChunkIdEnvelopeGetError = GetEnvelopeApiFleetChunksChunkIdEnvelopeGetErrors[keyof GetEnvelopeApiFleetChunksChunkIdEnvelopeGetErrors];
+
+export type GetEnvelopeApiFleetChunksChunkIdEnvelopeGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: NodeEnvelope;
+};
+
+export type GetEnvelopeApiFleetChunksChunkIdEnvelopeGetResponse = GetEnvelopeApiFleetChunksChunkIdEnvelopeGetResponses[keyof GetEnvelopeApiFleetChunksChunkIdEnvelopeGetResponses];
+
+export type ReportEscalationApiFleetChunksChunkIdEscalationsPostData = {
+    body: EscalationReport;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/fleet/chunks/{chunk_id}/escalations';
+};
+
+export type ReportEscalationApiFleetChunksChunkIdEscalationsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReportEscalationApiFleetChunksChunkIdEscalationsPostError = ReportEscalationApiFleetChunksChunkIdEscalationsPostErrors[keyof ReportEscalationApiFleetChunksChunkIdEscalationsPostErrors];
+
+export type ReportEscalationApiFleetChunksChunkIdEscalationsPostResponses = {
+    /**
+     * Response Report Escalation Api Fleet Chunks  Chunk Id  Escalations Post
+     *
+     * Successful Response
+     */
+    202: {
+        [key: string]: string;
+    };
+};
+
+export type ReportEscalationApiFleetChunksChunkIdEscalationsPostResponse = ReportEscalationApiFleetChunksChunkIdEscalationsPostResponses[keyof ReportEscalationApiFleetChunksChunkIdEscalationsPostResponses];
+
+export type HubAdvanceApiFleetChunksChunkIdHubAdvancePostData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/fleet/chunks/{chunk_id}/hub-advance';
+};
+
+export type HubAdvanceApiFleetChunksChunkIdHubAdvancePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type HubAdvanceApiFleetChunksChunkIdHubAdvancePostError = HubAdvanceApiFleetChunksChunkIdHubAdvancePostErrors[keyof HubAdvanceApiFleetChunksChunkIdHubAdvancePostErrors];
+
+export type HubAdvanceApiFleetChunksChunkIdHubAdvancePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: HubAdvanceResponse;
+};
+
+export type HubAdvanceApiFleetChunksChunkIdHubAdvancePostResponse = HubAdvanceApiFleetChunksChunkIdHubAdvancePostResponses[keyof HubAdvanceApiFleetChunksChunkIdHubAdvancePostResponses];
+
+export type ReportLeaseApiFleetChunksChunkIdLeasesPostData = {
+    body: LeaseMintReport;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/fleet/chunks/{chunk_id}/leases';
+};
+
+export type ReportLeaseApiFleetChunksChunkIdLeasesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReportLeaseApiFleetChunksChunkIdLeasesPostError = ReportLeaseApiFleetChunksChunkIdLeasesPostErrors[keyof ReportLeaseApiFleetChunksChunkIdLeasesPostErrors];
+
+export type ReportLeaseApiFleetChunksChunkIdLeasesPostResponses = {
+    /**
+     * Response Report Lease Api Fleet Chunks  Chunk Id  Leases Post
+     *
+     * Successful Response
+     */
+    202: {
+        [key: string]: string;
+    };
+};
+
+export type ReportLeaseApiFleetChunksChunkIdLeasesPostResponse = ReportLeaseApiFleetChunksChunkIdLeasesPostResponses[keyof ReportLeaseApiFleetChunksChunkIdLeasesPostResponses];
+
+export type GetPmItemsApiFleetChunksChunkIdPmItemsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/fleet/chunks/{chunk_id}/pm-items';
+};
+
+export type GetPmItemsApiFleetChunksChunkIdPmItemsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetPmItemsApiFleetChunksChunkIdPmItemsGetError = GetPmItemsApiFleetChunksChunkIdPmItemsGetErrors[keyof GetPmItemsApiFleetChunksChunkIdPmItemsGetErrors];
+
+export type GetPmItemsApiFleetChunksChunkIdPmItemsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: PmItemsView;
+};
+
+export type GetPmItemsApiFleetChunksChunkIdPmItemsGetResponse = GetPmItemsApiFleetChunksChunkIdPmItemsGetResponses[keyof GetPmItemsApiFleetChunksChunkIdPmItemsGetResponses];
+
+export type RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/fleet/chunks/{chunk_id}/route-token';
+};
+
+export type RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostError = RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostErrors[keyof RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostErrors];
+
+export type RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: RouteTokenRekeyResponse;
+};
+
+export type RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostResponse = RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostResponses[keyof RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostResponses];
+
+export type IngestRunnerFactsApiFleetEventsPostData = {
+    body: RunnerFactBatch;
+    path?: never;
+    query?: never;
+    url: '/api/fleet/events';
+};
+
+export type IngestRunnerFactsApiFleetEventsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type IngestRunnerFactsApiFleetEventsPostError = IngestRunnerFactsApiFleetEventsPostErrors[keyof IngestRunnerFactsApiFleetEventsPostErrors];
+
+export type IngestRunnerFactsApiFleetEventsPostResponses = {
     /**
      * Successful Response
      */
     200: RunnerFactAck;
 };
 
-export type IngestRunnerFactsApiEventsPostResponse = IngestRunnerFactsApiEventsPostResponses[keyof IngestRunnerFactsApiEventsPostResponses];
+export type IngestRunnerFactsApiFleetEventsPostResponse = IngestRunnerFactsApiFleetEventsPostResponses[keyof IngestRunnerFactsApiFleetEventsPostResponses];
 
-export type FleetSpendApiFleetSpendGetData = {
+export type GetQuestionApiFleetQuestionsQuestionIdGetData = {
     body?: never;
-    path?: never;
-    query: {
+    path: {
         /**
-         * Since
+         * Question Id
          */
-        since: string;
+        question_id: string;
     };
-    url: '/api/fleet/spend';
+    query?: never;
+    url: '/api/fleet/questions/{question_id}';
 };
 
-export type FleetSpendApiFleetSpendGetErrors = {
+export type GetQuestionApiFleetQuestionsQuestionIdGetErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type FleetSpendApiFleetSpendGetError = FleetSpendApiFleetSpendGetErrors[keyof FleetSpendApiFleetSpendGetErrors];
+export type GetQuestionApiFleetQuestionsQuestionIdGetError = GetQuestionApiFleetQuestionsQuestionIdGetErrors[keyof GetQuestionApiFleetQuestionsQuestionIdGetErrors];
 
-export type FleetSpendApiFleetSpendGetResponses = {
+export type GetQuestionApiFleetQuestionsQuestionIdGetResponses = {
     /**
      * Successful Response
      */
-    200: FleetSpendView;
+    200: QuestionView;
 };
 
-export type FleetSpendApiFleetSpendGetResponse = FleetSpendApiFleetSpendGetResponses[keyof FleetSpendApiFleetSpendGetResponses];
+export type GetQuestionApiFleetQuestionsQuestionIdGetResponse = GetQuestionApiFleetQuestionsQuestionIdGetResponses[keyof GetQuestionApiFleetQuestionsQuestionIdGetResponses];
+
+export type PeekQueueApiFleetQueuePeekGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/fleet/queue/peek';
+};
+
+export type PeekQueueApiFleetQueuePeekGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: QueuePeekResponse;
+};
+
+export type PeekQueueApiFleetQueuePeekGetResponse = PeekQueueApiFleetQueuePeekGetResponses[keyof PeekQueueApiFleetQueuePeekGetResponses];
+
+export type ClaimRouteApiFleetRoutesPostData = {
+    body: RouteClaim;
+    path?: never;
+    query?: never;
+    url: '/api/fleet/routes';
+};
+
+export type ClaimRouteApiFleetRoutesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ClaimRouteApiFleetRoutesPostError = ClaimRouteApiFleetRoutesPostErrors[keyof ClaimRouteApiFleetRoutesPostErrors];
+
+export type ClaimRouteApiFleetRoutesPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: RouteClaimResponse;
+};
+
+export type ClaimRouteApiFleetRoutesPostResponse = ClaimRouteApiFleetRoutesPostResponses[keyof ClaimRouteApiFleetRoutesPostResponses];
+
+export type RegisterRunnerApiFleetRunnersPostData = {
+    body: RunnerRegistrationRequest;
+    path?: never;
+    query?: never;
+    url: '/api/fleet/runners';
+};
+
+export type RegisterRunnerApiFleetRunnersPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RegisterRunnerApiFleetRunnersPostError = RegisterRunnerApiFleetRunnersPostErrors[keyof RegisterRunnerApiFleetRunnersPostErrors];
+
+export type RegisterRunnerApiFleetRunnersPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: RunnerRegistrationResponse;
+};
+
+export type RegisterRunnerApiFleetRunnersPostResponse = RegisterRunnerApiFleetRunnersPostResponses[keyof RegisterRunnerApiFleetRunnersPostResponses];
+
+export type GetRunnerApiFleetRunnersRunnerIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Runner Id
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/api/fleet/runners/{runner_id}';
+};
+
+export type GetRunnerApiFleetRunnersRunnerIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetRunnerApiFleetRunnersRunnerIdGetError = GetRunnerApiFleetRunnersRunnerIdGetErrors[keyof GetRunnerApiFleetRunnersRunnerIdGetErrors];
+
+export type GetRunnerApiFleetRunnersRunnerIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: RunnerView;
+};
+
+export type GetRunnerApiFleetRunnersRunnerIdGetResponse = GetRunnerApiFleetRunnersRunnerIdGetResponses[keyof GetRunnerApiFleetRunnersRunnerIdGetResponses];
+
+export type HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostData = {
+    body?: never;
+    path: {
+        /**
+         * Runner Id
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/api/fleet/runners/{runner_id}/heartbeats';
+};
+
+export type HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostError = HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostErrors[keyof HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostErrors];
+
+export type HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostResponse = HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostResponses[keyof HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostResponses];
 
 export type ListGraphsApiGraphsGetData = {
     body?: never;
@@ -2821,36 +3095,6 @@ export type AskQuestionApiQuestionsPostResponses = {
 
 export type AskQuestionApiQuestionsPostResponse = AskQuestionApiQuestionsPostResponses[keyof AskQuestionApiQuestionsPostResponses];
 
-export type GetQuestionApiQuestionsQuestionIdGetData = {
-    body?: never;
-    path: {
-        /**
-         * Question Id
-         */
-        question_id: string;
-    };
-    query?: never;
-    url: '/api/questions/{question_id}';
-};
-
-export type GetQuestionApiQuestionsQuestionIdGetErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type GetQuestionApiQuestionsQuestionIdGetError = GetQuestionApiQuestionsQuestionIdGetErrors[keyof GetQuestionApiQuestionsQuestionIdGetErrors];
-
-export type GetQuestionApiQuestionsQuestionIdGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: QuestionView;
-};
-
-export type GetQuestionApiQuestionsQuestionIdGetResponse = GetQuestionApiQuestionsQuestionIdGetResponses[keyof GetQuestionApiQuestionsQuestionIdGetResponses];
-
 export type AnswerQuestionApiQuestionsQuestionIdAnswerPostData = {
     body: AnswerRequest;
     path: {
@@ -2938,31 +3182,6 @@ export type ReadyApiReadyGetResponses = {
 
 export type ReadyApiReadyGetResponse = ReadyApiReadyGetResponses[keyof ReadyApiReadyGetResponses];
 
-export type ClaimRouteApiRoutesPostData = {
-    body: RouteClaim;
-    path?: never;
-    query?: never;
-    url: '/api/routes';
-};
-
-export type ClaimRouteApiRoutesPostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ClaimRouteApiRoutesPostError = ClaimRouteApiRoutesPostErrors[keyof ClaimRouteApiRoutesPostErrors];
-
-export type ClaimRouteApiRoutesPostResponses = {
-    /**
-     * Successful Response
-     */
-    201: RouteClaimResponse;
-};
-
-export type ClaimRouteApiRoutesPostResponse = ClaimRouteApiRoutesPostResponses[keyof ClaimRouteApiRoutesPostResponses];
-
 export type ListRunnersApiRunnersGetData = {
     body?: never;
     path?: never;
@@ -2979,32 +3198,7 @@ export type ListRunnersApiRunnersGetResponses = {
 
 export type ListRunnersApiRunnersGetResponse = ListRunnersApiRunnersGetResponses[keyof ListRunnersApiRunnersGetResponses];
 
-export type RegisterRunnerApiRunnersPostData = {
-    body: RunnerRegistrationRequest;
-    path?: never;
-    query?: never;
-    url: '/api/runners';
-};
-
-export type RegisterRunnerApiRunnersPostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type RegisterRunnerApiRunnersPostError = RegisterRunnerApiRunnersPostErrors[keyof RegisterRunnerApiRunnersPostErrors];
-
-export type RegisterRunnerApiRunnersPostResponses = {
-    /**
-     * Successful Response
-     */
-    201: RunnerRegistrationResponse;
-};
-
-export type RegisterRunnerApiRunnersPostResponse = RegisterRunnerApiRunnersPostResponses[keyof RegisterRunnerApiRunnersPostResponses];
-
-export type GetRunnerApiRunnersRunnerIdGetData = {
+export type EnrollRunnerApiRunnersRunnerIdEnrollmentsPostData = {
     body?: never;
     path: {
         /**
@@ -3013,56 +3207,26 @@ export type GetRunnerApiRunnersRunnerIdGetData = {
         runner_id: string;
     };
     query?: never;
-    url: '/api/runners/{runner_id}';
+    url: '/api/runners/{runner_id}/enrollments';
 };
 
-export type GetRunnerApiRunnersRunnerIdGetErrors = {
+export type EnrollRunnerApiRunnersRunnerIdEnrollmentsPostErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type GetRunnerApiRunnersRunnerIdGetError = GetRunnerApiRunnersRunnerIdGetErrors[keyof GetRunnerApiRunnersRunnerIdGetErrors];
+export type EnrollRunnerApiRunnersRunnerIdEnrollmentsPostError = EnrollRunnerApiRunnersRunnerIdEnrollmentsPostErrors[keyof EnrollRunnerApiRunnersRunnerIdEnrollmentsPostErrors];
 
-export type GetRunnerApiRunnersRunnerIdGetResponses = {
+export type EnrollRunnerApiRunnersRunnerIdEnrollmentsPostResponses = {
     /**
      * Successful Response
      */
-    200: RunnerView;
+    201: RunnerEnrollmentResponse;
 };
 
-export type GetRunnerApiRunnersRunnerIdGetResponse = GetRunnerApiRunnersRunnerIdGetResponses[keyof GetRunnerApiRunnersRunnerIdGetResponses];
-
-export type HeartbeatRunnerApiRunnersRunnerIdHeartbeatsPostData = {
-    body?: never;
-    path: {
-        /**
-         * Runner Id
-         */
-        runner_id: string;
-    };
-    query?: never;
-    url: '/api/runners/{runner_id}/heartbeats';
-};
-
-export type HeartbeatRunnerApiRunnersRunnerIdHeartbeatsPostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type HeartbeatRunnerApiRunnersRunnerIdHeartbeatsPostError = HeartbeatRunnerApiRunnersRunnerIdHeartbeatsPostErrors[keyof HeartbeatRunnerApiRunnersRunnerIdHeartbeatsPostErrors];
-
-export type HeartbeatRunnerApiRunnersRunnerIdHeartbeatsPostResponses = {
-    /**
-     * Successful Response
-     */
-    204: void;
-};
-
-export type HeartbeatRunnerApiRunnersRunnerIdHeartbeatsPostResponse = HeartbeatRunnerApiRunnersRunnerIdHeartbeatsPostResponses[keyof HeartbeatRunnerApiRunnersRunnerIdHeartbeatsPostResponses];
+export type EnrollRunnerApiRunnersRunnerIdEnrollmentsPostResponse = EnrollRunnerApiRunnersRunnerIdEnrollmentsPostResponses[keyof EnrollRunnerApiRunnersRunnerIdEnrollmentsPostResponses];
 
 export type PauseRunnerApiRunnersRunnerIdPausePostData = {
     body: RunnerPauseRequest;
@@ -3123,3 +3287,33 @@ export type ResumeRunnerApiRunnersRunnerIdResumePostResponses = {
 };
 
 export type ResumeRunnerApiRunnersRunnerIdResumePostResponse = ResumeRunnerApiRunnersRunnerIdResumePostResponses[keyof ResumeRunnerApiRunnersRunnerIdResumePostResponses];
+
+export type FleetSpendApiSpendGetData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Since
+         */
+        since: string;
+    };
+    url: '/api/spend';
+};
+
+export type FleetSpendApiSpendGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type FleetSpendApiSpendGetError = FleetSpendApiSpendGetErrors[keyof FleetSpendApiSpendGetErrors];
+
+export type FleetSpendApiSpendGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: FleetSpendView;
+};
+
+export type FleetSpendApiSpendGetResponse = FleetSpendApiSpendGetResponses[keyof FleetSpendApiSpendGetResponses];

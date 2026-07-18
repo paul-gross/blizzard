@@ -33,6 +33,7 @@ from blizzard.hub.domain.claim import ClaimService
 from blizzard.hub.domain.decisions import DecisionService, RequeueService
 from blizzard.hub.domain.detach import DetachService
 from blizzard.hub.domain.edit import EditService
+from blizzard.hub.domain.enrollment import RunnerEnrollmentService
 from blizzard.hub.domain.facts import FactIngestService, RunnerFactsService
 from blizzard.hub.domain.graph import GraphDoc, IReadGraphRepository
 from blizzard.hub.domain.graph_authoring import GraphMintService
@@ -41,7 +42,7 @@ from blizzard.hub.domain.pause import PauseService
 from blizzard.hub.domain.promote import PromoteService
 from blizzard.hub.domain.questions import QuestionService
 from blizzard.hub.domain.queue import GroupService, QueueService
-from blizzard.hub.domain.registry import FleetService
+from blizzard.hub.domain.registry import FleetService, IReadRunnerRegistry
 from blizzard.hub.domain.work import IReadChunkRepository
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.graphs import default_graph_yaml, load_default_graph_doc
@@ -73,6 +74,14 @@ class HubServices:
     queue: QueueService
     group: GroupService
     fleet: FleetService
+    enrollment: RunnerEnrollmentService
+    #: The fleet registry's read-only Protocol, held directly by ``HubServices``
+    #: (mirroring ``chunks: IReadChunkRepository``) so an edge dependency —
+    #: ``require_runner_principal`` (``hub/api/auth.py``) — can resolve a presented
+    #: bearer token's hash to its runner without holding a domain service
+    #: (``bzh:controller-read-only``: a read-only repository is fine at the edge).
+    #: The same underlying store instance as ``fleet``'s write registry.
+    registry: IReadRunnerRegistry
     hub_node: HubNodeExecutor
     events: EventBroker
     clock: IClock
@@ -127,6 +136,7 @@ def build_services(
     # One fleet service, shared: the API's pause routes and the fact ingest both land
     # registry facts, and two instances would be two of the same thing (issue #43).
     fleet = FleetService(registry=registry_store, clock=clock)
+    enrollment = RunnerEnrollmentService(registry=registry_store, clock=clock)
     return HubServices(
         chunks=chunk_store,
         graphs=graph_store,
@@ -146,6 +156,8 @@ def build_services(
         queue=QueueService(chunks=chunk_store, clock=clock),
         group=GroupService(chunks=chunk_store, clock=clock),
         fleet=fleet,
+        enrollment=enrollment,
+        registry=registry_store,
         hub_node=hub_node,
         events=events,
         clock=clock,

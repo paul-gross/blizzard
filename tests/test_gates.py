@@ -119,7 +119,7 @@ def _ingest(hub, yaml_body: str) -> tuple[str, dict]:  # type: ignore[no-untyped
 
 def _claim_and_lease(hub, chunk_id: str, *, epoch: int = 1, seq: int = 1) -> None:  # type: ignore[no-untyped-def]
     hub.client.post(
-        "/api/routes",
+        "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
     )
     report_lease(hub, chunk_id, epoch=epoch, seq=seq)
@@ -150,7 +150,7 @@ def test_graph_gate_opens_a_decision_and_parks(tmp_path: Path) -> None:
 
     # build passes -> the transition lands on the human gate: the hub opens a decision.
     resp = hub.client.post(
-        f"/api/chunks/{chunk_id}/completions",
+        f"/api/fleet/chunks/{chunk_id}/completions",
         json=_completion(nodes["build"], choice="pass", artifacts=[_BUILD_ARTIFACT]),
     )
     assert resp.json()["outcome"] == "parked_at_gate", resp.text
@@ -173,13 +173,13 @@ def test_worker_transition_out_of_a_gate_is_rejected(tmp_path: Path) -> None:
     chunk_id, nodes = _ingest(hub, _GATE_YAML)
     _claim_and_lease(hub, chunk_id)
     hub.client.post(
-        f"/api/chunks/{chunk_id}/completions",
+        f"/api/fleet/chunks/{chunk_id}/completions",
         json=_completion(nodes["build"], choice="pass", artifacts=[_BUILD_ARTIFACT]),
     )
 
     # A plain worker transition OUT of the human-judged gate (no decision_id) is rejected.
     resp = hub.client.post(
-        f"/api/chunks/{chunk_id}/completions",
+        f"/api/fleet/chunks/{chunk_id}/completions",
         json=_completion(nodes["approve-gate"], choice="approve"),
     )
     assert resp.json()["outcome"] == "failure"
@@ -193,7 +193,7 @@ def test_decide_then_resolving_transition_advances_the_chunk(tmp_path: Path) -> 
     chunk_id, nodes = _ingest(hub, _GATE_YAML)
     _claim_and_lease(hub, chunk_id)
     hub.client.post(
-        f"/api/chunks/{chunk_id}/completions",
+        f"/api/fleet/chunks/{chunk_id}/completions",
         json=_completion(nodes["build"], choice="pass", artifacts=[_BUILD_ARTIFACT]),
     )
     decision_id = hub.client.get(f"/api/chunks/{chunk_id}").json()["decision"]["decision_id"]
@@ -209,7 +209,7 @@ def test_decide_then_resolving_transition_advances_the_chunk(tmp_path: Path) -> 
 
     # The holding runner records the resolving transition referencing the decision.
     resolving = hub.client.post(
-        f"/api/chunks/{chunk_id}/completions",
+        f"/api/fleet/chunks/{chunk_id}/completions",
         json=_completion(nodes["approve-gate"], choice="approve", decision_id=decision_id),
     )
     # approve -> deliver (a generic hub command node): its run: script executes.
@@ -228,7 +228,7 @@ def test_resolution_is_first_write_wins(tmp_path: Path) -> None:
     chunk_id, nodes = _ingest(hub, _GATE_YAML)
     _claim_and_lease(hub, chunk_id)
     hub.client.post(
-        f"/api/chunks/{chunk_id}/completions",
+        f"/api/fleet/chunks/{chunk_id}/completions",
         json=_completion(nodes["build"], choice="pass", artifacts=[_BUILD_ARTIFACT]),
     )
     decision_id = hub.client.get(f"/api/chunks/{chunk_id}").json()["decision"]["decision_id"]
@@ -249,7 +249,7 @@ def test_decide_unknown_choice_is_400(tmp_path: Path) -> None:
     chunk_id, nodes = _ingest(hub, _GATE_YAML)
     _claim_and_lease(hub, chunk_id)
     hub.client.post(
-        f"/api/chunks/{chunk_id}/completions",
+        f"/api/fleet/chunks/{chunk_id}/completions",
         json=_completion(nodes["build"], choice="pass", artifacts=[_BUILD_ARTIFACT]),
     )
     decision_id = hub.client.get(f"/api/chunks/{chunk_id}").json()["decision"]["decision_id"]
@@ -270,7 +270,7 @@ def test_runner_config_gate_submits_a_decision_for_a_worker_node(tmp_path: Path)
     # The runner gates `build` by config: instead of a transition it POSTs a decision,
     # carrying the step's artifacts; the choice set is the node's own (pass/fail).
     resp = hub.client.post(
-        f"/api/chunks/{chunk_id}/decisions",
+        f"/api/fleet/chunks/{chunk_id}/decisions",
         json={"from_node_id": nodes["build"], "epoch": 1, "runner_id": "r1", "artifacts": [_BUILD_ARTIFACT]},
     )
     assert resp.json()["outcome"] == "parked_at_gate", resp.text
@@ -287,7 +287,7 @@ def test_runner_config_gate_submits_a_decision_for_a_worker_node(tmp_path: Path)
     # advances build -> deliver.
     hub.client.post(f"/api/decisions/{decision['decision_id']}/resolution", json={"choice": "pass"})
     resolving = hub.client.post(
-        f"/api/chunks/{chunk_id}/completions",
+        f"/api/fleet/chunks/{chunk_id}/completions",
         json=_completion(nodes["build"], choice="pass", decision_id=decision["decision_id"]),
     )
     assert resolving.json()["outcome"] == "hub_node_taken", resolving.text
@@ -299,8 +299,8 @@ def test_runner_config_gate_submission_is_idempotent(tmp_path: Path) -> None:
     chunk_id, nodes = _ingest(hub, _PLAIN_YAML)
     _claim_and_lease(hub, chunk_id)
     body = {"from_node_id": nodes["build"], "epoch": 1, "runner_id": "r1", "artifacts": [_BUILD_ARTIFACT]}
-    hub.client.post(f"/api/chunks/{chunk_id}/decisions", json=body)
-    hub.client.post(f"/api/chunks/{chunk_id}/decisions", json=body)  # replay (lost ack)
+    hub.client.post(f"/api/fleet/chunks/{chunk_id}/decisions", json=body)
+    hub.client.post(f"/api/fleet/chunks/{chunk_id}/decisions", json=body)  # replay (lost ack)
     # Exactly one decision open — the natural-key probe deduped the replay.
     assert len(hub.client.get("/api/decisions").json()["decisions"]) == 1
 
@@ -316,7 +316,7 @@ def test_requeue_closes_an_escalation_by_supersession(tmp_path: Path) -> None:
     _claim_and_lease(hub, chunk_id)
     # Report an escalation (retries exhausted) — the chunk derives needs_human.
     esc = hub.client.post(
-        f"/api/chunks/{chunk_id}/escalations",
+        f"/api/fleet/chunks/{chunk_id}/escalations",
         json={"epoch": 1, "runner_id": "r1", "takeover_command": "cd env && claude --resume s"},
     )
     assert esc.status_code == 202
@@ -390,7 +390,7 @@ def test_detach_an_escalated_chunk_succeeds_and_the_escalation_survives(tmp_path
     chunk_id, _ = _ingest(hub, _PLAIN_YAML)
     _claim_and_lease(hub, chunk_id)
     esc = hub.client.post(
-        f"/api/chunks/{chunk_id}/escalations",
+        f"/api/fleet/chunks/{chunk_id}/escalations",
         json={"epoch": 1, "runner_id": "r1", "takeover_command": "cd env && claude --resume s"},
     )
     assert esc.status_code == 202
@@ -437,7 +437,7 @@ def test_reclaim_at_a_same_instant_tie_still_derives_running(tmp_path: Path) -> 
 
     # No clock.advance: this claim's route.created ties the just-written route.released.
     reclaim = hub.client.post(
-        "/api/routes",
+        "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r2", "workspace_id": "w2", "environment_ids": ["e"]},
     )
     assert reclaim.status_code == 201, reclaim.text

@@ -5,21 +5,21 @@ over the **served mission-control board** (``blizzard hub host`` mounts the buil
 app at ``/``) wired to a live hub over a minted ``blizzard-mock`` fixture. Scenario 6
 (``test_board_browser_e2e``) proves the operator *controls* live over SSE; this scenario
 proves the **cost/usage figures** the P4 render adds are (a) rendered end to end from a
-real ``GET /api/chunks`` + ``GET /api/fleet/spend`` off the live hub, and (b) **updated
+real ``GET /api/chunks`` + ``GET /api/spend`` off the live hub, and (b) **updated
 live over SSE with no reload** when a fresh ``usage.recorded`` fact lands — the one claim
 only a real browser over the real SSE spine can make, and the one the component tiers
 (``chunk-detail-panel.spec.ts``, ``board-header.spec.ts``, ``board-shell.spec.ts``,
 ``fleet-live.spec.ts``, ``test_usage_facts_ingest.py``) each prove only a slice of.
 
-The live path exercised: a usage fact arrives at ``POST /api/events`` (``kind:
+The live path exercised: a usage fact arrives at ``POST /api/fleet/events`` (``kind:
 usage.recorded``), the hub re-broadcasts ``chunk-changed`` over ``GET /api/events/stream``
 (SSE), the ``FleetLiveUpdates`` spine invalidates the chunk read **and** the fleet
 spend-since read (``hubFleetSpendKey``), and the board re-derives — the card's cost badge,
 the header's spend-today figure, and the open detail dock's total all move **in place**.
 
-No runner is driven: the chunk is claimed straight through ``POST /api/routes`` (the same
+No runner is driven: the chunk is claimed straight through ``POST /api/fleet/routes`` (the same
 claim the runner's FILL makes) so it derives ``running`` and shows on the board, then usage
-facts are pushed straight through the hub's own ``POST /api/events`` — the runner's real
+facts are pushed straight through the hub's own ``POST /api/fleet/events`` — the runner's real
 store-and-forward destination. That keeps the scenario about the *render + SSE* surface
 this phase added, not a re-proof of the reconciliation loop scenario 6 already carries.
 
@@ -75,7 +75,7 @@ def _ingest_promote_claim(forge: httpx.Client, hub: httpx.Client, title: str) ->
     chunk_id = ingested.json()["chunk_id"]
     assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
     claim = hub.post(
-        "/api/routes",
+        "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
     )
     assert claim.status_code == 201, claim.text
@@ -109,7 +109,7 @@ def _push_usage(
         "cost_usd": cost_usd,
     }
     resp = hub.post(
-        "/api/events",
+        "/api/fleet/events",
         json={"runner_id": "r1", "facts": [{"seq": seq, "kind": "usage.recorded", "payload": payload}]},
     )
     assert resp.status_code == 200, resp.text

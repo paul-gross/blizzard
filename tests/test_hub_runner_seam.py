@@ -72,7 +72,7 @@ def test_detach_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -
     assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
 
     claim = hub.client.post(
-        "/api/routes",
+        "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "ws1", "environment_ids": ["e1"]},
     )
     assert claim.status_code == 201, claim.text

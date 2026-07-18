@@ -67,6 +67,141 @@ def test_resume_command_is_the_literal_takeover() -> None:
     assert cmd == "cd /ws/e1 && claude --resume sess-x"
 
 
+# --------------------------------------------------------------------------- #
+# Spawn-environment allowlist (issue #88): no call path copies `os.environ` wholesale
+# --------------------------------------------------------------------------- #
+
+_SENTINEL_UNLISTED_VAR = "MY_UNLISTED_SENTINEL_VAR"
+
+
+@pytest.mark.unit
+def test_spawn_env_excludes_the_hub_token_and_an_unlisted_sentinel(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("BZ_HUB_TOKEN", "super-secret-token")
+    monkeypatch.setenv(_SENTINEL_UNLISTED_VAR, "should-not-leak")
+    adapter = ClaudeCodeAdapter(binary="claude")
+    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
+    preamble = WorkerPreamble(
+        environments=[AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")],
+        lease_id="lease_1",
+        local_api_url="http://127.0.0.1:8431",
+    )
+
+    env = adapter._spawn_env(envelope, preamble, "sess-1")
+
+    assert "BZ_HUB_TOKEN" not in env
+    assert _SENTINEL_UNLISTED_VAR not in env
+
+
+@pytest.mark.component
+def test_judge_child_env_excludes_the_hub_token_and_an_unlisted_sentinel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("BZ_HUB_TOKEN", "super-secret-token")
+    monkeypatch.setenv(_SENTINEL_UNLISTED_VAR, "should-not-leak")
+    dump_script = tmp_path / "dump-env"
+    dump_script.write_text(_ENV_DUMP_HARNESS)
+    dump_script.chmod(dump_script.stat().st_mode | stat.S_IEXEC | stat.S_IRUSR)
+    workdir = tmp_path / "e1"
+    workdir.mkdir()
+    adapter = ClaudeCodeAdapter(binary=str(dump_script))
+
+    adapter.judge(str(workdir), "sess-1", "assess")
+
+    dumped = json.loads((workdir / "env-dump.json").read_text())
+    assert "BZ_HUB_TOKEN" not in dumped
+    assert _SENTINEL_UNLISTED_VAR not in dumped
+
+
+@pytest.mark.component
+def test_resume_with_message_child_env_excludes_the_hub_token_and_an_unlisted_sentinel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("BZ_HUB_TOKEN", "super-secret-token")
+    monkeypatch.setenv(_SENTINEL_UNLISTED_VAR, "should-not-leak")
+    dump_script = tmp_path / "dump-env"
+    dump_script.write_text(_ENV_DUMP_HARNESS)
+    dump_script.chmod(dump_script.stat().st_mode | stat.S_IEXEC | stat.S_IRUSR)
+    workdir = tmp_path / "e1"
+    workdir.mkdir()
+    adapter = ClaudeCodeAdapter(binary=str(dump_script))
+
+    pid = adapter.resume_with_message(str(workdir), "sess-1", "deliver")
+    os.waitpid(pid, 0)
+
+    dumped = json.loads((workdir / "env-dump.json").read_text())
+    assert "BZ_HUB_TOKEN" not in dumped
+    assert _SENTINEL_UNLISTED_VAR not in dumped
+
+
+@pytest.mark.unit
+def test_spawn_env_forwards_a_named_passthrough_var(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MY_HARNESS_QUIRK", "needed-by-the-real-binary")
+    adapter = ClaudeCodeAdapter(binary="claude", env_passthrough=("MY_HARNESS_QUIRK",))
+    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
+    preamble = WorkerPreamble(
+        environments=[AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")],
+        lease_id="lease_1",
+        local_api_url="http://127.0.0.1:8431",
+    )
+
+    env = adapter._spawn_env(envelope, preamble, "sess-1")
+
+    assert env["MY_HARNESS_QUIRK"] == "needed-by-the-real-binary"
+
+
+@pytest.mark.unit
+def test_spawn_env_forwards_lc_prefixed_locale_vars(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LC_ALL", "en_US.UTF-8")
+    monkeypatch.setenv("LC_TIME", "fr_FR.UTF-8")
+    adapter = ClaudeCodeAdapter(binary="claude")
+    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
+    preamble = WorkerPreamble(
+        environments=[AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")],
+        lease_id="lease_1",
+        local_api_url="http://127.0.0.1:8431",
+    )
+
+    env = adapter._spawn_env(envelope, preamble, "sess-1")
+
+    assert env["LC_ALL"] == "en_US.UTF-8"
+    assert env["LC_TIME"] == "fr_FR.UTF-8"
+
+
+@pytest.mark.unit
+def test_spawn_env_still_carries_the_base_allowlist_and_deliberate_blizzard_vars(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The allowlist is not a denylist rewrite in disguise: PATH/HOME (needed to locate
+    # and run the binary) and the adapter's own BLIZZARD_* additions still ride the
+    # child env exactly as before.
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    monkeypatch.setenv("HOME", "/home/worker")
+    adapter = ClaudeCodeAdapter(binary="claude")
+    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
+    preamble = WorkerPreamble(
+        environments=[AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")],
+        lease_id="lease_1",
+        local_api_url="http://127.0.0.1:8431",
+    )
+
+    env = adapter._spawn_env(envelope, preamble, "sess-1")
+
+    assert env["PATH"] == "/usr/bin:/bin"
+    assert env["HOME"] == "/home/worker"
+    assert env["BLIZZARD_LEASE_ID"] == "lease_1"
+    assert env["BLIZZARD_SESSION_ID"] == "sess-1"
+
+
+_ENV_DUMP_HARNESS = """#!/usr/bin/env python3
+import json, os
+with open("env-dump.json", "w") as f:
+    json.dump(dict(os.environ), f)
+print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": "", "session_id": "auto"}))
+"""
+
+
 _FAKE_HARNESS = """#!/usr/bin/env python3
 import sys, json
 args = sys.argv[1:]

@@ -1,11 +1,15 @@
-"""Decision routes — gate surfacing and resolution.
+"""Decision routes — gate surfacing and resolution — the anonymous **operator**
+surface (issue #87).
 
-The fleet half of the human gate: ``GET /decisions`` lists the open decisions the
+The human-gate half a person drives: ``GET /decisions`` lists the open decisions the
 board and ``blizzard hub decisions`` render, and ``POST /decisions/{id}/resolution``
 records a person's choice first-write-wins — the same route the board's buttons and
 ``blizzard hub decide`` hit. The controller stays read-only over the
 store (``bzh:controller-read-only``): resolution delegates to
 :class:`~blizzard.hub.domain.decisions.DecisionService`.
+``dependencies=[Depends(reject_runner_principal)]`` rejects a runner's bearer token
+here rather than treating it as anonymous-plus-credential — a runner's token is
+confined to the fleet router.
 """
 
 from __future__ import annotations
@@ -16,6 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.work import DecisionRow
@@ -28,7 +33,7 @@ from blizzard.wire.decision import (
     OpenDecisionsResponse,
 )
 
-router = APIRouter(prefix="/api", tags=["decisions"])
+router = APIRouter(prefix="/api", tags=["decisions"], dependencies=[Depends(reject_runner_principal)])
 
 
 def to_decision_view(row: DecisionRow) -> DecisionView:

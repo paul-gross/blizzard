@@ -15,6 +15,18 @@ a transport failure to the hub is a ``502`` and the hub's own status (``404``
 unknown chunk, ``503`` no work-source configured) passes through verbatim so the worker
 sees the real reason. A per-pointer forge failure is not a status — the hub degrades it to
 an ``error`` on that entry, so the worker still reads the pointers it did reach.
+
+The forward carries the same ``Authorization: Bearer`` credential as the reconciliation
+loop's own hub client (issue #86b) — ``config.hub_token``, resolved once at ``host``
+startup — rather than a separately patched header: one credential path for every
+runner->hub call. No header at all when ``hub_token`` is empty (unenrolled / warn-mode
+fleet with no token installed yet).
+
+The forward targets the hub's fleet-side counterpart (``/api/fleet/chunks/{id}/pm-items``,
+issue #87), not the board's own anonymous ``/api/chunks/{id}/pm-items`` — a runner
+bearer token is confined to the fleet router, so forwarding it to the operator path
+would now be rejected under ``enforce``. Both routes render the same read; the board
+reaches its own copy directly, unauthenticated.
 """
 
 from __future__ import annotations
@@ -42,9 +54,9 @@ def get_pm_items(chunk_id: str, request: Request) -> PmItemsView:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="runner not wired to a hub — start via `blizzard runner host`",
         )
-    url = f"{config.hub_url.rstrip('/')}/api/chunks/{chunk_id}/pm-items"
+    url = f"{config.hub_url.rstrip('/')}/api/fleet/chunks/{chunk_id}/pm-items"
     try:
-        upstream = httpx.get(url, timeout=_HUB_TIMEOUT)
+        upstream = httpx.get(url, headers=config.auth_headers(), timeout=_HUB_TIMEOUT)
     except httpx.HTTPError as exc:
         _log.error("pm-items proxy could not reach the hub", chunk_id=chunk_id, error=str(exc))
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"hub unreachable: {exc}") from exc

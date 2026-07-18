@@ -53,6 +53,7 @@ from blizzard.runner.store.schema import (
     requeues,
     resume_clears,
     resume_intents,
+    route_tokens,
     session_ends,
     takeover_ends,
     takeovers,
@@ -422,6 +423,10 @@ class SqlAlchemyRunnerStore:
         rows = self._all(select(workspace_prompt.c.prompt).where(workspace_prompt.c.workspace_id == workspace_id))
         return str(rows[0].prompt) if rows else None
 
+    def route_token(self, chunk_id: str) -> str | None:
+        rows = self._all(select(route_tokens.c.token).where(route_tokens.c.chunk_id == chunk_id))
+        return str(rows[0].token) if rows else None
+
     def resume_intent_lease_ids(self) -> set[str]:
         stmt = select(resume_intents.c.lease_id).where(_intent_is_open()).distinct()
         return {str(r.lease_id) for r in self._all(stmt)}
@@ -675,6 +680,19 @@ class SqlAlchemyRunnerStore:
                     .values(prompt=prompt, updated_at=at)
                 )
         _log.info("workspace prompt override set", workspace_id=workspace_id, length=len(prompt))
+
+    def set_route_token(self, chunk_id: str, *, token: str, at: datetime) -> None:
+        with self._begin() as conn:
+            existing = conn.execute(
+                select(route_tokens.c.chunk_id).where(route_tokens.c.chunk_id == chunk_id)
+            ).one_or_none()
+            if existing is None:
+                conn.execute(route_tokens.insert().values(chunk_id=chunk_id, token=token, acquired_at=at))
+            else:
+                conn.execute(
+                    route_tokens.update().where(route_tokens.c.chunk_id == chunk_id).values(token=token, acquired_at=at)
+                )
+        _log.info("route token stashed", chunk_id=chunk_id)
 
     def record_resume_intent(self, *, lease_id: str, marked_at: datetime) -> None:
         with self._begin() as conn:

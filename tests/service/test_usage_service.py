@@ -14,7 +14,7 @@ tiers``), which the new ``ChunkUsageView`` / ``ChunkUsageTotalView`` shapes are:
   recorded once, never re-buffered by the subsequent ticks (the seq high-water idempotency).
 * **mock runner -> live hub (derived totals)** — the mock runner claims a chunk over the wire
   (a real lease + epoch minted on the running hub); usage facts are then pushed through the
-  hub's real ``POST /api/events`` store-and-forward endpoint, and the derived per-node-step
+  hub's real ``POST /api/fleet/events`` store-and-forward endpoint, and the derived per-node-step
   usage + chunk total (with ``cost_partial`` when a row's cost is absent) are read back off
   the **live** ``GET /api/chunks/{id}`` and ``GET /api/chunks`` responses. A replayed seq
   lands nothing twice.
@@ -96,7 +96,10 @@ def _pending_total(config: RunnerConfig) -> int:
 
 
 def _status(hub: httpx.Client, chunk_id: str) -> str:
-    return hub.get(f"/api/chunks/{chunk_id}").json()["status"]
+    """The mock hub's own status read (issue #87 moved its whole hub mirror under
+    ``/api/fleet``) — distinct from the live-hub reads further down this file, which
+    stay at the real hub's anonymous ``GET /api/chunks/{id}``."""
+    return hub.get(f"/api/fleet/chunks/{chunk_id}").json()["status"]
 
 
 def _tick_then_usage_buffered(config: RunnerConfig, fenced: dict[str, str]) -> bool:
@@ -207,7 +210,7 @@ def _usage_payload(chunk_id: str, node_id: str, *, epoch: int, cost_usd: float |
 
 def _push_usage(hub: httpx.Client, *, runner_id: str, seq: int, payload: dict) -> dict:
     resp = hub.post(
-        "/api/events",
+        "/api/fleet/events",
         json={"runner_id": runner_id, "facts": [{"seq": seq, "kind": "usage.recorded", "payload": payload}]},
     )
     assert resp.status_code == 200, resp.text

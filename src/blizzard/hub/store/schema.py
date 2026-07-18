@@ -198,6 +198,29 @@ route_released = Table(
     Column("seq", Integer, nullable=False),
 )
 
+# --- Route capability tokens (route_token_minted — issue #84a) ----------------
+#
+# An unguessable per-acquisition secret minted alongside a claim's ``route_created``
+# fact — an **append-only fact table**, deliberately not a ``token_hash`` column on
+# ``route_created`` (``bzh:facts-not-status``): the route fact is immutable, so a
+# re-key (Phase 6) must append a new token fact, never rewrite the route row, the same
+# reason ``route_released`` is its own table rather than a status flip. Only the
+# sha256 hex digest is ever persisted; the plaintext is returned once in the claim
+# response and never stored. ``seq`` shares :func:`ChunkStore._next_route_seq`'s
+# per-chunk counter with ``route_created``/``route_released`` (not a private one) so a
+# token fact totally orders against a create/release even on a timestamp tie — the
+# hub's own live-token derivation (``hub/domain/work.py``'s ``newest_live_route_token``)
+# depends on that shared ordering to resolve exactly one live token per live route.
+route_token_minted = Table(
+    "route_token_minted",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
+    Column("token_hash", Text, nullable=False),
+    Column("seq", Integer, nullable=False),
+    Column("minted_at", UtcDateTime, nullable=False),
+)
+
 # --- Delivery landing facts (per-repo, then whole-chunk) ----------------------
 
 delivery_repo_landed = Table(
@@ -574,6 +597,17 @@ runner_registrations = Table(
     Column("workspace_id", String, nullable=False),  # the per-runner workspace binding
     Column("registered_at", UtcDateTime, nullable=False),
     Column("last_seen_at", UtcDateTime, nullable=False),  # liveness derives from this
+    # The hub-minted bearer token's sha256 hex digest (issue #86a) — nullable because an
+    # unenrolled runner (every runner before an operator's `enroll` call, and every
+    # pre-#86a row) has none. Indexed because `registration_for_token_hash` selects on
+    # it — the reverse lookup `require_runner_principal` resolves a presented token
+    # through, the mirror image of every other registry read (which key on
+    # `runner_id`, already primary-keyed). A rotating column, not an append-only fact
+    # (`bzh:facts-not-status`'s one deliberate exception — see this table's module
+    # docstring): the registration row is already a mutable upsert, so re-enrollment
+    # overwriting the hash in place is consistent with the rest of the row, unlike the
+    # route capability token (#84's append-only fact table).
+    Column("token_hash", Text, nullable=True, index=True),
 )
 
 runner_pause_facts = Table(

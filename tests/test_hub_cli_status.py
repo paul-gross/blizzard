@@ -1,7 +1,7 @@
 """``blizzard hub status`` — the per-chunk cost column and fleet total (issue #60).
 
 A pure client of the hub API: ``GET /chunks`` + ``GET /runners`` + ``GET /questions``
-+ ``GET /fleet/spend``. This file stubs ``httpx.Client`` (the same monkeypatch seam
++ ``GET /spend``. This file stubs ``httpx.Client`` (the same monkeypatch seam
 ``tests/test_ingest_and_pause_verbs.py`` uses for the POST verbs) with canned
 responses keyed by path, so it proves the CLI's own rendering — the per-chunk cost
 column, the fleet total, and the lower-bound PARTIAL marker — without a running hub.
@@ -68,7 +68,7 @@ def _responses(chunk_cost: dict, fleet_cost: dict, runners: list[dict] | None = 
         ],
         "/api/runners": {"runners": runners or []},
         "/api/questions": [],
-        "/api/fleet/spend": {"since": "1970-01-01T00:00:00+00:00", **fleet_cost},
+        "/api/spend": {"since": "1970-01-01T00:00:00+00:00", **fleet_cost},
     }
 
 

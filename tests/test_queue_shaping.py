@@ -83,7 +83,7 @@ def test_paused_chunk_with_a_live_route_is_still_excluded_from_the_queue(tmp_pat
     hub = build_hub(tmp_path)
     a, b = _ingest(hub, 1), _ingest(hub, 2)
     claim = hub.client.post(
-        "/api/routes",
+        "/api/fleet/routes",
         json={"chunk_id": a, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
     )
     assert claim.status_code == 201, claim.text
@@ -151,7 +151,7 @@ def test_reorder_non_ready_chunk_is_409(tmp_path: Path) -> None:
     a = _ingest(hub, 1)
     # Claim it so it derives running, not ready.
     claim = hub.client.post(
-        "/api/routes",
+        "/api/fleet/routes",
         json={"chunk_id": a, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
     )
     assert claim.status_code == 201, claim.text
@@ -198,7 +198,7 @@ def test_group_rejects_a_non_ready_member(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     survivor, running = _ingest(hub, 1), _ingest(hub, 2)
     hub.client.post(
-        "/api/routes",
+        "/api/fleet/routes",
         json={"chunk_id": running, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
     )
     resp = hub.client.post(f"/api/chunks/{survivor}/group", json={"merge_chunk_ids": [running]})

@@ -50,7 +50,7 @@ def _api_error(operation: str, exc: Exception) -> click.ClickException:
     return click.ClickException(f"{operation} failed: {exc}")
 
 
-# The since-the-beginning-of-time cutoff `hub status` passes ``GET /api/fleet/spend``
+# The since-the-beginning-of-time cutoff `hub status` passes ``GET /api/spend``
 # for its fleet-total line (issue #60) — a full-fleet overview, not a "today" window
 # (the board's own spend-today figure picks its own local-midnight ``since``).
 _FLEET_SPEND_SINCE = "1970-01-01T00:00:00+00:00"
@@ -174,7 +174,7 @@ def status(url: str | None) -> None:
     """The fleet view: every chunk with its derived status, the runners, and open questions.
 
     A pure client of the hub API: ``GET /chunks`` + ``GET /runners`` +
-    ``GET /questions`` + ``GET /fleet/spend`` (issue #60), the same facts the board
+    ``GET /questions`` + ``GET /spend`` (issue #60), the same facts the board
     renders, in the terminal."""
     base = _hub_url(url)
     try:
@@ -185,7 +185,7 @@ def status(url: str | None) -> None:
             runners.raise_for_status()
             questions = client.get("/api/questions")
             questions.raise_for_status()
-            spend = client.get("/api/fleet/spend", params={"since": _FLEET_SPEND_SINCE})
+            spend = client.get("/api/spend", params={"since": _FLEET_SPEND_SINCE})
             spend.raise_for_status()
     except httpx.HTTPError as exc:
         raise click.ClickException(f"hub status: could not reach the hub at {base} ({exc})") from exc
@@ -529,3 +529,33 @@ def _set_runner_pause(runner_id: str, *, verb: str, by: str, hub_url: str | None
     if body.get("locally_paused"):
         # Resuming here cannot clear the runner's own brake, so don't imply it did.
         click.echo(f"note: runner {runner_id} also paused itself — clear that with `blizzard runner start`")
+
+
+@hub.group("runner")
+def runner_group() -> None:
+    """Operator verbs over one runner's identity (issue #86a: currently just enrollment)."""
+
+
+@runner_group.command("enroll")
+@click.argument("runner_id")
+@click.option("--hub-url", default=None, help=f"Hub API base URL (default ${ENV_HUB_URL} or {DEFAULT_HUB_URL}).")
+def enroll_runner(runner_id: str, hub_url: str | None) -> None:
+    """Mint (or rotate) RUNNER_ID's bearer token; prints the plaintext exactly once.
+
+    A thin client of ``POST /runners/{id}/enrollments`` (issue #86a). Re-running
+    rotates: the old token stops resolving immediately. RUNNER_ID must already be
+    registered at the hub (404 otherwise) — enrollment is a deliberate operator act,
+    not a trust-on-first-use grant."""
+    url = f"{_hub_url(hub_url).rstrip('/')}/api/runners/{runner_id}/enrollments"
+    try:
+        resp = httpx.post(url, timeout=_CLIENT_TIMEOUT)
+    except httpx.HTTPError as exc:
+        raise _api_error("POST /runners/{id}/enrollments", exc) from exc
+    if resp.status_code == httpx.codes.NOT_FOUND:
+        raise click.ClickException(f"unknown runner {runner_id}")
+    try:
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise _api_error("POST /runners/{id}/enrollments", exc) from exc
+    token = resp.json()["token"]
+    click.echo(f"enrolled {runner_id} — bearer token (copy now, shown only once):\n{token}")

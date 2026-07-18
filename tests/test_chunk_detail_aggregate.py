@@ -79,12 +79,12 @@ def test_detail_carries_the_full_aggregate(tmp_path: Path) -> None:
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
 
     hub.client.post(
-        "/api/routes",
+        "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e1", "e2"]},
     )
     report_lease(hub, chunk_id, epoch=1, seq=1)
     hub.client.post(
-        f"/api/chunks/{chunk_id}/completions",
+        f"/api/fleet/chunks/{chunk_id}/completions",
         json={
             "choice": "pass",
             "epoch": 1,

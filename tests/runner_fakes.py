@@ -40,7 +40,7 @@ from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeConfig, Node
 from blizzard.wire.facts import RunnerFact, RunnerFactAck, RunnerFactBatch
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekEntry, QueuePeekResponse
-from blizzard.wire.route import RouteClaim, RouteClaimResponse
+from blizzard.wire.route import RouteClaim, RouteClaimResponse, RouteTokenRekeyResponse
 
 
 def make_store(tmp_path_url: str) -> SqlAlchemyRunnerStore:
@@ -94,6 +94,8 @@ class FakeHub:
         self.not_found: set[str] = set()  # chunk ids `get_chunk`/`get_envelope` 404 for (blizzard#9)
         self.hub_advance_calls: list[str] = []  # chunk ids `hub_advance` was called for (#66)
         self.hub_advance_responses: dict[str, HubAdvanceResponse] = {}
+        self.rekey_calls: list[str] = []  # chunk ids `rekey_route_token` was called for (issue #84b)
+        self.rekey_responses: dict[str, str] = {}  # chunk_id -> the plaintext to hand back
 
     def peek_queue(self) -> QueuePeekResponse:
         return QueuePeekResponse(entries=list(self.queue))
@@ -188,6 +190,15 @@ class FakeHub:
 
     def report_escalation(self, chunk_id: str, *, epoch: int, runner_id: str, takeover_command: str) -> None:
         self.escalations.append((chunk_id, epoch, runner_id, takeover_command))
+
+    def rekey_route_token(self, chunk_id: str) -> RouteTokenRekeyResponse:
+        if chunk_id in self.not_found:
+            raise ChunkNotFoundError(f"chunk {chunk_id} unknown")
+        if self.down:
+            raise HubClientError("fake hub is down")
+        self.rekey_calls.append(chunk_id)
+        token = self.rekey_responses.get(chunk_id, "rtok_rekeyed")
+        return RouteTokenRekeyResponse(chunk_id=chunk_id, route_token=token)
 
 
 class FakeProvider:
@@ -408,7 +419,9 @@ def make_envelope(
     )
 
 
-def claimed_outcome(chunk_id: str, envelope: NodeEnvelope, *, runner_id: str = "r1") -> RouteClaimOutcome:
+def claimed_outcome(
+    chunk_id: str, envelope: NodeEnvelope, *, runner_id: str = "r1", route_token: str = "rtok_test"
+) -> RouteClaimOutcome:
     return RouteClaimOutcome(
         claimed=RouteClaimResponse(
             chunk_id=chunk_id,
@@ -416,5 +429,6 @@ def claimed_outcome(chunk_id: str, envelope: NodeEnvelope, *, runner_id: str = "
             workspace_id="ws1",
             environment_ids=["e1"],
             envelope=envelope,
+            route_token=route_token,
         )
     )

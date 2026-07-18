@@ -27,7 +27,7 @@ _POINTER = {"source": "default", "ref": "7"}
 def _claim(hub) -> tuple[str, str]:  # type: ignore[no-untyped-def]
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
     node_id = hub.client.post(
-        "/api/routes",
+        "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
     ).json()["envelope"]["node"]["node_id"]
     return chunk_id, node_id
@@ -52,7 +52,7 @@ def _push_usage(hub, *, chunk_id: str, node_id: str, epoch: int, seq: int, cost_
     payload = _usage_payload(node_id, epoch=epoch, cost_usd=cost_usd)
     payload["chunk_id"] = chunk_id
     resp = hub.client.post(
-        "/api/events",
+        "/api/fleet/events",
         json={"runner_id": "r1", "facts": [{"seq": seq, "kind": "usage.recorded", "payload": payload}]},
     )
     assert resp.status_code == 200, resp.text

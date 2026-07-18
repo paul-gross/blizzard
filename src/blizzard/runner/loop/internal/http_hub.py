@@ -21,12 +21,23 @@ from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
 from blizzard.wire.facts import EscalationReport, LeaseMintReport, RunnerFactAck, RunnerFactBatch
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekResponse
-from blizzard.wire.route import RouteClaim, RouteClaimConflict, RouteClaimPausedDenial, RouteClaimResponse
+from blizzard.wire.route import (
+    RouteClaim,
+    RouteClaimConflict,
+    RouteClaimPausedDenial,
+    RouteClaimResponse,
+    RouteTokenRekeyResponse,
+)
 from blizzard.wire.runner import RunnerRegistrationRequest, RunnerView
 
 _log = get_logger("blizzard.runner.hub")
 
-_API = "/api"
+#: Every runner->hub call (issue #87) — the fleet router mounts `require_runner_principal`
+#: once at router level, so the runner's whole outbound surface moved under this prefix in
+#: one atomic wire migration (runner and hub ship from one repo). ``hub_advance``
+#: (#65/#66) joined the rest here once its own runner-only-caller status was confirmed —
+#: it postdated issue #87's original route inventory.
+_FLEET_API = "/api/fleet"
 
 
 class HttpHubClient:
@@ -36,43 +47,43 @@ class HttpHubClient:
         self._client = client
 
     def peek_queue(self) -> QueuePeekResponse:
-        resp = self._get(f"{_API}/queue/peek")
+        resp = self._get(f"{_FLEET_API}/queue/peek")
         return QueuePeekResponse.model_validate(resp.json())
 
     def claim_route(self, claim: RouteClaim) -> RouteClaimOutcome:
         try:
-            resp = self._client.post(f"{_API}/routes", json=claim.model_dump(mode="json"))
+            resp = self._client.post(f"{_FLEET_API}/routes", json=claim.model_dump(mode="json"))
         except httpx.HTTPError as exc:
-            raise self._wrap(exc, "POST /routes") from exc
+            raise self._wrap(exc, "POST /fleet/routes") from exc
         if resp.status_code == httpx.codes.CONFLICT:
             return RouteClaimOutcome(conflict=RouteClaimConflict.model_validate(resp.json()))
         if resp.status_code == httpx.codes.FORBIDDEN:
             return RouteClaimOutcome(denied_paused=RouteClaimPausedDenial.model_validate(resp.json()))
-        self._raise_for_status(resp, "POST /routes")
+        self._raise_for_status(resp, "POST /fleet/routes")
         return RouteClaimOutcome(claimed=RouteClaimResponse.model_validate(resp.json()))
 
     def submit_completion(self, chunk_id: str, submission: CompletionSubmission) -> ApplyResponse:
-        resp = self._post(f"{_API}/chunks/{chunk_id}/completions", submission.model_dump(mode="json"))
+        resp = self._post(f"{_FLEET_API}/chunks/{chunk_id}/completions", submission.model_dump(mode="json"))
         return ApplyResponse.model_validate(resp.json())
 
     def submit_decision(self, chunk_id: str, submission: DecisionSubmission) -> ApplyResponse:
-        resp = self._post(f"{_API}/chunks/{chunk_id}/decisions", submission.model_dump(mode="json"))
+        resp = self._post(f"{_FLEET_API}/chunks/{chunk_id}/decisions", submission.model_dump(mode="json"))
         return ApplyResponse.model_validate(resp.json())
 
     def push_facts(self, batch: RunnerFactBatch) -> RunnerFactAck:
-        resp = self._post(f"{_API}/events", batch.model_dump(mode="json"))
+        resp = self._post(f"{_FLEET_API}/events", batch.model_dump(mode="json"))
         return RunnerFactAck.model_validate(resp.json())
 
     def get_envelope(self, chunk_id: str) -> NodeEnvelope:
-        resp = self._get(f"{_API}/chunks/{chunk_id}/envelope", not_found_as=ChunkNotFoundError)
+        resp = self._get(f"{_FLEET_API}/chunks/{chunk_id}/envelope", not_found_as=ChunkNotFoundError)
         return NodeEnvelope.model_validate(resp.json())
 
     def get_chunk(self, chunk_id: str) -> ChunkDetail:
-        resp = self._get(f"{_API}/chunks/{chunk_id}", not_found_as=ChunkNotFoundError)
+        resp = self._get(f"{_FLEET_API}/chunks/{chunk_id}", not_found_as=ChunkNotFoundError)
         return ChunkDetail.model_validate(resp.json())
 
     def hub_advance(self, chunk_id: str) -> HubAdvanceResponse:
-        path = f"{_API}/chunks/{chunk_id}/hub-advance"
+        path = f"{_FLEET_API}/chunks/{chunk_id}/hub-advance"
         try:
             resp = self._client.post(path)
         except httpx.HTTPError as exc:
@@ -81,32 +92,36 @@ class HttpHubClient:
         return HubAdvanceResponse.model_validate(resp.json())
 
     def get_question(self, question_id: str) -> QuestionView:
-        resp = self._get(f"{_API}/questions/{question_id}")
+        resp = self._get(f"{_FLEET_API}/questions/{question_id}")
         return QuestionView.model_validate(resp.json())
 
     def register_runner(self, runner_id: str, workspace_id: str) -> None:
         self._post(
-            f"{_API}/runners",
+            f"{_FLEET_API}/runners",
             RunnerRegistrationRequest(runner_id=runner_id, workspace_id=workspace_id).model_dump(mode="json"),
         )
 
     def fetch_runner_paused(self, runner_id: str) -> bool:
-        resp = self._get(f"{_API}/runners/{runner_id}")
+        resp = self._get(f"{_FLEET_API}/runners/{runner_id}")
         return bool(RunnerView.model_validate(resp.json()).hub_paused)
 
     def report_lease(self, chunk_id: str, *, epoch: int, runner_id: str) -> None:
         self._post(
-            f"{_API}/chunks/{chunk_id}/leases",
+            f"{_FLEET_API}/chunks/{chunk_id}/leases",
             LeaseMintReport(epoch=epoch, runner_id=runner_id).model_dump(mode="json"),
         )
 
     def report_escalation(self, chunk_id: str, *, epoch: int, runner_id: str, takeover_command: str) -> None:
         self._post(
-            f"{_API}/chunks/{chunk_id}/escalations",
+            f"{_FLEET_API}/chunks/{chunk_id}/escalations",
             EscalationReport(epoch=epoch, runner_id=runner_id, takeover_command=takeover_command).model_dump(
                 mode="json"
             ),
         )
+
+    def rekey_route_token(self, chunk_id: str) -> RouteTokenRekeyResponse:
+        resp = self._post(f"{_FLEET_API}/chunks/{chunk_id}/route-token", None)
+        return RouteTokenRekeyResponse.model_validate(resp.json())
 
     # --- plumbing -----------------------------------------------------------
 

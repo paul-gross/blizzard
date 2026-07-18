@@ -30,8 +30,14 @@ In verification ``binary`` points at the ``blizzard-mock`` ``mock-claude-code``
 façade (the prompt is a behavior script it ``exec``s), so the seam is exercised
 against a realistic CLI with no tokens. The identity variables ride the spawn
 environment (``BLIZZARD_LEASE_ID`` / ``BLIZZARD_SESSION_ID`` / ``BLIZZARD_ENV_IDS``);
-the mock fence variables are supplied by the test scaffolding, not by this adapter.
+the mock fence variable (``BLIZZARD_MOCK_HARNESS_FENCE``) is supplied by the test
+scaffolding's declared ``worker_env_passthrough``, not by this adapter.
 Confined to ``internal/`` (``bzh:dependency-inversion``).
+
+Every child env — spawn, judge, resume — is built by :func:`_allowlisted_env`
+(``bzh:worker-env-allowlist``): a fixed base allowlist plus the operator's declared
+``env_passthrough``, never a full ``os.environ`` copy, so a daemon secret (foremost
+``BZ_HUB_TOKEN``) is absent from a worker/judge/resume child by construction.
 
 The first positional of ``judge`` / ``resume_with_message`` / ``resume_command`` is
 the **working directory** — the provider-returned workdir the runner resolves from
@@ -62,6 +68,32 @@ _log = get_logger("blizzard.runner.harness")
 
 _CHOICE_OPEN = "<Choice>"
 _CHOICE_CLOSE = "</Choice>"
+
+# The worker spawn-environment allowlist's base (`bzh:worker-env-allowlist`): what a
+# child process needs to locate/run its interpreter and behave predictably in a
+# headless shell, determined empirically against the real `claude` harness on the
+# dogfooding fleet. Deliberately conservative — an operator widens it via
+# `[worker] env_passthrough` (`RunnerConfig.worker_env_passthrough`) rather than this
+# list growing ad hoc.
+_BASE_ALLOWLIST_VARS: tuple[str, ...] = ("PATH", "HOME", "USER", "LANG", "TERM", "TMPDIR")
+# `LC_*` locale vars are a family, not a fixed set of names, so they are matched by
+# prefix rather than enumerated in `_BASE_ALLOWLIST_VARS`.
+_LOCALE_PREFIX = "LC_"
+
+
+def _allowlisted_env(passthrough: Sequence[str]) -> dict[str, str]:
+    """The child env built from the base allowlist + `LC_*` + the operator's passthrough.
+
+    Never a full `os.environ` copy (`bzh:worker-env-allowlist`): everything not named
+    here — foremost a daemon credential like `BZ_HUB_TOKEN` — is absent from a
+    worker/judge/resume child by construction. The one function all three subprocess
+    env constructions build from.
+    """
+    names = set(_BASE_ALLOWLIST_VARS) | set(passthrough)
+    env = {name: os.environ[name] for name in names if name in os.environ}
+    env.update((k, v) for k, v in os.environ.items() if k.startswith(_LOCALE_PREFIX))
+    return env
+
 
 # The model every fleet worker runs on. Pinned so a spawn never inherits the
 # operator's ambient ``claude`` default (which can resolve to a lightweight model
@@ -121,6 +153,7 @@ class ClaudeCodeAdapter:
         settings_path: str | None = None,
         permission_mode: str | None = None,
         model: str = DEFAULT_WORKER_MODEL,
+        env_passthrough: Sequence[str] = (),
     ) -> None:
         self._binary = binary
         self._settings_path = settings_path
@@ -134,6 +167,10 @@ class ClaudeCodeAdapter:
         # run git/checks, commit, and push unattended. ``None`` omits the flag (the
         # ``mock-claude-code`` façade takes no such flag).
         self._permission_mode = permission_mode
+        # The operator's declared extension to the spawn-environment allowlist (issue
+        # #88, `RunnerConfig.worker_env_passthrough`) — forwarded to every worker/judge/
+        # resume child alongside the fixed base allowlist.
+        self._env_passthrough = tuple(env_passthrough)
 
     def spawn(self, envelope: NodeEnvelope, preamble: WorkerPreamble, session_hint: str | None) -> WorkerHandle:
         if not preamble.environments:
@@ -183,7 +220,9 @@ class ClaudeCodeAdapter:
 
     def judge(self, environment_id: str, session_id: str, judgement_prompt: str) -> str:
         cmd = [self._binary, "-p", "--output-format", "json", "--resume", session_id, judgement_prompt]
-        result = subprocess.run(cmd, cwd=environment_id, capture_output=True, text=True, env=os.environ.copy())
+        result = subprocess.run(
+            cmd, cwd=environment_id, capture_output=True, text=True, env=_allowlisted_env(self._env_passthrough)
+        )
         _log.info("judgement resume", pid_returncode=result.returncode, session_id=session_id, cwd=environment_id)
         return result.stdout
 
@@ -196,7 +235,9 @@ class ClaudeCodeAdapter:
         # this op has no preamble, so the path rides as a direct param; empty keeps
         # today's behavior (stdout inherited).
         with _stdout_target(stdout_path) as stdout_file:
-            proc = subprocess.Popen(cmd, cwd=environment_id, env=os.environ.copy(), stdout=stdout_file)
+            proc = subprocess.Popen(
+                cmd, cwd=environment_id, env=_allowlisted_env(self._env_passthrough), stdout=stdout_file
+            )
         return proc.pid
 
     def resume_command(self, environment_id: str, session_id: str) -> str:
@@ -285,7 +326,7 @@ class ClaudeCodeAdapter:
         return str(envelope["result"]) if envelope is not None else output
 
     def _spawn_env(self, envelope: NodeEnvelope, preamble: WorkerPreamble, session_id: str) -> dict[str, str]:
-        env = os.environ.copy()
+        env = _allowlisted_env(self._env_passthrough)
         env["BLIZZARD_ENV_IDS"] = ",".join(e.environment_id for e in preamble.environments)
         env["BLIZZARD_ENV_WORKDIRS"] = ",".join(e.workdir for e in preamble.environments)
         env["BLIZZARD_SESSION_ID"] = session_id

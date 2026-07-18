@@ -109,6 +109,24 @@ class RouteReleasedFact:
 
 
 @dataclass(frozen=True)
+class RouteTokenMintedFact:
+    """A ``route_token_minted`` fact — the route capability token, hashed (issue #84a).
+
+    Minted alongside a claim's :class:`RouteCreatedFact` and appended, never rewritten
+    (``bzh:facts-not-status`` — a re-key appends a fresh fact rather than mutating this
+    one). ``token_hash`` is the sha256 hex digest only; the plaintext is returned once
+    in the claim response and never stored. ``seq`` shares the same per-chunk counter
+    :class:`RouteCreatedFact`/:class:`RouteReleasedFact` do (see
+    :func:`newest_live_route_token`), so it totally orders against a create/release
+    even on a timestamp tie.
+    """
+
+    token_hash: str
+    minted_at: datetime
+    seq: int = 0
+
+
+@dataclass(frozen=True)
 class PrOpenedFact:
     """A ``pr.opened`` fact — the open-pr deliver mode's park record.
 
@@ -350,6 +368,7 @@ class ChunkFacts:
     transitions: list[TransitionFact] = field(default_factory=list)
     routes_created: list[RouteCreatedFact] = field(default_factory=list)
     routes_released: list[RouteReleasedFact] = field(default_factory=list)
+    route_tokens_minted: list[RouteTokenMintedFact] = field(default_factory=list)
     questions: list[QuestionFact] = field(default_factory=list)
     decisions: list[DecisionFact] = field(default_factory=list)
     requeues: list[RequeueFact] = field(default_factory=list)
@@ -632,6 +651,36 @@ def _has_live_route(facts: ChunkFacts) -> bool:
     return newest_live_route(facts.routes_created, facts.routes_released) is not None
 
 
+def newest_live_route_token(
+    routes_created: list[RouteCreatedFact],
+    routes_released: list[RouteReleasedFact],
+    route_tokens_minted: list[RouteTokenMintedFact],
+) -> RouteTokenMintedFact | None:
+    """The chunk's live route capability token, or ``None`` if unclaimed/released (issue #84a).
+
+    The live token is the newest :class:`RouteTokenMintedFact` minted for the
+    currently-live acquisition — i.e. at or after :func:`newest_live_route`'s own
+    ``seq``. Restricting to ``seq >= live.seq`` is sufficient to scope the search to
+    the live acquisition's window with no separate upper bound against
+    ``route_released``: a token minted *before* the live route's own ``created_at``
+    fact belonged to an earlier (already-released) acquisition and is excluded by the
+    lower bound alone, and there is no later release to bound against or
+    :func:`newest_live_route` would already have returned ``None``.
+
+    Newest-fact-wins (ordered the same way :func:`newest_live_route` orders its own
+    candidates — ``(timestamp, seq)``) is what makes a re-key (Phase 6: a fresh token
+    fact appended for the same live route, same ``seq`` floor) supersede the prior
+    token immediately, with no separate revocation step.
+    """
+    live = newest_live_route(routes_created, routes_released)
+    if live is None:
+        return None
+    candidates = [t for t in route_tokens_minted if t.seq >= live.seq]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda t: (t.minted_at, t.seq))
+
+
 def newest_transition(facts: ChunkFacts) -> TransitionFact | None:
     """The chunk's newest accepted transition — its current node derives from this.
 
@@ -872,8 +921,27 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         """Advance a runner's applied-seq high-water mark (upsert)."""
         ...
 
-    def record_route(self, route: Route, *, at: datetime) -> None: ...
+    def record_route(self, route: Route, *, token_hash: str, at: datetime) -> None:
+        """Record the route **and** mint its capability token's fact, atomically (issue #84a).
+
+        ``token_hash`` is the sha256 hex digest of the claim's plaintext route token —
+        already minted and hashed by the caller (``bzh:domain-takes-objects``); this
+        appends the :class:`RouteTokenMintedFact` in the same store write as
+        ``route_created`` (one transaction), never a column on the route fact itself
+        (``bzh:facts-not-status``)."""
+        ...
+
     def record_route_released(self, chunk_id: str, *, at: datetime) -> None: ...
+
+    def record_route_token(self, chunk_id: str, *, token_hash: str, at: datetime) -> None:
+        """Append a fresh :class:`RouteTokenMintedFact` for the chunk's route — the
+        re-key path (issue #84b). Never mutates the prior token fact
+        (``bzh:facts-not-status``): the newest-fact-wins derivation
+        (:func:`newest_live_route_token`) supersedes it immediately, with no separate
+        revocation step. ``token_hash`` is already minted and hashed by the caller
+        (``bzh:domain-takes-objects``)."""
+        ...
+
     def record_transition(
         self,
         *,

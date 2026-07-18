@@ -59,6 +59,11 @@ DEFAULT_HARNESS_BINARY = "claude"
 DEFAULT_HARNESS_PERMISSION_MODE = "bypassPermissions"
 DEFAULT_MAX_AGENTS = 1
 DEFAULT_BASE_BRANCH = "main"
+# The env var naming this runner's hub bearer token (issue #86b) — mirrors
+# `PmSourceConfig.token_env` (`src/blizzard/hub/config.py`): the toml round-trips only the
+# variable NAME, never the secret, which lives in the runtime env file (systemd
+# `EnvironmentFile`, the orchestrator env in dev).
+DEFAULT_TOKEN_ENV = "BZ_HUB_TOKEN"
 DEFAULT_ENV_POOL: tuple[str, ...] = ("e1",)
 # The runner-ceiling rolling window's default length (issue #61b) — used only when
 # `runner_ceiling_usd` is set and `window_hours` is not given alongside it; a ceiling with
@@ -92,6 +97,15 @@ class RunnerConfig:
     hub_url: str = DEFAULT_HUB_URL
     runner_id: str = DEFAULT_RUNNER_ID
     workspace_id: str = DEFAULT_WORKSPACE_ID
+    #: Names the env var carrying this runner's hub bearer token (issue #86b) — never the
+    #: secret itself: round-trips through toml (mirrors ``PmSourceConfig.token_env``,
+    #: ``src/blizzard/hub/config.py``). :attr:`hub_token` is the *resolved* secret, read
+    #: from ``os.environ[token_env]`` at ``scaffold``/``load`` and never written back to
+    #: toml. Empty (``hub_token == ""``) is a valid, warn-mode-only state — the outbound
+    #: client attaches no ``Authorization`` header, so a fleet with no tokens installed yet
+    #: keeps working.
+    token_env: str = DEFAULT_TOKEN_ENV
+    hub_token: str = ""
     workspace_root: str = ""  # the winter workspace the provider drives; required to FILL
     workspace_envs: tuple[str, ...] = DEFAULT_ENV_POOL  # the provider's static env pool
     harness_binary: str = DEFAULT_HARNESS_BINARY  # mock-claude-code in tests, `claude` in prod
@@ -147,6 +161,14 @@ class RunnerConfig:
     #: is ``None``; defaults to :data:`DEFAULT_RUNNER_CEILING_WINDOW_HOURS` when a ceiling
     #: is set but no window is given alongside it.
     runner_ceiling_window_hours: float = DEFAULT_RUNNER_CEILING_WINDOW_HOURS
+    #: The operator's declared extension to the worker spawn-environment allowlist
+    #: (issue #88) — read from the ``[worker]`` table's ``env_passthrough`` key. The
+    #: adapter's three subprocess env constructions build from a fixed base allowlist
+    #: (``PATH``/``HOME``/``USER``/``LANG``/``LC_*``/``TERM``/``TMPDIR``) plus this list,
+    #: never a full ``os.environ`` copy — so a daemon secret (foremost ``BZ_HUB_TOKEN``)
+    #: is absent from every worker/judge/resume child by construction unless an operator
+    #: deliberately names it here. Empty on a fresh scaffold.
+    worker_env_passthrough: tuple[str, ...] = ()
 
     @property
     def config_path(self) -> Path:
@@ -183,6 +205,19 @@ class RunnerConfig:
             return path.read_text()
         return self.workspace_prompt
 
+    def auth_headers(self) -> dict[str, str]:
+        """The outbound ``Authorization`` header every runner->hub call carries (issue #86b).
+
+        One credential path for the reconciliation loop's ``httpx.Client`` and the
+        pm-items proxy alike, rather than each building its own header. Empty when
+        :attr:`hub_token` is unset — an unenrolled runner (or a fleet that has not
+        installed tokens yet) attaches nothing, and the hub's own ``runner_auth_mode``
+        (``warn`` by default) decides whether that is tolerated.
+        """
+        if not self.hub_token:
+            return {}
+        return {"Authorization": f"Bearer {self.hub_token}"}
+
     @classmethod
     def scaffold(cls, root: Path) -> RunnerConfig:
         """The default config for a fresh runtime root (used by ``init``).
@@ -200,6 +235,8 @@ class RunnerConfig:
             host=os.environ.get(ENV_HOST, DEFAULT_HOST),
             port=int(os.environ.get(ENV_PORT, DEFAULT_PORT)),
             hub_url=os.environ.get(ENV_HUB_URL, DEFAULT_HUB_URL),
+            token_env=DEFAULT_TOKEN_ENV,
+            hub_token=os.environ.get(DEFAULT_TOKEN_ENV, ""),
             workspace_root=os.environ.get(ENV_WORKSPACE_ROOT, ""),
             workspace_envs=_as_env_tuple([e.strip() for e in envs.split(",") if e.strip()])
             if envs
@@ -235,6 +272,9 @@ class RunnerConfig:
             f"port = {self.port}\n"
             "\n# Reconciliation-loop seams.\n"
             f'hub_url = "{self.hub_url}"\n'
+            "\n# Names the env var carrying this runner's hub bearer token (issue #86b);\n"
+            "# the secret itself lives in the runtime env file, never here.\n"
+            f'token_env = "{self.token_env}"\n'
             f'runner_id = "{self.runner_id}"\n'
             f'workspace_id = "{self.workspace_id}"\n'
             f'workspace_root = "{self.workspace_root}"\n'
@@ -272,6 +312,12 @@ class RunnerConfig:
                 else "# runner_ceiling_usd = 50.0\n"
             )
             + f"window_hours = {self.runner_ceiling_window_hours}\n"
+            + "\n# The worker spawn-environment allowlist's operator extension (`bzh:worker-env-allowlist`).\n"
+            + "# The base allowlist (PATH/HOME/USER/LANG/LC_*/TERM/TMPDIR) always reaches a worker;\n"
+            + "# name additional vars here to forward them too. Empty = base allowlist only. The\n"
+            + "# BLIZZARD_* identity vars are injected per spawn/judge/resume, not passed through.\n"
+            + "[worker]\n"
+            + f"env_passthrough = [{', '.join(f'"{v}"' for v in self.worker_env_passthrough)}]\n"
         )
 
     @classmethod
@@ -282,12 +328,15 @@ class RunnerConfig:
         if not path.exists():
             raise ConfigError(f"{root} is not an initialized runner runtime (run `blizzard runner init {root}`)")
         raw = tomllib.loads(path.read_text())
+        token_env = str(raw.get("token_env", DEFAULT_TOKEN_ENV))
         return cls(
             root=root,
             db_url=str(raw["db_url"]),
             host=host or str(raw.get("host", DEFAULT_HOST)),
             port=port if port is not None else int(raw.get("port", DEFAULT_PORT)),
             hub_url=str(raw.get("hub_url", DEFAULT_HUB_URL)),
+            token_env=token_env,
+            hub_token=os.environ.get(token_env, ""),
             runner_id=str(raw.get("runner_id", DEFAULT_RUNNER_ID)),
             workspace_id=str(raw.get("workspace_id", DEFAULT_WORKSPACE_ID)),
             workspace_root=str(raw.get("workspace_root", "")),
@@ -308,6 +357,7 @@ class RunnerConfig:
             chunk_cap_usd=_parse_chunk_cap_usd(raw.get("cost", {})),
             runner_ceiling_usd=_parse_runner_ceiling_usd(raw.get("cost", {})),
             runner_ceiling_window_hours=_parse_runner_ceiling_window_hours(raw.get("cost", {})),
+            worker_env_passthrough=_parse_worker_env_passthrough(raw.get("worker", {})),
         )
 
 
@@ -339,3 +389,11 @@ def _parse_runner_ceiling_window_hours(cost: object) -> float:
     if not isinstance(cost, dict) or cost.get("window_hours") is None:
         return DEFAULT_RUNNER_CEILING_WINDOW_HOURS
     return float(cost["window_hours"])
+
+
+def _parse_worker_env_passthrough(worker: object) -> tuple[str, ...]:
+    """``[worker].env_passthrough`` (issue #88) — absent (the table, or just this key)
+    means no operator extension, mirroring :func:`_parse_chunk_cap_usd`'s shape."""
+    if not isinstance(worker, dict) or worker.get("env_passthrough") is None:
+        return ()
+    return tuple(str(v) for v in worker["env_passthrough"])

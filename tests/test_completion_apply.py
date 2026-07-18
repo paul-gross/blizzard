@@ -94,7 +94,7 @@ def _claimed(hub, *, graph_yaml: str = _BUILD_DELIVER_YAML) -> tuple[str, str]: 
     assert hub.client.post("/api/graphs", json={"definition_yaml": graph_yaml}).status_code == 201
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
     node_id = hub.client.post(
-        "/api/routes",
+        "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
     ).json()["envelope"]["node"]["node_id"]
     report_lease(hub, chunk_id, epoch=1, seq=1)  # the fence input the completion checks against
@@ -117,7 +117,7 @@ def test_stale_epoch_is_rejected_and_nothing_lands(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id, node_id = _claimed(hub)
 
-    resp = hub.client.post(f"/api/chunks/{chunk_id}/completions", json=_completion(node_id, epoch=99))
+    resp = hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(node_id, epoch=99))
     assert resp.status_code == 200
     assert resp.json()["outcome"] == "failure"
     # The chunk never advanced and no artifact entered the store.
@@ -127,19 +127,23 @@ def test_stale_epoch_is_rejected_and_nothing_lands(tmp_path: Path) -> None:
 def test_completion_on_terminal_chunk_fails(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id, node_id = _claimed(hub)
-    hub.client.post(f"/api/chunks/{chunk_id}/completions", json=_completion(node_id, epoch=1))
+    hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(node_id, epoch=1))
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
 
     # A fresh (non-replayed) completion on a done chunk is rejected as terminal. A
     # later epoch keeps it out of the idempotency replay path so the terminal guard fires.
-    late = hub.client.post(f"/api/chunks/{chunk_id}/completions", json=_completion(node_id, epoch=2, choice="fail"))
+    late = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(node_id, epoch=2, choice="fail")
+    )
     assert late.json()["outcome"] == "failure"
 
 
 def test_unknown_choice_is_a_failure(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id, node_id = _claimed(hub)
-    resp = hub.client.post(f"/api/chunks/{chunk_id}/completions", json=_completion(node_id, epoch=1, choice="nope"))
+    resp = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(node_id, epoch=1, choice="nope")
+    )
     assert resp.json()["outcome"] == "failure"
 
 
@@ -163,7 +167,7 @@ def test_non_code_chunk_completes_with_only_asset_artifacts(tmp_path: Path) -> N
         "from_node_id": node_id,
         "artifacts": [{"name": "spike-notes", "kind": "asset", "content": "no change warranted"}],
     }
-    resp = hub.client.post(f"/api/chunks/{chunk_id}/completions", json=completion)
+    resp = hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=completion)
     assert resp.status_code == 200
 
     # Fleet truth: the empty deliver still finalizes the chunk terminal.
@@ -179,7 +183,7 @@ def test_non_code_chunk_completes_with_only_asset_artifacts(tmp_path: Path) -> N
 def test_completion_on_unknown_chunk_is_404(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     resp = hub.client.post(
-        "/api/chunks/ch_missing/completions",
+        "/api/fleet/chunks/ch_missing/completions",
         json={"choice": "pass", "epoch": 1, "runner_id": "r1", "from_node_id": "nd_x"},
     )
     assert resp.status_code == 404

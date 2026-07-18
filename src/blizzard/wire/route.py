@@ -27,13 +27,16 @@ class RouteClaim(BaseModel):
 
 
 class RouteClaimResponse(BaseModel):
-    """The winning claim's reply — the route plus the first node envelope."""
+    """The winning claim's reply — the route, its first node envelope, and the
+    route's plaintext capability token (issue #84a), returned exactly once here. The
+    runner stashes it and presents it on every subsequent chunk-scoped write."""
 
     chunk_id: str
     runner_id: str
     workspace_id: str
     environment_ids: list[str]
     envelope: NodeEnvelope
+    route_token: str
 
 
 class RouteClaimConflict(BaseModel):
@@ -54,3 +57,14 @@ class RouteClaimPausedDenial(BaseModel):
     chunk_id: str
     runner_id: str
     detail: str = "runner is paused at the hub"
+
+
+class RouteTokenRekeyResponse(BaseModel):
+    """``POST /api/fleet/chunks/{id}/route-token``'s reply — a fresh plaintext route
+    capability token for the chunk's live route (issue #84b), returned exactly once
+    here, same as the claim response's own ``route_token``. Covers the
+    crash-after-mint-before-response case: the holding runner re-keys rather than
+    being permanently locked out of a token it never read back."""
+
+    chunk_id: str
+    route_token: str

@@ -47,6 +47,7 @@ from blizzard.hub.domain.work import (
     RequeueFact,
     RouteCreatedFact,
     RouteReleasedFact,
+    RouteTokenMintedFact,
     TransitionFact,
     UsageFact,
     derive_chunk_status,
@@ -113,6 +114,12 @@ class ChunkStore:
             routes_released = [
                 RouteReleasedFact(released_at=r.released_at, seq=r.seq)
                 for r in conn.execute(select(s.route_released).where(s.route_released.c.chunk_id == chunk_id)).all()
+            ]
+            route_tokens_minted = [
+                RouteTokenMintedFact(token_hash=t.token_hash, minted_at=t.minted_at, seq=t.seq)
+                for t in conn.execute(
+                    select(s.route_token_minted).where(s.route_token_minted.c.chunk_id == chunk_id)
+                ).all()
             ]
             answered = {
                 a.question_id
@@ -195,6 +202,7 @@ class ChunkStore:
                 transitions=transitions,
                 routes_created=routes_created,
                 routes_released=routes_released,
+                route_tokens_minted=route_tokens_minted,
                 questions=questions,
                 decisions=decisions,
                 requeues=requeues,
@@ -465,7 +473,13 @@ class ChunkStore:
                     .values(seq=seq, updated_at=at)
                 )
 
-    def record_route(self, route: Route, *, at: datetime) -> None:
+    def record_route(self, route: Route, *, token_hash: str, at: datetime) -> None:
+        """Record the route and mint its capability token's fact, one transaction (issue #84a).
+
+        The token fact is a second row on the same shared per-chunk seq counter
+        (:meth:`_next_route_seq`), allocated *after* the route's own seq is taken —
+        its own call to the same allocator, not a fixed +1, so it stays correct if a
+        future caller inserts anything else into this transaction between the two."""
         route_id = mint(_ROUTE_PREFIX, self._clock)
         with self._engine.begin() as conn:
             conn.execute(
@@ -480,12 +494,35 @@ class ChunkStore:
             )
             for env_id in route.environment_ids:
                 conn.execute(insert(s.route_environments).values(route_id=route_id, environment_id=env_id))
+            conn.execute(
+                insert(s.route_token_minted).values(
+                    chunk_id=route.chunk_id,
+                    token_hash=token_hash,
+                    seq=self._next_route_seq(conn, route.chunk_id),
+                    minted_at=at,
+                )
+            )
 
     def record_route_released(self, chunk_id: str, *, at: datetime) -> None:
         with self._engine.begin() as conn:
             conn.execute(
                 insert(s.route_released).values(
                     chunk_id=chunk_id, released_at=at, seq=self._next_route_seq(conn, chunk_id)
+                )
+            )
+
+    def record_route_token(self, chunk_id: str, *, token_hash: str, at: datetime) -> None:
+        """Append a fresh ``route_token_minted`` fact — the re-key path (issue #84b).
+        Same allocator as :meth:`record_route`'s own token fact, its own call rather
+        than a fixed +1, so it stays correctly ordered against a concurrent
+        create/release/re-key on this chunk."""
+        with self._engine.begin() as conn:
+            conn.execute(
+                insert(s.route_token_minted).values(
+                    chunk_id=chunk_id,
+                    token_hash=token_hash,
+                    seq=self._next_route_seq(conn, chunk_id),
+                    minted_at=at,
                 )
             )
 
@@ -1039,10 +1076,15 @@ class ChunkStore:
 
     @staticmethod
     def _next_route_seq(conn: Connection, chunk_id: str) -> int:
-        """The next value of the per-chunk ``route_created``/``route_released`` seq
-        counter (see ``work.newest_live_route``) — one past the current max
-        across both tables for this chunk, so a created/released pair is totally
-        ordered by real write order even when their timestamps tie.
+        """The next value of the per-chunk ``route_created``/``route_released``/
+        ``route_token_minted`` seq counter (see ``work.newest_live_route`` and
+        ``work.newest_live_route_token``) — one past the current max across all three
+        tables for this chunk, so a create/release/token-mint triple is totally
+        ordered by real write order even when their timestamps tie. ``route_token_minted``
+        joined the counter in issue #84a (Phase 5): without it, a release recorded
+        right after a token mint at the same instant could compute the same next value
+        the mint just took (the released-max query alone can't see the token row), so
+        the max must span all three tables, not just the original two.
 
         This is read-then-insert, not an atomic increment, so two concurrent callers
         for the same chunk must not both compute the same next value. A per-table
@@ -1085,7 +1127,10 @@ class ChunkStore:
         released_max = conn.execute(
             select(func.max(s.route_released.c.seq)).where(s.route_released.c.chunk_id == chunk_id)
         ).scalar()
-        return max(created_max or 0, released_max or 0) + 1
+        token_max = conn.execute(
+            select(func.max(s.route_token_minted.c.seq)).where(s.route_token_minted.c.chunk_id == chunk_id)
+        ).scalar()
+        return max(created_max or 0, released_max or 0, token_max or 0) + 1
 
     @staticmethod
     def _question_row(q, answer) -> QuestionRow:  # type: ignore[no-untyped-def]

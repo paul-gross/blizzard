@@ -40,8 +40,8 @@ from blizzard.hub.api.health import router as health_router
 from blizzard.hub.api.questions import router as questions_router
 from blizzard.hub.api.queue import router as queue_router
 from blizzard.hub.api.readiness import router as readiness_router
-from blizzard.hub.api.routes import router as routes_router
 from blizzard.hub.api.runners import router as runners_router
+from blizzard.hub.api.spend import router as spend_router
 from blizzard.hub.composition import HubServices, build_services
 from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.readiness import ReadinessService
@@ -118,10 +118,13 @@ def create_app(
     app.include_router(graphs_router)
     app.include_router(chunks_router)
     app.include_router(decisions_router)
-    app.include_router(routes_router)
     app.include_router(queue_router)
     app.include_router(questions_router)
     app.include_router(runners_router)
+    app.include_router(spend_router)
+    # The runner-authenticated fleet router (issue #87): `require_runner_principal` is
+    # declared once at router level (`blizzard.hub.api.fleet`), not repeated per route —
+    # a fleet verb is authenticated *because of where it is mounted*.
     app.include_router(fleet_router)
 
     # The embedded frontend, served from the same process and origin.

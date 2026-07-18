@@ -64,7 +64,7 @@ def _claim(hub) -> str:  # type: ignore[no-untyped-def]
     assert hub.client.post("/api/graphs", json={"definition_yaml": _GRAPH_YAML}).status_code == 201
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
     claim = hub.client.post(
-        "/api/routes",
+        "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
     )
     assert claim.status_code == 201, claim.text
@@ -78,7 +78,7 @@ def test_escalation_derives_needs_human_and_surfaces_takeover(tmp_path: Path) ->
 
     hub.clock.advance(timedelta(minutes=5))  # the escalation lands after the claim's lease
     resp = hub.client.post(
-        f"/api/chunks/{chunk_id}/escalations",
+        f"/api/fleet/chunks/{chunk_id}/escalations",
         json={"epoch": 1, "runner_id": "r1", "takeover_command": _TAKEOVER},
     )
     assert resp.status_code == 202, resp.text
@@ -96,14 +96,16 @@ def test_requeue_lease_mint_closes_escalation_by_supersession(tmp_path: Path) ->
 
     hub.clock.advance(timedelta(minutes=5))
     hub.client.post(
-        f"/api/chunks/{chunk_id}/escalations",
+        f"/api/fleet/chunks/{chunk_id}/escalations",
         json={"epoch": 1, "runner_id": "r1", "takeover_command": _TAKEOVER},
     )
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "needs_human"
 
     # A requeue mints a fresh lease AFTER the escalation — supersession, no resolution.
     hub.clock.advance(timedelta(minutes=5))
-    assert hub.client.post(f"/api/chunks/{chunk_id}/leases", json={"epoch": 2, "runner_id": "r1"}).status_code == 202
+    assert (
+        hub.client.post(f"/api/fleet/chunks/{chunk_id}/leases", json={"epoch": 2, "runner_id": "r1"}).status_code == 202
+    )
 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "running"  # back on the route, escalation closed
@@ -113,7 +115,7 @@ def test_requeue_lease_mint_closes_escalation_by_supersession(tmp_path: Path) ->
 def test_escalation_on_unknown_chunk_is_404(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     resp = hub.client.post(
-        "/api/chunks/ch_missing/escalations",
+        "/api/fleet/chunks/ch_missing/escalations",
         json={"epoch": 1, "runner_id": "r1", "takeover_command": _TAKEOVER},
     )
     assert resp.status_code == 404

@@ -78,7 +78,7 @@ def test_reaped_lease_completion_is_fenced_and_cannot_deliver(tmp_path: Path) ->
     _mint_build_deliver_graph(hub)
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
     build_node_id = hub.client.post(
-        "/api/routes",
+        "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
     ).json()["envelope"]["node"]["node_id"]
 
@@ -88,7 +88,7 @@ def test_reaped_lease_completion_is_fenced_and_cannot_deliver(tmp_path: Path) ->
     report_lease(hub, chunk_id, epoch=2, seq=2)  # the successor's fresh epoch
 
     # The zombie — the reaped worker — flushes its completion carrying the OLD epoch.
-    zombie = hub.client.post(f"/api/chunks/{chunk_id}/completions", json=_completion(build_node_id, epoch=1))
+    zombie = hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(build_node_id, epoch=1))
     assert zombie.status_code == 200
     assert zombie.json()["outcome"] == "failure"
     assert "stale epoch" in zombie.json()["detail"]
@@ -100,7 +100,7 @@ def test_reaped_lease_completion_is_fenced_and_cannot_deliver(tmp_path: Path) ->
 
     # The legitimate successor (fresh epoch) delivers normally — the fence blocks only
     # the zombie, not the live attempt.
-    winner = hub.client.post(f"/api/chunks/{chunk_id}/completions", json=_completion(build_node_id, epoch=2))
+    winner = hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(build_node_id, epoch=2))
     assert winner.json()["outcome"] == "hub_node_taken"
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
 
@@ -111,14 +111,14 @@ def test_zombie_completion_never_enters_merge_queue_even_if_it_races_first(tmp_p
     _mint_build_deliver_graph(hub)
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
     build_node_id = hub.client.post(
-        "/api/routes",
+        "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
     ).json()["envelope"]["node"]["node_id"]
     report_lease(hub, chunk_id, epoch=1, seq=1)
     report_lease(hub, chunk_id, epoch=2, seq=2)
 
     # Two flushes in a row: the zombie (epoch 1) then nothing else. It must not land.
-    hub.client.post(f"/api/chunks/{chunk_id}/completions", json=_completion(build_node_id, epoch=1))
-    hub.client.post(f"/api/chunks/{chunk_id}/completions", json=_completion(build_node_id, epoch=1))
+    hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(build_node_id, epoch=1))
+    hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=_completion(build_node_id, epoch=1))
 
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "running"

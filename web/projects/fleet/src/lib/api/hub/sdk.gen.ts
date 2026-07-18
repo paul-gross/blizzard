@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { AnswerQuestionApiQuestionsQuestionIdAnswerPostData, AnswerQuestionApiQuestionsQuestionIdAnswerPostErrors, AnswerQuestionApiQuestionsQuestionIdAnswerPostResponses, AskQuestionApiQuestionsPostData, AskQuestionApiQuestionsPostErrors, AskQuestionApiQuestionsPostResponses, ClaimRouteApiRoutesPostData, ClaimRouteApiRoutesPostErrors, ClaimRouteApiRoutesPostResponses, DetachChunkApiChunksChunkIdDetachPostData, DetachChunkApiChunksChunkIdDetachPostErrors, DetachChunkApiChunksChunkIdDetachPostResponses, FleetSpendApiFleetSpendGetData, FleetSpendApiFleetSpendGetErrors, FleetSpendApiFleetSpendGetResponses, GetChunkApiChunksChunkIdGetData, GetChunkApiChunksChunkIdGetErrors, GetChunkApiChunksChunkIdGetResponses, GetEnvelopeApiChunksChunkIdEnvelopeGetData, GetEnvelopeApiChunksChunkIdEnvelopeGetErrors, GetEnvelopeApiChunksChunkIdEnvelopeGetResponses, GetGraphApiGraphsGraphIdGetData, GetGraphApiGraphsGraphIdGetErrors, GetGraphApiGraphsGraphIdGetResponses, GetPmItemsApiChunksChunkIdPmItemsGetData, GetPmItemsApiChunksChunkIdPmItemsGetErrors, GetPmItemsApiChunksChunkIdPmItemsGetResponses, GetQuestionApiQuestionsQuestionIdGetData, GetQuestionApiQuestionsQuestionIdGetErrors, GetQuestionApiQuestionsQuestionIdGetResponses, GetRunnerApiRunnersRunnerIdGetData, GetRunnerApiRunnersRunnerIdGetErrors, GetRunnerApiRunnersRunnerIdGetResponses, GroupChunksApiChunksChunkIdGroupPostData, GroupChunksApiChunksChunkIdGroupPostErrors, GroupChunksApiChunksChunkIdGroupPostResponses, HealthApiHealthGetData, HealthApiHealthGetResponses, HeartbeatRunnerApiRunnersRunnerIdHeartbeatsPostData, HeartbeatRunnerApiRunnersRunnerIdHeartbeatsPostErrors, HeartbeatRunnerApiRunnersRunnerIdHeartbeatsPostResponses, HubAdvanceApiChunksChunkIdHubAdvancePostData, HubAdvanceApiChunksChunkIdHubAdvancePostErrors, HubAdvanceApiChunksChunkIdHubAdvancePostResponses, IngestChunkApiChunksPostData, IngestChunkApiChunksPostErrors, IngestChunkApiChunksPostResponses, IngestRunnerFactsApiEventsPostData, IngestRunnerFactsApiEventsPostErrors, IngestRunnerFactsApiEventsPostResponses, ListChunksApiChunksGetData, ListChunksApiChunksGetResponses, ListDecisionsApiDecisionsGetData, ListDecisionsApiDecisionsGetResponses, ListGraphsApiGraphsGetData, ListGraphsApiGraphsGetResponses, ListOpenQuestionsApiQuestionsGetData, ListOpenQuestionsApiQuestionsGetResponses, ListRunnersApiRunnersGetData, ListRunnersApiRunnersGetResponses, MintGraphApiGraphsPostData, MintGraphApiGraphsPostErrors, MintGraphApiGraphsPostResponses, PauseChunkApiChunksChunkIdPausePostData, PauseChunkApiChunksChunkIdPausePostErrors, PauseChunkApiChunksChunkIdPausePostResponses, PauseRunnerApiRunnersRunnerIdPausePostData, PauseRunnerApiRunnersRunnerIdPausePostErrors, PauseRunnerApiRunnersRunnerIdPausePostResponses, PeekQueueApiQueuePeekGetData, PeekQueueApiQueuePeekGetResponses, PromoteChunkApiChunksChunkIdPromotePostData, PromoteChunkApiChunksChunkIdPromotePostErrors, PromoteChunkApiChunksChunkIdPromotePostResponses, ReadyApiReadyGetData, ReadyApiReadyGetResponses, RecordHubMarkerApiChunksChunkIdHubMarkersPostData, RecordHubMarkerApiChunksChunkIdHubMarkersPostErrors, RecordHubMarkerApiChunksChunkIdHubMarkersPostResponses, RegisterRunnerApiRunnersPostData, RegisterRunnerApiRunnersPostErrors, RegisterRunnerApiRunnersPostResponses, ReorderQueueApiQueueReorderPostData, ReorderQueueApiQueueReorderPostErrors, ReorderQueueApiQueueReorderPostResponses, ReportEscalationApiChunksChunkIdEscalationsPostData, ReportEscalationApiChunksChunkIdEscalationsPostErrors, ReportEscalationApiChunksChunkIdEscalationsPostResponses, ReportLeaseApiChunksChunkIdLeasesPostData, ReportLeaseApiChunksChunkIdLeasesPostErrors, ReportLeaseApiChunksChunkIdLeasesPostResponses, RequeueChunkApiChunksChunkIdRequeuesPostData, RequeueChunkApiChunksChunkIdRequeuesPostErrors, RequeueChunkApiChunksChunkIdRequeuesPostResponses, ResolveDecisionApiDecisionsDecisionIdResolutionPostData, ResolveDecisionApiDecisionsDecisionIdResolutionPostErrors, ResolveDecisionApiDecisionsDecisionIdResolutionPostResponses, ResumeChunkApiChunksChunkIdResumePostData, ResumeChunkApiChunksChunkIdResumePostErrors, ResumeChunkApiChunksChunkIdResumePostResponses, ResumeRunnerApiRunnersRunnerIdResumePostData, ResumeRunnerApiRunnersRunnerIdResumePostErrors, ResumeRunnerApiRunnersRunnerIdResumePostResponses, SetChunkGraphApiChunksChunkIdGraphPostData, SetChunkGraphApiChunksChunkIdGraphPostErrors, SetChunkGraphApiChunksChunkIdGraphPostResponses, SetChunkModelApiChunksChunkIdModelPostData, SetChunkModelApiChunksChunkIdModelPostErrors, SetChunkModelApiChunksChunkIdModelPostResponses, SubmitCompletionApiChunksChunkIdCompletionsPostData, SubmitCompletionApiChunksChunkIdCompletionsPostErrors, SubmitCompletionApiChunksChunkIdCompletionsPostResponses, SubmitDecisionApiChunksChunkIdDecisionsPostData, SubmitDecisionApiChunksChunkIdDecisionsPostErrors, SubmitDecisionApiChunksChunkIdDecisionsPostResponses } from './types.gen';
+import type { AnswerQuestionApiQuestionsQuestionIdAnswerPostData, AnswerQuestionApiQuestionsQuestionIdAnswerPostErrors, AnswerQuestionApiQuestionsQuestionIdAnswerPostResponses, AskQuestionApiQuestionsPostData, AskQuestionApiQuestionsPostErrors, AskQuestionApiQuestionsPostResponses, ClaimRouteApiFleetRoutesPostData, ClaimRouteApiFleetRoutesPostErrors, ClaimRouteApiFleetRoutesPostResponses, DetachChunkApiChunksChunkIdDetachPostData, DetachChunkApiChunksChunkIdDetachPostErrors, DetachChunkApiChunksChunkIdDetachPostResponses, EnrollRunnerApiRunnersRunnerIdEnrollmentsPostData, EnrollRunnerApiRunnersRunnerIdEnrollmentsPostErrors, EnrollRunnerApiRunnersRunnerIdEnrollmentsPostResponses, FleetSpendApiSpendGetData, FleetSpendApiSpendGetErrors, FleetSpendApiSpendGetResponses, GetChunkApiChunksChunkIdGetData, GetChunkApiChunksChunkIdGetErrors, GetChunkApiChunksChunkIdGetResponses, GetChunkApiFleetChunksChunkIdGetData, GetChunkApiFleetChunksChunkIdGetErrors, GetChunkApiFleetChunksChunkIdGetResponses, GetEnvelopeApiFleetChunksChunkIdEnvelopeGetData, GetEnvelopeApiFleetChunksChunkIdEnvelopeGetErrors, GetEnvelopeApiFleetChunksChunkIdEnvelopeGetResponses, GetGraphApiGraphsGraphIdGetData, GetGraphApiGraphsGraphIdGetErrors, GetGraphApiGraphsGraphIdGetResponses, GetPmItemsApiChunksChunkIdPmItemsGetData, GetPmItemsApiChunksChunkIdPmItemsGetErrors, GetPmItemsApiChunksChunkIdPmItemsGetResponses, GetPmItemsApiFleetChunksChunkIdPmItemsGetData, GetPmItemsApiFleetChunksChunkIdPmItemsGetErrors, GetPmItemsApiFleetChunksChunkIdPmItemsGetResponses, GetQuestionApiFleetQuestionsQuestionIdGetData, GetQuestionApiFleetQuestionsQuestionIdGetErrors, GetQuestionApiFleetQuestionsQuestionIdGetResponses, GetRunnerApiFleetRunnersRunnerIdGetData, GetRunnerApiFleetRunnersRunnerIdGetErrors, GetRunnerApiFleetRunnersRunnerIdGetResponses, GroupChunksApiChunksChunkIdGroupPostData, GroupChunksApiChunksChunkIdGroupPostErrors, GroupChunksApiChunksChunkIdGroupPostResponses, HealthApiHealthGetData, HealthApiHealthGetResponses, HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostData, HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostErrors, HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostResponses, HubAdvanceApiFleetChunksChunkIdHubAdvancePostData, HubAdvanceApiFleetChunksChunkIdHubAdvancePostErrors, HubAdvanceApiFleetChunksChunkIdHubAdvancePostResponses, IngestChunkApiChunksPostData, IngestChunkApiChunksPostErrors, IngestChunkApiChunksPostResponses, IngestRunnerFactsApiFleetEventsPostData, IngestRunnerFactsApiFleetEventsPostErrors, IngestRunnerFactsApiFleetEventsPostResponses, ListChunksApiChunksGetData, ListChunksApiChunksGetResponses, ListDecisionsApiDecisionsGetData, ListDecisionsApiDecisionsGetResponses, ListGraphsApiGraphsGetData, ListGraphsApiGraphsGetResponses, ListOpenQuestionsApiQuestionsGetData, ListOpenQuestionsApiQuestionsGetResponses, ListRunnersApiRunnersGetData, ListRunnersApiRunnersGetResponses, MintGraphApiGraphsPostData, MintGraphApiGraphsPostErrors, MintGraphApiGraphsPostResponses, PauseChunkApiChunksChunkIdPausePostData, PauseChunkApiChunksChunkIdPausePostErrors, PauseChunkApiChunksChunkIdPausePostResponses, PauseRunnerApiRunnersRunnerIdPausePostData, PauseRunnerApiRunnersRunnerIdPausePostErrors, PauseRunnerApiRunnersRunnerIdPausePostResponses, PeekQueueApiFleetQueuePeekGetData, PeekQueueApiFleetQueuePeekGetResponses, PeekQueueApiQueuePeekGetData, PeekQueueApiQueuePeekGetResponses, PromoteChunkApiChunksChunkIdPromotePostData, PromoteChunkApiChunksChunkIdPromotePostErrors, PromoteChunkApiChunksChunkIdPromotePostResponses, ReadyApiReadyGetData, ReadyApiReadyGetResponses, RecordHubMarkerApiChunksChunkIdHubMarkersPostData, RecordHubMarkerApiChunksChunkIdHubMarkersPostErrors, RecordHubMarkerApiChunksChunkIdHubMarkersPostResponses, RegisterRunnerApiFleetRunnersPostData, RegisterRunnerApiFleetRunnersPostErrors, RegisterRunnerApiFleetRunnersPostResponses, RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostData, RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostErrors, RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostResponses, ReorderQueueApiQueueReorderPostData, ReorderQueueApiQueueReorderPostErrors, ReorderQueueApiQueueReorderPostResponses, ReportEscalationApiFleetChunksChunkIdEscalationsPostData, ReportEscalationApiFleetChunksChunkIdEscalationsPostErrors, ReportEscalationApiFleetChunksChunkIdEscalationsPostResponses, ReportLeaseApiFleetChunksChunkIdLeasesPostData, ReportLeaseApiFleetChunksChunkIdLeasesPostErrors, ReportLeaseApiFleetChunksChunkIdLeasesPostResponses, RequeueChunkApiChunksChunkIdRequeuesPostData, RequeueChunkApiChunksChunkIdRequeuesPostErrors, RequeueChunkApiChunksChunkIdRequeuesPostResponses, ResolveDecisionApiDecisionsDecisionIdResolutionPostData, ResolveDecisionApiDecisionsDecisionIdResolutionPostErrors, ResolveDecisionApiDecisionsDecisionIdResolutionPostResponses, ResumeChunkApiChunksChunkIdResumePostData, ResumeChunkApiChunksChunkIdResumePostErrors, ResumeChunkApiChunksChunkIdResumePostResponses, ResumeRunnerApiRunnersRunnerIdResumePostData, ResumeRunnerApiRunnersRunnerIdResumePostErrors, ResumeRunnerApiRunnersRunnerIdResumePostResponses, SetChunkGraphApiChunksChunkIdGraphPostData, SetChunkGraphApiChunksChunkIdGraphPostErrors, SetChunkGraphApiChunksChunkIdGraphPostResponses, SetChunkModelApiChunksChunkIdModelPostData, SetChunkModelApiChunksChunkIdModelPostErrors, SetChunkModelApiChunksChunkIdModelPostResponses, SubmitCompletionApiFleetChunksChunkIdCompletionsPostData, SubmitCompletionApiFleetChunksChunkIdCompletionsPostErrors, SubmitCompletionApiFleetChunksChunkIdCompletionsPostResponses, SubmitDecisionApiFleetChunksChunkIdDecisionsPostData, SubmitDecisionApiFleetChunksChunkIdDecisionsPostErrors, SubmitDecisionApiFleetChunksChunkIdDecisionsPostResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -48,60 +48,11 @@ export const ingestChunkApiChunksPost = <ThrowOnError extends boolean = false>(o
 export const getChunkApiChunksChunkIdGet = <ThrowOnError extends boolean = false>(options: Options<GetChunkApiChunksChunkIdGetData, ThrowOnError>): RequestResult<GetChunkApiChunksChunkIdGetResponses, GetChunkApiChunksChunkIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetChunkApiChunksChunkIdGetResponses, GetChunkApiChunksChunkIdGetErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}', ...options });
 
 /**
- * Submit Completion
- *
- * Apply a node-step's completion atomically; reply carries the next envelope.
- */
-export const submitCompletionApiChunksChunkIdCompletionsPost = <ThrowOnError extends boolean = false>(options: Options<SubmitCompletionApiChunksChunkIdCompletionsPostData, ThrowOnError>): RequestResult<SubmitCompletionApiChunksChunkIdCompletionsPostResponses, SubmitCompletionApiChunksChunkIdCompletionsPostErrors, ThrowOnError> => (options.client ?? client).post<SubmitCompletionApiChunksChunkIdCompletionsPostResponses, SubmitCompletionApiChunksChunkIdCompletionsPostErrors, ThrowOnError>({
-    url: '/api/chunks/{chunk_id}/completions',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Submit Decision
- *
- * Runner-config gate: park the chunk on a decision in place of a transition.
- */
-export const submitDecisionApiChunksChunkIdDecisionsPost = <ThrowOnError extends boolean = false>(options: Options<SubmitDecisionApiChunksChunkIdDecisionsPostData, ThrowOnError>): RequestResult<SubmitDecisionApiChunksChunkIdDecisionsPostResponses, SubmitDecisionApiChunksChunkIdDecisionsPostErrors, ThrowOnError> => (options.client ?? client).post<SubmitDecisionApiChunksChunkIdDecisionsPostResponses, SubmitDecisionApiChunksChunkIdDecisionsPostErrors, ThrowOnError>({
-    url: '/api/chunks/{chunk_id}/decisions',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
  * Detach Chunk
  *
  * Forcibly release a chunk from its runner without touching any escalation.
  */
 export const detachChunkApiChunksChunkIdDetachPost = <ThrowOnError extends boolean = false>(options: Options<DetachChunkApiChunksChunkIdDetachPostData, ThrowOnError>): RequestResult<DetachChunkApiChunksChunkIdDetachPostResponses, DetachChunkApiChunksChunkIdDetachPostErrors, ThrowOnError> => (options.client ?? client).post<DetachChunkApiChunksChunkIdDetachPostResponses, DetachChunkApiChunksChunkIdDetachPostErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/detach', ...options });
-
-/**
- * Get Envelope
- *
- * The chunk's current node envelope, idempotent — the lost-apply re-read.
- */
-export const getEnvelopeApiChunksChunkIdEnvelopeGet = <ThrowOnError extends boolean = false>(options: Options<GetEnvelopeApiChunksChunkIdEnvelopeGetData, ThrowOnError>): RequestResult<GetEnvelopeApiChunksChunkIdEnvelopeGetResponses, GetEnvelopeApiChunksChunkIdEnvelopeGetErrors, ThrowOnError> => (options.client ?? client).get<GetEnvelopeApiChunksChunkIdEnvelopeGetResponses, GetEnvelopeApiChunksChunkIdEnvelopeGetErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/envelope', ...options });
-
-/**
- * Report Escalation
- *
- * Land a runner's ``escalation.recorded`` — the chunk derives ``needs_human``.
- */
-export const reportEscalationApiChunksChunkIdEscalationsPost = <ThrowOnError extends boolean = false>(options: Options<ReportEscalationApiChunksChunkIdEscalationsPostData, ThrowOnError>): RequestResult<ReportEscalationApiChunksChunkIdEscalationsPostResponses, ReportEscalationApiChunksChunkIdEscalationsPostErrors, ThrowOnError> => (options.client ?? client).post<ReportEscalationApiChunksChunkIdEscalationsPostResponses, ReportEscalationApiChunksChunkIdEscalationsPostErrors, ThrowOnError>({
-    url: '/api/chunks/{chunk_id}/escalations',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
 
 /**
  * Set Chunk Graph
@@ -135,22 +86,6 @@ export const groupChunksApiChunksChunkIdGroupPost = <ThrowOnError extends boolea
 });
 
 /**
- * Hub Advance
- *
- * Drive a chunk parked at a generic hub command node one step (#65).
- *
- * Runs :class:`~blizzard.hub.delivery.hub_node.HubNodeExecutor` once, respecting the
- * fleet-wide serialization slot: ``ran=False`` means a different chunk holds the
- * slot right now, OR (#66) the node reported ``pending`` on a prior call and
- * ``poll_interval`` has not yet elapsed — either way not an error, the runner's
- * ADVANCE poll (``_advance_held_chunk``) simply calls this again on a later tick. A
- * no-op (``ran=False``, ``detail`` names it) when the chunk is not currently parked
- * at a generic hub command node — every hub node is this shape since #67; no other
- * delivery route remains.
- */
-export const hubAdvanceApiChunksChunkIdHubAdvancePost = <ThrowOnError extends boolean = false>(options: Options<HubAdvanceApiChunksChunkIdHubAdvancePostData, ThrowOnError>): RequestResult<HubAdvanceApiChunksChunkIdHubAdvancePostResponses, HubAdvanceApiChunksChunkIdHubAdvancePostErrors, ThrowOnError> => (options.client ?? client).post<HubAdvanceApiChunksChunkIdHubAdvancePostResponses, HubAdvanceApiChunksChunkIdHubAdvancePostErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/hub-advance', ...options });
-
-/**
  * Record Hub Marker
  *
  * The mid-run marker callback (#65) — a ``run:`` step's own dynamic-loop marker.
@@ -165,20 +100,6 @@ export const hubAdvanceApiChunksChunkIdHubAdvancePost = <ThrowOnError extends bo
  */
 export const recordHubMarkerApiChunksChunkIdHubMarkersPost = <ThrowOnError extends boolean = false>(options: Options<RecordHubMarkerApiChunksChunkIdHubMarkersPostData, ThrowOnError>): RequestResult<RecordHubMarkerApiChunksChunkIdHubMarkersPostResponses, RecordHubMarkerApiChunksChunkIdHubMarkersPostErrors, ThrowOnError> => (options.client ?? client).post<RecordHubMarkerApiChunksChunkIdHubMarkersPostResponses, RecordHubMarkerApiChunksChunkIdHubMarkersPostErrors, ThrowOnError>({
     url: '/api/chunks/{chunk_id}/hub-markers',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Report Lease
- *
- * Land a runner's ``lease.minted`` — keeps the epoch fence in lockstep.
- */
-export const reportLeaseApiChunksChunkIdLeasesPost = <ThrowOnError extends boolean = false>(options: Options<ReportLeaseApiChunksChunkIdLeasesPostData, ThrowOnError>): RequestResult<ReportLeaseApiChunksChunkIdLeasesPostResponses, ReportLeaseApiChunksChunkIdLeasesPostErrors, ThrowOnError> => (options.client ?? client).post<ReportLeaseApiChunksChunkIdLeasesPostResponses, ReportLeaseApiChunksChunkIdLeasesPostErrors, ThrowOnError>({
-    url: '/api/chunks/{chunk_id}/leases',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -285,6 +206,119 @@ export const resolveDecisionApiDecisionsDecisionIdResolutionPost = <ThrowOnError
 });
 
 /**
+ * Get Chunk
+ *
+ * The runner's chunk-status poll — the same aggregate as the board's own read.
+ */
+export const getChunkApiFleetChunksChunkIdGet = <ThrowOnError extends boolean = false>(options: Options<GetChunkApiFleetChunksChunkIdGetData, ThrowOnError>): RequestResult<GetChunkApiFleetChunksChunkIdGetResponses, GetChunkApiFleetChunksChunkIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetChunkApiFleetChunksChunkIdGetResponses, GetChunkApiFleetChunksChunkIdGetErrors, ThrowOnError>({ url: '/api/fleet/chunks/{chunk_id}', ...options });
+
+/**
+ * Submit Completion
+ *
+ * Apply a node-step's completion atomically; reply carries the next envelope.
+ */
+export const submitCompletionApiFleetChunksChunkIdCompletionsPost = <ThrowOnError extends boolean = false>(options: Options<SubmitCompletionApiFleetChunksChunkIdCompletionsPostData, ThrowOnError>): RequestResult<SubmitCompletionApiFleetChunksChunkIdCompletionsPostResponses, SubmitCompletionApiFleetChunksChunkIdCompletionsPostErrors, ThrowOnError> => (options.client ?? client).post<SubmitCompletionApiFleetChunksChunkIdCompletionsPostResponses, SubmitCompletionApiFleetChunksChunkIdCompletionsPostErrors, ThrowOnError>({
+    url: '/api/fleet/chunks/{chunk_id}/completions',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Submit Decision
+ *
+ * Runner-config gate: park the chunk on a decision in place of a transition.
+ */
+export const submitDecisionApiFleetChunksChunkIdDecisionsPost = <ThrowOnError extends boolean = false>(options: Options<SubmitDecisionApiFleetChunksChunkIdDecisionsPostData, ThrowOnError>): RequestResult<SubmitDecisionApiFleetChunksChunkIdDecisionsPostResponses, SubmitDecisionApiFleetChunksChunkIdDecisionsPostErrors, ThrowOnError> => (options.client ?? client).post<SubmitDecisionApiFleetChunksChunkIdDecisionsPostResponses, SubmitDecisionApiFleetChunksChunkIdDecisionsPostErrors, ThrowOnError>({
+    url: '/api/fleet/chunks/{chunk_id}/decisions',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Get Envelope
+ *
+ * The chunk's current node envelope, idempotent — the lost-apply re-read.
+ */
+export const getEnvelopeApiFleetChunksChunkIdEnvelopeGet = <ThrowOnError extends boolean = false>(options: Options<GetEnvelopeApiFleetChunksChunkIdEnvelopeGetData, ThrowOnError>): RequestResult<GetEnvelopeApiFleetChunksChunkIdEnvelopeGetResponses, GetEnvelopeApiFleetChunksChunkIdEnvelopeGetErrors, ThrowOnError> => (options.client ?? client).get<GetEnvelopeApiFleetChunksChunkIdEnvelopeGetResponses, GetEnvelopeApiFleetChunksChunkIdEnvelopeGetErrors, ThrowOnError>({ url: '/api/fleet/chunks/{chunk_id}/envelope', ...options });
+
+/**
+ * Report Escalation
+ *
+ * Land a runner's ``escalation.recorded`` — the chunk derives ``needs_human``.
+ */
+export const reportEscalationApiFleetChunksChunkIdEscalationsPost = <ThrowOnError extends boolean = false>(options: Options<ReportEscalationApiFleetChunksChunkIdEscalationsPostData, ThrowOnError>): RequestResult<ReportEscalationApiFleetChunksChunkIdEscalationsPostResponses, ReportEscalationApiFleetChunksChunkIdEscalationsPostErrors, ThrowOnError> => (options.client ?? client).post<ReportEscalationApiFleetChunksChunkIdEscalationsPostResponses, ReportEscalationApiFleetChunksChunkIdEscalationsPostErrors, ThrowOnError>({
+    url: '/api/fleet/chunks/{chunk_id}/escalations',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Hub Advance
+ *
+ * Drive a chunk parked at a generic hub command node one step (#65).
+ *
+ * Runs :class:`~blizzard.hub.delivery.hub_node.HubNodeExecutor` once, respecting the
+ * fleet-wide serialization slot: ``ran=False`` means a different chunk holds the
+ * slot right now, OR (#66) the node reported ``pending`` on a prior call and
+ * ``poll_interval`` has not yet elapsed — either way not an error, the runner's
+ * ADVANCE poll (``_advance_held_chunk``) simply calls this again on a later tick. A
+ * no-op (``ran=False``, ``detail`` names it) when the chunk is not currently parked
+ * at a generic hub command node — every hub node is this shape since #67; no other
+ * delivery route remains.
+ *
+ * No ``runner_id`` is declared on this request (it carries only ``chunk_id``), so
+ * the router-level ``require_runner_principal`` dependency is the whole check here —
+ * no :func:`~blizzard.hub.api.auth.assert_owns` call, the same shape as the other
+ * chunk-scoped fleet reads (``get_chunk``/``get_envelope``) that carry no runner_id
+ * to confine against.
+ */
+export const hubAdvanceApiFleetChunksChunkIdHubAdvancePost = <ThrowOnError extends boolean = false>(options: Options<HubAdvanceApiFleetChunksChunkIdHubAdvancePostData, ThrowOnError>): RequestResult<HubAdvanceApiFleetChunksChunkIdHubAdvancePostResponses, HubAdvanceApiFleetChunksChunkIdHubAdvancePostErrors, ThrowOnError> => (options.client ?? client).post<HubAdvanceApiFleetChunksChunkIdHubAdvancePostResponses, HubAdvanceApiFleetChunksChunkIdHubAdvancePostErrors, ThrowOnError>({ url: '/api/fleet/chunks/{chunk_id}/hub-advance', ...options });
+
+/**
+ * Report Lease
+ *
+ * Land a runner's ``lease.minted`` — keeps the epoch fence in lockstep.
+ */
+export const reportLeaseApiFleetChunksChunkIdLeasesPost = <ThrowOnError extends boolean = false>(options: Options<ReportLeaseApiFleetChunksChunkIdLeasesPostData, ThrowOnError>): RequestResult<ReportLeaseApiFleetChunksChunkIdLeasesPostResponses, ReportLeaseApiFleetChunksChunkIdLeasesPostErrors, ThrowOnError> => (options.client ?? client).post<ReportLeaseApiFleetChunksChunkIdLeasesPostResponses, ReportLeaseApiFleetChunksChunkIdLeasesPostErrors, ThrowOnError>({
+    url: '/api/fleet/chunks/{chunk_id}/leases',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Get Pm Items
+ *
+ * The build worker's PM-items proxy target (via the runner-local pass-through,
+ * ``blizzard.runner.api.pm_items``), forwarded here with the runner's own bearer
+ * token — the same pass-through the board reads anonymously.
+ */
+export const getPmItemsApiFleetChunksChunkIdPmItemsGet = <ThrowOnError extends boolean = false>(options: Options<GetPmItemsApiFleetChunksChunkIdPmItemsGetData, ThrowOnError>): RequestResult<GetPmItemsApiFleetChunksChunkIdPmItemsGetResponses, GetPmItemsApiFleetChunksChunkIdPmItemsGetErrors, ThrowOnError> => (options.client ?? client).get<GetPmItemsApiFleetChunksChunkIdPmItemsGetResponses, GetPmItemsApiFleetChunksChunkIdPmItemsGetErrors, ThrowOnError>({ url: '/api/fleet/chunks/{chunk_id}/pm-items', ...options });
+
+/**
+ * Rekey Route Token
+ *
+ * Rotate the chunk's live route capability token (issue #84b) — the lost-plaintext
+ * recovery for a runner that crashed between the mint and reading the claim response
+ * back (``_adopt_interrupted_claim``, ``runner/loop/steps.py``). Confined to the
+ * live route's own runner via :func:`~blizzard.hub.api.auth.assert_owns`, the same
+ * ownership check every other fleet write makes — this route carries no chunk-scoped
+ * ``route_token`` of its own to present (that is exactly what it is minting).
+ */
+export const rekeyRouteTokenApiFleetChunksChunkIdRouteTokenPost = <ThrowOnError extends boolean = false>(options: Options<RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostData, ThrowOnError>): RequestResult<RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostResponses, RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostErrors, ThrowOnError> => (options.client ?? client).post<RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostResponses, RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostErrors, ThrowOnError>({ url: '/api/fleet/chunks/{chunk_id}/route-token', ...options });
+
+/**
  * Ingest Runner Facts
  *
  * Land runner-minted facts, idempotent by per-runner seq high-water.
@@ -296,8 +330,8 @@ export const resolveDecisionApiDecisionsDecisionIdResolutionPost = <ThrowOnError
  * the SSE stream so the board refreshes — ``chunk-changed`` for every touched chunk, and
  * ``question-asked`` for a forwarded ask.
  */
-export const ingestRunnerFactsApiEventsPost = <ThrowOnError extends boolean = false>(options: Options<IngestRunnerFactsApiEventsPostData, ThrowOnError>): RequestResult<IngestRunnerFactsApiEventsPostResponses, IngestRunnerFactsApiEventsPostErrors, ThrowOnError> => (options.client ?? client).post<IngestRunnerFactsApiEventsPostResponses, IngestRunnerFactsApiEventsPostErrors, ThrowOnError>({
-    url: '/api/events',
+export const ingestRunnerFactsApiFleetEventsPost = <ThrowOnError extends boolean = false>(options: Options<IngestRunnerFactsApiFleetEventsPostData, ThrowOnError>): RequestResult<IngestRunnerFactsApiFleetEventsPostResponses, IngestRunnerFactsApiFleetEventsPostErrors, ThrowOnError> => (options.client ?? client).post<IngestRunnerFactsApiFleetEventsPostResponses, IngestRunnerFactsApiFleetEventsPostErrors, ThrowOnError>({
+    url: '/api/fleet/events',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -306,12 +340,64 @@ export const ingestRunnerFactsApiEventsPost = <ThrowOnError extends boolean = fa
 });
 
 /**
- * Fleet Spend
+ * Get Question
  *
- * The fleet's total usage/cost since ``since`` (an ISO-8601 instant) — summed
- * over every usage fact recorded at or after it, across every chunk.
+ * The runner's answer poll before it resumes the dormant session.
  */
-export const fleetSpendApiFleetSpendGet = <ThrowOnError extends boolean = false>(options: Options<FleetSpendApiFleetSpendGetData, ThrowOnError>): RequestResult<FleetSpendApiFleetSpendGetResponses, FleetSpendApiFleetSpendGetErrors, ThrowOnError> => (options.client ?? client).get<FleetSpendApiFleetSpendGetResponses, FleetSpendApiFleetSpendGetErrors, ThrowOnError>({ url: '/api/fleet/spend', ...options });
+export const getQuestionApiFleetQuestionsQuestionIdGet = <ThrowOnError extends boolean = false>(options: Options<GetQuestionApiFleetQuestionsQuestionIdGetData, ThrowOnError>): RequestResult<GetQuestionApiFleetQuestionsQuestionIdGetResponses, GetQuestionApiFleetQuestionsQuestionIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetQuestionApiFleetQuestionsQuestionIdGetResponses, GetQuestionApiFleetQuestionsQuestionIdGetErrors, ThrowOnError>({ url: '/api/fleet/questions/{question_id}', ...options });
+
+/**
+ * Peek Queue
+ *
+ * The runner's FILL read — the same ready queue as the board's own peek.
+ */
+export const peekQueueApiFleetQueuePeekGet = <ThrowOnError extends boolean = false>(options?: Options<PeekQueueApiFleetQueuePeekGetData, ThrowOnError>): RequestResult<PeekQueueApiFleetQueuePeekGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<PeekQueueApiFleetQueuePeekGetResponses, unknown, ThrowOnError>({ url: '/api/fleet/queue/peek', ...options });
+
+/**
+ * Claim Route
+ *
+ * Claim a chunk; 403 if the runner is paused at the hub, 409 if already claimed,
+ * else the first node envelope.
+ */
+export const claimRouteApiFleetRoutesPost = <ThrowOnError extends boolean = false>(options: Options<ClaimRouteApiFleetRoutesPostData, ThrowOnError>): RequestResult<ClaimRouteApiFleetRoutesPostResponses, ClaimRouteApiFleetRoutesPostErrors, ThrowOnError> => (options.client ?? client).post<ClaimRouteApiFleetRoutesPostResponses, ClaimRouteApiFleetRoutesPostErrors, ThrowOnError>({
+    url: '/api/fleet/routes',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Register Runner
+ *
+ * Register a runner — runner id + workspace binding; idempotent upsert.
+ *
+ * Runner-auth checked (issue #86a): ``warn`` (the default) logs and proceeds on a
+ * missing/invalid/mismatched token; ``enforce`` rejects.
+ */
+export const registerRunnerApiFleetRunnersPost = <ThrowOnError extends boolean = false>(options: Options<RegisterRunnerApiFleetRunnersPostData, ThrowOnError>): RequestResult<RegisterRunnerApiFleetRunnersPostResponses, RegisterRunnerApiFleetRunnersPostErrors, ThrowOnError> => (options.client ?? client).post<RegisterRunnerApiFleetRunnersPostResponses, RegisterRunnerApiFleetRunnersPostErrors, ThrowOnError>({
+    url: '/api/fleet/runners',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Get Runner
+ *
+ * One runner's declarative state — the runner's own pull read.
+ */
+export const getRunnerApiFleetRunnersRunnerIdGet = <ThrowOnError extends boolean = false>(options: Options<GetRunnerApiFleetRunnersRunnerIdGetData, ThrowOnError>): RequestResult<GetRunnerApiFleetRunnersRunnerIdGetResponses, GetRunnerApiFleetRunnersRunnerIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetRunnerApiFleetRunnersRunnerIdGetResponses, GetRunnerApiFleetRunnersRunnerIdGetErrors, ThrowOnError>({ url: '/api/fleet/runners/{runner_id}', ...options });
+
+/**
+ * Heartbeat Runner
+ *
+ * Refresh a runner's liveness — the slow runner-level heartbeat. Returns 204.
+ */
+export const heartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPost = <ThrowOnError extends boolean = false>(options: Options<HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostData, ThrowOnError>): RequestResult<HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostResponses, HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostErrors, ThrowOnError> => (options.client ?? client).post<HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostResponses, HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostErrors, ThrowOnError>({ url: '/api/fleet/runners/{runner_id}/heartbeats', ...options });
 
 /**
  * List Graphs
@@ -368,13 +454,6 @@ export const askQuestionApiQuestionsPost = <ThrowOnError extends boolean = false
 });
 
 /**
- * Get Question
- *
- * One question with its derived answer state — the runner's answer poll.
- */
-export const getQuestionApiQuestionsQuestionIdGet = <ThrowOnError extends boolean = false>(options: Options<GetQuestionApiQuestionsQuestionIdGetData, ThrowOnError>): RequestResult<GetQuestionApiQuestionsQuestionIdGetResponses, GetQuestionApiQuestionsQuestionIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetQuestionApiQuestionsQuestionIdGetResponses, GetQuestionApiQuestionsQuestionIdGetErrors, ThrowOnError>({ url: '/api/questions/{question_id}', ...options });
-
-/**
  * Answer Question
  *
  * Answer a question first-write-wins; 409 carries the winning answer.
@@ -415,21 +494,6 @@ export const reorderQueueApiQueueReorderPost = <ThrowOnError extends boolean = f
 export const readyApiReadyGet = <ThrowOnError extends boolean = false>(options?: Options<ReadyApiReadyGetData, ThrowOnError>): RequestResult<ReadyApiReadyGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ReadyApiReadyGetResponses, unknown, ThrowOnError>({ url: '/api/ready', ...options });
 
 /**
- * Claim Route
- *
- * Claim a chunk; 403 if the runner is paused at the hub, 409 if already claimed,
- * else the first node envelope.
- */
-export const claimRouteApiRoutesPost = <ThrowOnError extends boolean = false>(options: Options<ClaimRouteApiRoutesPostData, ThrowOnError>): RequestResult<ClaimRouteApiRoutesPostResponses, ClaimRouteApiRoutesPostErrors, ThrowOnError> => (options.client ?? client).post<ClaimRouteApiRoutesPostResponses, ClaimRouteApiRoutesPostErrors, ThrowOnError>({
-    url: '/api/routes',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
  * List Runners
  *
  * The fleet registry — every runner with derived liveness + paused state.
@@ -437,32 +501,17 @@ export const claimRouteApiRoutesPost = <ThrowOnError extends boolean = false>(op
 export const listRunnersApiRunnersGet = <ThrowOnError extends boolean = false>(options?: Options<ListRunnersApiRunnersGetData, ThrowOnError>): RequestResult<ListRunnersApiRunnersGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListRunnersApiRunnersGetResponses, unknown, ThrowOnError>({ url: '/api/runners', ...options });
 
 /**
- * Register Runner
+ * Enroll Runner
  *
- * Register a runner — runner id + workspace binding; idempotent upsert.
- */
-export const registerRunnerApiRunnersPost = <ThrowOnError extends boolean = false>(options: Options<RegisterRunnerApiRunnersPostData, ThrowOnError>): RequestResult<RegisterRunnerApiRunnersPostResponses, RegisterRunnerApiRunnersPostErrors, ThrowOnError> => (options.client ?? client).post<RegisterRunnerApiRunnersPostResponses, RegisterRunnerApiRunnersPostErrors, ThrowOnError>({
-    url: '/api/runners',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Get Runner
+ * Mint (or rotate) ``runner_id``'s bearer token — the plaintext is returned once;
+ * the store keeps only its sha256 hash from here on (issue #86a).
  *
- * One runner's declarative state — the runner's own pull read.
+ * Anonymous, like every operator verb under this epic (localhost dogfooding hub;
+ * operator auth is epic:team). Requires an existing registration (404 otherwise):
+ * enrollment is a deliberate operator act on a runner the fleet already knows, not a
+ * trust-on-first-use grant to a name nobody has registered yet.
  */
-export const getRunnerApiRunnersRunnerIdGet = <ThrowOnError extends boolean = false>(options: Options<GetRunnerApiRunnersRunnerIdGetData, ThrowOnError>): RequestResult<GetRunnerApiRunnersRunnerIdGetResponses, GetRunnerApiRunnersRunnerIdGetErrors, ThrowOnError> => (options.client ?? client).get<GetRunnerApiRunnersRunnerIdGetResponses, GetRunnerApiRunnersRunnerIdGetErrors, ThrowOnError>({ url: '/api/runners/{runner_id}', ...options });
-
-/**
- * Heartbeat Runner
- *
- * Refresh a runner's liveness — the slow runner-level heartbeat. Returns 204.
- */
-export const heartbeatRunnerApiRunnersRunnerIdHeartbeatsPost = <ThrowOnError extends boolean = false>(options: Options<HeartbeatRunnerApiRunnersRunnerIdHeartbeatsPostData, ThrowOnError>): RequestResult<HeartbeatRunnerApiRunnersRunnerIdHeartbeatsPostResponses, HeartbeatRunnerApiRunnersRunnerIdHeartbeatsPostErrors, ThrowOnError> => (options.client ?? client).post<HeartbeatRunnerApiRunnersRunnerIdHeartbeatsPostResponses, HeartbeatRunnerApiRunnersRunnerIdHeartbeatsPostErrors, ThrowOnError>({ url: '/api/runners/{runner_id}/heartbeats', ...options });
+export const enrollRunnerApiRunnersRunnerIdEnrollmentsPost = <ThrowOnError extends boolean = false>(options: Options<EnrollRunnerApiRunnersRunnerIdEnrollmentsPostData, ThrowOnError>): RequestResult<EnrollRunnerApiRunnersRunnerIdEnrollmentsPostResponses, EnrollRunnerApiRunnersRunnerIdEnrollmentsPostErrors, ThrowOnError> => (options.client ?? client).post<EnrollRunnerApiRunnersRunnerIdEnrollmentsPostResponses, EnrollRunnerApiRunnersRunnerIdEnrollmentsPostErrors, ThrowOnError>({ url: '/api/runners/{runner_id}/enrollments', ...options });
 
 /**
  * Pause Runner
@@ -491,3 +540,11 @@ export const resumeRunnerApiRunnersRunnerIdResumePost = <ThrowOnError extends bo
         ...options.headers
     }
 });
+
+/**
+ * Fleet Spend
+ *
+ * The fleet's total usage/cost since ``since`` (an ISO-8601 instant) — summed
+ * over every usage fact recorded at or after it, across every chunk.
+ */
+export const fleetSpendApiSpendGet = <ThrowOnError extends boolean = false>(options: Options<FleetSpendApiSpendGetData, ThrowOnError>): RequestResult<FleetSpendApiSpendGetResponses, FleetSpendApiSpendGetErrors, ThrowOnError> => (options.client ?? client).get<FleetSpendApiSpendGetResponses, FleetSpendApiSpendGetErrors, ThrowOnError>({ url: '/api/spend', ...options });

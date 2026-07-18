@@ -72,7 +72,7 @@ _PENDING_YAML = _MERGE_YAML.replace('command: "true"', 'command: "echo pending"'
 
 def _claim(hub, chunk_id: str) -> str:  # type: ignore[no-untyped-def]
     resp = hub.client.post(
-        "/api/routes",
+        "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["env-a"]},
     )
     assert resp.status_code == 201, resp.text
@@ -106,7 +106,7 @@ def _ingest_and_deliver(hub, *, yaml: str) -> str:  # type: ignore[no-untyped-de
     assert hub.client.post("/api/graphs", json={"definition_yaml": yaml}).status_code == 201
     chunk_id = ingest(hub, [_POINTER])
     build_node_id = _claim(hub, chunk_id)
-    apply = hub.client.post(f"/api/chunks/{chunk_id}/completions", json=_build_completion(build_node_id, 1))
+    apply = hub.client.post(f"/api/fleet/chunks/{chunk_id}/completions", json=_build_completion(build_node_id, 1))
     assert apply.status_code == 200, apply.text
     assert apply.json()["outcome"] == "hub_node_taken"
     return chunk_id
@@ -195,7 +195,7 @@ def test_pause_allows_a_running_chunk(tmp_path: Path) -> None:
     chunk_id = ingest(hub, [_POINTER])
     assert (
         hub.client.post(
-            "/api/routes",
+            "/api/fleet/routes",
             json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["env-a"]},
         ).status_code
         == 201
@@ -240,7 +240,7 @@ def test_pause_view_is_carried_even_when_the_status_hides_the_pause(tmp_path: Pa
     chunk_id = ingest(hub, [_POINTER])
     assert (
         hub.client.post(
-            "/api/routes",
+            "/api/fleet/routes",
             json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["env-a"]},
         ).status_code
         == 201

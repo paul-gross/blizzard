@@ -34,16 +34,39 @@ the runner's own lease epoch — not this value — is what the fence consumes.
 
 from __future__ import annotations
 
+import secrets
 import threading
 from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.crash import crashpoint
+from blizzard.hub.domain.enrollment import hash_token
 from blizzard.hub.domain.envelope import build_node_envelope
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.registry import IReadRunnerRegistry
 from blizzard.hub.domain.work import Chunk, IWriteChunkRepository, current_node_id, latest_epoch
 from blizzard.wire.envelope import NodeEnvelope
+
+#: `secrets.token_urlsafe` byte count for the route capability token — same length as
+#: the runner bearer token (`hub/domain/enrollment.py`), for the same reason: a
+#: 43-character URL-safe secret comfortably beyond brute-force range.
+_ROUTE_TOKEN_BYTES = 32
+
+# Crash point (``bzh:crash-point-registry``, issue #84b) — the claim-family boundary: the
+# route and its capability-token fact (``record_route``) are durable, but the plaintext
+# token has not yet reached the runner in the HTTP response. A kill here is recovered
+# generically by the runner's own ``_reconcile_interrupted_claims``/``_adopt_interrupted_claim``
+# (``runner/loop/steps.py``): the hub already shows the route live and held by this
+# runner, so the runner adopts rather than re-claiming, and re-keys since it has no
+# ``route_tokens`` row for the chunk. Reached by the generic build->deliver sweep
+# scenario — every claim in that scenario passes through here — so no dedicated crash
+# scenario is needed, only the module's addition to `_INSTRUMENTED_MODULES` and to the
+# bounded CI subset (`tests/crash/test_kill9_sweep.py`).
+_CP_CLAIM_AFTER_PERSIST_BEFORE_RESPONSE = crashpoint(
+    "claim.after-persist.before-response",
+    "the route + its route_token_minted fact are durable; the plaintext has not yet reached the runner",
+)
 
 
 class ClaimConflict(Exception):
@@ -69,10 +92,17 @@ class ClaimDeniedPaused(Exception):
 
 @dataclass(frozen=True)
 class ClaimResult:
-    """A won claim — the route fact plus the chunk's first node envelope."""
+    """A won claim — the route fact, its first node envelope, and the route's
+    plaintext capability token (issue #84a).
+
+    ``route_token`` is returned exactly once, here — the hub persists only its sha256
+    hash (:meth:`~blizzard.hub.domain.work.IWriteChunkRepository.record_route`'s
+    ``token_hash``); :class:`~blizzard.hub.domain.fleet.Route` itself stays
+    dependency-free and carries no secret."""
 
     route: Route
     envelope: NodeEnvelope
+    route_token: str
 
 
 class ClaimService:
@@ -135,7 +165,12 @@ class ClaimService:
             environment_ids=list(environment_ids),
             created_at=now,
         )
-        self._chunks.record_route(route, at=now)
+        # Minted fresh per acquisition (issue #84a): the plaintext is returned once on
+        # the result below and never stored — only its sha256 hash lands, appended as
+        # its own route_token_minted fact in the same store write as record_route.
+        route_token = secrets.token_urlsafe(_ROUTE_TOKEN_BYTES)
+        self._chunks.record_route(route, token_hash=hash_token(route_token), at=now)
+        _CP_CLAIM_AFTER_PERSIST_BEFORE_RESPONSE.reached()
 
         node_id = (current_node_id(facts) if facts is not None else None) or graph.entry_node_id
         node = graph.node_by_id(node_id)
@@ -147,4 +182,23 @@ class ClaimService:
             artifacts=self._chunks.load_artifacts(chunk.chunk_id),
             epoch=epoch,
         )
-        return ClaimResult(route=route, envelope=envelope)
+        return ClaimResult(route=route, envelope=envelope, route_token=route_token)
+
+    def rekey(self, route: Route) -> str:
+        """Rotate a live route's capability token (issue #84b) — the lost-plaintext
+        recovery: a runner that crashed between the mint and reading the claim
+        response back has no other way to learn its token.
+
+        Mints a fresh ``secrets.token_urlsafe`` and appends it as a new
+        ``route_token_minted`` fact (``bzh:facts-not-status`` — never a mutation of
+        the prior fact); the newest-fact-wins derivation
+        (:func:`~blizzard.hub.domain.work.newest_live_route_token`) supersedes the old
+        token immediately, with no separate revocation step. Idempotent by
+        construction: a re-run appends another fact and the runner simply stores
+        whichever plaintext it last received. Takes the already-resolved live
+        :class:`~blizzard.hub.domain.fleet.Route` (``bzh:domain-takes-objects`` — the
+        caller confirms liveness and the requesting runner's ownership via
+        ``route_of``/``assert_owns`` before calling this)."""
+        route_token = secrets.token_urlsafe(_ROUTE_TOKEN_BYTES)
+        self._chunks.record_route_token(route.chunk_id, token_hash=hash_token(route_token), at=self._clock.now())
+        return route_token

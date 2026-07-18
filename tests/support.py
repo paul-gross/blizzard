@@ -28,7 +28,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub.app import create_app
 from blizzard.hub.composition import HubServices, build_services
-from blizzard.hub.config import HubConfig, PmSourceConfig
+from blizzard.hub.config import ROUTE_TOKEN_WARN, RUNNER_AUTH_WARN, HubConfig, PmSourceConfig
 from blizzard.hub.delivery.command_runner import CommandResult, IHubCommandRunner
 from blizzard.hub.delivery.workdir import IHubWorkdir
 from blizzard.hub.domain.graph import Edge, Graph, Node
@@ -317,6 +317,8 @@ def build_hub(
     hub_command_runner: IHubCommandRunner | None = None,
     hub_workdir: IHubWorkdir | None = None,
     forge_owner: str | None = None,
+    runner_auth_mode: str = RUNNER_AUTH_WARN,
+    route_token_mode: str = ROUTE_TOKEN_WARN,
 ) -> HubHarness:
     """A migrated, fully-wired hub over ``tmp_path`` with fake external seams.
 
@@ -329,9 +331,13 @@ def build_hub(
     ``hub_command_runner``/``hub_workdir`` are the generic hub command node's mechanism
     seams (#65) — a test binds fakes here; left ``None``, ``build_services`` wires the
     real subprocess/filesystem adapters (rooted under a throwaway tmp dir, harmless for
-    tests that never mint a ``run:`` node)."""
+    tests that never mint a ``run:`` node). ``runner_auth_mode`` (issue #86a) and
+    ``route_token_mode`` (issue #84b) default to ``warn``; a test exercising either
+    ``enforce`` rejection path overrides the relevant one."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
-    config = HubConfig(root=tmp_path, db_url=db_url)
+    config = HubConfig(
+        root=tmp_path, db_url=db_url, runner_auth_mode=runner_auth_mode, route_token_mode=route_token_mode
+    )
     migration_runner(config).upgrade("head")
 
     pm_registry = PmSourceRegistry(pm if pm is not None else {"default": FakePmSource()})
@@ -521,20 +527,24 @@ def assert_all_timestamps_utc(payload: object) -> None:
             assert_all_timestamps_utc(item)
 
 
-def report_lease(hub: HubHarness, chunk_id: str, *, epoch: int, seq: int, runner_id: str = "r1") -> dict:
+def report_lease(
+    hub: HubHarness, chunk_id: str, *, epoch: int, seq: int, runner_id: str = "r1", route_token: str | None = None
+) -> dict:
     """Report a runner-minted ``lease.minted`` fact through POST /events.
 
     Mirrors the real runner flow: after claiming a route, the runner mints its lease
     locally and reports its epoch up through the store-and-forward buffer, which is the
     fence input the completion check consumes. Component tests that submit a completion
-    call this first so the hub knows the chunk's latest epoch.
+    call this first so the hub knows the chunk's latest epoch. ``route_token`` (issue
+    #84b) rides the payload, same as the real runner's stamp-at-enqueue; ``None``
+    (the default) omits it, matching a caller that never claimed under the plaintext.
     """
+    payload: dict[str, object] = {"chunk_id": chunk_id, "epoch": epoch}
+    if route_token is not None:
+        payload["route_token"] = route_token
     resp = hub.client.post(
-        "/api/events",
-        json={
-            "runner_id": runner_id,
-            "facts": [{"seq": seq, "kind": "lease.minted", "payload": {"chunk_id": chunk_id, "epoch": epoch}}],
-        },
+        "/api/fleet/events",
+        json={"runner_id": runner_id, "facts": [{"seq": seq, "kind": "lease.minted", "payload": payload}]},
     )
     assert resp.status_code == 200, resp.text
     return resp.json()

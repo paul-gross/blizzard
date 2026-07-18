@@ -26,6 +26,7 @@ from blizzard.hub.domain.work import (
     QuestionFact,
     RouteCreatedFact,
     RouteReleasedFact,
+    RouteTokenMintedFact,
     TransitionFact,
     awaiting_external_merge,
     bounce_count,
@@ -34,6 +35,7 @@ from blizzard.hub.domain.work import (
     derive_chunk_status,
     has_landed_repos,
     latest_epoch,
+    newest_live_route_token,
     open_pause,
     open_questions,
 )
@@ -144,6 +146,68 @@ def test_same_instant_reclaim_still_derives_running() -> None:
         routes_released=[RouteReleasedFact(released_at=_at(2), seq=2)],
     )
     assert derive_chunk_status(facts) is ChunkStatus.RUNNING
+
+
+# --------------------------------------------------------------------------- #
+# Route capability token derivation (issue #84a) — newest-fact-wins over the live
+# acquisition's window, mirroring the route liveness derivation above.
+# --------------------------------------------------------------------------- #
+
+
+def test_unclaimed_chunk_has_no_live_token() -> None:
+    assert newest_live_route_token([], [], []) is None
+
+
+def test_live_route_with_no_token_facts_has_no_live_token() -> None:
+    # Should not happen in practice (the hub mints the token atomically with the
+    # route), but the derivation must not fabricate one.
+    routes_created = [RouteCreatedFact(created_at=_at(1))]
+    assert newest_live_route_token(routes_created, [], []) is None
+
+
+def test_freshly_claimed_route_has_its_own_live_token() -> None:
+    routes_created = [RouteCreatedFact(created_at=_at(1), seq=1)]
+    tokens = [RouteTokenMintedFact(token_hash="hash-a", minted_at=_at(1), seq=2)]
+    live = newest_live_route_token(routes_created, [], tokens)
+    assert live is not None
+    assert live.token_hash == "hash-a"
+
+
+def test_released_route_has_no_live_token() -> None:
+    routes_created = [RouteCreatedFact(created_at=_at(1), seq=1)]
+    routes_released = [RouteReleasedFact(released_at=_at(2), seq=3)]
+    tokens = [RouteTokenMintedFact(token_hash="hash-a", minted_at=_at(1), seq=2)]
+    assert newest_live_route_token(routes_created, routes_released, tokens) is None
+
+
+def test_earlier_acquisitions_token_is_excluded_after_reclaim() -> None:
+    """A released acquisition's token must not leak as the live token of the chunk's
+    *next* acquisition — only a token minted at/after the live route's own seq counts."""
+    routes_created = [
+        RouteCreatedFact(created_at=_at(1), seq=1),  # first acquisition
+        RouteCreatedFact(created_at=_at(3), seq=4),  # reclaim, now live
+    ]
+    routes_released = [RouteReleasedFact(released_at=_at(2), seq=3)]
+    tokens = [
+        RouteTokenMintedFact(token_hash="hash-old", minted_at=_at(1), seq=2),  # first acquisition's
+        RouteTokenMintedFact(token_hash="hash-new", minted_at=_at(3), seq=5),  # the reclaim's
+    ]
+    live = newest_live_route_token(routes_created, routes_released, tokens)
+    assert live is not None
+    assert live.token_hash == "hash-new"
+
+
+def test_a_rekey_fact_supersedes_the_original_token() -> None:
+    """Phase 6 re-key: a second token_minted fact for the same live route, minted
+    later, must win — newest-fact-wins, no separate revocation needed."""
+    routes_created = [RouteCreatedFact(created_at=_at(1), seq=1)]
+    tokens = [
+        RouteTokenMintedFact(token_hash="hash-original", minted_at=_at(1), seq=2),
+        RouteTokenMintedFact(token_hash="hash-rekeyed", minted_at=_at(5), seq=6),
+    ]
+    live = newest_live_route_token(routes_created, [], tokens)
+    assert live is not None
+    assert live.token_hash == "hash-rekeyed"
 
 
 def test_newest_transition_into_hub_node_is_delivering() -> None:

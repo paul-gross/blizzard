@@ -54,6 +54,7 @@ def build_loop_context(config: RunnerConfig, hub: IHubClient) -> LoopContext:
         binary=config.harness_binary,
         settings_path=config.worker_settings_path,
         permission_mode=config.harness_permission_mode,
+        env_passthrough=config.worker_env_passthrough,
     )
     # The per-lease harness-stdout directory (issue #58) — under the runner's own data
     # directory, created once here (never inside the adapter), so a worker's stdout
@@ -97,7 +98,7 @@ def build_loop_context(config: RunnerConfig, hub: IHubClient) -> LoopContext:
 
 def run_single_tick(config: RunnerConfig) -> None:
     """Run one synchronous reconciliation tick — the CLI verb and e2e driver."""
-    with httpx.Client(base_url=config.hub_url, timeout=_HTTP_TIMEOUT) as client:
+    with httpx.Client(base_url=config.hub_url, timeout=_HTTP_TIMEOUT, headers=config.auth_headers()) as client:
         ctx = build_loop_context(config, HttpHubClient(client))
         tick(ctx)
 
@@ -169,7 +170,9 @@ class PeriodicDriver:
         self._thread.join()
 
     def _run(self) -> None:
-        self._client = httpx.Client(base_url=self._config.hub_url, timeout=_HTTP_TIMEOUT)
+        self._client = httpx.Client(
+            base_url=self._config.hub_url, timeout=_HTTP_TIMEOUT, headers=self._config.auth_headers()
+        )
         ctx = build_loop_context(self._config, HttpHubClient(self._client))
         _log.info("reconciliation loop started", runner_id=self._config.runner_id, interval=self._interval)
         try:

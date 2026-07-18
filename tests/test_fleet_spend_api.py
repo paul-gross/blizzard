@@ -1,4 +1,4 @@
-"""``GET /api/fleet/spend`` — the fleet-wide spend-since read (issue #60, component tier).
+"""``GET /api/spend`` — the fleet-wide spend-since read (issue #60, component tier).
 
 A small dedicated read distinct from a chunk's own derived total
 (``tests/test_usage_facts_ingest.py``): it sums usage facts **across every chunk**,
@@ -27,7 +27,7 @@ _POINTER_B = {"source": "default", "ref": "8"}
 def _claim(hub, pointer: dict) -> tuple[str, str]:  # type: ignore[no-untyped-def]
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(pointer)]}).json()["chunk_id"]
     node_id = hub.client.post(
-        "/api/routes",
+        "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
     ).json()["envelope"]["node"]["node_id"]
     return chunk_id, node_id
@@ -47,7 +47,7 @@ def _push_usage(hub, *, chunk_id: str, node_id: str, epoch: int, seq: int, cost_
         "cost_usd": cost_usd,
     }
     resp = hub.client.post(
-        "/api/events",
+        "/api/fleet/events",
         json={"runner_id": "r1", "facts": [{"seq": seq, "kind": "usage.recorded", "payload": payload}]},
     )
     assert resp.status_code == 200, resp.text
@@ -70,7 +70,7 @@ def test_fleet_spend_sums_usage_across_every_chunk_since_the_cutoff(tmp_path: Pa
     _push_usage(hub, chunk_id=chunk_a, node_id=node_a, epoch=1, seq=4, cost_usd=0.25)
     _push_usage(hub, chunk_id=chunk_b, node_id=node_b, epoch=1, seq=5, cost_usd=0.50)
 
-    resp = hub.client.get("/api/fleet/spend", params={"since": cutoff})
+    resp = hub.client.get("/api/spend", params={"since": cutoff})
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["since"] == cutoff
@@ -89,7 +89,7 @@ def test_fleet_spend_flags_partial_when_any_summed_row_has_no_cost(tmp_path: Pat
     _push_usage(hub, chunk_id=chunk_id, node_id=node_id, epoch=1, seq=2, cost_usd=0.10)
     _push_usage(hub, chunk_id=chunk_id, node_id=node_id, epoch=1, seq=3, cost_usd=None)
 
-    resp = hub.client.get("/api/fleet/spend", params={"since": cutoff})
+    resp = hub.client.get("/api/spend", params={"since": cutoff})
     body = resp.json()
     assert body["input_tokens"] == 200  # tokens still summed for both rows
     assert body["cost_usd"] == pytest.approx(0.10)  # the lower bound
@@ -99,6 +99,6 @@ def test_fleet_spend_flags_partial_when_any_summed_row_has_no_cost(tmp_path: Pat
 def test_fleet_spend_rejects_a_malformed_since(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
 
-    resp = hub.client.get("/api/fleet/spend", params={"since": "not-a-timestamp"})
+    resp = hub.client.get("/api/spend", params={"since": "not-a-timestamp"})
 
     assert resp.status_code == 422, resp.text

@@ -489,3 +489,24 @@ usage_facts = Table(
     Column("cost_usd", Float, nullable=True),  # None = no envelope for this invocation — never fabricated
     Column("recorded_at", UtcDateTime, nullable=False),
 )
+
+# --- Route capability tokens (the runner's stash — issue #84a) ----------------
+#
+# The plaintext of a won claim's route token (`wire.route.RouteClaimResponse.route_token`),
+# stashed here on a won claim (FILL and the interrupted-claim reclaim path) and stamped
+# onto every chunk-scoped outbound payload at enqueue — completion, decision, lease.minted,
+# escalation.recorded, question.asked. One upserted row per chunk, mirroring `hub_control`'s
+# shape: a fresh claim (a re-claim after release) overwrites the prior token; a same-runner
+# requeue/takeover/retry re-reads the same row, since it re-spawns under the route already
+# held rather than re-claiming. The runner keeps only the *current* plaintext for a chunk it
+# holds — no rotation history is needed here, unlike the hub's own append-only
+# `route_token_minted` facts, because the runner only ever presents its current token, never
+# proves what it held in the past.
+
+route_tokens = Table(
+    "route_tokens",
+    metadata,
+    Column("chunk_id", String, primary_key=True),
+    Column("token", Text, nullable=False),
+    Column("acquired_at", UtcDateTime, nullable=False),
+)

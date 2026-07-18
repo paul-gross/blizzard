@@ -68,7 +68,7 @@ def test_next_route_seq_locks_the_chunk_row_for_update() -> None:
 
     ChunkStore._next_route_seq(conn, "ch_1")  # type: ignore[arg-type]
 
-    assert len(conn.statements) == 3  # the lock, then the two per-table max reads
+    assert len(conn.statements) == 4  # the lock, then the three per-table max reads
     lock_stmt = conn.statements[0]
     assert isinstance(lock_stmt, Update)  # a write, not a SELECT — see the allocator's
     # own docstring for why: sqlite silently drops SELECT ... FOR UPDATE, and even a

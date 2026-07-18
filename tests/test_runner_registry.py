@@ -21,7 +21,7 @@ pytestmark = pytest.mark.component
 
 
 def _register(hub: HubHarness, runner_id: str = "runner-a", workspace_id: str = "ws-a") -> dict:
-    resp = hub.client.post("/api/runners", json={"runner_id": runner_id, "workspace_id": workspace_id})
+    resp = hub.client.post("/api/fleet/runners", json={"runner_id": runner_id, "workspace_id": workspace_id})
     assert resp.status_code == 201, resp.text
     return resp.json()
 
@@ -29,10 +29,10 @@ def _register(hub: HubHarness, runner_id: str = "runner-a", workspace_id: str = 
 def test_register_is_idempotent_upsert(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     assert _register(hub)["first_registration"] is True
-    again = hub.client.post("/api/runners", json={"runner_id": "runner-a", "workspace_id": "ws-b"})
+    again = hub.client.post("/api/fleet/runners", json={"runner_id": "runner-a", "workspace_id": "ws-b"})
     assert again.json()["first_registration"] is False
     # The re-register updated the workspace binding and refreshed last_seen.
-    view = hub.client.get("/api/runners/runner-a").json()
+    view = hub.client.get("/api/fleet/runners/runner-a").json()
     assert view["workspace_id"] == "ws-b"
 
 
@@ -54,21 +54,21 @@ def test_liveness_goes_offline_when_stale_and_heartbeat_refreshes(tmp_path: Path
     hub = build_hub(tmp_path)
     _register(hub)
     hub.clock.advance(STALE_AFTER + timedelta(seconds=1))
-    assert hub.client.get("/api/runners/runner-a").json()["online"] is False
+    assert hub.client.get("/api/fleet/runners/runner-a").json()["online"] is False
 
-    hb = hub.client.post("/api/runners/runner-a/heartbeats")
+    hb = hub.client.post("/api/fleet/runners/runner-a/heartbeats")
     assert hb.status_code == 204
-    assert hub.client.get("/api/runners/runner-a").json()["online"] is True
+    assert hub.client.get("/api/fleet/runners/runner-a").json()["online"] is True
 
 
 def test_heartbeat_unknown_runner_is_404(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    assert hub.client.post("/api/runners/ghost/heartbeats").status_code == 404
+    assert hub.client.post("/api/fleet/runners/ghost/heartbeats").status_code == 404
 
 
 def test_get_unknown_runner_is_404(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    assert hub.client.get("/api/runners/ghost").status_code == 404
+    assert hub.client.get("/api/fleet/runners/ghost").status_code == 404
 
 
 def test_pause_and_resume_flip_the_derived_brake(tmp_path: Path) -> None:
@@ -78,14 +78,14 @@ def test_pause_and_resume_flip_the_derived_brake(tmp_path: Path) -> None:
     paused = hub.client.post("/api/runners/runner-a/pause", json={"by": "alice"})
     assert paused.status_code == 200
     assert paused.json()["hub_paused"] is True
-    assert hub.client.get("/api/runners/runner-a").json()["hub_paused"] is True
+    assert hub.client.get("/api/fleet/runners/runner-a").json()["hub_paused"] is True
     # The fleet's brake is not the runner's own: pausing here leaves that one alone.
-    assert hub.client.get("/api/runners/runner-a").json()["locally_paused"] is False
+    assert hub.client.get("/api/fleet/runners/runner-a").json()["locally_paused"] is False
 
     resumed = hub.client.post("/api/runners/runner-a/resume", json={"by": "alice"})
     assert resumed.status_code == 200
     assert resumed.json()["hub_paused"] is False
-    assert hub.client.get("/api/runners/runner-a").json()["hub_paused"] is False
+    assert hub.client.get("/api/fleet/runners/runner-a").json()["hub_paused"] is False
 
 
 def test_pause_unknown_runner_is_404(tmp_path: Path) -> None:
@@ -126,7 +126,7 @@ def _report_local_pause(
     if reason is not None:
         payload["reason"] = reason
     resp = hub.client.post(
-        "/api/events",
+        "/api/fleet/events",
         json={"runner_id": runner_id, "facts": [{"seq": seq, "kind": kind, "payload": payload}]},
     )
     assert resp.status_code == 200, resp.text
@@ -138,7 +138,7 @@ def test_a_reported_local_pause_lands_and_is_separate_from_the_hubs_brake(tmp_pa
     _register(hub)
 
     assert _report_local_pause(hub, paused=True)["applied"] == [1]
-    view = hub.client.get("/api/runners/runner-a").json()
+    view = hub.client.get("/api/fleet/runners/runner-a").json()
     assert view["locally_paused"] is True
     assert view["hub_paused"] is False  # the fleet never paused it — the runner did
 
@@ -150,7 +150,7 @@ def test_a_reported_local_resume_clears_only_the_local_brake(tmp_path: Path) -> 
     _report_local_pause(hub, paused=True, seq=1)
 
     _report_local_pause(hub, paused=False, seq=2)
-    view = hub.client.get("/api/runners/runner-a").json()
+    view = hub.client.get("/api/fleet/runners/runner-a").json()
     assert view["locally_paused"] is False
     assert view["hub_paused"] is True  # untouched — each brake is cleared where it was set
 
@@ -165,7 +165,7 @@ def test_a_ceiling_pause_reason_rides_the_report_and_lands_on_the_view(tmp_path:
     reason = "spend ceiling $5.00 reached over the trailing 24h (spend $7.00)"
     _report_local_pause(hub, paused=True, by="runner-ceiling", reason=reason)
 
-    view = hub.client.get("/api/runners/runner-a").json()
+    view = hub.client.get("/api/fleet/runners/runner-a").json()
     assert view["locally_paused"] is True
     assert view["locally_paused_by"] == "runner-ceiling"
     assert view["locally_paused_reason"] == reason
@@ -179,7 +179,7 @@ def test_a_manual_pause_carries_no_reason_and_renders_bare(tmp_path: Path) -> No
 
     _report_local_pause(hub, paused=True, by="operator")
 
-    view = hub.client.get("/api/runners/runner-a").json()
+    view = hub.client.get("/api/fleet/runners/runner-a").json()
     assert view["locally_paused"] is True
     assert view["locally_paused_by"] == "operator"
     assert view["locally_paused_reason"] is None
@@ -194,7 +194,7 @@ def test_a_local_resume_clears_the_reason_alongside_the_brake(tmp_path: Path) ->
 
     _report_local_pause(hub, paused=False, seq=2, by="operator")
 
-    view = hub.client.get("/api/runners/runner-a").json()
+    view = hub.client.get("/api/fleet/runners/runner-a").json()
     assert view["locally_paused"] is False
     assert view["locally_paused_by"] is None
     assert view["locally_paused_reason"] is None
@@ -212,7 +212,7 @@ def test_a_replayed_ceiling_pause_records_the_reason_exactly_once(tmp_path: Path
     replay = _report_local_pause(hub, paused=True, seq=1, by="runner-ceiling", reason=reason)
     assert replay["applied"] == [] and replay["already_applied"] == [1]
 
-    view = hub.client.get("/api/runners/runner-a").json()
+    view = hub.client.get("/api/fleet/runners/runner-a").json()
     assert view["locally_paused_by"] == "runner-ceiling"
     assert view["locally_paused_reason"] == reason
 
@@ -237,7 +237,7 @@ def test_a_replayed_local_pause_is_not_reapplied(tmp_path: Path) -> None:
 
     replay = _report_local_pause(hub, paused=True, seq=1)
     assert replay["applied"] == [] and replay["already_applied"] == [1]
-    assert hub.client.get("/api/runners/runner-a").json()["locally_paused"] is True
+    assert hub.client.get("/api/fleet/runners/runner-a").json()["locally_paused"] is True
 
 
 def test_a_local_pause_from_an_unregistered_runner_is_kept(tmp_path: Path) -> None:
@@ -249,5 +249,5 @@ def test_a_local_pause_from_an_unregistered_runner_is_kept(tmp_path: Path) -> No
     hub = build_hub(tmp_path)
     assert _report_local_pause(hub, paused=True, runner_id="runner-late")["applied"] == [1]
 
-    hub.client.post("/api/runners", json={"runner_id": "runner-late", "workspace_id": "ws-a"})
-    assert hub.client.get("/api/runners/runner-late").json()["locally_paused"] is True
+    hub.client.post("/api/fleet/runners", json={"runner_id": "runner-late", "workspace_id": "ws-a"})
+    assert hub.client.get("/api/fleet/runners/runner-late").json()["locally_paused"] is True

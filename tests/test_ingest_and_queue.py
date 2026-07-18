@@ -247,7 +247,7 @@ def test_pm_items_503s_when_no_pm_source_is_configured_at_all(tmp_path: Path) ->
 
 def _pass(hub, chunk_id: str, node_id: str, epoch: int, *, artifacts: list[dict]) -> dict:  # type: ignore[no-untyped-def]
     return hub.client.post(
-        f"/api/chunks/{chunk_id}/completions",
+        f"/api/fleet/chunks/{chunk_id}/completions",
         json={
             "choice": "pass",
             "epoch": epoch,
@@ -268,14 +268,16 @@ def test_terminal_pointer_reingest_mints_a_fresh_chunk(tmp_path: Path) -> None:
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_P1)]}).json()["chunk_id"]
     # Drive the chunk terminal through the default build -> review -> deliver graph.
     build_id = hub.client.post(
-        "/api/routes",
+        "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
     ).json()["envelope"]["node"]["node_id"]
     commit = [{"name": "w", "kind": "git_commit", "repo": "acme/widget", "branch_name": "b", "commit_hash": "c"}]
     to_review = _pass(hub, chunk_id, build_id, 1, artifacts=commit)
     review_id = to_review["next_envelope"]["node"]["node_id"]
     # Report the review node-step's fresh lease so the hub's fence tracks it.
-    assert hub.client.post(f"/api/chunks/{chunk_id}/leases", json={"epoch": 2, "runner_id": "r1"}).status_code == 202
+    assert (
+        hub.client.post(f"/api/fleet/chunks/{chunk_id}/leases", json={"epoch": 2, "runner_id": "r1"}).status_code == 202
+    )
     _pass(hub, chunk_id, review_id, 2, artifacts=[])
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
 
@@ -297,7 +299,7 @@ def test_queue_peek_lists_ready_chunks_fifo_and_hides_claimed(tmp_path: Path) ->
 
     # Claiming the first removes it from the ready queue.
     hub.client.post(
-        "/api/routes",
+        "/api/fleet/routes",
         json={"chunk_id": first, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
     )
     remaining = hub.client.get("/api/queue/peek").json()["entries"]

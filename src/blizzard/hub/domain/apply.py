@@ -26,12 +26,15 @@ from __future__ import annotations
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import ARTIFACT_PREFIX, DECISION_PREFIX, TRANSITION_PREFIX, mint
+from blizzard.hub.config import ROUTE_TOKEN_WARN
 from blizzard.hub.delivery.hub_node import HubNodeExecutor
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.envelope import build_node_envelope
 from blizzard.hub.domain.graph import RESERVED_TERMINAL, Edge, Executor, Graph, JudgedBy, Node
+from blizzard.hub.domain.route_auth import check_route_token
 from blizzard.hub.domain.work import (
     Chunk,
+    ChunkFacts,
     ChunkStatus,
     DecisionChoice,
     IWriteChunkRepository,
@@ -62,10 +65,26 @@ class ApplyService:
         self._clock = clock
         self._hub_node_executor = hub_node_executor
 
-    def apply(self, chunk: Chunk, graph: Graph, submission: CompletionSubmission) -> ApplyResponse:
+    def apply(
+        self, chunk: Chunk, graph: Graph, submission: CompletionSubmission, *, route_token_mode: str = ROUTE_TOKEN_WARN
+    ) -> ApplyResponse:
         from_node = graph.node_by_id(submission.from_node_id)
         if from_node is None:
             return _failure(f"no node {submission.from_node_id} in graph {graph.graph_id}")
+
+        facts = self._chunks.load_facts(chunk.chunk_id)
+        if facts is None:
+            return _failure(f"unknown chunk {chunk.chunk_id}")
+
+        # Route-token authorization (issue #84b) — ordered ahead of everything else
+        # below, including the idempotent-replay probe: a replay is a write-path
+        # short-circuit too, and a post-release zombie's replayed completion must be
+        # rejected exactly as a fresh one would be (the plan's "release invalidates the
+        # token" requirement). The existing epoch fence (further down, and in
+        # ``_apply_gate_resolution``) runs after this and is untouched.
+        rejection = self._check_route_token(chunk, facts, submission, route_token_mode=route_token_mode)
+        if rejection is not None:
+            return rejection
 
         # Idempotent replay first: a completion already applied at this
         # (node, epoch) returns its original outcome — even once the chunk is terminal.
@@ -86,9 +105,6 @@ class ApplyService:
         if from_node.judged_by is JudgedBy.HUMAN:
             return _failure(f"human signoff required: node `{from_node.name}` is a gate — resolve its decision")
 
-        facts = self._chunks.load_facts(chunk.chunk_id)
-        if facts is None:
-            return _failure(f"unknown chunk {chunk.chunk_id}")
         if derive_chunk_status(facts) in _TERMINAL_STATUSES:
             return _failure("chunk is terminal")
         latest = latest_epoch(facts)
@@ -228,6 +244,19 @@ class ApplyService:
             at=self._clock.now(),
             artifacts=[],
         )
+
+    def _check_route_token(
+        self, chunk: Chunk, facts: ChunkFacts, submission: CompletionSubmission, *, route_token_mode: str
+    ) -> ApplyResponse | None:
+        route = self._chunks.route_of(chunk.chunk_id)
+        detail = check_route_token(
+            facts,
+            presented_token=submission.route_token,
+            submission_runner_id=submission.runner_id,
+            route_runner_id=route.runner_id if route is not None else None,
+            mode=route_token_mode,
+        )
+        return _failure(detail) if detail is not None else None
 
     def _row(self, chunk: Chunk, from_node: Node, epoch: int, artifact: SubmittedArtifact) -> ArtifactRow:
         is_commit = artifact.kind is ArtifactKind.GIT_COMMIT

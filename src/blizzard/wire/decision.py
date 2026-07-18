@@ -43,6 +43,9 @@ class DecisionSubmission(BaseModel):
     epoch: int  # the step's lease fence, checked against the chunk's latest
     runner_id: str
     artifacts: list[SubmittedArtifact] = []
+    # The route capability token stamped at enqueue (issue #84a) — see
+    # `wire.completion.CompletionSubmission.route_token`; present-only in this phase.
+    route_token: str | None = None
 
 
 class DecisionView(BaseModel):

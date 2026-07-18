@@ -1,12 +1,16 @@
-"""Queue routes — peek, reorder, and group.
+"""Queue routes — peek, reorder, and group — the anonymous **operator** surface (issue #87).
 
-``GET /queue/peek`` is the read-only ready-queue peek a runner's FILL step does before
-claiming; ready is a **derived** status (a minted chunk with no live route) and
-the queue's order is an explicit hub-side property. ``POST /queue/reorder`` is
-the board's Prioritize control, and ``POST /chunks/{id}/group`` is the Group control —
-both shape the ready queue without executing work. Controllers stay read-only over the
-store and delegate the writes to the queue-shaping domain services
-(``bzh:controller-read-only``).
+``GET /queue/peek`` is the read-only ready-queue peek the board's queue panel polls;
+ready is a **derived** status (a minted chunk with no live route) and the queue's order
+is an explicit hub-side property. A runner's FILL step peeks the same ready queue
+through its own fleet-side counterpart (``GET /api/fleet/queue/peek``,
+:mod:`blizzard.hub.api.fleet`) rather than this route — both share :func:`peek_queue`.
+``POST /queue/reorder`` is the board's Prioritize control, and ``POST
+/chunks/{id}/group`` is the Group control — both shape the ready queue without
+executing work. Controllers stay read-only over the store and delegate the writes to
+the queue-shaping domain services (``bzh:controller-read-only``).
+``dependencies=[Depends(reject_runner_principal)]`` rejects a runner's bearer token
+here rather than treating it as anonymous-plus-credential.
 """
 
 from __future__ import annotations
@@ -16,6 +20,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
+from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.queue import ChunkNotFound, ChunkNotReady
@@ -30,7 +35,7 @@ from blizzard.wire.queue import (
     QueueReorderResponse,
 )
 
-router = APIRouter(prefix="/api", tags=["queue"])
+router = APIRouter(prefix="/api", tags=["queue"], dependencies=[Depends(reject_runner_principal)])
 
 
 def _entries(ready: list[Chunk]) -> list[QueuePeekEntry]:

@@ -357,6 +357,10 @@ def write_runner_config(runner_dir: Path, *, workspace: Path, bin_dir: Path, hub
         # default (``bypassPermissions``): None omits the flag so the mock is unaffected.
         harness_permission_mode=None,
         base_branch="main",
+        # `start_runner` sets `ENV_HARNESS_FENCE` in the daemon subprocess's own env; the
+        # adapter's spawn-environment allowlist (issue #88) only forwards it to a worker
+        # because it is declared here, mirroring the real fleet's `[worker] env_passthrough`.
+        worker_env_passthrough=(ENV_HARNESS_FENCE,),
     )
     config.config_path.write_text(config.to_toml())
     return config

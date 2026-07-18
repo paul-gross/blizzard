@@ -99,7 +99,7 @@ def _completion(node_id: str, *, epoch: int, choice: str, artifacts: list[dict])
 
 
 def _report_lease(hub, chunk_id: str, epoch: int) -> None:  # type: ignore[no-untyped-def]
-    resp = hub.client.post(f"/api/chunks/{chunk_id}/leases", json={"epoch": epoch, "runner_id": "r1"})
+    resp = hub.client.post(f"/api/fleet/chunks/{chunk_id}/leases", json={"epoch": epoch, "runner_id": "r1"})
     assert resp.status_code == 202, resp.text
 
 
@@ -111,7 +111,7 @@ def _mint_and_claim(hub) -> tuple[str, dict[str, str]]:  # type: ignore[no-untyp
 
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
     claim = hub.client.post(
-        "/api/routes",
+        "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
     )
     assert claim.status_code == 201, claim.text
@@ -127,7 +127,7 @@ def test_review_fail_carries_findings_and_addendum_back_into_build(tmp_path: Pat
 
     # build (epoch 1, from the claim's lease) passes -> review.
     to_review = hub.client.post(
-        f"/api/chunks/{chunk_id}/completions",
+        f"/api/fleet/chunks/{chunk_id}/completions",
         json=_completion(nodes["build"], epoch=1, choice="pass", artifacts=[_git_artifact("c1")]),
     ).json()
     assert to_review["outcome"] == "next"
@@ -137,7 +137,7 @@ def test_review_fail_carries_findings_and_addendum_back_into_build(tmp_path: Pat
     # findings asset. The apply-response's next envelope is build's re-entry.
     _report_lease(hub, chunk_id, epoch=2)
     to_build = hub.client.post(
-        f"/api/chunks/{chunk_id}/completions",
+        f"/api/fleet/chunks/{chunk_id}/completions",
         json=_completion(
             nodes["review"],
             epoch=2,
@@ -171,12 +171,12 @@ def test_chunk_detail_exposes_the_review_fail_loop_and_findings_asset(tmp_path: 
 
     # build pass -> review, then review fail -> build (emitting the findings asset).
     hub.client.post(
-        f"/api/chunks/{chunk_id}/completions",
+        f"/api/fleet/chunks/{chunk_id}/completions",
         json=_completion(nodes["build"], epoch=1, choice="pass", artifacts=[_git_artifact("c1")]),
     )
     _report_lease(hub, chunk_id, epoch=2)
     hub.client.post(
-        f"/api/chunks/{chunk_id}/completions",
+        f"/api/fleet/chunks/{chunk_id}/completions",
         json=_completion(
             nodes["review"],
             epoch=2,
@@ -219,12 +219,12 @@ def test_review_cycle_second_pass_delivers_and_lands(tmp_path: Path) -> None:
 
     # First lap: build pass -> review fail -> back to build.
     hub.client.post(
-        f"/api/chunks/{chunk_id}/completions",
+        f"/api/fleet/chunks/{chunk_id}/completions",
         json=_completion(nodes["build"], epoch=1, choice="pass", artifacts=[_git_artifact("c1")]),
     )
     _report_lease(hub, chunk_id, epoch=2)
     hub.client.post(
-        f"/api/chunks/{chunk_id}/completions",
+        f"/api/fleet/chunks/{chunk_id}/completions",
         json=_completion(
             nodes["review"],
             epoch=2,
@@ -237,12 +237,12 @@ def test_review_cycle_second_pass_delivers_and_lands(tmp_path: Path) -> None:
     # Second lap: build pass -> review pass -> deliver (hub node) -> lands -> done.
     _report_lease(hub, chunk_id, epoch=3)
     hub.client.post(
-        f"/api/chunks/{chunk_id}/completions",
+        f"/api/fleet/chunks/{chunk_id}/completions",
         json=_completion(nodes["build"], epoch=3, choice="pass", artifacts=[_git_artifact("c2")]),
     )
     _report_lease(hub, chunk_id, epoch=4)
     delivered = hub.client.post(
-        f"/api/chunks/{chunk_id}/completions",
+        f"/api/fleet/chunks/{chunk_id}/completions",
         json=_completion(nodes["review"], epoch=4, choice="pass", artifacts=[]),
     ).json()
 
@@ -260,13 +260,13 @@ def test_review_completion_without_lease_report_is_stale(tmp_path: Path) -> None
     hub = build_hub(tmp_path)
     chunk_id, nodes = _mint_and_claim(hub)
     hub.client.post(
-        f"/api/chunks/{chunk_id}/completions",
+        f"/api/fleet/chunks/{chunk_id}/completions",
         json=_completion(nodes["build"], epoch=1, choice="pass", artifacts=[_git_artifact("c1")]),
     )
     # Submit review at epoch 2 WITHOUT reporting the lease mint: the hub's latest epoch
     # is still 1 (the claim's), so the fence rejects epoch 2 as stale.
     stale = hub.client.post(
-        f"/api/chunks/{chunk_id}/completions",
+        f"/api/fleet/chunks/{chunk_id}/completions",
         json=_completion(nodes["review"], epoch=2, choice="pass", artifacts=[]),
     ).json()
     assert stale["outcome"] == "failure"

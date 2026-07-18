@@ -1,12 +1,20 @@
-"""Question routes — the hub half of the ask/answer rendezvous.
+"""Question routes — the anonymous **operator** half of the ask/answer rendezvous
+(issue #87).
 
 ``POST /questions`` lands the durable question row a runner forwards (the chunk
 derives ``waiting_on_human``); ``POST /questions/{id}/answer`` writes the answer
 **first-write-wins** (201 for the winner, 409 carrying the winning answer for a racing
-loser); ``GET /questions`` lists the open ones for ``blizzard hub status``; and
-``GET /questions/{id}`` is the runner's answer poll before it resumes the dormant
-session. Controllers stay read-only over the store and delegate the writes to
-:class:`~blizzard.hub.domain.questions.QuestionService` (``bzh:controller-read-only``).
+loser) — the board's person answering it; and ``GET /questions`` lists the open ones for
+``blizzard hub status``. Controllers stay read-only over the store and delegate the
+writes to :class:`~blizzard.hub.domain.questions.QuestionService`
+(``bzh:controller-read-only``).
+
+The runner's own answer poll (``GET /questions/{id}``) moved to the
+runner-authenticated fleet router (:mod:`blizzard.hub.api.fleet`, issue #87) — no board
+or CLI caller ever reached it. :func:`question_view` stays here, public, so the fleet
+router's own poll reuses this module's rendering rather than duplicating it.
+``dependencies=[Depends(reject_runner_principal)]`` rejects a runner's bearer token on
+this router rather than treating it as anonymous-plus-credential.
 """
 
 from __future__ import annotations
@@ -17,12 +25,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.work import ChunkFacts, QuestionRow, derive_chunk_status
 from blizzard.wire.question import AnswerRequest, AnswerResult, QuestionAsked, QuestionView
 
-router = APIRouter(prefix="/api", tags=["questions"])
+router = APIRouter(prefix="/api", tags=["questions"], dependencies=[Depends(reject_runner_principal)])
 
 
 def question_view(row: QuestionRow) -> QuestionView:
@@ -86,15 +95,6 @@ def answer_question(
 def list_open_questions(services: Annotated[HubServices, Depends(get_services)]) -> list[QuestionView]:
     """Every open (unanswered) question across the fleet — the ``hub status`` surface."""
     return [question_view(row) for row in services.chunks.list_open_questions()]
-
-
-@router.get("/questions/{question_id}", response_model=QuestionView)
-def get_question(question_id: str, services: Annotated[HubServices, Depends(get_services)]) -> QuestionView:
-    """One question with its derived answer state — the runner's answer poll."""
-    row = services.chunks.get_question(question_id)
-    if row is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown question {question_id}")
-    return question_view(row)
 
 
 def _publish(services: HubServices, chunk_id: str) -> None:

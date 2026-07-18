@@ -29,6 +29,29 @@ DEFAULT_PORT = 8421
 ENV_HOST = "BZ_HUB_HOST"
 ENV_PORT = "BZ_HUB_PORT"
 
+# The runner-authentication rollout brake (issue #86a) — `warn` logs a missing/invalid/
+# mismatched bearer token and lets the request proceed; `enforce` rejects it. Ship
+# defaulting to `warn`; the dogfooding fleet flips to `enforce` once its runtime env
+# files carry enrolled tokens (an operator step, out of scope here). Named
+# `runner_auth_mode` for the *runner-identity* brake specifically — #84 adds a
+# separate `route_token_mode` for the per-acquisition route capability token, so the
+# two enforce independently.
+RUNNER_AUTH_WARN = "warn"
+RUNNER_AUTH_ENFORCE = "enforce"
+_KNOWN_RUNNER_AUTH_MODES = {RUNNER_AUTH_WARN, RUNNER_AUTH_ENFORCE}
+
+# The route-capability-token rollout brake (issue #84b) — a **separate** flag from
+# `runner_auth_mode` above, so route-token authorization enforces independently of
+# runner identity (a fleet can flip one on before the other). `warn` logs a
+# missing/mismatched route token and lets the chunk-scoped write/fact proceed;
+# `enforce` rejects it as a semantic failure, before the epoch fence. Ship `warn`; the
+# operator flips to `enforce` once outbound buffers carrying pre-upgrade,
+# token-less facts have drained (no separate grace period is needed — `warn` covers
+# that window).
+ROUTE_TOKEN_WARN = "warn"
+ROUTE_TOKEN_ENFORCE = "enforce"
+_KNOWN_ROUTE_TOKEN_MODES = {ROUTE_TOKEN_WARN, ROUTE_TOKEN_ENFORCE}
+
 # The only PM provider grammar a source may declare; an unknown provider fails
 # at config load, not at first use.
 _KNOWN_PM_PROVIDERS = {"github"}
@@ -87,6 +110,8 @@ class HubConfig:
     host: str = DEFAULT_HOST
     port: int = DEFAULT_PORT
     pm_sources: tuple[PmSourceConfig, ...] = ()
+    runner_auth_mode: str = RUNNER_AUTH_WARN
+    route_token_mode: str = ROUTE_TOKEN_WARN
 
     @property
     def config_path(self) -> Path:
@@ -116,6 +141,8 @@ class HubConfig:
             f'db_url = "{self.db_url}"\n',
             f'host = "{self.host}"\n',
             f"port = {self.port}\n",
+            f'runner_auth_mode = "{self.runner_auth_mode}"\n',
+            f'route_token_mode = "{self.route_token_mode}"\n',
         ]
         if not self.pm_sources:
             lines.append(_PM_SOURCE_EXAMPLE_COMMENT)
@@ -139,12 +166,24 @@ class HubConfig:
         if not path.exists():
             raise ConfigError(f"{root} is not an initialized hub runtime (run `blizzard hub init {root}`)")
         raw = tomllib.loads(path.read_text())
+        runner_auth_mode = str(raw.get("runner_auth_mode", RUNNER_AUTH_WARN))
+        if runner_auth_mode not in _KNOWN_RUNNER_AUTH_MODES:
+            raise ConfigError(
+                f"runner_auth_mode must be one of {sorted(_KNOWN_RUNNER_AUTH_MODES)}, got {runner_auth_mode!r}"
+            )
+        route_token_mode = str(raw.get("route_token_mode", ROUTE_TOKEN_WARN))
+        if route_token_mode not in _KNOWN_ROUTE_TOKEN_MODES:
+            raise ConfigError(
+                f"route_token_mode must be one of {sorted(_KNOWN_ROUTE_TOKEN_MODES)}, got {route_token_mode!r}"
+            )
         return cls(
             root=root,
             db_url=str(raw["db_url"]),
             host=host or str(raw.get("host", DEFAULT_HOST)),
             port=port if port is not None else int(raw.get("port", DEFAULT_PORT)),
             pm_sources=_parse_pm_sources(raw.get("pm_source", [])),
+            runner_auth_mode=runner_auth_mode,
+            route_token_mode=route_token_mode,
         )
 
 

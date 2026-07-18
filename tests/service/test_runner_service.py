@@ -80,7 +80,9 @@ def _drive(config: RunnerConfig, fenced: dict[str, str], *, ticks: int, pause: f
 
 
 def _status(hub: httpx.Client, chunk_id: str) -> str:
-    return hub.get(f"/api/chunks/{chunk_id}").json()["status"]
+    """The mock hub's own status read (issue #87 moved its whole hub mirror under
+    ``/api/fleet``)."""
+    return hub.get(f"/api/fleet/chunks/{chunk_id}").json()["status"]
 
 
 def _pending_outbound(config: RunnerConfig) -> int:

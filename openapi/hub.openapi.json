@@ -826,6 +826,17 @@
             "title": "From Node Id",
             "type": "string"
           },
+          "route_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route Token"
+          },
           "runner_id": {
             "title": "Runner Id",
             "type": "string"
@@ -925,6 +936,17 @@
           "from_node_id": {
             "title": "From Node Id",
             "type": "string"
+          },
+          "route_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route Token"
           },
           "runner_id": {
             "title": "Runner Id",
@@ -1498,7 +1520,7 @@
         "type": "object"
       },
       "HubAdvanceResponse": {
-        "description": "The result of one on-demand ``POST /chunks/{id}/hub-advance`` (#65).\n\nA generic hub command node runs ``run:`` to completion, one call at a time,\nbehind the fleet-wide serialization slot: ``ran=False`` means the slot was held\nby a different chunk and this call deferred without touching anything \u2014 not an\nerror, just try again on a later poll.",
+        "description": "The result of one on-demand ``POST /api/fleet/chunks/{id}/hub-advance`` (#65,\nmoved under the fleet router by #87).\n\nA generic hub command node runs ``run:`` to completion, one call at a time,\nbehind the fleet-wide serialization slot: ``ran=False`` means the slot was held\nby a different chunk and this call deferred without touching anything \u2014 not an\nerror, just try again on a later poll.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -2343,7 +2365,7 @@
         "type": "object"
       },
       "RouteClaimResponse": {
-        "description": "The winning claim's reply \u2014 the route plus the first node envelope.",
+        "description": "The winning claim's reply \u2014 the route, its first node envelope, and the\nroute's plaintext capability token (issue #84a), returned exactly once here. The\nrunner stashes it and presents it on every subsequent chunk-scoped write.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -2359,6 +2381,10 @@
             "title": "Environment Ids",
             "type": "array"
           },
+          "route_token": {
+            "title": "Route Token",
+            "type": "string"
+          },
           "runner_id": {
             "title": "Runner Id",
             "type": "string"
@@ -2373,9 +2399,29 @@
           "runner_id",
           "workspace_id",
           "environment_ids",
-          "envelope"
+          "envelope",
+          "route_token"
         ],
         "title": "RouteClaimResponse",
+        "type": "object"
+      },
+      "RouteTokenRekeyResponse": {
+        "description": "``POST /api/fleet/chunks/{id}/route-token``'s reply \u2014 a fresh plaintext route\ncapability token for the chunk's live route (issue #84b), returned exactly once\nhere, same as the claim response's own ``route_token``. Covers the\ncrash-after-mint-before-response case: the holding runner re-keys rather than\nbeing permanently locked out of a token it never read back.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "route_token": {
+            "title": "Route Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "route_token"
+        ],
+        "title": "RouteTokenRekeyResponse",
         "type": "object"
       },
       "RouteView": {
@@ -2405,8 +2451,27 @@
         "title": "RouteView",
         "type": "object"
       },
+      "RunnerEnrollmentResponse": {
+        "description": "A freshly minted (or rotated) bearer token \u2014 issue #86a.\n\n``token`` is the plaintext; the hub keeps only its sha256 hash from here on, so\nthis response is the one and only place it is ever visible again. A re-enroll\ncall rotates: the old token stops resolving the moment this response lands.",
+        "properties": {
+          "runner_id": {
+            "title": "Runner Id",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "runner_id",
+          "token"
+        ],
+        "title": "RunnerEnrollmentResponse",
+        "type": "object"
+      },
       "RunnerFact": {
-        "description": "One buffered runner fact: its per-runner seq, its kind, and its payload.\n\n``payload`` is the kind-specific body \u2014 for ``lease.minted`` ``{chunk_id, epoch}``,\nfor ``escalation.recorded`` ``{chunk_id, epoch, takeover_command}`` \u2014 kept open so a\nnew runner fact kind bolts on without a wire change.",
+        "description": "One buffered runner fact: its per-runner seq, its kind, and its payload.\n\n``payload`` is the kind-specific body \u2014 for ``lease.minted`` ``{chunk_id, epoch,\nroute_token}``, for ``escalation.recorded`` ``{chunk_id, epoch, takeover_command,\nroute_token}``, for ``question.asked`` the ask fields plus ``route_token`` \u2014 kept\nopen so a new runner fact kind bolts on without a wire change. ``route_token``\n(issue #84a) is the chunk-scoped fact's route capability token, stamped at\nenqueue; present-only in this phase (the hub does not yet reject on it).",
         "properties": {
           "kind": {
             "title": "Kind",
@@ -2924,112 +2989,6 @@
         ]
       }
     },
-    "/api/chunks/{chunk_id}/completions": {
-      "post": {
-        "description": "Apply a node-step's completion atomically; reply carries the next envelope.",
-        "operationId": "submit_completion_api_chunks__chunk_id__completions_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "chunk_id",
-            "required": true,
-            "schema": {
-              "title": "Chunk Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CompletionSubmission"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApplyResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Submit Completion",
-        "tags": [
-          "chunks"
-        ]
-      }
-    },
-    "/api/chunks/{chunk_id}/decisions": {
-      "post": {
-        "description": "Runner-config gate: park the chunk on a decision in place of a transition.",
-        "operationId": "submit_decision_api_chunks__chunk_id__decisions_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "chunk_id",
-            "required": true,
-            "schema": {
-              "title": "Chunk Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DecisionSubmission"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApplyResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Submit Decision",
-        "tags": [
-          "chunks"
-        ]
-      }
-    },
     "/api/chunks/{chunk_id}/detach": {
       "post": {
         "description": "Forcibly release a chunk from its runner without touching any escalation.",
@@ -3072,106 +3031,6 @@
           }
         },
         "summary": "Detach Chunk",
-        "tags": [
-          "chunks"
-        ]
-      }
-    },
-    "/api/chunks/{chunk_id}/envelope": {
-      "get": {
-        "description": "The chunk's current node envelope, idempotent \u2014 the lost-apply re-read.",
-        "operationId": "get_envelope_api_chunks__chunk_id__envelope_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "chunk_id",
-            "required": true,
-            "schema": {
-              "title": "Chunk Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/NodeEnvelope"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Envelope",
-        "tags": [
-          "chunks"
-        ]
-      }
-    },
-    "/api/chunks/{chunk_id}/escalations": {
-      "post": {
-        "description": "Land a runner's ``escalation.recorded`` \u2014 the chunk derives ``needs_human``.",
-        "operationId": "report_escalation_api_chunks__chunk_id__escalations_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "chunk_id",
-            "required": true,
-            "schema": {
-              "title": "Chunk Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/EscalationReport"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "202": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Report Escalation Api Chunks  Chunk Id  Escalations Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Report Escalation",
         "tags": [
           "chunks"
         ]
@@ -3283,49 +3142,6 @@
         ]
       }
     },
-    "/api/chunks/{chunk_id}/hub-advance": {
-      "post": {
-        "description": "Drive a chunk parked at a generic hub command node one step (#65).\n\nRuns :class:`~blizzard.hub.delivery.hub_node.HubNodeExecutor` once, respecting the\nfleet-wide serialization slot: ``ran=False`` means a different chunk holds the\nslot right now, OR (#66) the node reported ``pending`` on a prior call and\n``poll_interval`` has not yet elapsed \u2014 either way not an error, the runner's\nADVANCE poll (``_advance_held_chunk``) simply calls this again on a later tick. A\nno-op (``ran=False``, ``detail`` names it) when the chunk is not currently parked\nat a generic hub command node \u2014 every hub node is this shape since #67; no other\ndelivery route remains.",
-        "operationId": "hub_advance_api_chunks__chunk_id__hub_advance_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "chunk_id",
-            "required": true,
-            "schema": {
-              "title": "Chunk Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HubAdvanceResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Hub Advance",
-        "tags": [
-          "chunks"
-        ]
-      }
-    },
     "/api/chunks/{chunk_id}/hub-markers": {
       "post": {
         "description": "The mid-run marker callback (#65) \u2014 a ``run:`` step's own dynamic-loop marker.\n\nMirrors ``blizzard runner ask``'s worker-facing callback shape: a hub command\nnode's script POSTs here (via the injected\n``BZ_HUB_MARKER_CALLBACK_URL``, which already carries ``node_id``/``epoch``) to\nrecord a marker artifact mid-run, ahead of that command's own exit \u2014 enabling a\ndynamic loop (``merge repo -> push -> record merged/<repo> -> next``). Idempotent\nper ``(chunk, node, name, epoch)``, exactly like the ``produces:`` marker the\nexecutor records on a step's own exit.",
@@ -3392,63 +3208,6 @@
           }
         },
         "summary": "Record Hub Marker",
-        "tags": [
-          "chunks"
-        ]
-      }
-    },
-    "/api/chunks/{chunk_id}/leases": {
-      "post": {
-        "description": "Land a runner's ``lease.minted`` \u2014 keeps the epoch fence in lockstep.",
-        "operationId": "report_lease_api_chunks__chunk_id__leases_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "chunk_id",
-            "required": true,
-            "schema": {
-              "title": "Chunk Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LeaseMintReport"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "202": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Report Lease Api Chunks  Chunk Id  Leases Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Report Lease",
         "tags": [
           "chunks"
         ]
@@ -3833,10 +3592,445 @@
         ]
       }
     },
-    "/api/events": {
+    "/api/fleet/chunks/{chunk_id}": {
+      "get": {
+        "description": "The runner's chunk-status poll \u2014 the same aggregate as the board's own read.",
+        "operationId": "get_chunk_api_fleet_chunks__chunk_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChunkDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Chunk",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
+    "/api/fleet/chunks/{chunk_id}/completions": {
+      "post": {
+        "description": "Apply a node-step's completion atomically; reply carries the next envelope.",
+        "operationId": "submit_completion_api_fleet_chunks__chunk_id__completions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompletionSubmission"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Submit Completion",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
+    "/api/fleet/chunks/{chunk_id}/decisions": {
+      "post": {
+        "description": "Runner-config gate: park the chunk on a decision in place of a transition.",
+        "operationId": "submit_decision_api_fleet_chunks__chunk_id__decisions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecisionSubmission"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Submit Decision",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
+    "/api/fleet/chunks/{chunk_id}/envelope": {
+      "get": {
+        "description": "The chunk's current node envelope, idempotent \u2014 the lost-apply re-read.",
+        "operationId": "get_envelope_api_fleet_chunks__chunk_id__envelope_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeEnvelope"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Envelope",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
+    "/api/fleet/chunks/{chunk_id}/escalations": {
+      "post": {
+        "description": "Land a runner's ``escalation.recorded`` \u2014 the chunk derives ``needs_human``.",
+        "operationId": "report_escalation_api_fleet_chunks__chunk_id__escalations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EscalationReport"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Report Escalation Api Fleet Chunks  Chunk Id  Escalations Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Report Escalation",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
+    "/api/fleet/chunks/{chunk_id}/hub-advance": {
+      "post": {
+        "description": "Drive a chunk parked at a generic hub command node one step (#65).\n\nRuns :class:`~blizzard.hub.delivery.hub_node.HubNodeExecutor` once, respecting the\nfleet-wide serialization slot: ``ran=False`` means a different chunk holds the\nslot right now, OR (#66) the node reported ``pending`` on a prior call and\n``poll_interval`` has not yet elapsed \u2014 either way not an error, the runner's\nADVANCE poll (``_advance_held_chunk``) simply calls this again on a later tick. A\nno-op (``ran=False``, ``detail`` names it) when the chunk is not currently parked\nat a generic hub command node \u2014 every hub node is this shape since #67; no other\ndelivery route remains.\n\nNo ``runner_id`` is declared on this request (it carries only ``chunk_id``), so\nthe router-level ``require_runner_principal`` dependency is the whole check here \u2014\nno :func:`~blizzard.hub.api.auth.assert_owns` call, the same shape as the other\nchunk-scoped fleet reads (``get_chunk``/``get_envelope``) that carry no runner_id\nto confine against.",
+        "operationId": "hub_advance_api_fleet_chunks__chunk_id__hub_advance_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HubAdvanceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Hub Advance",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
+    "/api/fleet/chunks/{chunk_id}/leases": {
+      "post": {
+        "description": "Land a runner's ``lease.minted`` \u2014 keeps the epoch fence in lockstep.",
+        "operationId": "report_lease_api_fleet_chunks__chunk_id__leases_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LeaseMintReport"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Report Lease Api Fleet Chunks  Chunk Id  Leases Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Report Lease",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
+    "/api/fleet/chunks/{chunk_id}/pm-items": {
+      "get": {
+        "description": "The build worker's PM-items proxy target (via the runner-local pass-through,\n``blizzard.runner.api.pm_items``), forwarded here with the runner's own bearer\ntoken \u2014 the same pass-through the board reads anonymously.",
+        "operationId": "get_pm_items_api_fleet_chunks__chunk_id__pm_items_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PmItemsView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Pm Items",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
+    "/api/fleet/chunks/{chunk_id}/route-token": {
+      "post": {
+        "description": "Rotate the chunk's live route capability token (issue #84b) \u2014 the lost-plaintext\nrecovery for a runner that crashed between the mint and reading the claim response\nback (``_adopt_interrupted_claim``, ``runner/loop/steps.py``). Confined to the\nlive route's own runner via :func:`~blizzard.hub.api.auth.assert_owns`, the same\nownership check every other fleet write makes \u2014 this route carries no chunk-scoped\n``route_token`` of its own to present (that is exactly what it is minting).",
+        "operationId": "rekey_route_token_api_fleet_chunks__chunk_id__route_token_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RouteTokenRekeyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rekey Route Token",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
+    "/api/fleet/events": {
       "post": {
         "description": "Land runner-minted facts, idempotent by per-runner seq high-water.\n\nThe store-and-forward ingest: ``lease.minted`` (the fence input), ``escalation.recorded``,\n``question.asked``, and ``answer.delivered`` ride the runner's outbound buffer here. A\npushed seq at or below the runner's high-water mark is already-applied and re-acked; a\nfresh one is applied and advances the mark. Each freshly-applied fact re-broadcasts on\nthe SSE stream so the board refreshes \u2014 ``chunk-changed`` for every touched chunk, and\n``question-asked`` for a forwarded ask.",
-        "operationId": "ingest_runner_facts_api_events_post",
+        "operationId": "ingest_runner_facts_api_fleet_events_post",
         "requestBody": {
           "content": {
             "application/json": {
@@ -3871,21 +4065,21 @@
         },
         "summary": "Ingest Runner Facts",
         "tags": [
-          "meta"
+          "fleet"
         ]
       }
     },
-    "/api/fleet/spend": {
+    "/api/fleet/questions/{question_id}": {
       "get": {
-        "description": "The fleet's total usage/cost since ``since`` (an ISO-8601 instant) \u2014 summed\nover every usage fact recorded at or after it, across every chunk.",
-        "operationId": "fleet_spend_api_fleet_spend_get",
+        "description": "The runner's answer poll before it resumes the dormant session.",
+        "operationId": "get_question_api_fleet_questions__question_id__get",
         "parameters": [
           {
-            "in": "query",
-            "name": "since",
+            "in": "path",
+            "name": "question_id",
             "required": true,
             "schema": {
-              "title": "Since",
+              "title": "Question Id",
               "type": "string"
             }
           }
@@ -3895,7 +4089,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/FleetSpendView"
+                  "$ref": "#/components/schemas/QuestionView"
                 }
               }
             },
@@ -3912,7 +4106,192 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Fleet Spend",
+        "summary": "Get Question",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
+    "/api/fleet/queue/peek": {
+      "get": {
+        "description": "The runner's FILL read \u2014 the same ready queue as the board's own peek.",
+        "operationId": "peek_queue_api_fleet_queue_peek_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueuePeekResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Peek Queue",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
+    "/api/fleet/routes": {
+      "post": {
+        "description": "Claim a chunk; 403 if the runner is paused at the hub, 409 if already claimed,\nelse the first node envelope.",
+        "operationId": "claim_route_api_fleet_routes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RouteClaim"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RouteClaimResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Claim Route",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
+    "/api/fleet/runners": {
+      "post": {
+        "description": "Register a runner \u2014 runner id + workspace binding; idempotent upsert.\n\nRunner-auth checked (issue #86a): ``warn`` (the default) logs and proceeds on a\nmissing/invalid/mismatched token; ``enforce`` rejects.",
+        "operationId": "register_runner_api_fleet_runners_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunnerRegistrationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerRegistrationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Register Runner",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
+    "/api/fleet/runners/{runner_id}": {
+      "get": {
+        "description": "One runner's declarative state \u2014 the runner's own pull read.",
+        "operationId": "get_runner_api_fleet_runners__runner_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "title": "Runner Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Runner",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
+    "/api/fleet/runners/{runner_id}/heartbeats": {
+      "post": {
+        "description": "Refresh a runner's liveness \u2014 the slow runner-level heartbeat. Returns 204.",
+        "operationId": "heartbeat_runner_api_fleet_runners__runner_id__heartbeats_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "title": "Runner Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Heartbeat Runner",
         "tags": [
           "fleet"
         ]
@@ -4122,49 +4501,6 @@
         ]
       }
     },
-    "/api/questions/{question_id}": {
-      "get": {
-        "description": "One question with its derived answer state \u2014 the runner's answer poll.",
-        "operationId": "get_question_api_questions__question_id__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "question_id",
-            "required": true,
-            "schema": {
-              "title": "Question Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/QuestionView"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Question",
-        "tags": [
-          "questions"
-        ]
-      }
-    },
     "/api/questions/{question_id}/answer": {
       "post": {
         "description": "Answer a question first-write-wins; 409 carries the winning answer.",
@@ -4303,48 +4639,6 @@
         ]
       }
     },
-    "/api/routes": {
-      "post": {
-        "description": "Claim a chunk; 403 if the runner is paused at the hub, 409 if already claimed,\nelse the first node envelope.",
-        "operationId": "claim_route_api_routes_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RouteClaim"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RouteClaimResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Claim Route",
-        "tags": [
-          "routes"
-        ]
-      }
-    },
     "/api/runners": {
       "get": {
         "description": "The fleet registry \u2014 every runner with derived liveness + paused state.",
@@ -4365,26 +4659,29 @@
         "tags": [
           "runners"
         ]
-      },
+      }
+    },
+    "/api/runners/{runner_id}/enrollments": {
       "post": {
-        "description": "Register a runner \u2014 runner id + workspace binding; idempotent upsert.",
-        "operationId": "register_runner_api_runners_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RunnerRegistrationRequest"
-              }
+        "description": "Mint (or rotate) ``runner_id``'s bearer token \u2014 the plaintext is returned once;\nthe store keeps only its sha256 hash from here on (issue #86a).\n\nAnonymous, like every operator verb under this epic (localhost dogfooding hub;\noperator auth is epic:team). Requires an existing registration (404 otherwise):\nenrollment is a deliberate operator act on a runner the fleet already knows, not a\ntrust-on-first-use grant to a name nobody has registered yet.",
+        "operationId": "enroll_runner_api_runners__runner_id__enrollments_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "title": "Runner Id",
+              "type": "string"
             }
-          },
-          "required": true
-        },
+          }
+        ],
         "responses": {
           "201": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RunnerRegistrationResponse"
+                  "$ref": "#/components/schemas/RunnerEnrollmentResponse"
                 }
               }
             },
@@ -4401,86 +4698,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Register Runner",
-        "tags": [
-          "runners"
-        ]
-      }
-    },
-    "/api/runners/{runner_id}": {
-      "get": {
-        "description": "One runner's declarative state \u2014 the runner's own pull read.",
-        "operationId": "get_runner_api_runners__runner_id__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "runner_id",
-            "required": true,
-            "schema": {
-              "title": "Runner Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RunnerView"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Runner",
-        "tags": [
-          "runners"
-        ]
-      }
-    },
-    "/api/runners/{runner_id}/heartbeats": {
-      "post": {
-        "description": "Refresh a runner's liveness \u2014 the slow runner-level heartbeat. Returns 204.",
-        "operationId": "heartbeat_runner_api_runners__runner_id__heartbeats_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "runner_id",
-            "required": true,
-            "schema": {
-              "title": "Runner Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Heartbeat Runner",
+        "summary": "Enroll Runner",
         "tags": [
           "runners"
         ]
@@ -4589,6 +4807,49 @@
         "summary": "Resume Runner",
         "tags": [
           "runners"
+        ]
+      }
+    },
+    "/api/spend": {
+      "get": {
+        "description": "The fleet's total usage/cost since ``since`` (an ISO-8601 instant) \u2014 summed\nover every usage fact recorded at or after it, across every chunk.",
+        "operationId": "fleet_spend_api_spend_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "since",
+            "required": true,
+            "schema": {
+              "title": "Since",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FleetSpendView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Fleet Spend",
+        "tags": [
+          "spend"
         ]
       }
     }

@@ -14,6 +14,10 @@ first here, the runner reports the second up through its outbound buffer.
 ``last_seen_at`` is the one refreshed timestamp (not a fact), bumped by registration and
 the heartbeat; liveness derives from it in the domain, against the clock. Timestamps
 arrive already stamped from the injected clock (``bzh:injected-clock``).
+
+``token_hash`` (issue #86a) is the second refreshed-in-place column: ``set_token_hash``
+overwrites it on enroll/re-enroll, and ``registration_for_token_hash`` is the reverse,
+hash-indexed read the runner-auth dependency resolves a presented token through.
 """
 
 from __future__ import annotations
@@ -52,6 +56,17 @@ class RunnerRegistryStore:
                 )
                 for row in rows
             ]
+
+    def registration_for_token_hash(self, token_hash: str) -> RunnerRegistration | None:
+        with self._engine.connect() as conn:
+            row = conn.execute(
+                select(s.runner_registrations).where(s.runner_registrations.c.token_hash == token_hash)
+            ).one_or_none()
+            if row is None:
+                return None
+            return self._registration(
+                row, self._paused(conn, row.runner_id), self._local_pause_detail(conn, row.runner_id)
+            )
 
     # --- writes -------------------------------------------------------------
 
@@ -95,6 +110,18 @@ class RunnerRegistryStore:
                 insert(s.runner_local_pause_facts).values(
                     runner_id=runner_id, paused=paused, set_at=at, set_by=by, reason=reason
                 )
+            )
+
+    def set_token_hash(self, runner_id: str, *, token_hash: str, at: datetime) -> None:
+        # `at` is not persisted: no rotation-audit column exists yet (see the Protocol
+        # docstring) — accepted here only for signature symmetry with this seam's other
+        # writes, all of which stamp a column from it.
+        del at
+        with self._engine.begin() as conn:
+            conn.execute(
+                s.runner_registrations.update()
+                .where(s.runner_registrations.c.runner_id == runner_id)
+                .values(token_hash=token_hash)
             )
 
     # --- helpers ------------------------------------------------------------
@@ -151,6 +178,7 @@ class RunnerRegistryStore:
             locally_paused=locally_paused,
             locally_paused_by=locally_paused_by,
             locally_paused_reason=locally_paused_reason,
+            token_hash=row.token_hash,
         )
 
 

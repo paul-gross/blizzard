@@ -53,3 +53,8 @@ class CompletionSubmission(BaseModel):
     # resolves. Its presence is what makes a transition out of a human-judged node
     # legal — a worker transition there (no decision_id) is rejected (human signoff).
     decision_id: str | None = None
+    # The route capability token stamped at enqueue (issue #84a) — the plaintext the
+    # claim response returned once, presented here so a later authorization check
+    # (Phase 6) can confirm the submitter still holds the chunk's live route. Optional
+    # in this phase: the hub does not yet reject on it (present-only).
+    route_token: str | None = None

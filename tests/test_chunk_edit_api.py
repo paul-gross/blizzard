@@ -136,7 +136,7 @@ def test_edit_graph_refuses_once_the_chunk_is_claimed(tmp_path: Path) -> None:
     chunk_id = ingest(hub, [_POINTER])
     alt_graph_id = _mint_alt_graph(hub)
     claim = hub.client.post(
-        "/api/routes",
+        "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["env-a"]},
     )
     assert claim.status_code == 201, claim.text
@@ -210,7 +210,7 @@ def test_edit_model_refuses_once_the_chunk_is_claimed(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [_POINTER])
     claim = hub.client.post(
-        "/api/routes",
+        "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["env-a"]},
     )
     assert claim.status_code == 201, claim.text

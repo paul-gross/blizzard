@@ -72,9 +72,12 @@ class EscalationReport(BaseModel):
 class RunnerFact(BaseModel):
     """One buffered runner fact: its per-runner seq, its kind, and its payload.
 
-    ``payload`` is the kind-specific body — for ``lease.minted`` ``{chunk_id, epoch}``,
-    for ``escalation.recorded`` ``{chunk_id, epoch, takeover_command}`` — kept open so a
-    new runner fact kind bolts on without a wire change.
+    ``payload`` is the kind-specific body — for ``lease.minted`` ``{chunk_id, epoch,
+    route_token}``, for ``escalation.recorded`` ``{chunk_id, epoch, takeover_command,
+    route_token}``, for ``question.asked`` the ask fields plus ``route_token`` — kept
+    open so a new runner fact kind bolts on without a wire change. ``route_token``
+    (issue #84a) is the chunk-scoped fact's route capability token, stamped at
+    enqueue; present-only in this phase (the hub does not yet reject on it).
     """
 
     seq: int

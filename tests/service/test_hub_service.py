@@ -16,6 +16,11 @@ Every assertion is made over the wire against the running hub:
   a reorder moves it to the top; ``GET /api/queue/peek`` reflects both.
 * **SSE contract** — ``GET /api/events/stream`` serves a valid ``text/event-stream`` an
   ``EventSource`` connects to (the reserved comment).
+* **route-token authorization** (issue #84b) — under ``route_token_mode=enforce``, the
+  mock runner's default (present the claim's own token) completes normally; its
+  ``stale_route_token``/``omit_route_token`` levers each get fenced out (``failure``) and
+  do not advance the chunk — the one-sided hub service test the mock-runner lever exists
+  to drive.
 
 sqlite only, no tokens, no network. Reproduce — from a provisioned feature env — with::
 
@@ -29,6 +34,7 @@ from pathlib import Path
 import httpx
 import pytest
 
+from blizzard.hub.config import ROUTE_TOKEN_ENFORCE
 from tests.e2e.test_acceptance_loop import REPO, REPO_NAME, _forge, _free_port, _hub
 from tests.service.support import (
     mint_fixture,
@@ -238,8 +244,75 @@ def test_runner_registers_and_reads_its_pause_brake(tmp_path: Path) -> None:
         )
         # the operator flips the pause brake; the hub's registry reflects it.
         assert hub.post("/api/runners/runner-brake/pause", json={"by": "operator"}).status_code == 200
-        view = hub.get("/api/runners/runner-brake").json()
+        view = hub.get("/api/fleet/runners/runner-brake").json()
         assert view["hub_paused"] is True
         # The runner's own brake is a separate field the hub only ever reads; the
         # operator flipping the fleet's brake must not appear to have set it.
         assert view["locally_paused"] is False
+
+
+# --------------------------------------------------------------------------- #
+# Route-token authorization over the wire (issue #84b) — the mock-runner
+# stale_route_token/omit_route_token levers driving the real hub's enforce check.
+# --------------------------------------------------------------------------- #
+
+
+def test_route_token_present_by_default_is_accepted_under_enforce(tmp_path: Path) -> None:
+    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    with (
+        _forge(bin_dir, origins, forge_port) as forge,
+        _hub(tmp_path / "hub", forge_port, hub_port, route_token_mode=ROUTE_TOKEN_ENFORCE) as hub,
+    ):
+        assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
+        chunk_id = _ingest(forge, hub, "route token present")
+
+        with mock_runner(bin_dir, _free_port(), hub_port) as runner:
+            runner.post("/_drive/register")
+            claim = runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()
+            assert claim["claimed"] is True
+
+            # No lever armed: the mock runner presents the claim's own token by default.
+            out = runner.post("/_drive/complete", json={"chunk_id": chunk_id, "choice": "pass"}).json()
+            assert out["response"]["outcome"] == "next", out
+
+
+def test_route_token_stale_is_rejected_under_enforce_over_the_wire(tmp_path: Path) -> None:
+    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    with (
+        _forge(bin_dir, origins, forge_port) as forge,
+        _hub(tmp_path / "hub", forge_port, hub_port, route_token_mode=ROUTE_TOKEN_ENFORCE) as hub,
+    ):
+        assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
+        chunk_id = _ingest(forge, hub, "route token stale")
+
+        with mock_runner(bin_dir, _free_port(), hub_port) as runner:
+            runner.post("/_drive/register")
+            assert runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()["claimed"] is True
+            before = hub.get(f"/api/chunks/{chunk_id}").json()["current_node_id"]
+
+            assert runner.post("/_levers/stale_route_token", json={"chunk_id": chunk_id}).status_code == 200
+            out = runner.post("/_drive/complete", json={"chunk_id": chunk_id, "choice": "pass"}).json()
+
+            assert out["response"]["outcome"] == "failure", out
+            assert hub.get(f"/api/chunks/{chunk_id}").json()["current_node_id"] == before
+
+
+def test_route_token_omitted_is_rejected_under_enforce_over_the_wire(tmp_path: Path) -> None:
+    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    with (
+        _forge(bin_dir, origins, forge_port) as forge,
+        _hub(tmp_path / "hub", forge_port, hub_port, route_token_mode=ROUTE_TOKEN_ENFORCE) as hub,
+    ):
+        assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
+        chunk_id = _ingest(forge, hub, "route token omitted")
+
+        with mock_runner(bin_dir, _free_port(), hub_port) as runner:
+            runner.post("/_drive/register")
+            assert runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()["claimed"] is True
+            before = hub.get(f"/api/chunks/{chunk_id}").json()["current_node_id"]
+
+            assert runner.post("/_levers/omit_route_token", json={"chunk_id": chunk_id}).status_code == 200
+            out = runner.post("/_drive/complete", json={"chunk_id": chunk_id, "choice": "pass"}).json()
+
+            assert out["response"]["outcome"] == "failure", out
+            assert hub.get(f"/api/chunks/{chunk_id}").json()["current_node_id"] == before

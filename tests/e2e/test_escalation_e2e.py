@@ -10,7 +10,7 @@ so the node's budget is exhausted and the runner **escalates**:
 
 * the chunk derives **needs_human** — an open ``escalation.recorded`` with no later
   lease mint, flushed up the runner's outbound buffer to
-  ``POST /api/events`` and dispatched to ``record_escalation``;
+  ``POST /api/fleet/events`` and dispatched to ``record_escalation``;
 * the open escalation surfaces the runner-composed **takeover command** — the
   pasteable ``cd <workdir> && <harness> --resume <session>``;
 * and that command, **executed verbatim in the env**, actually resumes the parked

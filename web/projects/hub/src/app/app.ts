@@ -10,7 +10,7 @@ import {
 
 import { AppNav } from './nav/app-nav';
 
-/** Local midnight, as the ISO-8601 instant `GET /api/fleet/spend?since=` expects
+/** Local midnight, as the ISO-8601 instant `GET /api/spend?since=` expects
  * (issue #60) — the board's "spend today" is the operator's own calendar day, not UTC's. */
 function startOfLocalDayIso(): string {
   const now = new Date();

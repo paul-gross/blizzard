@@ -1,6 +1,8 @@
 """Fleet-wide wire views — reads that span every chunk rather than one.
 
-``FleetSpendView`` is the ``GET /api/fleet/spend`` read's shape (issue #60): a
+``FleetSpendView`` is the ``GET /api/spend`` read's shape (issue #60, relocated from
+``/api/fleet/spend`` by issue #87 to free that prefix for the runner-authenticated
+fleet router): a
 fleet-wide usage/cost total, summed at read time over every usage fact recorded at or
 after a caller-chosen instant (:func:`~blizzard.hub.domain.work.derive_fleet_usage`) —
 never a stored column, same as a chunk's own derived total

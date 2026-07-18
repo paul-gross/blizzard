@@ -1350,7 +1350,17 @@ def _fill_one(ctx: LoopContext) -> bool:
     try:
         outcome = ctx.hub.claim_route(claim)
     except HubClientError:
-        _release_binding(ctx, entry.chunk_id, acquired)  # claim not sent — undo the local binding
+        # Ambiguous: the request may never have reached the hub, or the hub may have
+        # committed the claim (issue #84b's ``claim.after-persist.before-response``
+        # crash point — persisted, then the process died before the response landed)
+        # and this runner simply never read the outcome back. Releasing the binding
+        # here unconditionally would be *wrong* in the second case: the hub would show
+        # a live route this runner holds while the runner has already freed the
+        # environment for other work, permanently stranding the chunk. Leave the
+        # binding exactly as :func:`_reconcile_interrupted_claims` already handles a
+        # runner-side crash in this same window — its next tick resolves the ambiguity
+        # for real, off the hub's own authoritative answer: adopt if the claim landed,
+        # reclaim (fresh) if it did not.
         return False
     if outcome.denied_paused is not None:
         # The hub's registry already has us paused — a distinct outcome from losing
@@ -1369,6 +1379,12 @@ def _fill_one(ctx: LoopContext) -> bool:
         return True  # peek fresh next iteration
 
     _CP_FILL_AFTER_CLAIM.reached()
+    # Stash the won claim's plaintext route token (issue #84a) before spawning: the
+    # first thing a chunk-scoped fact enqueues under this route reads it back out of
+    # the store, never off `outcome.claimed` directly — the same store round-trip the
+    # reclaim path below shares, and requeue/takeover/retries later re-read the same
+    # row rather than re-claiming.
+    ctx.store.set_route_token(entry.chunk_id, token=outcome.claimed.route_token, at=ctx.clock.now())
     _spawn_attempt(ctx, entry.chunk_id, outcome.claimed.envelope, acquired, via="fill")
     return True
 
@@ -1551,6 +1567,7 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
         from_node_id=lease.node_id,
         check_results=[],  # in-session check assessment is P7; the model carries them
         artifacts=artifacts,
+        route_token=ctx.store.route_token(lease.chunk_id),  # issue #84a — stamped at enqueue
     )
     payload = json.dumps({"submission": submission.model_dump(mode="json")})
     ctx.store.enqueue_outbound(
@@ -1577,6 +1594,7 @@ def _buffer_decision(ctx: LoopContext, lease: LeaseRecord, artifacts: list[Submi
         epoch=lease.epoch,
         runner_id=ctx.config.runner_id,
         artifacts=artifacts,
+        route_token=ctx.store.route_token(lease.chunk_id),  # issue #84a — stamped at enqueue
     )
     payload = json.dumps({"submission": submission.model_dump(mode="json")})
     ctx.store.enqueue_outbound(
@@ -1738,6 +1756,9 @@ def _resolve_gate(ctx: LoopContext, chunk_id: str, decision: DecisionView) -> No
         from_node_id=decision.node_id,
         artifacts=[],  # the decision's artifacts already landed
         decision_id=decision.decision_id,
+        # issue #84a — not buffered (no enqueue_outbound here), so stamped directly at
+        # submit; the same chunk-scoped write the buffered completion above stamps.
+        route_token=ctx.store.route_token(chunk_id),
     )
     try:
         response = ctx.hub.submit_completion(chunk_id, submission)
@@ -1829,12 +1850,15 @@ def _spawn_attempt(
     # POST /events, ahead of any completion minted under it (FIFO). It is the
     # fence input the hub's completion check consumes — the runner's mint keeps the
     # hub's latest epoch in lockstep across a build -> review chunk, and a requeue's mint
-    # closes an escalation by supersession.
+    # closes an escalation by supersession. Stamped with the chunk's stashed route
+    # token (issue #84a) — present on every spawn path (fill, adopt, reclaim, requeue,
+    # requeue-resume) since they all route through here; ``None`` only if no won claim
+    # ever stashed one for this chunk.
     ctx.store.enqueue_outbound(
         kind=LEASE_MINTED,
         chunk_id=chunk_id,
         lease_id=lease_id,
-        payload=json.dumps({"chunk_id": chunk_id, "epoch": epoch}),
+        payload=json.dumps({"chunk_id": chunk_id, "epoch": epoch, "route_token": ctx.store.route_token(chunk_id)}),
         created_at=now,
     )
     _CP_SPAWN_AFTER_MINT.reached()  # lease minted, worker not spawned — the orphan-lease window REAP absorbs
@@ -1933,6 +1957,12 @@ def _adopt_interrupted_claim(ctx: LoopContext, chunk_id: str) -> None:
     is a spawn of the chunk's current node from its idempotent envelope into the
     already-bound environment — the same work FILL's tail would have done.
 
+    Also the route-token recovery path (issue #84b): the crash window this adopts
+    across spans the claim response too, so a runner that never read its route token
+    back has no ``route_tokens`` row for this chunk. Re-keying before spawning fills
+    it in from a fresh mint — the READY reclaim branch needs no equivalent (a fresh
+    claim there already returns a fresh token in its own response).
+
     A 404 (:class:`ChunkNotFoundError`) here is terminal the same way it is for
     :func:`_advance_held_chunk` (blizzard#9): there is no active lease over this chunk to
     reap, only the binding this function already owns, so a chunk the hub no longer knows
@@ -1941,6 +1971,16 @@ def _adopt_interrupted_claim(ctx: LoopContext, chunk_id: str) -> None:
     if not bindings:
         _log.warning("adopt with no bound env — cannot spawn", chunk_id=chunk_id)
         return
+    if ctx.store.route_token(chunk_id) is None:
+        try:
+            rekeyed = ctx.hub.rekey_route_token(chunk_id)
+        except ChunkNotFoundError:
+            _log.warning("hub reports adopted chunk unknown — releasing envs", chunk_id=chunk_id)
+            _release_all(ctx, chunk_id)
+            return
+        except HubClientError:
+            return  # hub unreachable — the binding is durable; retry next tick
+        ctx.store.set_route_token(chunk_id, token=rekeyed.route_token, at=ctx.clock.now())
     try:
         envelope = ctx.hub.get_envelope(chunk_id)
     except ChunkNotFoundError:
@@ -2016,6 +2056,11 @@ def _reclaim_interrupted(ctx: LoopContext, chunk_id: str, bindings: list[EnvBind
         _release_all(ctx, chunk_id)
         return
     _log.info("re-claimed interrupted chunk — spawning current node", chunk_id=chunk_id)
+    # Same stash as FILL's own won claim (issue #84a) — a reclaim is a fresh claim, so
+    # its token overwrites whatever this chunk_id's row held before (there should be
+    # none yet on this path, but overwrite is correct either way: a fresh claim always
+    # wins).
+    ctx.store.set_route_token(chunk_id, token=outcome.claimed.route_token, at=ctx.clock.now())
     _spawn_attempt(ctx, chunk_id, outcome.claimed.envelope, envs, via="reclaim")
 
 
@@ -2065,7 +2110,14 @@ def _escalate(ctx: LoopContext, lease: LeaseRecord, *, reason: str = "retries ex
     takeover = ""
     if lease.session_id is not None and bindings:
         takeover = ctx.harness.resume_command(bindings[0].workdir, lease.session_id)
-    payload = json.dumps({"chunk_id": lease.chunk_id, "epoch": lease.epoch, "takeover_command": takeover})
+    payload = json.dumps(
+        {
+            "chunk_id": lease.chunk_id,
+            "epoch": lease.epoch,
+            "takeover_command": takeover,
+            "route_token": ctx.store.route_token(lease.chunk_id),  # issue #84a
+        }
+    )
     ctx.store.enqueue_outbound(
         kind=ESCALATION_RECORDED, chunk_id=lease.chunk_id, lease_id=lease.lease_id, payload=payload, created_at=now
     )
@@ -2100,6 +2152,7 @@ def _park_on_ask(ctx: LoopContext, lease: LeaseRecord, ask: AskRecord) -> None:
             "question": ask.question,
             "options": ask.options,
             "asked_at": iso_utc(ask.asked_at),
+            "route_token": ctx.store.route_token(lease.chunk_id),  # issue #84a
         }
     )
     ctx.store.enqueue_outbound(

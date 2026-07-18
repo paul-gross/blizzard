@@ -25,7 +25,7 @@ def _client(handler) -> HttpHubClient:  # type: ignore[no-untyped-def]
 @pytest.mark.unit
 def test_peek_queue_parses_entries() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/api/queue/peek"
+        assert request.url.path == "/api/fleet/queue/peek"
         return httpx.Response(200, json={"entries": [{"chunk_id": "ch_1", "graph_id": "gr_1", "position": 0}]})
 
     peek = _client(handler).peek_queue()
@@ -35,7 +35,7 @@ def test_peek_queue_parses_entries() -> None:
 @pytest.mark.unit
 def test_claim_route_201_returns_envelope() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/api/routes"
+        assert request.url.path == "/api/fleet/routes"
         body = {
             "chunk_id": "ch_1",
             "runner_id": "r1",
@@ -55,6 +55,7 @@ def test_claim_route_201_returns_envelope() -> None:
                 "prompt": "do work",
                 "judgement_prompt": "assess",
             },
+            "route_token": "rtok_test",
         }
         return httpx.Response(201, json=body)
 
@@ -99,7 +100,7 @@ def test_claim_route_403_is_a_paused_denial_not_a_conflict() -> None:
 @pytest.mark.unit
 def test_submit_completion_returns_apply_response() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/api/chunks/ch_1/completions"
+        assert request.url.path == "/api/fleet/chunks/ch_1/completions"
         return httpx.Response(200, json={"outcome": "hub_node_taken", "detail": "delivering"})
 
     resp = _client(handler).submit_completion(
@@ -109,9 +110,19 @@ def test_submit_completion_returns_apply_response() -> None:
 
 
 @pytest.mark.unit
+def test_hub_advance_posts_to_the_fleet_path() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/fleet/chunks/ch_1/hub-advance"
+        return httpx.Response(200, json={"chunk_id": "ch_1", "status": "running", "ran": False, "detail": "busy"})
+
+    resp = _client(handler).hub_advance("ch_1")
+    assert resp.ran is False
+
+
+@pytest.mark.unit
 def test_get_chunk_parses_status() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/api/chunks/ch_1"
+        assert request.url.path == "/api/fleet/chunks/ch_1"
         return httpx.Response(
             200,
             json={
@@ -132,7 +143,7 @@ def test_register_runner_posts_registration() -> None:
     seen: dict[str, object] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/api/runners"
+        assert request.url.path == "/api/fleet/runners"
         import json
 
         seen.update(json.loads(request.content))
@@ -145,7 +156,7 @@ def test_register_runner_posts_registration() -> None:
 @pytest.mark.unit
 def test_fetch_runner_paused_reads_the_derived_brake() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/api/runners/r1"
+        assert request.url.path == "/api/fleet/runners/r1"
         return httpx.Response(
             200,
             json={

@@ -20,7 +20,13 @@ from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
 from blizzard.wire.facts import RunnerFactAck, RunnerFactBatch
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekResponse
-from blizzard.wire.route import RouteClaim, RouteClaimConflict, RouteClaimPausedDenial, RouteClaimResponse
+from blizzard.wire.route import (
+    RouteClaim,
+    RouteClaimConflict,
+    RouteClaimPausedDenial,
+    RouteClaimResponse,
+    RouteTokenRekeyResponse,
+)
 
 
 class HubClientError(RuntimeError):
@@ -69,36 +75,36 @@ class IHubClient(Protocol):
     """The runner's client of the hub API. Outbound-only."""
 
     def peek_queue(self) -> QueuePeekResponse:
-        """``GET /api/queue/peek`` — the hub-ordered ready queue."""
+        """``GET /api/fleet/queue/peek`` — the hub-ordered ready queue."""
         ...
 
     def claim_route(self, claim: RouteClaim) -> RouteClaimOutcome:
-        """``POST /api/routes`` — claim work; 409 loses the race, 403 means the hub
+        """``POST /api/fleet/routes`` — claim work; 409 loses the race, 403 means the hub
         registry already has this runner paused (issue #44)."""
         ...
 
     def submit_completion(self, chunk_id: str, submission: CompletionSubmission) -> ApplyResponse:
-        """``POST /api/chunks/{id}/completions`` — the atomic, epoch-fenced write."""
+        """``POST /api/fleet/chunks/{id}/completions`` — the atomic, epoch-fenced write."""
         ...
 
     def submit_decision(self, chunk_id: str, submission: DecisionSubmission) -> ApplyResponse:
-        """``POST /api/chunks/{id}/decisions`` — a runner-config gate parks the chunk."""
+        """``POST /api/fleet/chunks/{id}/decisions`` — a runner-config gate parks the chunk."""
         ...
 
     def push_facts(self, batch: RunnerFactBatch) -> RunnerFactAck:
-        """``POST /api/events`` — store-and-forward fact push, seq-idempotent."""
+        """``POST /api/fleet/events`` — store-and-forward fact push, seq-idempotent."""
         ...
 
     def get_envelope(self, chunk_id: str) -> NodeEnvelope:
-        """``GET /api/chunks/{id}/envelope`` — the idempotent envelope re-read."""
+        """``GET /api/fleet/chunks/{id}/envelope`` — the idempotent envelope re-read."""
         ...
 
     def get_chunk(self, chunk_id: str) -> ChunkDetail:
-        """``GET /api/chunks/{id}`` — the chunk's derived status, polled at a hub node."""
+        """``GET /api/fleet/chunks/{id}`` — the chunk's derived status, polled at a hub node."""
         ...
 
     def hub_advance(self, chunk_id: str) -> HubAdvanceResponse:
-        """``POST /api/chunks/{id}/hub-advance`` — drive a chunk parked at a generic
+        """``POST /api/fleet/chunks/{id}/hub-advance`` — drive a chunk parked at a generic
         hub command node one step (#65/#66).
 
         A no-op at the hub (``ran=False``) when the chunk is not currently parked at a
@@ -109,14 +115,14 @@ class IHubClient(Protocol):
         ...
 
     def get_question(self, question_id: str) -> QuestionView:
-        """``GET /api/questions/{id}`` — the runner's answer poll.
+        """``GET /api/fleet/questions/{id}`` — the runner's answer poll.
 
         A parked chunk's runner polls its forwarded question by id; once ``answered`` is
         true the answer is delivered by resuming the dormant session around it."""
         ...
 
     def register_runner(self, runner_id: str, workspace_id: str) -> None:
-        """``POST /api/runners`` — register into the fleet registry.
+        """``POST /api/fleet/runners`` — register into the fleet registry.
 
         Idempotent upsert: the runner registers on startup and re-registers each pull,
         which refreshes its ``last_seen_at`` — the runner-level liveness heartbeat the
@@ -125,14 +131,14 @@ class IHubClient(Protocol):
         ...
 
     def fetch_runner_paused(self, runner_id: str) -> bool:
-        """``GET /api/runners/{id}`` — the runner's declarative pause brake.
+        """``GET /api/fleet/runners/{id}`` — the runner's declarative pause brake.
 
         Read on the outbound pull and adhered to by FILL (paused = no new claims;
         in-flight chunks run on). Never a push into the box."""
         ...
 
     def report_lease(self, chunk_id: str, *, epoch: int, runner_id: str) -> None:
-        """``POST /api/chunks/{id}/leases`` — a ``lease.minted`` fact.
+        """``POST /api/fleet/chunks/{id}/leases`` — a ``lease.minted`` fact.
 
         Reported at every node-step spawn so the hub's epoch fence tracks the runner's:
         a chunk that visits a second runner node (review) submits its completion under a
@@ -141,8 +147,17 @@ class IHubClient(Protocol):
         ...
 
     def report_escalation(self, chunk_id: str, *, epoch: int, runner_id: str, takeover_command: str) -> None:
-        """``POST /api/chunks/{id}/escalations`` — retries exhausted.
+        """``POST /api/fleet/chunks/{id}/escalations`` — retries exhausted.
 
         Lands the escalation at the hub so the chunk derives ``needs_human`` fleet-wide,
         carrying the pasteable takeover command."""
+        ...
+
+    def rekey_route_token(self, chunk_id: str) -> RouteTokenRekeyResponse:
+        """``POST /api/fleet/chunks/{id}/route-token`` — rotate the chunk's route
+        capability token (issue #84b).
+
+        The lost-plaintext recovery: a runner that crashed between the hub minting a
+        claim's token and the runner reading the claim response back has no other way
+        to learn it (``_adopt_interrupted_claim``, ``runner/loop/steps.py``)."""
         ...

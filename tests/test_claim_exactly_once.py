@@ -36,7 +36,7 @@ def test_two_concurrent_claims_yield_one_win_one_conflict(tmp_path: Path) -> Non
     def claim(runner: str) -> None:
         body = _claim_body(runner) | {"chunk_id": chunk_id}
         start.wait()  # release both threads together to maximize the race
-        results[runner] = hub.client.post("/api/routes", json=body).status_code
+        results[runner] = hub.client.post("/api/fleet/routes", json=body).status_code
 
     threads = [threading.Thread(target=claim, args=(r,)) for r in ("r1", "r2")]
     for t in threads:
@@ -75,7 +75,7 @@ def test_repeated_races_never_double_claim(tmp_path: Path) -> None:
         ) -> None:
             body = _claim_body(runner) | {"chunk_id": cid}
             barrier.wait()
-            code = hub.client.post("/api/routes", json=body).status_code
+            code = hub.client.post("/api/fleet/routes", json=body).status_code
             with guard:
                 sink.append(code)
 

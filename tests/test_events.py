@@ -74,7 +74,7 @@ async def test_lifecycle_publishes_events_and_the_stream_replays_them(tmp_path: 
     hub = build_hub(tmp_path)
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
     hub.client.post(
-        "/api/routes",
+        "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
     )
 
@@ -96,7 +96,7 @@ async def test_stream_resumes_from_last_event_id(tmp_path: Path) -> None:
     # After ingest the latest id is known; a reconnect past it replays only newer events.
     resume_from = hub.events.latest_id()
     hub.client.post(
-        "/api/routes",
+        "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
     )
     events = await drain_stream(hub.events, last_event_id=resume_from)
@@ -109,7 +109,7 @@ def test_route_emission_lands_in_the_replay_buffer(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
     hub.client.post(
-        "/api/routes",
+        "/api/fleet/routes",
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
     )
     events = emitted_events(hub)

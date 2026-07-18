@@ -25,7 +25,7 @@ from sqlalchemy import Engine, func, select
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.graph import RESERVED_TERMINAL
-from blizzard.hub.domain.work import derive_chunk_status
+from blizzard.hub.domain.work import derive_chunk_status, newest_live_route, newest_live_route_token
 from blizzard.hub.store import schema as hub
 from blizzard.hub.store.internal.chunk_store import ChunkStore
 from blizzard.runner.store import schema as runner
@@ -222,16 +222,22 @@ def check_hub_store(engine: Engine) -> list[Violation]:
                 )
 
         # hub:route-seq-unique — per-chunk route ``seq`` is unique across
-        # ``route_created`` + ``route_released`` combined (issue #41): the two
-        # tables share one counter so a created/released pair is totally ordered even
-        # at a same-instant timestamp tie (``work.newest_live_route``). A duplicate
-        # means two route events raced past ``ChunkStore._next_route_seq`` uncaught —
-        # exactly the tie #41 closed, reopened.
+        # ``route_created`` + ``route_released`` + ``route_token_minted`` combined
+        # (issue #41, joined by ``route_token_minted`` in #84a): the three tables share
+        # one counter (``ChunkStore._next_route_seq``) so a create/release/token-mint
+        # triple is totally ordered even at a same-instant timestamp tie
+        # (``work.newest_live_route``/``newest_live_route_token``). A duplicate means
+        # two route events raced past the allocator uncaught — exactly the tie #41
+        # closed, reopened.
         route_seqs = Counter(
             (row[0], row[1]) for row in conn.execute(select(hub.route_created.c.chunk_id, hub.route_created.c.seq))
         )
         route_seqs.update(
             (row[0], row[1]) for row in conn.execute(select(hub.route_released.c.chunk_id, hub.route_released.c.seq))
+        )
+        route_seqs.update(
+            (row[0], row[1])
+            for row in conn.execute(select(hub.route_token_minted.c.chunk_id, hub.route_token_minted.c.seq))
         )
         for (chunk_id, seq), n in route_seqs.items():
             if n > 1:
@@ -310,6 +316,9 @@ def check_hub_store(engine: Engine) -> list[Violation]:
     # terminal, so it never reads as both landed and mid-flight (two states at once).
     # hub:derived-status-total — every chunk derives exactly one status without panic.
     violations.extend(_check_derivation_and_delivery(engine))
+    # hub:live-route-has-token — every chunk with a live route has a live route token
+    # (issue #84b/#84a).
+    violations.extend(_check_route_tokens(engine))
     return violations
 
 
@@ -355,6 +364,35 @@ def _check_derivation_and_delivery(engine: Engine) -> list[Violation]:
                         f"chunk {chunk.chunk_id} is {fact} but newest transition targets {target}",
                     )
                 )
+    return violations
+
+
+def _check_route_tokens(engine: Engine) -> list[Violation]:
+    """Every chunk with a live route has a live route token (issue #84b).
+
+    The derivation itself (:func:`~blizzard.hub.domain.work.newest_live_route_token`)
+    can never be *ambiguous* — it is a ``max()`` over candidates, so it always
+    resolves to at most one fact — what it *can* legitimately fail to find is a live
+    route with no qualifying token fact at all: the mint fact
+    (``ClaimService._claim_locked``) failing to land in the same store write as its
+    route (``record_route``), or a kill-9 landing between the two inserts of a
+    non-atomic adapter. Either would leave the chunk's every chunk-scoped write
+    permanently rejected under ``route_token_mode=enforce`` with no re-key possible
+    (re-key itself requires a live route, but derives no token to rotate)."""
+    violations: list[Violation] = []
+    store = ChunkStore(engine, SystemClock())
+    for chunk in store.list_all():
+        facts = store.load_facts(chunk.chunk_id)
+        if facts is None:
+            continue
+        live_route = newest_live_route(facts.routes_created, facts.routes_released)
+        if live_route is None:
+            continue
+        live_token = newest_live_route_token(facts.routes_created, facts.routes_released, facts.route_tokens_minted)
+        if live_token is None:
+            violations.append(
+                Violation("hub:live-route-has-token", f"chunk {chunk.chunk_id} has a live route but no live token")
+            )
     return violations
 
 
