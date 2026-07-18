@@ -22,7 +22,7 @@ from sqlalchemy import Connection, Engine, func, insert, select, update
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.ids import ARTIFACT_PREFIX, HUB_EXEC_SLOT_PREFIX, mint
+from blizzard.foundation.ids import ARTIFACT_PREFIX, HUB_EXEC_SLOT_PREFIX, MIGRATION_PREFIX, mint
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import Executor
@@ -39,6 +39,7 @@ from blizzard.hub.domain.work import (
     HubNodePollFact,
     IWriteChunkRepository,
     LeaseFact,
+    MigrationFact,
     PauseFact,
     PmPointer,
     PrOpenedFact,
@@ -155,6 +156,21 @@ class ChunkStore:
                 RequeueFact(requeued_at=r.requeued_at)
                 for r in conn.execute(select(s.requeues).where(s.requeues.c.chunk_id == chunk_id)).all()
             ]
+            migrations = [
+                MigrationFact(
+                    from_node_id=m.from_node_id,
+                    from_graph_id=m.from_graph_id,
+                    to_graph_id=m.to_graph_id,
+                    landed_node_id=m.landed_node_id,
+                    choice_name=m.choice_name,
+                    model=m.model_after,
+                    epoch=m.epoch,
+                    recorded_at=m.recorded_at,
+                )
+                for m in conn.execute(
+                    select(s.chunk_migrations).where(s.chunk_migrations.c.chunk_id == chunk_id)
+                ).all()
+            ]
             pauses = [
                 PauseFact(paused=p.paused, set_at=p.set_at, set_by=p.set_by)
                 for p in conn.execute(
@@ -216,6 +232,7 @@ class ChunkStore:
                 questions=questions,
                 decisions=decisions,
                 requeues=requeues,
+                migrations=migrations,
                 pr_opened=pr_opened,
                 pauses=pauses,
                 usage=usage,
@@ -863,6 +880,101 @@ class ChunkStore:
     def record_requeue(self, chunk_id: str, *, at: datetime) -> None:
         with self._engine.begin() as conn:
             conn.execute(insert(s.requeues).values(chunk_id=chunk_id, requeued_at=at))
+
+    def accepted_migration(self, chunk_id: str, *, from_node_id: str, epoch: int) -> bool:
+        """True iff a migration is already recorded for ``(chunk_id, from_node_id, epoch)``
+        — the idempotency probe a re-applied cross-graph completion short-circuits on (#90).
+
+        A migration writes no ``transitions`` row, so the transition-replay probe
+        (:meth:`accepted_transition_target`) can never see it; this is its migration
+        counterpart, keyed the same way (:meth:`record_migration`'s natural key)."""
+        with self._engine.connect() as conn:
+            return self._migration_exists(conn, chunk_id, from_node_id=from_node_id, epoch=epoch)
+
+    def record_migration(
+        self,
+        chunk_id: str,
+        *,
+        from_node_id: str | None,
+        from_graph_id: str,
+        to_graph_id: str,
+        landed_node_id: str | None,
+        choice_name: str | None,
+        model: str | None,
+        epoch: int,
+        at: datetime,
+        artifacts: list[ArtifactRow],
+    ) -> bool:
+        """Record a cross-graph migration **atomically and idempotently** (#90).
+
+        In **one transaction**: insert the ``chunk_migrations`` fact, re-pin
+        ``chunks.graph_id`` (and ``chunks.model`` when ``model`` is given), release the
+        route, **and persist this node-step's artifacts** (MUST-FIX 1 — the migration
+        branch bypasses ``record_transition``, which is where a step's artifacts normally
+        commit; without this the triage node's reasoning asset the carry-over relies on is
+        never persisted). Guarded by the natural key ``(chunk_id, from_node_id, epoch)``: a
+        redelivery replay after a ``kill -9`` re-enters harmlessly, writing nothing a
+        second time — the migration is all-or-nothing, never a half-written re-pin with
+        orphaned artifacts. Returns True iff it wrote, False on a replay.
+
+        No lease is minted here (unlike :meth:`finalize_delivery`): the migration is
+        recorded at the *submitting* epoch, and the re-queue means the **next** claim mints
+        a fresh higher lease above it, fencing the abandoned attempt."""
+        with self._engine.begin() as conn:
+            if self._migration_exists(conn, chunk_id, from_node_id=from_node_id, epoch=epoch):
+                return False
+            conn.execute(
+                insert(s.chunk_migrations).values(
+                    migration_id=mint(MIGRATION_PREFIX, self._clock),
+                    chunk_id=chunk_id,
+                    from_node_id=from_node_id,
+                    from_graph_id=from_graph_id,
+                    to_graph_id=to_graph_id,
+                    landed_node_id=landed_node_id,
+                    choice_name=choice_name,
+                    model_after=model,
+                    epoch=epoch,
+                    recorded_at=at,
+                )
+            )
+            values = {"graph_id": to_graph_id}
+            if model is not None:
+                values["model"] = model
+            conn.execute(update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(**values))
+            conn.execute(
+                insert(s.route_released).values(
+                    chunk_id=chunk_id, released_at=at, seq=self._next_route_seq(conn, chunk_id)
+                )
+            )
+            for row in artifacts:
+                conn.execute(
+                    insert(s.artifacts).values(
+                        artifact_id=row.artifact_id,
+                        chunk_id=row.chunk_id,
+                        node_id=row.node_id,
+                        node_name=row.node_name,
+                        epoch=row.epoch,
+                        name=row.name,
+                        kind=row.kind.value,
+                        data=row.data,
+                        repo=row.repo,
+                        produced_at=at,
+                    )
+                )
+            return True
+
+    @staticmethod
+    def _migration_exists(conn: Connection, chunk_id: str, *, from_node_id: str | None, epoch: int) -> bool:
+        return (
+            conn.execute(
+                select(s.chunk_migrations.c.migration_id).where(
+                    (s.chunk_migrations.c.chunk_id == chunk_id)
+                    & (s.chunk_migrations.c.from_node_id == from_node_id)
+                    & (s.chunk_migrations.c.epoch == epoch)
+                )
+            ).first()
+            is not None
+        )
 
     def record_queue_position(self, chunk_id: str, *, position: float, at: datetime) -> None:
         """Append the moved chunk's new ready-queue position; order derives."""

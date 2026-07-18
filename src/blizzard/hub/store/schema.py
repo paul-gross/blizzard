@@ -149,6 +149,36 @@ transitions = Table(
     Column("recorded_at", UtcDateTime, nullable=False),
 )
 
+# --- Cross-graph migration record (chunk_migrations — issue #90) ---------------
+#
+# A judgement choice targeting another graph (``to: graph:<name>``) re-pins the chunk
+# and re-queues it — its **own recorded fact**, never a ``transitions`` row
+# (``bzh:migration-not-transition``: a transitions row whose two nodes span graphs is
+# exactly the violation this table avoids). ``record_migration`` writes this fact, the
+# ``chunks.graph_id`` (+ ``chunks.model`` when re-pinned) update, the ``route_released``,
+# and the submitting node-step's artifacts in **one transaction**, idempotent-guarded by
+# ``(chunk_id, from_node_id, epoch)`` — a crash-replay re-enters harmlessly. ``epoch`` is
+# the submitting attempt's fence (the next claim mints a fresh higher one above it);
+# ``landed_node_id`` is the concrete name-match-else-entry landing node in the target
+# graph (nullable only as the schema allowance for "the target's entry"); ``model_after``
+# is the re-pinned model, or null when the migration kept the chunk's current model;
+# ``choice_name`` is the triggering choice (paralleling ``transitions.choice_name``).
+
+chunk_migrations = Table(
+    "chunk_migrations",
+    metadata,
+    Column("migration_id", String, primary_key=True),  # mg_<ulid>
+    Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
+    Column("from_node_id", String, nullable=True),  # the node the migrating choice left
+    Column("from_graph_id", String, nullable=False),  # the graph migrated out of
+    Column("to_graph_id", String, nullable=False),  # the graph re-pinned to
+    Column("landed_node_id", String, nullable=True),  # concrete landing node; null = target entry
+    Column("choice_name", String, nullable=True),  # the triggering judgement choice
+    Column("model_after", String, nullable=True),  # the re-pinned model, or null (kept current)
+    Column("epoch", Integer, nullable=False),  # the submitting fence; the natural-key third part
+    Column("recorded_at", UtcDateTime, nullable=False),
+)
+
 # --- Artifacts (the chunk artifact store) --------------------------------------
 
 artifacts = Table(
