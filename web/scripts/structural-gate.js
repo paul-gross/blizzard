@@ -4,16 +4,20 @@
  * tooled half of `blizzard-harness:/verification/blizzard.md`'s
  * `web:structural-gate` method.
  *
- * Two halves are planned; this script currently runs the first:
+ * Two halves, both live:
  *
- *   1. The chrome-duplication sweep (LIVE): the retired `.panel`/`.p-hdr`/
+ *   1. The chrome-duplication sweep: the retired `.panel`/`.p-hdr`/
  *      `.p-body`/`.status`/`.lbl` chrome-class blocks — the copy-pasted panel
  *      shell and async-state styling the `fleet/lib/kit/` components now own
  *      — come up empty in every component style outside the kit directory.
- *   2. An eslint `max-lines` ceiling over component files (the ~400-line
- *      cap) — Gap (phase 3): armed once #79/#80 bring every file under the
- *      cap; arming it before then would fail the gate on files the epic has
- *      not yet shrunk.
+ *   2. A `max-lines` ceiling (the ~400-line cap) over every Angular component
+ *      file (one declaring `@Component(`) — armed in phase 3 (#80) now that
+ *      the chunk-detail decomposition (#79) and the panel splits (#80) have
+ *      brought every in-scope file under the cap. `board-shell.ts` is a
+ *      named, narrow exemption (see `MAX_LINES_EXEMPT_FILES`): it is over the
+ *      cap today but out of both #79's and #80's file lists, so shrinking it
+ *      is out of scope here and tracked as a standing gap instead of silently
+ *      failing every future push.
  *
  * Run from `web/`: `npm run structural-gate` (`node scripts/structural-gate.js`).
  */
@@ -47,6 +51,21 @@ const EXEMPT_FILES = [
   path.join('local-panel', 'src', 'lib', 'chunk-detail.ts'),
   path.join('local-panel', 'src', 'lib', 'heartbeat-freshness.ts'),
 ];
+
+/** The `max-lines` ceiling every Angular component file is held to (the
+ * ~400-line cap, blizzard-harness `bzh:frontend-kit`). */
+const MAX_LINES = 400;
+
+/**
+ * `max-lines` exemptions — deliberately narrow (named files, not directories),
+ * so a *new* oversized file is still caught.
+ *
+ * - `board-shell.ts` (437 lines) predates this half's arming and is outside
+ *   both #79's (chunk-detail) and #80's (runner/queue/questions/local-panel)
+ *   file lists — shrinking it is a standing gap for a future pass, not
+ *   silently exempted by omission.
+ */
+const MAX_LINES_EXEMPT_FILES = [path.join('fleet', 'src', 'lib', 'board-shell', 'board-shell.ts')];
 
 // The retired chrome-class blocks (blizzard-harness bzh:frontend-kit Detect).
 // Matched as a CSS class selector opener — the name as a whole word, directly
@@ -85,6 +104,17 @@ function isExempt(relPath) {
   return EXEMPT_DIRS.some((dir) => relPath.startsWith(dir + path.sep));
 }
 
+/** Whether a source file declares an Angular component — the `max-lines`
+ * ceiling applies only to these, not to every `.ts` file the sweep walks
+ * (query/mutation/util files carry no template/style chrome to cap). */
+function isComponentFile(source) {
+  return source.includes('@Component(');
+}
+
+function countLines(source) {
+  return source.split('\n').length;
+}
+
 function main() {
   const files = walk(PROJECTS_DIR).filter((f) => {
     const rel = path.relative(PROJECTS_DIR, f);
@@ -95,24 +125,33 @@ function main() {
   });
 
   /** @type {{ file: string, className: string }[]} */
-  const violations = [];
+  const chromeViolations = [];
+  /** @type {{ file: string, lines: number }[]} */
+  const lineViolations = [];
 
   for (const file of files) {
     const rel = path.relative(PROJECTS_DIR, file);
-    if (isExempt(rel)) continue;
     const source = fs.readFileSync(file, 'utf8');
-    for (const block of extractStylesBlocks(source)) {
-      RETIRED_PATTERN.lastIndex = 0;
-      let match;
-      while ((match = RETIRED_PATTERN.exec(block)) !== null) {
-        violations.push({ file: rel, className: match[1] });
+
+    if (!isExempt(rel)) {
+      for (const block of extractStylesBlocks(source)) {
+        RETIRED_PATTERN.lastIndex = 0;
+        let match;
+        while ((match = RETIRED_PATTERN.exec(block)) !== null) {
+          chromeViolations.push({ file: rel, className: match[1] });
+        }
       }
+    }
+
+    if (isComponentFile(source) && !MAX_LINES_EXEMPT_FILES.includes(rel)) {
+      const lines = countLines(source);
+      if (lines > MAX_LINES) lineViolations.push({ file: rel, lines });
     }
   }
 
-  if (violations.length > 0) {
+  if (chromeViolations.length > 0) {
     console.error('structural-gate: retired chrome classes found outside fleet/lib/kit/:\n');
-    for (const v of violations) console.error(`  ${v.file}: .${v.className}`);
+    for (const v of chromeViolations) console.error(`  ${v.file}: .${v.className}`);
     console.error(
       '\nAdopt the shared kit (fleet/lib/kit/ — KitPanel, KitAsyncState) instead of a local copy of this chrome, ' +
         'per blizzard-harness:/standards/frontend.md bzh:frontend-kit.',
@@ -121,7 +160,18 @@ function main() {
     return;
   }
 
-  console.log('structural-gate: chrome-duplication sweep clean (max-lines half: Gap, phase 3).');
+  if (lineViolations.length > 0) {
+    console.error(`structural-gate: component files over the ${MAX_LINES}-line cap:\n`);
+    for (const v of lineViolations) console.error(`  ${v.file}: ${v.lines} lines`);
+    console.error(
+      '\nDecompose into container + presentational siblings built from the kit, ' +
+        'per blizzard-harness:/architecture/frontend-structure.md bzh:frontend-container-presentational.',
+    );
+    process.exitCode = 1;
+    return;
+  }
+
+  console.log('structural-gate: chrome-duplication sweep and max-lines ceiling both clean.');
 }
 
 main();
