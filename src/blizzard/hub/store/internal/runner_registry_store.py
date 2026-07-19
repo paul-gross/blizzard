@@ -70,7 +70,13 @@ class RunnerRegistryStore:
 
     # --- writes -------------------------------------------------------------
 
-    def upsert_registration(self, runner_id: str, *, workspace_id: str, at: datetime) -> bool:
+    def upsert_registration(
+        self, runner_id: str, *, workspace_id: str, env_capacity: int | None, at: datetime
+    ) -> bool:
+        # `env_capacity` is written on both branches — an unconditional overwrite on refresh
+        # is what converges a changed `workspace_envs` on the next re-registration, and
+        # writes `None` verbatim (an older client that omits it resets the stored total to
+        # null), mirroring the `workspace_id`/`last_seen_at` rewrite-in-place upsert.
         with self._engine.begin() as conn:
             existing = conn.execute(
                 select(s.runner_registrations.c.runner_id).where(s.runner_registrations.c.runner_id == runner_id)
@@ -78,14 +84,18 @@ class RunnerRegistryStore:
             if existing is None:
                 conn.execute(
                     insert(s.runner_registrations).values(
-                        runner_id=runner_id, workspace_id=workspace_id, registered_at=at, last_seen_at=at
+                        runner_id=runner_id,
+                        workspace_id=workspace_id,
+                        registered_at=at,
+                        last_seen_at=at,
+                        env_capacity=env_capacity,
                     )
                 )
                 return True
             conn.execute(
                 s.runner_registrations.update()
                 .where(s.runner_registrations.c.runner_id == runner_id)
-                .values(workspace_id=workspace_id, last_seen_at=at)
+                .values(workspace_id=workspace_id, last_seen_at=at, env_capacity=env_capacity)
             )
             return False
 
@@ -179,6 +189,7 @@ class RunnerRegistryStore:
             locally_paused_by=locally_paused_by,
             locally_paused_reason=locally_paused_reason,
             token_hash=row.token_hash,
+            env_capacity=row.env_capacity,
         )
 
 

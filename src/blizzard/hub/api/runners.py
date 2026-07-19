@@ -55,6 +55,7 @@ def runner_view(liveness: RunnerLiveness) -> RunnerView:
         locally_paused=r.locally_paused,
         locally_paused_by=r.locally_paused_by,
         locally_paused_reason=r.locally_paused_reason,
+        env_capacity=r.env_capacity,
     )
 
 

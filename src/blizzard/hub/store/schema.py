@@ -660,6 +660,12 @@ runner_registrations = Table(
     # overwriting the hash in place is consistent with the rest of the row, unlike the
     # route capability token (#84's append-only fact table).
     Column("token_hash", Text, nullable=True, index=True),
+    # The runner's configured environment-pool size (issue #69) — the `total` the board's
+    # slot bar renders `used/total` against. Nullable: a runner registered by a client that
+    # predates this field reports none, and the board omits the bar rather than guess a
+    # total. A reported fact refreshed in place on each re-registration (like `last_seen_at`
+    # / `token_hash` above), so a `workspace_envs` change converges on the next pull.
+    Column("env_capacity", Integer, nullable=True),
 )
 
 runner_pause_facts = Table(
