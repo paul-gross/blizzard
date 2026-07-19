@@ -89,6 +89,7 @@ class FakeHub:
         self.questions: dict[str, QuestionView] = {}
         self.delivered: list[tuple[str, QuestionView]] = []
         self.registered: list[tuple[str, str]] = []  # (runner_id, workspace_id)
+        self.registered_capacities: list[int | None] = []  # env_capacity per register call (issue #69)
         self.paused = False  # the hub-side pause brake this fake reports back
         self.down = False
         self.not_found: set[str] = set()  # chunk ids `get_chunk`/`get_envelope` 404 for (blizzard#9)
@@ -175,10 +176,11 @@ class FakeHub:
     def get_question(self, question_id: str) -> QuestionView:
         return self.questions[question_id]
 
-    def register_runner(self, runner_id: str, workspace_id: str) -> None:
+    def register_runner(self, runner_id: str, workspace_id: str, *, env_capacity: int | None = None) -> None:
         if self.down:
             raise HubClientError("fake hub is down")
         self.registered.append((runner_id, workspace_id))
+        self.registered_capacities.append(env_capacity)
 
     def fetch_runner_paused(self, runner_id: str) -> bool:
         if self.down:

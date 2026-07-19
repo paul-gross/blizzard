@@ -12,6 +12,7 @@ collaborators, the harness matrix's component definition, not its one-function u
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -117,6 +118,20 @@ def test_pull_mirrors_the_hub_pause_brake_and_registers(tmp_path):  # type: igno
     # PULL registered the runner (liveness heartbeat) and mirrored the brake locally.
     assert hub.registered == [("r1", "ws1")]
     assert store.hub_paused("r1") is True
+
+
+def test_pull_reports_the_configured_env_capacity(tmp_path):  # type: ignore[no-untyped-def]
+    """PULL's registration (the heartbeat) carries the runner's env-pool size (issue #69) so
+    the board's slot bar has a `total`; a changed pool converges on the next pull."""
+    ctx, hub, _store = _ctx_with_a_claimable_chunk(tmp_path, paused=False)
+
+    # env_capacity is mirrored from len(workspace_envs) at build; frozen config, so replace.
+    pull(replace(ctx, config=replace(ctx.config, env_capacity=4)))
+    assert hub.registered_capacities == [4]
+
+    # The operator grew workspace_envs and the runner re-synced — the new count converges.
+    pull(replace(ctx, config=replace(ctx.config, env_capacity=6)))
+    assert hub.registered_capacities == [4, 6]
 
 
 def test_fill_claims_nothing_while_paused(tmp_path):  # type: ignore[no-untyped-def]

@@ -149,8 +149,25 @@ def test_register_runner_posts_registration() -> None:
         seen.update(json.loads(request.content))
         return httpx.Response(201, json={"runner_id": "r1", "first_registration": True})
 
+    _client(handler).register_runner("r1", "ws1", env_capacity=4)
+    # env_capacity (issue #69) rides the registration body — the board's slot-bar total.
+    assert seen == {"runner_id": "r1", "workspace_id": "ws1", "env_capacity": 4}
+
+
+@pytest.mark.unit
+def test_register_runner_sends_null_capacity_when_unset() -> None:
+    """A caller that omits env_capacity posts an explicit null, not a missing key — the hub
+    reads it verbatim and (on a refresh) resets the stored total, so the wire stays honest."""
+    seen: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+
+        seen.update(json.loads(request.content))
+        return httpx.Response(201, json={"runner_id": "r1", "first_registration": True})
+
     _client(handler).register_runner("r1", "ws1")
-    assert seen == {"runner_id": "r1", "workspace_id": "ws1"}
+    assert seen == {"runner_id": "r1", "workspace_id": "ws1", "env_capacity": None}
 
 
 @pytest.mark.unit

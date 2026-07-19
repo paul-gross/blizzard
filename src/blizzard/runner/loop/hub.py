@@ -121,13 +121,17 @@ class IHubClient(Protocol):
         true the answer is delivered by resuming the dormant session around it."""
         ...
 
-    def register_runner(self, runner_id: str, workspace_id: str) -> None:
+    def register_runner(self, runner_id: str, workspace_id: str, *, env_capacity: int | None = None) -> None:
         """``POST /api/fleet/runners`` — register into the fleet registry.
 
         Idempotent upsert: the runner registers on startup and re-registers each pull,
         which refreshes its ``last_seen_at`` — the runner-level liveness heartbeat the
         board's fleet column derives online/offline from. Called before the paused
-        read so the runner is registered by the time it reads its state back."""
+        read so the runner is registered by the time it reads its state back.
+
+        ``env_capacity`` (issue #69) reports the runner's configured environment-pool size
+        (``len(workspace_envs)``) so the board can render a ``used/total`` slot bar; because
+        re-registration is the heartbeat, a changed pool converges on the next pull."""
         ...
 
     def fetch_runner_paused(self, runner_id: str) -> bool:
