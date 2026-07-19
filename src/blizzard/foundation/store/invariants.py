@@ -24,7 +24,7 @@ from sqlalchemy import Engine, func, select
 
 from blizzard.foundation.clock import SystemClock
 from blizzard.foundation.store.engine import create_engine_from_url
-from blizzard.hub.domain.graph import RESERVED_TERMINAL
+from blizzard.hub.domain.graph import RESERVED_TERMINAL, Executor
 from blizzard.hub.domain.work import derive_chunk_status, newest_live_route, newest_live_route_token
 from blizzard.hub.store import schema as hub
 from blizzard.hub.store.internal.chunk_store import ChunkStore
@@ -336,11 +336,16 @@ def _check_migrations(engine: Engine) -> list[Violation]:
     one) equals that newest migration's target: the re-pin is written in the **same
     transaction** as the fact, so a fact without its pin — or a pin without its fact — is
     the half-write a ``kill -9`` in the ``migrate.`` window must never leave.
-    ``hub:migration-route-released`` — that same transaction also releases the route (a
-    migration ends the attempt), so a recorded migration always carries a ``route_released``
-    at or after its ``recorded_at``. A migration fact whose route release never landed is
-    the other face of the torn ``migrate.`` write: the chunk would re-pin yet keep its
-    stale claim, unclaimable under the new graph. (Artifact co-persistence — the third
+    ``hub:migration-route-released`` — a **runner-landing** migration also releases the
+    route in that same transaction (the migration ends the attempt and re-queues the chunk
+    ``ready``), so it always carries a ``route_released`` at or after its ``recorded_at``. A
+    runner-landing migration fact whose route release never landed is the other face of the
+    torn ``migrate.`` write: the chunk would re-pin yet keep its stale claim, unclaimable
+    under the new graph. A migration landing on a **hub-executed** node (issue #111) is the
+    deliberate exception: it **retains** the route so the hub keeps the chunk and drives the
+    landed hub node via the holding runner's ADVANCE poll (deriving ``delivering``, exactly
+    as a transition into a hub node does), so no ``route_released`` is expected and the
+    assertion applies to runner landings alone. (Artifact co-persistence — the third
     limb of the atomic write — is not independently countable from the store without the
     graph definition, so it is asserted at the component tier over a real
     ``record_migration`` in ``test_migration_store``; here we assert the two facets a torn
@@ -373,8 +378,16 @@ def _check_migrations(engine: Engine) -> list[Violation]:
             if cur is None or (m.recorded_at, m.epoch) >= (cur.recorded_at, cur.epoch):  # type: ignore[attr-defined]
                 newest[m.chunk_id] = m
         chunks = {c.chunk_id: c for c in conn.execute(select(hub.chunks))}
-        # The latest route release per chunk — a migration releases the route in its own
-        # transaction, so its ``recorded_at`` is never above the chunk's newest release.
+        # A migration's landed node executor (issue #111): a hub landing retains the route
+        # by design, so it is exempt from the route-released assertion below. Node ids are
+        # globally-unique, so one node_id -> executor map resolves any landing node.
+        landed_executor = {
+            row.node_id: row.executor
+            for row in conn.execute(select(hub.graph_nodes.c.node_id, hub.graph_nodes.c.executor))
+        }
+        # The latest route release per chunk — a runner-landing migration releases the route
+        # in its own transaction, so its ``recorded_at`` is never above the chunk's newest
+        # release (a hub landing retains it — checked below).
         latest_release: dict[str, datetime] = {}
         for r in conn.execute(select(hub.route_released.c.chunk_id, hub.route_released.c.released_at)):
             cur = latest_release.get(r.chunk_id)
@@ -398,8 +411,11 @@ def _check_migrations(engine: Engine) -> list[Violation]:
                         f"chunk {chunk_id} model {chunk.model} but its newest migration re-pinned {m.model_after}",  # type: ignore[attr-defined]
                     )
                 )
+            # A hub-landing migration (issue #111) retains the route by design — it is not a
+            # torn write, so it is exempt from the route-released assertion.
+            lands_on_hub = landed_executor.get(m.landed_node_id) == Executor.HUB  # type: ignore[attr-defined]
             released = latest_release.get(chunk_id)
-            if released is None or released < m.recorded_at:  # type: ignore[attr-defined]
+            if not lands_on_hub and (released is None or released < m.recorded_at):  # type: ignore[attr-defined]
                 violations.append(
                     Violation(
                         "hub:migration-route-released",

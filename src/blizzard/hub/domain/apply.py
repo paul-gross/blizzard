@@ -53,10 +53,14 @@ _TERMINAL_STATUSES = frozenset({ChunkStatus.STOPPED, ChunkStatus.DONE})
 # a hub node — issue #111 — in which case the route is retained instead), and the
 # node-step's artifacts are already committed in one transaction — a ``kill -9`` here loses
 # only the ``MIGRATED``/``HUB_NODE_TAKEN`` response, so the runner's replayed completion
-# re-derives it via the ``accepted_migration`` probe (idempotent) — and on a hub landing,
-# the resumable ``HubNodeExecutor.run`` re-dispatch below picks the run back up — and the
-# invariant checker's ``hub:migration-pin-consistent`` holds because the re-pin landed
-# atomically with the fact.
+# re-derives it via the ``accepted_migration`` probe (idempotent). On a hub landing the
+# inline ``HubNodeExecutor.run`` never ran (the crash preceded it) and the replay probe
+# short-circuits *above* that re-dispatch, so recovery does not come from re-running it here;
+# it comes from the RETAINED route — the replay returns ``HUB_NODE_TAKEN`` so the holding
+# runner keeps its environments and its ADVANCE poll drives the landed hub node to its
+# outcome (``bzh:crash-point-registry``). The invariant checker's
+# ``hub:migration-pin-consistent`` holds because the re-pin landed atomically with the fact,
+# and ``hub:migration-route-released`` exempts the hub landing (the retained route is intended).
 _CP_MIGRATE_AFTER_RECORD = crashpoint(
     "migrate.after-record.before-response",
     "migration recorded (graph/model re-pinned, route released unless hub-landing, artifacts committed);"
@@ -79,10 +83,23 @@ def _migrated(from_node: Node, target_graph: Graph) -> ApplyResponse:
 
 def _migrated_replay() -> ApplyResponse:
     """The replayed ``MIGRATED`` apply-response (issue #90) — a lost-ack re-flush of a
-    completion whose migration already landed. Carries no node/graph detail: the migration
-    re-pinned the graph, so the submitting node no longer lives in the chunk's current pin,
-    and the natural-key probe alone (not a graph lookup) resolves the replay."""
+    **runner-landing** migration that already landed. Carries no node/graph detail: the
+    migration re-pinned the graph, so the submitting node no longer lives in the chunk's
+    current pin, and the natural-key probe alone (not a graph lookup) resolves the replay."""
     return ApplyResponse(outcome=ApplyOutcome.MIGRATED, detail="chunk already migrated (replay)")
+
+
+def _hub_node_taken_replay() -> ApplyResponse:
+    """The replayed ``HUB_NODE_TAKEN`` apply-response (issue #111) — a lost-ack re-flush of a
+    completion whose migration landed on a **hub-executed** node. Like :func:`_migrated_replay`
+    it carries no node/graph detail (the natural-key probe alone resolves the replay), but its
+    outcome is ``HUB_NODE_TAKEN``, not ``MIGRATED``: a hub landing **retained** the route, so
+    the holding runner must KEEP its environments and drive the landed hub node via its ADVANCE
+    poll. A ``MIGRATED`` reply here would make the runner release the route (``_apply_response``)
+    and strand the chunk at ``delivering`` — the inline ``HubNodeExecutor.run`` never ran (the
+    crash preceded it) and this replay short-circuits above it, so the ADVANCE poll is the only
+    thing left to carry the landed hub node to its outcome."""
+    return ApplyResponse(outcome=ApplyOutcome.HUB_NODE_TAKEN, detail="chunk migrated onto a hub node (replay)")
 
 
 class ApplyService:
@@ -136,6 +153,22 @@ class ApplyService:
         if self._chunks.accepted_migration(
             chunk.chunk_id, from_node_id=submission.from_node_id, epoch=submission.epoch
         ):
+            # A **hub-landing** migration (issue #111) retained the route and derives
+            # ``delivering``; its replay must return ``HUB_NODE_TAKEN`` so the holding runner
+            # keeps its environments and drives the landed hub node — a ``MIGRATED`` reply
+            # would make it release the route and strand the chunk (see ``_hub_node_taken_replay``).
+            # The migration fact carries the landed executor, resolved at read time from the
+            # target graph; a runner landing keeps the ``MIGRATED`` re-queue behavior.
+            replayed = next(
+                (
+                    m
+                    for m in facts.migrations
+                    if m.from_node_id == submission.from_node_id and m.epoch == submission.epoch
+                ),
+                None,
+            )
+            if replayed is not None and replayed.landed_node_executor is Executor.HUB:
+                return _hub_node_taken_replay()
             return _migrated_replay()
 
         from_node = graph.node_by_id(submission.from_node_id)

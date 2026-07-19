@@ -266,6 +266,45 @@ def migrate_target_yaml(landed_file: str) -> str:
     return graph_yaml(landed_file).replace("name: default-delivery", "name: triage-delivery", 1)
 
 
+def migrate_hub_source_yaml() -> str:
+    """A source graph (`default-delivery`, so ingest pins it) whose `build` migrates to the
+    hub-landing target `triage-hub` (issue #111) rather than the runner-landing
+    `triage-delivery` :func:`migrate_source_yaml` uses. Same no-op build prompt: the source
+    node commits nothing, so the target's landing hub node has no branches to merge (the
+    exactly-once assertion is on convergence, not a landed file — see the test)."""
+    return migrate_source_yaml().replace("graph:triage-delivery", "graph:triage-hub", 1)
+
+
+def migrate_hub_target_yaml() -> str:
+    """The hub-landing migration target (`triage-hub`, issue #111): its **entry** node
+    `build` — which name-matches the source's migrating `build`, so the migration lands
+    there — is **hub-executed**, not a runner node. A migration re-pinning a chunk onto a
+    hub node is retained by the hub exactly as a transition into one is: it derives
+    `delivering` (never runner-claimable `ready`) and the landed hub node is driven by the
+    holding runner's ADVANCE poll to `done`. The hub node reuses :data:`LAND_STEP`, which
+    with no submitted branches (the source committed nothing) is a clean no-op that prints
+    its success line and routes the default `success` edge to `done`."""
+    import yaml
+
+    graph = {
+        "name": "triage-hub",
+        "entry": "build",
+        "nodes": {
+            "build": {
+                "executor": "hub",
+                "run": [{"command": LAND_STEP}],
+                "judgement": {
+                    "choices": {
+                        "success": {"description": "Delivered.", "to": "done"},
+                        "failure": {"description": "Failed to deliver.", "to": "build"},
+                    }
+                },
+            },
+        },
+    }
+    return yaml.safe_dump(graph, sort_keys=False)
+
+
 # --------------------------------------------------------------------------- #
 # Process helpers
 # --------------------------------------------------------------------------- #

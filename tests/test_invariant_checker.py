@@ -348,15 +348,37 @@ def test_a_double_park_after_a_repause_is_still_a_violation(tmp_path: Path) -> N
 
 
 def _seed_migration(
-    conn, *, to_graph: str, model_after: str | None, pin_graph: str, pin_model: str, release_route: bool = True
+    conn,
+    *,
+    to_graph: str,
+    model_after: str | None,
+    pin_graph: str,
+    pin_model: str,
+    release_route: bool = True,
+    landed_executor: str | None = None,
 ) -> None:
     """A chunk pinned to (pin_graph, pin_model) with one migration targeting to_graph (#90).
 
-    ``record_migration`` releases the route in the migration's own transaction, so a
-    consistent migration always carries its ``route_released``; ``release_route=False``
-    seeds the torn write where the fact landed but the release did not.
+    A runner-landing ``record_migration`` releases the route in the migration's own
+    transaction, so a consistent migration always carries its ``route_released``;
+    ``release_route=False`` seeds the torn write where the fact landed but the release did
+    not. ``landed_executor`` seeds a ``graph_nodes`` row for the landing node so the
+    ``hub:migration-route-released`` check can resolve its executor: a ``"hub"`` landing
+    (issue #111) retains the route by design and is exempt from that assertion. Left None,
+    the landing node has no node row (an unknown/runner landing), so the assertion applies.
     """
     conn.execute(insert(hub.chunks).values(chunk_id="ch_1", graph_id=pin_graph, minted_at=_NOW, model=pin_model))
+    if landed_executor is not None:
+        conn.execute(
+            insert(hub.graph_nodes).values(
+                node_id="nd_landed",
+                graph_id=to_graph,
+                name="build",
+                executor=landed_executor,
+                session="fresh",
+                judged_by="worker",
+            )
+        )
     conn.execute(
         insert(hub.chunk_migrations).values(
             migration_id="mg_1",
@@ -413,6 +435,26 @@ def test_a_migration_without_its_route_release_is_a_violation(tmp_path: Path) ->
         )
     slugs = {v.invariant for v in check_hub_store(engine)}
     assert "hub:migration-route-released" in slugs
+
+
+def test_a_hub_landing_migration_retains_its_route_and_is_not_a_violation(tmp_path: Path) -> None:
+    """``hub:migration-route-released`` exempts a migration landing on a **hub-executed**
+    node (issue #111): it deliberately retains the route so the hub keeps the chunk and
+    drives the landed hub node via the holding runner's ADVANCE poll. A retained route on a
+    hub landing is the intended shape, not the torn ``migrate.`` write the runner-landing
+    case above catches — so no violation, even with no ``route_released``."""
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        _seed_migration(
+            conn,
+            to_graph="gr_triage",
+            model_after=None,
+            pin_graph="gr_triage",
+            pin_model="m",
+            release_route=False,
+            landed_executor="hub",
+        )
+    assert check_hub_store(engine) == []
 
 
 def test_two_migrations_at_one_node_epoch_is_a_violation(tmp_path: Path) -> None:

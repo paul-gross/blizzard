@@ -96,9 +96,7 @@ class ChunkStore:
             # is already covered via ``chunk.graph_id`` (a migration re-pins it), but an
             # older, superseded migration's landing node otherwise falls outside the span.
             graph_ids = (
-                {chunk.graph_id}
-                | {t.graph_id for t in transition_rows}
-                | {m.to_graph_id for m in migration_rows}
+                {chunk.graph_id} | {t.graph_id for t in transition_rows} | {m.to_graph_id for m in migration_rows}
             )
             executors = {
                 r.node_id: Executor(r.executor)

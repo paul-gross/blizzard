@@ -133,9 +133,7 @@ nodes:
 """
 
 
-def _setup(
-    hub, *, target_name: str, mint_target: bool, target_yaml: str = _TARGET_YAML
-) -> tuple[str, str]:  # type: ignore[no-untyped-def]
+def _setup(hub, *, target_name: str, mint_target: bool, target_yaml: str = _TARGET_YAML) -> tuple[str, str]:  # type: ignore[no-untyped-def]
     """Mint the source graph (and optionally the target), ingest + promote + claim a
     chunk on the source. Returns (chunk_id, from_node_id)."""
     assert (
@@ -258,6 +256,32 @@ def test_a_replayed_migration_completion_is_idempotent(tmp_path: Path) -> None:
     # A re-flushed completion (lost ack) replays to MIGRATED without a second re-pin.
     second = _migrate(hub, chunk_id, node_id)
     assert second.json()["outcome"] == "migrated"
+
+    facts = hub.services.chunks.load_facts(chunk_id)
+    assert facts is not None
+    assert len(facts.migrations) == 1  # exactly one migration fact, no duplicate
+
+
+def test_a_replayed_hub_landing_migration_completion_returns_hub_node_taken(tmp_path: Path) -> None:
+    """A hub-landing migration's lost-ack replay must return ``hub_node_taken``, not
+    ``migrated`` (issue #111). The runner reacts to ``migrated`` by RELEASING its route —
+    correct for a runner landing (the chunk re-queues ``ready``, claimable) but fatal for a
+    hub landing: the route was retained and the chunk derives ``delivering`` (never
+    ``ready``), so a released route strands it with nothing to drive the landed hub node.
+    The replay therefore returns ``hub_node_taken`` so the holding runner keeps its
+    environments and its ADVANCE poll carries the node to its outcome. (This is the fence on
+    the crash-sweep wedge ``test_kill9_at_migrate_crash_point_landing_on_a_hub_node`` proves
+    end to end: the crash at ``migrate.after-record.before-response`` loses the response, and
+    only this replay outcome keeps the retained-route chunk alive on recovery.)"""
+    hub = build_hub(tmp_path)
+    chunk_id, node_id = _setup(hub, target_name="triage", mint_target=True, target_yaml=_HUB_TARGET_YAML)
+
+    first = _migrate(hub, chunk_id, node_id)
+    assert first.json()["outcome"] == "hub_node_taken"
+    # A re-flushed completion (lost ack) replays to hub_node_taken — never migrated, which
+    # would make the runner release the retained route — and lands no second migration.
+    second = _migrate(hub, chunk_id, node_id)
+    assert second.json()["outcome"] == "hub_node_taken"
 
     facts = hub.services.chunks.load_facts(chunk_id)
     assert facts is not None

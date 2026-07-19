@@ -98,6 +98,8 @@ from tests.crash.support import (
     free_port,
     git_bare,
     graph_yaml,
+    migrate_hub_source_yaml,
+    migrate_hub_target_yaml,
     migrate_source_yaml,
     migrate_target_yaml,
     start_hub,
@@ -446,6 +448,101 @@ def test_kill9_at_migrate_crash_point(crash_env: CrashEnv, tmp_path: Path, point
         tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
         commits = [line for line in tree.splitlines() if line.strip()]
         assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
+    finally:
+        hub.close()
+        terminate(runner_proc)
+        terminate(hub_proc)
+
+
+def _ingest_migrate_hub_chunk(hub: httpx.Client, forge: httpx.Client, title: str) -> tuple[str, str]:
+    """Mint the hub-landing migrate target + source graphs (issue #111), file a fresh
+    issue, ingest + promote a chunk pinned to the source. Returns (chunk_id, target_graph_id)."""
+    target = hub.post("/api/graphs", json={"definition_yaml": migrate_hub_target_yaml()})
+    assert target.status_code == 201, target.text
+    src = hub.post("/api/graphs", json={"definition_yaml": migrate_hub_source_yaml()})
+    assert src.status_code == 201, src.text
+    issue = forge.post(f"/repos/{REPO}/issues", json={"title": title, "body": "a hub-landing migrate crash chunk"})
+    assert issue.status_code == 201, issue.text
+    number = issue.json()["number"]
+    ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{number}"]})
+    assert ingested.status_code == 201, ingested.text
+    chunk_id = ingested.json()["chunk_id"]
+    assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+    assert hub.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
+    return chunk_id, target.json()["graph_id"]
+
+
+@pytest.mark.parametrize("point", _MIGRATE_SWEEP)
+def test_kill9_at_migrate_crash_point_landing_on_a_hub_node(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
+    """A ``kill -9`` at the migrate window when the migration lands on a **hub** node
+    (issue #111) still recovers — it must not wedge at ``delivering``.
+
+    The sibling ``test_kill9_at_migrate_crash_point`` lands on a *runner* node: on the
+    lost-ack replay the hub returns ``MIGRATED``, the runner releases its route, and the
+    chunk re-queues ``ready`` for a fresh claim. A **hub-landing** migration is the harder
+    case this scenario fences: the migration retains the route and the chunk derives
+    ``delivering`` (never runner-claimable ``ready``), so recovery cannot come from a fresh
+    claim — it must come from the **holding runner's ADVANCE poll** driving the landed hub
+    node. The crash fires at ``migrate.after-record.before-response``, *before* the inline
+    ``HubNodeExecutor.run`` in ``_apply_migration`` — so the inline dispatch is lost to the
+    crash and only the retained route + the runner's ``hub-advance`` poll can carry the
+    chunk to ``done``. A regression that released the route (or derived ``ready``) on this
+    path would strand the chunk with nothing driving it, and ``wait_status`` below would
+    time out at ``delivering`` rather than converge.
+
+    The source ``build`` commits nothing (it hands the chunk off), so the landed hub node
+    has no submitted branches to merge — ``LAND_STEP`` is a clean no-op that routes
+    ``success -> done``. The assertion is therefore on **convergence and the retained-route
+    derivation**, not a landed file: the chunk reaches ``done`` under the target graph, its
+    history records exactly one migration onto the hub-executed node, and the invariants are
+    green after the crash and after convergence."""
+    title = f"HUB-MIGRATE-{point.replace('.', '_')}"
+    hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
+    hub_port, runner_port = free_port(), free_port()
+
+    # Arm the HUB: the migrate window opens inside its completions handler, not the runner.
+    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point)
+    runner_proc = None
+    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    try:
+        await_http(hub, "/api/health", proc=hub_proc)
+        chunk_id, target_graph_id = _ingest_migrate_hub_chunk(hub, crash_env.forge, title)
+
+        write_runner_config(
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+        )
+        runner_proc = start_runner(runner_dir, crash_point=None)
+
+        # The runner claims, the worker migrates onto the hub node, and the hub self-SIGKILLs.
+        code = wait_death(hub_proc)
+        assert code == -9, f"armed hub at {point} exited {code}, not SIGKILL (-9); point never reached?"
+        _assert_invariants(runner_dir, hub_dir, when=f"immediately after hub-landing kill at {point}")
+
+        # The migration is durable even though the response never returned — and it landed on
+        # the hub-executed node, so the chunk derives `delivering`, never `ready`.
+        hub_engine = create_engine_from_url(HubConfig.load(hub_dir).db_url)
+        with hub_engine.connect() as conn:
+            migrations = conn.execute(
+                select(hub_schema.chunk_migrations).where(hub_schema.chunk_migrations.c.chunk_id == chunk_id)
+            ).all()
+        assert len(migrations) == 1, "the migration fact was not durably recorded before the crash"
+
+        # Restart the hub UNARMED; the retained route means the holding runner's ADVANCE poll
+        # drives the landed hub node to `done` — no fresh claim, no re-queue.
+        hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+        await_http(hub, "/api/health", proc=hub_proc)
+
+        status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"})
+        assert status == "done", (
+            f"hub-landing migration did not converge to done after kill at {point} (last {status!r}) — "
+            "a `delivering` timeout here means the retained-route chunk wedged with nothing driving it"
+        )
+        _assert_invariants(runner_dir, hub_dir, when=f"after hub-landing convergence past {point}")
+
+        detail = hub.get(f"/api/chunks/{chunk_id}").json()
+        assert detail["graph_id"] == target_graph_id, "the chunk was not re-pinned to the target graph"
+        assert len(detail["migrations"]) == 1, "the two-graph history is missing its migration step"
+        assert detail["migrations"][0]["to_graph_name"] == "triage-hub"
     finally:
         hub.close()
         terminate(runner_proc)
