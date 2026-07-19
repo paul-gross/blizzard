@@ -59,7 +59,7 @@ from blizzard.hub.domain.work import (
 from blizzard.wire.chunk import ChunkDetail, HubAdvanceResponse, PmItemsView
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
-from blizzard.wire.envelope import ApplyResponse, NodeEnvelope
+from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeEnvelope
 from blizzard.wire.facts import (
     QUESTION_ASKED,
     RUNNER_LOCALLY_PAUSED,
@@ -330,6 +330,9 @@ def submit_completion(
     if graph is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
     target_graph = _resolve_cross_graph_target(services, graph, submission)
+    already_migrated = services.chunks.accepted_migration(
+        chunk_id, from_node_id=submission.from_node_id, epoch=submission.epoch
+    )
     response = services.apply.apply(
         chunk,
         graph,
@@ -340,6 +343,8 @@ def submit_completion(
     )
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
+    if response.outcome is ApplyOutcome.MIGRATED and not already_migrated:
+        services.events.publish_queue_changed()  # a fresh migration re-queued the chunk under the target graph
     # A completion landing on a human-judged node opens a graph gate: surface it.
     chunks_api.publish_open_decision(services, chunk_id)
     return response

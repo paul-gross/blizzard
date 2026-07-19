@@ -16,7 +16,7 @@ import httpx
 import pytest
 
 from blizzard.hub.config import ROUTE_TOKEN_ENFORCE
-from tests.support import build_hub, pointer_token, report_lease
+from tests.support import build_hub, emitted_events, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
 
@@ -347,6 +347,51 @@ def test_a_replayed_hub_landing_migration_completion_returns_hub_node_taken(tmp_
     facts = hub.services.chunks.load_facts(chunk_id)
     assert facts is not None
     assert len(facts.migrations) == 1  # exactly one migration fact, no duplicate
+
+
+def test_fresh_migration_publishes_queue_changed(tmp_path: Path) -> None:
+    """A fresh cross-graph migration re-queues the chunk under the target graph — like
+    every other re-admit path, that must publish ``queue-changed`` (issue #107)."""
+    hub = build_hub(tmp_path)
+    chunk_id, node_id = _setup(hub, target_name="triage", mint_target=True)
+    since = hub.events.latest_id()
+
+    resp = _migrate(hub, chunk_id, node_id)
+
+    assert resp.json()["outcome"] == "migrated"
+    types = [e["event"] for e in emitted_events(hub, since=since)]
+    assert "queue-changed" in types
+
+
+def test_replayed_migration_does_not_publish_queue_changed(tmp_path: Path) -> None:
+    """A replayed migration completion (lost ack) is idempotent and re-pins nothing — it
+    must not publish a second ``queue-changed`` (issue #107)."""
+    hub = build_hub(tmp_path)
+    chunk_id, node_id = _setup(hub, target_name="triage", mint_target=True)
+    first = _migrate(hub, chunk_id, node_id)
+    assert first.json()["outcome"] == "migrated"
+    since = hub.events.latest_id()
+
+    second = _migrate(hub, chunk_id, node_id)
+
+    assert second.json()["outcome"] == "migrated"
+    types = [e["event"] for e in emitted_events(hub, since=since)]
+    assert "queue-changed" not in types
+
+
+def test_a_hub_landing_migration_does_not_publish_queue_changed(tmp_path: Path) -> None:
+    """A migration landing on a hub node (issue #111) retains the route and returns
+    ``HUB_NODE_TAKEN`` rather than re-queuing — the ``MIGRATED``-keyed guard must not
+    fire here (issue #107)."""
+    hub = build_hub(tmp_path)
+    chunk_id, node_id = _setup(hub, target_name="triage", mint_target=True, target_yaml=_HUB_TARGET_YAML)
+    since = hub.events.latest_id()
+
+    resp = _migrate(hub, chunk_id, node_id)
+
+    assert resp.json()["outcome"] == "hub_node_taken"
+    types = [e["event"] for e in emitted_events(hub, since=since)]
+    assert "queue-changed" not in types
 
 
 def test_a_human_gate_resolved_migration_closes_its_decision(tmp_path: Path) -> None:
