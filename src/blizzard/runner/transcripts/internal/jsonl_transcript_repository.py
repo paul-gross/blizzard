@@ -43,7 +43,7 @@ _log = get_logger("blizzard.runner.transcripts")
 #: all — enforced by seeking to the tail before reading, not by reading the whole
 #: file and then discarding the front, so peak memory is bounded by this cap
 #: regardless of the file's actual size.
-MAX_FILE_BYTES = 32 * 1024 * 1024
+MAX_FILE_BYTES = 64 * 1024 * 1024
 
 
 class JsonlTranscriptRepository:

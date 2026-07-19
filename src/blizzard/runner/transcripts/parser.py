@@ -39,10 +39,10 @@ from typing import Any
 from blizzard.runner.transcripts.repository import Turn, TurnKind
 
 #: Keep only the most recent this-many turns (post-collapse).
-MAX_TURNS = 500
+MAX_TURNS = 1000
 
 #: Cap each text / tool_input / tool_output block at this many characters.
-MAX_BLOCK_CHARS = 8 * 1024
+MAX_BLOCK_CHARS = 1024 * 1024
 
 #: Control records: plumbing, never conversation.
 _CONTROL_TYPES = frozenset(
