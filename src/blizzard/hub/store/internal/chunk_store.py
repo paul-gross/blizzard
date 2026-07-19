@@ -82,14 +82,24 @@ class ChunkStore:
             if chunk is None or chunk_id in self._grouped_ids(conn):
                 return None
             transition_rows = conn.execute(select(s.transitions).where(s.transitions.c.chunk_id == chunk_id)).all()
+            migration_rows = conn.execute(
+                select(s.chunk_migrations).where(s.chunk_migrations.c.chunk_id == chunk_id)
+            ).all()
             # Resolve each transition's executor against *its own* graph (issue #90):
             # after a cross-graph migration re-pins ``chunk.graph_id``, an old-graph
             # transition's ``to_node_id`` lives in a graph the chunk no longer points at,
             # so the executor map must span the set of graphs the chunk's transitions
             # touched, not only its current pin. Node ids are globally-unique ULIDs, so a
             # single node_id -> executor dict keyed across graphs resolves each transition
-            # unambiguously (no silent ``RUNNER`` fallback for a known node).
-            graph_ids = {chunk.graph_id} | {t.graph_id for t in transition_rows}
+            # unambiguously (no silent ``RUNNER`` fallback for a known node). Also union in
+            # every migration's ``to_graph_id`` (issue #111): the newest migration's target
+            # is already covered via ``chunk.graph_id`` (a migration re-pins it), but an
+            # older, superseded migration's landing node otherwise falls outside the span.
+            graph_ids = (
+                {chunk.graph_id}
+                | {t.graph_id for t in transition_rows}
+                | {m.to_graph_id for m in migration_rows}
+            )
             executors = {
                 r.node_id: Executor(r.executor)
                 for r in conn.execute(
@@ -166,8 +176,9 @@ class ChunkStore:
                     model=m.model_after,
                     epoch=m.epoch,
                     recorded_at=m.recorded_at,
+                    landed_node_executor=executors.get(m.landed_node_id, Executor.RUNNER),
                 )
-                for m in conn.execute(select(s.chunk_migrations).where(s.chunk_migrations.c.chunk_id == chunk_id)).all()
+                for m in migration_rows
             ]
             pauses = [
                 PauseFact(paused=p.paused, set_at=p.set_at, set_by=p.set_by)
@@ -903,23 +914,29 @@ class ChunkStore:
         epoch: int,
         at: datetime,
         artifacts: list[ArtifactRow],
+        release_route: bool = True,
     ) -> bool:
         """Record a cross-graph migration **atomically and idempotently** (#90).
 
         In **one transaction**: insert the ``chunk_migrations`` fact, re-pin
         ``chunks.graph_id`` (and ``chunks.model`` when ``model`` is given), release the
-        route, **and persist this node-step's artifacts** (MUST-FIX 1 — the migration
-        branch bypasses ``record_transition``, which is where a step's artifacts normally
-        commit; without this the triage node's reasoning asset the carry-over relies on is
-        never persisted). When ``decision_id`` is given — a **human gate's** resolved
-        choice was itself the cross-graph migration (#90) — it is stamped on the fact so
-        that decision derives ``transitioned`` (closed), exactly as a resolving transition
-        would; without it the gate's decision would stay live forever (a phantom decision
-        that mis-renders the board and wedges REAP recovery). Guarded by the natural key
-        ``(chunk_id, from_node_id, epoch)``: a
-        redelivery replay after a ``kill -9`` re-enters harmlessly, writing nothing a
-        second time — the migration is all-or-nothing, never a half-written re-pin with
-        orphaned artifacts. Returns True iff it wrote, False on a replay.
+        route (unless ``release_route`` is ``False``), **and persist this node-step's
+        artifacts** (MUST-FIX 1 — the migration branch bypasses ``record_transition``,
+        which is where a step's artifacts normally commit; without this the triage node's
+        reasoning asset the carry-over relies on is never persisted). When ``decision_id``
+        is given — a **human gate's** resolved choice was itself the cross-graph migration
+        (#90) — it is stamped on the fact so that decision derives ``transitioned``
+        (closed), exactly as a resolving transition would; without it the gate's decision
+        would stay live forever (a phantom decision that mis-renders the board and wedges
+        REAP recovery). ``release_route`` (issue #111) is executor-aware: a hub-landing
+        migration passes ``False`` so the holding runner's route is retained — no route
+        release means no other runner can poll ``hub-advance`` out from under it, and the
+        holding runner's own ADVANCE poll drives the landed hub node's ``run:`` steps.
+        Default ``True`` preserves the runner-landing behavior (release + re-queue). Guarded
+        by the natural key ``(chunk_id, from_node_id, epoch)``: a redelivery replay after a
+        ``kill -9`` re-enters harmlessly, writing nothing a second time — the migration is
+        all-or-nothing, never a half-written re-pin with orphaned artifacts. Returns True
+        iff it wrote, False on a replay.
 
         No lease is minted here (unlike :meth:`finalize_delivery`): the migration is
         recorded at the *submitting* epoch, and the re-queue means the **next** claim mints
@@ -946,11 +963,12 @@ class ChunkStore:
             if model is not None:
                 values["model"] = model
             conn.execute(update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(**values))
-            conn.execute(
-                insert(s.route_released).values(
-                    chunk_id=chunk_id, released_at=at, seq=self._next_route_seq(conn, chunk_id)
+            if release_route:
+                conn.execute(
+                    insert(s.route_released).values(
+                        chunk_id=chunk_id, released_at=at, seq=self._next_route_seq(conn, chunk_id)
+                    )
                 )
-            )
             for row in artifacts:
                 conn.execute(
                     insert(s.artifacts).values(

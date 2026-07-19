@@ -49,14 +49,18 @@ from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 _TERMINAL_STATUSES = frozenset({ChunkStatus.STOPPED, ChunkStatus.DONE})
 
 # The cross-graph migration crash window (issue #90, ``bzh:crash-point-registry``): the
-# migration fact, the graph/model re-pin, the route release, and the node-step's
-# artifacts are already committed in one transaction — a ``kill -9`` here loses only the
-# ``MIGRATED`` response, so the runner's replayed completion re-derives it via the
-# ``accepted_migration`` probe (idempotent), and the invariant checker's
-# ``hub:migration-pin-consistent`` holds because the re-pin landed atomically with the fact.
+# migration fact, the graph/model re-pin, the route release (unless the migration lands on
+# a hub node — issue #111 — in which case the route is retained instead), and the
+# node-step's artifacts are already committed in one transaction — a ``kill -9`` here loses
+# only the ``MIGRATED``/``HUB_NODE_TAKEN`` response, so the runner's replayed completion
+# re-derives it via the ``accepted_migration`` probe (idempotent) — and on a hub landing,
+# the resumable ``HubNodeExecutor.run`` re-dispatch below picks the run back up — and the
+# invariant checker's ``hub:migration-pin-consistent`` holds because the re-pin landed
+# atomically with the fact.
 _CP_MIGRATE_AFTER_RECORD = crashpoint(
     "migrate.after-record.before-response",
-    "migration recorded (graph/model re-pinned, route released, artifacts committed); MIGRATED response not returned",
+    "migration recorded (graph/model re-pinned, route released unless hub-landing, artifacts committed);"
+    " response not yet returned",
 )
 
 
@@ -260,20 +264,31 @@ class ApplyService:
         """Take a cross-graph migration edge (issue #90) — re-pin + re-queue, or escalate.
 
         When the caller resolved the target (``target_graph`` set): record the migration
-        (which re-pins the graph/model, releases the route, and commits this node-step's
-        artifacts atomically), landing on the name-match-else-entry node of the target
-        graph, and return ``MIGRATED``. When this migration is a **human gate's** resolved
-        choice (``submission.decision_id`` set — reached via ``_apply_gate_resolution``),
-        the migration fact carries that ``decision_id`` so the decision derives closed;
-        without it the gate's decision would stay a phantom live decision (mis-rendered on
-        the board, and — worse — blocking REAP from ever reclaiming the chunk). When the caller could **not** resolve it
-        (``target_graph is None`` — the ``graph:<name>`` names no enabled graph):
-        ``record_escalation`` so the chunk derives ``needs_human`` (visible on the board),
-        rather than crash or silently drop — and return ``PARKED_AT_GATE`` so the runner
-        stops without re-leasing (a ``FAILURE`` would requeue and *supersede* the very
-        escalation just recorded). Idempotent on replay by the migration natural key
-        (checked in ``apply``) and, on the escalation branch, by an existing escalation at
-        this epoch."""
+        (which re-pins the graph/model and commits this node-step's artifacts atomically),
+        landing on the name-match-else-entry node of the target graph. When this migration
+        is a **human gate's** resolved choice (``submission.decision_id`` set — reached via
+        ``_apply_gate_resolution``), the migration fact carries that ``decision_id`` so the
+        decision derives closed; without it the gate's decision would stay a phantom live
+        decision (mis-rendered on the board, and — worse — blocking REAP from ever
+        reclaiming the chunk).
+
+        The landed node's executor decides what happens next (issue #111), mirroring
+        ``_respond``'s transition-into-a-hub-node branch: when the landed node is
+        hub-executed, the route is **retained** (``release_route=False``) rather than
+        released, the hub node is run inline via ``HubNodeExecutor.run`` — idempotent and
+        resumable, so a re-flush after a mid-run crash resumes rather than wedging the
+        chunk — and the response is ``HUB_NODE_TAKEN`` so the holding runner's next ADVANCE
+        poll observes the outcome. Otherwise (a runner-landing migration) the route is
+        released as before and the response is ``MIGRATED``, re-queuing the chunk for any
+        runner to claim.
+
+        When the caller could **not** resolve the target (``target_graph is None`` — the
+        ``graph:<name>`` names no enabled graph): ``record_escalation`` so the chunk
+        derives ``needs_human`` (visible on the board), rather than crash or silently drop
+        — and return ``PARKED_AT_GATE`` so the runner stops without re-leasing (a
+        ``FAILURE`` would requeue and *supersede* the very escalation just recorded).
+        Idempotent on replay by the migration natural key (checked in ``apply``) and, on
+        the escalation branch, by an existing escalation at this epoch."""
         if target_graph is None:
             facts = self._chunks.load_facts(chunk.chunk_id)
             already = facts is not None and any(e.epoch == submission.epoch for e in facts.escalations)
@@ -292,20 +307,31 @@ class ApplyService:
                 detail=f"cross-graph target `{edge.target_graph}` did not resolve; chunk escalated for a human",
             )
         submitted = submission.artifacts if artifacts is None else artifacts
+        landed_node_id = landing_node(target_graph, from_node.name)
+        landed_node = target_graph.node_by_id(landed_node_id)
+        lands_on_hub = landed_node is not None and landed_node.executor is Executor.HUB
         self._chunks.record_migration(
             chunk.chunk_id,
             from_node_id=from_node.node_id,
             from_graph_id=from_node.graph_id,
             to_graph_id=target_graph.graph_id,
-            landed_node_id=landing_node(target_graph, from_node.name),
+            landed_node_id=landed_node_id,
             choice_name=submission.choice,
             decision_id=submission.decision_id,
             model=edge.model,
             epoch=submission.epoch,
             at=self._clock.now(),
             artifacts=[self._row(chunk, from_node, submission.epoch, a) for a in submitted],
+            release_route=not lands_on_hub,
         )
         _CP_MIGRATE_AFTER_RECORD.reached()
+        if lands_on_hub:
+            assert landed_node is not None
+            self._hub_node_executor.run(chunk, target_graph, landed_node, epoch=submission.epoch)
+            return ApplyResponse(
+                outcome=ApplyOutcome.HUB_NODE_TAKEN,
+                detail=f"migration landed on hub node `{landed_node.name}`; poll the chunk for the outcome",
+            )
         return _migrated(from_node, target_graph)
 
     def _respond(

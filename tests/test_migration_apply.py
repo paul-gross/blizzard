@@ -61,6 +61,44 @@ nodes:
           to: build
 """
 
+# A target graph whose landing node (name-matching the source's `build`) is
+# hub-executed (issue #111) — mirrors `_BUILD_DELIVER_YAML`'s `deliver` node shape
+# (a `run:` list + a judgement with `success`/`failure` choices), but under the
+# name the source's migrating node lands on by name-match. `success` routes onward
+# to a runner node (never straight to `done`) so the inline run's own route-retention
+# (a non-terminal hub-step transition releases nothing, `_route`'s
+# `release_route=to_node_id == RESERVED_TERMINAL`) is what the test observes, not the
+# terminal chunk's own route release.
+_HUB_TARGET_YAML = """
+name: triage
+entry: build
+nodes:
+  build:
+    executor: hub
+    run:
+      - command: "true"
+    judgement:
+      choices:
+        success:
+          description: Delivered.
+          to: review
+        failure:
+          description: Failed to deliver.
+          to: build
+  review:
+    executor: runner
+    prompt: Review the delivery.
+    judgement:
+      prompt: Assess.
+      choices:
+        pass:
+          description: Done.
+          to: done
+        fail:
+          description: Retry.
+          to: build
+"""
+
 # A gate-source graph whose **human gate's** resolved choice is itself the cross-graph
 # migration (issue #90 M1). build (worker, pass) -> approve-gate (human, approve migrates
 # to graph:triage). The resolving migration must close the gate's decision — a migration
@@ -95,7 +133,9 @@ nodes:
 """
 
 
-def _setup(hub, *, target_name: str, mint_target: bool) -> tuple[str, str]:  # type: ignore[no-untyped-def]
+def _setup(
+    hub, *, target_name: str, mint_target: bool, target_yaml: str = _TARGET_YAML
+) -> tuple[str, str]:  # type: ignore[no-untyped-def]
     """Mint the source graph (and optionally the target), ingest + promote + claim a
     chunk on the source. Returns (chunk_id, from_node_id)."""
     assert (
@@ -103,7 +143,7 @@ def _setup(hub, *, target_name: str, mint_target: bool) -> tuple[str, str]:  # t
         == 201
     )
     if mint_target:
-        assert hub.client.post("/api/graphs", json={"definition_yaml": _TARGET_YAML}).status_code == 201
+        assert hub.client.post("/api/graphs", json={"definition_yaml": target_yaml}).status_code == 201
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
     hub.client.post(f"/api/chunks/{chunk_id}/promote")
     node_id = hub.client.post(
@@ -152,6 +192,48 @@ def test_a_cross_graph_choice_migrates_repins_and_re_queues_at_the_landing_node(
         json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
     ).json()["envelope"]
     assert envelope["node"]["node_id"] == detail["current_node_id"]
+
+
+def test_a_cross_graph_choice_migrating_onto_a_hub_node_runs_it_inline_and_retains_the_route(
+    tmp_path: Path,
+) -> None:
+    """A migration whose landing node is hub-executed (issue #111) must not release the
+    route the way a runner-landing migration does — releasing it would leave the landed
+    hub node's `run:` steps never driven (no holding runner left to poll `hub-advance`).
+    Mirrors `_respond`'s transition-into-a-hub-node branch: run the hub node inline,
+    retain the route, and return `HUB_NODE_TAKEN`."""
+    hub = build_hub(tmp_path)
+    chunk_id, node_id = _setup(hub, target_name="triage", mint_target=True, target_yaml=_HUB_TARGET_YAML)
+    triage_id = next(g["graph_id"] for g in hub.client.get("/api/graphs").json() if g["name"] == "triage")
+
+    resp = _migrate(hub, chunk_id, node_id)
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["outcome"] == "hub_node_taken"  # not "migrated" — the runner keeps holding
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["graph_id"] == triage_id  # still re-pinned to the target graph
+    # The route was RETAINED, not released: the inline hub run's `success` choice routed
+    # onward to a non-terminal runner node (`review`), so the chunk derives `running` (a
+    # live route) rather than `ready` (re-queued, claimable) the way a runner-landing
+    # migration's target does.
+    assert detail["status"] == "running"
+    assert detail["current_node_name"] == "review"
+    # The triage node's reasoning asset still carried across the migration.
+    assert any(a["name"] == "triage-notes" for a in detail["artifacts"])
+    # The landed hub node's inline run recorded its own run-step log artifact (#65).
+    assert any(a["name"].startswith("hub-log.") for a in detail["artifacts"])
+
+    # The observable consequence of a retained route: a fresh claim on this same chunk
+    # loses the race — 409, not a hand-out of the landed node the way the runner-landing
+    # test's re-claim succeeds.
+    conflict = hub.client.post(
+        "/api/fleet/routes",
+        json={"chunk_id": chunk_id, "runner_id": "r2", "workspace_id": "w1", "environment_ids": ["e"]},
+    )
+    assert conflict.status_code == 409, conflict.text
+    # Nor does the chunk appear as a claimable ready chunk in the queue.
+    assert all(e["chunk_id"] != chunk_id for e in hub.client.get("/api/queue/peek").json()["entries"])
 
 
 def test_an_unresolvable_cross_graph_target_escalates_to_needs_human(tmp_path: Path) -> None:

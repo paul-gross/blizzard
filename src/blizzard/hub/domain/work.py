@@ -285,6 +285,12 @@ class MigrationFact:
     ``from_node_id``/``from_graph_id``/``choice_name`` describe the edge for the history
     view. The status derivations key on ``(recorded_at, epoch)`` supersession of the
     newest transition and read ``landed_node_id``.
+
+    ``landed_node_executor`` is the landing node's executor facet, resolved at read time
+    from ``graph_nodes.executor`` against ``to_graph_id`` — mirroring
+    :attr:`TransitionFact.to_node_executor` — so a migration landing on a hub-executed
+    node derives ``delivering``, not ``ready`` (issue #111). Defaults to
+    ``Executor.RUNNER`` so existing constructions that predate this field still work.
     """
 
     from_node_id: str | None
@@ -295,6 +301,7 @@ class MigrationFact:
     model: str | None
     epoch: int
     recorded_at: datetime
+    landed_node_executor: Executor = Executor.RUNNER
 
 
 @dataclass(frozen=True)
@@ -649,11 +656,15 @@ def newest_transition_is_terminal(facts: ChunkFacts) -> bool:
 def _newest_transition_enters_hub_node(facts: ChunkFacts) -> bool:
     """The newest accepted transition's target is a hub-executed node.
 
-    A later migration supersedes it (issue #90) — a re-queued chunk derives ``ready``, not
-    ``delivering`` off a pre-migration hub-node transition.
+    A later migration supersedes it (issue #90) — a re-queued chunk derives its status off
+    the migration's own landing node, not the pre-migration transition. That landing node
+    can itself be hub-executed (issue #111): a migration re-pinning the chunk onto a hub
+    node is retained by the hub exactly as a transition into one is, so it derives
+    ``delivering``, not ``ready``.
     """
     if _latest_movement_is_migration(facts):
-        return False
+        migration = newest_migration(facts)
+        return migration is not None and migration.landed_node_executor is Executor.HUB
     transition = newest_transition(facts)
     return transition is not None and transition.to_node_executor is Executor.HUB
 
@@ -1227,20 +1238,25 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         epoch: int,
         at: datetime,
         artifacts: list[ArtifactRow],
+        release_route: bool = True,
     ) -> bool:
         """Record a cross-graph migration atomically and idempotently (issue #90).
 
         In one transaction: the ``chunk_migrations`` fact, the ``chunks.graph_id`` re-pin
-        (+ ``chunks.model`` when ``model`` is given), the ``route_released``, and the
-        submitting node-step's ``artifacts`` (so the triage node's reasoning asset carries
-        to the landing claim — the migration branch bypasses :meth:`record_transition`,
-        where a step's artifacts normally commit). When ``decision_id`` is set — a human
-        gate's resolved choice was itself the migration — the fact carries it so that
-        decision derives closed (a migration writes no transitions row; an unclosed gate
-        decision mis-renders the board and wedges REAP recovery). Idempotent by
-        ``(chunk_id, from_node_id, epoch)`` — a redelivery replay writes nothing. No lease
-        is minted: the fact is recorded at the submitting epoch, and the next claim mints a
-        fresh higher one. Returns True iff it wrote, False on a replay."""
+        (+ ``chunks.model`` when ``model`` is given), the ``route_released`` (unless
+        ``release_route`` is ``False``), and the submitting node-step's ``artifacts`` (so
+        the triage node's reasoning asset carries to the landing claim — the migration
+        branch bypasses :meth:`record_transition`, where a step's artifacts normally
+        commit). When ``decision_id`` is set — a human gate's resolved choice was itself
+        the migration — the fact carries it so that decision derives closed (a migration
+        writes no transitions row; an unclosed gate decision mis-renders the board and
+        wedges REAP recovery). ``release_route`` defaults to ``True`` — the runner-landing
+        behavior — but a hub-landing migration (issue #111) passes ``False`` so the
+        holding runner's route is retained: it is the one that polls the landed hub node to
+        completion, exactly as a transition-into-a-hub-node retains the route. Idempotent
+        by ``(chunk_id, from_node_id, epoch)`` — a redelivery replay writes nothing. No
+        lease is minted: the fact is recorded at the submitting epoch, and the next claim
+        mints a fresh higher one. Returns True iff it wrote, False on a replay."""
         ...
 
     def record_queue_position(self, chunk_id: str, *, position: float, at: datetime) -> None:
