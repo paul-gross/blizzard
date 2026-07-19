@@ -24,9 +24,11 @@ const runner = (id: string, over: Partial<Record<string, unknown>> = {}) => ({
 const CEILING_REASON = 'spend ceiling $5.00 reached over the trailing 24h (spend $7.00)';
 const RUNNERS = {
   runners: [
-    runner('rn_online'),
+    // rn_online reports a 4-slot pool (#69); rn_local's capacity is null — an older client
+    // that predates the field — so its row renders no slot bar.
+    runner('rn_online', { env_capacity: 4 }),
     runner('rn_paused', { hub_paused: true }),
-    runner('rn_local', { locally_paused: true }),
+    runner('rn_local', { locally_paused: true, env_capacity: null }),
     runner('rn_both', { hub_paused: true, locally_paused: true }),
     runner('rn_ceiling', {
       locally_paused: true,
@@ -48,6 +50,7 @@ const CHUNKS = [
     current_node_name: 'build',
     model: 'claude-opus-4-8',
     runner_id: 'rn_online',
+    environment_count: 2, // a grouped route holding two envs — the slot bar's numerator
   },
   {
     chunk_id: 'ch_01other000000000000000000000',
@@ -106,6 +109,22 @@ describe('RunnerPanel', () => {
     expect(claims[0].textContent).toContain('build');
     expect(el.querySelectorAll('[data-runner="rn_local"] [data-testid="runner-claim"]')).toHaveLength(0);
     expect(el.querySelector('[data-runner="rn_paused"] [data-testid="runner-hub-paused"]')).not.toBeNull();
+  });
+
+  it('renders a slot bar from env_capacity and summed environment_count, omitting it when null (#69)', async () => {
+    const fixture = TestBed.createComponent(RunnerPanel);
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    // rn_online: 4-slot capacity, one chunk holding 2 envs → a 4-cell bar, 2 filled.
+    const bar = el.querySelector('[data-runner="rn_online"] [data-testid="runner-slot-bar"]');
+    expect(bar).not.toBeNull();
+    expect(bar?.querySelectorAll('.cell')).toHaveLength(4);
+    expect(bar?.querySelectorAll('.cell.on')).toHaveLength(2);
+    expect(bar?.querySelector('[data-testid="slot-bar-label"]')?.textContent?.trim()).toBe('2/4 slots');
+
+    // rn_local's capacity is null — no bar rather than a zero-slot one.
+    expect(el.querySelector('[data-runner="rn_local"] [data-testid="runner-slot-bar"]')).toBeNull();
   });
 
   it('distinguishes the hub brake, the runner\'s own, and both (#43)', async () => {

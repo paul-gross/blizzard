@@ -16,6 +16,7 @@ const row = (id: string, over: Partial<RunnerRow> = {}): RunnerRow => ({
   hub_paused: false,
   locally_paused: false,
   claims: [],
+  used: 0,
   ...over,
 });
 
@@ -64,6 +65,28 @@ describe('RunnerPanelView', () => {
     expect(el.querySelector('[data-testid="runner-locally-paused"]')?.getAttribute('title')).toBe(
       'spend ceiling $5.00 reached',
     );
+  });
+
+  it('renders a slot bar for a reported capacity, with used filled of total (#69)', async () => {
+    const fixture = TestBed.createComponent(RunnerPanelView);
+    fixture.componentRef.setInput('rows', [row('rn_cap', { env_capacity: 4, used: 2 })]);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const bar = el.querySelector('[data-runner="rn_cap"] [data-testid="runner-slot-bar"]');
+    expect(bar).not.toBeNull();
+    expect(bar?.querySelectorAll('.cell')).toHaveLength(4);
+    expect(bar?.querySelectorAll('.cell.on')).toHaveLength(2);
+    expect(bar?.querySelector('[data-testid="slot-bar-label"]')?.textContent?.trim()).toBe('2/4 slots');
+  });
+
+  it('omits the slot bar for a runner whose capacity is null (older client) (#69)', async () => {
+    const fixture = TestBed.createComponent(RunnerPanelView);
+    fixture.componentRef.setInput('rows', [row('rn_nocap', { env_capacity: null, used: 0 })]);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-runner="rn_nocap"] [data-testid="runner-slot-bar"]')).toBeNull();
   });
 
   it('emits togglePause with the row when the pause/resume button is activated', async () => {
