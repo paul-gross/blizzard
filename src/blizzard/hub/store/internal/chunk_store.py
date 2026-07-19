@@ -167,9 +167,7 @@ class ChunkStore:
                     epoch=m.epoch,
                     recorded_at=m.recorded_at,
                 )
-                for m in conn.execute(
-                    select(s.chunk_migrations).where(s.chunk_migrations.c.chunk_id == chunk_id)
-                ).all()
+                for m in conn.execute(select(s.chunk_migrations).where(s.chunk_migrations.c.chunk_id == chunk_id)).all()
             ]
             pauses = [
                 PauseFact(paused=p.paused, set_at=p.set_at, set_by=p.set_by)
@@ -900,6 +898,7 @@ class ChunkStore:
         to_graph_id: str,
         landed_node_id: str | None,
         choice_name: str | None,
+        decision_id: str | None = None,
         model: str | None,
         epoch: int,
         at: datetime,
@@ -912,7 +911,12 @@ class ChunkStore:
         route, **and persist this node-step's artifacts** (MUST-FIX 1 — the migration
         branch bypasses ``record_transition``, which is where a step's artifacts normally
         commit; without this the triage node's reasoning asset the carry-over relies on is
-        never persisted). Guarded by the natural key ``(chunk_id, from_node_id, epoch)``: a
+        never persisted). When ``decision_id`` is given — a **human gate's** resolved
+        choice was itself the cross-graph migration (#90) — it is stamped on the fact so
+        that decision derives ``transitioned`` (closed), exactly as a resolving transition
+        would; without it the gate's decision would stay live forever (a phantom decision
+        that mis-renders the board and wedges REAP recovery). Guarded by the natural key
+        ``(chunk_id, from_node_id, epoch)``: a
         redelivery replay after a ``kill -9`` re-enters harmlessly, writing nothing a
         second time — the migration is all-or-nothing, never a half-written re-pin with
         orphaned artifacts. Returns True iff it wrote, False on a replay.
@@ -932,6 +936,7 @@ class ChunkStore:
                     to_graph_id=to_graph_id,
                     landed_node_id=landed_node_id,
                     choice_name=choice_name,
+                    decision_id=decision_id,
                     model_after=model,
                     epoch=epoch,
                     recorded_at=at,
@@ -1319,9 +1324,18 @@ class ChunkStore:
         resolution = conn.execute(
             select(s.decision_resolutions).where(s.decision_resolutions.c.decision_id == row.decision_id)
         ).one_or_none()
+        # Closed by the resolving transition that carries this decision — or, when the
+        # gate's resolved choice was itself a cross-graph migration (#90, which writes no
+        # transitions row), by the migration fact stamped with the same decision_id.
         transitioned = (
             conn.execute(
                 select(s.transitions.c.transition_id).where(s.transitions.c.decision_id == row.decision_id).limit(1)
+            ).first()
+            is not None
+            or conn.execute(
+                select(s.chunk_migrations.c.migration_id)
+                .where(s.chunk_migrations.c.decision_id == row.decision_id)
+                .limit(1)
             ).first()
             is not None
         )

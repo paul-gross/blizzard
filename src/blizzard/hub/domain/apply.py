@@ -223,7 +223,10 @@ class ApplyService:
             return _failure(f"gate `{gate_node.name}` has no choice `{submission.choice}`")
         # A human gate's resolved choice may itself target another graph (issue #90) —
         # the migration branch is reached through here too (the gate's decision artifacts
-        # already landed, so the migration carries none of its own).
+        # already landed, so the migration carries none of its own). It threads
+        # ``submission.decision_id`` through, so the resolved decision derives closed —
+        # a migration writes no transitions row, and an unclosed gate decision would wedge
+        # REAP recovery (``steps.py`` skips any chunk whose ``decision`` is non-None).
         if edge.target_graph is not None:
             return self._apply_migration(chunk, gate_node, submission, edge, target_graph, artifacts=[])
         to_node_id = RESERVED_TERMINAL if edge.to_node_name == RESERVED_TERMINAL else _resolve(graph, edge.to_node_name)
@@ -259,7 +262,11 @@ class ApplyService:
         When the caller resolved the target (``target_graph`` set): record the migration
         (which re-pins the graph/model, releases the route, and commits this node-step's
         artifacts atomically), landing on the name-match-else-entry node of the target
-        graph, and return ``MIGRATED``. When the caller could **not** resolve it
+        graph, and return ``MIGRATED``. When this migration is a **human gate's** resolved
+        choice (``submission.decision_id`` set — reached via ``_apply_gate_resolution``),
+        the migration fact carries that ``decision_id`` so the decision derives closed;
+        without it the gate's decision would stay a phantom live decision (mis-rendered on
+        the board, and — worse — blocking REAP from ever reclaiming the chunk). When the caller could **not** resolve it
         (``target_graph is None`` — the ``graph:<name>`` names no enabled graph):
         ``record_escalation`` so the chunk derives ``needs_human`` (visible on the board),
         rather than crash or silently drop — and return ``PARKED_AT_GATE`` so the runner
@@ -292,6 +299,7 @@ class ApplyService:
             to_graph_id=target_graph.graph_id,
             landed_node_id=landing_node(target_graph, from_node.name),
             choice_name=submission.choice,
+            decision_id=submission.decision_id,
             model=edge.model,
             epoch=submission.epoch,
             at=self._clock.now(),

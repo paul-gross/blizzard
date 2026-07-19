@@ -15,7 +15,9 @@ deliver -> land end to end. Tables the thin slice does not yet exercise
 criterion 7); the gate tables (``decisions``, ``decision_resolutions``, ``requeues``)
 land the human-gate loop (MVP criterion 12) and feed the ``waiting_on_human``
 derivation; ``transitions.decision_id`` (carried since P6) is what the resolving
-transition points back at.
+transition points back at — as is ``chunk_migrations.decision_id`` when a gate's
+resolved choice migrates cross-graph (issue #90), so that decision derives closed
+even though a migration writes no transitions row.
 """
 
 from __future__ import annotations
@@ -163,6 +165,11 @@ transitions = Table(
 # graph (nullable only as the schema allowance for "the target's entry"); ``model_after``
 # is the re-pinned model, or null when the migration kept the chunk's current model;
 # ``choice_name`` is the triggering choice (paralleling ``transitions.choice_name``).
+# ``decision_id`` is set only when a **human gate's** resolved choice is itself the
+# cross-graph migration (issue #90): a migration writes no ``transitions`` row, so
+# without pointing back at the decision here it would stay ``transitioned=False`` forever
+# (a phantom live decision that mis-renders the board and wedges REAP recovery). It is
+# null for the ordinary worker-judged migration, which resolves no decision.
 
 chunk_migrations = Table(
     "chunk_migrations",
@@ -174,6 +181,7 @@ chunk_migrations = Table(
     Column("to_graph_id", String, nullable=False),  # the graph re-pinned to
     Column("landed_node_id", String, nullable=True),  # concrete landing node; null = target entry
     Column("choice_name", String, nullable=True),  # the triggering judgement choice
+    Column("decision_id", String, nullable=True),  # gate migrations only — the decision this closes (#90)
     Column("model_after", String, nullable=True),  # the re-pinned model, or null (kept current)
     Column("epoch", Integer, nullable=False),  # the submitting fence; the natural-key third part
     Column("recorded_at", UtcDateTime, nullable=False),

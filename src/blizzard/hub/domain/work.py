@@ -1222,6 +1222,7 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         to_graph_id: str,
         landed_node_id: str | None,
         choice_name: str | None,
+        decision_id: str | None = None,
         model: str | None,
         epoch: int,
         at: datetime,
@@ -1233,10 +1234,13 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         (+ ``chunks.model`` when ``model`` is given), the ``route_released``, and the
         submitting node-step's ``artifacts`` (so the triage node's reasoning asset carries
         to the landing claim — the migration branch bypasses :meth:`record_transition`,
-        where a step's artifacts normally commit). Idempotent by ``(chunk_id,
-        from_node_id, epoch)`` — a redelivery replay writes nothing. No lease is minted:
-        the fact is recorded at the submitting epoch, and the next claim mints a fresh
-        higher one. Returns True iff it wrote, False on a replay."""
+        where a step's artifacts normally commit). When ``decision_id`` is set — a human
+        gate's resolved choice was itself the migration — the fact carries it so that
+        decision derives closed (a migration writes no transitions row; an unclosed gate
+        decision mis-renders the board and wedges REAP recovery). Idempotent by
+        ``(chunk_id, from_node_id, epoch)`` — a redelivery replay writes nothing. No lease
+        is minted: the fact is recorded at the submitting epoch, and the next claim mints a
+        fresh higher one. Returns True iff it wrote, False on a replay."""
         ...
 
     def record_queue_position(self, chunk_id: str, *, position: float, at: datetime) -> None:
