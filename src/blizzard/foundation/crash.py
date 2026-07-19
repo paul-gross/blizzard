@@ -92,6 +92,7 @@ _INSTRUMENTED_MODULES = (
     "blizzard.runner.loop.steps",
     "blizzard.hub.delivery.hub_node",
     "blizzard.hub.domain.claim",
+    "blizzard.hub.domain.apply",
 )
 
 

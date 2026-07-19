@@ -345,3 +345,74 @@ def test_a_double_park_after_a_repause_is_still_a_violation(tmp_path: Path) -> N
         conn.execute(insert(runner.pause_parks).values(lease_id="lease_a", chunk_id="ch_1", parked_at=t2))
     slugs = {v.invariant for v in check_runner_store(engine)}
     assert "runner:one-open-pause-park-per-lease" in slugs
+
+
+def _seed_migration(conn, *, to_graph: str, model_after: str | None, pin_graph: str, pin_model: str) -> None:
+    """A chunk pinned to (pin_graph, pin_model) with one migration targeting to_graph (#90)."""
+    conn.execute(insert(hub.chunks).values(chunk_id="ch_1", graph_id=pin_graph, minted_at=_NOW, model=pin_model))
+    conn.execute(
+        insert(hub.chunk_migrations).values(
+            migration_id="mg_1",
+            chunk_id="ch_1",
+            from_node_id="nd_from",
+            from_graph_id="gr_src",
+            to_graph_id=to_graph,
+            landed_node_id="nd_landed",
+            choice_name="migrate",
+            model_after=model_after,
+            epoch=1,
+            recorded_at=_NOW,
+        )
+    )
+
+
+def test_a_consistent_migration_is_not_a_violation(tmp_path: Path) -> None:
+    """The atomic re-pin landed with the fact: the chunk's pin matches its migration (#90)."""
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        _seed_migration(conn, to_graph="gr_triage", model_after="claude-x", pin_graph="gr_triage", pin_model="claude-x")
+    assert check_hub_store(engine) == []
+
+
+def test_a_migration_without_its_graph_repin_is_a_violation(tmp_path: Path) -> None:
+    """``hub:migration-pin-consistent`` — a migration fact whose graph re-pin never landed:
+    the half-write a kill -9 in the ``migrate.`` window must never leave (#90)."""
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        _seed_migration(conn, to_graph="gr_triage", model_after=None, pin_graph="gr_src", pin_model="m")
+    slugs = {v.invariant for v in check_hub_store(engine)}
+    assert "hub:migration-pin-consistent" in slugs
+
+
+def test_a_migration_without_its_model_repin_is_a_violation(tmp_path: Path) -> None:
+    """The graph pin landed but the model re-pin did not — still a torn migration write (#90)."""
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        _seed_migration(conn, to_graph="gr_triage", model_after="claude-x", pin_graph="gr_triage", pin_model="stale")
+    slugs = {v.invariant for v in check_hub_store(engine)}
+    assert "hub:migration-pin-consistent" in slugs
+
+
+def test_two_migrations_at_one_node_epoch_is_a_violation(tmp_path: Path) -> None:
+    """``hub:one-migration-per-node-epoch`` — the idempotency natural key failed; a
+    crash-replay double-landed the migration (#90)."""
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(insert(hub.chunks).values(chunk_id="ch_1", graph_id="gr_triage", minted_at=_NOW, model="m"))
+        for mid in ("mg_1", "mg_2"):
+            conn.execute(
+                insert(hub.chunk_migrations).values(
+                    migration_id=mid,
+                    chunk_id="ch_1",
+                    from_node_id="nd_from",
+                    from_graph_id="gr_src",
+                    to_graph_id="gr_triage",
+                    landed_node_id="nd_landed",
+                    choice_name="migrate",
+                    model_after=None,
+                    epoch=1,
+                    recorded_at=_NOW,
+                )
+            )
+    slugs = {v.invariant for v in check_hub_store(engine)}
+    assert "hub:one-migration-per-node-epoch" in slugs

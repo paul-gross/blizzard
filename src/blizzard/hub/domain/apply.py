@@ -25,6 +25,7 @@ a plain worker transition out of a gate is rejected (human signoff required).
 from __future__ import annotations
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.ids import ARTIFACT_PREFIX, DECISION_PREFIX, TRANSITION_PREFIX, mint
 from blizzard.hub.config import ROUTE_TOKEN_WARN
 from blizzard.hub.delivery.hub_node import HubNodeExecutor
@@ -46,6 +47,17 @@ from blizzard.wire.completion import CompletionSubmission, SubmittedArtifact
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 
 _TERMINAL_STATUSES = frozenset({ChunkStatus.STOPPED, ChunkStatus.DONE})
+
+# The cross-graph migration crash window (issue #90, ``bzh:crash-point-registry``): the
+# migration fact, the graph/model re-pin, the route release, and the node-step's
+# artifacts are already committed in one transaction — a ``kill -9`` here loses only the
+# ``MIGRATED`` response, so the runner's replayed completion re-derives it via the
+# ``accepted_migration`` probe (idempotent), and the invariant checker's
+# ``hub:migration-pin-consistent`` holds because the re-pin landed atomically with the fact.
+_CP_MIGRATE_AFTER_RECORD = crashpoint(
+    "migrate.after-record.before-response",
+    "migration recorded (graph/model re-pinned, route released, artifacts committed); MIGRATED response not returned",
+)
 
 
 def _failure(detail: str) -> ApplyResponse:
@@ -285,6 +297,7 @@ class ApplyService:
             at=self._clock.now(),
             artifacts=[self._row(chunk, from_node, submission.epoch, a) for a in submitted],
         )
+        _CP_MIGRATE_AFTER_RECORD.reached()
         return _migrated(from_node, target_graph)
 
     def _respond(

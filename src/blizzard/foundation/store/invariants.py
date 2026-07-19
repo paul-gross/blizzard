@@ -312,6 +312,10 @@ def check_hub_store(engine: Engine) -> list[Violation]:
         if (live_slots or 0) > 1:
             violations.append(Violation("hub:one-live-exec-slot", f"{live_slots} hub-execution slots are live at once"))
 
+    # hub:one-migration-per-node-epoch + hub:migration-pin-consistent — a cross-graph
+    # migration (#90) is all-or-nothing: recorded once per (chunk, from_node, epoch), and
+    # its re-pin lands with it (never a migration fact without the graph/model pin moving).
+    violations.extend(_check_migrations(engine))
     # hub:merge-queue-single-state — a delivered chunk's newest transition is the
     # terminal, so it never reads as both landed and mid-flight (two states at once).
     # hub:derived-status-total — every chunk derives exactly one status without panic.
@@ -319,6 +323,67 @@ def check_hub_store(engine: Engine) -> list[Violation]:
     # hub:live-route-has-token — every chunk with a live route has a live route token
     # (issue #84b/#84a).
     violations.extend(_check_route_tokens(engine))
+    return violations
+
+
+def _check_migrations(engine: Engine) -> list[Violation]:
+    """Assert a cross-graph migration (#90) is atomic and idempotent in the durable facts.
+
+    ``hub:one-migration-per-node-epoch`` — at most one ``chunk_migrations`` row per
+    ``(chunk, from_node, epoch)``: the natural key ``record_migration`` guards, so a
+    crash-replay never lands a second migration. ``hub:migration-pin-consistent`` — a
+    migrated chunk's ``graph_id`` (and its ``model`` when the newest migration re-pinned
+    one) equals that newest migration's target: the re-pin is written in the **same
+    transaction** as the fact, so a fact without its pin — or a pin without its fact — is
+    the half-write a ``kill -9`` in the ``migrate.`` window must never leave.
+    """
+    violations: list[Violation] = []
+    with engine.connect() as conn:
+        key = Counter(
+            (row[0], row[1], row[2])
+            for row in conn.execute(
+                select(
+                    hub.chunk_migrations.c.chunk_id,
+                    hub.chunk_migrations.c.from_node_id,
+                    hub.chunk_migrations.c.epoch,
+                )
+            )
+        )
+        for (chunk_id, from_node, epoch), n in key.items():
+            if n > 1:
+                violations.append(
+                    Violation(
+                        "hub:one-migration-per-node-epoch",
+                        f"chunk {chunk_id} node {from_node} epoch {epoch} has {n} migrations",
+                    )
+                )
+
+        newest: dict[str, object] = {}
+        for m in conn.execute(select(hub.chunk_migrations)):
+            cur = newest.get(m.chunk_id)
+            if cur is None or (m.recorded_at, m.epoch) >= (cur.recorded_at, cur.epoch):  # type: ignore[attr-defined]
+                newest[m.chunk_id] = m
+        chunks = {c.chunk_id: c for c in conn.execute(select(hub.chunks))}
+        for chunk_id, m in newest.items():
+            chunk = chunks.get(chunk_id)
+            if chunk is None:
+                continue
+            if chunk.graph_id != m.to_graph_id:  # type: ignore[attr-defined]
+                violations.append(
+                    Violation(
+                        "hub:migration-pin-consistent",
+                        f"chunk {chunk_id} pinned {chunk.graph_id} but its newest migration targets "
+                        f"{m.to_graph_id}",  # type: ignore[attr-defined]
+                    )
+                )
+            elif m.model_after is not None and chunk.model != m.model_after:  # type: ignore[attr-defined]
+                violations.append(
+                    Violation(
+                        "hub:migration-pin-consistent",
+                        f"chunk {chunk_id} model {chunk.model} but its newest migration re-pinned "
+                        f"{m.model_after}",  # type: ignore[attr-defined]
+                    )
+                )
     return violations
 
 
