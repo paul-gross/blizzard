@@ -4,6 +4,8 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 export interface KitChipOption {
   readonly value: string;
   readonly label: string;
+  /** Optional per-chip test hook, forwarded to the rendered {@link KitChip}. */
+  readonly testid?: string;
 }
 
 /**
@@ -16,7 +18,13 @@ export interface KitChipOption {
   selector: 'fleet-kit-chip',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <button type="button" class="chip" [class.selected]="selected()" [attr.data-testid]="testid()">
+    <button
+      type="button"
+      class="chip"
+      [class.selected]="selected()"
+      [attr.aria-pressed]="selected()"
+      [attr.data-testid]="testid()"
+    >
       <ng-content />
     </button>
   `,
@@ -61,7 +69,11 @@ export class KitChip {
   template: `
     <div class="row">
       @for (option of options(); track option.value) {
-        <fleet-kit-chip [selected]="option.value === selectedValue()" (click)="choose.emit(option.value)">
+        <fleet-kit-chip
+          [selected]="option.value === selectedValue()"
+          [testid]="option.testid ?? null"
+          (click)="choose.emit(option.value)"
+        >
           {{ option.label }}
         </fleet-kit-chip>
       }

@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
-import { ageMs, compactRef, formatAge, type runnerApi } from 'fleet';
+import { ageMs, compactRef, formatAge, KitChips, type KitChipOption, type runnerApi } from 'fleet';
 
 import type { MachineChunkStatus } from './chunk-status';
 import { HeartbeatFreshness } from './heartbeat-freshness';
@@ -24,7 +24,7 @@ import { TranscriptPanel } from './transcript-panel';
 @Component({
   selector: 'local-machine-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [HeartbeatFreshness, TranscriptPanel],
+  imports: [HeartbeatFreshness, KitChips, TranscriptPanel],
   template: `
     <div class="detail" data-testid="machine-detail">
       @if (newestLease(); as l) {
@@ -69,22 +69,13 @@ import { TranscriptPanel } from './transcript-panel';
             </div>
           }
         </div>
-        @if (leases().length > 1) {
-          <div class="attempts" role="tablist" data-testid="attempt-tabs">
-            @for (att of leases(); track att.lease_id) {
-              <button
-                type="button"
-                role="tab"
-                class="tab"
-                [class.active]="att.lease_id === activeAttemptLeaseId()"
-                [attr.aria-selected]="att.lease_id === activeAttemptLeaseId()"
-                [attr.data-lease-id]="att.lease_id"
-                data-testid="attempt-tab"
-                (click)="selectAttempt(att.lease_id)"
-              >
-                a{{ att.epoch }} <small>{{ attemptState(att) }}</small>
-              </button>
-            }
+        @if (attemptOptions().length > 1) {
+          <div class="attempts" data-testid="attempt-tabs">
+            <fleet-kit-chips
+              [options]="attemptOptions()"
+              [selectedValue]="activeAttemptLeaseId()"
+              (choose)="selectAttempt($event)"
+            />
           </div>
         }
         <div class="transcript" data-testid="detail-transcript">
@@ -214,40 +205,8 @@ import { TranscriptPanel } from './transcript-panel';
     }
     .attempts {
       flex: none;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 4px;
       padding: 6px 8px;
       border-bottom: 1px solid var(--bezel);
-    }
-    .tab {
-      display: inline-flex;
-      align-items: baseline;
-      gap: 5px;
-      padding: 2px 8px;
-      font-family: inherit;
-      font-size: var(--fs-label);
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--label);
-      background: var(--panel);
-      border: 1px solid var(--bezel);
-      cursor: pointer;
-    }
-    .tab:hover {
-      color: var(--text);
-      border-color: var(--line);
-    }
-    .tab.active {
-      color: var(--amber-hi);
-      border-color: var(--amber);
-    }
-    .tab small {
-      color: var(--label-dim);
-      font-size: var(--fs-label);
-    }
-    .tab.active small {
-      color: var(--amber);
     }
     .transcript {
       flex: 1;
@@ -307,9 +266,19 @@ export class MachineDetail {
     if (chunkId) this.picked.set({ chunkId, leaseId });
   }
 
+  /** One selectable chip per attempt (oldest → newest), keyed by lease id and
+   * labelled with the attempt ordinal + its state, for the `KitChips` tab row. */
+  protected readonly attemptOptions = computed<readonly KitChipOption[]>(() =>
+    this.leases().map((att) => ({
+      value: att.lease_id,
+      label: `a${att.epoch} ${this.attemptState(att)}`,
+      testid: 'attempt-tab',
+    })),
+  );
+
   /** An attempt tab's state hint: the closure reason for a closed attempt (why
    * that attempt ended), else the live lease state. */
-  protected attemptState(att: runnerApi.LeaseView): string {
+  private attemptState(att: runnerApi.LeaseView): string {
     return att.state === 'closed' ? (att.closure_reason ?? 'closed') : att.state;
   }
 

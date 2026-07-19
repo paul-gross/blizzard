@@ -239,9 +239,13 @@ describe('LocalPanel', () => {
       const tabs = el.querySelectorAll('[data-testid="attempt-tab"]');
       expect(tabs).toHaveLength(2);
       // Oldest attempt first, newest last and selected by default.
-      expect(tabs[0].getAttribute('data-lease-id')).toBe('lease_01KXKVVF1J3D6H6VYZ3XYNBBBB');
-      expect(tabs[1].getAttribute('data-lease-id')).toBe('lease_01KXKVVF1J3D6H6VYZ3XYNZPRR');
-      expect(tabs[1].getAttribute('aria-selected')).toBe('true');
+      expect(tabs[0].textContent).toContain('a1');
+      expect(tabs[1].textContent).toContain('a2');
+      expect(tabs[1].getAttribute('aria-pressed')).toBe('true');
+      // The newest attempt's transcript is the default read.
+      expect(stub.forRoute('/api/leases/lease_01KXKVVF1J3D6H6VYZ3XYNZPRR/transcript', 'GET').length).toBeGreaterThan(
+        0,
+      );
     });
 
     it('selecting a lease row selects its chunk — one shared selection across both rails', async () => {
