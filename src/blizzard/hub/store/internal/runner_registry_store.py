@@ -70,9 +70,7 @@ class RunnerRegistryStore:
 
     # --- writes -------------------------------------------------------------
 
-    def upsert_registration(
-        self, runner_id: str, *, workspace_id: str, env_capacity: int | None, at: datetime
-    ) -> bool:
+    def upsert_registration(self, runner_id: str, *, workspace_id: str, env_capacity: int | None, at: datetime) -> bool:
         # `env_capacity` is written on both branches — an unconditional overwrite on refresh
         # is what converges a changed `workspace_envs` on the next re-registration, and
         # writes `None` verbatim (an older client that omits it resets the stored total to

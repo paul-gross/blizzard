@@ -127,9 +127,7 @@ class IReadRunnerRegistry(Protocol):
 class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
     """Read-write registry access — only the domain layer depends on this variant."""
 
-    def upsert_registration(
-        self, runner_id: str, *, workspace_id: str, env_capacity: int | None, at: datetime
-    ) -> bool:
+    def upsert_registration(self, runner_id: str, *, workspace_id: str, env_capacity: int | None, at: datetime) -> bool:
         """Register a runner (idempotent upsert), refreshing ``last_seen_at``.
 
         Returns True if the row was newly created (a first registration), False if it
