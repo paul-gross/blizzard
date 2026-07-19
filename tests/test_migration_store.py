@@ -100,7 +100,8 @@ def test_after_a_migration_the_current_node_is_the_landing_node_and_status_is_re
     assert current_node_id(facts) == "nd_landed"
     assert derive_chunk_status(facts) is ChunkStatus.READY
     # The fact carries the re-pinned model for the audit/history surface.
-    assert newest_migration(facts) is not None and newest_migration(facts).model is None
+    migration = newest_migration(facts)
+    assert migration is not None and migration.model is None
 
 
 @unit
@@ -141,6 +142,7 @@ def test_landing_node_is_name_match_else_entry() -> None:
         FixedClock(_T0),
     )
     build = graph.node_by_name("build")
+    assert build is not None
     assert landing_node(graph, "build") == build.node_id  # name match
     assert landing_node(graph, "no-such-node") == graph.entry_node_id  # entry fallback
     assert landing_node(graph, None) == graph.entry_node_id
@@ -187,7 +189,9 @@ def test_record_migration_repins_releases_and_persists_artifacts_in_one_write(tm
     hub = build_hub(tmp_path)
     chunk_id, node_id, target_graph_id = _claimed(hub)
     chunks = cast(IWriteChunkRepository, hub.services.chunks)
-    source_graph_id = hub.services.chunks.get(chunk_id).graph_id
+    pre_migration = hub.services.chunks.get(chunk_id)
+    assert pre_migration is not None
+    source_graph_id = pre_migration.graph_id
 
     wrote = chunks.record_migration(
         chunk_id,
@@ -204,6 +208,7 @@ def test_record_migration_repins_releases_and_persists_artifacts_in_one_write(tm
 
     assert wrote is True
     chunk = hub.services.chunks.get(chunk_id)
+    assert chunk is not None
     assert chunk.graph_id == target_graph_id  # re-pinned
     assert chunk.model == "claude-sonnet-5"  # model re-pin
     assert hub.services.chunks.route_of(chunk_id) is None  # route released
@@ -212,6 +217,7 @@ def test_record_migration_repins_releases_and_persists_artifacts_in_one_write(tm
     assert any(a.name == "triage-notes" for a in hub.services.chunks.load_artifacts(chunk_id))
     # The migration is its own fact — no transitions row was written for it.
     facts = hub.services.chunks.load_facts(chunk_id)
+    assert facts is not None
     assert len(facts.migrations) == 1
     assert chunks.accepted_transition_target(chunk_id, from_node_id=node_id, epoch=1) is None
 
@@ -221,7 +227,9 @@ def test_record_migration_is_idempotent_on_replay(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id, node_id, target_graph_id = _claimed(hub)
     chunks = cast(IWriteChunkRepository, hub.services.chunks)
-    source_graph_id = hub.services.chunks.get(chunk_id).graph_id
+    pre_migration = hub.services.chunks.get(chunk_id)
+    assert pre_migration is not None
+    source_graph_id = pre_migration.graph_id
 
     def do_migrate() -> bool:
         return chunks.record_migration(

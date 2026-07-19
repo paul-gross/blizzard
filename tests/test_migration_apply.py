@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import httpx
 import pytest
 
 from tests.support import build_hub, pointer_token, report_lease
@@ -113,7 +114,7 @@ def _setup(hub, *, target_name: str, mint_target: bool) -> tuple[str, str]:  # t
     return chunk_id, node_id
 
 
-def _migrate(hub, chunk_id: str, node_id: str, *, epoch: int = 1) -> dict:  # type: ignore[no-untyped-def]
+def _migrate(hub, chunk_id: str, node_id: str, *, epoch: int = 1) -> httpx.Response:  # type: ignore[no-untyped-def]
     return hub.client.post(
         f"/api/fleet/chunks/{chunk_id}/completions",
         json={
@@ -177,6 +178,7 @@ def test_a_replayed_migration_completion_is_idempotent(tmp_path: Path) -> None:
     assert second.json()["outcome"] == "migrated"
 
     facts = hub.services.chunks.load_facts(chunk_id)
+    assert facts is not None
     assert len(facts.migrations) == 1  # exactly one migration fact, no duplicate
 
 

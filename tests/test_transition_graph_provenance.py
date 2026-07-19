@@ -17,7 +17,7 @@ from sqlalchemy import insert
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.api.chunks import _history_views
-from blizzard.hub.domain.graph import Executor, parse_graph_doc
+from blizzard.hub.domain.graph import Executor, Graph, parse_graph_doc
 from blizzard.hub.domain.graph_authoring import reify_graph
 from blizzard.hub.domain.work import ChunkFacts, TransitionFact
 from blizzard.hub.store import schema as s
@@ -28,7 +28,7 @@ pytestmark = pytest.mark.unit
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 
-def _two_node_graph(entry: str, other: str, *, other_executor: str) -> object:
+def _two_node_graph(entry: str, other: str, *, other_executor: str) -> Graph:
     """A minimal two-node graph: a worker ``entry`` routing to ``other``."""
     other_body: dict[str, object] = (
         {
@@ -67,6 +67,7 @@ def test_history_view_resolves_each_step_name_against_its_own_graph() -> None:
     a_review = graph_a.node_by_name("review")
     b_triage = graph_b.node_by_name("triage")
     b_fix = graph_b.node_by_name("fix")
+    assert a_build is not None and a_review is not None and b_triage is not None and b_fix is not None
 
     facts = ChunkFacts(
         minted=True,

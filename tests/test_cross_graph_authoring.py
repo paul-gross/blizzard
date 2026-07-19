@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.graph import classify_choice_target, parse_graph_doc, target_graph_of
+from blizzard.hub.domain.graph import GraphDoc, classify_choice_target, parse_graph_doc, target_graph_of
 from blizzard.hub.domain.graph_authoring import reify_graph
 from blizzard.hub.domain.graph_validation import validate_graph
 from tests.support import build_hub
@@ -29,7 +29,7 @@ _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 _POINTER = {"source": "default", "ref": "9"}
 
 
-def _doc(*, to: str, model: str | None = None) -> object:
+def _doc(*, to: str, model: str | None = None) -> GraphDoc:
     """A build graph whose ``pass`` choice routes to ``to`` (with an optional model)."""
     pass_choice: dict[str, object] = {"description": "done", "to": to}
     if model is not None:
@@ -74,6 +74,7 @@ def test_classify_choice_target_distinguishes_node_graph_and_malformed() -> None
 def test_cross_graph_target_parses_reifies_and_validates() -> None:
     doc = _doc(to="graph:default-delivery")
     build = doc.node("build")
+    assert build is not None and build.judgement is not None
     pass_choice = next(c for c in build.judgement.choices if c.name == "pass")
     assert pass_choice.target_graph == "default-delivery"
 
@@ -105,6 +106,7 @@ def test_same_graph_to_a_nonexistent_sibling_still_errors() -> None:
 def test_per_choice_model_override_parses_and_reifies() -> None:
     doc = _doc(to="graph:default-delivery", model="claude-sonnet-5")
     build = doc.node("build")
+    assert build is not None and build.judgement is not None
     pass_choice = next(c for c in build.judgement.choices if c.name == "pass")
     assert pass_choice.model == "claude-sonnet-5"
 
