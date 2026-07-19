@@ -5,15 +5,22 @@ import { formatCost, formatTokens } from '../cost-format';
 import { formatWhen } from '../when';
 
 /** One judged node on the timeline: the node, the verdict that closed it, and where
- * that verdict routed the chunk — a transition re-read node-first for display. */
+ * that verdict routed the chunk — a transition re-read node-first for display. A
+ * `migration` step (issue #90) is the same shape re-read as a graph-to-graph hop: its
+ * `toName` is `to_graph/landed_node`, and `graphName` labels the graph the step happened
+ * in so a two-graph history is legible. `sortKey` is the raw `recorded_at` used to weave
+ * transitions and migrations into one chronological timeline. */
 interface HistoryRow {
+  readonly kind: 'transition' | 'migration';
   readonly epoch: number;
   readonly nodeId: string | null;
   readonly nodeName: string;
+  readonly graphName: string | null;
   readonly verdict: string | null;
   readonly toId: string;
   readonly toName: string;
   readonly when: string;
+  readonly sortKey: string;
 }
 
 /** The synthetic timeline row for the node currently in flight — see {@link ChunkTimeline.activeRow}. */
@@ -63,12 +70,22 @@ interface StepUsageTotal {
     } @else {
       <ol class="timeline" data-testid="history">
         @for (row of historyRows(); track $index) {
-          <li class="step" data-testid="history-step" [attr.data-choice]="row.verdict">
-            <span class="att">{{ row.epoch }}</span>
-            <span class="nd" [attr.title]="row.nodeId">{{ row.nodeName }}</span>
+          <li
+            class="step"
+            [attr.data-testid]="row.kind === 'migration' ? 'history-migration-step' : 'history-step'"
+            [attr.data-choice]="row.kind === 'migration' ? 'migrated' : row.verdict"
+          >
+            <span class="att">{{ row.kind === 'migration' ? '⤳' : row.epoch }}</span>
+            <span class="nd" [attr.title]="row.nodeId">
+              @if (multiGraph() && row.graphName) {
+                <span class="gr" data-testid="history-graph">{{ row.graphName }}/</span>
+              }{{ row.nodeName }}</span
+            >
             <!-- The judgement that closed the node, in a column of its own so the
                  verdicts read down the timeline aligned, then where it routed the
-                 chunk — the fail loop's "→ build" consequence, dimmed. -->
+                 chunk — the fail loop's "→ build" consequence, dimmed. A migration
+                 (issue #90) reads its verdict as the choice that hopped graphs and
+                 routes to the target graph's landing node. -->
             <span class="jg">
               <span class="verdict" data-testid="history-choice">{{ row.verdict ?? '·' }}</span>
               <span class="jg-to" [attr.title]="row.toId">→ {{ row.toName }}</span>
@@ -179,6 +196,14 @@ interface StepUsageTotal {
     .step[data-choice='run'] .verdict {
       color: var(--cyan);
     }
+    /* A cross-graph migration (issue #90) reads cyan — a deliberate hop, not a failure. */
+    .step[data-choice='migrated'] .verdict {
+      color: var(--cyan);
+    }
+    /* The graph a step happened in, shown only on a two-graph (migrated) timeline. */
+    .step .nd .gr {
+      color: var(--label-dim);
+    }
     .step[data-choice='waiting'] .verdict,
     .step[data-choice='paused'] .verdict {
       color: var(--amber-hi);
@@ -223,21 +248,51 @@ export class ChunkTimeline {
   protected readonly formatCost = formatCost;
   protected readonly formatTokens = formatTokens;
 
-  protected readonly historyRows = computed<readonly HistoryRow[]>(() =>
-    (this.detail().history ?? [])
+  protected readonly historyRows = computed<readonly HistoryRow[]>(() => {
+    const transitions: HistoryRow[] = (this.detail().history ?? [])
       // An entry transition (no origin node) judged nothing — the node it entered
       // shows up as the next row's origin, or as the in-flight row below.
       .filter((t) => t.from_node_id)
       .map((t) => ({
+        kind: 'transition' as const,
         epoch: t.epoch,
         nodeId: t.from_node_id,
         nodeName: t.from_node_name ?? t.from_node_id ?? '·',
+        graphName: t.graph_name ?? null,
         verdict: t.choice_name,
         toId: t.to_node_id,
         toName: t.to_node_name ?? t.to_node_id,
         when: formatWhen(t.recorded_at),
-      })),
-  );
+        sortKey: t.recorded_at,
+      }));
+    // Cross-graph migration steps (issue #90) — the chunk left `from_graph/from_node`
+    // and re-queued at `to_graph/landed_node`, woven into the same timeline by time.
+    const migrations: HistoryRow[] = (this.detail().migrations ?? []).map((m) => ({
+      kind: 'migration' as const,
+      epoch: 0,
+      nodeId: m.from_node_id,
+      nodeName: m.from_node_name ?? m.from_node_id ?? '·',
+      graphName: m.from_graph_name ?? m.from_graph_id,
+      verdict: m.choice_name ?? null,
+      toId: m.landed_node_id ?? m.to_graph_id,
+      toName: `${m.to_graph_name ?? m.to_graph_id}/${m.landed_node_name ?? m.landed_node_id ?? 'entry'}`,
+      when: formatWhen(m.recorded_at),
+      sortKey: m.recorded_at,
+    }));
+    return [...transitions, ...migrations].sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+  });
+
+  /** Whether the timeline spans more than one graph (issue #90) — a chunk that migrated.
+   * When true the board labels each row with the graph it happened in; a single-graph
+   * chunk shows no graph badge (it would be noise). A migration inherently crosses two
+   * graphs (its target may not yet have its own row), so its presence alone qualifies. */
+  protected readonly multiGraph = computed<boolean>(() => {
+    const rows = this.historyRows();
+    if (rows.some((r) => r.kind === 'migration')) return true;
+    const names = new Set(rows.map((r) => r.graphName ?? ''));
+    names.delete('');
+    return names.size > 1;
+  });
 
   /** The node currently in flight, as a synthetic timeline row — `RUN` while a worker
    * drives it, or the parked state's own verb (`WAITING`, `NEEDS HUMAN`, `PAUSED`).
