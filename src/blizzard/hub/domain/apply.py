@@ -113,26 +113,32 @@ class ApplyService:
         if facts is None:
             return _failure(f"unknown chunk {chunk.chunk_id}")
 
-        # Route-token authorization (issue #84b) — ordered ahead of everything else
-        # below, including the idempotent-replay probe: a replay is a write-path
-        # short-circuit too, and a post-release zombie's replayed completion must be
-        # rejected exactly as a fresh one would be (the plan's "release invalidates the
-        # token" requirement). The existing epoch fence (further down, and in
-        # ``_apply_gate_resolution``) runs after this and is untouched.
-        rejection = self._check_route_token(chunk, facts, submission, route_token_mode=route_token_mode)
-        if rejection is not None:
-            return rejection
-
         # A migration writes no transition and **re-pins the graph** (issue #90), so on a
         # replay the submission's ``from_node_id`` no longer lives in the chunk's now-current
         # pinned graph — probe it by the natural key *before* the graph-node lookup below,
         # else a legitimate lost-ack replay 404s its own from-node in the new graph. Ordered
-        # after the route-token check (a post-release zombie is still rejected first) but
-        # ahead of everything graph-shaped.
+        # **ahead of** the route-token check below (issue #108): ``record_migration``
+        # itself releases the route as part of landing, so a lost-ack replay of an already
+        # -accepted migration presents a token whose route the migration's own completion
+        # released — that is not a zombie signal, and must short-circuit here before the
+        # token check would otherwise reject it.
         if self._chunks.accepted_migration(
             chunk.chunk_id, from_node_id=submission.from_node_id, epoch=submission.epoch
         ):
             return _migrated_replay()
+
+        # Route-token authorization (issue #84b) — ordered ahead of everything else
+        # below, including the ordinary idempotent-replay probe (``accepted_transition_target``):
+        # a replay is a write-path short-circuit too, and a post-release zombie's replayed
+        # completion must be rejected exactly as a fresh one would be (the plan's "release
+        # invalidates the token" requirement) — for any submission that isn't already carved
+        # out above as an accepted migration's own replay (issue #108). A fresh, non-matching
+        # submission over a released route is still rejected here first. The existing epoch
+        # fence (further down, and in ``_apply_gate_resolution``) runs after this and is
+        # untouched.
+        rejection = self._check_route_token(chunk, facts, submission, route_token_mode=route_token_mode)
+        if rejection is not None:
+            return rejection
 
         from_node = graph.node_by_id(submission.from_node_id)
         if from_node is None:
