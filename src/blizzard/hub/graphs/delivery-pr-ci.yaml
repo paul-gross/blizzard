@@ -72,7 +72,10 @@ nodes:
         command: python3 -m blizzard.hub.graphs.scripts.land_pr_ci
     # Poll every 30s, give up (kick back to build) after 30 minutes of no repo going
     # clean — the executor's own defaults; authored explicitly here so the policy is
-    # visible in the graph, not merely inherited.
+    # visible in the graph, not merely inherited. The self-heal script routes `unknown`
+    # and `behind` (it fires update-branch) to `pending` and re-polls; only a real
+    # `dirty` conflict prints `conflict`, so a `conflict` edge is required alongside the
+    # poll_timeout `failure` edge.
     poll_interval: 30
     poll_timeout: 1800
     judgement:
@@ -80,6 +83,9 @@ nodes:
         landed:
           description: Every repo's PR merged cleanly.
           to: done
+        conflict:
+          description: A repo's PR is dirty (a real merge conflict); kicked back to build immediately.
+          to: build
         failure:
-          description: poll_timeout exceeded with no repo ever going clean; kicked back to build.
+          description: poll_timeout exceeded with no repo ever going cleanly mergeable; kicked back to build.
           to: build

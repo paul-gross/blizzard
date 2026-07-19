@@ -1,37 +1,34 @@
-"""The PR + CI-watch example graph delivers through the generic path (#67).
+"""The self-healing PR + CI-watch example graph delivers through the generic path (#67).
 
 The e2e-tier proof that delivery **policy lives in YAML**: the shipped example graph
 `hub/graphs/delivery-pr-ci.yaml` differs from the default graph only in its `deliver`
 node's `run:` script (`hub/graphs/scripts/land_pr_ci.py` vs `scripts/land_default.py`)
-and its poll cadence — yet it expresses a wholly different delivery policy (open a PR
-per repo, report the machinery-reserved `pending` outcome (#66) while any PR is not yet
-cleanly mergeable, merge once every PR reads `mergeable_state: clean`) through the SAME
-generic `executor: hub` primitive, no engine change. This scenario drives that real
-`land_pr_ci.py` script end to end against the mock forge:
+and its poll cadence — yet it expresses a wholly different delivery policy through the
+SAME generic `executor: hub` primitive, no engine change. `land_pr_ci` opens a PR per
+repo and routes by the PR's live `mergeable_state`, resolving what is mechanical or
+transient without ever waking the LLM. This module drives that real script end to end
+against the (extended) mock forge, one scenario per route:
 
-* the mock forge's `merge_conflict` lever, armed repo-scoped, makes the freshly-opened
-  PR read `dirty` — the stand-in for "CI is not yet green" — so the script prints
-  `pending`, the executor records a poll-attempt fact, releases the fleet-wide slot,
-  and the chunk derives `delivering` (awaiting an external merge) with its route held —
-  **nothing merges**;
-* clearing the lever is the stand-in for "CI went green": the next poll reads the PR
-  `clean`, merges it by pinned SHA, records the `merged/<repo>` marker, prints `landed`,
-  and the chunk lands to `done`.
+* **wait** — the `checks_pending` lever makes the PR read `blocked` (required CI not yet
+  green): the script prints `pending`, the executor records a poll attempt and releases
+  the fleet-wide slot, the chunk derives `delivering`, **nothing merges**; clearing the
+  lever ("CI went green") lets the next poll read `clean`, merge, and land to `done`.
+* **self-heal** — the `stale_branch` lever makes the PR read `behind` (base moved, no
+  conflict): the script fires `PUT .../update-branch` and pends; the mock advances the
+  head and clears the lever, so the next poll reads `clean` and lands — **no LLM**.
+  Because that lever clears *only* via update-branch, reaching `done` is itself proof the
+  self-heal ran.
+* **bounce** — the `merge_conflict` lever makes the PR read `dirty` (a real conflict):
+  the script prints `conflict` *immediately* (not a 30-min `poll_timeout` wait), the
+  chunk records a `conflict` bounce and routes back to `build`, **nothing lands**.
 
-Asserted at both ends over the full live stack (mock forge + mock harness + fixture
-workspace + real hub/runner), exactly like the sibling e2e scenarios:
+Asserted over the full live stack (mock forge + mock harness + fixture workspace + real
+hub/runner), exactly like the sibling e2e scenarios — fleet truth (pending/bounce/done)
+and git truth (bare `main` moves exactly once on a land, never on a pend or a bounce).
 
-* **fleet truth** — while pending the chunk is not terminal and its detail carries a
-  live `pending` view (a recorded poll attempt, no transition); after the lever clears
-  it derives `done` with `landed` true;
-* **git truth** — bare `main` is unchanged while pending, and carries the build's
-  commit exactly once after the land; the forge holds exactly one merged PR.
-
-The shipped `delivery-pr-ci.yaml` authors a production 30s `poll_interval`; this
-scenario mints the same `land_pr_ci` script with a brisk 1s `poll_interval` so the
-in-process driver converges in seconds (mirroring the crash sweep's own pending
-scenario). It is the SAME script — the point proved is the script's policy, run through
-the generic executor, not the cadence constant.
+The shipped graph authors a production 30s `poll_interval`; these scenarios mint the SAME
+`land_pr_ci` script with a brisk 1s cadence so the in-process driver converges in seconds
+— the point proved is the script's policy through the generic executor, not the cadence.
 
 Gated exactly like the sibling e2e scenarios — skipped unless `BLIZZARD_E2E=1` and the
 sibling `blizzard-mock` worktree + a local winter source are discoverable.
@@ -92,8 +89,9 @@ _BUILD_JUDGEMENT = "verdict('pass', 'committed the change; checks are green')\n"
 def _graph_yaml() -> str:
     """The PR+CI example graph's shape, inlined with a re-poll-every-tick cadence.
 
-    Identical to the shipped `delivery-pr-ci.yaml` except `poll_interval`/`poll_timeout`
-    — the `deliver` node names the SAME real `land_pr_ci` script, so this exercises the
+    Identical to the shipped `delivery-pr-ci.yaml` (including the `conflict` edge the
+    self-heal script's `dirty` fast-bounce needs) except `poll_interval`/`poll_timeout` —
+    the `deliver` node names the SAME real `land_pr_ci` script, so this exercises the
     example graph's actual policy, not a stand-in."""
     import yaml
 
@@ -117,11 +115,12 @@ def _graph_yaml() -> str:
             "deliver": {
                 "executor": "hub",
                 "poll_interval": 1,  # a brisk 1s cadence so the scenario converges in seconds
-                "poll_timeout": 600,  # never time out — this proves the resume-to-land path, not #64's kick-back
+                "poll_timeout": 600,  # never time out — these prove routing, not #64's timeout kick-back
                 "run": [{"command": "python3 -m blizzard.hub.graphs.scripts.land_pr_ci"}],
                 "judgement": {
                     "choices": {
                         "landed": {"description": "Every repo's PR merged cleanly.", "to": "done"},
+                        "conflict": {"description": "A repo's PR is dirty; back to build.", "to": "build"},
                         "failure": {"description": "poll_timeout exceeded; back to build.", "to": "build"},
                     }
                 },
@@ -131,54 +130,8 @@ def _graph_yaml() -> str:
     return yaml.safe_dump(graph, sort_keys=False)
 
 
-def _drive_until_pending(config: RunnerConfig, hub: httpx.Client, chunk_id: str, env: dict[str, str]) -> dict:
-    """Tick until the chunk records a live pending poll at its hub node (#66).
-
-    Returns the chunk detail the moment `pending` is non-None. A pending poll is the
-    node waiting on external merge-ability — the route is held and no transition is
-    recorded, so the chunk never reaches a terminal status here."""
-    prior = dict(os.environ)
-    os.environ.update(env)
-    try:
-        deadline = time.monotonic() + 60.0
-        while time.monotonic() < deadline:
-            run_single_tick(config)
-            detail = hub.get(f"/api/chunks/{chunk_id}")
-            assert detail.status_code == 200, detail.text
-            body = detail.json()
-            assert body["status"] not in {"done", "stopped", "needs_human"}, (
-                f"chunk went terminal ({body['status']!r}) while a PR should be pending — did it merge a dirty PR?"
-            )
-            if body["pending"] is not None:
-                return body
-            time.sleep(0.4)
-        raise AssertionError("the PR+CI deliver node never recorded a pending poll while the PR read dirty")
-    finally:
-        os.environ.clear()
-        os.environ.update(prior)
-
-
-def _drive_until_done(config: RunnerConfig, hub: httpx.Client, chunk_id: str, env: dict[str, str]) -> str:
-    prior = dict(os.environ)
-    os.environ.update(env)
-    try:
-        deadline = time.monotonic() + 90.0
-        status = "delivering"
-        while time.monotonic() < deadline:
-            run_single_tick(config)
-            detail = hub.get(f"/api/chunks/{chunk_id}")
-            assert detail.status_code == 200, detail.text
-            status = detail.json()["status"]
-            if status in {"done", "stopped", "needs_human"}:
-                return status
-            time.sleep(0.4)
-        return status
-    finally:
-        os.environ.clear()
-        os.environ.update(prior)
-
-
-def test_pr_ci_graph_pends_until_green_then_lands(tmp_path: Path) -> None:
+def _reset_fixture(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
+    """Reset the mock fixture workspace; skip if the sibling mock/winter aren't present."""
     bin_dir = _mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
@@ -207,56 +160,124 @@ def test_pr_ci_graph_pends_until_green_then_lands(tmp_path: Path) -> None:
     origins = fixture_root / "origins"
     origin_bare = origins / f"{REPO_NAME}.git"
     (workspace / ".blizzard-mock-harness-fence").write_text("e2e fence marker\n")
+    return bin_dir, workspace, origins, origin_bare
 
+
+def _ingest_and_promote(hub: httpx.Client, forge: httpx.Client) -> str:
+    assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
+    issue = forge.post(f"/repos/{REPO}/issues", json={"title": "pr-ci", "body": "the PR+CI chunk"})
+    assert issue.status_code == 201, issue.text
+    ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{issue.json()['number']}"]})
+    assert ingested.status_code == 201, ingested.text
+    chunk_id = ingested.json()["chunk_id"]
+    assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+    return chunk_id
+
+
+def _drive_until(config: RunnerConfig, hub: httpx.Client, chunk_id: str, env: dict[str, str], predicate, timeout=60.0):
+    """Tick until `predicate(detail)` is truthy; return that detail. Raises on timeout."""
+    prior = dict(os.environ)
+    os.environ.update(env)
+    try:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            run_single_tick(config)
+            detail = hub.get(f"/api/chunks/{chunk_id}")
+            assert detail.status_code == 200, detail.text
+            body = detail.json()
+            if predicate(body):
+                return body
+            time.sleep(0.4)
+        raise AssertionError("predicate never became true within the timeout")
+    finally:
+        os.environ.clear()
+        os.environ.update(prior)
+
+
+def _fenced_env() -> dict[str, str]:
+    return {**os.environ, "BLIZZARD_MOCK_HARNESS_FENCE": "1"}
+
+
+def test_pr_ci_pends_on_blocked_then_lands_when_green(tmp_path: Path) -> None:
+    bin_dir, workspace, origins, origin_bare = _reset_fixture(tmp_path)
     main_before = _git_bare(origin_bare, "rev-parse", "main").strip()
 
     forge_port, hub_port = _free_port(), _free_port()
     with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
-        # Arm merge_conflict repo-scoped — the stand-in for "CI is not green yet": the PR
-        # the script opens reads dirty, so land_pr_ci prints `pending`, merging nothing.
-        armed = forge.post("/_levers/merge_conflict", json={"repo": REPO})
-        assert armed.status_code == 200, armed.text
-
-        assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201
-        issue = forge.post(f"/repos/{REPO}/issues", json={"title": "pr-ci", "body": "the PR+CI chunk"})
-        assert issue.status_code == 201, issue.text
-        issue_number = issue.json()["number"]
-        ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{issue_number}"]})
-        assert ingested.status_code == 201, ingested.text
-        chunk_id = ingested.json()["chunk_id"]
-        assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
-
+        # `blocked` (required CI not green yet) — the correct "not green" wait state.
+        assert forge.post("/_levers/checks_pending", json={"repo": REPO}).status_code == 200
+        chunk_id = _ingest_and_promote(hub, forge)
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
-        fenced = dict(os.environ)
-        fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
+        fenced = _fenced_env()
 
-        # Phase 1 — pending: the PR is open but dirty, so nothing merges.
-        pending_detail = _drive_until_pending(config, hub, chunk_id, fenced)
-        assert pending_detail["status"] == "delivering", pending_detail["status"]
-        assert pending_detail["landed"] is False
+        # Phase 1 — pending: the PR is open but blocked, so nothing merges.
+        pending = _drive_until(config, hub, chunk_id, fenced, lambda b: b["pending"] is not None)
+        assert pending["status"] == "delivering", pending["status"]
+        assert pending["landed"] is False
         pulls = forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json()
-        assert pulls, "the PR+CI script opened no PR while pending"
-        assert not any(p.get("merged") for p in pulls), f"a dirty PR merged while pending: {pulls}"
+        assert pulls and not any(p.get("merged") for p in pulls), f"a blocked PR merged while pending: {pulls}"
         assert _git_bare(origin_bare, "rev-parse", "main").strip() == main_before, "bare main moved while pending"
 
-        # Phase 2 — CI goes green: clear the lever, the next poll reads clean and merges.
-        cleared = forge.delete("/_levers/merge_conflict", params={"repo": REPO})
-        assert cleared.status_code == 200, cleared.text
+        # Phase 2 — CI goes green: clear the lever; the next poll reads clean and merges.
+        assert forge.delete("/_levers/checks_pending", params={"repo": REPO}).status_code == 200
+        done = _drive_until(config, hub, chunk_id, fenced, lambda b: b["status"] in {"done", "needs_human"}, timeout=90)
+        assert done["status"] == "done", f"did not land after CI went green (status {done['status']!r})"
+        assert done["landed"] is True
 
-        status = _drive_until_done(config, hub, chunk_id, fenced)
-        assert status == "done", f"the PR+CI chunk did not land after CI went green (last status {status!r})"
-        detail = hub.get(f"/api/chunks/{chunk_id}").json()
-        assert detail["landed"] is True, "landed did not derive true after the PR merged"
-
-        # Forge truth: exactly one PR, now merged.
-        pulls = forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json()
-        merged = [p for p in pulls if p.get("merged")]
-        assert len(merged) == 1, f"expected exactly one merged PR, got {pulls}"
-
-    # Git truth: bare main advanced past its start, carrying the build's commit once.
     main_after = _git_bare(origin_bare, "rev-parse", "main").strip()
     assert main_after != main_before, "bare main did not move despite a clean merge"
-    landings = [
-        ln for ln in _git_bare(origin_bare, "log", "--oneline", "--", "PR_CI_LANDED.md").splitlines() if ln.strip()
-    ]
+    landings = [ln for ln in _git_bare(origin_bare, "log", "--oneline", "--", "PR_CI_LANDED.md").splitlines() if ln.strip()]
     assert len(landings) == 1, f"PR_CI_LANDED.md landed {len(landings)} times on bare main"
+
+
+def test_pr_ci_self_heals_a_behind_branch_and_lands(tmp_path: Path) -> None:
+    bin_dir, workspace, origins, origin_bare = _reset_fixture(tmp_path)
+    main_before = _git_bare(origin_bare, "rev-parse", "main").strip()
+
+    forge_port, hub_port = _free_port(), _free_port()
+    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+        # `behind` — base moved, no conflict. The `stale_branch` lever clears ONLY via
+        # `PUT .../update-branch`, so reaching `done` proves the script self-healed.
+        assert forge.post("/_levers/stale_branch", json={"repo": REPO}).status_code == 200
+        chunk_id = _ingest_and_promote(hub, forge)
+        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        fenced = _fenced_env()
+
+        # The behind PR fires update-branch and pends at least once before healing.
+        pending = _drive_until(config, hub, chunk_id, fenced, lambda b: b["pending"] is not None)
+        assert pending["landed"] is False
+
+        done = _drive_until(config, hub, chunk_id, fenced, lambda b: b["status"] in {"done", "needs_human"}, timeout=90)
+        assert done["status"] == "done", f"a behind PR did not self-heal to done (status {done['status']!r})"
+        assert done["landed"] is True
+
+        # Forge truth: the once-behind PR is now merged, exactly once.
+        pulls = forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json()
+        assert len([p for p in pulls if p.get("merged")]) == 1, f"expected one merged PR, got {pulls}"
+
+    main_after = _git_bare(origin_bare, "rev-parse", "main").strip()
+    assert main_after != main_before, "bare main did not move despite the self-healed land"
+
+
+def test_pr_ci_bounces_a_dirty_conflict_back_to_build(tmp_path: Path) -> None:
+    bin_dir, workspace, origins, origin_bare = _reset_fixture(tmp_path)
+    main_before = _git_bare(origin_bare, "rev-parse", "main").strip()
+
+    forge_port, hub_port = _free_port(), _free_port()
+    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+        # `dirty` — a real merge conflict. The script bounces to `build` immediately.
+        assert forge.post("/_levers/merge_conflict", json={"repo": REPO}).status_code == 200
+        chunk_id = _ingest_and_promote(hub, forge)
+        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        fenced = _fenced_env()
+
+        # A conflict routes back to build — the FIRST recorded bounce carries cause `conflict`.
+        bounced = _drive_until(config, hub, chunk_id, fenced, lambda b: bool(b.get("bounces")))
+        assert bounced["bounces"][0]["cause"] == "conflict", bounced["bounces"]
+        assert bounced["landed"] is False
+
+        # Nothing merged; the dirty PR is still open.
+        pulls = forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json()
+        assert pulls and not any(p.get("merged") for p in pulls), f"a dirty PR merged: {pulls}"
+
+    assert _git_bare(origin_bare, "rev-parse", "main").strip() == main_before, "bare main moved despite the conflict"
