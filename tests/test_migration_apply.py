@@ -308,7 +308,10 @@ def test_a_non_matching_submission_over_a_released_migration_route_is_still_reje
     """Bug #108's carve-out is scoped to the ACCEPTED migration's own natural key only —
     a fresh, non-matching submission (different epoch here) presented with the same
     now-released token is still rejected by the route-token check, exactly as a fresh
-    zombie completion would be."""
+    zombie completion would be. Both cases assert the ``"live route"`` detail from
+    ``check_route_token`` specifically — not just ``outcome == "failure"`` — so the test
+    pins the route-token check as the rejecting mechanism rather than some other
+    downstream failure that would also reject a non-matching submission."""
     hub = build_hub(tmp_path, route_token_mode=ROUTE_TOKEN_ENFORCE)
     chunk_id, node_id, token = _setup_under_enforce(hub, target_name="triage", mint_target=True)
 
@@ -317,8 +320,23 @@ def test_a_non_matching_submission_over_a_released_migration_route_is_still_reje
 
     # Same chunk_id/from_node_id, but a different epoch — no longer matches the accepted
     # migration's (chunk_id, from_node_id, epoch) natural key, so the probe doesn't
-    # short-circuit; the released token is rejected by the route-token check first.
+    # short-circuit; the released token is rejected by the route-token check first. Assert
+    # the "live route" detail specifically: an epoch=2 submission would independently fail
+    # the epoch fence downstream too, so "failure" alone wouldn't pin the route-token check
+    # as the actual rejecting mechanism.
     mismatched = _migrate_with_token(hub, chunk_id, node_id, epoch=2, route_token=token)
 
     assert mismatched.status_code == 200, mismatched.text
     assert mismatched.json()["outcome"] == "failure"
+    assert "live route" in mismatched.json()["detail"]
+
+    # Same-epoch case: epoch=1 matches the accepted migration's epoch, so the epoch fence
+    # cannot be why this is rejected — only the different from_node_id keeps it off the
+    # accepted migration's natural key. The route-token check runs ahead of any graph-node
+    # lookup, so the released token is still rejected first (not a "no node ..." lookup
+    # failure), proving the token check — not the epoch fence — is doing the rejecting.
+    non_matching_node = _migrate_with_token(hub, chunk_id, "nd_does_not_match", epoch=1, route_token=token)
+
+    assert non_matching_node.status_code == 200, non_matching_node.text
+    assert non_matching_node.json()["outcome"] == "failure"
+    assert "live route" in non_matching_node.json()["detail"]
