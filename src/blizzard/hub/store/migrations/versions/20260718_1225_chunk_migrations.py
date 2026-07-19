@@ -4,8 +4,8 @@ Phase 3 of the cross-graph-migration change: the ``chunk_migrations`` fact a
 judgement choice targeting another graph records — its own recorded fact, never a
 ``transitions`` row (``bzh:migration-not-transition``). Adds exactly one new table
 (``migration_id`` PK, ``chunk_id`` FK, ``from_node_id``, ``from_graph_id``,
-``to_graph_id``, ``landed_node_id``, ``choice_name``, ``model_after``, ``epoch``,
-``recorded_at``).
+``to_graph_id``, ``landed_node_id``, ``choice_name``, ``decision_id``,
+``model_after``, ``epoch``, ``recorded_at``).
 
 Brand new as of this revision — no later revision reshapes it yet — so it is imported
 directly from ``schema.py`` rather than frozen locally (the exception
