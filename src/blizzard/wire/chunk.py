@@ -126,9 +126,13 @@ class ChunkSummary(BaseModel):
     :class:`ChunkDetail`, the one place a board action lives. ``runner_id`` (the live
     route's holder, null when unrouted) is a passive where-is-it fact in that same
     sense — it lets the fleet registry list each runner's claims — not an action key.
-    ``cost`` is the one exception (issue #59): the derived spend total is cheap to carry
-    on every card and is not itself an operator fact, so it rides the summary rather than
-    waiting for the detail fetch."""
+    ``environment_count`` (issue #69) is a passive where-is-it *count* in that same
+    spirit: the number of environments the chunk's live route holds, so the fleet registry
+    can sum a runner's slot-bar numerator without the full ``environment_ids`` list (which
+    stays out of scope on this status-only summary, reaching only
+    :class:`ChunkDetail.route`). ``cost`` is the one exception (issue #59): the derived
+    spend total is cheap to carry on every card and is not itself an operator fact, so it
+    rides the summary rather than waiting for the detail fetch."""
 
     chunk_id: str
     graph_id: str
@@ -140,6 +144,10 @@ class ChunkSummary(BaseModel):
     # the store column is non-nullable and every mint sets DEFAULT_MODEL.
     model: str
     runner_id: str | None = None
+    # The count of environments the chunk's live route holds (issue #69) — the board's
+    # slot-bar numerator, summed per runner across its chunks. 0 when unrouted. A grouped
+    # chunk holding >1 environment counts them all, so the numerator does not undercount.
+    environment_count: int = 0
     # The chunk's derived usage/cost total (issue #59) — see ChunkUsageTotalView.
     cost: ChunkUsageTotalView = Field(default_factory=_zero_usage_total)
 
