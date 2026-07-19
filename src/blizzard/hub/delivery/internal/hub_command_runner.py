@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 
 from blizzard.hub.delivery.command_runner import CommandResult, IHubCommandRunner
 
@@ -26,8 +27,17 @@ class SubprocessHubCommandRunner:
         # ``PATH``/``PYTHONPATH``/``VIRTUAL_ENV`` etc. to resolve ``git``/``python3``/
         # the ``blizzard`` package the same way the hub process itself does — the
         # node-specific ``BZ_*`` keys are added on top (never removed by the parent
-        # env), so a script sees both.
+        # env), so a script sees both. Inheriting ``PATH`` alone is not enough for
+        # ``python3``: a wheel-installed daemon launched by absolute path (systemd)
+        # inherits a PATH with no venv on it, so a bare ``python3`` in a ``run:``
+        # step would resolve to an interpreter that cannot import ``blizzard`` —
+        # prepend the hub interpreter's own bin dir so it always resolves to the
+        # interpreter the hub itself runs under (``bzh:hub-node-env-contract``).
         full_env = {**os.environ, **env}
+        interpreter_bin = os.path.dirname(sys.executable)
+        path = full_env.get("PATH", "")
+        if interpreter_bin and path.split(os.pathsep, 1)[0] != interpreter_bin:
+            full_env["PATH"] = f"{interpreter_bin}{os.pathsep}{path}" if path else interpreter_bin
         try:
             result = subprocess.run(
                 command,
