@@ -59,13 +59,30 @@ nodes:
           to: build
 """
 
+# A target graph whose landing node (name-matches the source's ``build``) is
+# hub-executed — issue #111: a migration landing here must derive ``delivering``.
+_HUB_TARGET_YAML = """
+name: triage
+entry: build
+nodes:
+  build:
+    executor: hub
+    judgement:
+      choices:
+        pass:
+          description: done
+          to: done
+"""
+
 
 # --------------------------------------------------------------------------- #
 # Unit — derivations
 # --------------------------------------------------------------------------- #
 
 
-def _migrated_facts(*, landed: str | None, model: str | None = None) -> ChunkFacts:
+def _migrated_facts(
+    *, landed: str | None, model: str | None = None, landed_executor: Executor = Executor.RUNNER
+) -> ChunkFacts:
     return ChunkFacts(
         minted=True,
         promoted=True,
@@ -89,6 +106,7 @@ def _migrated_facts(*, landed: str | None, model: str | None = None) -> ChunkFac
                 model=model,
                 epoch=1,
                 recorded_at=_T0 + timedelta(minutes=1),
+                landed_node_executor=landed_executor,
             )
         ],
     )
@@ -98,10 +116,19 @@ def _migrated_facts(*, landed: str | None, model: str | None = None) -> ChunkFac
 def test_after_a_migration_the_current_node_is_the_landing_node_and_status_is_ready() -> None:
     facts = _migrated_facts(landed="nd_landed")
     assert current_node_id(facts) == "nd_landed"
+    # A runner-executed landing node re-queues the chunk claimable (issue #111 regression).
     assert derive_chunk_status(facts) is ChunkStatus.READY
     # The fact carries the re-pinned model for the audit/history surface.
     migration = newest_migration(facts)
     assert migration is not None and migration.model is None
+
+
+@unit
+def test_a_migration_landing_on_a_hub_node_derives_delivering() -> None:
+    # Issue #111: a migration re-pinning the chunk onto a hub-executed node is retained
+    # by the hub, exactly as a transition into one is — never wrongly derived READY.
+    facts = _migrated_facts(landed="nd_landed", landed_executor=Executor.HUB)
+    assert derive_chunk_status(facts) is ChunkStatus.DELIVERING
 
 
 @unit
@@ -254,3 +281,51 @@ def test_record_migration_is_idempotent_on_replay(tmp_path: Path) -> None:
         artifacts = conn.execute(select(s.artifacts).where(s.artifacts.c.chunk_id == chunk_id)).all()
     assert len(migrations) == 1
     assert len([a for a in artifacts if a.name == "triage-notes"]) == 1
+
+
+@component
+def test_a_migration_landing_on_a_hub_node_derives_delivering_and_is_not_ready(tmp_path: Path) -> None:
+    """Issue #111: a cross-graph migration whose landing node is hub-executed is
+    retained by the hub — the chunk must derive ``delivering``, not runner-claimable
+    ``ready``, and so must be absent from :meth:`ChunkStore.list_ready`."""
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/graphs", json={"definition_yaml": _SRC_YAML}).status_code == 201
+    target = hub.client.post("/api/graphs", json={"definition_yaml": _HUB_TARGET_YAML}).json()
+    target_graph_id = target["graph_id"]
+    landed = next(n for n in target["nodes"] if n["name"] == "build")
+    assert landed["executor"] == "hub"
+
+    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    node_id = hub.client.post(
+        "/api/fleet/routes",
+        json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
+    ).json()["envelope"]["node"]["node_id"]
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+    pre_migration = hub.services.chunks.get(chunk_id)
+    assert pre_migration is not None
+    source_graph_id = pre_migration.graph_id
+
+    chunks = cast(IWriteChunkRepository, hub.services.chunks)
+    wrote = chunks.record_migration(
+        chunk_id,
+        from_node_id=node_id,
+        from_graph_id=source_graph_id,
+        to_graph_id=target_graph_id,
+        landed_node_id=landed["node_id"],
+        choice_name="migrate",
+        model=None,
+        epoch=1,
+        at=hub.clock.now(),
+        artifacts=[_artifact(chunk_id, node_id)],
+    )
+    assert wrote is True
+
+    facts = hub.services.chunks.load_facts(chunk_id)
+    assert facts is not None
+    migration = newest_migration(facts)
+    assert migration is not None
+    assert migration.landed_node_executor is Executor.HUB
+    assert derive_chunk_status(facts) is ChunkStatus.DELIVERING
+
+    ready_ids = {c.chunk_id for c in hub.services.chunks.list_ready()}
+    assert chunk_id not in ready_ids
