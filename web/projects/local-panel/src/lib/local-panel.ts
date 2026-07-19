@@ -11,9 +11,13 @@ import {
 } from './status.query';
 
 /** One row in the machine-chunks list: a chunk's newest lease plus its derived
- * machine-side status, pre-folded so the layout needs no second read. */
+ * machine-side status, pre-folded so the layout needs no second read. `leases`
+ * carries *every* attempt of the chunk (oldest → newest) for the detail dock's
+ * per-attempt tabs; `lease` is `leases`' newest entry — the row and the summary
+ * both render off it. */
 export interface MachineChunkRow {
   readonly lease: runnerApi.LeaseView;
+  readonly leases: readonly runnerApi.LeaseView[];
   readonly status: MachineChunkStatus;
 }
 
@@ -41,7 +45,7 @@ export interface MachineChunkRow {
       [machineChunks]="machineChunks()"
       [openAskCount]="openAskCount()"
       [selectedChunkId]="selectedChunkId()"
-      [selectedLease]="selectedLease()"
+      [selectedChunkLeases]="selectedChunkLeases()"
       [selectedStatus]="selectedStatus()"
       [selectedEscalation]="selectedEscalation()"
       (selectLease)="selectLease($event)"
@@ -86,8 +90,11 @@ export class LocalPanel {
   /**
    * One row per chunk on this machine: the chunk's newest lease (the server
    * orders actives first, then the recent-closed block, so the first lease
-   * seen per `chunk_id` is the freshest attempt) plus the derived status —
-   * folded once here, handed to the row and the detail dock alike.
+   * seen per `chunk_id` is the freshest attempt) plus every attempt of the
+   * chunk and the derived status — folded once here, handed to the row and the
+   * detail dock alike. Each row's `leases` is ordered oldest → newest for the
+   * detail dock's attempt tabs; `lease` (the summary/status subject) is that
+   * list's newest entry.
    */
   protected readonly machineChunks = computed<MachineChunkRow[]>(() => {
     const facts = {
@@ -95,12 +102,22 @@ export class LocalPanel {
       takeoverChunkIds: new Set((this.takeoversQuery.data() ?? []).map((tko) => tko.chunk_id)),
       askChunkIds: new Set((this.asksQuery.data() ?? []).map((ask) => ask.chunk_id)),
     };
-    const seen = new Set<string>();
-    const rows: MachineChunkRow[] = [];
+    // Group by chunk in server order (newest attempt first); the Map preserves
+    // first-seen insertion order, so the rows keep the newest-lease-first order.
+    const grouped = new Map<string, runnerApi.LeaseView[]>();
     for (const lease of this.leases()) {
-      if (seen.has(lease.chunk_id)) continue;
-      seen.add(lease.chunk_id);
-      rows.push({ lease, status: deriveMachineChunkStatus(lease, facts) });
+      const group = grouped.get(lease.chunk_id);
+      if (group) group.push(lease);
+      else grouped.set(lease.chunk_id, [lease]);
+    }
+    const rows: MachineChunkRow[] = [];
+    for (const group of grouped.values()) {
+      const newest = group[0];
+      rows.push({
+        lease: newest,
+        leases: [...group].reverse(), // oldest → newest for the attempt tabs
+        status: deriveMachineChunkStatus(newest, facts),
+      });
     }
     return rows;
   });
@@ -120,11 +137,15 @@ export class LocalPanel {
     if (lease) this.selectedChunkId.set(lease.chunk_id);
   }
 
-  /** The selected chunk's newest lease — what the detail dock renders. */
-  protected readonly selectedLease = computed<runnerApi.LeaseView | null>(() => {
+  /**
+   * The selected chunk's attempts (oldest → newest) — what the detail dock
+   * renders: its summary/status off the newest, one transcript tab per attempt.
+   * Empty when nothing is selected.
+   */
+  protected readonly selectedChunkLeases = computed<readonly runnerApi.LeaseView[]>(() => {
     const chunkId = this.selectedChunkId();
-    if (chunkId === null) return null;
-    return this.machineChunks().find((chunk) => chunk.lease.chunk_id === chunkId)?.lease ?? null;
+    if (chunkId === null) return [];
+    return this.machineChunks().find((chunk) => chunk.lease.chunk_id === chunkId)?.leases ?? [];
   });
 
   protected readonly selectedStatus = computed<MachineChunkStatus | null>(() => {

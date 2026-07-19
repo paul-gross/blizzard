@@ -221,6 +221,33 @@ describe('LocalPanel', () => {
       );
     });
 
+    it('renders one attempt tab per lease of the selected multi-attempt chunk, newest selected', async () => {
+      const older = LEASE({
+        lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNBBBB',
+        epoch: 1,
+        state: 'closed',
+        closure_reason: 'failed',
+      });
+      // Server order: newest active first, then the closed attempt.
+      stub = stubRequestClient(runnerClient, routes([LEASE(), older]));
+      const fixture = await render();
+      const el = fixture.nativeElement as HTMLElement;
+
+      el.querySelector<HTMLElement>('[data-testid="chunk-row"]')?.click();
+      await settle(fixture);
+
+      const tabs = el.querySelectorAll('[data-testid="attempt-tab"]');
+      expect(tabs).toHaveLength(2);
+      // Oldest attempt first, newest last and selected by default.
+      expect(tabs[0].textContent).toContain('a1');
+      expect(tabs[1].textContent).toContain('a2');
+      expect(tabs[1].getAttribute('aria-pressed')).toBe('true');
+      // The newest attempt's transcript is the default read.
+      expect(stub.forRoute('/api/leases/lease_01KXKVVF1J3D6H6VYZ3XYNZPRR/transcript', 'GET').length).toBeGreaterThan(
+        0,
+      );
+    });
+
     it('selecting a lease row selects its chunk — one shared selection across both rails', async () => {
       stub = stubRequestClient(runnerClient, routes([LEASE()]));
       const fixture = await render();

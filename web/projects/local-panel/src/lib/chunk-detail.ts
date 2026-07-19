@@ -1,5 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
-import { ageMs, compactRef, formatAge, type runnerApi } from 'fleet';
+import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
+import { ageMs, compactRef, formatAge, KitChips, type KitChipOption, type runnerApi } from 'fleet';
 
 import type { MachineChunkStatus } from './chunk-status';
 import { HeartbeatFreshness } from './heartbeat-freshness';
@@ -12,18 +12,22 @@ import { TranscriptPanel } from './transcript-panel';
  * and the transcript inline at the bottom (there is no cross-view navigation
  * yet, so the transcript list lives here rather than behind a link).
  *
- * Everything renders off the chunk's newest lease, handed in by the shell —
- * this dock owns no list read of its own. The transcript is
- * {@link TranscriptPanel}'s read, keyed by that lease id; the dock only passes
- * the id and never branches on the transcript's states.
+ * The summary facts, status, and escalation all render off the chunk's newest
+ * lease (the last entry of the `leases` list the shell hands in, oldest →
+ * newest) — this dock owns no list read of its own. A chunk is often processed
+ * across several attempts, each its own lease with its own transcript, so when
+ * there is more than one the dock renders a tab per attempt (issue #98): the
+ * newest is selected by default, and picking a tab feeds that attempt's lease
+ * id to {@link TranscriptPanel}'s existing `leaseId` input. The dock only
+ * passes the id and never branches on the transcript's states.
  */
 @Component({
   selector: 'local-machine-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [HeartbeatFreshness, TranscriptPanel],
+  imports: [HeartbeatFreshness, KitChips, TranscriptPanel],
   template: `
     <div class="detail" data-testid="machine-detail">
-      @if (lease(); as l) {
+      @if (newestLease(); as l) {
         <header class="d-hdr">
           <span class="lbl">machine detail</span>
           <span class="cid" data-testid="detail-chunk-ref">{{ chunkRef() }}</span>
@@ -65,8 +69,17 @@ import { TranscriptPanel } from './transcript-panel';
             </div>
           }
         </div>
+        @if (attemptOptions().length > 1) {
+          <div class="attempts" data-testid="attempt-tabs">
+            <fleet-kit-chips
+              [options]="attemptOptions()"
+              [selectedValue]="activeAttemptLeaseId()"
+              (choose)="selectAttempt($event)"
+            />
+          </div>
+        }
         <div class="transcript" data-testid="detail-transcript">
-          <local-transcript-panel [leaseId]="l.lease_id" />
+          <local-transcript-panel [leaseId]="activeAttemptLeaseId()" />
         </div>
       } @else {
         <p class="status" data-testid="detail-empty">SELECT A CHUNK</p>
@@ -190,6 +203,11 @@ import { TranscriptPanel } from './transcript-panel';
       font-size: var(--fs-sm);
       user-select: all;
     }
+    .attempts {
+      flex: none;
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--bezel);
+    }
     .transcript {
       flex: 1;
       min-height: 0;
@@ -209,8 +227,9 @@ import { TranscriptPanel } from './transcript-panel';
   `,
 })
 export class MachineDetail {
-  /** The selected chunk's newest lease, or null when nothing is selected. */
-  readonly lease = input.required<runnerApi.LeaseView | null>();
+  /** The selected chunk's attempts, oldest → newest; empty when nothing is
+   * selected. The newest is the summary/status subject; each is a transcript tab. */
+  readonly leases = input.required<readonly runnerApi.LeaseView[]>();
 
   /** The derived machine-side status for the selected chunk (shell-folded). */
   readonly status = input<MachineChunkStatus | null>(null);
@@ -218,13 +237,58 @@ export class MachineDetail {
   /** The open escalation for this chunk, when there is one — carries the resume command. */
   readonly escalation = input<runnerApi.EscalationView | null>(null);
 
+  /** The chunk's newest attempt (the `leases` list's last entry) — the summary,
+   * status, and escalation all render off it, whichever attempt tab is active. */
+  protected readonly newestLease = computed<runnerApi.LeaseView | null>(() => this.leases().at(-1) ?? null);
+
+  /**
+   * The operator's attempt pick, scoped to the chunk it was made on. Kept keyed
+   * by `chunk_id` so it survives the leases list re-fetching (poll refresh keeps
+   * the same attempt selected) but falls back to the newest when the chunk
+   * changes or the picked attempt ages out of the recent-lease window.
+   */
+  private readonly picked = signal<{ chunkId: string; leaseId: string } | null>(null);
+
+  /** The attempt whose transcript the dock shows — the operator's pick when it
+   * still applies, else the newest attempt (the default). */
+  protected readonly activeAttemptLeaseId = computed<string | null>(() => {
+    const leases = this.leases();
+    const newest = this.newestLease();
+    const pick = this.picked();
+    if (pick && pick.chunkId === newest?.chunk_id && leases.some((att) => att.lease_id === pick.leaseId)) {
+      return pick.leaseId;
+    }
+    return newest?.lease_id ?? null;
+  });
+
+  protected selectAttempt(leaseId: string): void {
+    const chunkId = this.newestLease()?.chunk_id;
+    if (chunkId) this.picked.set({ chunkId, leaseId });
+  }
+
+  /** One selectable chip per attempt (oldest → newest), keyed by lease id and
+   * labelled with the attempt ordinal + its state, for the `KitChips` tab row. */
+  protected readonly attemptOptions = computed<readonly KitChipOption[]>(() =>
+    this.leases().map((att) => ({
+      value: att.lease_id,
+      label: `a${att.epoch} ${this.attemptState(att)}`,
+      testid: 'attempt-tab',
+    })),
+  );
+
+  /** An attempt tab's state hint: the closure reason for a closed attempt (why
+   * that attempt ended), else the live lease state. */
+  private attemptState(att: runnerApi.LeaseView): string {
+    return att.state === 'closed' ? (att.closure_reason ?? 'closed') : att.state;
+  }
+
   protected readonly chunkRef = computed(() => {
-    const l = this.lease();
+    const l = this.newestLease();
     return l ? compactRef(l.chunk_id) : '';
   });
 
   protected readonly leaseRef = computed(() => {
-    const l = this.lease();
+    const l = this.newestLease();
     return l ? compactRef(l.lease_id) : '';
   });
 
@@ -233,7 +297,7 @@ export class MachineDetail {
    * decoration only; the server-derived state carries liveness (`bzh:utc-instants`).
    */
   protected readonly heartbeatLabel = computed<string>(() => {
-    const l = this.lease();
+    const l = this.newestLease();
     if (!l || l.state === 'closed') return '—';
     const age = ageMs(l.last_heartbeat_at, Date.now());
     return age === null ? '—' : formatAge(age);

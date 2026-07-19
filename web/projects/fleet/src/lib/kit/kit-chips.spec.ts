@@ -4,8 +4,8 @@ import { TestBed } from '@angular/core/testing';
 import { KitChips, type KitChipOption } from './kit-chips';
 
 const OPTIONS: KitChipOption[] = [
-  { value: 'a', label: 'Option A' },
-  { value: 'b', label: 'Option B' },
+  { value: 'a', label: 'Option A', testid: 'chip-a' },
+  { value: 'b', label: 'Option B', testid: 'chip-b' },
 ];
 
 @Component({
@@ -47,8 +47,20 @@ describe('KitChips', () => {
     const chips = el.querySelectorAll('.chip');
     expect(chips[0].classList.contains('selected')).toBe(true);
     expect(chips[1].classList.contains('selected')).toBe(false);
+    // Selection is conveyed to assistive tech, not just visually.
+    expect(chips[0].getAttribute('aria-pressed')).toBe('true');
+    expect(chips[1].getAttribute('aria-pressed')).toBe('false');
 
     (chips[1] as HTMLButtonElement).click();
     expect(fixture.componentInstance.chosen).toBe('b');
+  });
+
+  it('forwards each option testid to its chip', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="chip-a"]')?.textContent?.trim()).toBe('Option A');
+    expect(el.querySelector('[data-testid="chip-b"]')?.textContent?.trim()).toBe('Option B');
   });
 });

@@ -26,7 +26,7 @@ const LEASE = (overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseVie
   ...overrides,
 });
 
-const MACHINE_CHUNK: MachineChunkRow = { lease: LEASE(), status: { label: 'RUNNING', tone: 'running' } };
+const MACHINE_CHUNK: MachineChunkRow = { lease: LEASE(), leases: [LEASE()], status: { label: 'RUNNING', tone: 'running' } };
 
 async function render(overrides: Record<string, unknown> = {}) {
   await TestBed.configureTestingModule({
@@ -48,7 +48,7 @@ async function render(overrides: Record<string, unknown> = {}) {
     machineChunks: [MACHINE_CHUNK],
     openAskCount: 0,
     selectedChunkId: null,
-    selectedLease: null,
+    selectedChunkLeases: [],
     selectedStatus: null,
     selectedEscalation: null,
     ...overrides,
@@ -122,14 +122,14 @@ describe('LocalPanelLayout', () => {
   });
 
   it('shows the SELECT A CHUNK placeholder in the detail dock before anything is selected', async () => {
-    const fixture = await render({ selectedLease: null });
+    const fixture = await render({ selectedChunkLeases: [] });
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="detail-empty"]')?.textContent).toContain('SELECT A CHUNK');
   });
 
-  it('renders the selected lease in the detail dock', async () => {
-    const fixture = await render({ selectedLease: MACHINE_CHUNK.lease, selectedStatus: MACHINE_CHUNK.status });
+  it('renders the selected chunk in the detail dock, summary off the newest attempt', async () => {
+    const fixture = await render({ selectedChunkLeases: [LEASE()], selectedStatus: MACHINE_CHUNK.status });
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="detail-chunk-ref"]')?.textContent).toContain('C-3YJ9');

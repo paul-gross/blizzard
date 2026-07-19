@@ -104,7 +104,7 @@ import type { MachineChunkRow } from './local-panel';
           </fleet-kit-panel>
           <div class="detail-frame">
             <local-machine-detail
-              [lease]="selectedLease()"
+              [leases]="selectedChunkLeases()"
               [status]="selectedStatus()"
               [escalation]="selectedEscalation()"
             />
@@ -269,8 +269,9 @@ export class LocalPanelLayout {
   /** The `chunk_id` currently selected, or `null`. */
   readonly selectedChunkId = input.required<string | null>();
 
-  /** The selected chunk's newest lease — what the detail dock renders. */
-  readonly selectedLease = input.required<runnerApi.LeaseView | null>();
+  /** The selected chunk's attempts (oldest → newest) — what the detail dock
+   * renders: summary/status off the newest, one transcript tab per attempt. */
+  readonly selectedChunkLeases = input.required<readonly runnerApi.LeaseView[]>();
 
   readonly selectedStatus = input.required<MachineChunkStatus | null>();
 
