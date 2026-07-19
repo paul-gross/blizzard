@@ -55,6 +55,8 @@ def pr_title(feature_title: str, branch: str) -> str:
     if len(title) > _PR_TITLE_MAX:
         title = title[: _PR_TITLE_MAX - 1].rstrip() + "…"
     return title
+
+
 _PENDING = "pending"
 
 
