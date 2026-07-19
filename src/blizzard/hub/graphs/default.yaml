@@ -21,6 +21,15 @@
 # `landed -> done`. See `hub/graphs/delivery-pr-ci.yaml` for the alternative PR +
 # CI-watch delivery policy this same primitive expresses — proof that delivery policy
 # lives in YAML, not code.
+# A judgement choice's `to:` normally names a sibling node or the reserved terminal
+# `done`; it may instead name `graph:<name>` — a cross-graph MIGRATION target (issue
+# #90). Taking such a choice re-pins the chunk to that graph and re-queues it at the
+# name-matched landing node (else the target's entry), recording a migration fact rather
+# than a transition; an optional per-choice `model:` re-pins the chunk's model on the
+# hop. The target binds by name when taken, so a target not yet minted warns at mint, not
+# errors. The full authoring contract lives in `blizzard-harness:/domain/graphs.md`. This
+# default graph uses no cross-graph targets.
+#
 # Operational metadata (enabled, auto_migrate, migration_target) is NOT authored
 # here — it is set after mint via PATCH /graphs/{id}.
 
