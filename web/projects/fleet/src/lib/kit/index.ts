@@ -8,4 +8,5 @@ export { KitAsyncState, type KitAsyncStateValue } from './kit-async-state';
 export { KitBadge } from './kit-badge';
 export { KitButton } from './kit-button';
 export { KitChip, KitChips, type KitChipOption } from './kit-chips';
+export { KitSlotBar } from './kit-slot-bar';
 export type { Tone } from './tone';
