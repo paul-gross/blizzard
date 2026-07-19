@@ -145,6 +145,30 @@ def test_distinct_generation_or_kind_usage_rows_are_not_a_violation(tmp_path: Pa
     assert check_runner_store(engine) == []
 
 
+def test_duplicate_nudge_fact_for_one_lease_epoch_is_a_violation(tmp_path: Path) -> None:
+    """`record_nudge_fired` is an insert never an upsert, gated by
+    `_advance_exited_worker`'s own check-then-insert, not a DB constraint
+    (``bzh:sql-portable``, issue #113) — so two rows for the same ``(lease, epoch)``
+    mean that guard was bypassed, and the checker names it."""
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        for _ in range(2):
+            conn.execute(insert(runner.nudge_facts).values(lease_id="lease_1", epoch=1, nudged_at=_NOW))
+    slugs = {v.invariant for v in check_runner_store(engine)}
+    assert "runner:nudge-at-most-once" in slugs
+
+
+def test_distinct_lease_or_epoch_nudge_facts_are_not_a_violation(tmp_path: Path) -> None:
+    """A different lease, or a later epoch under the same lease id, is a genuinely new
+    attempt's own nudge — not a duplicate. The checker stays green over them."""
+    engine = _runner_engine(tmp_path)
+    with engine.begin() as conn:
+        conn.execute(insert(runner.nudge_facts).values(lease_id="lease_1", epoch=1, nudged_at=_NOW))
+        conn.execute(insert(runner.nudge_facts).values(lease_id="lease_1", epoch=2, nudged_at=_NOW))
+        conn.execute(insert(runner.nudge_facts).values(lease_id="lease_2", epoch=1, nudged_at=_NOW))
+    assert check_runner_store(engine) == []
+
+
 def test_duplicate_repo_land_is_a_violation(tmp_path: Path) -> None:
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:

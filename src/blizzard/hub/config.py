@@ -52,6 +52,20 @@ ROUTE_TOKEN_WARN = "warn"
 ROUTE_TOKEN_ENFORCE = "enforce"
 _KNOWN_ROUTE_TOKEN_MODES = {ROUTE_TOKEN_WARN, ROUTE_TOKEN_ENFORCE}
 
+# The produces-artifact rollout brake (issue #113 phase 5) — a **separate** flag from
+# ``route_token_mode``/``runner_auth_mode`` above, gating the hub-side backstop on top of
+# the runner's own nudge-once (issue #113 phase 4): completion assembly already prefers an
+# explicit ``blizzard runner attach`` over the judgement-assessment fallback, so a
+# `produces:` name still lacking an explicit attachment at submission time is a signal the
+# nudge did not resolve. `warn` logs the missing-explicit-artifact names and lets the
+# completion proceed unchanged (assessment fallback still lands, exactly as before this
+# phase); `enforce` rejects the completion as a semantic failure, before the transition is
+# recorded. Ship `warn`; the operator flips to `enforce` once packaged prompts (phase 6)
+# and the runner nudge (phase 4, already landed) have had time to drive worker behavior.
+PRODUCES_WARN = "warn"
+PRODUCES_ENFORCE = "enforce"
+_KNOWN_PRODUCES_MODES = {PRODUCES_WARN, PRODUCES_ENFORCE}
+
 # The only PM provider grammar a source may declare; an unknown provider fails
 # at config load, not at first use.
 _KNOWN_PM_PROVIDERS = {"github"}
@@ -112,6 +126,7 @@ class HubConfig:
     pm_sources: tuple[PmSourceConfig, ...] = ()
     runner_auth_mode: str = RUNNER_AUTH_WARN
     route_token_mode: str = ROUTE_TOKEN_WARN
+    produces_mode: str = PRODUCES_WARN
 
     @property
     def config_path(self) -> Path:
@@ -143,6 +158,7 @@ class HubConfig:
             f"port = {self.port}\n",
             f'runner_auth_mode = "{self.runner_auth_mode}"\n',
             f'route_token_mode = "{self.route_token_mode}"\n',
+            f'produces_mode = "{self.produces_mode}"\n',
         ]
         if not self.pm_sources:
             lines.append(_PM_SOURCE_EXAMPLE_COMMENT)
@@ -176,6 +192,9 @@ class HubConfig:
             raise ConfigError(
                 f"route_token_mode must be one of {sorted(_KNOWN_ROUTE_TOKEN_MODES)}, got {route_token_mode!r}"
             )
+        produces_mode = str(raw.get("produces_mode", PRODUCES_WARN))
+        if produces_mode not in _KNOWN_PRODUCES_MODES:
+            raise ConfigError(f"produces_mode must be one of {sorted(_KNOWN_PRODUCES_MODES)}, got {produces_mode!r}")
         return cls(
             root=root,
             db_url=str(raw["db_url"]),
@@ -184,6 +203,7 @@ class HubConfig:
             pm_sources=_parse_pm_sources(raw.get("pm_source", [])),
             runner_auth_mode=runner_auth_mode,
             route_token_mode=route_token_mode,
+            produces_mode=produces_mode,
         )
 
 

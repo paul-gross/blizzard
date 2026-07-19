@@ -11,8 +11,10 @@ axes — correctness, architecture, design quality). Run the project's own check
 e2e flows inside the chunk's environment, where the environment's services are
 available to drive.
 
-Record your findings as the node's `review-findings` asset: write your assessment —
-what you checked, what passed, and every blocking issue — as the judgement
-assessment payload. On a `fail` that asset is carried back into the build node's
-envelope, so make each finding specific and actionable. Do not commit fixes here;
-review observes, build repairs.
+Submit your findings as the node's `review-findings` asset before you declare done:
+run `blizzard runner attach --name review-findings` with the content on stdin —
+what you checked, what passed, and every blocking issue. For a short verdict, pipe
+it directly, e.g. `echo "..." | blizzard runner attach --name review-findings`; for a
+longer writeup, use a heredoc so the full text reaches stdin intact. On a `fail` that
+asset is carried back into the build node's envelope, so make each finding specific
+and actionable. Do not commit fixes here; review observes, build repairs.

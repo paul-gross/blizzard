@@ -21,6 +21,12 @@ Every assertion is made over the wire against the running hub:
   ``stale_route_token``/``omit_route_token`` levers each get fenced out (``failure``) and
   do not advance the chunk — the one-sided hub service test the mock-runner lever exists
   to drive.
+* **produces-artifact authorization** (issue #113 phase 5) — under
+  ``produces_mode=enforce`` a completion for a node declaring ``produces: [notes]`` is
+  fenced out (``failure``, chunk not advanced) unless it carries an **explicit**
+  (``attached=True``) artifact for every declared name; a fallback-only completion still
+  applies under the default ``warn``. Driven by the mock runner's ``/_drive/complete``
+  ``artifacts`` field — the produces analogue of the route-token levers above.
 
 sqlite only, no tokens, no network. Reproduce — from a provisioned feature env — with::
 
@@ -34,7 +40,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from blizzard.hub.config import ROUTE_TOKEN_ENFORCE
+from blizzard.hub.config import PRODUCES_ENFORCE, ROUTE_TOKEN_ENFORCE
 from tests.e2e.test_acceptance_loop import REPO, REPO_NAME, _forge, _free_port, _hub
 from tests.service.support import (
     mint_fixture,
@@ -316,3 +322,163 @@ def test_route_token_omitted_is_rejected_under_enforce_over_the_wire(tmp_path: P
 
             assert out["response"]["outcome"] == "failure", out
             assert hub.get(f"/api/chunks/{chunk_id}").json()["current_node_id"] == before
+
+
+# --------------------------------------------------------------------------- #
+# Produces-artifact authorization over the wire (issue #113 phase 5) — the real
+# hub's `produces_mode` backstop, driven by the mock-runner /_drive/complete
+# `artifacts` field. The produces analogue of the route-token block above.
+# --------------------------------------------------------------------------- #
+
+
+def _produces_graph_yaml() -> str:
+    """A ``default-delivery`` graph whose ``build`` node declares ``produces: [notes]``.
+
+    Named ``default-delivery`` so POST /chunks' lazy ``ensure_default`` reuses it. The
+    build node's ``pass`` choice advances to ``review`` — the transition the produces
+    backstop gates when ``notes`` was not explicitly attached."""
+    import yaml
+
+    graph = {
+        "name": "default-delivery",
+        "entry": "build",
+        "nodes": {
+            "build": {
+                "executor": "runner",
+                "prompt": "# build",
+                "produces": ["notes"],
+                "judgement": {"prompt": "# judge", "choices": {"pass": {"description": "green", "to": "review"}}},
+                "retries": {"max": 1, "exhausted": "escalate"},
+            },
+            "review": {
+                "executor": "runner",
+                "prompt": "# review",
+                "session": "fresh",
+                "judgement": {"prompt": "# judge", "choices": {"pass": {"description": "clean", "to": "deliver"}}},
+                "retries": {"max": 1, "exhausted": "escalate"},
+            },
+            "deliver": {
+                "executor": "hub",
+                "run": [{"command": "true"}],
+                "judgement": {
+                    "choices": {
+                        "success": {"description": "Delivered.", "to": "done"},
+                        "failure": {"description": "Failed to deliver.", "to": "build"},
+                    }
+                },
+            },
+        },
+    }
+    return yaml.safe_dump(graph, sort_keys=False)
+
+
+_ATTACHED_NOTES = [{"name": "notes", "kind": "asset", "content": "the real thing", "attached": True}]
+_FALLBACK_NOTES = [{"name": "notes", "kind": "asset", "content": "assessment fallback", "attached": False}]
+#: A ``produces:`` name covered by a pushed git commit rather than an attach. Note
+#: ``attached`` is absent (it defaults False) — that is precisely the shape that made this
+#: the regression class below: a legitimate commit-covered name looks "unattached".
+_GIT_COMMIT_NOTES = [
+    {"name": "notes", "kind": "git_commit", "repo": "toy-api", "branch_name": "bz/notes", "commit_hash": "cafe1234"}
+]
+
+
+def test_fallback_only_completion_is_accepted_under_warn_over_the_wire(tmp_path: Path) -> None:
+    """The default ``warn``: a build completion with no explicit ``notes`` attachment
+    (only the assessment fallback) still applies over the wire — the fallback lands."""
+    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+        assert hub.post("/api/graphs", json={"definition_yaml": _produces_graph_yaml()}).status_code == 201
+        chunk_id = _ingest(forge, hub, "produces warn")
+
+        with mock_runner(bin_dir, _free_port(), hub_port) as runner:
+            runner.post("/_drive/register")
+            assert runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()["claimed"] is True
+
+            out = runner.post(
+                "/_drive/complete",
+                json={"chunk_id": chunk_id, "choice": "pass", "artifacts": _FALLBACK_NOTES},
+            ).json()
+            assert out["response"]["outcome"] == "next", out  # build -> review, applied despite no attachment
+
+
+def test_fallback_only_completion_is_rejected_under_enforce_over_the_wire(tmp_path: Path) -> None:
+    """Under ``enforce`` a fallback-only completion (``attached=False`` for ``notes``) is
+    fenced out and the chunk does not advance — the produces backstop over the wire."""
+    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    with (
+        _forge(bin_dir, origins, forge_port) as forge,
+        _hub(tmp_path / "hub", forge_port, hub_port, produces_mode=PRODUCES_ENFORCE) as hub,
+    ):
+        assert hub.post("/api/graphs", json={"definition_yaml": _produces_graph_yaml()}).status_code == 201
+        chunk_id = _ingest(forge, hub, "produces enforce reject")
+
+        with mock_runner(bin_dir, _free_port(), hub_port) as runner:
+            runner.post("/_drive/register")
+            assert runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()["claimed"] is True
+            before = hub.get(f"/api/chunks/{chunk_id}").json()["current_node_id"]
+
+            out = runner.post(
+                "/_drive/complete",
+                json={"chunk_id": chunk_id, "choice": "pass", "artifacts": _FALLBACK_NOTES},
+            ).json()
+            assert out["response"]["outcome"] == "failure", out
+            assert "notes" in (out["response"].get("detail") or "")
+            assert hub.get(f"/api/chunks/{chunk_id}").json()["current_node_id"] == before
+
+
+def test_explicit_attachment_is_accepted_under_enforce_over_the_wire(tmp_path: Path) -> None:
+    """Under ``enforce`` a completion carrying an **explicit** (``attached=True``) ``notes``
+    artifact passes the backstop and advances over the wire — the accept side."""
+    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    with (
+        _forge(bin_dir, origins, forge_port) as forge,
+        _hub(tmp_path / "hub", forge_port, hub_port, produces_mode=PRODUCES_ENFORCE) as hub,
+    ):
+        assert hub.post("/api/graphs", json={"definition_yaml": _produces_graph_yaml()}).status_code == 201
+        chunk_id = _ingest(forge, hub, "produces enforce accept")
+
+        with mock_runner(bin_dir, _free_port(), hub_port) as runner:
+            runner.post("/_drive/register")
+            claim = runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()
+            assert claim["claimed"] is True
+            entry_node = claim["from_node_id"]
+
+            out = runner.post(
+                "/_drive/complete",
+                json={"chunk_id": chunk_id, "choice": "pass", "artifacts": _ATTACHED_NOTES},
+            ).json()
+            assert out["response"]["outcome"] == "next", out
+            assert hub.get(f"/api/chunks/{chunk_id}").json()["current_node_id"] != entry_node
+
+
+def test_git_commit_covered_produces_name_is_accepted_under_enforce_over_the_wire(tmp_path: Path) -> None:
+    """Under ``enforce`` a ``produces:`` name covered by a **pushed git commit** — carrying
+    ``attached=False``, since nothing was attached — passes the backstop and advances.
+
+    The regression class this closes (issue #113): the hub once counted a name covered only
+    by ``attached=True``, so a commit-covered name was fenced out over the wire even though
+    the runner's own nudge check already treated it as satisfied and never asked the worker
+    for anything more. A worker doing exactly what the runner wanted was rejected by the hub.
+    The unit-tier `test_produces_coverage_agreement.py` pins the two predicates together;
+    this proves the accept end to end over the real wire, the only place the mismatch bit.
+    """
+    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    with (
+        _forge(bin_dir, origins, forge_port) as forge,
+        _hub(tmp_path / "hub", forge_port, hub_port, produces_mode=PRODUCES_ENFORCE) as hub,
+    ):
+        assert hub.post("/api/graphs", json={"definition_yaml": _produces_graph_yaml()}).status_code == 201
+        chunk_id = _ingest(forge, hub, "produces enforce git commit")
+
+        with mock_runner(bin_dir, _free_port(), hub_port) as runner:
+            runner.post("/_drive/register")
+            claim = runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()
+            assert claim["claimed"] is True
+            entry_node = claim["from_node_id"]
+
+            out = runner.post(
+                "/_drive/complete",
+                json={"chunk_id": chunk_id, "choice": "pass", "artifacts": _GIT_COMMIT_NOTES},
+            ).json()
+            assert out["response"]["outcome"] == "next", out
+            assert hub.get(f"/api/chunks/{chunk_id}").json()["current_node_id"] != entry_node

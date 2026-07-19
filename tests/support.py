@@ -28,7 +28,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub.app import create_app
 from blizzard.hub.composition import HubServices, build_services
-from blizzard.hub.config import ROUTE_TOKEN_WARN, RUNNER_AUTH_WARN, HubConfig, PmSourceConfig
+from blizzard.hub.config import PRODUCES_WARN, ROUTE_TOKEN_WARN, RUNNER_AUTH_WARN, HubConfig, PmSourceConfig
 from blizzard.hub.delivery.command_runner import CommandResult, IHubCommandRunner
 from blizzard.hub.delivery.workdir import IHubWorkdir
 from blizzard.hub.domain.graph import Edge, Graph, Node
@@ -319,6 +319,7 @@ def build_hub(
     forge_owner: str | None = None,
     runner_auth_mode: str = RUNNER_AUTH_WARN,
     route_token_mode: str = ROUTE_TOKEN_WARN,
+    produces_mode: str = PRODUCES_WARN,
 ) -> HubHarness:
     """A migrated, fully-wired hub over ``tmp_path`` with fake external seams.
 
@@ -331,12 +332,17 @@ def build_hub(
     ``hub_command_runner``/``hub_workdir`` are the generic hub command node's mechanism
     seams (#65) — a test binds fakes here; left ``None``, ``build_services`` wires the
     real subprocess/filesystem adapters (rooted under a throwaway tmp dir, harmless for
-    tests that never mint a ``run:`` node). ``runner_auth_mode`` (issue #86a) and
-    ``route_token_mode`` (issue #84b) default to ``warn``; a test exercising either
-    ``enforce`` rejection path overrides the relevant one."""
+    tests that never mint a ``run:`` node). ``runner_auth_mode`` (issue #86a),
+    ``route_token_mode`` (issue #84b), and ``produces_mode`` (issue #113 phase 5) default
+    to ``warn``; a test exercising an ``enforce`` rejection path overrides the relevant
+    one."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     config = HubConfig(
-        root=tmp_path, db_url=db_url, runner_auth_mode=runner_auth_mode, route_token_mode=route_token_mode
+        root=tmp_path,
+        db_url=db_url,
+        runner_auth_mode=runner_auth_mode,
+        route_token_mode=route_token_mode,
+        produces_mode=produces_mode,
     )
     migration_runner(config).upgrade("head")
 

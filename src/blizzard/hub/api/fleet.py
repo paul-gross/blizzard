@@ -91,6 +91,10 @@ def _route_token_mode(request: Request) -> str:
     return request.app.state.config.route_token_mode
 
 
+def _produces_mode(request: Request) -> str:
+    return request.app.state.config.produces_mode
+
+
 def _resolve_cross_graph_target(services: HubServices, graph: Graph, submission: CompletionSubmission) -> Graph | None:
     """The target graph a cross-graph migration edge (issue #90) names, resolved by name
     via the read graph repository — or ``None`` when the chosen edge is not cross-graph
@@ -317,7 +321,12 @@ def submit_completion(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
     target_graph = _resolve_cross_graph_target(services, graph, submission)
     response = services.apply.apply(
-        chunk, graph, submission, route_token_mode=_route_token_mode(http_request), target_graph=target_graph
+        chunk,
+        graph,
+        submission,
+        route_token_mode=_route_token_mode(http_request),
+        produces_mode=_produces_mode(http_request),
+        target_graph=target_graph,
     )
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)

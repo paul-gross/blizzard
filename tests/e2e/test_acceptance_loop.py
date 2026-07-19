@@ -300,7 +300,14 @@ def _forge(bin_dir: Path, origins: Path, port: int) -> Iterator[httpx.Client]:
 
 
 @contextlib.contextmanager
-def _hub(hub_dir: Path, forge_port: int, port: int, *, route_token_mode: str | None = None) -> Iterator[httpx.Client]:
+def _hub(
+    hub_dir: Path,
+    forge_port: int,
+    port: int,
+    *,
+    route_token_mode: str | None = None,
+    produces_mode: str | None = None,
+) -> Iterator[httpx.Client]:
     env = {
         **os.environ,
         "BZ_FORGE_URL": f"http://127.0.0.1:{forge_port}",
@@ -323,12 +330,18 @@ def _hub(hub_dir: Path, forge_port: int, port: int, *, route_token_mode: str | N
             )
         ],
     )
-    if route_token_mode is not None:
-        # issue #84b — the route-token enforcement brake, a separate flag from
-        # runner_auth_mode; a service-tier scenario proving `enforce` end to end sets
-        # this before the daemon starts (the config is read once, at `host` startup).
+    if route_token_mode is not None or produces_mode is not None:
+        # issue #84b / #113 — the route-token and produces-artifact enforcement brakes,
+        # each a separate flag from runner_auth_mode; a service-tier scenario proving
+        # `enforce` end to end sets these before the daemon starts (the config is read
+        # once, at `host` startup).
         config = HubConfig.load(hub_dir)
-        config = dataclasses.replace(config, route_token_mode=route_token_mode)
+        overrides: dict[str, str] = {}
+        if route_token_mode is not None:
+            overrides["route_token_mode"] = route_token_mode
+        if produces_mode is not None:
+            overrides["produces_mode"] = produces_mode
+        config = dataclasses.replace(config, **overrides)
         config.config_path.write_text(config.to_toml())
     proc = subprocess.Popen(
         [hub_bin, "host", "--dir", str(hub_dir), "--host", "127.0.0.1", "--port", str(port)],

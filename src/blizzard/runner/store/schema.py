@@ -480,7 +480,7 @@ usage_facts = Table(
     Column("node_id", String, nullable=False),
     Column("epoch", Integer, nullable=False),
     Column("generation", Integer, nullable=False),  # this lease's spawn ordinal (1 = the initial spawn)
-    Column("kind", String, nullable=False),  # spawn | resume | judge
+    Column("kind", String, nullable=False),  # spawn | resume | judge | nudge
     Column("model", String, nullable=False),
     Column("input_tokens", Integer, nullable=False),
     Column("output_tokens", Integer, nullable=False),
@@ -509,4 +509,69 @@ route_tokens = Table(
     Column("chunk_id", String, primary_key=True),
     Column("token", Text, nullable=False),
     Column("acquired_at", UtcDateTime, nullable=False),
+)
+
+# --- Lease capability tokens (issue #113, Phase 1) ---------------------------
+#
+# A per-lease capability token minted alongside the lease itself (``_spawn_attempt``),
+# authorizing a later attach call to prove it is the worker holding this lease. One
+# row per lease (``lease_id`` PK, written once at mint — a lease is never re-minted
+# under the same id), storing only the sha256 hash; the plaintext rides the spawn
+# env (``BLIZZARD_LEASE_TOKEN``) and is never persisted. This phase is additive
+# scaffold only — no caller yet compares a presented token against this hash.
+
+lease_tokens = Table(
+    "lease_tokens",
+    metadata,
+    Column("lease_id", String, primary_key=True),
+    Column("token_hash", Text, nullable=False),
+    Column("minted_at", UtcDateTime, nullable=False),
+)
+
+# --- Attachments (a worker's explicit artifact submission — issue #113, Phase 2) ---
+#
+# ``blizzard runner attach --name <n>`` hits this table via ``POST /api/leases/{id}/
+# attachments``, authorized by the lease's own capability token (``lease_tokens`` above).
+# Append-only, latest-wins-per-``(lease_id, name)`` (``bzh:facts-not-status``): a worker
+# may re-submit the same name (a correction) and the newest row for that pair is the one
+# completion assembly reads — no update-in-place, mirroring the append-and-read-newest
+# convention the rest of this store follows for a fact that can be superseded. ``chunk_id``
+# / ``node_id`` / ``epoch`` are carried off the lease at attach time (denormalized, not
+# joined back) so a later read needs no join to ``lease_context`` to place the attachment.
+# Read back at completion assembly by ``_collect_asset_artifacts`` (issue #113, Phase 3),
+# which prefers an attachment over the judgement assessment per ``produces`` name.
+
+attachments = Table(
+    "attachments",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("lease_id", String, nullable=False),
+    Column("chunk_id", String, nullable=False),
+    Column("node_id", String, nullable=False),
+    Column("epoch", Integer, nullable=False),
+    Column("name", String, nullable=False),
+    Column("content", Text, nullable=False),
+    Column("attached_at", UtcDateTime, nullable=False),
+)
+
+# --- Nudge-fired facts (issue #113, Phase 4) ----------------------------------
+#
+# At most one row per ``(lease_id, epoch)`` — the durable guard
+# ``_advance_exited_worker`` (``runner/loop/steps.py``) consults before ever resuming
+# a worker session to nudge it about a ``produces:`` name no git commit or attachment
+# covers (``bzh:invariant-checker`` — "at most one nudge per (lease, epoch)"),
+# idempotent by ``record_nudge_fired``'s own check-then-insert, not a DB constraint
+# (``bzh:sql-portable``), mirroring ``usage_facts``. Written BEFORE the resume it
+# guards, unlike this store's usual resume-then-record pairing (``lease_spawns``): the
+# fact carries no output the resume produces, so nothing blocks recording it first,
+# and doing so makes "at most one nudge" hold structurally across a crash at either
+# the write or the resume that follows it, not just when the worker happens to comply.
+
+nudge_facts = Table(
+    "nudge_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("lease_id", String, nullable=False),
+    Column("epoch", Integer, nullable=False),
+    Column("nudged_at", UtcDateTime, nullable=False),
 )

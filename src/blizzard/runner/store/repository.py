@@ -450,6 +450,13 @@ class IReadRunnerStore(Protocol):
         ``question.asked``. ``None`` is presented as an absent field, never fabricated."""
         ...
 
+    def lease_token_hash(self, lease_id: str) -> str | None:
+        """The lease's minted capability token hash, or ``None`` if never minted
+        here (issue #113, Phase 1). Written once at spawn (:func:`_spawn_attempt`);
+        this phase reads it back for nothing yet — the seam a later attach
+        authorization check compares a presented plaintext's hash against."""
+        ...
+
     def open_takeover_for_chunk(self, chunk_id: str) -> TakeoverRecord | None:
         """The chunk's open takeover, or ``None`` — a ``takeovers`` row with no
         ``takeover_ends`` row for the same ``takeover_id`` (issue #52).
@@ -509,6 +516,28 @@ class IReadRunnerStore(Protocol):
         """Sum every local usage fact recorded at or after ``at`` (issue #58's
         runner-ceiling read, Phase 5b) — see :class:`UsageTotals` for the lower-bound +
         PARTIAL contract on ``cost_usd``."""
+        ...
+
+    def attachments_for_lease(self, lease_id: str) -> dict[str, str]:
+        """The lease's explicit artifact submissions, newest content per ``name``
+        (issue #113, Phase 2). Append-only, latest-wins-per-``(lease_id, name)``: a
+        worker's re-attach of the same name (a correction) reads back as the
+        replacement, never a duplicate. Empty for a lease that never attached
+        anything. Read at completion assembly by
+        :func:`~blizzard.runner.loop.steps._collect_asset_artifacts` (issue #113,
+        Phase 3), which prefers an attachment over the judgement assessment per
+        ``produces`` name."""
+        ...
+
+    def nudge_fired(self, lease_id: str, epoch: int) -> bool:
+        """``True`` iff this attempt's `produces`-unmet nudge is already spent
+        (issue #113, Phase 4) — the durable guard
+        :func:`~blizzard.runner.loop.steps._advance_exited_worker` consults before
+        ever resuming a worker session to nudge it. Written by
+        :meth:`~IWriteRunnerStore.record_nudge_fired` *before* that resume runs, so a
+        crash between the two still leaves this reading ``True`` on the next pass —
+        the resume itself may or may not have actually run, but it will not be
+        attempted again either way."""
         ...
 
 
@@ -627,6 +656,16 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         those paths."""
         ...
 
+    def record_lease_token(self, lease_id: str, token_hash: str, at: datetime) -> None:
+        """Persist a freshly minted lease's capability-token hash (issue #113, Phase 1).
+
+        Called once from :func:`_spawn_attempt` right after :meth:`record_lease` —
+        a lease id is never re-minted, so this is an insert, never an upsert. The
+        plaintext itself is never persisted; only this sha256 hash lands here, read
+        back by a later attach-authorization check via :meth:`~IReadRunnerStore.
+        lease_token_hash`."""
+        ...
+
     def record_resume_intent(self, *, lease_id: str, marked_at: datetime) -> None:
         """Mark a lease for same-lease restart-resume at graceful shutdown."""
         ...
@@ -689,4 +728,38 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         between this write and the outbound enqueue, re-run by the next tick reaching the
         same exited worker again before its completion is buffered — finds the row already
         there and writes nothing a second time, buffering no duplicate report either."""
+        ...
+
+    def record_attachment(
+        self,
+        *,
+        lease_id: str,
+        chunk_id: str,
+        node_id: str,
+        epoch: int,
+        name: str,
+        content: str,
+        attached_at: datetime,
+    ) -> None:
+        """Append a worker's explicit artifact submission for ``name`` (issue #113,
+        Phase 2), a single committed transaction so it survives a ``kill -9`` between
+        this call and the completion submission that would otherwise read it. Called
+        by :class:`~blizzard.runner.domain.attachments.AttachmentService` once the
+        presented lease token has been authorized — never directly from the API edge
+        (``bzh:controller-read-only``). Append-only: a later call for the same
+        ``(lease_id, name)`` is a correction, read back as the replacement by
+        :meth:`~IReadRunnerStore.attachments_for_lease`, never merged with the prior
+        row."""
+        ...
+
+    def record_nudge_fired(self, *, lease_id: str, epoch: int, at: datetime) -> None:
+        """Durably spend this attempt's one `produces`-unmet nudge (issue #113,
+        Phase 4). Idempotent by its own check-then-insert, not a DB constraint
+        (``bzh:sql-portable``), mirroring :meth:`record_usage`: ``_advance_exited_
+        worker`` already checks :meth:`~IReadRunnerStore.nudge_fired` first, so this
+        only ever finds an existing row on a genuine replay. Called *before* the
+        resume that delivers the nudge, not after — see the call site's own comment
+        for why that ordering, not the matching-usual resume-then-record one, is what
+        makes "at most one nudge per (lease, epoch)" hold across a crash at either
+        point."""
         ...

@@ -335,6 +335,7 @@ class ClaudeCodeAdapter:
         # tree, so a sibling worker cannot misattribute a beat).
         env["BLIZZARD_LEASE_ID"] = preamble.lease_id
         env["BLIZZARD_RUNNER_URL"] = preamble.local_api_url
+        env["BLIZZARD_LEASE_TOKEN"] = preamble.lease_token
         # The ask channel: the worker records an undecidable choice by
         # running ``blizzard runner ask`` against the local API above, then exits. Real
         # Claude Code invokes it per the node-prompt convention; the blizzard-mock façade

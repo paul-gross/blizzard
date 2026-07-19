@@ -23,11 +23,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-#: The three points in a node's lifecycle a harness invocation is attributed to —
-#: the initial spawn, a fire-and-forget resume (answer delivery / CI feedback), or
-#: the two-phase judgement resume. Supplied by the caller (the runner core knows
-#: which operation it just ran), never inferred by the adapter.
-UsageKind = Literal["spawn", "resume", "judge"]
+#: The points in a node's lifecycle a harness invocation is attributed to — the
+#: initial spawn, a fire-and-forget resume (answer delivery / CI feedback), the
+#: two-phase judgement resume, or the produces-nudge resume (issue #113, Phase 4 —
+#: its own kind, distinct from ``judge``, so its usage fact never collides with the
+#: primary judgement's at the same generation). Supplied by the caller (the runner
+#: core knows which operation it just ran), never inferred by the adapter.
+UsageKind = Literal["spawn", "resume", "judge", "nudge"]
 
 __all__ = ["UsageKind", "UsageSample"]
 

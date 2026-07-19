@@ -62,6 +62,12 @@ class WorkerPreamble:
     **injected**, never computed inside the adapter (``bzh:dependency-injection`);
     the runner composition root resolves the concrete path (phase 2 of issue #58).
     Empty keeps today's behavior (stdout discarded).
+
+    ``lease_token`` (issue #113) is the lease's minted capability-token plaintext,
+    ridden into the spawn env as ``BLIZZARD_LEASE_TOKEN`` alongside ``BLIZZARD_
+    LEASE_ID`` — a per-spawn identity var scoped to this worker's own lease, never
+    a daemon secret (``bzh:worker-env-allowlist``). This phase mints and carries it
+    only; no caller yet authorizes anything against it.
     """
 
     environments: list[AcquiredEnvironment]
@@ -70,6 +76,7 @@ class WorkerPreamble:
     workspace_root: str = ""
     prompt_prefix: str = ""
     stdout_path: str = ""
+    lease_token: str = ""
 
 
 @dataclass(frozen=True)

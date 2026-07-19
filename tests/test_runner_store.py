@@ -359,3 +359,74 @@ def test_lease_ids_for_chunk_spans_active_and_closed(tmp_path):  # type: ignore[
     _mint(store, lease="lease_2", epoch=2)
     store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="reaped", closed_at=_NOW)
     assert sorted(store.lease_ids_for_chunk("ch_1")) == ["lease_1", "lease_2"]
+
+
+@pytest.mark.unit
+def test_lease_token_hash_absent_for_a_lease_never_minted_one(tmp_path):  # type: ignore[no-untyped-def]
+    # issue #113, Phase 1 — never minted here (e.g. a lease from before this revision).
+    store = _store(tmp_path)
+    _mint(store)
+    assert store.lease_token_hash("lease_1") is None
+
+
+@pytest.mark.unit
+def test_lease_token_hash_round_trips_what_was_recorded(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _mint(store)
+    store.record_lease_token("lease_1", "deadbeef" * 8, _NOW)
+    assert store.lease_token_hash("lease_1") == "deadbeef" * 8
+    # Scoped per lease — a different lease id has no row of its own.
+    assert store.lease_token_hash("lease_2") is None
+
+
+@pytest.mark.unit
+def test_attachments_for_lease_is_empty_when_nothing_attached(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _mint(store)
+    assert store.attachments_for_lease("lease_1") == {}
+
+
+@pytest.mark.unit
+def test_attachments_for_lease_round_trips_what_was_recorded(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _mint(store)
+    store.record_attachment(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        name="review-findings",
+        content="looks good",
+        attached_at=_NOW,
+    )
+    assert store.attachments_for_lease("lease_1") == {"review-findings": "looks good"}
+
+
+@pytest.mark.unit
+def test_attachments_for_lease_is_latest_wins_per_name(tmp_path):  # type: ignore[no-untyped-def]
+    """A re-attach of the same name is a correction, not a duplicate — the newest
+    row for the pair is what reads back."""
+    store = _store(tmp_path)
+    _mint(store)
+    store.record_attachment(
+        lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", epoch=1, name="n", content="first", attached_at=_NOW
+    )
+    store.record_attachment(
+        lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", epoch=1, name="n", content="second", attached_at=_NOW
+    )
+    assert store.attachments_for_lease("lease_1") == {"n": "second"}
+
+
+@pytest.mark.unit
+def test_attachments_for_lease_is_scoped_per_lease(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _mint(store, lease="lease_1")
+    _mint(store, lease="lease_2", chunk="ch_2")
+    store.record_attachment(
+        lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", epoch=1, name="n", content="one", attached_at=_NOW
+    )
+    store.record_attachment(
+        lease_id="lease_2", chunk_id="ch_2", node_id="nd_build", epoch=1, name="n", content="two", attached_at=_NOW
+    )
+    assert store.attachments_for_lease("lease_1") == {"n": "one"}
+    assert store.attachments_for_lease("lease_2") == {"n": "two"}

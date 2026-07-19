@@ -312,6 +312,27 @@ into every spawn too. Empty (the fresh-scaffold default) means the base allowlis
 only; a daemon credential such as `BZ_HUB_TOKEN` is never in scope for this list, so
 it is absent from a worker child by construction unless deliberately named here.
 
+## Produces-artifact enforcement
+
+`produces_mode` is a third rollout flag, scaffolded into `blizzard-hub.toml` by
+`blizzard hub init` alongside `runner_auth_mode`/`route_token_mode` above and defaulting
+to `warn` the same way — but it guards a different concern: not runner identity or
+route capability, a node's own `produces:` declaration. A node that lists a name in
+`produces:` should carry either a pushed git commit of that name or an explicit
+`blizzard runner attach --name <name>` for it; a name backed only by the worker's
+judgement-assessment fallback is not proof the worker produced the thing the graph
+asked for.
+
+| Flag | Guards | `warn` (default) | `enforce` |
+|------|--------|-------------------|-----------|
+| `produces_mode` | every `produces:` name has an explicit attachment or a covering git commit | logs the missing names and lets the completion proceed on the assessment fallback | rejects the completion as a semantic failure |
+
+It is independent of `runner_auth_mode`/`route_token_mode` — flipping it does not
+depend on either of them, and vice versa — so it is not part of the rollout sequence
+above. A fresh deploy or an upgraded hub keeps accepting assessment-fallback
+completions until an operator deliberately flips it to `enforce` in
+`blizzard-hub.toml` and restarts the hub.
+
 ## The runner's two doors
 
 The runner daemon serves one API on two listeners, and which one you address depends on

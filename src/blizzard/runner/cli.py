@@ -52,6 +52,9 @@ DEFAULT_DIR = "."
 # at spawn — and is distinct from the operator's `BZ_*` config namespace below.
 ENV_LEASE_ID = "BLIZZARD_LEASE_ID"
 ENV_RUNNER_URL = "BLIZZARD_RUNNER_URL"
+# The lease's minted capability token (issue #113, Phase 1) — authorizes `attach`
+# against this worker's own lease, nothing else.
+ENV_LEASE_TOKEN = "BLIZZARD_LEASE_TOKEN"
 # The operator's TCP door onto the local API (issue #43) — the `BZ_*` namespace, and the
 # override for when the socket is not the right address (a remote-ish Tailnet reach, or a
 # daemon whose runtime dir this shell cannot see).
@@ -367,6 +370,36 @@ def ask(prompt: str, options: str | None) -> None:
     except httpx.HTTPError as exc:
         raise click.ClickException(f"ask: could not record the question ({exc})") from exc
     click.echo(resp.json().get("question_id", ""))
+
+
+@runner.command()
+@click.option("--name", required=True, help="The `produces:` name this content is submitted for.")
+def attach(name: str) -> None:
+    """Worker: durably submit an explicit artifact for a ``produces:`` name (stdin).
+
+    A pure client of the runner's local API: the worker pipes the artifact's content
+    on stdin, and this posts it for the lease in ``BLIZZARD_LEASE_ID`` to
+    ``BLIZZARD_RUNNER_URL``, authorized by the lease token in ``BLIZZARD_LEASE_TOKEN`` —
+    all three inherited from the spawn environment, so no identity arguments. A
+    rejection (a wrong/missing token, an unknown lease, an unreachable runner) exits
+    non-zero so the worker learns it rather than silently losing the submission.
+    """
+    lease_id = os.environ.get(ENV_LEASE_ID)
+    runner_url = os.environ.get(ENV_RUNNER_URL)
+    lease_token = os.environ.get(ENV_LEASE_TOKEN)
+    if not lease_id or not runner_url:
+        raise click.ClickException(f"attach: no {ENV_LEASE_ID}/{ENV_RUNNER_URL} in the environment")
+    content = click.get_text_stream("stdin").read()
+    try:
+        resp = httpx.post(
+            f"{runner_url.rstrip('/')}/api/leases/{lease_id}/attachments",
+            json={"name": name, "content": content},
+            headers={"X-Blizzard-Lease-Token": lease_token} if lease_token else {},
+            timeout=_HEARTBEAT_TIMEOUT,
+        )
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise click.ClickException(f"attach: could not record {name!r} ({exc})") from exc
 
 
 @runner.command("pm-items")

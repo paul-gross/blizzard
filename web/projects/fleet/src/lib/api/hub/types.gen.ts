@@ -2038,6 +2038,10 @@ export type SessionMode = 'resume' | 'fresh';
  */
 export type SubmittedArtifact = {
     /**
+     * Attached
+     */
+    attached?: boolean;
+    /**
      * Branch Name
      */
     branch_name?: string | null;

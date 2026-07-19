@@ -35,6 +35,7 @@ from blizzard.runner.store.repository import (
 )
 from blizzard.runner.store.schema import (
     asks,
+    attachments,
     binding_releases,
     daemon_liveness,
     env_bindings,
@@ -43,8 +44,10 @@ from blizzard.runner.store.schema import (
     lease_closures,
     lease_context,
     lease_spawns,
+    lease_tokens,
     leases,
     local_pause_facts,
+    nudge_facts,
     outbound_buffer,
     park_facts,
     park_resumes,
@@ -427,6 +430,26 @@ class SqlAlchemyRunnerStore:
         rows = self._all(select(route_tokens.c.token).where(route_tokens.c.chunk_id == chunk_id))
         return str(rows[0].token) if rows else None
 
+    def lease_token_hash(self, lease_id: str) -> str | None:
+        rows = self._all(select(lease_tokens.c.token_hash).where(lease_tokens.c.lease_id == lease_id))
+        return str(rows[0].token_hash) if rows else None
+
+    def attachments_for_lease(self, lease_id: str) -> dict[str, str]:
+        newest = (
+            select(attachments.c.name, func.max(attachments.c.id).label("id"))
+            .where(attachments.c.lease_id == lease_id)
+            .group_by(attachments.c.name)
+            .subquery()
+        )
+        stmt = select(attachments.c.name, attachments.c.content).join(newest, attachments.c.id == newest.c.id)
+        return {str(r.name): str(r.content) for r in self._all(stmt)}
+
+    def nudge_fired(self, lease_id: str, epoch: int) -> bool:
+        rows = self._all(
+            select(nudge_facts.c.lease_id).where(and_(nudge_facts.c.lease_id == lease_id, nudge_facts.c.epoch == epoch))
+        )
+        return bool(rows)
+
     def resume_intent_lease_ids(self) -> set[str]:
         stmt = select(resume_intents.c.lease_id).where(_intent_is_open()).distinct()
         return {str(r.lease_id) for r in self._all(stmt)}
@@ -693,6 +716,54 @@ class SqlAlchemyRunnerStore:
                     route_tokens.update().where(route_tokens.c.chunk_id == chunk_id).values(token=token, acquired_at=at)
                 )
         _log.info("route token stashed", chunk_id=chunk_id)
+
+    def record_lease_token(self, lease_id: str, token_hash: str, at: datetime) -> None:
+        with self._begin() as conn:
+            conn.execute(lease_tokens.insert().values(lease_id=lease_id, token_hash=token_hash, minted_at=at))
+        _log.info("lease token minted", lease_id=lease_id)
+
+    def record_attachment(
+        self,
+        *,
+        lease_id: str,
+        chunk_id: str,
+        node_id: str,
+        epoch: int,
+        name: str,
+        content: str,
+        attached_at: datetime,
+    ) -> None:
+        # A single committed transaction (`engine.begin()` commits on clean exit) —
+        # durable the instant this returns, so it survives a `kill -9` right after
+        # (issue #113 Phase 2's crash-sweep criterion).
+        with self._begin() as conn:
+            conn.execute(
+                attachments.insert().values(
+                    lease_id=lease_id,
+                    chunk_id=chunk_id,
+                    node_id=node_id,
+                    epoch=epoch,
+                    name=name,
+                    content=content,
+                    attached_at=attached_at,
+                )
+            )
+        _log.info("attachment recorded", lease_id=lease_id, name=name)
+
+    def record_nudge_fired(self, *, lease_id: str, epoch: int, at: datetime) -> None:
+        # Check-then-insert in one transaction, mirroring `record_usage` — idempotent by
+        # construction rather than a DB constraint (`bzh:sql-portable`): the caller
+        # already checks `nudge_fired` first, so this only ever finds an existing row on
+        # a genuine replay (a crash between this write and whatever follows it,
+        # re-driven by the next ADVANCE pass before that pass's own read would see it).
+        with self._begin() as conn:
+            existing = conn.execute(
+                select(nudge_facts.c.id).where(and_(nudge_facts.c.lease_id == lease_id, nudge_facts.c.epoch == epoch))
+            ).one_or_none()
+            if existing is not None:
+                return
+            conn.execute(nudge_facts.insert().values(lease_id=lease_id, epoch=epoch, nudged_at=at))
+        _log.info("nudge fired", lease_id=lease_id, epoch=epoch)
 
     def record_resume_intent(self, *, lease_id: str, marked_at: datetime) -> None:
         with self._begin() as conn:

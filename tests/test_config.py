@@ -13,8 +13,8 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.config import ENV_PORT as HUB_ENV_PORT
+from blizzard.hub.config import PRODUCES_ENFORCE, HubConfig, PmSourceConfig
 from blizzard.hub.config import ConfigError as HubConfigError
-from blizzard.hub.config import HubConfig, PmSourceConfig
 from blizzard.runner.config import DEFAULT_RUNNER_CEILING_WINDOW_HOURS, RunnerConfig
 from blizzard.runner.config import ENV_PORT as RUNNER_ENV_PORT
 
@@ -485,6 +485,60 @@ def test_route_token_mode_enforces_independently_of_runner_auth_mode(tmp_path: P
     edited.config_path.write_text(edited.to_toml())
     reloaded = HubConfig.load(edited.root)
     assert reloaded.runner_auth_mode == "enforce"
+    assert reloaded.route_token_mode == "warn"
+
+
+# --------------------------------------------------------------------------- #
+# `produces_mode` — the produces-artifact rollout brake (issue #113 phase 5), a
+# separate flag from `runner_auth_mode`/`route_token_mode` above.
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.unit
+def test_produces_mode_defaults_to_warn(tmp_path: Path) -> None:
+    config = _hub_config(tmp_path)
+    assert config.produces_mode == "warn"
+
+
+@pytest.mark.unit
+def test_produces_mode_round_trips_through_to_toml_and_load(tmp_path: Path) -> None:
+    config = _hub_config(tmp_path)
+    config.config_path.write_text(config.to_toml())
+    loaded = HubConfig.load(config.root)
+    assert loaded.produces_mode == "warn"
+
+    edited = dataclasses.replace(loaded, produces_mode="enforce")
+    edited.config_path.write_text(edited.to_toml())
+    reloaded = HubConfig.load(edited.root)
+    assert reloaded.produces_mode == "enforce"
+
+
+@pytest.mark.unit
+def test_produces_mode_absent_from_toml_defaults_to_warn(tmp_path: Path) -> None:
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///x"\n')
+    assert HubConfig.load(root).produces_mode == "warn"
+
+
+@pytest.mark.unit
+def test_produces_mode_unknown_value_raises(tmp_path: Path) -> None:
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///x"\nproduces_mode = "block"\n')
+    with pytest.raises(HubConfigError, match="produces_mode"):
+        HubConfig.load(root)
+
+
+@pytest.mark.unit
+def test_produces_mode_enforces_independently_of_the_other_modes(tmp_path: Path) -> None:
+    """All three flags are separate — setting one leaves the others at their own default."""
+    config = _hub_config(tmp_path)
+    edited = dataclasses.replace(config, produces_mode=PRODUCES_ENFORCE)
+    edited.config_path.write_text(edited.to_toml())
+    reloaded = HubConfig.load(edited.root)
+    assert reloaded.produces_mode == "enforce"
+    assert reloaded.runner_auth_mode == "warn"
     assert reloaded.route_token_mode == "warn"
 
 

@@ -117,6 +117,21 @@ def check_runner_store(engine: Engine) -> list[Violation]:
                     )
                 )
 
+        # runner:nudge-at-most-once — a lease's `produces`-unmet nudge fires at most
+        # once per (lease, epoch) (issue #113, Phase 4). `record_nudge_fired` is an
+        # insert never an upsert, gated by `_advance_exited_worker`'s own
+        # check-then-insert (not a DB constraint — `bzh:sql-portable`), so a duplicate
+        # here means that guard was bypassed — the crash-correctness property the
+        # `nudge.*` crash points exist to prove holds across a kill -9 at either one.
+        nudge_key = Counter(
+            (row[0], row[1]) for row in conn.execute(select(runner.nudge_facts.c.lease_id, runner.nudge_facts.c.epoch))
+        )
+        for (lease_id, epoch), n in nudge_key.items():
+            if n > 1:
+                violations.append(
+                    Violation("runner:nudge-at-most-once", f"lease {lease_id} epoch {epoch} has {n} nudge facts")
+                )
+
         # NOT checked, deliberately: "a pause-parked lease has no closure" (issue #46 plan §7).
         # It reads like the natural companion to the rule above, and it is **false on a legal
         # history**: pause a chunk, then detach it. `_reconcile_leases` abandons the lease —

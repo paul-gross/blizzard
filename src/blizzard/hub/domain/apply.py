@@ -27,11 +27,12 @@ from __future__ import annotations
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.ids import ARTIFACT_PREFIX, DECISION_PREFIX, TRANSITION_PREFIX, mint
-from blizzard.hub.config import ROUTE_TOKEN_WARN
+from blizzard.hub.config import PRODUCES_WARN, ROUTE_TOKEN_WARN
 from blizzard.hub.delivery.hub_node import HubNodeExecutor
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.envelope import build_node_envelope
 from blizzard.hub.domain.graph import RESERVED_TERMINAL, Edge, Executor, Graph, JudgedBy, Node
+from blizzard.hub.domain.produces_auth import check_produces
 from blizzard.hub.domain.route_auth import check_route_token
 from blizzard.hub.domain.work import (
     Chunk,
@@ -123,6 +124,7 @@ class ApplyService:
         submission: CompletionSubmission,
         *,
         route_token_mode: str = ROUTE_TOKEN_WARN,
+        produces_mode: str = PRODUCES_WARN,
         target_graph: Graph | None = None,
     ) -> ApplyResponse:
         """Apply a completion. ``target_graph`` is the pre-resolved cross-graph migration
@@ -215,6 +217,17 @@ class ApplyService:
         to_node_id = RESERVED_TERMINAL if edge.to_node_name == RESERVED_TERMINAL else _resolve(graph, edge.to_node_name)
         if to_node_id is None:
             return _failure(f"choice `{submission.choice}` routes to unknown node {edge.to_node_name}")
+
+        # Produces-artifact backstop (issue #113 phase 5) — ordered here, after every
+        # other rejection ahead of this fresh transition, so the check only runs on a
+        # submission that is genuinely about to be recorded: never on a replay (probed
+        # above), never on a gate resolution (no produces of its own — the decision's
+        # artifacts already landed), and never once the chunk is already terminal or
+        # stale. Under ``enforce`` a rejection here leaves the fence and the transition
+        # untouched, exactly like ``_check_route_token``'s failure above.
+        produces_rejection = check_produces(from_node, submission.artifacts, mode=produces_mode)
+        if produces_rejection is not None:
+            return _failure(produces_rejection)
 
         self._chunks.record_transition(
             transition_id=mint(TRANSITION_PREFIX, self._clock),

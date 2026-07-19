@@ -16,15 +16,18 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.hub.domain.artifacts import ArtifactKind
+from blizzard.hub.domain.enrollment import hash_token
 from blizzard.hub.domain.work import DEFAULT_MODEL, ChunkStatus
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.context import LoopConfig
-from blizzard.runner.loop.steps import advance, fill, pull, reap
+from blizzard.runner.loop.steps import _collect_asset_artifacts, advance, fill, pull, reap
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.loop.worktree import GitArtifact
 from blizzard.runner.store.repository import NewLease
 from blizzard.wire.chunk import ChunkDetail, ChunkUsageTotalView, RouteView
+from blizzard.wire.completion import SubmittedArtifact
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from blizzard.wire.facts import ESCALATION_RECORDED, LEASE_MINTED
 from blizzard.wire.queue import QueuePeekEntry
@@ -234,6 +237,29 @@ def test_fill_stashes_the_claims_route_token(tmp_path):  # type: ignore[no-untyp
     fill(ctx)
 
     assert store.route_token("ch_1") == "rtok-abc123"
+
+
+@pytest.mark.unit
+def test_fill_mints_a_lease_capability_token_and_carries_its_plaintext_to_spawn(tmp_path):  # type: ignore[no-untyped-def]
+    """A per-lease capability token (issue #113, Phase 1) is minted alongside the
+    lease: its sha256 hash lands durably in the store, and its plaintext rides only
+    the spawn preamble — never the store — for ``BLIZZARD_LEASE_TOKEN`` to carry
+    into the worker env. Pure scaffold this phase: nothing yet authorizes against
+    it, so this only pins the mint + carry, not any check."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.claim_outcome = claimed_outcome("ch_1", _build_envelope())
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
+
+    fill(ctx)
+
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None
+    _, preamble = harness.spawns[0]
+    assert preamble.lease_token
+    assert store.lease_token_hash(lease.lease_id) == hash_token(preamble.lease_token)
 
 
 @pytest.mark.unit
@@ -515,6 +541,69 @@ def test_advance_review_harvests_findings_asset_from_assessment(tmp_path):  # ty
     assert len(findings) == 1
     assert findings[0].kind is ArtifactKind.ASSET
     assert findings[0].content == "BLOCKING: guard the empty input"
+    assert findings[0].attached is False
+
+
+@pytest.mark.unit
+def test_collect_asset_artifacts_prefers_an_attachment_over_the_assessment():  # type: ignore[no-untyped-def]
+    """A `produces` name with a durable attachment wins over the assessment (issue #113)."""
+    envelope = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES, produces=["review-findings"])
+
+    submitted = _collect_asset_artifacts(envelope, [], "the assessment", {"review-findings": "attached content"})
+
+    assert len(submitted) == 1
+    assert submitted[0].name == "review-findings"
+    assert submitted[0].kind is ArtifactKind.ASSET
+    assert submitted[0].content == "attached content"
+    assert submitted[0].attached is True
+
+
+@pytest.mark.unit
+def test_collect_asset_artifacts_falls_back_to_the_assessment_when_unattached():  # type: ignore[no-untyped-def]
+    """A `produces` name with no attachment still emits the assessment, unattached."""
+    envelope = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES, produces=["review-findings"])
+
+    submitted = _collect_asset_artifacts(envelope, [], "the assessment", {})
+
+    assert len(submitted) == 1
+    assert submitted[0].content == "the assessment"
+    assert submitted[0].attached is False
+
+
+@pytest.mark.unit
+def test_collect_asset_artifacts_multi_asset_node_does_not_alias_attached_and_unattached_names():  # type: ignore[no-untyped-def]
+    """The #90 aliasing bug: two `produces` names, only one attached, must now differ."""
+    envelope = make_envelope(
+        "ch_1", "review", node_id="nd_review", choices=_CHOICES, produces=["review-findings", "review-diary"]
+    )
+
+    submitted = _collect_asset_artifacts(
+        envelope, [], "the shared assessment", {"review-findings": "the real findings"}
+    )
+
+    by_name = {a.name: a for a in submitted}
+    assert by_name["review-findings"].content == "the real findings"
+    assert by_name["review-findings"].attached is True
+    assert by_name["review-diary"].content == "the shared assessment"
+    assert by_name["review-diary"].attached is False
+    # The exact bug: before this phase both names aliased to the same assessment string.
+    assert by_name["review-findings"].content != by_name["review-diary"].content
+
+
+@pytest.mark.unit
+def test_collect_asset_artifacts_git_commit_precedence_over_an_attachment():  # type: ignore[no-untyped-def]
+    """A name already covered by a git-commit artifact is never re-emitted as an asset,
+    even when an attachment exists for that same name."""
+    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES, produces=["toy-api"])
+    git_artifacts = [
+        SubmittedArtifact(
+            name="toy-api", kind=ArtifactKind.GIT_COMMIT, repo="toy-api", branch_name="b", commit_hash="deadbeef"
+        )
+    ]
+
+    submitted = _collect_asset_artifacts(envelope, git_artifacts, "assessment", {"toy-api": "should be ignored"})
+
+    assert submitted == []
 
 
 @pytest.mark.unit

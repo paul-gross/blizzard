@@ -116,6 +116,49 @@
         "title": "AskView",
         "type": "object"
       },
+      "AttachmentRequest": {
+        "description": "A worker's explicit artifact submission for one ``produces:`` name.",
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "content"
+        ],
+        "title": "AttachmentRequest",
+        "type": "object"
+      },
+      "AttachmentResponse": {
+        "description": "``POST /api/leases/{lease_id}/attachments`` \u2014 the submission landed durably.",
+        "properties": {
+          "lease_id": {
+            "title": "Lease Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "recorded": {
+            "title": "Recorded",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "recorded",
+          "lease_id",
+          "name"
+        ],
+        "title": "AttachmentResponse",
+        "type": "object"
+      },
       "CapacitiesView": {
         "description": "Agent slots \u2014 the same math FILL claims against.",
         "properties": {
@@ -1705,6 +1748,59 @@
           }
         },
         "summary": "Record Ask",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/leases/{lease_id}/attachments": {
+      "post": {
+        "description": "Record a worker's explicit artifact for ``request_body.name`` against its lease.",
+        "operationId": "record_attachment_api_leases__lease_id__attachments_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "title": "Lease Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AttachmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttachmentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Attachment",
         "tags": [
           "runner"
         ]

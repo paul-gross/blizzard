@@ -73,6 +73,7 @@ import contextlib
 import os
 import signal
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -83,10 +84,12 @@ from blizzard.foundation.crash import discover_crash_points
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.invariants import check_invariants
 from blizzard.hub.config import HubConfig
+from blizzard.hub.domain.enrollment import hash_token
 from blizzard.hub.store import schema as hub_schema
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.store import schema as runner_schema
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
+from blizzard.runner.store.repository import NewLease
 from tests.crash.support import (
     LAND_STEP,
     OWNER,
@@ -102,6 +105,7 @@ from tests.crash.support import (
     migrate_hub_target_yaml,
     migrate_source_yaml,
     migrate_target_yaml,
+    nudge_graph_yaml,
     start_hub,
     start_runner,
     terminate,
@@ -122,7 +126,7 @@ _ALL_POINTS = [p.name for p in discover_crash_points()]
 # the generic sweep drives every remaining boundary; resume points are swept by the
 # graceful-restart scenario (`test_kill9_at_resume_crash_point`) and abandon points by the
 # dedicated detach scenario (`test_kill9_at_abandon_crash_point`), further down.
-_DEDICATED_PREFIXES = ("resume.", "abandon.", "pause.", "hubnode.", "migrate.")
+_DEDICATED_PREFIXES = ("resume.", "abandon.", "pause.", "hubnode.", "migrate.", "attach.", "nudge.")
 _RESUME_POINTS = [p for p in _ALL_POINTS if p.startswith("resume.")]
 _ABANDON_POINTS = [p for p in _ALL_POINTS if p.startswith("abandon.")]
 _PAUSE_POINTS = [p for p in _ALL_POINTS if p.startswith("pause.")]
@@ -166,6 +170,31 @@ _HUBNODE_POINTS = [p for p in _ALL_POINTS if p.startswith("hubnode.") and p not 
 # crashes right after the atomic re-pin, and recovery re-queues + lands the chunk under the
 # target graph exactly once with `hub:migration-pin-consistent` green.
 _MIGRATE_POINTS = [p for p in _ALL_POINTS if p.startswith("migrate.")]
+# `attach.*` fires inside the RUNNER's local attach endpoint (`AttachmentService.attach`,
+# issue #113), an out-of-band HTTP write the generic `build -> deliver` sweep never drives —
+# so it is a dedicated family swept by its own scenario (`test_kill9_at_attach_crash_point`),
+# which stands up a real runner daemon, seeds a lease + its capability token, and makes the
+# real `POST /api/leases/{id}/attachments` call: the runner records the row durably, crashes
+# in the after-record window, and the attachment (with full provenance) survives against the
+# same store — criterion 3's kill-9 durability. It needs no hub and no forge (the attach
+# channel is loop-independent), so it stands up neither.
+_ATTACH_POINTS = [p for p in _ALL_POINTS if p.startswith("attach.")]
+# `nudge.*` fires inside the RUNNER's own ADVANCE step (`_advance_exited_worker`,
+# issue #113 Phase 4), only when a node's `produces:` name has neither a pushed git
+# commit nor an explicit attachment — a condition the plain `build -> deliver` graph
+# above never creates (its `build` node declares no `produces:` at all). So it is a
+# dedicated family swept by its own scenario (`test_kill9_at_nudge_crash_point`),
+# which drives `nudge_graph_yaml`'s `build -> deliver` graph — identical but for one
+# unattached `produces:` name on `build` — and crashes the RUNNER (never the hub;
+# both windows are runner-local) in one of the two per-nudge windows:
+# `nudge.after-fired-fact.before-resume` (the guard is durable, the resume that
+# delivers the nudge has not run) and `nudge.after-resume.before-reassemble` (the
+# resume returned, attachments not yet re-read). Either way the chunk still lands
+# exactly once and `runner:nudge-at-most-once` is green — the resume the crash
+# interrupted is never repeated on the recovering pass, because the guard fact is
+# written before the resume runs, not after (see the call site in
+# `runner/loop/steps.py` for why that ordering is what makes the property hold).
+_NUDGE_POINTS = [p for p in _ALL_POINTS if p.startswith("nudge.")]
 _GENERIC_POINTS = [p for p in _ALL_POINTS if not p.startswith(_DEDICATED_PREFIXES)]
 
 # A representative CI subset — one crash point per boundary family, biased toward the
@@ -228,6 +257,19 @@ _HUBNODE_PENDING_CI_SUBSET = ("hubnode.after-poll.before-slot-release",)
 # `_select` rename-guard asserts the point still exists in the registry.
 _MIGRATE_CI_SUBSET = ("migrate.after-record.before-response",)
 
+# The attach CI subset (#113): `attach.*` is a new runner-side boundary family whose lone
+# member — the after-record durability window — is its own CI representative, so this new
+# window ships with real CI coverage (never zero), exactly as the other new families do; the
+# `_select` rename-guard asserts the point still exists in the registry.
+_ATTACH_CI_SUBSET = ("attach.after-record.before-response",)
+
+# The nudge CI subset (#113): `nudge.*` is a new runner-side boundary family whose first-
+# declared member — the fired-fact-before-resume window, the one the "at most one nudge"
+# guarantee rests on — is its own CI representative, exactly as the other new families are,
+# so this new window ships with real CI coverage (never zero); the `_select` rename-guard
+# asserts the point still exists in the registry.
+_NUDGE_CI_SUBSET = ("nudge.after-fired-fact.before-resume",)
+
 
 def _select(points: list[str], ci_subset: tuple[str, ...]) -> list[str]:
     """The points to parametrize: all of ``points``, or its CI subset under the CI profile."""
@@ -248,6 +290,8 @@ _PAUSE_SWEEP = _select(_PAUSE_POINTS, _PAUSE_CI_SUBSET)
 _HUBNODE_SWEEP = _select(_HUBNODE_POINTS, _HUBNODE_CI_SUBSET)
 _HUBNODE_PENDING_SWEEP = _select(_HUBNODE_PENDING_POINTS, _HUBNODE_PENDING_CI_SUBSET)
 _MIGRATE_SWEEP = _select(_MIGRATE_POINTS, _MIGRATE_CI_SUBSET)
+_ATTACH_SWEEP = _select(_ATTACH_POINTS, _ATTACH_CI_SUBSET)
+_NUDGE_SWEEP = _select(_NUDGE_POINTS, _NUDGE_CI_SUBSET)
 
 
 def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -277,6 +321,8 @@ def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
         | set(_select(_HUBNODE_POINTS, _HUBNODE_CI_SUBSET))
         | set(_select(_HUBNODE_PENDING_POINTS, _HUBNODE_PENDING_CI_SUBSET))
         | set(_select(_MIGRATE_POINTS, _MIGRATE_CI_SUBSET))
+        | set(_select(_ATTACH_POINTS, _ATTACH_CI_SUBSET))
+        | set(_select(_NUDGE_POINTS, _NUDGE_CI_SUBSET))
     )
     uncovered = {family for family in families if not any(p.startswith(f"{family}.") for p in ci_selected)}
     assert not uncovered, f"registry families with zero CI-subset coverage: {sorted(uncovered)}"
@@ -543,6 +589,204 @@ def test_kill9_at_migrate_crash_point_landing_on_a_hub_node(crash_env: CrashEnv,
         assert detail["graph_id"] == target_graph_id, "the chunk was not re-pinned to the target graph"
         assert len(detail["migrations"]) == 1, "the two-graph history is missing its migration step"
         assert detail["migrations"][0]["to_graph_name"] == "triage-hub"
+    finally:
+        hub.close()
+        terminate(runner_proc)
+        terminate(hub_proc)
+
+
+# The seeded lease's known plaintext token, and the artifact the worker attaches.
+_ATTACH_TOKEN = "the-attach-lease-token"
+_ATTACH_NAME = "review-findings"
+_ATTACH_CONTENT = "the worker's explicit per-produces artifact\n"
+_ATTACH_NOW = datetime(2026, 7, 19, 12, 0, 0, tzinfo=UTC)
+
+
+@pytest.mark.parametrize("point", _ATTACH_SWEEP)
+def test_kill9_at_attach_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
+    """A ``kill -9`` right after the runner records a worker attachment keeps it (issue #113 criterion 3).
+
+    ``attach.*`` fires inside the RUNNER's local attach endpoint
+    (``AttachmentService.attach``, behind ``POST /api/leases/{id}/attachments``), the instant
+    ``record_attachment``'s single committed txn returns and before the ``200`` does. Unlike
+    the generic ``build -> deliver`` sweep, the attach channel is an out-of-band HTTP write no
+    loop step drives — and completion assembly that would read it back is Phase 3, not built
+    here — so this dedicated scenario stands up a real runner daemon (no hub, no forge: the
+    attach path is loop-independent), seeds a lease + its Phase-1 capability token directly,
+    and makes the real attach call. The runner writes the row durably, self-SIGKILLs in the
+    after-record window, and the claim under test is that the attachment — with full
+    provenance — is still readable against the **same store** after the ungraceful death: the
+    durable fact a later completion (and the recovering ADVANCE tick) re-derives via
+    ``attachments_for_lease``.
+
+    The seeded lease is **parked** so REAP — which ticks at startup and would otherwise expire
+    an unspawned, pid-less lease (``steps.reap``) — leaves it be; ADVANCE skips a pid-less
+    lease outright, so nothing else in the hub-less loop touches it. The park is scaffolding to
+    keep the lease alive for the out-of-band write, not part of the property under test.
+    """
+    runner_dir = tmp_path / "runner"
+    # Nothing listens on ``hub_port`` — the attach path never calls the hub; the loop's hub
+    # polls just fail and are swallowed, and the local API serves regardless.
+    hub_port, runner_port = free_port(), free_port()
+    write_runner_config(
+        runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+    )
+    db_url = RunnerConfig.load(runner_dir).db_url
+
+    # Seed a lease + its capability token, then park it, through a store the daemon does not
+    # yet hold; dispose so the hosted daemon opens the sqlite file with no concurrent writer.
+    engine = create_engine_from_url(db_url)
+    store = SqlAlchemyRunnerStore(engine)
+    store.record_lease(
+        NewLease(
+            lease_id="lease_attach",
+            chunk_id="ch_attach",
+            graph_id="gr_attach",
+            node_id="nd_review",
+            node_name="review",
+            epoch=4,
+            runner_id="runner-local",
+            retries_max=2,
+            created_at=_ATTACH_NOW,
+        )
+    )
+    store.record_lease_token("lease_attach", hash_token(_ATTACH_TOKEN), _ATTACH_NOW)
+    store.record_ask(
+        lease_id="lease_attach",
+        chunk_id="ch_attach",
+        question_id="q_park",
+        question="parked so REAP leaves the seeded lease be",
+        options=[],
+        session_id=None,
+        asked_at=_ATTACH_NOW,
+    )
+    store.record_park(lease_id="lease_attach", chunk_id="ch_attach", question_id="q_park", parked_at=_ATTACH_NOW)
+    engine.dispose()
+
+    runner = httpx.Client(base_url=f"http://127.0.0.1:{runner_port}", timeout=30.0)
+    runner_proc = start_runner(runner_dir, crash_point=point)
+    try:
+        await_http(runner, "/api/health", proc=runner_proc)
+
+        # The runner records the attachment durably, then self-SIGKILLs before the response —
+        # the client sees the killed connection, never a 200.
+        with pytest.raises(httpx.HTTPError):
+            runner.post(
+                "/api/leases/lease_attach/attachments",
+                json={"name": _ATTACH_NAME, "content": _ATTACH_CONTENT},
+                headers={"X-Blizzard-Lease-Token": _ATTACH_TOKEN},
+            )
+        code = wait_death(runner_proc)
+        assert code == -9, f"armed runner at {point} exited {code}, not SIGKILL (-9); point never reached?"
+
+        # Durable across the kill -9: reopen the same store — the attachment and its full
+        # provenance (lease/chunk/node/epoch/name) are exactly what the worker submitted,
+        # though the 200 never returned.
+        engine2 = create_engine_from_url(db_url)
+        try:
+            assert SqlAlchemyRunnerStore(engine2).attachments_for_lease("lease_attach") == {
+                _ATTACH_NAME: _ATTACH_CONTENT
+            }
+            with engine2.connect() as conn:
+                rows = conn.execute(
+                    select(runner_schema.attachments).where(runner_schema.attachments.c.lease_id == "lease_attach")
+                ).all()
+            assert len(rows) == 1, "the attachment was not durably recorded before the crash"
+            row = rows[0]._mapping
+            assert (row["chunk_id"], row["node_id"], row["epoch"], row["name"]) == (
+                "ch_attach",
+                "nd_review",
+                4,
+                _ATTACH_NAME,
+            ), "the attachment's provenance did not survive intact"
+        finally:
+            engine2.dispose()
+
+        # The invariant checker is green over the durable runner facts right after the crash.
+        violations = check_invariants(runner_db_url=db_url)
+        assert not violations, "invariant violations after the attach crash:\n" + "\n".join(str(v) for v in violations)
+
+        # Restart the runner UNARMED; the attachment is still readable against the same store —
+        # the fact a later completion (Phase 3) prefers over the judgement assessment.
+        runner_proc = start_runner(runner_dir, crash_point=None)
+        await_http(runner, "/api/health", proc=runner_proc)
+        engine3 = create_engine_from_url(db_url)
+        try:
+            assert SqlAlchemyRunnerStore(engine3).attachments_for_lease("lease_attach") == {
+                _ATTACH_NAME: _ATTACH_CONTENT
+            }
+        finally:
+            engine3.dispose()
+    finally:
+        runner.close()
+        terminate(runner_proc)
+
+
+def _ingest_nudge_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str) -> str:
+    """:func:`_ingest_chunk`'s twin, minting :func:`nudge_graph_yaml` instead of
+    :func:`graph_yaml` — the one unattached ``produces:`` name is what opens the
+    `nudge.*` windows this scenario arms."""
+    minted = hub.post("/api/graphs", json={"definition_yaml": nudge_graph_yaml(landed_file)})
+    assert minted.status_code == 201, minted.text
+    issue = forge.post(f"/repos/{REPO}/issues", json={"title": landed_file, "body": "a nudge crash-sweep chunk"})
+    assert issue.status_code == 201, issue.text
+    number = issue.json()["number"]
+    ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{number}"]})
+    assert ingested.status_code == 201, ingested.text
+    chunk_id = ingested.json()["chunk_id"]
+    assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+    assert hub.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
+    return chunk_id
+
+
+@pytest.mark.parametrize("point", _NUDGE_SWEEP)
+def test_kill9_at_nudge_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
+    """A ``kill -9`` at a `nudge.*` window recovers with the nudge fired at most once
+    and the chunk still landing exactly once (issue #113, Phase 4).
+
+    ``nudge.*`` fires inside the RUNNER's own ADVANCE step, so — unlike ``attach.*`` —
+    this scenario needs a real hub too (the fact this window's condition depends on is
+    an unattached ``produces:`` name on a real node-step, elicited through a real
+    judgement resume against the mock harness). It always arms the runner, never the
+    hub: both windows are runner-local. The mock worker never attaches
+    ``NUDGE_PRODUCES_NAME`` in response to the nudge (scripting a conditional reply is
+    not what these points need proven), so the completion that eventually lands
+    carries the assessment fallback for it — the same shape an unnudged pass would
+    produce, proving the crash cost the attempt nothing but the interrupted resume
+    itself.
+    """
+    landed_file = f"NUDGE-LANDED-{point.replace('.', '_')}.md"
+    hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
+    hub_port, runner_port = free_port(), free_port()
+
+    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+    runner_proc = None
+    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    try:
+        await_http(hub, "/api/health", proc=hub_proc)
+        chunk_id = _ingest_nudge_chunk(hub, crash_env.forge, landed_file)
+
+        write_runner_config(
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+        )
+        runner_proc = start_runner(runner_dir, crash_point=point)
+
+        code = wait_death(runner_proc)
+        assert code == -9, f"armed runner at {point} exited {code}, not SIGKILL (-9); point never reached?"
+
+        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}")
+
+        runner_proc = start_runner(runner_dir, crash_point=None)
+
+        status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"})
+        assert status == "done", f"chunk did not converge to done after kill at {point} (last {status!r})"
+
+        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}")
+
+        # Exactly-once delivery, as every scenario asserts.
+        tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
+        commits = [line for line in tree.splitlines() if line.strip()]
+        assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
     finally:
         hub.close()
         terminate(runner_proc)

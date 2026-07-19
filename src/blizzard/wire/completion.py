@@ -31,6 +31,31 @@ class SubmittedArtifact(BaseModel):
     commit_hash: str | None = None
     # asset variant
     content: str | None = None
+    # True when this asset's content came from an explicit `blizzard runner attach`
+    # (issue #113) rather than the judgement assessment fallback. Default `False` keeps
+    # existing graphs and the regenerated OpenAPI/TS client additive.
+    attached: bool = False
+
+
+def satisfied_produces_names(artifacts: list[SubmittedArtifact]) -> set[str]:
+    """The ``produces:`` names this artifact list explicitly satisfies — an artifact
+    submitted with ``attached=True`` (an explicit ``blizzard runner attach``), or a
+    ``GIT_COMMIT`` artifact, whose pushed branch is itself the explicit signal a name
+    covered by a commit needed no separate attach (issue #113). A name present only as
+    the judgement-assessment fallback (``attached=False``, kind ``ASSET``) is excluded —
+    that is exactly the gap both callers below watch for.
+
+    The **one** shared home for this coverage predicate: the runner's nudge check
+    (:func:`~blizzard.runner.loop.steps._missing_produces`) and the hub's produces
+    backstop (:func:`~blizzard.hub.domain.produces_auth.check_produces`) both call this
+    rather than each re-deriving "covered", so the two cannot drift apart again — the bug
+    this function fixes was exactly that drift (the hub backstop rejecting a
+    git-commit-covered name the runner's own model already treats as satisfied). Lives
+    here, not in either domain package, because ``wire`` is the one module both the hub
+    and runner layers already import without crossing each other (``bzh:screaming-
+    architecture`` keeps hub and runner as separate top-level packages neither importing
+    the other's domain)."""
+    return {a.name for a in artifacts if a.attached or a.kind == ArtifactKind.GIT_COMMIT}
 
 
 class CheckResult(BaseModel):

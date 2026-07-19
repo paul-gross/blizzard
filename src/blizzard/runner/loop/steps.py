@@ -23,6 +23,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import secrets
 import uuid
 from datetime import datetime, timedelta
 
@@ -30,6 +31,7 @@ from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.ids import LEASE_PREFIX, mint
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.hub.domain.enrollment import hash_token
 from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.domain.leases import as_utc, is_heartbeat_stale
 from blizzard.runner.environments.provider import (
@@ -52,7 +54,7 @@ from blizzard.runner.store.repository import (
     LeaseRecord,
     NewLease,
 )
-from blizzard.wire.completion import CompletionSubmission, SubmittedArtifact
+from blizzard.wire.completion import CompletionSubmission, SubmittedArtifact, satisfied_produces_names
 from blizzard.wire.decision import DecisionSubmission, DecisionView
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeEnvelope
 from blizzard.wire.facts import (
@@ -111,6 +113,10 @@ _DECISION_KIND = "decision.submitted"
 
 # The env count a solo chunk wants; batching (K>1) is parked.
 _SOLO_ENV_COUNT = 1
+
+# The lease capability token's byte length (issue #113, Phase 1) — mirrors the
+# hub's own route-token mint (`hub/domain/claim.py`'s `_ROUTE_TOKEN_BYTES`).
+_LEASE_TOKEN_BYTES = 32
 
 # --------------------------------------------------------------------------- #
 # Crash points (``bzh:crash-point-registry``) — the runner tick's dangerous windows.
@@ -196,6 +202,30 @@ _CP_ADV_AFTER_JUDGE = crashpoint("advance.after-judgement.before-buffer", "verdi
 # double-count. Named for the window it opens, not the step whose call site reaches it
 # (``bzh:crash-point-registry``).
 _CP_ADV_AFTER_USAGE = crashpoint("advance.after-usage.before-buffer", "usage facts recorded; completion not buffered")
+
+# ADVANCE's nudge-once (issue #113, Phase 4): a `produces` name with neither a git
+# commit nor an attachment gets one resumed nudge, gated on a durable
+# `(lease, epoch)` fact recorded BEFORE the resume runs (see the comment at the call
+# site for why that ordering, not the reverse, is the one that makes "at most one
+# nudge" hold across a crash at either point). `after-fired-fact` is reached the
+# instant that guard is durable and before the resume it guards has run at all: a
+# crash here must never re-nudge (the fact alone already forbids it) and must not
+# assume the worker ever saw the message. `after-resume` is reached once the resume
+# has returned and before attachments are re-read / the completion reassembled: a
+# crash here finds the fact already durable (no re-nudge possible) and recovery's own
+# fresh re-evaluation of the missing set — sourced from the same durable attachments
+# table a restarted ADVANCE always re-reads — picks up whatever the worker attached,
+# or falls back to the assessment for what it didn't, exactly as an unnudged pass
+# would.
+_CP_NUDGE_AFTER_FIRED_FACT = crashpoint(
+    "nudge.after-fired-fact.before-resume",
+    "nudge-fired fact durable; the resume that delivers the nudge has not run yet",
+)
+_CP_NUDGE_AFTER_RESUME = crashpoint(
+    "nudge.after-resume.before-reassemble",
+    "nudge resume returned; attachments not yet re-read and the completion not yet reassembled",
+)
+
 _CP_ADV_AFTER_BUFFER = crashpoint("advance.after-buffer.before-flush", "completion buffered; not yet flushed")
 
 # The between-attempts step boundary the per-chunk spend cap checks at (issue #61a), inside
@@ -1551,11 +1581,79 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
     _CP_ADV_AFTER_JUDGE.reached()
     _CP_ADV_AFTER_USAGE.reached()
 
+    # 2a. Nudge-once (issue #113, Phase 4): a `produces` name this attempt covers
+    #     with neither a pushed git commit nor an explicit attachment gets exactly one
+    #     resumed nudge, gated on a durable fact keyed `(lease, epoch)` so a later
+    #     ADVANCE re-drive of this same attempt (a retried judgement poll, a crash
+    #     recovery) never repeats it (`bzh:invariant-checker` —
+    #     "at most one nudge per (lease, epoch)"). The resume is a spawn primitive, but
+    #     needs no separate `_spawn_suppressed` check of its own: this function already
+    #     gated its one entry into spawn territory above (comment 2), and a suppressed
+    #     tick never reaches this line at all.
+    #
+    #     The fact is recorded BEFORE the resume runs, not after. Every other
+    #     resume-then-record pairing in this module (`_resume_if_answered`,
+    #     `_resume_if_unpaused`) records after because the fact it writes carries the
+    #     resume's own output (a new pid) — it cannot exist sooner. This fact carries
+    #     no such output: it is a pure guard, so nothing blocks writing it first, and
+    #     writing it first is what makes "at most one nudge" a structural guarantee
+    #     rather than a hope. A kill -9 anywhere from this write onward can never lead
+    #     to a second resume attempt for this attempt, because the next ADVANCE pass
+    #     consults the fact alone, never the resume's outcome. The alternative
+    #     ordering (record after) leaves a window — a crash between the resume
+    #     returning and the fact landing — where recovery cannot tell "nudged, worker
+    #     ignored it" from "never nudged" without trusting the worker's compliance,
+    #     which a crash-correctness guarantee cannot rest on. A crash before this
+    #     write (there is nothing to arm — the write is the first mutation in this
+    #     branch) simply leaves the fact unset, so the very next pass evaluates the
+    #     same missing-set fresh and decides again, same as if this branch had never
+    #     started.
+    assessment = ctx.harness.parse_assessment(output)
+    attachments = ctx.store.attachments_for_lease(lease.lease_id)
+    missing = _missing_produces(envelope, artifacts, attachments)
+    if missing and not ctx.store.nudge_fired(lease.lease_id, lease.epoch):
+        _log.warning(
+            "nudging worker for unattached produces names",
+            node=envelope.node.node_name,
+            missing=missing,
+            lease_id=lease.lease_id,
+            epoch=lease.epoch,
+        )
+        ctx.store.record_nudge_fired(lease_id=lease.lease_id, epoch=lease.epoch, at=ctx.clock.now())
+        _CP_NUDGE_AFTER_FIRED_FACT.reached()
+        # `judge`, not `resume_with_message`, on purpose: this call's own reply is
+        # discarded (the nudge elicits no verdict of its own — the original judgement
+        # above already stands), but the resume must still be *synchronous* — the
+        # `attachments_for_lease` re-read just below has to observe whatever the worker
+        # attached while the nudge ran, and only `judge`'s synchronous session-resume
+        # guarantees the worker has already replied (and so had the chance to attach)
+        # before this function reads on. `resume_with_message` only returns a new pid
+        # (issue #113, Phase 4) — it would race the re-read against a worker still
+        # composing its attach.
+        nudge_output = ctx.harness.judge(bindings[0].workdir, lease.session_id, _nudge_message(missing))
+        _CP_NUDGE_AFTER_RESUME.reached()
+        # Record this invocation's own usage (issue #58) — a distinct `nudge` kind so it
+        # cannot collide with (or be mistaken for) the primary judgement's own `judge`
+        # fact already recorded above at this same generation (`_record_attempt_usage`);
+        # the generation itself does not advance for this resume (no `record_spawn`
+        # call — the pid is unchanged), so it is read fresh here rather than threaded
+        # through from `_record_attempt_usage`, but resolves to the same value.
+        nudge_generation = ctx.store.lease_generation(lease.lease_id)
+        nudge_sample = ctx.harness.parse_usage(nudge_output, "nudge")
+        if nudge_sample is not None:
+            _store_usage(ctx, lease, generation=nudge_generation, sample=nudge_sample)
+        # Re-read: a worker that attached during the nudge must have its content picked
+        # up before assembly below, not the assessment fallback it just corrected.
+        attachments = ctx.store.attachments_for_lease(lease.lease_id)
+
     # 2b. Harvest the node's asset artifacts: a node that `produces` a name no
-    #     pushed git commit covers (the review node's `findings`) emits the worker's
-    #     assessment as that asset's content, which a fail judgement carries back into
-    #     the build envelope latest-by-epoch.
-    artifacts += _collect_asset_artifacts(envelope, artifacts, ctx.harness.parse_assessment(output))
+    #     pushed git commit covers (the review node's `findings`) emits an explicit
+    #     `blizzard runner attach --name` submission for that name where one exists
+    #     (issue #113), read from the durable store so a restart between attach and
+    #     completion still sees it, else falls back to the worker's assessment as
+    #     before — either way carried back into the build envelope latest-by-epoch on
+    #     a fail judgement.
+    artifacts += _collect_asset_artifacts(envelope, artifacts, assessment, attachments)
 
     # 3. Buffer the completion — one atomic, epoch-fenced write, delivered by
     #    the flusher. The buffer entry names the lease so the flush drives its
@@ -1853,6 +1951,13 @@ def _spawn_attempt(
             created_at=now,
         )
     )
+    # A per-lease capability token (issue #113, Phase 1): minted alongside the lease
+    # itself, its hash stashed durably here, the plaintext carried forward only to
+    # the spawn preamble (never persisted). Pure scaffold this phase — no caller yet
+    # authorizes anything against `lease_token_hash`; a later attach endpoint is what
+    # compares a presented token's hash against it.
+    lease_token = secrets.token_urlsafe(_LEASE_TOKEN_BYTES)
+    ctx.store.record_lease_token(lease_id, hash_token(lease_token), now)
     # The lease is a hub-bound fact: buffer it so the flusher reports it up to
     # POST /events, ahead of any completion minted under it (FIFO). It is the
     # fence input the hub's completion check consumes — the runner's mint keeps the
@@ -1889,6 +1994,7 @@ def _spawn_attempt(
         workspace_root=ctx.config.workspace_root,
         prompt_prefix=prompt_prefix,
         stdout_path=_stdout_path(ctx, lease_id, _pending_generation(ctx, lease_id)),
+        lease_token=lease_token,
     )
     handle = ctx.harness.spawn(envelope, preamble, session_hint=str(uuid.uuid4()))
     ctx.store.record_spawn(
@@ -2323,25 +2429,74 @@ def _resume_if_unpaused(ctx: LoopContext, lease: LeaseRecord) -> None:
     )
 
 
+def _missing_produces(
+    envelope: NodeEnvelope, git_artifacts: list[SubmittedArtifact], attachments: dict[str, str]
+) -> list[str]:
+    """Every `produces:` name this attempt covers with neither a pushed git commit nor
+    an explicit attachment (issue #113, Phase 4) — the nudge-worthy set
+    :func:`_advance_exited_worker` checks before submitting. Order follows the
+    envelope's own `produces:` declaration, not attachment/git order, so the nudge
+    message and a node's declared list read in the same sequence. Mirrors
+    :func:`_collect_asset_artifacts`'s own git-coverage check rather than sharing it:
+    the two run at different points in the same attempt (this one before the nudge,
+    that one after), over ``attachments`` snapshots that may legitimately differ.
+
+    The git-commit half of "covered" is the same predicate the hub's own backstop
+    checks (:func:`~blizzard.hub.domain.produces_auth.check_produces`) — both call
+    :func:`~blizzard.wire.completion.satisfied_produces_names` so the two coverage
+    models cannot drift apart again."""
+    covered = satisfied_produces_names(git_artifacts)
+    return [name for name in envelope.node.produces if name not in covered and name not in attachments]
+
+
+def _nudge_message(missing: list[str]) -> str:
+    """The nudge resume's message (issue #113, Phase 4): one `#`-prefixed comment
+    line naming every unattached `produces:` name and the CLI to answer it with —
+    mirroring :data:`_PAUSE_RESUME_MESSAGE`'s shape, so the mock harness's
+    prompt-is-program exec sees a legal no-op script while a real harness reads the
+    same text as an ordinary resume instruction."""
+    names = ", ".join(missing)
+    return (
+        f"# This node's `produces:` still needs an explicit submission for: {names}. "
+        f"Before this attempt is judged done, run `blizzard runner attach --name <name>` "
+        f"(content on stdin) for each name listed above."
+    )
+
+
 def _collect_asset_artifacts(
-    envelope: NodeEnvelope, git_artifacts: list[SubmittedArtifact], assessment: str
+    envelope: NodeEnvelope,
+    git_artifacts: list[SubmittedArtifact],
+    assessment: str,
+    attachments: dict[str, str],
 ) -> list[SubmittedArtifact]:
     """Emit an asset artifact per produced name no git commit covers.
 
     The engine has no file convention for assets: a node that declares it
     ``produces`` a name — the review node's ``findings`` — but pushes no git commit of
-    that name emits the worker's judgement assessment as the asset's content. Git-commit
-    artifacts are named by repo, so a build node producing repo commits yields no
-    assets; a read-only review node yields its findings. Content may be empty (a clean
-    pass) — the asset still lands, and only a fail routes it back into build (latest-by-epoch)."""
+    that name emits an asset built from either an explicit attachment or the worker's
+    judgement assessment. ``attachments`` is the lease's durable, newest-content-per-name
+    submissions (``blizzard runner attach --name``, issue #113 Phase 2); a name present
+    there wins over the assessment and is marked ``attached=True`` — the provenance a
+    multi-asset node needs to tell its N distinct artifacts apart instead of aliasing
+    them all to one assessment (#90). A name with no attachment falls back to the
+    assessment as before, ``attached=False``. Git-commit artifacts are named by repo, so
+    a build node producing repo commits yields no assets; a read-only review node yields
+    its findings. Content may be empty (a clean pass) — the asset still lands, and only a
+    fail routes it back into build (latest-by-epoch)."""
     from blizzard.hub.domain.artifacts import ArtifactKind
 
     covered = {a.name for a in git_artifacts}
-    return [
-        SubmittedArtifact(name=name, kind=ArtifactKind.ASSET, content=assessment)
-        for name in envelope.node.produces
-        if name not in covered
-    ]
+    submitted: list[SubmittedArtifact] = []
+    for name in envelope.node.produces:
+        if name in covered:
+            continue
+        if name in attachments:
+            submitted.append(
+                SubmittedArtifact(name=name, kind=ArtifactKind.ASSET, content=attachments[name], attached=True)
+            )
+        else:
+            submitted.append(SubmittedArtifact(name=name, kind=ArtifactKind.ASSET, content=assessment))
+    return submitted
 
 
 def _push_and_collect_artifacts(ctx: LoopContext, bindings: list[EnvBindingRecord]) -> list[SubmittedArtifact]:

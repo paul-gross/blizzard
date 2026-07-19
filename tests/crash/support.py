@@ -229,6 +229,65 @@ def graph_yaml(landed_file: str) -> str:
     return yaml.safe_dump(graph, sort_keys=False)
 
 
+#: The nudge scenario's unattached `produces:` name (issue #113, Phase 4) — the build
+#: node declares it but the mock worker's judgement script never attaches it (real
+#: harnesses would; scripting a conditional attach-on-nudge reply is not what the
+#: `nudge.*` crash points need proven — the "at most one nudge" property they guard
+#: holds regardless of whether the worker ever complies).
+NUDGE_PRODUCES_NAME = "finding"
+
+
+def nudge_graph_yaml(landed_file: str) -> str:
+    """:func:`graph_yaml`'s ``build -> deliver`` shape, plus one unattached
+    ``produces:`` name on ``build`` (issue #113, Phase 4) — the condition
+    :func:`~blizzard.runner.loop.steps._advance_exited_worker`'s nudge-once checks
+    before ever eliciting it: no pushed git commit is named :data:`NUDGE_PRODUCES_NAME`
+    and the mock worker never attaches it, so every pass through ``build`` opens the
+    `nudge.*` windows the dedicated scenario arms.
+
+    Named ``default-delivery`` like :func:`graph_yaml` — not a distinct name — because
+    ingest (``POST /api/chunks`` with no explicit ``graph_id``) resolves to the newest
+    *enabled* graph of the hub's configured default name via ``ensure_default``
+    (``hub/api/chunks.py``), minting the packaged ``default.yaml`` shape under that name
+    if none enabled yet exists. A differently-named custom graph is simply never picked
+    up by ingest; sharing the name is what makes this scenario's mint the one ingest
+    resolves to, exactly as :func:`graph_yaml`'s own docstring already relies on."""
+    import yaml
+
+    graph = {
+        "name": "default-delivery",
+        "entry": "build",
+        "nodes": {
+            "build": {
+                "executor": "runner",
+                "prompt": build_script(landed_file),
+                "produces": [NUDGE_PRODUCES_NAME],
+                "judgement": {
+                    "prompt": _JUDGEMENT_SCRIPT,
+                    "choices": {
+                        "pass": {
+                            "description": "The change is committed and the node's checks are green.",
+                            "to": "deliver",
+                        }
+                    },
+                },
+                "retries": {"max": 1, "exhausted": "escalate"},
+            },
+            "deliver": {
+                "executor": "hub",
+                "run": [{"command": LAND_STEP}],
+                "judgement": {
+                    "choices": {
+                        "success": {"description": "Delivered.", "to": "done"},
+                        "failure": {"description": "Failed to deliver.", "to": "build"},
+                    }
+                },
+            },
+        },
+    }
+    return yaml.safe_dump(graph, sort_keys=False)
+
+
 def migrate_source_yaml() -> str:
     """A source graph (`default-delivery`, so ingest pins it) whose `build` node migrates
     the chunk to the `triage-delivery` graph (#90) rather than delivering in place.

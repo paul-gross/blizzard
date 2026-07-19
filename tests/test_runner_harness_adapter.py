@@ -194,6 +194,24 @@ def test_spawn_env_still_carries_the_base_allowlist_and_deliberate_blizzard_vars
     assert env["BLIZZARD_SESSION_ID"] == "sess-1"
 
 
+@pytest.mark.unit
+def test_spawn_env_carries_the_lease_capability_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    # issue #113, Phase 1 — the preamble's plaintext lease token rides the spawn env
+    # as an explicit per-spawn identity var, alongside BLIZZARD_LEASE_ID.
+    adapter = ClaudeCodeAdapter(binary="claude")
+    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
+    preamble = WorkerPreamble(
+        environments=[AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")],
+        lease_id="lease_1",
+        local_api_url="http://127.0.0.1:8431",
+        lease_token="plaintext-lease-token",
+    )
+
+    env = adapter._spawn_env(envelope, preamble, "sess-1")
+
+    assert env["BLIZZARD_LEASE_TOKEN"] == "plaintext-lease-token"
+
+
 _ENV_DUMP_HARNESS = """#!/usr/bin/env python3
 import json, os
 with open("env-dump.json", "w") as f:

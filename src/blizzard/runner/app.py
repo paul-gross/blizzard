@@ -21,6 +21,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.web import mount_web_app
 from blizzard.runner.api.asks import router as asks_router
+from blizzard.runner.api.attachments import router as attachments_router
 from blizzard.runner.api.control import router as control_router
 from blizzard.runner.api.environments import router as environments_router
 from blizzard.runner.api.escalations import router as escalations_router
@@ -37,6 +38,7 @@ from blizzard.runner.api.takeovers import router as takeovers_router
 from blizzard.runner.api.transcripts import router as transcripts_router
 from blizzard.runner.api.workspace_prompt import router as workspace_prompt_router
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.domain.attachments import AttachmentService
 from blizzard.runner.domain.leases import LocalLeaseService
 from blizzard.runner.domain.readiness import ReadinessService
 from blizzard.runner.domain.requeue import RequeueService
@@ -75,6 +77,7 @@ def create_app(
     takeover: TakeoverService | None = None,
     requeue: RequeueService | None = None,
     selftests: SelfTestService | None = None,
+    attachments: AttachmentService | None = None,
 ) -> FastAPI:
     """Build a fully wired runner app from resolved config.
 
@@ -106,6 +109,9 @@ def create_app(
     harness registry carries only ``harness`` under :data:`CLAUDE_CODE_HARNESS_NAME`
     when one was passed, empty otherwise, so the store-free app still answers both
     routes (naming no configured harnesses on ``POST`` rather than 503ing).
+
+    ``attachments`` is the store-backed worker attach channel (issue #113, Phase 2) —
+    ``blizzard runner attach``'s backing service, wired the same way.
     """
     log = get_logger("blizzard.runner")
 
@@ -133,6 +139,9 @@ def create_app(
     # The operator-requeue service (issue #53) — ``blizzard runner requeue``'s backing
     # service.
     app.state.requeue = requeue
+    # The worker attach channel (issue #113, Phase 2) — ``blizzard runner attach``'s
+    # backing service.
+    app.state.attachments = attachments
     # The adapter-drift canary (issue #54): a store-free in-memory job service, wired
     # unconditionally so `POST`/`GET /api/selftests` answer even on the store-free app.
     app.state.selftests = selftests or SelfTestService(
@@ -148,6 +157,9 @@ def create_app(
     app.include_router(heartbeat_router)
     app.include_router(session_end_router)
     app.include_router(asks_router)
+    # The worker attach channel (issue #113, Phase 2): a lease-token-authorized,
+    # explicit artifact submission for a `produces:` name.
+    app.include_router(attachments_router)
     app.include_router(leases_router)
     app.include_router(transcripts_router)
     app.include_router(selftests_router)
@@ -241,6 +253,10 @@ def build_hosted_app(config: RunnerConfig) -> FastAPI:
     # instance, like the siblings above: stateless, so a second instance is equivalent to
     # sharing one.
     requeue = RequeueService(runner_store, SystemClock())
+    # ``blizzard runner attach``'s backing service (issue #113, Phase 2). Its own
+    # ``SystemClock()`` instance, like the siblings above: stateless, so a second
+    # instance is equivalent to sharing one.
+    attachments = AttachmentService(runner_store, SystemClock())
     return create_app(
         config,
         readiness=readiness,
@@ -252,6 +268,7 @@ def build_hosted_app(config: RunnerConfig) -> FastAPI:
         runner_status=runner_status,
         takeover=takeover,
         requeue=requeue,
+        attachments=attachments,
     )
 
 

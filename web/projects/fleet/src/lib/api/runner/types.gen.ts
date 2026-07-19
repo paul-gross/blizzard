@@ -89,6 +89,42 @@ export type AskView = {
 };
 
 /**
+ * AttachmentRequest
+ *
+ * A worker's explicit artifact submission for one ``produces:`` name.
+ */
+export type AttachmentRequest = {
+    /**
+     * Content
+     */
+    content: string;
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
+ * AttachmentResponse
+ *
+ * ``POST /api/leases/{lease_id}/attachments`` — the submission landed durably.
+ */
+export type AttachmentResponse = {
+    /**
+     * Lease Id
+     */
+    lease_id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Recorded
+     */
+    recorded: boolean;
+};
+
+/**
  * CapacitiesView
  *
  * Agent slots — the same math FILL claims against.
@@ -1159,6 +1195,36 @@ export type RecordAskApiLeasesLeaseIdAsksPostResponses = {
 };
 
 export type RecordAskApiLeasesLeaseIdAsksPostResponse = RecordAskApiLeasesLeaseIdAsksPostResponses[keyof RecordAskApiLeasesLeaseIdAsksPostResponses];
+
+export type RecordAttachmentApiLeasesLeaseIdAttachmentsPostData = {
+    body: AttachmentRequest;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+    };
+    query?: never;
+    url: '/api/leases/{lease_id}/attachments';
+};
+
+export type RecordAttachmentApiLeasesLeaseIdAttachmentsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RecordAttachmentApiLeasesLeaseIdAttachmentsPostError = RecordAttachmentApiLeasesLeaseIdAttachmentsPostErrors[keyof RecordAttachmentApiLeasesLeaseIdAttachmentsPostErrors];
+
+export type RecordAttachmentApiLeasesLeaseIdAttachmentsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: AttachmentResponse;
+};
+
+export type RecordAttachmentApiLeasesLeaseIdAttachmentsPostResponse = RecordAttachmentApiLeasesLeaseIdAttachmentsPostResponses[keyof RecordAttachmentApiLeasesLeaseIdAttachmentsPostResponses];
 
 export type SessionEndApiLeasesLeaseIdSessionEndPostData = {
     body?: never;

@@ -2852,6 +2852,11 @@
       "SubmittedArtifact": {
         "description": "An artifact committed atomically with the completion.",
         "properties": {
+          "attached": {
+            "default": false,
+            "title": "Attached",
+            "type": "boolean"
+          },
           "branch_name": {
             "anyOf": [
               {
