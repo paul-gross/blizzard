@@ -76,6 +76,7 @@ from blizzard.hub.domain.work import (
     hub_node_poll_history,
     landed_repos_from_markers,
 )
+from blizzard.hub.pm.source import IPmSourceRegistry
 
 _HUB_RUNNER_ID = "hub"
 
@@ -146,6 +147,7 @@ class HubEnvInputs:
     forge_url: str | None = None
     forge_token: str | None = None
     forge_owner: str | None = None
+    feature_title: str | None = None
 
 
 # The env-injection contract (mirrors the worker's own, `_spawn_env` in
@@ -163,6 +165,9 @@ ENV_MARKER_CALLBACK_URL = "BZ_HUB_MARKER_CALLBACK_URL"  # POST {name, content} r
 ENV_FORGE_URL = "BZ_FORGE_URL"
 ENV_FORGE_TOKEN = "BZ_FORGE_TOKEN"
 ENV_FORGE_OWNER = "BZ_FORGE_OWNER"  # qualifies a bare (owner-less) repo, mirroring land_default.qualify_repo
+# the prose PR/merge title resolved from the chunk's primary PM item, absent when
+# it can't be resolved
+ENV_FEATURE_TITLE = "BZ_HUB_FEATURE_TITLE"
 
 
 def build_hub_env(inputs: HubEnvInputs) -> dict[str, str]:
@@ -171,9 +176,9 @@ def build_hub_env(inputs: HubEnvInputs) -> dict[str, str]:
     **Never a model credential** (``bzh:deterministic-shell`` — a hub node is
     structurally agentless): this function injects only the chunk/workdir/node
     identity, the per-repo git pointers the chunk's submitted work carries, the
-    forge credential the coordinator already holds today, and the mid-run marker
-    callback. There is no field here, and must never be one, naming an LLM/agent
-    API key.
+    forge credential the coordinator already holds today, the mid-run marker
+    callback, and (when resolved) the chunk's prose feature title. There is no
+    field here, and must never be one, naming an LLM/agent API key.
     """
     commits = [
         {"repo": row.repo, "branch": row.data.partition(":")[0], "commit": row.data.partition(":")[2]}
@@ -198,6 +203,8 @@ def build_hub_env(inputs: HubEnvInputs) -> dict[str, str]:
         env[ENV_FORGE_TOKEN] = inputs.forge_token
     if inputs.forge_owner:
         env[ENV_FORGE_OWNER] = inputs.forge_owner
+    if inputs.feature_title:
+        env[ENV_FEATURE_TITLE] = inputs.feature_title
     return env
 
 
@@ -260,6 +267,7 @@ class HubNodeExecutor:
         forge_url: str | None = None,
         forge_token: str | None = None,
         forge_owner: str | None = None,
+        pm: IPmSourceRegistry | None = None,
         slot_stale_after: timedelta = DEFAULT_SLOT_STALE_AFTER,
     ) -> None:
         self._chunks = chunks
@@ -271,6 +279,7 @@ class HubNodeExecutor:
         self._forge_url = forge_url
         self._forge_token = forge_token
         self._forge_owner = forge_owner
+        self._pm = pm
         self._slot_stale_after = slot_stale_after
 
     def record_marker(
@@ -341,6 +350,7 @@ class HubNodeExecutor:
                 forge_url=self._forge_url,
                 forge_token=self._forge_token,
                 forge_owner=self._forge_owner,
+                feature_title=self._resolve_feature_title(chunk),
             )
         )
 
@@ -545,6 +555,25 @@ class HubNodeExecutor:
             release_route=to_node_id == RESERVED_TERMINAL,
         )
         return HubRunResult(outcome_choice=choice, to_node_name=edge.to_node_name, wrote_transition=wrote)
+
+    def _resolve_feature_title(self, chunk: Chunk) -> str | None:
+        """The chunk's prose feature title (:data:`ENV_FEATURE_TITLE`) — the FIRST
+        ``pm_pointer``'s PM item title, best-effort. Never lets a forge-read failure
+        (:class:`~blizzard.hub.pm.source.PmSourceError` or otherwise) or a missing
+        registry/pointer/title break delivery: any of those degrades to ``None``, which
+        :func:`build_hub_env` simply omits — a graph author's ``run:`` script falls
+        back to its own ``blizzard: land ...`` default."""
+        if not chunk.pm_pointers or self._pm is None:
+            return None
+        pointer = chunk.pm_pointers[0]
+        source = self._pm.get(pointer.source)
+        if source is None:
+            return None
+        try:
+            title = source.fetch(pointer).title
+        except Exception:  # a forge read failing must never break delivery — degrade to no title
+            return None
+        return title or None
 
     def _marker_callback_url(self, chunk_id: str, node_id: str, epoch: int) -> str:
         if not self._marker_callback_base_url:

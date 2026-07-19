@@ -16,9 +16,9 @@ out itself.
 
 Same env contract as :mod:`~blizzard.hub.graphs.scripts.land_default`
 (``BZ_FORGE_URL``/``BZ_FORGE_TOKEN``/``BZ_FORGE_OWNER``/``BZ_HUB_BASE_BRANCH``/
-``BZ_HUB_GIT_COMMITS``/``BZ_HUB_ARTIFACT_NAMES``/``BZ_HUB_MARKER_CALLBACK_URL``); exit
-code is always 0, the authored choice (``landed`` or the reserved ``pending``) is the
-last stdout line.
+``BZ_HUB_GIT_COMMITS``/``BZ_HUB_ARTIFACT_NAMES``/``BZ_HUB_MARKER_CALLBACK_URL``/
+``BZ_HUB_FEATURE_TITLE``, optional); exit code is always 0, the authored choice
+(``landed`` or the reserved ``pending``) is the last stdout line.
 """
 
 from __future__ import annotations
@@ -37,9 +37,24 @@ _ENV_BASE_BRANCH = "BZ_HUB_BASE_BRANCH"
 _ENV_GIT_COMMITS = "BZ_HUB_GIT_COMMITS"
 _ENV_ARTIFACT_NAMES = "BZ_HUB_ARTIFACT_NAMES"
 _ENV_MARKER_CALLBACK_URL = "BZ_HUB_MARKER_CALLBACK_URL"
+_ENV_FEATURE_TITLE = "BZ_HUB_FEATURE_TITLE"
 
 _HUB_USER = "blizzard-hub"
 _MARKER_PREFIX = "merged/"
+
+# GitHub caps PR/issue titles at 256 characters; a resolved feature title longer than
+# that is truncated with an ellipsis so PR creation never fails on an over-long title.
+_PR_TITLE_MAX = 256
+
+
+def pr_title(feature_title: str, branch: str) -> str:
+    """The opened PR's title: JUST the hub-resolved feature title, or the branch name
+    when none resolved — never a ``blizzard: land`` prefix — truncated to
+    :data:`_PR_TITLE_MAX`."""
+    title = feature_title or branch
+    if len(title) > _PR_TITLE_MAX:
+        title = title[: _PR_TITLE_MAX - 1].rstrip() + "…"
+    return title
 _PENDING = "pending"
 
 
@@ -51,6 +66,7 @@ def main() -> int:
     commits: list[dict[str, str]] = json.loads(os.environ[_ENV_GIT_COMMITS])
     already: set[str] = set(json.loads(os.environ.get(_ENV_ARTIFACT_NAMES, "[]")))
     callback_url = os.environ.get(_ENV_MARKER_CALLBACK_URL, "")
+    feature_title = os.environ.get(_ENV_FEATURE_TITLE) or ""
 
     def api(method: str, path: str, body: dict[str, Any] | None = None) -> tuple[int, Any]:
         return forge_request(method, f"{forge_url}{path}", token=token, body=body)
@@ -78,7 +94,12 @@ def main() -> int:
             status, created = api(
                 "POST",
                 f"/repos/{repo}/pulls",
-                {"title": f"blizzard: land {branch}", "head": branch, "base": base_branch, "user": _HUB_USER},
+                {
+                    "title": pr_title(feature_title, branch),
+                    "head": branch,
+                    "base": base_branch,
+                    "user": _HUB_USER,
+                },
             )
             if status != 201:
                 print(f"could not open a PR for {repo}:{branch}: {created}", file=sys.stderr)
@@ -102,7 +123,7 @@ def main() -> int:
             "PUT",
             f"/repos/{repo}/pulls/{number}/merge",
             {
-                "commit_message": f"blizzard: land {bare_repo}",
+                "commit_message": feature_title or f"blizzard: land {bare_repo}",
                 "sha": commit_hash,
                 "merge_method": "merge",
                 "user": _HUB_USER,

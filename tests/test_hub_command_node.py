@@ -44,7 +44,15 @@ from blizzard.hub.domain.work import (
     TransitionFact,
     hub_node_pending,
 )
-from tests.support import FakeHubCommandRunner, FakeHubWorkdir, HubHarness, build_hub, pointer_token, report_lease
+from tests.support import (
+    FakeHubCommandRunner,
+    FakeHubWorkdir,
+    FakePmSource,
+    HubHarness,
+    build_hub,
+    pointer_token,
+    report_lease,
+)
 
 
 def _writable(hub: HubHarness) -> IWriteChunkRepository:
@@ -452,10 +460,29 @@ def test_build_hub_env_carries_no_model_credential_and_the_documented_keys() -> 
     assert env["BZ_HUB_MARKER_CALLBACK_URL"] == "http://hub/api/chunks/ch_x/hub-markers"
     assert env["BZ_FORGE_URL"] == "http://forge"
     assert env["BZ_FORGE_TOKEN"] == "tok"
+    assert "BZ_HUB_FEATURE_TITLE" not in env  # no feature_title given
     # Structurally agentless (`bzh:deterministic-shell`) — no key here ever names a
     # model/agent credential.
     forbidden = {"ANTHROPIC_API_KEY", "OPENAI_API_KEY", "BZ_MODEL", "BZ_MODEL_API_KEY"}
     assert not forbidden & env.keys()
+
+
+def test_build_hub_env_carries_the_feature_title_when_given() -> None:
+    _, merge_node = _reified_merge_node()
+    chunk = Chunk(chunk_id="ch_x", graph_id="gr_x", pm_pointers=[], minted_at=datetime(2026, 7, 17, tzinfo=UTC))
+    env = build_hub_env(
+        HubEnvInputs(
+            chunk=chunk,
+            node=merge_node,
+            workdir="/tmp/ch_x",
+            epoch=1,
+            artifacts=[],
+            base_branch="main",
+            marker_callback_url="http://hub/api/chunks/ch_x/hub-markers",
+            feature_title="Add rate limiting to the widget API",
+        )
+    )
+    assert env["BZ_HUB_FEATURE_TITLE"] == "Add rate limiting to the widget API"
 
 
 # --------------------------------------------------------------------------- #
@@ -544,6 +571,9 @@ def test_full_run_maps_success_to_the_authored_edge(tmp_path: Path) -> None:
     command, _cwd, env = runner.calls[0]
     assert command == "land-the-repo"
     assert env["BZ_HUB_CHUNK_ID"] == chunk_id
+    # The chunk's PM pointer resolves through the default FakePmSource — its title
+    # flows into the hub node's env for the land script to use as the PR/merge title.
+    assert env["BZ_HUB_FEATURE_TITLE"] == "issue title"
     assert workdir.ensured == [chunk_id]
 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
@@ -552,6 +582,32 @@ def test_full_run_maps_success_to_the_authored_edge(tmp_path: Path) -> None:
     assert len(land_transitions) == 1
     assert land_transitions[0]["choice_name"] == "success"
     assert land_transitions[0]["to_node_id"] == "done"  # the reserved terminal — no node to name
+
+
+@pytest.mark.component
+def test_a_failed_pm_fetch_degrades_the_feature_title_to_absent(tmp_path: Path) -> None:
+    """A forge read failing while resolving the feature title must never break
+    delivery (best-effort, #bzh design note above :meth:`HubNodeExecutor._resolve_feature_title`):
+    the hub node still runs its ``run:`` step, just with no ``BZ_HUB_FEATURE_TITLE``."""
+    runner = FakeHubCommandRunner()
+    workdir = FakeHubWorkdir()
+    hub = build_hub(
+        tmp_path,
+        hub_command_runner=runner,
+        hub_workdir=workdir,
+        pm={"default": FakePmSource(fail_refs={"42"})},
+    )
+    chunk_id, build_node_id, _graph = _to_merge_node(hub)
+
+    apply = _submit_build_pass(hub, chunk_id, build_node_id, 1)
+    assert apply.json()["outcome"] == "hub_node_taken"
+
+    assert len(runner.calls) == 1
+    _command, _cwd, env = runner.calls[0]
+    assert "BZ_HUB_FEATURE_TITLE" not in env
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["status"] == "done"
 
 
 @pytest.mark.component

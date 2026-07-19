@@ -132,6 +132,7 @@ def build_services(
         forge_url=forge_url,
         forge_token=forge_token,
         forge_owner=forge_owner,
+        pm=pm,
     )
     # One fleet service, shared: the API's pause routes and the fact ingest both land
     # registry facts, and two instances would be two of the same thing (issue #43).
