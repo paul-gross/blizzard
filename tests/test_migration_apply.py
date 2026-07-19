@@ -15,6 +15,7 @@ from pathlib import Path
 import httpx
 import pytest
 
+from blizzard.hub.config import ROUTE_TOKEN_ENFORCE
 from tests.support import build_hub, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
@@ -122,6 +123,46 @@ def _migrate(hub, chunk_id: str, node_id: str, *, epoch: int = 1) -> httpx.Respo
             "epoch": epoch,
             "runner_id": "r1",
             "from_node_id": node_id,
+            "artifacts": [{"name": "triage-notes", "kind": "asset", "content": "hand off"}],
+        },
+    )
+
+
+def _setup_under_enforce(hub, *, target_name: str, mint_target: bool) -> tuple[str, str, str]:  # type: ignore[no-untyped-def]
+    """Like ``_setup``, but claims through ``/api/fleet/routes`` and returns the
+    plaintext route token too — for driving migration replay under
+    ``route_token_mode=enforce`` (issue #108)."""
+    assert (
+        hub.client.post("/api/graphs", json={"definition_yaml": _SRC_YAML.format(target=target_name)}).status_code
+        == 201
+    )
+    if mint_target:
+        assert hub.client.post("/api/graphs", json={"definition_yaml": _TARGET_YAML}).status_code == 201
+    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    hub.client.post(f"/api/chunks/{chunk_id}/promote")
+    claim = hub.client.post(
+        "/api/fleet/routes",
+        json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
+    ).json()
+    node_id = claim["envelope"]["node"]["node_id"]
+    token = str(claim["route_token"])
+    report_lease(hub, chunk_id, epoch=1, seq=1, route_token=token)
+    return chunk_id, node_id, token
+
+
+def _migrate_with_token(  # type: ignore[no-untyped-def]
+    hub, chunk_id: str, node_id: str, *, epoch: int = 1, route_token: str
+) -> httpx.Response:
+    """Like ``_migrate``, but carries a ``route_token`` (issue #108) — for driving the
+    completion under ``route_token_mode=enforce``."""
+    return hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json={
+            "choice": "migrate",
+            "epoch": epoch,
+            "runner_id": "r1",
+            "from_node_id": node_id,
+            "route_token": route_token,
             "artifacts": [{"name": "triage-notes", "kind": "asset", "content": "hand off"}],
         },
     )
@@ -235,3 +276,49 @@ def test_a_human_gate_resolved_migration_closes_its_decision(tmp_path: Path) -> 
     assert hub.client.get("/api/decisions").json()["decisions"] == []
     closed = hub.services.chunks.get_decision(decision_id)
     assert closed is not None and closed.transitioned is True
+
+
+def test_a_replayed_migration_completion_is_idempotent_under_route_token_enforce(tmp_path: Path) -> None:
+    """Bug #108: ``record_migration`` releases the route as part of landing, so a
+    lost-ack replay of an accepted migration presents a token whose route the migration
+    itself released. The ``accepted_migration`` natural-key probe must short-circuit to
+    the replay response *ahead of* the route-token check, even under
+    ``route_token_mode=enforce`` — the same lost-ack replay the warn-mode idempotency
+    test above proves, but now with token enforcement in play."""
+    hub = build_hub(tmp_path, route_token_mode=ROUTE_TOKEN_ENFORCE)
+    chunk_id, node_id, token = _setup_under_enforce(hub, target_name="triage", mint_target=True)
+
+    first = _migrate_with_token(hub, chunk_id, node_id, route_token=token)
+    assert first.status_code == 200, first.text
+    assert first.json()["outcome"] == "migrated"
+
+    # A re-flushed completion (lost ack) carries the IDENTICAL token — the migration's own
+    # completion already released the route, but the replay's natural key matches the
+    # accepted migration, so it short-circuits above the token check rather than failing.
+    second = _migrate_with_token(hub, chunk_id, node_id, route_token=token)
+    assert second.status_code == 200, second.text
+    assert second.json()["outcome"] == "migrated"
+
+    facts = hub.services.chunks.load_facts(chunk_id)
+    assert facts is not None
+    assert len(facts.migrations) == 1  # exactly one migration fact, no duplicate re-pin
+
+
+def test_a_non_matching_submission_over_a_released_migration_route_is_still_rejected(tmp_path: Path) -> None:
+    """Bug #108's carve-out is scoped to the ACCEPTED migration's own natural key only —
+    a fresh, non-matching submission (different epoch here) presented with the same
+    now-released token is still rejected by the route-token check, exactly as a fresh
+    zombie completion would be."""
+    hub = build_hub(tmp_path, route_token_mode=ROUTE_TOKEN_ENFORCE)
+    chunk_id, node_id, token = _setup_under_enforce(hub, target_name="triage", mint_target=True)
+
+    landed = _migrate_with_token(hub, chunk_id, node_id, route_token=token)
+    assert landed.json()["outcome"] == "migrated"
+
+    # Same chunk_id/from_node_id, but a different epoch — no longer matches the accepted
+    # migration's (chunk_id, from_node_id, epoch) natural key, so the probe doesn't
+    # short-circuit; the released token is rejected by the route-token check first.
+    mismatched = _migrate_with_token(hub, chunk_id, node_id, epoch=2, route_token=token)
+
+    assert mismatched.status_code == 200, mismatched.text
+    assert mismatched.json()["outcome"] == "failure"
