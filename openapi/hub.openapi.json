@@ -621,7 +621,7 @@
         "type": "string"
       },
       "ChunkSummary": {
-        "description": "One row of the fleet chunk list \u2014 derived status + current node.\n\n``current_node_name`` is the node's human graph name (``build``, ``review``) the\nboard renders in place of the raw ``nd_`` ULID; null when the chunk has no\ncurrent node or its pinned graph cannot resolve the id.\n\nDeliberately status-only: the summary feeds the board **card**, which is a passive\nstatus view (issue #42), so no operator *fact* is carried here. The pause fact \u2014 and\nevery other fact an operator action keys on \u2014 reaches the chunk detail dock through\n:class:`ChunkDetail`, the one place a board action lives. ``runner_id`` (the live\nroute's holder, null when unrouted) is a passive where-is-it fact in that same\nsense \u2014 it lets the fleet registry list each runner's claims \u2014 not an action key.\n``cost`` is the one exception (issue #59): the derived spend total is cheap to carry\non every card and is not itself an operator fact, so it rides the summary rather than\nwaiting for the detail fetch.",
+        "description": "One row of the fleet chunk list \u2014 derived status + current node.\n\n``current_node_name`` is the node's human graph name (``build``, ``review``) the\nboard renders in place of the raw ``nd_`` ULID; null when the chunk has no\ncurrent node or its pinned graph cannot resolve the id.\n\nDeliberately status-only: the summary feeds the board **card**, which is a passive\nstatus view (issue #42), so no operator *fact* is carried here. The pause fact \u2014 and\nevery other fact an operator action keys on \u2014 reaches the chunk detail dock through\n:class:`ChunkDetail`, the one place a board action lives. ``runner_id`` (the live\nroute's holder, null when unrouted) is a passive where-is-it fact in that same\nsense \u2014 it lets the fleet registry list each runner's claims \u2014 not an action key.\n``environment_count`` (issue #69) is a passive where-is-it *count* in that same\nspirit: the number of environments the chunk's live route holds, so the fleet registry\ncan sum a runner's slot-bar numerator without the full ``environment_ids`` list (which\nstays out of scope on this status-only summary, reaching only\n:class:`ChunkDetail.route`). ``cost`` is the one exception (issue #59): the derived\nspend total is cheap to carry on every card and is not itself an operator fact, so it\nrides the summary rather than waiting for the detail fetch.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -651,6 +651,11 @@
               }
             ],
             "title": "Current Node Name"
+          },
+          "environment_count": {
+            "default": 0,
+            "title": "Environment Count",
+            "type": "integer"
           },
           "graph_id": {
             "title": "Graph Id",
@@ -2710,8 +2715,19 @@
         "type": "object"
       },
       "RunnerRegistrationRequest": {
-        "description": "Register a runner into the fleet \u2014 runner id + workspace binding.",
+        "description": "Register a runner into the fleet \u2014 runner id + workspace binding.\n\n``env_capacity`` is the runner's configured environment-pool size (the length of its\n``workspace_envs``) \u2014 the denominator the board's slot bar renders ``used/total``\nagainst. Absent (``None``) from an older runner binary that predates this field, in\nwhich case the hub stores/reports null and the board omits the bar rather than\nguessing a total. Re-registration is the runner's heartbeat, so a ``workspace_envs``\nchange converges on the next pull (the stored value is overwritten unconditionally).",
         "properties": {
+          "env_capacity": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Env Capacity"
+          },
           "runner_id": {
             "title": "Runner Id",
             "type": "string"
@@ -2750,6 +2766,17 @@
       "RunnerView": {
         "description": "One fleet-registry row \u2014 derived liveness and both brakes.\n\nA runner can be paused by two different parties for two different reasons, so the two\nare reported separately rather than collapsed into one ``paused`` (issue #43): the\nboard shows *which*. A reader that wants \"is it claiming?\" ORs them; since issue #45\nthe two diverge past claiming \u2014 ``hub_paused`` keeps its claims-only meaning, while\n``locally_paused`` alone answers \"is it spawning anything at all?\".",
         "properties": {
+          "env_capacity": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Env Capacity"
+          },
           "hub_paused": {
             "title": "Hub Paused",
             "type": "boolean"

@@ -886,7 +886,7 @@ def _sync_registry(ctx: LoopContext) -> None:
     mirrored value holds, so the runner keeps obeying its last-known directive.
     """
     try:
-        ctx.hub.register_runner(ctx.config.runner_id, ctx.config.workspace_id)
+        ctx.hub.register_runner(ctx.config.runner_id, ctx.config.workspace_id, env_capacity=ctx.config.env_capacity)
         paused = ctx.hub.fetch_runner_paused(ctx.config.runner_id)
     except HubClientError:
         return  # hub unreachable — keep the last-mirrored brake

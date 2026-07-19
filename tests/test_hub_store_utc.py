@@ -30,7 +30,7 @@ def _store(tmp_path: Path) -> RunnerRegistryStore:
 
 def test_registration_round_trips_its_own_written_instant(tmp_path: Path) -> None:
     store = _store(tmp_path)
-    store.upsert_registration("r1", workspace_id="ws1", at=_NOW)
+    store.upsert_registration("r1", workspace_id="ws1", env_capacity=None, at=_NOW)
 
     registration = store.get_runner("r1")
 
@@ -43,7 +43,7 @@ def test_registration_round_trips_its_own_written_instant(tmp_path: Path) -> Non
 
 def test_touch_last_seen_round_trips_a_later_instant(tmp_path: Path) -> None:
     store = _store(tmp_path)
-    store.upsert_registration("r1", workspace_id="ws1", at=_NOW)
+    store.upsert_registration("r1", workspace_id="ws1", env_capacity=None, at=_NOW)
     later = datetime(2026, 7, 16, 12, 5, 0, tzinfo=UTC)
 
     store.touch_last_seen("r1", at=later)

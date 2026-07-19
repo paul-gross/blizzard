@@ -95,10 +95,12 @@ class HttpHubClient:
         resp = self._get(f"{_FLEET_API}/questions/{question_id}")
         return QuestionView.model_validate(resp.json())
 
-    def register_runner(self, runner_id: str, workspace_id: str) -> None:
+    def register_runner(self, runner_id: str, workspace_id: str, *, env_capacity: int | None = None) -> None:
         self._post(
             f"{_FLEET_API}/runners",
-            RunnerRegistrationRequest(runner_id=runner_id, workspace_id=workspace_id).model_dump(mode="json"),
+            RunnerRegistrationRequest(
+                runner_id=runner_id, workspace_id=workspace_id, env_capacity=env_capacity
+            ).model_dump(mode="json"),
         )
 
     def fetch_runner_paused(self, runner_id: str) -> bool:

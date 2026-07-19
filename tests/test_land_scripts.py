@@ -33,7 +33,10 @@ def _scripted_forge(calls: list[tuple[str, str, dict[str, Any] | None]]):
     responses = {
         ("GET", f"http://forge/repos/{_REPO}/pulls?state=open"): (200, []),
         ("POST", f"http://forge/repos/{_REPO}/pulls"): (201, {"number": 1, "head": {"ref": _BRANCH}}),
-        ("GET", f"http://forge/repos/{_REPO}/pulls/1"): (200, {"number": 1, "merged": False, "mergeable_state": "clean"}),
+        ("GET", f"http://forge/repos/{_REPO}/pulls/1"): (
+            200,
+            {"number": 1, "merged": False, "mergeable_state": "clean"},
+        ),
         ("PUT", f"http://forge/repos/{_REPO}/pulls/1/merge"): (200, {"sha": "merged-sha1", "merged": True}),
     }
 
@@ -101,9 +104,7 @@ def test_missing_feature_title_falls_back_to_the_branch_and_land_strings(
 
 
 @pytest.mark.parametrize("module", [land_default, land_pr_ci], ids=["land_default", "land_pr_ci"])
-def test_an_over_long_feature_title_is_truncated_for_the_pr_title(
-    monkeypatch: pytest.MonkeyPatch, module: Any
-) -> None:
+def test_an_over_long_feature_title_is_truncated_for_the_pr_title(monkeypatch: pytest.MonkeyPatch, module: Any) -> None:
     long_title = "x" * 300
     _set_base_env(monkeypatch, feature_title=long_title)
     calls: list[tuple[str, str, dict[str, Any] | None]] = []

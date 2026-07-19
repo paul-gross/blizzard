@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
 import { KitPanel } from '../kit/kit-panel';
+import { KitSlotBar } from '../kit/kit-slot-bar';
 import { formatSeenAgo } from '../when';
 import type { RunnerRow } from './runner-panel';
 
@@ -13,7 +14,7 @@ import type { RunnerRow } from './runner-panel';
 @Component({
   selector: 'fleet-runner-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitPanel],
+  imports: [KitPanel, KitSlotBar],
   template: `
     <fleet-kit-panel
       aria-label="Runner registry"
@@ -64,6 +65,18 @@ import type { RunnerRow } from './runner-panel';
                       </li>
                     }
                   </ul>
+                }
+                <!-- The env-slot occupancy bar (issue #69): used = environments this
+                     runner's live routes hold; total = its reported env_capacity. Omitted
+                     (not a zero-slot bar) for a runner registered by a client that predates
+                     the field, whose capacity is null. -->
+                @if (hasCapacity(row)) {
+                  <fleet-kit-slot-bar
+                    data-testid="runner-slot-bar"
+                    [attr.data-runner-slot-bar]="row.runner_id"
+                    [used]="row.used"
+                    [total]="row.env_capacity ?? 0"
+                  />
                 }
                 <div class="r3">
                   <span class="badges">
@@ -242,6 +255,13 @@ import type { RunnerRow } from './runner-panel';
 export class RunnerPanelView {
   /** The registry rows to render — each runner plus its pre-folded claims. */
   readonly rows = input.required<readonly RunnerRow[]>();
+
+  /** Whether to render the env-slot bar (issue #69): only when the runner reported a
+   * capacity. A runner registered by a client that predates the field has a null (or
+   * absent) `env_capacity` and gets no bar, rather than a misleading zero-slot one. */
+  protected hasCapacity(row: RunnerRow): boolean {
+    return row.env_capacity !== null && row.env_capacity !== undefined;
+  }
 
   /** Emitted with the row to flip the **hub** brake on — the container reads
    * `hub_paused` off it to decide pause vs. resume. Named `togglePause`, not

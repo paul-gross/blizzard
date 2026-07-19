@@ -35,6 +35,12 @@ class LoopConfig:
     workspace_id: str
     max_agents: int = 1
     base_branch: str = "main"
+    #: The runner's configured environment-pool size (issue #69) — ``len(workspace_envs)``,
+    #: mirrored once at composition from :class:`~blizzard.runner.config.RunnerConfig`. The
+    #: loop reports it to the hub on each registration (the heartbeat) as the board's slot-bar
+    #: ``total``; the loop consumes only the count, so the full pool stays with the provider.
+    #: ``None`` means unreported — the hub stores null and the board omits the bar.
+    env_capacity: int | None = None
     default_retries_max: int = DEFAULT_RETRIES_MAX
     #: The runner's own local-API base URL, handed to a spawned worker as
     #: ``BLIZZARD_RUNNER_URL`` so its heartbeat hook posts back.

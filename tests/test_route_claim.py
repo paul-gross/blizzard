@@ -55,6 +55,28 @@ def test_winning_claim_carries_the_first_node_envelope(tmp_path: Path) -> None:
     assert env["pm_pointers"] == [_POINTER]
 
 
+def test_summary_environment_count_counts_the_routes_environments(tmp_path: Path) -> None:
+    """The board's slot-bar numerator (issue #69) rides ``ChunkSummary`` as a count of the
+    live route's environments — never the full ``environment_ids`` list, which stays out of
+    scope on the status-only summary. A grouped chunk counts all its envs (so the per-runner
+    sum does not undercount); an unrouted chunk is 0."""
+    hub = build_hub(tmp_path)
+    grouped = _ingest(hub, ref="7")
+    single = _ingest(hub, ref="8")
+    unrouted = _ingest(hub, ref="9")
+
+    hub.client.post("/api/fleet/routes", json=_claim_body(grouped))  # env-a, env-b — grouped
+    hub.client.post(
+        "/api/fleet/routes",
+        json={"chunk_id": single, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["env-c"]},
+    )
+
+    summaries = {c["chunk_id"]: c for c in hub.client.get("/api/chunks").json()}
+    assert summaries[grouped]["environment_count"] == 2
+    assert summaries[single]["environment_count"] == 1
+    assert summaries[unrouted]["environment_count"] == 0
+
+
 # --------------------------------------------------------------------------- #
 # Route capability token — mint at claim, hash-only at rest, returned once (issue #84a)
 # --------------------------------------------------------------------------- #

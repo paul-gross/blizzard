@@ -439,7 +439,7 @@ def register_runner(
     Runner-auth checked (issue #86a): ``warn`` (the default) logs and proceeds on a
     missing/invalid/mismatched token; ``enforce`` rejects."""
     assert_owns(principal, request.runner_id, mode=_mode(http_request))
-    first = services.fleet.register(request.runner_id, request.workspace_id)
+    first = services.fleet.register(request.runner_id, request.workspace_id, env_capacity=request.env_capacity)
     services.events.publish_runner_changed(request.runner_id)
     return RunnerRegistrationResponse(runner_id=request.runner_id, first_registration=first)
 

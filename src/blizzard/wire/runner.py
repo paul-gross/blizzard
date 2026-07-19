@@ -19,10 +19,18 @@ from pydantic import BaseModel
 
 
 class RunnerRegistrationRequest(BaseModel):
-    """Register a runner into the fleet — runner id + workspace binding."""
+    """Register a runner into the fleet — runner id + workspace binding.
+
+    ``env_capacity`` is the runner's configured environment-pool size (the length of its
+    ``workspace_envs``) — the denominator the board's slot bar renders ``used/total``
+    against. Absent (``None``) from an older runner binary that predates this field, in
+    which case the hub stores/reports null and the board omits the bar rather than
+    guessing a total. Re-registration is the runner's heartbeat, so a ``workspace_envs``
+    change converges on the next pull (the stored value is overwritten unconditionally)."""
 
     runner_id: str
     workspace_id: str
+    env_capacity: int | None = None
 
 
 class RunnerRegistrationResponse(BaseModel):
@@ -66,6 +74,10 @@ class RunnerView(BaseModel):
     # pause.
     locally_paused_by: str | None = None
     locally_paused_reason: str | None = None
+    # The runner's configured environment-pool size — the ``total`` denominator the board's
+    # slot bar renders ``used/total`` against. ``None`` for a runner registered by a client
+    # that predates this field; the board omits the bar (not a zero-slot bar) when null.
+    env_capacity: int | None = None
 
 
 class RunnerListResponse(BaseModel):

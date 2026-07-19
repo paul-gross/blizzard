@@ -20,8 +20,16 @@ from tests.support import HubHarness, assert_all_timestamps_utc, build_hub, emit
 pytestmark = pytest.mark.component
 
 
-def _register(hub: HubHarness, runner_id: str = "runner-a", workspace_id: str = "ws-a") -> dict:
-    resp = hub.client.post("/api/fleet/runners", json={"runner_id": runner_id, "workspace_id": workspace_id})
+def _register(
+    hub: HubHarness,
+    runner_id: str = "runner-a",
+    workspace_id: str = "ws-a",
+    env_capacity: int | None = None,
+) -> dict:
+    body: dict[str, object] = {"runner_id": runner_id, "workspace_id": workspace_id}
+    if env_capacity is not None:
+        body["env_capacity"] = env_capacity
+    resp = hub.client.post("/api/fleet/runners", json=body)
     assert resp.status_code == 201, resp.text
     return resp.json()
 
@@ -100,6 +108,55 @@ def test_registry_changes_emit_runner_changed_events(tmp_path: Path) -> None:
     events = emitted_events(hub)
     assert [e["event"] for e in events] == ["runner-changed", "runner-changed"]
     assert all("runner-a" in e["data"] for e in events)
+
+
+# --------------------------------------------------------------------------- #
+# Environment-pool capacity, reported on registration (issue #69)
+# --------------------------------------------------------------------------- #
+#
+# The runner reports its configured `len(workspace_envs)` as `env_capacity` on `POST
+# /runners`; the hub stores it and returns it on every `RunnerView`. Re-registration is
+# the runner's heartbeat, so a changed pool converges on the next pull. A client that
+# predates the field omits it, and the hub reports null — the board omits the slot bar.
+
+
+def test_env_capacity_reported_on_register_lands_on_the_view(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    _register(hub, env_capacity=4)
+
+    runners = hub.client.get("/api/runners").json()["runners"]
+    assert runners[0]["env_capacity"] == 4
+    assert hub.client.get("/api/fleet/runners/runner-a").json()["env_capacity"] == 4
+
+
+def test_env_capacity_converges_on_reregistration(tmp_path: Path) -> None:
+    """Re-registration is the heartbeat, so a changed `workspace_envs` pool overwrites the
+    stored capacity unconditionally — a shrunk or grown fleet converges on the next pull."""
+    hub = build_hub(tmp_path)
+    _register(hub, env_capacity=4)
+
+    _register(hub, env_capacity=6)
+    assert hub.client.get("/api/fleet/runners/runner-a").json()["env_capacity"] == 6
+
+
+def test_env_capacity_absent_reports_null(tmp_path: Path) -> None:
+    """A runner registered by a client that predates the field omits it; the hub stores and
+    returns null, and the board omits the bar rather than guessing a total."""
+    hub = build_hub(tmp_path)
+    _register(hub)  # no env_capacity in the body
+
+    assert hub.client.get("/api/fleet/runners/runner-a").json()["env_capacity"] is None
+
+
+def test_env_capacity_resets_to_null_when_a_newer_reregister_omits_it(tmp_path: Path) -> None:
+    """The unconditional overwrite writes an absent value verbatim: a runner that reported a
+    capacity and then re-registers without one (an older binary redeployed) resets to null,
+    rather than leaving a stale total on the row."""
+    hub = build_hub(tmp_path)
+    _register(hub, env_capacity=4)
+
+    _register(hub)  # re-register with the field absent
+    assert hub.client.get("/api/fleet/runners/runner-a").json()["env_capacity"] is None
 
 
 # --------------------------------------------------------------------------- #

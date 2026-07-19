@@ -15,9 +15,11 @@ export interface ClaimLine {
 }
 
 /** A registry row: the runner plus the claims it holds, pre-folded so the
- * presentational sibling needs no second read to render them. */
+ * presentational sibling needs no second read to render them. `used` is the slot
+ * bar's numerator — environments held by this runner's live routes (issue #69). */
 export interface RunnerRow extends RunnerView {
   readonly claims: readonly ClaimLine[];
+  readonly used: number;
 }
 
 /**
@@ -63,9 +65,27 @@ export class RunnerPanel {
     return grouped;
   });
 
-  /** Each runner with its claims folded on, for the presentational view. */
+  /** Environments held per runner — the slot bar's numerator (issue #69), summed from
+   * each of its chunks' `environment_count`. A grouped chunk holding >1 environment
+   * counts them all, so a runner working one 3-env chunk reads as using 3 slots, not 1.
+   * Environments are exclusively leased and a runner's chunks are distinct, so a plain
+   * sum needs no dedup. */
+  private readonly usedByRunner = computed<Map<string, number>>(() => {
+    const used = new Map<string, number>();
+    for (const chunk of this.chunksQuery.data() ?? []) {
+      if (!chunk.runner_id) continue;
+      used.set(chunk.runner_id, (used.get(chunk.runner_id) ?? 0) + (chunk.environment_count ?? 0));
+    }
+    return used;
+  });
+
+  /** Each runner with its claims and slot-bar numerator folded on, for the view. */
   protected readonly rows = computed<readonly RunnerRow[]>(() =>
-    this.runners().map((runner) => ({ ...runner, claims: this.claims().get(runner.runner_id) ?? [] })),
+    this.runners().map((runner) => ({
+      ...runner,
+      claims: this.claims().get(runner.runner_id) ?? [],
+      used: this.usedByRunner().get(runner.runner_id) ?? 0,
+    })),
   );
 
   protected toggle(runner: RunnerView): void {

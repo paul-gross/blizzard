@@ -365,6 +365,7 @@ def list_chunks(services: Annotated[HubServices, Depends(get_services)]) -> list
                 pm_pointers=_pointer_views(chunk, services.pm),
                 model=chunk.model,
                 runner_id=route.runner_id if route is not None else None,
+                environment_count=len(route.environment_ids) if route is not None else 0,
                 cost=_usage_total_view(facts),
             )
         )

@@ -434,9 +434,13 @@ export type ChunkStatus = 'not_ready' | 'ready' | 'running' | 'delivering' | 'wa
  * :class:`ChunkDetail`, the one place a board action lives. ``runner_id`` (the live
  * route's holder, null when unrouted) is a passive where-is-it fact in that same
  * sense — it lets the fleet registry list each runner's claims — not an action key.
- * ``cost`` is the one exception (issue #59): the derived spend total is cheap to carry
- * on every card and is not itself an operator fact, so it rides the summary rather than
- * waiting for the detail fetch.
+ * ``environment_count`` (issue #69) is a passive where-is-it *count* in that same
+ * spirit: the number of environments the chunk's live route holds, so the fleet registry
+ * can sum a runner's slot-bar numerator without the full ``environment_ids`` list (which
+ * stays out of scope on this status-only summary, reaching only
+ * :class:`ChunkDetail.route`). ``cost`` is the one exception (issue #59): the derived
+ * spend total is cheap to carry on every card and is not itself an operator fact, so it
+ * rides the summary rather than waiting for the detail fetch.
  */
 export type ChunkSummary = {
     /**
@@ -452,6 +456,10 @@ export type ChunkSummary = {
      * Current Node Name
      */
     current_node_name?: string | null;
+    /**
+     * Environment Count
+     */
+    environment_count?: number;
     /**
      * Graph Id
      */
@@ -1923,8 +1931,19 @@ export type RunnerPauseRequest = {
  * RunnerRegistrationRequest
  *
  * Register a runner into the fleet — runner id + workspace binding.
+ *
+ * ``env_capacity`` is the runner's configured environment-pool size (the length of its
+ * ``workspace_envs``) — the denominator the board's slot bar renders ``used/total``
+ * against. Absent (``None``) from an older runner binary that predates this field, in
+ * which case the hub stores/reports null and the board omits the bar rather than
+ * guessing a total. Re-registration is the runner's heartbeat, so a ``workspace_envs``
+ * change converges on the next pull (the stored value is overwritten unconditionally).
  */
 export type RunnerRegistrationRequest = {
+    /**
+     * Env Capacity
+     */
+    env_capacity?: number | null;
     /**
      * Runner Id
      */
@@ -1963,6 +1982,10 @@ export type RunnerRegistrationResponse = {
  * ``locally_paused`` alone answers "is it spawning anything at all?".
  */
 export type RunnerView = {
+    /**
+     * Env Capacity
+     */
+    env_capacity?: number | null;
     /**
      * Hub Paused
      */
