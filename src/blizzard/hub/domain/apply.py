@@ -25,6 +25,7 @@ a plain worker transition out of a gate is rejected (human signoff required).
 from __future__ import annotations
 
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.ids import ARTIFACT_PREFIX, DECISION_PREFIX, TRANSITION_PREFIX, mint
 from blizzard.hub.config import ROUTE_TOKEN_WARN
 from blizzard.hub.delivery.hub_node import HubNodeExecutor
@@ -39,6 +40,7 @@ from blizzard.hub.domain.work import (
     DecisionChoice,
     IWriteChunkRepository,
     derive_chunk_status,
+    landing_node,
     latest_epoch,
 )
 from blizzard.wire.completion import CompletionSubmission, SubmittedArtifact
@@ -46,9 +48,37 @@ from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 
 _TERMINAL_STATUSES = frozenset({ChunkStatus.STOPPED, ChunkStatus.DONE})
 
+# The cross-graph migration crash window (issue #90, ``bzh:crash-point-registry``): the
+# migration fact, the graph/model re-pin, the route release, and the node-step's
+# artifacts are already committed in one transaction — a ``kill -9`` here loses only the
+# ``MIGRATED`` response, so the runner's replayed completion re-derives it via the
+# ``accepted_migration`` probe (idempotent), and the invariant checker's
+# ``hub:migration-pin-consistent`` holds because the re-pin landed atomically with the fact.
+_CP_MIGRATE_AFTER_RECORD = crashpoint(
+    "migrate.after-record.before-response",
+    "migration recorded (graph/model re-pinned, route released, artifacts committed); MIGRATED response not returned",
+)
+
 
 def _failure(detail: str) -> ApplyResponse:
     return ApplyResponse(outcome=ApplyOutcome.FAILURE, detail=detail)
+
+
+def _migrated(from_node: Node, target_graph: Graph) -> ApplyResponse:
+    """The fresh ``MIGRATED`` apply-response (issue #90) — the chunk re-pinned + re-queued;
+    the runner tears the attempt down rather than continuing in place."""
+    return ApplyResponse(
+        outcome=ApplyOutcome.MIGRATED,
+        detail=f"node `{from_node.name}` migrated the chunk to graph `{target_graph.name}`; re-queued",
+    )
+
+
+def _migrated_replay() -> ApplyResponse:
+    """The replayed ``MIGRATED`` apply-response (issue #90) — a lost-ack re-flush of a
+    completion whose migration already landed. Carries no node/graph detail: the migration
+    re-pinned the graph, so the submitting node no longer lives in the chunk's current pin,
+    and the natural-key probe alone (not a graph lookup) resolves the replay."""
+    return ApplyResponse(outcome=ApplyOutcome.MIGRATED, detail="chunk already migrated (replay)")
 
 
 class ApplyService:
@@ -66,12 +96,19 @@ class ApplyService:
         self._hub_node_executor = hub_node_executor
 
     def apply(
-        self, chunk: Chunk, graph: Graph, submission: CompletionSubmission, *, route_token_mode: str = ROUTE_TOKEN_WARN
+        self,
+        chunk: Chunk,
+        graph: Graph,
+        submission: CompletionSubmission,
+        *,
+        route_token_mode: str = ROUTE_TOKEN_WARN,
+        target_graph: Graph | None = None,
     ) -> ApplyResponse:
-        from_node = graph.node_by_id(submission.from_node_id)
-        if from_node is None:
-            return _failure(f"no node {submission.from_node_id} in graph {graph.graph_id}")
-
+        """Apply a completion. ``target_graph`` is the pre-resolved cross-graph migration
+        target (issue #90) — the edge caller resolves the chosen edge's ``graph:<name>``
+        via the read graph repository and passes the ``Graph`` (or ``None`` if it names no
+        enabled graph) here, so this stays a pure taker-of-objects (``bzh:domain-takes-objects``)
+        holding no graph repo of its own."""
         facts = self._chunks.load_facts(chunk.chunk_id)
         if facts is None:
             return _failure(f"unknown chunk {chunk.chunk_id}")
@@ -86,6 +123,21 @@ class ApplyService:
         if rejection is not None:
             return rejection
 
+        # A migration writes no transition and **re-pins the graph** (issue #90), so on a
+        # replay the submission's ``from_node_id`` no longer lives in the chunk's now-current
+        # pinned graph — probe it by the natural key *before* the graph-node lookup below,
+        # else a legitimate lost-ack replay 404s its own from-node in the new graph. Ordered
+        # after the route-token check (a post-release zombie is still rejected first) but
+        # ahead of everything graph-shaped.
+        if self._chunks.accepted_migration(
+            chunk.chunk_id, from_node_id=submission.from_node_id, epoch=submission.epoch
+        ):
+            return _migrated_replay()
+
+        from_node = graph.node_by_id(submission.from_node_id)
+        if from_node is None:
+            return _failure(f"no node {submission.from_node_id} in graph {graph.graph_id}")
+
         # Idempotent replay first: a completion already applied at this
         # (node, epoch) returns its original outcome — even once the chunk is terminal.
         # This covers both an ordinary transition and a gate-resolving one (same key).
@@ -99,7 +151,7 @@ class ApplyService:
         # graph gate (human node) or runner-config gate (worker node): validate and
         # record it against the resolved decision, marking that decision transitioned.
         if submission.decision_id is not None:
-            return self._apply_gate_resolution(chunk, graph, from_node, submission)
+            return self._apply_gate_resolution(chunk, graph, from_node, submission, target_graph)
         # A plain transition OUT of a human-judged node is rejected — human signoff
         # required; only the resolving transition above may leave a gate node.
         if from_node.judged_by is JudgedBy.HUMAN:
@@ -114,6 +166,9 @@ class ApplyService:
         edge = graph.edge_for_choice(from_node.node_id, submission.choice)
         if edge is None:
             return _failure(f"node {from_node.name} has no choice `{submission.choice}`")
+        # A cross-graph edge (issue #90) migrates the chunk rather than transitioning it.
+        if edge.target_graph is not None:
+            return self._apply_migration(chunk, from_node, submission, edge, target_graph)
         to_node_id = RESERVED_TERMINAL if edge.to_node_name == RESERVED_TERMINAL else _resolve(graph, edge.to_node_name)
         if to_node_id is None:
             return _failure(f"choice `{submission.choice}` routes to unknown node {edge.to_node_name}")
@@ -132,7 +187,12 @@ class ApplyService:
         return self._respond(chunk, graph, from_node, submission, to_node_id=to_node_id, is_fresh_apply=True, edge=edge)
 
     def _apply_gate_resolution(
-        self, chunk: Chunk, graph: Graph, gate_node: Node, submission: CompletionSubmission
+        self,
+        chunk: Chunk,
+        graph: Graph,
+        gate_node: Node,
+        submission: CompletionSubmission,
+        target_graph: Graph | None = None,
     ) -> ApplyResponse:
         """Advance a chunk past a resolved gate — the resolving transition.
 
@@ -161,6 +221,14 @@ class ApplyService:
         edge = graph.edge_for_choice(gate_node.node_id, submission.choice)
         if edge is None:
             return _failure(f"gate `{gate_node.name}` has no choice `{submission.choice}`")
+        # A human gate's resolved choice may itself target another graph (issue #90) —
+        # the migration branch is reached through here too (the gate's decision artifacts
+        # already landed, so the migration carries none of its own). It threads
+        # ``submission.decision_id`` through, so the resolved decision derives closed —
+        # a migration writes no transitions row, and an unclosed gate decision would wedge
+        # REAP recovery (``steps.py`` skips any chunk whose ``decision`` is non-None).
+        if edge.target_graph is not None:
+            return self._apply_migration(chunk, gate_node, submission, edge, target_graph, artifacts=[])
         to_node_id = RESERVED_TERMINAL if edge.to_node_name == RESERVED_TERMINAL else _resolve(graph, edge.to_node_name)
         if to_node_id is None:
             return _failure(f"choice `{submission.choice}` routes to unknown node {edge.to_node_name}")
@@ -178,6 +246,67 @@ class ApplyService:
             decision_id=submission.decision_id,
         )
         return self._respond(chunk, graph, gate_node, submission, to_node_id=to_node_id, is_fresh_apply=True, edge=edge)
+
+    def _apply_migration(
+        self,
+        chunk: Chunk,
+        from_node: Node,
+        submission: CompletionSubmission,
+        edge: Edge,
+        target_graph: Graph | None,
+        *,
+        artifacts: list[SubmittedArtifact] | None = None,
+    ) -> ApplyResponse:
+        """Take a cross-graph migration edge (issue #90) — re-pin + re-queue, or escalate.
+
+        When the caller resolved the target (``target_graph`` set): record the migration
+        (which re-pins the graph/model, releases the route, and commits this node-step's
+        artifacts atomically), landing on the name-match-else-entry node of the target
+        graph, and return ``MIGRATED``. When this migration is a **human gate's** resolved
+        choice (``submission.decision_id`` set — reached via ``_apply_gate_resolution``),
+        the migration fact carries that ``decision_id`` so the decision derives closed;
+        without it the gate's decision would stay a phantom live decision (mis-rendered on
+        the board, and — worse — blocking REAP from ever reclaiming the chunk). When the caller could **not** resolve it
+        (``target_graph is None`` — the ``graph:<name>`` names no enabled graph):
+        ``record_escalation`` so the chunk derives ``needs_human`` (visible on the board),
+        rather than crash or silently drop — and return ``PARKED_AT_GATE`` so the runner
+        stops without re-leasing (a ``FAILURE`` would requeue and *supersede* the very
+        escalation just recorded). Idempotent on replay by the migration natural key
+        (checked in ``apply``) and, on the escalation branch, by an existing escalation at
+        this epoch."""
+        if target_graph is None:
+            facts = self._chunks.load_facts(chunk.chunk_id)
+            already = facts is not None and any(e.epoch == submission.epoch for e in facts.escalations)
+            if not already:
+                self._chunks.record_escalation(
+                    chunk.chunk_id,
+                    epoch=submission.epoch,
+                    takeover_command=(
+                        f"cross-graph target `{edge.target_graph}` names no enabled graph — mint a graph "
+                        f"named `{edge.target_graph}` (or edit the choice), then requeue this chunk"
+                    ),
+                    at=self._clock.now(),
+                )
+            return ApplyResponse(
+                outcome=ApplyOutcome.PARKED_AT_GATE,
+                detail=f"cross-graph target `{edge.target_graph}` did not resolve; chunk escalated for a human",
+            )
+        submitted = submission.artifacts if artifacts is None else artifacts
+        self._chunks.record_migration(
+            chunk.chunk_id,
+            from_node_id=from_node.node_id,
+            from_graph_id=from_node.graph_id,
+            to_graph_id=target_graph.graph_id,
+            landed_node_id=landing_node(target_graph, from_node.name),
+            choice_name=submission.choice,
+            decision_id=submission.decision_id,
+            model=edge.model,
+            epoch=submission.epoch,
+            at=self._clock.now(),
+            artifacts=[self._row(chunk, from_node, submission.epoch, a) for a in submitted],
+        )
+        _CP_MIGRATE_AFTER_RECORD.reached()
+        return _migrated(from_node, target_graph)
 
     def _respond(
         self,

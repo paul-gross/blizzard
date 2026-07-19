@@ -312,6 +312,10 @@ def check_hub_store(engine: Engine) -> list[Violation]:
         if (live_slots or 0) > 1:
             violations.append(Violation("hub:one-live-exec-slot", f"{live_slots} hub-execution slots are live at once"))
 
+    # hub:one-migration-per-node-epoch + hub:migration-pin-consistent — a cross-graph
+    # migration (#90) is all-or-nothing: recorded once per (chunk, from_node, epoch), and
+    # its re-pin lands with it (never a migration fact without the graph/model pin moving).
+    violations.extend(_check_migrations(engine))
     # hub:merge-queue-single-state — a delivered chunk's newest transition is the
     # terminal, so it never reads as both landed and mid-flight (two states at once).
     # hub:derived-status-total — every chunk derives exactly one status without panic.
@@ -319,6 +323,90 @@ def check_hub_store(engine: Engine) -> list[Violation]:
     # hub:live-route-has-token — every chunk with a live route has a live route token
     # (issue #84b/#84a).
     violations.extend(_check_route_tokens(engine))
+    return violations
+
+
+def _check_migrations(engine: Engine) -> list[Violation]:
+    """Assert a cross-graph migration (#90) is atomic and idempotent in the durable facts.
+
+    ``hub:one-migration-per-node-epoch`` — at most one ``chunk_migrations`` row per
+    ``(chunk, from_node, epoch)``: the natural key ``record_migration`` guards, so a
+    crash-replay never lands a second migration. ``hub:migration-pin-consistent`` — a
+    migrated chunk's ``graph_id`` (and its ``model`` when the newest migration re-pinned
+    one) equals that newest migration's target: the re-pin is written in the **same
+    transaction** as the fact, so a fact without its pin — or a pin without its fact — is
+    the half-write a ``kill -9`` in the ``migrate.`` window must never leave.
+    ``hub:migration-route-released`` — that same transaction also releases the route (a
+    migration ends the attempt), so a recorded migration always carries a ``route_released``
+    at or after its ``recorded_at``. A migration fact whose route release never landed is
+    the other face of the torn ``migrate.`` write: the chunk would re-pin yet keep its
+    stale claim, unclaimable under the new graph. (Artifact co-persistence — the third
+    limb of the atomic write — is not independently countable from the store without the
+    graph definition, so it is asserted at the component tier over a real
+    ``record_migration`` in ``test_migration_store``; here we assert the two facets a torn
+    write leaves observable in the durable facts alone.)
+    """
+    violations: list[Violation] = []
+    with engine.connect() as conn:
+        key = Counter(
+            (row[0], row[1], row[2])
+            for row in conn.execute(
+                select(
+                    hub.chunk_migrations.c.chunk_id,
+                    hub.chunk_migrations.c.from_node_id,
+                    hub.chunk_migrations.c.epoch,
+                )
+            )
+        )
+        for (chunk_id, from_node, epoch), n in key.items():
+            if n > 1:
+                violations.append(
+                    Violation(
+                        "hub:one-migration-per-node-epoch",
+                        f"chunk {chunk_id} node {from_node} epoch {epoch} has {n} migrations",
+                    )
+                )
+
+        newest: dict[str, object] = {}
+        for m in conn.execute(select(hub.chunk_migrations)):
+            cur = newest.get(m.chunk_id)
+            if cur is None or (m.recorded_at, m.epoch) >= (cur.recorded_at, cur.epoch):  # type: ignore[attr-defined]
+                newest[m.chunk_id] = m
+        chunks = {c.chunk_id: c for c in conn.execute(select(hub.chunks))}
+        # The latest route release per chunk — a migration releases the route in its own
+        # transaction, so its ``recorded_at`` is never above the chunk's newest release.
+        latest_release: dict[str, datetime] = {}
+        for r in conn.execute(select(hub.route_released.c.chunk_id, hub.route_released.c.released_at)):
+            cur = latest_release.get(r.chunk_id)
+            if cur is None or r.released_at > cur:
+                latest_release[r.chunk_id] = r.released_at
+        for chunk_id, m in newest.items():
+            chunk = chunks.get(chunk_id)
+            if chunk is None:
+                continue
+            if chunk.graph_id != m.to_graph_id:  # type: ignore[attr-defined]
+                violations.append(
+                    Violation(
+                        "hub:migration-pin-consistent",
+                        f"chunk {chunk_id} pinned {chunk.graph_id} but its newest migration targets {m.to_graph_id}",  # type: ignore[attr-defined]
+                    )
+                )
+            elif m.model_after is not None and chunk.model != m.model_after:  # type: ignore[attr-defined]
+                violations.append(
+                    Violation(
+                        "hub:migration-pin-consistent",
+                        f"chunk {chunk_id} model {chunk.model} but its newest migration re-pinned {m.model_after}",  # type: ignore[attr-defined]
+                    )
+                )
+            released = latest_release.get(chunk_id)
+            if released is None or released < m.recorded_at:  # type: ignore[attr-defined]
+                violations.append(
+                    Violation(
+                        "hub:migration-route-released",
+                        f"chunk {chunk_id} migrated at {m.recorded_at} but no route release landed "  # type: ignore[attr-defined]
+                        "with it — a torn migrate. write kept the stale claim",
+                    )
+                )
     return violations
 
 

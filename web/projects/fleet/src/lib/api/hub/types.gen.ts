@@ -56,7 +56,7 @@ export type AnswerResult = {
  *
  * What a completion's apply produced.
  */
-export type ApplyOutcome = 'next' | 'hub_node_taken' | 'parked_at_gate' | 'done' | 'failure';
+export type ApplyOutcome = 'next' | 'hub_node_taken' | 'parked_at_gate' | 'migrated' | 'done' | 'failure';
 
 /**
  * ApplyResponse
@@ -247,6 +247,10 @@ export type ChunkDetail = {
      * Latest Epoch
      */
     latest_epoch: number | null;
+    /**
+     * Migrations
+     */
+    migrations?: Array<MigrationView>;
     /**
      * Model
      */
@@ -1166,6 +1170,65 @@ export type LeaseMintReport = {
 };
 
 /**
+ * MigrationView
+ *
+ * One cross-graph migration step in a chunk's history (issue #90).
+ *
+ * A judgement choice targeting another graph ends the chunk's attempt in ``from_graph``
+ * and re-queues it at ``landed_node`` in ``to_graph`` — its own step in the timeline,
+ * never a transition (``bzh:migration-not-transition``). The board renders it as a
+ * graph-to-graph hop: ``from_graph/from_node --choice--> to_graph/landed_node``. Node and
+ * graph names are resolved server-side against each side's own graph (null when
+ * unresolvable); ``model`` is the re-pinned model, or null when the chunk kept its own.
+ */
+export type MigrationView = {
+    /**
+     * Choice Name
+     */
+    choice_name?: string | null;
+    /**
+     * From Graph Id
+     */
+    from_graph_id: string;
+    /**
+     * From Graph Name
+     */
+    from_graph_name?: string | null;
+    /**
+     * From Node Id
+     */
+    from_node_id: string | null;
+    /**
+     * From Node Name
+     */
+    from_node_name?: string | null;
+    /**
+     * Landed Node Id
+     */
+    landed_node_id?: string | null;
+    /**
+     * Landed Node Name
+     */
+    landed_node_name?: string | null;
+    /**
+     * Model
+     */
+    model?: string | null;
+    /**
+     * Recorded At
+     */
+    recorded_at: string;
+    /**
+     * To Graph Id
+     */
+    to_graph_id: string;
+    /**
+     * To Graph Name
+     */
+    to_graph_name?: string | null;
+};
+
+/**
  * NodeConfig
  *
  * The node's invariant identity for this step.
@@ -1988,6 +2051,11 @@ export type SubmittedArtifact = {
  * ``review``) the board renders in place of the raw ``nd_`` ULIDs; resolved here so the
  * timeline is legible without reassembly, null when the pinned graph cannot
  * resolve the id.
+ *
+ * ``graph_id``/``graph_name`` identify the graph this step happened in (issue #90) —
+ * resolved per-transition against its own graph, so a chunk that later migrated still
+ * labels its old-graph steps with the graph they belong to rather than the current pin;
+ * both null for a step predating graph-provenance (never backfilled with a name).
  */
 export type TransitionView = {
     /**
@@ -2006,6 +2074,14 @@ export type TransitionView = {
      * From Node Name
      */
     from_node_name?: string | null;
+    /**
+     * Graph Id
+     */
+    graph_id?: string | null;
+    /**
+     * Graph Name
+     */
+    graph_name?: string | null;
     /**
      * Recorded At
      */

@@ -47,6 +47,7 @@ from blizzard.hub.composition import HubServices
 from blizzard.hub.delivery.hub_node import poll_interval_for
 from blizzard.hub.domain.claim import ClaimConflict, ClaimDeniedPaused
 from blizzard.hub.domain.envelope import addendum_for_transition, build_node_envelope
+from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.work import (
     ChunkFacts,
     current_node_id,
@@ -88,6 +89,26 @@ def _mode(request: Request) -> str:
 
 def _route_token_mode(request: Request) -> str:
     return request.app.state.config.route_token_mode
+
+
+def _resolve_cross_graph_target(services: HubServices, graph: Graph, submission: CompletionSubmission) -> Graph | None:
+    """The target graph a cross-graph migration edge (issue #90) names, resolved by name
+    via the read graph repository — or ``None`` when the chosen edge is not cross-graph
+    or its ``graph:<name>`` names no enabled graph.
+
+    Resolved at the edge so :class:`~blizzard.hub.domain.apply.ApplyService` stays a pure
+    taker-of-objects holding no graph repo (``bzh:domain-takes-objects``, MUST-FIX 2), the
+    codebase's own "controller resolves the graph, passes it in" convention. Deliberately
+    **total** (A3): a missing node/edge/choice returns ``None`` — it never raises, since
+    those are ``apply()``'s authoritative ``_failure`` returns, not a second validation
+    site that would 500 the controller."""
+    from_node = graph.node_by_id(submission.from_node_id)
+    if from_node is None:
+        return None
+    edge = graph.edge_for_choice(from_node.node_id, submission.choice)
+    if edge is None or edge.target_graph is None:
+        return None
+    return services.graphs.get_enabled_by_name(edge.target_graph)
 
 
 # --------------------------------------------------------------------------- #
@@ -294,7 +315,10 @@ def submit_completion(
     graph = services.graphs.get(chunk.graph_id)
     if graph is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
-    response = services.apply.apply(chunk, graph, submission, route_token_mode=_route_token_mode(http_request))
+    target_graph = _resolve_cross_graph_target(services, graph, submission)
+    response = services.apply.apply(
+        chunk, graph, submission, route_token_mode=_route_token_mode(http_request), target_graph=target_graph
+    )
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
     # A completion landing on a human-judged node opens a graph gate: surface it.

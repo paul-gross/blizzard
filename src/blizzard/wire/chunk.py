@@ -174,7 +174,12 @@ class TransitionView(BaseModel):
     ``from_node_name``/``to_node_name`` are the nodes' human graph names (``build``,
     ``review``) the board renders in place of the raw ``nd_`` ULIDs; resolved here so the
     timeline is legible without reassembly, null when the pinned graph cannot
-    resolve the id."""
+    resolve the id.
+
+    ``graph_id``/``graph_name`` identify the graph this step happened in (issue #90) —
+    resolved per-transition against its own graph, so a chunk that later migrated still
+    labels its old-graph steps with the graph they belong to rather than the current pin;
+    both null for a step predating graph-provenance (never backfilled with a name)."""
 
     from_node_id: str | None
     from_node_name: str | None = None
@@ -182,6 +187,31 @@ class TransitionView(BaseModel):
     to_node_name: str | None = None
     choice_name: str | None
     epoch: int
+    recorded_at: str
+    graph_id: str | None = None
+    graph_name: str | None = None
+
+
+class MigrationView(BaseModel):
+    """One cross-graph migration step in a chunk's history (issue #90).
+
+    A judgement choice targeting another graph ends the chunk's attempt in ``from_graph``
+    and re-queues it at ``landed_node`` in ``to_graph`` — its own step in the timeline,
+    never a transition (``bzh:migration-not-transition``). The board renders it as a
+    graph-to-graph hop: ``from_graph/from_node --choice--> to_graph/landed_node``. Node and
+    graph names are resolved server-side against each side's own graph (null when
+    unresolvable); ``model`` is the re-pinned model, or null when the chunk kept its own."""
+
+    from_node_id: str | None
+    from_node_name: str | None = None
+    from_graph_id: str
+    from_graph_name: str | None = None
+    to_graph_id: str
+    to_graph_name: str | None = None
+    landed_node_id: str | None = None
+    landed_node_name: str | None = None
+    choice_name: str | None = None
+    model: str | None = None
     recorded_at: str
 
 
@@ -357,6 +387,10 @@ class ChunkDetail(BaseModel):
     # holding runner picks up a resolved decision and records the resolving transition.
     decision: DecisionView | None = None
     history: list[TransitionView] = []
+    # The chunk's cross-graph migration steps (issue #90), oldest first — woven into the
+    # timeline alongside ``history`` by ``recorded_at``. Empty for the common single-graph
+    # chunk; a migration re-pins the chunk and re-queues it under another graph.
+    migrations: list[MigrationView] = []
     artifacts: list[ArtifactView] = []
     # The chunk's open questions: a ``waiting_on_human``
     # chunk carries the ask a human answers with ``blizzard hub answer``.

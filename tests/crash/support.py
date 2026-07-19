@@ -126,6 +126,13 @@ def build_script(landed_file: str) -> str:
 
 _JUDGEMENT_SCRIPT = "verdict('pass', 'the mock harness committed the change; checks are green')\n"
 
+# The migrate scenario's source-graph judgement (#90): the build node hands the chunk to
+# the `triage-delivery` graph instead of delivering in place. Its build prompt is a no-op
+# (`pass`) so the source node commits nothing — the real landing commit is made by the
+# TARGET graph's own `build` node after the migration re-queues the chunk there, keeping
+# the sweep's exactly-once-on-`main` assertion honest (no source branch to double-merge).
+_MIGRATE_JUDGEMENT_SCRIPT = "verdict('migrate', 'hand the chunk to the triage-delivery graph')\n"
+
 
 # The generic sweep's ``deliver`` node command — a real merge-to-main, not a ``true``
 # no-op. The runner pushes each build commit to a feature branch; this step opens a PR
@@ -220,6 +227,43 @@ def graph_yaml(landed_file: str) -> str:
         },
     }
     return yaml.safe_dump(graph, sort_keys=False)
+
+
+def migrate_source_yaml() -> str:
+    """A source graph (`default-delivery`, so ingest pins it) whose `build` node migrates
+    the chunk to the `triage-delivery` graph (#90) rather than delivering in place.
+
+    The build prompt is a no-op: the migration re-queues the chunk at the target graph's
+    own `build` node (name-match-else-entry), which does the real commit + deliver. So the
+    only landing branch is the target's — a source branch that could double-merge never
+    exists, keeping the exactly-once-on-`main` assertion meaningful."""
+    import yaml
+
+    graph = {
+        "name": "default-delivery",
+        "entry": "build",
+        "nodes": {
+            "build": {
+                "executor": "runner",
+                "prompt": "pass\n",
+                "judgement": {
+                    "prompt": _MIGRATE_JUDGEMENT_SCRIPT,
+                    "choices": {
+                        "migrate": {"description": "Hand off to triage-delivery.", "to": "graph:triage-delivery"},
+                    },
+                },
+                "retries": {"max": 1, "exhausted": "escalate"},
+            },
+        },
+    }
+    return yaml.safe_dump(graph, sort_keys=False)
+
+
+def migrate_target_yaml(landed_file: str) -> str:
+    """The migration target (`triage-delivery`, #90) — a standard `build -> deliver` graph
+    whose `build` node name-matches the source's, so the migration lands there and the
+    chunk runs to `done` under the new graph."""
+    return graph_yaml(landed_file).replace("name: default-delivery", "name: triage-delivery", 1)
 
 
 # --------------------------------------------------------------------------- #

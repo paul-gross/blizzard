@@ -98,6 +98,49 @@ const NAMED_DETAIL: ChunkDetail = {
   artifacts: [],
 };
 
+// A chunk whose history spans two graphs (issue #90): a transition in the source graph,
+// then a cross-graph migration into the triage graph. Both sides carry resolved names,
+// so the timeline must not degrade any step to a raw `nd_`/`gr_` id.
+const TWO_GRAPH_DETAIL: ChunkDetail = {
+  chunk_id: 'ch_01twograph0000000000000000000',
+  graph_id: 'gr_triage',
+  model: 'claude-opus-4-8',
+  status: 'ready',
+  current_node_id: 'nd_t_build',
+  current_node_name: 'build',
+  latest_epoch: 1,
+  pm_pointers: [],
+  history: [
+    {
+      from_node_id: 'nd_s_build',
+      from_node_name: 'build',
+      to_node_id: 'nd_s_review',
+      to_node_name: 'review',
+      choice_name: 'pass',
+      epoch: 1,
+      recorded_at: '2026-07-13T00:00:01Z',
+      graph_id: 'gr_src',
+      graph_name: 'source',
+    },
+  ],
+  migrations: [
+    {
+      from_node_id: 'nd_s_review',
+      from_node_name: 'review',
+      from_graph_id: 'gr_src',
+      from_graph_name: 'source',
+      to_graph_id: 'gr_triage',
+      to_graph_name: 'triage',
+      landed_node_id: 'nd_t_build',
+      landed_node_name: 'build',
+      choice_name: 'migrate',
+      model: 'claude-sonnet-5',
+      recorded_at: '2026-07-13T00:00:02Z',
+    },
+  ],
+  artifacts: [],
+};
+
 describe('ChunkTimeline', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -124,6 +167,33 @@ describe('ChunkTimeline', () => {
     expect(active?.getAttribute('data-choice')).toBe('run');
     expect(active?.querySelector('.nd')?.textContent).toContain('nd_build');
     expect(active?.querySelector('[data-testid="history-active-verb"]')?.textContent).toContain('run');
+  });
+
+  it('weaves a cross-graph migration into the timeline, resolving names on both graphs (issue #90)', async () => {
+    const fixture = TestBed.createComponent(ChunkTimeline);
+    fixture.componentRef.setInput('detail', TWO_GRAPH_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    // The source-graph transition still resolves its own node names (no raw-id degradation).
+    const transition = el.querySelector('[data-testid="history-step"]')!;
+    expect(transition.querySelector('.nd')?.textContent).toContain('build');
+    expect(transition.querySelector('.jg-to')?.textContent).toContain('review');
+
+    // The migration renders as its own step: the migrate verdict routing to the target
+    // graph's landing node.
+    const migration = el.querySelector('[data-testid="history-migration-step"]')!;
+    expect(migration).not.toBeNull();
+    expect(migration.getAttribute('data-choice')).toBe('migrated');
+    expect(migration.querySelector('[data-testid="history-choice"]')?.textContent).toContain('migrate');
+    expect(migration.querySelector('.jg-to')?.textContent).toContain('triage/build');
+
+    // A two-graph timeline labels each step with the graph it happened in; neither the
+    // transition nor the migration degrades to a raw id.
+    expect(el.querySelectorAll('[data-testid="history-graph"]').length).toBeGreaterThan(0);
+    const history = el.querySelector('[data-testid="history"]')!;
+    expect(history.textContent).not.toContain('nd_');
+    expect(history.textContent).not.toContain('gr_');
   });
 
   it('shows no transitions yet when the chunk has no history and no node in flight', async () => {

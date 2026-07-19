@@ -25,6 +25,46 @@ from typing import Protocol
 # The reserved terminal a choice may point at instead of a node name.
 RESERVED_TERMINAL = "done"
 
+# The reserved cross-graph target prefix (issue #90). A judgement choice whose ``to:``
+# is ``graph:<name>`` targets **another graph** — taking it re-pins the chunk to that
+# graph and re-queues it (a migration, not a same-graph transition). Graph-only: the
+# landing node is resolved at apply time by name-match-else-entry against the target
+# graph (``bzh:migration-not-transition``); an explicit ``graph:<name>:<node>`` landing
+# override is deferred (issue #90 out-of-scope).
+GRAPH_TARGET_PREFIX = "graph:"
+
+
+def classify_choice_target(to: str) -> tuple[str, str | None]:
+    """Classify a choice ``to:`` value into ``(kind, value)`` — a pure syntax parser (issue #90).
+
+    - ``("node", <name>)`` — a same-graph node name, or the reserved terminal ``done``.
+    - ``("graph", <name>)`` — a well-formed cross-graph target ``graph:<name>``.
+    - ``("malformed", None)`` — a ``graph:``-prefixed value that is not ``graph:<name>``
+      (empty name, or an extra ``:`` — the deferred explicit-node override).
+
+    Kept a pure function so both the mint-time validator (which rejects ``malformed``)
+    and the store's edge hydration (which re-derives the target from the persisted raw
+    ``to_node_name``) classify identically.
+    """
+    if not to.startswith(GRAPH_TARGET_PREFIX):
+        return ("node", to)
+    name = to[len(GRAPH_TARGET_PREFIX) :]
+    if not name or ":" in name:
+        return ("malformed", None)
+    return ("graph", name)
+
+
+def target_graph_of(to_node_name: str) -> str | None:
+    """The cross-graph target graph name a reified edge's ``to_node_name`` encodes, or
+    ``None`` for a same-graph node / terminal target (issue #90).
+
+    A cross-graph edge persists its target as the raw ``graph:<name>`` string in
+    ``to_node_name`` (no separate column) — this re-derives the structured name on load.
+    A malformed form never reaches here: the validator rejects it before mint.
+    """
+    kind, value = classify_choice_target(to_node_name)
+    return value if kind == "graph" else None
+
 
 class Executor(StrEnum):
     """Where a node's step runs."""
@@ -85,12 +125,21 @@ DEFAULT_BOUNCE_CAP = 5
 
 @dataclass(frozen=True)
 class ChoiceDoc:
-    """One fused choice/edge entry as authored."""
+    """One fused choice/edge entry as authored.
+
+    ``to`` is the raw authored target — a same-graph node name, the reserved terminal,
+    or a cross-graph ``graph:<name>`` (issue #90). ``target_graph`` is the parsed graph
+    name when ``to`` is a well-formed cross-graph form (``None`` otherwise); a malformed
+    ``graph:`` form leaves it ``None`` and is rejected by the validator, which reads the
+    raw ``to``. ``model`` is an optional per-choice model override applied when the choice
+    migrates the chunk to another graph (``None`` keeps the chunk's current model)."""
 
     name: str
     description: str | None
     to: str | None
     prompt_addendum: str | None = None
+    target_graph: str | None = None
+    model: str | None = None
 
 
 @dataclass(frozen=True)
@@ -256,11 +305,22 @@ def _parse_choice(name: str, body: dict[str, object]) -> ChoiceDoc:
     description = body.get("description")
     to = body.get("to")
     addendum = body.get("prompt_addendum")
+    model = body.get("model")
+    to_str = str(to) if to is not None else None
+    # Structural coercion only — a malformed ``graph:`` form parses to ``target_graph=None``
+    # and the validator rejects it against the raw ``to`` (parse never validates).
+    target_graph = None
+    if to_str is not None:
+        kind, value = classify_choice_target(to_str)
+        if kind == "graph":
+            target_graph = value
     return ChoiceDoc(
         name=name,
         description=str(description) if description is not None else None,
-        to=str(to) if to is not None else None,
+        to=to_str,
         prompt_addendum=str(addendum) if addendum is not None else None,
+        target_graph=target_graph,
+        model=str(model) if model is not None else None,
     )
 
 
@@ -296,12 +356,21 @@ class Choice:
 
 @dataclass(frozen=True)
 class Edge:
-    """A directed, choice-keyed connection between two nodes of one graph."""
+    """A directed, choice-keyed connection out of one node.
+
+    ``to_node_name`` is a node name of this graph, the reserved terminal, or — for a
+    cross-graph migration edge (issue #90) — the raw ``graph:<name>`` string (the target
+    is re-derived from it on load via :func:`target_graph_of`, so no separate column is
+    persisted). ``target_graph`` is that parsed name when the edge is cross-graph
+    (``None`` for a same-graph/terminal edge); ``model`` is the optional per-choice model
+    override applied when the migration re-pins the chunk (``None`` keeps its model)."""
 
     from_node_id: str
     choice_id: str
-    to_node_name: str  # a node name of this graph, or RESERVED_TERMINAL
+    to_node_name: str  # a node name of this graph, RESERVED_TERMINAL, or ``graph:<name>``
     prompt_addendum: str | None = None
+    target_graph: str | None = None
+    model: str | None = None
 
 
 @dataclass(frozen=True)

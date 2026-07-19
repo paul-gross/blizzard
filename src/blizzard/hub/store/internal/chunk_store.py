@@ -22,7 +22,7 @@ from sqlalchemy import Connection, Engine, func, insert, select, update
 from sqlalchemy.exc import IntegrityError
 
 from blizzard.foundation.clock import IClock
-from blizzard.foundation.ids import ARTIFACT_PREFIX, HUB_EXEC_SLOT_PREFIX, mint
+from blizzard.foundation.ids import ARTIFACT_PREFIX, HUB_EXEC_SLOT_PREFIX, MIGRATION_PREFIX, mint
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import Executor
@@ -39,6 +39,7 @@ from blizzard.hub.domain.work import (
     HubNodePollFact,
     IWriteChunkRepository,
     LeaseFact,
+    MigrationFact,
     PauseFact,
     PmPointer,
     PrOpenedFact,
@@ -80,11 +81,20 @@ class ChunkStore:
             chunk = conn.execute(select(s.chunks).where(s.chunks.c.chunk_id == chunk_id)).one_or_none()
             if chunk is None or chunk_id in self._grouped_ids(conn):
                 return None
+            transition_rows = conn.execute(select(s.transitions).where(s.transitions.c.chunk_id == chunk_id)).all()
+            # Resolve each transition's executor against *its own* graph (issue #90):
+            # after a cross-graph migration re-pins ``chunk.graph_id``, an old-graph
+            # transition's ``to_node_id`` lives in a graph the chunk no longer points at,
+            # so the executor map must span the set of graphs the chunk's transitions
+            # touched, not only its current pin. Node ids are globally-unique ULIDs, so a
+            # single node_id -> executor dict keyed across graphs resolves each transition
+            # unambiguously (no silent ``RUNNER`` fallback for a known node).
+            graph_ids = {chunk.graph_id} | {t.graph_id for t in transition_rows}
             executors = {
                 r.node_id: Executor(r.executor)
                 for r in conn.execute(
                     select(s.graph_nodes.c.node_id, s.graph_nodes.c.executor).where(
-                        s.graph_nodes.c.graph_id == chunk.graph_id
+                        s.graph_nodes.c.graph_id.in_(graph_ids)
                     )
                 ).all()
             }
@@ -96,8 +106,9 @@ class ChunkStore:
                     recorded_at=t.recorded_at,
                     from_node_id=t.from_node_id,
                     choice_name=t.choice_name,
+                    graph_id=t.graph_id,
                 )
-                for t in conn.execute(select(s.transitions).where(s.transitions.c.chunk_id == chunk_id)).all()
+                for t in transition_rows
             ]
             leases = [
                 LeaseFact(epoch=lease.epoch, minted_at=lease.minted_at)
@@ -144,6 +155,19 @@ class ChunkStore:
             requeues = [
                 RequeueFact(requeued_at=r.requeued_at)
                 for r in conn.execute(select(s.requeues).where(s.requeues.c.chunk_id == chunk_id)).all()
+            ]
+            migrations = [
+                MigrationFact(
+                    from_node_id=m.from_node_id,
+                    from_graph_id=m.from_graph_id,
+                    to_graph_id=m.to_graph_id,
+                    landed_node_id=m.landed_node_id,
+                    choice_name=m.choice_name,
+                    model=m.model_after,
+                    epoch=m.epoch,
+                    recorded_at=m.recorded_at,
+                )
+                for m in conn.execute(select(s.chunk_migrations).where(s.chunk_migrations.c.chunk_id == chunk_id)).all()
             ]
             pauses = [
                 PauseFact(paused=p.paused, set_at=p.set_at, set_by=p.set_by)
@@ -206,6 +230,7 @@ class ChunkStore:
                 questions=questions,
                 decisions=decisions,
                 requeues=requeues,
+                migrations=migrations,
                 pr_opened=pr_opened,
                 pauses=pauses,
                 usage=usage,
@@ -545,6 +570,7 @@ class ChunkStore:
                 insert(s.transitions).values(
                     transition_id=transition_id,
                     chunk_id=chunk_id,
+                    graph_id=self._graph_id_of(conn, chunk_id),
                     from_node_id=from_node_id,
                     to_node_id=to_node_id,
                     choice_name=choice_name,
@@ -618,6 +644,7 @@ class ChunkStore:
                 insert(s.transitions).values(
                     transition_id=transition_id,
                     chunk_id=chunk_id,
+                    graph_id=self._graph_id_of(conn, chunk_id),
                     from_node_id=from_node_id,
                     to_node_id=to_node_id,
                     choice_name=choice_name,
@@ -852,6 +879,108 @@ class ChunkStore:
         with self._engine.begin() as conn:
             conn.execute(insert(s.requeues).values(chunk_id=chunk_id, requeued_at=at))
 
+    def accepted_migration(self, chunk_id: str, *, from_node_id: str, epoch: int) -> bool:
+        """True iff a migration is already recorded for ``(chunk_id, from_node_id, epoch)``
+        — the idempotency probe a re-applied cross-graph completion short-circuits on (#90).
+
+        A migration writes no ``transitions`` row, so the transition-replay probe
+        (:meth:`accepted_transition_target`) can never see it; this is its migration
+        counterpart, keyed the same way (:meth:`record_migration`'s natural key)."""
+        with self._engine.connect() as conn:
+            return self._migration_exists(conn, chunk_id, from_node_id=from_node_id, epoch=epoch)
+
+    def record_migration(
+        self,
+        chunk_id: str,
+        *,
+        from_node_id: str | None,
+        from_graph_id: str,
+        to_graph_id: str,
+        landed_node_id: str | None,
+        choice_name: str | None,
+        decision_id: str | None = None,
+        model: str | None,
+        epoch: int,
+        at: datetime,
+        artifacts: list[ArtifactRow],
+    ) -> bool:
+        """Record a cross-graph migration **atomically and idempotently** (#90).
+
+        In **one transaction**: insert the ``chunk_migrations`` fact, re-pin
+        ``chunks.graph_id`` (and ``chunks.model`` when ``model`` is given), release the
+        route, **and persist this node-step's artifacts** (MUST-FIX 1 — the migration
+        branch bypasses ``record_transition``, which is where a step's artifacts normally
+        commit; without this the triage node's reasoning asset the carry-over relies on is
+        never persisted). When ``decision_id`` is given — a **human gate's** resolved
+        choice was itself the cross-graph migration (#90) — it is stamped on the fact so
+        that decision derives ``transitioned`` (closed), exactly as a resolving transition
+        would; without it the gate's decision would stay live forever (a phantom decision
+        that mis-renders the board and wedges REAP recovery). Guarded by the natural key
+        ``(chunk_id, from_node_id, epoch)``: a
+        redelivery replay after a ``kill -9`` re-enters harmlessly, writing nothing a
+        second time — the migration is all-or-nothing, never a half-written re-pin with
+        orphaned artifacts. Returns True iff it wrote, False on a replay.
+
+        No lease is minted here (unlike :meth:`finalize_delivery`): the migration is
+        recorded at the *submitting* epoch, and the re-queue means the **next** claim mints
+        a fresh higher lease above it, fencing the abandoned attempt."""
+        with self._engine.begin() as conn:
+            if self._migration_exists(conn, chunk_id, from_node_id=from_node_id, epoch=epoch):
+                return False
+            conn.execute(
+                insert(s.chunk_migrations).values(
+                    migration_id=mint(MIGRATION_PREFIX, self._clock),
+                    chunk_id=chunk_id,
+                    from_node_id=from_node_id,
+                    from_graph_id=from_graph_id,
+                    to_graph_id=to_graph_id,
+                    landed_node_id=landed_node_id,
+                    choice_name=choice_name,
+                    decision_id=decision_id,
+                    model_after=model,
+                    epoch=epoch,
+                    recorded_at=at,
+                )
+            )
+            values = {"graph_id": to_graph_id}
+            if model is not None:
+                values["model"] = model
+            conn.execute(update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(**values))
+            conn.execute(
+                insert(s.route_released).values(
+                    chunk_id=chunk_id, released_at=at, seq=self._next_route_seq(conn, chunk_id)
+                )
+            )
+            for row in artifacts:
+                conn.execute(
+                    insert(s.artifacts).values(
+                        artifact_id=row.artifact_id,
+                        chunk_id=row.chunk_id,
+                        node_id=row.node_id,
+                        node_name=row.node_name,
+                        epoch=row.epoch,
+                        name=row.name,
+                        kind=row.kind.value,
+                        data=row.data,
+                        repo=row.repo,
+                        produced_at=at,
+                    )
+                )
+            return True
+
+    @staticmethod
+    def _migration_exists(conn: Connection, chunk_id: str, *, from_node_id: str | None, epoch: int) -> bool:
+        return (
+            conn.execute(
+                select(s.chunk_migrations.c.migration_id).where(
+                    (s.chunk_migrations.c.chunk_id == chunk_id)
+                    & (s.chunk_migrations.c.from_node_id == from_node_id)
+                    & (s.chunk_migrations.c.epoch == epoch)
+                )
+            ).first()
+            is not None
+        )
+
     def record_queue_position(self, chunk_id: str, *, position: float, at: datetime) -> None:
         """Append the moved chunk's new ready-queue position; order derives."""
         with self._engine.begin() as conn:
@@ -1030,6 +1159,7 @@ class ChunkStore:
                 insert(s.transitions).values(
                     transition_id=transition_id,
                     chunk_id=chunk_id,
+                    graph_id=self._graph_id_of(conn, chunk_id),
                     from_node_id=from_node_id,
                     to_node_id=to_node_id,
                     choice_name=choice_name,
@@ -1069,6 +1199,14 @@ class ChunkStore:
             conn.execute(insert(s.hub_node_poll).values(chunk_id=chunk_id, node_id=node_id, epoch=epoch, polled_at=at))
 
     # --- helpers ------------------------------------------------------------
+
+    @staticmethod
+    def _graph_id_of(conn: Connection, chunk_id: str) -> str:
+        """The chunk's then-current graph pin — the provenance a transition is stamped
+        with (issue #90). Read inside the writing transaction so a transition always
+        carries the graph it actually moved within, even as a later migration re-pins
+        ``chunks.graph_id`` in a subsequent write."""
+        return conn.execute(select(s.chunks.c.graph_id).where(s.chunks.c.chunk_id == chunk_id)).scalar_one()
 
     @staticmethod
     def _grouped_ids(conn) -> set[str]:  # type: ignore[no-untyped-def]
@@ -1186,9 +1324,18 @@ class ChunkStore:
         resolution = conn.execute(
             select(s.decision_resolutions).where(s.decision_resolutions.c.decision_id == row.decision_id)
         ).one_or_none()
+        # Closed by the resolving transition that carries this decision — or, when the
+        # gate's resolved choice was itself a cross-graph migration (#90, which writes no
+        # transitions row), by the migration fact stamped with the same decision_id.
         transitioned = (
             conn.execute(
                 select(s.transitions.c.transition_id).where(s.transitions.c.decision_id == row.decision_id).limit(1)
+            ).first()
+            is not None
+            or conn.execute(
+                select(s.chunk_migrations.c.migration_id)
+                .where(s.chunk_migrations.c.decision_id == row.decision_id)
+                .limit(1)
             ).first()
             is not None
         )

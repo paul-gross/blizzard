@@ -28,6 +28,7 @@ from blizzard.hub.domain.graph import (
     Node,
     RunStep,
     SessionMode,
+    target_graph_of,
 )
 from blizzard.hub.store.schema import graph_choices, graph_edges, graph_nodes, graphs
 
@@ -88,6 +89,7 @@ class GraphStore:
                         choice_id=edge.choice_id,
                         to_node_name=edge.to_node_name,
                         prompt_addendum=edge.prompt_addendum,
+                        to_graph_model=edge.model,
                     )
                 )
 
@@ -153,6 +155,10 @@ class GraphStore:
                 choice_id=er.choice_id,
                 to_node_name=er.to_node_name,
                 prompt_addendum=er.prompt_addendum,
+                # The cross-graph target is re-derived from the raw ``to_node_name`` (#90),
+                # not a stored column; the per-choice model override is its own column.
+                target_graph=target_graph_of(er.to_node_name),
+                model=er.to_graph_model,
             )
             for er in edge_rows
         ]

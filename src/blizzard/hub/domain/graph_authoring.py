@@ -65,6 +65,8 @@ def reify_graph(doc: GraphDoc, clock: IClock) -> Graph:
                     choice_id=choice_id,
                     to_node_name=choice_doc.to or RESERVED_TERMINAL,
                     prompt_addendum=choice_doc.prompt_addendum,
+                    target_graph=choice_doc.target_graph,
+                    model=choice_doc.model,
                 )
             )
         nodes.append(
@@ -117,8 +119,30 @@ class GraphMintService:
         if not result.ok:
             raise GraphValidationError(result)
         graph = reify_graph(doc, self._clock)
+        warnings = [*result.warnings, *self._cross_graph_warnings(graph)]
         self._graphs.mint(graph, definition_yaml=definition_yaml, at=graph.created_at)
-        return graph, result.warnings
+        return graph, warnings
+
+    def _cross_graph_warnings(self, graph: Graph) -> list[str]:
+        """Late-bound resolvability of cross-graph targets (issue #90) — a **warning**,
+        never an error. A ``graph:<name>`` target is resolved by name at apply time (the
+        same late binding ingest uses), so authoring a graph whose target is not minted
+        *yet* is legal — the two may be authored in either order, or the target minted
+        later. This is the one mint-time step that touches the graph repository, keeping
+        the pure validator (:func:`validate_graph`) filesystem- and framework-free."""
+        warnings: list[str] = []
+        seen: set[str] = set()
+        for edge in graph.edges:
+            target = edge.target_graph
+            if target is None or target in seen:
+                continue
+            seen.add(target)
+            if self._graphs.get_enabled_by_name(target) is None:
+                warnings.append(
+                    f"cross-graph target `{target}` names no enabled graph yet — it will resolve "
+                    f"when a graph named `{target}` is minted"
+                )
+        return warnings
 
     def ensure_default(self, doc: GraphDoc, *, definition_yaml: str) -> Graph:
         """Mint the configured default graph if no enabled graph of its name exists.

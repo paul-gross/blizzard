@@ -78,6 +78,7 @@ from blizzard.wire.chunk import (
     EscalationView,
     HubMarkerRequest,
     HubMarkerResponse,
+    MigrationView,
     PauseView,
     PendingView,
     PmItemEntry,
@@ -131,23 +132,86 @@ def _node_name(graph: Graph | None, node_id: str | None) -> str | None:
     return node.name if node is not None else None
 
 
-def _history_views(facts: ChunkFacts, graph: Graph | None) -> list[TransitionView]:
+def _graph_name(graph: Graph | None) -> str | None:
+    return graph.name if graph is not None else None
+
+
+def _history_views(facts: ChunkFacts, graphs: dict[str | None, Graph | None]) -> list[TransitionView]:
     """The chunk's transitions oldest-first — the board's node-history timeline.
 
-    Each edge's node ids are resolved to their human graph names against the chunk's
-    pinned graph so the timeline reads ``build -> review``."""
-    return [
-        TransitionView(
-            from_node_id=t.from_node_id,
-            from_node_name=_node_name(graph, t.from_node_id),
-            to_node_id=t.to_node_id,
-            to_node_name=_node_name(graph, t.to_node_id),
-            choice_name=t.choice_name,
-            epoch=t.epoch,
-            recorded_at=iso_utc(t.recorded_at),
+    Each edge's node ids are resolved to their human graph names against *the graph the
+    transition happened in* (issue #90), keyed by ``TransitionFact.graph_id`` — not the
+    chunk's current pin. A single-graph history keys every step to the one graph exactly
+    as before; a chunk that later migrates still reads its old-graph steps' names, rather
+    than degrading them to raw ``nd_`` ids against the new pin. The step's own
+    ``graph_id``/``graph_name`` ride along so the board can label which graph it belongs to."""
+    views: list[TransitionView] = []
+    for t in transition_history(facts):
+        graph = graphs.get(t.graph_id)
+        views.append(
+            TransitionView(
+                from_node_id=t.from_node_id,
+                from_node_name=_node_name(graph, t.from_node_id),
+                to_node_id=t.to_node_id,
+                to_node_name=_node_name(graph, t.to_node_id),
+                choice_name=t.choice_name,
+                epoch=t.epoch,
+                recorded_at=iso_utc(t.recorded_at),
+                graph_id=t.graph_id,
+                graph_name=_graph_name(graph),
+            )
         )
-        for t in transition_history(facts)
-    ]
+    return views
+
+
+def _migration_views(facts: ChunkFacts, graphs: dict[str | None, Graph | None]) -> list[MigrationView]:
+    """The chunk's cross-graph migration steps oldest-first (issue #90).
+
+    Each step names the graph it left and the graph it re-pinned to: the ``from_node`` is
+    resolved against the ``from_graph``, the ``landed_node`` against the ``to_graph`` — each
+    side's own graph, so neither degrades to a raw id when the two differ. The board weaves
+    these into the timeline alongside :func:`_history_views` by ``recorded_at``."""
+    views: list[MigrationView] = []
+    for m in sorted(facts.migrations, key=lambda m: (m.recorded_at, m.epoch)):
+        from_graph = graphs.get(m.from_graph_id)
+        to_graph = graphs.get(m.to_graph_id)
+        views.append(
+            MigrationView(
+                from_node_id=m.from_node_id,
+                from_node_name=_node_name(from_graph, m.from_node_id),
+                from_graph_id=m.from_graph_id,
+                from_graph_name=_graph_name(from_graph),
+                to_graph_id=m.to_graph_id,
+                to_graph_name=_graph_name(to_graph),
+                landed_node_id=m.landed_node_id,
+                landed_node_name=_node_name(to_graph, m.landed_node_id),
+                choice_name=m.choice_name,
+                model=m.model,
+                recorded_at=iso_utc(m.recorded_at),
+            )
+        )
+    return views
+
+
+def _history_graphs(services: HubServices, chunk: Chunk, facts: ChunkFacts) -> dict[str | None, Graph | None]:
+    """The graphs a chunk's history spans, by id (issue #90).
+
+    The chunk's current pin plus every distinct graph its transitions were recorded in and
+    every graph its migrations left or entered (only ever the one, until a cross-graph
+    migration lands) — each resolved once so :func:`_history_views` /
+    :func:`_migration_views` can name nodes against their own graph."""
+    graphs: dict[str | None, Graph | None] = {chunk.graph_id: services.graphs.get(chunk.graph_id)}
+
+    def ensure(graph_id: str | None) -> None:
+        if graph_id is not None and graph_id not in graphs:
+            graphs[graph_id] = services.graphs.get(graph_id)
+
+    for t in facts.transitions:
+        ensure(t.graph_id)
+    for m in facts.migrations:
+        ensure(m.from_graph_id)
+        ensure(m.to_graph_id)
+    return graphs
 
 
 def _usage_total_view(facts: ChunkFacts) -> ChunkUsageTotalView:
@@ -322,6 +386,7 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
     node_id = current_node_id(facts) or (graph.entry_node_id if graph is not None else None)
     node_name = _node_name(graph, node_id)
     web_base = _branch_url_source(chunk, services.pm)
+    history_graphs = _history_graphs(services, chunk, facts)
     artifacts = services.chunks.load_artifacts(chunk_id)
     pending = hub_node_pending(facts)
     pending_view = None
@@ -351,7 +416,8 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
         else None,
         pause=PauseView(by=pause.set_by, set_at=iso_utc(pause.set_at)) if pause is not None else None,
         decision=to_decision_view(decision) if decision is not None else None,
-        history=_history_views(facts, graph),
+        history=_history_views(facts, history_graphs),
+        migrations=_migration_views(facts, history_graphs),
         artifacts=_artifact_views(artifacts, web_base),
         questions=[question_view(q) for q in services.chunks.load_questions(chunk_id) if not q.answered],
         awaiting_external_merge=awaiting_external_merge(facts),

@@ -29,7 +29,7 @@ from typing import Protocol
 
 from blizzard.hub.domain.artifacts import ArtifactRow
 from blizzard.hub.domain.fleet import Route
-from blizzard.hub.domain.graph import RESERVED_TERMINAL, Executor
+from blizzard.hub.domain.graph import RESERVED_TERMINAL, Executor, Graph
 
 
 class ChunkStatus(StrEnum):
@@ -165,6 +165,13 @@ class TransitionFact:
     derivations read only ``to_node_id``/``to_node_executor``/``epoch``/``recorded_at``;
     the edge fields feed the chunk's transition-history view and default to
     ``None`` so a derivation unit test never has to supply them.
+
+    ``graph_id`` is the graph the transition happened in (issue #90 — graph-provenance).
+    The hydrating repository resolves ``to_node_executor`` and the history view resolves
+    the node names against *this* graph rather than the chunk's current pin, so a chunk
+    that later migrates to another graph still reads its old-graph steps correctly.
+    Defaults to ``None`` so a derivation unit test that supplies its own
+    ``to_node_executor`` need not name a graph.
     """
 
     to_node_id: str
@@ -173,6 +180,7 @@ class TransitionFact:
     recorded_at: datetime
     from_node_id: str | None = None
     choice_name: str | None = None
+    graph_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -261,6 +269,32 @@ class HubNodePollFact:
     node_id: str
     epoch: int
     polled_at: datetime
+
+
+@dataclass(frozen=True)
+class MigrationFact:
+    """A ``chunk_migrations`` fact — a cross-graph migration re-pinned the chunk (issue #90).
+
+    Its own recorded fact, **never a transition** (``bzh:migration-not-transition``): a
+    judgement choice targeting another graph ends the current attempt, re-pins the chunk
+    to ``to_graph_id``, releases the route, and re-queues the chunk at ``landed_node_id``
+    (name-match-else-entry against the target graph, resolved concretely at write time —
+    ``None`` only as a schema allowance, read as the target's entry). Recorded at the
+    submitting ``epoch`` (the fence the next claim mints above); ``model`` is the
+    re-pinned model, or ``None`` when the migration kept the chunk's current model.
+    ``from_node_id``/``from_graph_id``/``choice_name`` describe the edge for the history
+    view. The status derivations key on ``(recorded_at, epoch)`` supersession of the
+    newest transition and read ``landed_node_id``.
+    """
+
+    from_node_id: str | None
+    from_graph_id: str
+    to_graph_id: str
+    landed_node_id: str | None
+    choice_name: str | None
+    model: str | None
+    epoch: int
+    recorded_at: datetime
 
 
 @dataclass(frozen=True)
@@ -372,6 +406,12 @@ class ChunkFacts:
     questions: list[QuestionFact] = field(default_factory=list)
     decisions: list[DecisionFact] = field(default_factory=list)
     requeues: list[RequeueFact] = field(default_factory=list)
+    # The chunk's cross-graph migration facts (issue #90) — each re-pins the chunk to
+    # another graph and re-queues it. Feeds :func:`newest_migration` /
+    # :func:`current_node_id` and gates the terminal/hub-node checks, so a re-queued chunk
+    # derives ``ready`` at its new landing node rather than ``done``/``delivering`` off its
+    # superseded pre-migration transition.
+    migrations: list[MigrationFact] = field(default_factory=list)
     pr_opened: list[PrOpenedFact] = field(default_factory=list)
     pauses: list[PauseFact] = field(default_factory=list)
     usage: list[UsageFact] = field(default_factory=list)
@@ -560,6 +600,35 @@ def bounces_over_cap(facts: ChunkFacts, cap: int) -> bool:
     return bounce_count(facts) > cap
 
 
+def newest_migration(facts: ChunkFacts) -> MigrationFact | None:
+    """The chunk's newest cross-graph migration fact, or ``None`` (issue #90).
+
+    Ordered by ``(recorded_at, epoch)`` — the same key :func:`newest_transition` uses —
+    so "the latest movement" is comparable across the two fact kinds.
+    """
+    if not facts.migrations:
+        return None
+    return max(facts.migrations, key=lambda m: (m.recorded_at, m.epoch))
+
+
+def _latest_movement_is_migration(facts: ChunkFacts) -> bool:
+    """The chunk's newest movement fact is a migration, not a transition (issue #90).
+
+    A migration re-queues the chunk, so once it is the latest movement the chunk's
+    current node is the migration's landing node and the pre-migration transition's
+    terminal/hub identity is superseded (a re-queued chunk is ``ready``, never ``done``
+    off its old-graph terminal). Ties go to the migration — it is recorded *after* the
+    transition that brought the chunk to the node it migrates out of.
+    """
+    migration = newest_migration(facts)
+    if migration is None:
+        return False
+    transition = newest_transition(facts)
+    if transition is None:
+        return True
+    return (migration.recorded_at, migration.epoch) >= (transition.recorded_at, transition.epoch)
+
+
 def newest_transition_is_terminal(facts: ChunkFacts) -> bool:
     """The newest accepted transition's target is the reserved terminal (``done``, #63).
 
@@ -567,16 +636,42 @@ def newest_transition_is_terminal(facts: ChunkFacts) -> bool:
     chunk whose repos all landed but whose newest transition entered a post-merge node
     (an authored ``merged -> <node>`` edge) does not derive DONE here; it derives
     ``running``/``needs_human`` from the branches below, with :func:`has_landed_repos`
-    surfacing the landed detail truthfully alongside.
+    surfacing the landed detail truthfully alongside. A **later migration** supersedes the
+    transition entirely (issue #90): a re-queued chunk is never DONE off a pre-migration
+    terminal.
     """
+    if _latest_movement_is_migration(facts):
+        return False
     transition = newest_transition(facts)
     return transition is not None and transition.to_node_id == RESERVED_TERMINAL
 
 
 def _newest_transition_enters_hub_node(facts: ChunkFacts) -> bool:
-    """The newest accepted transition's target is a hub-executed node."""
+    """The newest accepted transition's target is a hub-executed node.
+
+    A later migration supersedes it (issue #90) — a re-queued chunk derives ``ready``, not
+    ``delivering`` off a pre-migration hub-node transition.
+    """
+    if _latest_movement_is_migration(facts):
+        return False
     transition = newest_transition(facts)
     return transition is not None and transition.to_node_executor is Executor.HUB
+
+
+def landing_node(target_graph: Graph, from_node_name: str | None) -> str:
+    """The node a migration lands on in ``target_graph`` — name-match-else-entry (issue #90).
+
+    ``bzh:migration-not-transition``'s landing rule: land on the node of the target graph
+    whose name matches the node the chunk migrated *from*, or the target's entry node when
+    no name matches (the triage case — the target has no same-named node). A pure function
+    of the passed-in graph (``bzh:domain-takes-objects``); the caller resolves the target
+    graph and this picks the concrete landing node id to record.
+    """
+    if from_node_name is not None:
+        node = target_graph.node_by_name(from_node_name)
+        if node is not None:
+            return node.node_id
+    return target_graph.entry_node_id
 
 
 def hub_node_poll_history(facts: ChunkFacts, *, node_id: str, epoch: int) -> list[HubNodePollFact]:
@@ -707,12 +802,23 @@ def transition_history(facts: ChunkFacts) -> list[TransitionFact]:
 
 
 def current_node_id(facts: ChunkFacts) -> str | None:
-    """The chunk's current node id — the newest transition's target, else ``None``.
+    """The chunk's current node id — the newest movement fact's target, else ``None``.
 
-    ``None`` means the chunk has not yet transitioned, so its current node is the
-    pinned graph's entry node — a graph the caller already holds; resolving it is
-    not this function's job (``bzh:domain-takes-objects``).
+    Normally the newest transition's ``to_node_id``. When a **migration** is the latest
+    movement (issue #90), it is the migration's ``landed_node_id`` in the re-pinned graph
+    instead — so a re-queued chunk's current node is where it landed under the new graph,
+    not the old-graph node it migrated out of. Centralizing this here fixes every
+    ``current_node_id(...) or graph.entry_node_id`` call site at once.
+
+    ``None`` means the chunk has not yet moved, so its current node is the pinned graph's
+    entry node — a graph the caller already holds; resolving it is not this function's job
+    (``bzh:domain-takes-objects``). ``landed_node_id`` may itself be ``None`` (the schema
+    allowance for "the target's entry") and falls through the same ``or entry_node_id``.
     """
+    if _latest_movement_is_migration(facts):
+        migration = newest_migration(facts)
+        assert migration is not None  # _latest_movement_is_migration guarantees it
+        return migration.landed_node_id
     transition = newest_transition(facts)
     return transition.to_node_id if transition is not None else None
 
@@ -871,6 +977,13 @@ class IReadChunkRepository(Protocol):
     def accepted_transition_target(self, chunk_id: str, *, from_node_id: str, epoch: int) -> str | None:
         """The ``to_node_id`` of an already-accepted transition out of ``from_node_id`` at
         ``epoch`` — the idempotency probe for a re-applied completion, or None."""
+        ...
+
+    def accepted_migration(self, chunk_id: str, *, from_node_id: str, epoch: int) -> bool:
+        """True iff a cross-graph migration is already recorded for ``(chunk_id,
+        from_node_id, epoch)`` (issue #90) — the replay probe for a re-applied cross-graph
+        completion. A migration writes no transition, so :meth:`accepted_transition_target`
+        never sees it; this is its counterpart."""
         ...
 
     def landed_repos(self, chunk_id: str) -> set[str]:
@@ -1098,6 +1211,36 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
 
     def record_requeue(self, chunk_id: str, *, at: datetime) -> None:
         """Record a ``requeue.recorded`` fact — supersedes an open escalation."""
+        ...
+
+    def record_migration(
+        self,
+        chunk_id: str,
+        *,
+        from_node_id: str | None,
+        from_graph_id: str,
+        to_graph_id: str,
+        landed_node_id: str | None,
+        choice_name: str | None,
+        decision_id: str | None = None,
+        model: str | None,
+        epoch: int,
+        at: datetime,
+        artifacts: list[ArtifactRow],
+    ) -> bool:
+        """Record a cross-graph migration atomically and idempotently (issue #90).
+
+        In one transaction: the ``chunk_migrations`` fact, the ``chunks.graph_id`` re-pin
+        (+ ``chunks.model`` when ``model`` is given), the ``route_released``, and the
+        submitting node-step's ``artifacts`` (so the triage node's reasoning asset carries
+        to the landing claim — the migration branch bypasses :meth:`record_transition`,
+        where a step's artifacts normally commit). When ``decision_id`` is set — a human
+        gate's resolved choice was itself the migration — the fact carries it so that
+        decision derives closed (a migration writes no transitions row; an unclosed gate
+        decision mis-renders the board and wedges REAP recovery). Idempotent by
+        ``(chunk_id, from_node_id, epoch)`` — a redelivery replay writes nothing. No lease
+        is minted: the fact is recorded at the submitting epoch, and the next claim mints a
+        fresh higher one. Returns True iff it wrote, False on a replay."""
         ...
 
     def record_queue_position(self, chunk_id: str, *, position: float, at: datetime) -> None:

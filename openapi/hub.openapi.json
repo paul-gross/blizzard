@@ -60,6 +60,7 @@
           "next",
           "hub_node_taken",
           "parked_at_gate",
+          "migrated",
           "done",
           "failure"
         ],
@@ -357,6 +358,14 @@
               }
             ],
             "title": "Latest Epoch"
+          },
+          "migrations": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/MigrationView"
+            },
+            "title": "Migrations",
+            "type": "array"
           },
           "model": {
             "title": "Model",
@@ -1640,6 +1649,119 @@
         "title": "LeaseMintReport",
         "type": "object"
       },
+      "MigrationView": {
+        "description": "One cross-graph migration step in a chunk's history (issue #90).\n\nA judgement choice targeting another graph ends the chunk's attempt in ``from_graph``\nand re-queues it at ``landed_node`` in ``to_graph`` \u2014 its own step in the timeline,\nnever a transition (``bzh:migration-not-transition``). The board renders it as a\ngraph-to-graph hop: ``from_graph/from_node --choice--> to_graph/landed_node``. Node and\ngraph names are resolved server-side against each side's own graph (null when\nunresolvable); ``model`` is the re-pinned model, or null when the chunk kept its own.",
+        "properties": {
+          "choice_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Choice Name"
+          },
+          "from_graph_id": {
+            "title": "From Graph Id",
+            "type": "string"
+          },
+          "from_graph_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Graph Name"
+          },
+          "from_node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Node Id"
+          },
+          "from_node_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Node Name"
+          },
+          "landed_node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Landed Node Id"
+          },
+          "landed_node_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Landed Node Name"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "recorded_at": {
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "to_graph_id": {
+            "title": "To Graph Id",
+            "type": "string"
+          },
+          "to_graph_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To Graph Name"
+          }
+        },
+        "required": [
+          "from_node_id",
+          "from_graph_id",
+          "to_graph_id",
+          "recorded_at"
+        ],
+        "title": "MigrationView",
+        "type": "object"
+      },
       "NodeConfig": {
         "description": "The node's invariant identity for this step.",
         "properties": {
@@ -2763,7 +2885,7 @@
         "type": "object"
       },
       "TransitionView": {
-        "description": "One accepted transition in a chunk's history.\n\nThe edge a node-step took \u2014 its origin node, the judgement choice that routed it,\nand its destination \u2014 oldest first on the detail. This is what makes the review-fail\nloop legible: a ``review -> build`` entry with ``choice_name = \"fail\"`` is a visible\nstep in the timeline (MVP criterion 9/11).\n\n``from_node_name``/``to_node_name`` are the nodes' human graph names (``build``,\n``review``) the board renders in place of the raw ``nd_`` ULIDs; resolved here so the\ntimeline is legible without reassembly, null when the pinned graph cannot\nresolve the id.",
+        "description": "One accepted transition in a chunk's history.\n\nThe edge a node-step took \u2014 its origin node, the judgement choice that routed it,\nand its destination \u2014 oldest first on the detail. This is what makes the review-fail\nloop legible: a ``review -> build`` entry with ``choice_name = \"fail\"`` is a visible\nstep in the timeline (MVP criterion 9/11).\n\n``from_node_name``/``to_node_name`` are the nodes' human graph names (``build``,\n``review``) the board renders in place of the raw ``nd_`` ULIDs; resolved here so the\ntimeline is legible without reassembly, null when the pinned graph cannot\nresolve the id.\n\n``graph_id``/``graph_name`` identify the graph this step happened in (issue #90) \u2014\nresolved per-transition against its own graph, so a chunk that later migrated still\nlabels its old-graph steps with the graph they belong to rather than the current pin;\nboth null for a step predating graph-provenance (never backfilled with a name).",
         "properties": {
           "choice_name": {
             "anyOf": [
@@ -2801,6 +2923,28 @@
               }
             ],
             "title": "From Node Name"
+          },
+          "graph_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graph Id"
+          },
+          "graph_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graph Name"
           },
           "recorded_at": {
             "title": "Recorded At",

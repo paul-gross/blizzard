@@ -15,7 +15,9 @@ deliver -> land end to end. Tables the thin slice does not yet exercise
 criterion 7); the gate tables (``decisions``, ``decision_resolutions``, ``requeues``)
 land the human-gate loop (MVP criterion 12) and feed the ``waiting_on_human``
 derivation; ``transitions.decision_id`` (carried since P6) is what the resolving
-transition points back at.
+transition points back at — as is ``chunk_migrations.decision_id`` when a gate's
+resolved choice migrates cross-graph (issue #90), so that decision derives closed
+even though a migration writes no transitions row.
 """
 
 from __future__ import annotations
@@ -92,8 +94,14 @@ graph_edges = Table(
     Column("edge_id", String, primary_key=True),
     Column("from_node_id", String, ForeignKey("graph_nodes.node_id"), nullable=False),
     Column("choice_id", String, ForeignKey("graph_choices.choice_id"), nullable=False),
-    Column("to_node_name", String, nullable=False),  # a node name, or the reserved 'done'
+    Column("to_node_name", String, nullable=False),  # a node name, the reserved 'done', or 'graph:<name>' (#90)
     Column("prompt_addendum", Text, nullable=True),  # inlined arrival context
+    # The optional per-choice model override applied when a cross-graph migration edge
+    # (#90) re-pins the chunk — null keeps the chunk's current model. The cross-graph
+    # *target* itself needs no column: it rides in ``to_node_name`` as ``graph:<name>``
+    # and is re-derived on load (``graph.target_graph_of``); the model, not being encoded
+    # there, is the one authored value a migration edge must persist separately.
+    Column("to_graph_model", String, nullable=True),
 )
 
 # --- Chunks and their PM pointers (chunk.minted) ------------------------------
@@ -126,12 +134,56 @@ transitions = Table(
     metadata,
     Column("transition_id", String, primary_key=True),  # tr_<ulid>
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
+    # The graph this transition happened in (issue #90 — graph-provenance). A movement
+    # fact carries the identity of the graph it moved within, so a later cross-graph
+    # migration (which re-pins ``chunks.graph_id``) never strands an old-graph transition's
+    # node ids against the new pin: hydration resolves each transition's executor/name
+    # against *its own* graph, not the chunk's current one. No ForeignKey — the sibling
+    # ``from_node_id``/``to_node_id`` columns carry none either (``to_node_id`` may be the
+    # reserved terminal), and the invariant-checker seeds transitions with a bare graph id.
+    Column("graph_id", String, nullable=False),
     Column("from_node_id", String, nullable=True),  # null on the first transition out of entry
     Column("to_node_id", String, nullable=False),  # a node_id, or 'done' terminal
     Column("choice_name", String, nullable=True),  # the judgement's selected choice
     Column("decision_id", String, nullable=True),  # gates only; shaped for P7
     Column("epoch", Integer, nullable=False),  # the fencing epoch checked against latest
     Column("runner_id", String, nullable=False),  # reporting author, or the hub coordinator
+    Column("recorded_at", UtcDateTime, nullable=False),
+)
+
+# --- Cross-graph migration record (chunk_migrations — issue #90) ---------------
+#
+# A judgement choice targeting another graph (``to: graph:<name>``) re-pins the chunk
+# and re-queues it — its **own recorded fact**, never a ``transitions`` row
+# (``bzh:migration-not-transition``: a transitions row whose two nodes span graphs is
+# exactly the violation this table avoids). ``record_migration`` writes this fact, the
+# ``chunks.graph_id`` (+ ``chunks.model`` when re-pinned) update, the ``route_released``,
+# and the submitting node-step's artifacts in **one transaction**, idempotent-guarded by
+# ``(chunk_id, from_node_id, epoch)`` — a crash-replay re-enters harmlessly. ``epoch`` is
+# the submitting attempt's fence (the next claim mints a fresh higher one above it);
+# ``landed_node_id`` is the concrete name-match-else-entry landing node in the target
+# graph (nullable only as the schema allowance for "the target's entry"); ``model_after``
+# is the re-pinned model, or null when the migration kept the chunk's current model;
+# ``choice_name`` is the triggering choice (paralleling ``transitions.choice_name``).
+# ``decision_id`` is set only when a **human gate's** resolved choice is itself the
+# cross-graph migration (issue #90): a migration writes no ``transitions`` row, so
+# without pointing back at the decision here it would stay ``transitioned=False`` forever
+# (a phantom live decision that mis-renders the board and wedges REAP recovery). It is
+# null for the ordinary worker-judged migration, which resolves no decision.
+
+chunk_migrations = Table(
+    "chunk_migrations",
+    metadata,
+    Column("migration_id", String, primary_key=True),  # mg_<ulid>
+    Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
+    Column("from_node_id", String, nullable=True),  # the node the migrating choice left
+    Column("from_graph_id", String, nullable=False),  # the graph migrated out of
+    Column("to_graph_id", String, nullable=False),  # the graph re-pinned to
+    Column("landed_node_id", String, nullable=True),  # concrete landing node; null = target entry
+    Column("choice_name", String, nullable=True),  # the triggering judgement choice
+    Column("decision_id", String, nullable=True),  # gate migrations only — the decision this closes (#90)
+    Column("model_after", String, nullable=True),  # the re-pinned model, or null (kept current)
+    Column("epoch", Integer, nullable=False),  # the submitting fence; the natural-key third part
     Column("recorded_at", UtcDateTime, nullable=False),
 )
 

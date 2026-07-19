@@ -98,6 +98,8 @@ from tests.crash.support import (
     free_port,
     git_bare,
     graph_yaml,
+    migrate_source_yaml,
+    migrate_target_yaml,
     start_hub,
     start_runner,
     terminate,
@@ -118,7 +120,7 @@ _ALL_POINTS = [p.name for p in discover_crash_points()]
 # the generic sweep drives every remaining boundary; resume points are swept by the
 # graceful-restart scenario (`test_kill9_at_resume_crash_point`) and abandon points by the
 # dedicated detach scenario (`test_kill9_at_abandon_crash_point`), further down.
-_DEDICATED_PREFIXES = ("resume.", "abandon.", "pause.", "hubnode.")
+_DEDICATED_PREFIXES = ("resume.", "abandon.", "pause.", "hubnode.", "migrate.")
 _RESUME_POINTS = [p for p in _ALL_POINTS if p.startswith("resume.")]
 _ABANDON_POINTS = [p for p in _ALL_POINTS if p.startswith("abandon.")]
 _PAUSE_POINTS = [p for p in _ALL_POINTS if p.startswith("pause.")]
@@ -154,6 +156,14 @@ _PAUSE_POINTS = [p for p in _ALL_POINTS if p.startswith("pause.")]
 # convergence (no leaked slot at all).
 _HUBNODE_PENDING_POINTS = [p for p in _ALL_POINTS if p.startswith("hubnode.after-poll.")]
 _HUBNODE_POINTS = [p for p in _ALL_POINTS if p.startswith("hubnode.") and p not in _HUBNODE_PENDING_POINTS]
+# `migrate.*` fires inside the HUB process (`ApplyService._apply_migration`, issue #90),
+# only when a worker selects a cross-graph judgement choice — which the generic
+# `build -> deliver` scenario (a single-graph graph) never mints. So it is a dedicated
+# family swept by its own scenario (`test_kill9_at_migrate_crash_point`), which drives a
+# two-graph `source --migrate--> triage-delivery` graph: the worker migrates, the hub
+# crashes right after the atomic re-pin, and recovery re-queues + lands the chunk under the
+# target graph exactly once with `hub:migration-pin-consistent` green.
+_MIGRATE_POINTS = [p for p in _ALL_POINTS if p.startswith("migrate.")]
 _GENERIC_POINTS = [p for p in _ALL_POINTS if not p.startswith(_DEDICATED_PREFIXES)]
 
 # A representative CI subset — one crash point per boundary family, biased toward the
@@ -210,6 +220,12 @@ _HUBNODE_CI_SUBSET = ("hubnode.after-step.before-marker",)
 # registry.
 _HUBNODE_PENDING_CI_SUBSET = ("hubnode.after-poll.before-slot-release",)
 
+# The migrate CI subset (#90): `migrate.*` is a new hub-side boundary family whose lone
+# member — the after-record window — is its own CI representative, so this new window
+# ships with real CI coverage (never zero), exactly as the other new families do; the
+# `_select` rename-guard asserts the point still exists in the registry.
+_MIGRATE_CI_SUBSET = ("migrate.after-record.before-response",)
+
 
 def _select(points: list[str], ci_subset: tuple[str, ...]) -> list[str]:
     """The points to parametrize: all of ``points``, or its CI subset under the CI profile."""
@@ -229,6 +245,7 @@ _ABANDON_SWEEP = _select(_ABANDON_POINTS, _ABANDON_CI_SUBSET)
 _PAUSE_SWEEP = _select(_PAUSE_POINTS, _PAUSE_CI_SUBSET)
 _HUBNODE_SWEEP = _select(_HUBNODE_POINTS, _HUBNODE_CI_SUBSET)
 _HUBNODE_PENDING_SWEEP = _select(_HUBNODE_PENDING_POINTS, _HUBNODE_PENDING_CI_SUBSET)
+_MIGRATE_SWEEP = _select(_MIGRATE_POINTS, _MIGRATE_CI_SUBSET)
 
 
 def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -257,6 +274,7 @@ def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
         | set(_select(_PAUSE_POINTS, _PAUSE_CI_SUBSET))
         | set(_select(_HUBNODE_POINTS, _HUBNODE_CI_SUBSET))
         | set(_select(_HUBNODE_PENDING_POINTS, _HUBNODE_PENDING_CI_SUBSET))
+        | set(_select(_MIGRATE_POINTS, _MIGRATE_CI_SUBSET))
     )
     uncovered = {family for family in families if not any(p.startswith(f"{family}.") for p in ci_selected)}
     assert not uncovered, f"registry families with zero CI-subset coverage: {sorted(uncovered)}"
@@ -341,6 +359,90 @@ def test_kill9_at_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -
         _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}")
 
         # Exactly-once delivery: the file is reachable from bare main exactly once.
+        tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
+        commits = [line for line in tree.splitlines() if line.strip()]
+        assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
+    finally:
+        hub.close()
+        terminate(runner_proc)
+        terminate(hub_proc)
+
+
+def _ingest_migrate_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str) -> tuple[str, str]:
+    """Mint the migrate target + source graphs, file a fresh issue, ingest + promote a
+    chunk pinned to the source. Returns (chunk_id, target_graph_id)."""
+    target = hub.post("/api/graphs", json={"definition_yaml": migrate_target_yaml(landed_file)})
+    assert target.status_code == 201, target.text
+    src = hub.post("/api/graphs", json={"definition_yaml": migrate_source_yaml()})
+    assert src.status_code == 201, src.text
+    issue = forge.post(f"/repos/{REPO}/issues", json={"title": landed_file, "body": "a migrate crash-sweep chunk"})
+    assert issue.status_code == 201, issue.text
+    number = issue.json()["number"]
+    ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{number}"]})
+    assert ingested.status_code == 201, ingested.text
+    chunk_id = ingested.json()["chunk_id"]
+    assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+    assert hub.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
+    return chunk_id, target.json()["graph_id"]
+
+
+@pytest.mark.parametrize("point", _MIGRATE_SWEEP)
+def test_kill9_at_migrate_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
+    """A ``kill -9`` right after a cross-graph migration is recorded still recovers (#90).
+
+    ``migrate.*`` fires inside the HUB (``ApplyService._apply_migration``): the worker at
+    the source graph's ``build`` node selects the ``migrate`` choice, the hub records the
+    migration atomically (graph/model re-pinned, route released, artifacts committed), then
+    self-SIGKILLs before returning ``MIGRATED``. The claim under test: the runner's
+    lost-ack replay re-derives ``MIGRATED`` via the ``accepted_migration`` probe (no second
+    re-pin — ``hub:one-migration-per-node-epoch`` stays green), the chunk re-queues at the
+    target graph's ``build`` node under the new pin (``hub:migration-pin-consistent``
+    green), and a claim there runs it to ``done`` — landing the file on bare ``main``
+    exactly once, its history spanning two graphs."""
+    landed_file = f"LANDED-{point.replace('.', '_')}.md"
+    hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
+    hub_port, runner_port = free_port(), free_port()
+
+    # Arm the HUB: the migrate window opens inside its completions handler, not the runner.
+    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point)
+    runner_proc = None
+    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    try:
+        await_http(hub, "/api/health", proc=hub_proc)
+        chunk_id, target_graph_id = _ingest_migrate_chunk(hub, crash_env.forge, landed_file)
+
+        write_runner_config(
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+        )
+        runner_proc = start_runner(runner_dir, crash_point=None)
+
+        # The runner claims, the worker migrates, and the hub self-SIGKILLs in the window.
+        code = wait_death(hub_proc)
+        assert code == -9, f"armed hub at {point} exited {code}, not SIGKILL (-9); point never reached?"
+        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}")
+
+        # The migration is durable even though the MIGRATED response never returned.
+        hub_engine = create_engine_from_url(HubConfig.load(hub_dir).db_url)
+        with hub_engine.connect() as conn:
+            migrations = conn.execute(
+                select(hub_schema.chunk_migrations).where(hub_schema.chunk_migrations.c.chunk_id == chunk_id)
+            ).all()
+        assert len(migrations) == 1, "the migration fact was not durably recorded before the crash"
+
+        # Restart the hub UNARMED; the runner's replayed completion re-derives MIGRATED and
+        # the chunk re-queues + lands under the target graph.
+        hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+        await_http(hub, "/api/health", proc=hub_proc)
+
+        status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"})
+        assert status == "done", f"chunk did not converge to done after kill at {point} (last {status!r})"
+        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}")
+
+        detail = hub.get(f"/api/chunks/{chunk_id}").json()
+        assert detail["graph_id"] == target_graph_id, "the chunk was not re-pinned to the target graph"
+        assert len(detail["migrations"]) == 1, "the two-graph history is missing its migration step"
+
+        # Exactly-once: the target graph's build is the only branch that lands the file.
         tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
         commits = [line for line in tree.splitlines() if line.strip()]
         assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
