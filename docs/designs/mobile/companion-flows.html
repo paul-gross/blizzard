@@ -1,0 +1,712 @@
+<title>blizzard mobile — five more flows</title>
+<style>
+  /* ---- blizzard mission-control tokens, verbatim ---- */
+  :root {
+    --bg: #060a12;
+    --ground: #080d17;
+    --panel: #0b1120;
+    --panel-deep: #080d19;
+    --bezel: #1d2b44;
+    --bezel-hi: #27395c;
+    --line: #131d30;
+    --amber: #f2b25c;
+    --amber-hi: #ffcf8a;
+    --amber-dim: #8f7548;
+    --amber-faint: #4d4130;
+    --snow: #eef4fb;
+    --cyan: #5cd1e5;
+    --cyan-dim: #2b6675;
+    --red: #f05c6c;
+    --red-dim: #7a3540;
+    --green: #4fc57e;
+    --green-dim: #2b5c40;
+    --label: #5c7089;
+    --label-dim: #3c4d63;
+    --text: #b8c6d8;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    --header-hi: #0d1526;
+    --header-lo: #080d18;
+    --fs-label: 11px;
+    --fs-xs: 12px;
+    --fs-sm: 13px;
+    --fs-base: 15px;
+    --fs-md: 16px;
+    --fs-lg: 19px;
+    color-scheme: dark;
+  }
+  html { background: var(--bg); }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1100px 500px at 50% -140px, #0c1424 0%, transparent 65%),
+      var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: var(--fs-base);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.5;
+  }
+  .sheet { max-width: 1160px; margin: 0 auto; padding: 48px 24px 80px; }
+
+  .masthead { border-bottom: 1px solid var(--bezel); padding-bottom: 22px; margin-bottom: 14px; }
+  .brand { color: var(--snow); font-size: 26px; letter-spacing: 0.04em; margin: 0 0 6px; font-weight: 700; }
+  .brand .dim { color: var(--amber); }
+  .masthead p { max-width: 68ch; margin: 6px 0 0; color: var(--text); }
+  .lbl {
+    color: var(--label);
+    font-size: var(--fs-label);
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    text-shadow: 0 1px 0 rgba(0,0,0,0.5);
+  }
+  .usecase { margin-top: 54px; }
+  .usecase-head { display: flex; align-items: baseline; gap: 14px; border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 24px; }
+  .usecase-head h2 { color: var(--snow); font-size: var(--fs-lg); margin: 0; letter-spacing: 0.02em; text-wrap: balance; }
+  .frames { display: flex; gap: 32px; align-items: flex-start; flex-wrap: wrap; }
+  .anno {
+    flex: 1 1 260px; min-width: 250px; max-width: 340px;
+    border: 1px solid var(--line);
+    background: var(--panel-deep);
+    padding: 16px 18px;
+    font-size: var(--fs-sm);
+  }
+  .anno h3 { margin: 0 0 8px; font-size: var(--fs-label); color: var(--amber); text-transform: uppercase; letter-spacing: 0.14em; font-weight: 600; }
+  .anno p { margin: 0 0 12px; color: var(--text); }
+  .anno p:last-child { margin-bottom: 0; }
+  .anno .reuse { color: var(--label); }
+  .anno .reuse b { color: var(--cyan); font-weight: 500; }
+  .anno code { color: var(--amber-hi); font-family: inherit; font-size: inherit; }
+
+  /* ---- phone frame ---- */
+  .phone {
+    flex: 0 0 auto;
+    width: 375px;
+    background: #02040a;
+    border: 1px solid var(--bezel);
+    border-radius: 34px;
+    padding: 10px;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(255,255,255,0.03);
+  }
+  .phone-cap { text-align: center; margin-top: 10px; }
+  .screen {
+    background: var(--bg);
+    border-radius: 26px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    height: 730px;
+  }
+  .statusbar {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 22px 6px;
+    color: var(--snow); font-size: var(--fs-xs);
+  }
+  .statusbar .sig { color: var(--label); letter-spacing: 0.08em; }
+  .appbar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 16px;
+    background: linear-gradient(var(--header-hi), var(--header-lo));
+    border-bottom: 1px solid var(--bezel);
+  }
+  .appbar .word { color: var(--snow); font-size: var(--fs-md); font-weight: 700; letter-spacing: 0.06em; }
+  .appbar .word .flake { color: var(--amber); }
+  .appbar .spacer { flex: 1; }
+  .livedot { width: 8px; height: 8px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+  .livedot.dead { background: var(--red); box-shadow: 0 0 8px var(--red); }
+  @media (prefers-reduced-motion: no-preference) {
+    .livedot { animation: pulse 2.2s ease-in-out infinite; }
+    @keyframes pulse { 50% { opacity: 0.35; } }
+  }
+  .back { color: var(--cyan); font-size: var(--fs-base); background: none; border: 0; font-family: inherit; padding: 4px 8px 4px 0; }
+  .scroll { flex: 1; overflow-y: auto; overscroll-behavior: contain; }
+
+  .tabbar {
+    display: flex; border-top: 1px solid var(--bezel);
+    background: linear-gradient(var(--header-hi), var(--header-lo));
+    padding-bottom: 14px;
+  }
+  .tab {
+    flex: 1; text-align: center; padding: 12px 0 8px;
+    color: var(--label-dim); font-size: var(--fs-label);
+    text-transform: uppercase; letter-spacing: 0.12em;
+    border: 0; background: none; font-family: inherit; position: relative;
+  }
+  .tab.on { color: var(--amber); }
+  .tab.on::before { content: ""; position: absolute; top: 0; left: 25%; right: 25%; height: 2px; background: var(--amber); }
+  .tab .badge {
+    display: inline-block; min-width: 16px; padding: 0 4px; margin-left: 5px;
+    background: var(--red); color: var(--snow); border-radius: 8px;
+    font-size: 10px; line-height: 16px; letter-spacing: 0;
+  }
+  .homebar { width: 120px; height: 4px; border-radius: 2px; background: var(--bezel-hi); margin: 6px auto 0; }
+
+  /* ---- shared furniture ---- */
+  .panel { border-bottom: 1px solid var(--line); }
+  .panel-head {
+    display: flex; align-items: baseline; gap: 8px;
+    padding: 10px 16px 6px;
+    background: rgba(0,0,0,0.2);
+  }
+  .panel-head .cnt { color: var(--snow); font-size: var(--fs-xs); }
+  .pill {
+    display: inline-block; padding: 1px 8px; border-radius: 9px;
+    font-size: var(--fs-label); text-transform: uppercase; letter-spacing: 0.1em;
+  }
+  .pill.run   { color: var(--cyan);  background: rgba(92,209,229,0.12); border: 1px solid var(--cyan-dim); }
+  .pill.needs { color: var(--red);   background: rgba(240,92,108,0.12); border: 1px solid var(--red-dim); }
+  .pill.wait  { color: var(--amber); background: rgba(242,178,92,0.12); border: 1px solid var(--amber-dim); }
+  .pill.done  { color: var(--green); background: rgba(79,197,126,0.12); border: 1px solid var(--green-dim); }
+  .cid { color: var(--snow); font-weight: 600; }
+  .rid { color: var(--label); font-size: var(--fs-xs); }
+  .row {
+    display: flex; align-items: center; gap: 10px;
+    width: 100%; text-align: left;
+    padding: 13px 16px; border: 0; border-bottom: 1px solid var(--line);
+    background: transparent; color: var(--text); font: inherit;
+  }
+  .row .grow { flex: 1; min-width: 0; }
+  .row .sub { display: block; color: var(--label); font-size: var(--fs-xs); margin-top: 1px; }
+  .row .num { color: var(--text); font-size: var(--fs-xs); text-align: right; }
+  .chev { color: var(--label-dim); }
+
+  .ctx { margin: 16px 16px 0; border: 1px solid var(--line); background: var(--panel); }
+  .ctx-row { display: flex; justify-content: space-between; gap: 12px; padding: 9px 12px; border-bottom: 1px solid var(--line); font-size: var(--fs-sm); }
+  .ctx-row:last-child { border-bottom: 0; }
+  .ctx-row .k { color: var(--label); }
+  .ctx-row .v { color: var(--text); text-align: right; }
+
+  .cta-zone { padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+  .cta {
+    min-height: 50px; border: 1px solid var(--amber-dim);
+    background: linear-gradient(rgba(242,178,92,0.16), rgba(242,178,92,0.08));
+    color: var(--amber-hi); font: inherit; font-size: var(--fs-md);
+    letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .cta.ok { border-color: var(--green-dim); background: linear-gradient(rgba(79,197,126,0.16), rgba(79,197,126,0.08)); color: var(--green); }
+  .cta.ghost { background: none; border-color: var(--bezel); color: var(--label); text-transform: none; letter-spacing: 0; font-size: var(--fs-sm); min-height: 40px; }
+
+  .vitals { display: grid; grid-template-columns: 1fr 1fr 1fr; border-bottom: 1px solid var(--line); }
+  .vital { padding: 12px 10px 10px; text-align: center; border-right: 1px solid var(--line); }
+  .vital:last-child { border-right: 0; }
+  .vital .n { display: block; font-size: 22px; color: var(--snow); }
+  .vital .n.hot { color: var(--red); }
+  .vital .n.live { color: var(--cyan); }
+  .vital .n.good { color: var(--green); }
+  .vital .n.warm { color: var(--amber); }
+
+  /* ---- timeline bits ---- */
+  .tl { padding: 6px 16px 14px; }
+  .tl-row { display: flex; gap: 12px; position: relative; padding: 10px 0; }
+  .tl-rail { display: flex; flex-direction: column; align-items: center; width: 14px; flex: 0 0 auto; }
+  .tl-dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--bezel-hi); background: var(--panel); margin-top: 4px; }
+  .tl-dot.pass { border-color: var(--green); background: var(--green-dim); }
+  .tl-dot.redo { border-color: var(--red); background: var(--red-dim); }
+  .tl-dot.appr { border-color: var(--amber); background: var(--amber-faint); }
+  .tl-dot.live { border-color: var(--cyan); background: var(--cyan-dim); box-shadow: 0 0 10px rgba(92,209,229,0.5); }
+  .tl-line { flex: 1; width: 2px; background: var(--line); margin-top: 2px; }
+  .tl-body { flex: 1; min-width: 0; padding-bottom: 2px; }
+  .tl-hop { color: var(--snow); font-size: var(--fs-base); }
+  .tl-hop .verdict { font-size: var(--fs-label); text-transform: uppercase; letter-spacing: 0.1em; padding: 1px 6px; border-radius: 8px; margin-left: 8px; }
+  .verdict.pass { color: var(--green); background: rgba(79,197,126,0.12); }
+  .verdict.redo { color: var(--red); background: rgba(240,92,108,0.12); }
+  .verdict.live { color: var(--cyan); background: rgba(92,209,229,0.12); }
+  .tl-cost { color: var(--label); font-size: var(--fs-xs); margin-top: 2px; }
+  .arrow { color: var(--label-dim); }
+
+  /* ---- new: digest ---- */
+  .digest-window { text-align: center; padding: 14px 16px 4px; }
+  .digest-window .win { color: var(--snow); font-size: var(--fs-md); }
+  .evrow { display: flex; gap: 12px; padding: 11px 16px; border-bottom: 1px solid var(--line); font-size: var(--fs-sm); align-items: baseline; }
+  .evrow .t { color: var(--label); font-size: var(--fs-xs); flex: 0 0 52px; }
+  .evrow .what { flex: 1; color: var(--text); }
+  .evrow .what .cid { font-weight: 500; }
+
+  /* ---- new: alarm banner ---- */
+  .alarm {
+    margin: 14px 16px 0; padding: 12px 14px;
+    border: 1px solid var(--red-dim); border-left: 3px solid var(--red);
+    background: rgba(240,92,108,0.08);
+  }
+  .alarm .ttl { color: var(--red); font-size: var(--fs-label); text-transform: uppercase; letter-spacing: 0.14em; }
+  .alarm .msg { color: var(--snow); font-size: var(--fs-base); margin-top: 4px; }
+  .alarm .sub { color: var(--text); font-size: var(--fs-xs); margin-top: 2px; }
+
+  /* ---- new: slide-to-confirm ---- */
+  .slide {
+    position: relative; margin: 0 16px; height: 52px;
+    border: 1px solid var(--red-dim); background: rgba(240,92,108,0.06);
+    display: flex; align-items: center; justify-content: center; overflow: hidden;
+  }
+  .slide .track-lbl { color: var(--red); font-size: var(--fs-sm); text-transform: uppercase; letter-spacing: 0.14em; }
+  .slide .knob {
+    position: absolute; left: 96px; top: 4px; width: 68px; height: 42px;
+    background: linear-gradient(rgba(240,92,108,0.35), rgba(240,92,108,0.2));
+    border: 1px solid var(--red); color: var(--snow);
+    display: flex; align-items: center; justify-content: center; font-size: var(--fs-md);
+  }
+  .slide .fill { position: absolute; left: 0; top: 0; bottom: 0; width: 96px; background: rgba(240,92,108,0.18); }
+
+  /* ---- new: diffstat ---- */
+  .diff-row { display: flex; align-items: center; gap: 10px; padding: 9px 16px; border-bottom: 1px solid var(--line); font-size: var(--fs-xs); }
+  .diff-row .f { flex: 1; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .diff-row .bars { flex: 0 0 84px; display: flex; gap: 1px; }
+  .diff-row .b { height: 8px; flex: 1; background: var(--line); }
+  .diff-row .b.add { background: var(--green-dim); }
+  .diff-row .b.del { background: var(--red-dim); }
+  .diff-row .pm { color: var(--label); flex: 0 0 auto; }
+  .ci { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--line); font-size: var(--fs-sm); }
+  .ci .ok { color: var(--green); }
+
+  /* ---- new: heartbeat / lease rows ---- */
+  .hb { display: flex; align-items: baseline; gap: 8px; padding: 14px 16px 4px; }
+  .hb .name { color: var(--snow); font-size: 20px; font-weight: 700; }
+  .hb .state-dead { color: var(--red); font-size: var(--fs-sm); text-transform: uppercase; letter-spacing: 0.1em; }
+  .lease-act { border: 1px solid var(--bezel); background: var(--panel); color: var(--amber); font: inherit; font-size: var(--fs-xs); padding: 6px 10px; min-height: 34px; }
+
+  .footnote { margin-top: 60px; border-top: 1px solid var(--bezel); padding-top: 18px; color: var(--label); font-size: var(--fs-sm); max-width: 75ch; }
+  .footnote b { color: var(--text); font-weight: 500; }
+
+  @media (max-width: 860px) {
+    .frames { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 12px; }
+    .anno { min-width: 280px; }
+  }
+</style>
+
+<div class="sheet">
+  <header class="masthead">
+    <div class="lbl">Mockups · adaptive shells over shared guts · sheet 2</div>
+    <h1 class="brand">blizzard <span class="dim">mobile</span> — five more flows</h1>
+    <p>Companion to the first sheet (answer · glance · show-off). These five cover the rest of the
+    mobile story: <em>digest, feed, protect, approve, repair</em>. Same tokens, same shared guts;
+    the new design elements introduced here are the digest rollup, the slide-to-confirm for
+    destructive verbs, diffstat bars, and the alarm banner.</p>
+  </header>
+
+  <!-- ============ 1 · MORNING BRIEFING ============ -->
+  <section class="usecase">
+    <div class="usecase-head">
+      <span class="lbl">Flow 1 · digest</span>
+      <h2>Morning briefing — what did the fleet do while I slept?</h2>
+    </div>
+    <div class="frames">
+      <div>
+        <div class="phone"><div class="screen">
+          <div class="statusbar"><span>07:31</span><span class="sig">▪▪▪ WiFi</span></div>
+          <div class="appbar">
+            <span class="word"><span class="flake">❄</span> blizzard</span>
+            <span class="spacer"></span>
+            <span class="lbl">briefing</span>
+          </div>
+          <div class="scroll">
+            <div class="digest-window">
+              <div class="lbl">While you slept</div>
+              <div class="win">22:00 → 07:30 UTC</div>
+            </div>
+            <div class="vitals">
+              <div class="vital"><span class="n good">2</span><span class="lbl">merged</span></div>
+              <div class="vital"><span class="n warm">1</span><span class="lbl">waiting on you</span></div>
+              <div class="vital"><span class="n">$11.20</span><span class="lbl">spent</span></div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head"><span class="lbl" style="color:var(--green)">Shipped</span><span class="cnt">2</span></div>
+              <button class="row">
+                <span class="pill done">done</span>
+                <span class="grow"><span class="cid">C-KJ2P</span> <span class="rid">blizzard#79</span>
+                  <span class="sub">fix: SSE reconnect on visibilitychange — merged 01:12</span></span>
+                <span class="chev">›</span>
+              </button>
+              <button class="row">
+                <span class="pill done">done</span>
+                <span class="grow"><span class="cid">C-N4RD</span> <span class="rid">blizzard#82</span>
+                  <span class="sub">feat: runner lease heartbeat metrics — merged 05:47</span></span>
+                <span class="chev">›</span>
+              </button>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head"><span class="lbl" style="color:var(--red)">Got stuck</span><span class="cnt">1</span></div>
+              <button class="row">
+                <span class="pill needs">needs human</span>
+                <span class="grow"><span class="cid">C-8QHF</span> <span class="rid">r1 · 03:40</span>
+                  <span class="sub">review: escalate — migration 0014 conflicts with seed data</span></span>
+                <span class="chev">›</span>
+              </button>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head"><span class="lbl">The night, in order</span></div>
+              <div class="evrow"><span class="t">23:05</span><span class="what"><span class="cid">C-KJ2P</span> build → review · pass</span></div>
+              <div class="evrow"><span class="t">01:12</span><span class="what"><span class="cid">C-KJ2P</span> delivered · PR merged</span></div>
+              <div class="evrow"><span class="t">03:40</span><span class="what"><span class="cid">C-8QHF</span> review → needs human</span></div>
+              <div class="evrow"><span class="t">04:18</span><span class="what"><span class="cid">C-N4RD</span> raised an ask · answered by policy: retry</span></div>
+              <div class="evrow"><span class="t">05:47</span><span class="what"><span class="cid">C-N4RD</span> delivered · PR merged</span></div>
+              <div class="evrow" style="border-bottom:0"><span class="t">06:02</span><span class="what">fleet idle · 2 chunks ready, none eligible before 08:00 window</span></div>
+            </div>
+
+            <div class="cta-zone">
+              <button class="cta ghost">Open the board ›</button>
+            </div>
+          </div>
+          <div class="tabbar">
+            <button class="tab on">Board</button>
+            <button class="tab">Asks<span class="badge">1</span></button>
+            <button class="tab">Fleet</button>
+          </div>
+          <div class="homebar"></div>
+        </div></div>
+        <div class="phone-cap lbl">F · the overnight digest</div>
+      </div>
+
+      <div class="anno">
+        <h3>Flow decisions</h3>
+        <p>The inverse of the restaurant glance: a <em>time window</em>, not a moment. Outcomes first (shipped / got stuck / spent), then the night as a chronological tape for anyone who wants the story. Delivered as an 07:30 push; the screen is just the push, expanded.</p>
+        <p>"Got stuck" rows deep-link straight into the ask/needs-human flows from sheet 1 — the briefing is also the morning's to-do list.</p>
+        <p>Everything here is derived from the event log over a window — no new backend state, one new windowed rollup query.</p>
+        <p class="reuse">Reuses <b>event-log</b>, <b>chunks.query</b>, <b>fleet-spend</b>, <b>cost-format</b>, status pills. New: windowed digest query, digest shell, scheduled push.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 2 · INGEST ============ -->
+  <section class="usecase">
+    <div class="usecase-head">
+      <span class="lbl">Flow 2 · feed</span>
+      <h2>Ingest from the couch — idea strikes, feed the fleet</h2>
+    </div>
+    <div class="frames">
+
+      <!-- Frame G: issue picker -->
+      <div>
+        <div class="phone"><div class="screen">
+          <div class="statusbar"><span>21:14</span><span class="sig">▪▪▪ WiFi</span></div>
+          <div class="appbar">
+            <button class="back">‹ Fleet</button>
+            <span class="spacer"></span>
+            <span class="lbl">ingest · source: blizzard</span>
+          </div>
+          <div class="scroll">
+            <div class="panel">
+              <div class="panel-head"><span class="lbl">Open issues · paul-gross/blizzard</span><span class="cnt">4</span></div>
+              <button class="row" style="border:1px solid var(--amber-dim); background:rgba(242,178,92,0.06)">
+                <span class="grow">
+                  <span class="cid">#96</span> <span class="rid">enhancement</span>
+                  <span class="sub" style="color:var(--text)">board: per-runner filter chips on the chunk lanes</span>
+                </span>
+                <span class="tick" style="color:var(--amber)">●</span>
+              </button>
+              <button class="row">
+                <span class="grow"><span class="cid">#94</span> <span class="rid">bug</span>
+                  <span class="sub">event log truncates verdict rationale over 120 chars</span></span>
+              </button>
+              <button class="row">
+                <span class="grow"><span class="cid">#91</span> <span class="rid">enhancement · has chunk</span>
+                  <span class="sub">seed data regeneration for migration 0014</span></span>
+              </button>
+              <button class="row">
+                <span class="grow"><span class="cid">#87</span> <span class="rid">docs</span>
+                  <span class="sub">runner setup guide: systemd user units</span></span>
+              </button>
+            </div>
+            <div class="ctx">
+              <div class="ctx-row"><span class="k">or paste</span><span class="v" style="color:var(--label-dim)">issue URL / blizzard#NN…</span></div>
+            </div>
+
+            <div class="ctx">
+              <div class="ctx-row"><span class="k">graph</span><span class="v">G-8H2C · plan→build→review→deliver</span></div>
+              <div class="ctx-row"><span class="k">runner</span><span class="v">auto · r4 (least loaded)</span></div>
+              <div class="ctx-row"><span class="k">model</span><span class="v">claude-fable-5</span></div>
+            </div>
+            <div class="cta-zone">
+              <button class="cta">Ingest #96 · launch chunk</button>
+            </div>
+          </div>
+          <div class="tabbar">
+            <button class="tab">Board</button>
+            <button class="tab">Asks</button>
+            <button class="tab on">Fleet</button>
+          </div>
+          <div class="homebar"></div>
+        </div></div>
+        <div class="phone-cap lbl">G · pick from the PM source</div>
+      </div>
+
+      <!-- Frame H: launched -->
+      <div>
+        <div class="phone"><div class="screen">
+          <div class="statusbar"><span>21:15</span><span class="sig">▪▪▪ WiFi</span></div>
+          <div class="appbar">
+            <span class="word"><span class="flake">❄</span> blizzard</span>
+            <span class="spacer"></span>
+            <span class="livedot"></span>
+          </div>
+          <div class="scroll">
+            <div style="text-align:center; padding: 46px 24px 8px;">
+              <div style="font-size:40px; color:var(--amber)">❄</div>
+              <h4 style="color:var(--snow); font-size:var(--fs-lg); margin:14px 0 6px; font-weight:600">Chunk launched</h4>
+              <p style="color:var(--text); font-size:var(--fs-sm); margin:0"><span class="cid">C-7XPD</span> · blizzard#96 · <span style="color:var(--cyan)">running · plan</span></p>
+            </div>
+            <div class="ctx">
+              <div class="ctx-row"><span class="k">runner</span><span class="v">r4 · lease L-2QWM</span></div>
+              <div class="ctx-row"><span class="k">first node</span><span class="v">plan · started 21:15:08 UTC</span></div>
+              <div class="ctx-row"><span class="k">while you watch</span><span class="v" style="color:var(--cyan)">est. plan ≈ 4 min</span></div>
+            </div>
+            <div class="cta-zone">
+              <button class="cta ghost" style="border-color:var(--cyan-dim); color:var(--cyan)">Watch the run story ›</button>
+              <button class="cta ghost">Back to the board</button>
+            </div>
+          </div>
+          <div class="tabbar">
+            <button class="tab on">Board</button>
+            <button class="tab">Asks</button>
+            <button class="tab">Fleet</button>
+          </div>
+          <div class="homebar"></div>
+        </div></div>
+        <div class="phone-cap lbl">H · launched, already planning</div>
+      </div>
+
+      <div class="anno">
+        <h3>Flow decisions</h3>
+        <p>The one <em>write</em> that turns the app from a monitor into a steering wheel. The picker is the PM source's open-issues read — the same list the board's pointers come from — with paste-a-URL as the escape hatch, mirroring <code>hub ingest blizzard:96</code>'s token forms.</p>
+        <p>Graph, runner, and model show as a preview card with sane defaults (pinned graph, least-loaded runner) — confirm-what-will-happen, not configure-it. Changing them is a tap into a picker, not a form.</p>
+        <p>The launch screen hands off to sheet 1's run story: idea → fleet working, under a minute, from a couch.</p>
+        <p class="reuse">Reuses <b>pm-items</b> read, ingest endpoint, <b>compactRef</b>, run-story shell (sheet 1, D). New: issue picker shell, ingest-preview card.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 3 · KILL SWITCH ============ -->
+  <section class="usecase">
+    <div class="usecase-head">
+      <span class="lbl">Flow 3 · protect</span>
+      <h2>The kill switch — that run is circling the drain</h2>
+    </div>
+    <div class="frames">
+      <div>
+        <div class="phone"><div class="screen">
+          <div class="statusbar"><span>16:23</span><span class="sig">▪▪ LTE</span></div>
+          <div class="appbar">
+            <button class="back">‹ Board</button>
+            <span class="spacer"></span>
+            <span class="pill run">running</span>
+          </div>
+          <div class="scroll">
+            <div class="alarm">
+              <div class="ttl">Spend alarm</div>
+              <div class="msg">C-Z2VN · $9.14 in 62 min</div>
+              <div class="sub">build redone 3× — same failing spec each lap</div>
+            </div>
+            <div class="runhead" style="padding: 14px 16px 8px;">
+              <span class="lbl">C-Z2VN · blizzard#93 · r3 · claude-fable-5</span>
+            </div>
+            <div class="tl" style="padding-top: 0;">
+              <div class="tl-row">
+                <div class="tl-rail"><div class="tl-dot redo"></div><div class="tl-line"></div></div>
+                <div class="tl-body">
+                  <div class="tl-hop">build <span class="arrow">→</span> review<span class="verdict redo tl-hop">redo</span></div>
+                  <div class="tl-cost">$2.90 · 15:21 UTC · "dashboard spec times out"</div>
+                </div>
+              </div>
+              <div class="tl-row">
+                <div class="tl-rail"><div class="tl-dot redo"></div><div class="tl-line"></div></div>
+                <div class="tl-body">
+                  <div class="tl-hop">build <span class="arrow">→</span> review<span class="verdict redo tl-hop">redo</span></div>
+                  <div class="tl-cost">$3.11 · 15:52 UTC · "dashboard spec times out"</div>
+                </div>
+              </div>
+              <div class="tl-row">
+                <div class="tl-rail"><div class="tl-dot redo"></div><div class="tl-line"></div></div>
+                <div class="tl-body">
+                  <div class="tl-hop">build <span class="arrow">→</span> review<span class="verdict redo tl-hop">redo</span></div>
+                  <div class="tl-cost">$2.86 · 16:14 UTC · "dashboard spec times out"</div>
+                </div>
+              </div>
+              <div class="tl-row">
+                <div class="tl-rail"><div class="tl-dot live"></div></div>
+                <div class="tl-body">
+                  <div class="tl-hop">build · epoch 4<span class="verdict live tl-hop">run</span></div>
+                  <div class="tl-cost">$0.27 · live · 9 min</div>
+                </div>
+              </div>
+            </div>
+
+            <div style="padding: 6px 0 4px;">
+              <div class="lbl" style="padding: 0 16px 8px;">Slide to confirm</div>
+              <div class="slide">
+                <div class="fill"></div>
+                <span class="track-lbl">Pause C-Z2VN&nbsp;&nbsp;›››</span>
+                <div class="knob">‖</div>
+              </div>
+            </div>
+            <div class="cta-zone" style="padding-top: 10px;">
+              <button class="cta ghost" style="border-color:var(--red-dim); color:var(--red)">Pause runner r3 (all its chunks)</button>
+              <button class="cta ghost">Leave it — snooze alarm 30 min</button>
+            </div>
+          </div>
+          <div class="tabbar">
+            <button class="tab on">Board</button>
+            <button class="tab">Asks</button>
+            <button class="tab">Fleet</button>
+          </div>
+          <div class="homebar"></div>
+        </div></div>
+        <div class="phone-cap lbl">I · alarm → evidence → pause</div>
+      </div>
+
+      <div class="anno">
+        <h3>Flow decisions</h3>
+        <p>Alarm, evidence, verb — in that order. The banner states the trigger; the timeline <em>is</em> the evidence (three identical redo laps with the same rationale read as a loop at a glance); the verb is right below it.</p>
+        <p>Pause is destructive-adjacent, so it gets the design language's first slide-to-confirm — a tap can misfire in a pocket, a 200px drag can't. Escalation (pause the whole runner) and de-escalation (snooze) flank it as plain buttons.</p>
+        <p>Pause, not stop: reversible from the same screen, and the desk-side debugging happens later. The alarm threshold ($/hour and redo-count per chunk) is hub config, not a mobile setting.</p>
+        <p class="reuse">Reuses <b>chunk-timeline</b> rows + verdict colors, pause/resume endpoints, spend from <b>ChunkUsageTotalView</b>. New: alarm rule + push, alarm banner, slide-to-confirm control.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 4 · DELIVERY GATE ============ -->
+  <section class="usecase">
+    <div class="usecase-head">
+      <span class="lbl">Flow 4 · approve</span>
+      <h2>The delivery gate — approve the merge from the checkout line</h2>
+    </div>
+    <div class="frames">
+      <div>
+        <div class="phone"><div class="screen">
+          <div class="statusbar"><span>12:48</span><span class="sig">▪▪▪ 5G</span></div>
+          <div class="appbar">
+            <button class="back">‹ Asks</button>
+            <span class="spacer"></span>
+            <span class="pill wait">awaiting delivery</span>
+          </div>
+          <div class="scroll">
+            <div class="runhead" style="padding: 16px;">
+              <span class="lbl">C-QT2X · blizzard#88 · r1</span>
+              <div class="title" style="color:var(--snow); font-size:var(--fs-md); margin:6px 0 2px;">fix: SSE reconnect on visibilitychange</div>
+              <div class="meta" style="color:var(--label); font-size:var(--fs-xs);">PR #112 → master · 2 laps · 890k tok · $3.61</div>
+            </div>
+
+            <div class="ci"><span class="ok">✓</span> review verdict: <b style="color:var(--green); font-weight:500;">pass</b> — "clean; reconnect path covered by 4 new specs"</div>
+            <div class="ci"><span class="ok">✓</span> CI · 5/5 checks green · 4 min ago</div>
+
+            <div class="panel">
+              <div class="panel-head"><span class="lbl">Diff · 6 files</span><span class="cnt">+214 −38</span></div>
+              <div class="diff-row"><span class="f">fleet/src/lib/sse/sse-client.ts</span><span class="bars"><span class="b add"></span><span class="b add"></span><span class="b add"></span><span class="b add"></span><span class="b del"></span><span class="b"></span></span><span class="pm">+96 −22</span></div>
+              <div class="diff-row"><span class="f">fleet/src/lib/sse/sse-client.spec.ts</span><span class="bars"><span class="b add"></span><span class="b add"></span><span class="b add"></span><span class="b add"></span><span class="b add"></span><span class="b"></span></span><span class="pm">+88 −4</span></div>
+              <div class="diff-row"><span class="f">fleet/src/lib/sse/index.ts</span><span class="bars"><span class="b add"></span><span class="b"></span><span class="b"></span><span class="b"></span><span class="b"></span><span class="b"></span></span><span class="pm">+6 −2</span></div>
+              <div class="diff-row"><span class="f">hub/src/app/board/board-page.ts</span><span class="bars"><span class="b add"></span><span class="b del"></span><span class="b"></span><span class="b"></span><span class="b"></span><span class="b"></span></span><span class="pm">+14 −8</span></div>
+              <div class="diff-row" style="border-bottom:0"><span class="f">+2 more files</span><span class="bars"></span><span class="pm">+10 −2</span></div>
+            </div>
+
+            <div class="cta-zone">
+              <button class="cta ok">Approve delivery · merge PR #112</button>
+              <button class="cta ghost" style="border-color:var(--red-dim); color:var(--red)">Send back to build with a note…</button>
+              <button class="cta ghost">Open PR on GitHub ›</button>
+            </div>
+          </div>
+          <div class="tabbar">
+            <button class="tab">Board</button>
+            <button class="tab on">Asks<span class="badge">1</span></button>
+            <button class="tab">Fleet</button>
+          </div>
+          <div class="homebar"></div>
+        </div></div>
+        <div class="phone-cap lbl">J · the shippable-change card</div>
+      </div>
+
+      <div class="anno">
+        <h3>Flow decisions</h3>
+        <p>The ask flow's big sibling: same shape (context → decision → resume), but the context is a shippable change. The screen argues for trust in three beats — the reviewer's verdict with its rationale, CI, then the diffstat as <em>shape</em> (mostly the SSE lib, mostly adds, specs grew) rather than a diff to read at 13px.</p>
+            <p>Approve is green and plain-tap — it's the expected outcome of a passed review, not a destructive act. Send-back requires a note (the agent needs a reason to act on); the GitHub link is the escape hatch for the change that needs desk-level scrutiny.</p>
+        <p>Lives in the Asks tab: an awaiting-delivery chunk <em>is</em> a question — "ship it?"</p>
+        <p class="reuse">Reuses <b>chunk-awaiting-human</b> resume endpoint, <b>chunk-facts</b>, pm pointer → PR link. New: delivery-card shell, diffstat read (forge API via hub), diffstat bars.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 5 · RUNNER ON-CALL ============ -->
+  <section class="usecase">
+    <div class="usecase-head">
+      <span class="lbl">Flow 5 · repair</span>
+      <h2>On-call for the fleet itself — r3 went dark</h2>
+    </div>
+    <div class="frames">
+      <div>
+        <div class="phone"><div class="screen">
+          <div class="statusbar"><span>22:51</span><span class="sig">▪ LTE</span></div>
+          <div class="appbar">
+            <button class="back">‹ Fleet</button>
+            <span class="spacer"></span>
+            <span class="lbl">runner</span>
+            <span class="livedot dead"></span>
+          </div>
+          <div class="scroll">
+            <div class="hb">
+              <span class="name">r3</span>
+              <span class="state-dead">unreachable</span>
+            </div>
+            <div class="ctx" style="margin-top: 8px;">
+              <div class="ctx-row"><span class="k">last heartbeat</span><span class="v" style="color:var(--red)">11 min ago · 22:40:07 UTC</span></div>
+              <div class="ctx-row"><span class="k">health probe</span><span class="v">GET /api/health · timeout ×3</span></div>
+              <div class="ctx-row"><span class="k">daemon</span><span class="v">blizzard-blizzard-runner · systemd user</span></div>
+            </div>
+
+            <div class="panel" style="margin-top: 14px;">
+              <div class="panel-head"><span class="lbl" style="color:var(--amber)">Leases at risk</span><span class="cnt">2</span></div>
+              <div class="row">
+                <span class="pill wait">stale</span>
+                <span class="grow"><span class="cid">L-ZPRR</span> <span class="rid">C-3YJ9 · build</span>
+                  <span class="sub">held 51 min · no progress since heartbeat loss</span></span>
+                <button class="lease-act">release</button>
+              </div>
+              <div class="row">
+                <span class="pill wait">stale</span>
+                <span class="grow"><span class="cid">L-9K2M</span> <span class="rid">C-04MW · review</span>
+                  <span class="sub">held 14 min</span></span>
+                <button class="lease-act">release</button>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head"><span class="lbl">Rest of the fleet</span></div>
+              <div class="row" style="border-bottom:0">
+                <span class="grow" style="font-size:var(--fs-sm)">
+                  <span style="color:var(--green)">●</span> r1 &nbsp;
+                  <span style="color:var(--green)">●</span> r2 &nbsp;
+                  <span style="color:var(--red)">●</span> r3 &nbsp;
+                  <span style="color:var(--green)">●</span> r4
+                  <span class="sub">released chunks re-queue to healthy runners</span>
+                </span>
+              </div>
+            </div>
+
+            <div class="cta-zone">
+              <button class="cta">Pause r3 · stop assigning it work</button>
+              <button class="cta ghost">Release both leases · re-queue chunks</button>
+              <button class="cta ghost">Notify me when it heartbeats again</button>
+            </div>
+          </div>
+          <div class="tabbar">
+            <button class="tab">Board</button>
+            <button class="tab">Asks</button>
+            <button class="tab on">Fleet</button>
+          </div>
+          <div class="homebar"></div>
+        </div></div>
+        <div class="phone-cap lbl">K · runner triage</div>
+      </div>
+
+      <div class="anno">
+        <h3>Flow decisions</h3>
+        <p>Ops for the machinery, not the work — a different audience from every other screen, so it lives under the Fleet tab. The triage order is fixed: what's wrong (heartbeat facts, stated as evidence, not adjectives), what's at risk (leases with ages), then the verbs.</p>
+        <p>The verbs are deliberately hub-side only — pause assignment, release leases, subscribe to recovery. Restarting the daemon itself is a desk job (systemd on the host); the phone's job is to stop the bleeding and make the fleet route around the dead runner.</p>
+        <p>"Notify me when it heartbeats again" closes the loop: on-call means you can put the phone away.</p>
+        <p class="reuse">Reuses <b>health</b> + <b>runners</b> queries, pause endpoint, <b>compactRef</b>. New: runner-detail shell, lease release verb, heartbeat-recovery push.</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="footnote">
+    <b>Across both sheets, the mobile app is now eight flows:</b> glance, answer, show-off (sheet 1) + digest, feed, protect, approve, repair (this sheet). The write surface stays tiny and high-leverage — answer an ask, ingest, pause, approve delivery, release a lease — every one an existing hub endpoint. Net-new plumbing introduced by this sheet: the windowed digest query, the spend/redo alarm rule + push channel, a forge diffstat read, and the heartbeat-recovery notification. The push channel is shared by four of the five flows — it's the first thing to build.
+  </div>
+</div>

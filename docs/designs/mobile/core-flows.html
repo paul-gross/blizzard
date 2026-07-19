@@ -1,0 +1,612 @@
+<title>blizzard mobile — adaptive shell mocks</title>
+<style>
+  /* ---- blizzard mission-control tokens, verbatim ---- */
+  :root {
+    --bg: #060a12;
+    --ground: #080d17;
+    --panel: #0b1120;
+    --panel-deep: #080d19;
+    --bezel: #1d2b44;
+    --bezel-hi: #27395c;
+    --line: #131d30;
+    --amber: #f2b25c;
+    --amber-hi: #ffcf8a;
+    --amber-dim: #8f7548;
+    --amber-faint: #4d4130;
+    --snow: #eef4fb;
+    --cyan: #5cd1e5;
+    --cyan-dim: #2b6675;
+    --red: #f05c6c;
+    --red-dim: #7a3540;
+    --green: #4fc57e;
+    --green-dim: #2b5c40;
+    --label: #5c7089;
+    --label-dim: #3c4d63;
+    --text: #b8c6d8;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    --header-hi: #0d1526;
+    --header-lo: #080d18;
+    --fs-label: 11px;
+    --fs-xs: 12px;
+    --fs-sm: 13px;
+    --fs-base: 15px;
+    --fs-md: 16px;
+    --fs-lg: 19px;
+    color-scheme: dark;
+  }
+  html { background: var(--bg); }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1100px 500px at 50% -140px, #0c1424 0%, transparent 65%),
+      var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: var(--fs-base);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.5;
+  }
+  .sheet { max-width: 1160px; margin: 0 auto; padding: 48px 24px 80px; }
+
+  /* ---- spec-sheet chrome ---- */
+  .masthead { border-bottom: 1px solid var(--bezel); padding-bottom: 22px; margin-bottom: 14px; }
+  .brand { color: var(--snow); font-size: 26px; letter-spacing: 0.04em; margin: 0 0 6px; font-weight: 700; }
+  .brand .dim { color: var(--amber); }
+  .masthead p { max-width: 68ch; margin: 6px 0 0; color: var(--text); }
+  .lbl {
+    color: var(--label);
+    font-size: var(--fs-label);
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    text-shadow: 0 1px 0 rgba(0,0,0,0.5);
+  }
+  .usecase { margin-top: 54px; }
+  .usecase-head { display: flex; align-items: baseline; gap: 14px; border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 24px; }
+  .usecase-head h2 { color: var(--snow); font-size: var(--fs-lg); margin: 0; letter-spacing: 0.02em; text-wrap: balance; }
+  .frames { display: flex; gap: 32px; align-items: flex-start; flex-wrap: wrap; }
+  .anno {
+    flex: 1 1 260px; min-width: 250px; max-width: 340px;
+    border: 1px solid var(--line);
+    background: var(--panel-deep);
+    padding: 16px 18px;
+    font-size: var(--fs-sm);
+  }
+  .anno h3 { margin: 0 0 8px; font-size: var(--fs-label); color: var(--amber); text-transform: uppercase; letter-spacing: 0.14em; font-weight: 600; }
+  .anno p { margin: 0 0 12px; color: var(--text); }
+  .anno p:last-child { margin-bottom: 0; }
+  .anno .reuse { color: var(--label); }
+  .anno .reuse b { color: var(--cyan); font-weight: 500; }
+  .anno code { color: var(--amber-hi); font-family: inherit; font-size: inherit; }
+
+  /* ---- phone frame ---- */
+  .phone {
+    flex: 0 0 auto;
+    width: 375px;
+    background: #02040a;
+    border: 1px solid var(--bezel);
+    border-radius: 34px;
+    padding: 10px;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(255,255,255,0.03);
+  }
+  .phone-cap { text-align: center; margin-top: 10px; }
+  .screen {
+    background: var(--bg);
+    border-radius: 26px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    height: 730px;
+  }
+  .statusbar {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 22px 6px;
+    color: var(--snow); font-size: var(--fs-xs);
+  }
+  .statusbar .sig { color: var(--label); letter-spacing: 0.08em; }
+  .appbar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 16px;
+    background: linear-gradient(var(--header-hi), var(--header-lo));
+    border-bottom: 1px solid var(--bezel);
+  }
+  .appbar .word { color: var(--snow); font-size: var(--fs-md); font-weight: 700; letter-spacing: 0.06em; }
+  .appbar .word .flake { color: var(--amber); }
+  .appbar .spacer { flex: 1; }
+  .livedot { width: 8px; height: 8px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+  @media (prefers-reduced-motion: no-preference) {
+    .livedot { animation: pulse 2.2s ease-in-out infinite; }
+    @keyframes pulse { 50% { opacity: 0.35; } }
+  }
+  .back { color: var(--cyan); font-size: var(--fs-base); background: none; border: 0; font-family: inherit; padding: 4px 8px 4px 0; }
+  .scroll { flex: 1; overflow-y: auto; overscroll-behavior: contain; }
+
+  /* ---- bottom tab bar ---- */
+  .tabbar {
+    display: flex; border-top: 1px solid var(--bezel);
+    background: linear-gradient(var(--header-hi), var(--header-lo));
+    padding-bottom: 14px; /* home-indicator zone */
+  }
+  .tab {
+    flex: 1; text-align: center; padding: 12px 0 8px;
+    color: var(--label-dim); font-size: var(--fs-label);
+    text-transform: uppercase; letter-spacing: 0.12em;
+    border: 0; background: none; font-family: inherit; position: relative;
+  }
+  .tab.on { color: var(--amber); }
+  .tab.on::before { content: ""; position: absolute; top: 0; left: 25%; right: 25%; height: 2px; background: var(--amber); }
+  .tab .badge {
+    display: inline-block; min-width: 16px; padding: 0 4px; margin-left: 5px;
+    background: var(--red); color: var(--snow); border-radius: 8px;
+    font-size: 10px; line-height: 16px; letter-spacing: 0;
+  }
+  .homebar { width: 120px; height: 4px; border-radius: 2px; background: var(--bezel-hi); margin: 6px auto 0; }
+
+  /* ---- shared screen furniture ---- */
+  .panel { border-bottom: 1px solid var(--line); }
+  .panel-head {
+    display: flex; align-items: baseline; gap: 8px;
+    padding: 10px 16px 6px;
+    background: rgba(0,0,0,0.2);
+  }
+  .panel-head .cnt { color: var(--snow); font-size: var(--fs-xs); }
+  .pill {
+    display: inline-block; padding: 1px 8px; border-radius: 9px;
+    font-size: var(--fs-label); text-transform: uppercase; letter-spacing: 0.1em;
+  }
+  .pill.run   { color: var(--cyan);  background: rgba(92,209,229,0.12); border: 1px solid var(--cyan-dim); }
+  .pill.needs { color: var(--red);   background: rgba(240,92,108,0.12); border: 1px solid var(--red-dim); }
+  .pill.wait  { color: var(--amber); background: rgba(242,178,92,0.12); border: 1px solid var(--amber-dim); }
+  .pill.done  { color: var(--green); background: rgba(79,197,126,0.12); border: 1px solid var(--green-dim); }
+  .cid { color: var(--snow); font-weight: 600; }
+  .rid { color: var(--label); font-size: var(--fs-xs); }
+  .row {
+    display: flex; align-items: center; gap: 10px;
+    width: 100%; text-align: left;
+    padding: 13px 16px; border: 0; border-bottom: 1px solid var(--line);
+    background: transparent; color: var(--text); font: inherit;
+  }
+  .row .grow { flex: 1; min-width: 0; }
+  .row .sub { display: block; color: var(--label); font-size: var(--fs-xs); margin-top: 1px; }
+  .row .num { color: var(--text); font-size: var(--fs-xs); text-align: right; }
+  .chev { color: var(--label-dim); }
+
+  /* ---- questions / answer flow ---- */
+  .ask-card { padding: 18px 16px 6px; }
+  .ask-q { color: var(--snow); font-size: 17px; line-height: 1.55; margin: 10px 0 0; }
+  .ctx {
+    margin: 16px 16px 0; border: 1px solid var(--line); background: var(--panel);
+  }
+  .ctx-row { display: flex; justify-content: space-between; gap: 12px; padding: 9px 12px; border-bottom: 1px solid var(--line); font-size: var(--fs-sm); }
+  .ctx-row:last-child { border-bottom: 0; }
+  .ctx-row .k { color: var(--label); }
+  .ctx-row .v { color: var(--text); text-align: right; }
+  .ctx-row .v .cid { font-weight: 500; }
+  .opts { display: flex; flex-direction: column; gap: 10px; padding: 18px 16px 4px; }
+  .opt {
+    display: flex; align-items: center; justify-content: space-between;
+    min-height: 48px; padding: 4px 16px;
+    background: var(--panel); border: 1px solid var(--bezel);
+    color: var(--snow); font: inherit; font-size: var(--fs-md); text-align: left;
+  }
+  .opt.sel { border-color: var(--amber); color: var(--amber-hi); background: rgba(242,178,92,0.07); box-shadow: inset 0 0 0 1px var(--amber-dim); }
+  .opt .tick { color: var(--amber); }
+  .freeform {
+    margin: 10px 16px 0; padding: 12px 14px; min-height: 52px;
+    border: 1px dashed var(--bezel); color: var(--label-dim); font-size: var(--fs-sm);
+  }
+  .cta-zone { padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+  .cta {
+    min-height: 50px; border: 1px solid var(--amber-dim);
+    background: linear-gradient(rgba(242,178,92,0.16), rgba(242,178,92,0.08));
+    color: var(--amber-hi); font: inherit; font-size: var(--fs-md);
+    letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .cta.ghost { background: none; border-color: var(--bezel); color: var(--label); text-transform: none; letter-spacing: 0; font-size: var(--fs-sm); min-height: 40px; }
+
+  .sent { text-align: center; padding: 46px 24px 8px; }
+  .sent .mark { font-size: 40px; color: var(--green); }
+  .sent h4 { color: var(--snow); font-size: var(--fs-lg); margin: 14px 0 6px; font-weight: 600; }
+  .sent p { color: var(--text); font-size: var(--fs-sm); margin: 0; }
+  .sent .echo {
+    margin: 18px 0 0; padding: 12px 14px; text-align: left;
+    background: var(--panel); border: 1px solid var(--line); font-size: var(--fs-sm);
+  }
+  .sent .echo .k { color: var(--label); }
+  .next-up { margin: 26px 16px 0; }
+
+  /* ---- glance board ---- */
+  .vitals { display: grid; grid-template-columns: 1fr 1fr 1fr; border-bottom: 1px solid var(--line); }
+  .vital { padding: 12px 10px 10px; text-align: center; border-right: 1px solid var(--line); }
+  .vital:last-child { border-right: 0; }
+  .vital .n { display: block; font-size: 22px; color: var(--snow); }
+  .vital .n.hot { color: var(--red); }
+  .vital .n.live { color: var(--cyan); }
+
+  /* ---- run story / timeline ---- */
+  .runhead { padding: 16px; border-bottom: 1px solid var(--line); }
+  .runhead .title { color: var(--snow); font-size: var(--fs-md); margin: 6px 0 2px; }
+  .runhead .meta { color: var(--label); font-size: var(--fs-xs); }
+  .tl { padding: 6px 16px 14px; }
+  .tl-row { display: flex; gap: 12px; position: relative; padding: 10px 0; }
+  .tl-rail { display: flex; flex-direction: column; align-items: center; width: 14px; flex: 0 0 auto; }
+  .tl-dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--bezel-hi); background: var(--panel); margin-top: 4px; }
+  .tl-dot.pass { border-color: var(--green); background: var(--green-dim); }
+  .tl-dot.redo { border-color: var(--red); background: var(--red-dim); }
+  .tl-dot.appr { border-color: var(--amber); background: var(--amber-faint); }
+  .tl-dot.live { border-color: var(--cyan); background: var(--cyan-dim); box-shadow: 0 0 10px rgba(92,209,229,0.5); }
+  .tl-line { flex: 1; width: 2px; background: var(--line); margin-top: 2px; }
+  .tl-body { flex: 1; min-width: 0; padding-bottom: 2px; }
+  .tl-hop { color: var(--snow); font-size: var(--fs-base); }
+  .tl-hop .verdict { font-size: var(--fs-label); text-transform: uppercase; letter-spacing: 0.1em; padding: 1px 6px; border-radius: 8px; margin-left: 8px; }
+  .verdict.pass { color: var(--green); background: rgba(79,197,126,0.12); }
+  .verdict.redo { color: var(--red); background: rgba(240,92,108,0.12); }
+  .verdict.appr { color: var(--amber); background: rgba(242,178,92,0.12); }
+  .verdict.live { color: var(--cyan); background: rgba(92,209,229,0.12); }
+  .tl-cost { color: var(--label); font-size: var(--fs-xs); margin-top: 2px; }
+  .arrow { color: var(--label-dim); }
+
+  /* ---- transcript ---- */
+  .turnpager {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px; border-bottom: 1px solid var(--line); background: rgba(0,0,0,0.2);
+  }
+  .turnpager .pg { color: var(--snow); font-size: var(--fs-sm); }
+  .pgbtn { background: var(--panel); border: 1px solid var(--bezel); color: var(--cyan); font: inherit; font-size: var(--fs-md); min-width: 44px; min-height: 38px; }
+  .pgbtn[disabled] { color: var(--label-dim); border-color: var(--line); }
+  .turn { padding: 14px 16px 8px; }
+  .turn-meta { display: flex; justify-content: space-between; margin-bottom: 8px; }
+  .turn-role { color: var(--amber); font-size: var(--fs-label); text-transform: uppercase; letter-spacing: 0.14em; }
+  .turn-clock { color: var(--label); font-size: var(--fs-xs); }
+  .turn-text { color: var(--text); font-size: var(--fs-base); line-height: 1.65; margin: 0 0 12px; }
+  .toolcall {
+    border: 1px solid var(--line); border-left: 2px solid var(--cyan-dim);
+    background: var(--panel); padding: 10px 12px; margin-bottom: 12px;
+    font-size: var(--fs-sm); overflow-x: auto;
+  }
+  .toolcall .tname { color: var(--cyan); }
+  .toolcall .tpath { color: var(--text); word-break: break-all; }
+  .toolcall .tres { color: var(--green); font-size: var(--fs-xs); margin-top: 4px; }
+  .swipe-hint { text-align: center; color: var(--label-dim); font-size: var(--fs-label); letter-spacing: 0.14em; text-transform: uppercase; padding: 8px 0 4px; }
+
+  .footnote { margin-top: 60px; border-top: 1px solid var(--bezel); padding-top: 18px; color: var(--label); font-size: var(--fs-sm); max-width: 75ch; }
+  .footnote b { color: var(--text); font-weight: 500; }
+
+  @media (max-width: 860px) {
+    .frames { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 12px; }
+    .anno { min-width: 280px; }
+  }
+</style>
+
+<div class="sheet">
+  <header class="masthead">
+    <div class="lbl">Mockups · adaptive shells over shared guts</div>
+    <h1 class="brand">blizzard <span class="dim">mobile</span></h1>
+    <p>Five phone screens across the three target use cases. Same mission-control tokens, same
+    <code style="color:var(--amber-hi)">fleet</code> data services underneath — only the shells are new.
+    Each section notes which existing components the screen reuses.</p>
+  </header>
+
+  <!-- ============ USE CASE 1 ============ -->
+  <section class="usecase">
+    <div class="usecase-head">
+      <span class="lbl">Use case · at work</span>
+      <h2>A question needs me — answer it from my pocket</h2>
+    </div>
+    <div class="frames">
+
+      <!-- Frame A: question screen -->
+      <div>
+        <div class="phone"><div class="screen">
+          <div class="statusbar"><span>14:07</span><span class="sig">▪▪▪ 5G</span></div>
+          <div class="appbar">
+            <button class="back">‹ Asks</button>
+            <span class="spacer"></span>
+            <span class="lbl">Q-K7KM</span>
+            <span class="livedot" title="live"></span>
+          </div>
+          <div class="scroll">
+            <div class="ask-card">
+              <div class="lbl">Agent ask · waiting on you · 6 min</div>
+              <p class="ask-q">The auth middleware returns 401 for expired tokens, but the spec in issue #84 says 403 when the signature is still valid. Which behavior do you want?</p>
+            </div>
+            <div class="ctx">
+              <div class="ctx-row"><span class="k">chunk</span><span class="v"><span class="cid">C-3YJ9</span> · blizzard#84</span></div>
+              <div class="ctx-row"><span class="k">node</span><span class="v">build · epoch 2</span></div>
+              <div class="ctx-row"><span class="k">runner</span><span class="v">r2 · claude-fable-5</span></div>
+              <div class="ctx-row"><span class="k">spent so far</span><span class="v">312k tok · $1.44</span></div>
+            </div>
+            <div class="opts">
+              <div class="lbl" style="margin-bottom:2px">Suggested answers</div>
+              <button class="opt sel"><span>403 — match the spec</span><span class="tick">●</span></button>
+              <button class="opt"><span>401 — keep current behavior</span></button>
+              <button class="opt"><span>Ask the reviewer node</span></button>
+            </div>
+            <div class="freeform">Or type your own answer…</div>
+            <div class="cta-zone">
+              <button class="cta">Send answer · resume C-3YJ9</button>
+              <button class="cta ghost">Open full chunk detail ›</button>
+            </div>
+          </div>
+          <div class="tabbar">
+            <button class="tab">Board</button>
+            <button class="tab on">Asks<span class="badge">2</span></button>
+            <button class="tab">Fleet</button>
+          </div>
+          <div class="homebar"></div>
+        </div></div>
+        <div class="phone-cap lbl">A · the ask, deep-linked</div>
+      </div>
+
+      <!-- Frame B: sent confirmation -->
+      <div>
+        <div class="phone"><div class="screen">
+          <div class="statusbar"><span>14:08</span><span class="sig">▪▪▪ 5G</span></div>
+          <div class="appbar">
+            <span class="word"><span class="flake">❄</span> blizzard</span>
+            <span class="spacer"></span>
+            <span class="livedot"></span>
+          </div>
+          <div class="scroll">
+            <div class="sent">
+              <div class="mark">✓</div>
+              <h4>Answer sent</h4>
+              <p><span class="cid">C-3YJ9</span> resumed — <span style="color:var(--cyan)">running · build</span></p>
+              <div class="echo">
+                <span class="k">you answered ·</span> 403 — match the spec
+              </div>
+            </div>
+            <div class="next-up">
+              <div class="lbl" style="margin-bottom:8px">Still waiting on you · 1</div>
+              <button class="row" style="border:1px solid var(--line); background:var(--panel)">
+                <span class="grow">
+                  <span class="cid">C-8QHF</span> <span class="rid">r1 · blizzard#91</span>
+                  <span class="sub">Migration 0014 renames a column the seed data references — regenerate seeds?</span>
+                </span>
+                <span class="chev">›</span>
+              </button>
+            </div>
+          </div>
+          <div class="tabbar">
+            <button class="tab">Board</button>
+            <button class="tab on">Asks<span class="badge">1</span></button>
+            <button class="tab">Fleet</button>
+          </div>
+          <div class="homebar"></div>
+        </div></div>
+        <div class="phone-cap lbl">B · sent → next ask queued</div>
+      </div>
+
+      <div class="anno">
+        <h3>Flow decisions</h3>
+        <p>The push notification deep-links to the <em>ask itself</em>, never the board — speed-to-done is the whole game. Options render as full-width 48px tap targets with the agent's suggested answers first; freeform is the fallback, not the default.</p>
+        <p>Context is a fixed four-row card (chunk · node · runner · spend), not the full detail panel — enough to answer confidently, one tap away from more.</p>
+        <p>The confirmation screen immediately surfaces the <em>next</em> waiting ask: clear the queue in one session, then pocket the phone.</p>
+        <p class="reuse">Reuses <b>questions.query</b>, <b>QuestionView</b> options, <b>compactRef</b>, answer POST from <b>chunk-awaiting-human</b>. New: mobile ask shell, tab bar.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ USE CASE 2 ============ -->
+  <section class="usecase">
+    <div class="usecase-head">
+      <span class="lbl">Use case · at a restaurant</span>
+      <h2>Thirty-second glance — does anything need me?</h2>
+    </div>
+    <div class="frames">
+
+      <!-- Frame C: glance board -->
+      <div>
+        <div class="phone"><div class="screen">
+          <div class="statusbar"><span>19:42</span><span class="sig">▪▪ LTE</span></div>
+          <div class="appbar">
+            <span class="word"><span class="flake">❄</span> blizzard</span>
+            <span class="spacer"></span>
+            <span class="lbl">live</span>
+            <span class="livedot"></span>
+          </div>
+          <div class="scroll">
+            <div class="vitals">
+              <div class="vital"><span class="n hot">2</span><span class="lbl">needs you</span></div>
+              <div class="vital"><span class="n live">3</span><span class="lbl">running</span></div>
+              <div class="vital"><span class="n">4/4</span><span class="lbl">runners up</span></div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head"><span class="lbl" style="color:var(--red)">Needs you</span><span class="cnt">2</span></div>
+              <button class="row">
+                <span class="pill wait">ask</span>
+                <span class="grow">
+                  <span class="cid">C-3YJ9</span> <span class="rid">r2</span>
+                  <span class="sub">401 vs 403 for expired tokens — 6 min waiting</span>
+                </span>
+                <span class="chev">›</span>
+              </button>
+              <button class="row">
+                <span class="pill needs">needs human</span>
+                <span class="grow">
+                  <span class="cid">C-8QHF</span> <span class="rid">r1</span>
+                  <span class="sub">review verdict: escalate — merge conflict in fleet lib</span>
+                </span>
+                <span class="chev">›</span>
+              </button>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head"><span class="lbl" style="color:var(--cyan)">In motion</span><span class="cnt">3</span></div>
+              <button class="row">
+                <span class="pill run">run</span>
+                <span class="grow"><span class="cid">C-Z2VN</span> <span class="rid">r3 · build</span></span>
+                <span class="num">41m<br>$2.03</span>
+              </button>
+              <button class="row">
+                <span class="pill run">run</span>
+                <span class="grow"><span class="cid">C-04MW</span> <span class="rid">r4 · review</span></span>
+                <span class="num">12m<br>$0.58</span>
+              </button>
+              <button class="row">
+                <span class="pill run">deliver</span>
+                <span class="grow"><span class="cid">C-QT2X</span> <span class="rid">r1 · deliver</span></span>
+                <span class="num">3m<br>$4.12</span>
+              </button>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head"><span class="lbl" style="color:var(--green)">Done today</span><span class="cnt">3</span></div>
+              <button class="row">
+                <span class="pill done">done</span>
+                <span class="grow"><span class="cid">C-KJ2P</span> <span class="rid">blizzard#79 · merged 17:20</span></span>
+              </button>
+            </div>
+
+            <div class="panel">
+              <div class="panel-head"><span class="lbl">Fleet spend · today</span></div>
+              <div class="row" style="border-bottom:0">
+                <span class="grow"><span class="cid">$18.40</span> <span class="rid">· 6.1M tok · 4 chunks</span></span>
+              </div>
+            </div>
+          </div>
+          <div class="tabbar">
+            <button class="tab on">Board</button>
+            <button class="tab">Asks<span class="badge">2</span></button>
+            <button class="tab">Fleet</button>
+          </div>
+          <div class="homebar"></div>
+        </div></div>
+        <div class="phone-cap lbl">C · the glance board</div>
+      </div>
+
+      <div class="anno">
+        <h3>Flow decisions</h3>
+        <p>Ordered by attention, not by entity: <span style="color:var(--red)">needs&nbsp;you</span> first (open asks + <code>needs_human</code> chunks folded into one list), then what's in motion, then the comfort numbers. The vitals strip answers "am I needed?" before a single scroll.</p>
+        <p>Zero taps required for the answer to be <em>no</em> — the whole point of the restaurant check. Every row is still a tap-through to the ask flow or the run story.</p>
+        <p>The live dot is the SSE spine's health; on <code>visibilitychange</code> the stream reconnects and catches up before re-rendering, so a backgrounded tab can never show stale rows as fresh.</p>
+        <p class="reuse">Reuses <b>chunks.query</b> (<code>ChunkSummary</code>), <b>questions.query</b>, <b>health</b>, <b>fleet-spend</b>, <b>cost-format</b>, status vocabulary from <b>chunk-lanes</b>. New: attention-sort, vitals strip, mobile board shell.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ USE CASE 3 ============ -->
+  <section class="usecase">
+    <div class="usecase-head">
+      <span class="lbl">Use case · at a show</span>
+      <h2>Show off a run — the story, then the transcript</h2>
+    </div>
+    <div class="frames">
+
+      <!-- Frame D: run story -->
+      <div>
+        <div class="phone"><div class="screen">
+          <div class="statusbar"><span>11:26</span><span class="sig">▪▪▪ 5G</span></div>
+          <div class="appbar">
+            <button class="back">‹ Board</button>
+            <span class="spacer"></span>
+            <span class="pill run">running</span>
+          </div>
+          <div class="scroll">
+            <div class="runhead">
+              <span class="lbl">C-3YJ9 · blizzard#84 · graph G-8H2C</span>
+              <div class="title">feat: adaptive mobile shells for hub board</div>
+              <div class="meta">r2 · claude-fable-5 · epoch 2 · 1.2M tok · $4.12 total</div>
+            </div>
+            <div class="panel-head"><span class="lbl">Timeline</span></div>
+            <div class="tl">
+              <div class="tl-row">
+                <div class="tl-rail"><div class="tl-dot appr"></div><div class="tl-line"></div></div>
+                <div class="tl-body">
+                  <div class="tl-hop">plan <span class="arrow">→</span> build<span class="verdict appr tl-hop">approve</span></div>
+                  <div class="tl-cost">132k tok · $0.61 · 09:02 UTC</div>
+                </div>
+              </div>
+              <div class="tl-row">
+                <div class="tl-rail"><div class="tl-dot pass"></div><div class="tl-line"></div></div>
+                <div class="tl-body">
+                  <div class="tl-hop">build <span class="arrow">→</span> review<span class="verdict pass tl-hop">pass</span></div>
+                  <div class="tl-cost">486k tok · $1.72 · 10:18 UTC</div>
+                </div>
+              </div>
+              <div class="tl-row">
+                <div class="tl-rail"><div class="tl-dot redo"></div><div class="tl-line"></div></div>
+                <div class="tl-body">
+                  <div class="tl-hop">review <span class="arrow">→</span> build<span class="verdict redo tl-hop">redo</span></div>
+                  <div class="tl-cost">201k tok · $0.83 · 10:44 UTC · "flaky spec in board-shell"</div>
+                </div>
+              </div>
+              <div class="tl-row">
+                <div class="tl-rail"><div class="tl-dot live"></div></div>
+                <div class="tl-body">
+                  <div class="tl-hop">build · epoch 2<span class="verdict live tl-hop">run</span></div>
+                  <div class="tl-cost">382k tok · $0.96 · live · 41 min</div>
+                </div>
+              </div>
+            </div>
+            <div class="cta-zone">
+              <button class="cta ghost" style="border-color:var(--cyan-dim); color:var(--cyan)">Watch the transcript ›</button>
+            </div>
+          </div>
+          <div class="tabbar">
+            <button class="tab on">Board</button>
+            <button class="tab">Asks<span class="badge">2</span></button>
+            <button class="tab">Fleet</button>
+          </div>
+          <div class="homebar"></div>
+        </div></div>
+        <div class="phone-cap lbl">D · the run story</div>
+      </div>
+
+      <!-- Frame E: transcript pager -->
+      <div>
+        <div class="phone"><div class="screen">
+          <div class="statusbar"><span>11:27</span><span class="sig">▪▪▪ 5G</span></div>
+          <div class="appbar">
+            <button class="back">‹ C-3YJ9</button>
+            <span class="spacer"></span>
+            <span class="lbl">L-ZPRR · build</span>
+          </div>
+          <div class="turnpager">
+            <button class="pgbtn">‹</button>
+            <span class="pg">turn 14 / 31</span>
+            <button class="pgbtn">›</button>
+          </div>
+          <div class="scroll">
+            <div class="turn">
+              <div class="turn-meta">
+                <span class="turn-role">assistant</span>
+                <span class="turn-clock">11:24:36 UTC</span>
+              </div>
+              <p class="turn-text">The board-shell spec assumed a fixed 1280px viewport. I'll parameterize the breakpoint through the ViewportService signal instead, so the spec exercises both shells.</p>
+              <div class="toolcall">
+                <span class="tname">Edit</span> <span class="tpath">web/projects/fleet/src/lib/board-shell/board-shell.ts</span>
+                <div class="tres">✓ applied · 14 lines</div>
+              </div>
+              <div class="toolcall">
+                <span class="tname">Bash</span> <span class="tpath">npm test -- board-shell</span>
+                <div class="tres">✓ 12 passed</div>
+              </div>
+              <p class="turn-text">Both shells now pass. Moving to the tab-bar badge wiring next.</p>
+            </div>
+            <div class="swipe-hint">‹ swipe between turns ›</div>
+          </div>
+          <div class="tabbar">
+            <button class="tab on">Board</button>
+            <button class="tab">Asks<span class="badge">2</span></button>
+            <button class="tab">Fleet</button>
+          </div>
+          <div class="homebar"></div>
+        </div></div>
+        <div class="phone-cap lbl">E · transcript, turn by turn</div>
+      </div>
+
+      <div class="anno">
+        <h3>Flow decisions</h3>
+        <p>Read-optimized, because this is the demo surface: the timeline is the hero, telling the run as a narrative — each hop carries its verdict and its lap cost, so "the reviewer bounced it once and it cost $0.83" is legible to a stranger holding your phone.</p>
+        <p>Transcripts page turn-by-turn (pager + swipe) instead of one infinite scroll — a show-off wants "look at this turn", not a wall. UTC clock stamps kept verbatim from the local-panel's rendering rule.</p>
+        <p>Scoping note: transcript reads are the <em>runner's</em> API (lease-keyed, via local-panel's query today). The mobile hub shell needs a proxied route to the owning runner — the one genuinely new plumbing item in these mocks.</p>
+        <p class="reuse">Reuses <b>chunk-timeline</b> row model + verdict colors, <b>chunk-facts</b>, <b>transcript.query</b>, <b>formatUtcClock</b>, <b>cost-format</b>. New: mobile run-story shell, turn pager.</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="footnote">
+    <b>Shared-guts inventory across all five screens:</b> design tokens verbatim (no new colors, no new type steps), compactRef, the status pill vocabulary, every query/service, the SSE spine. The net-new surface is four mobile shells (ask, board-glance, run-story, transcript), a ViewportService + manual override, the bottom tab bar, and the runner-transcript proxy route. Graphs authoring intentionally absent — it gets a "best on desktop" stub.
+  </div>
+</div>
