@@ -76,7 +76,7 @@ export const endTakeoverApiChunksChunkIdTakeoversTakeoverIdPatch = <ThrowOnError
 /**
  * List Environments
  *
- * Every environment this runner currently holds, across every chunk.
+ * Every environment in this runner's configured pool, held or free.
  */
 export const listEnvironmentsApiEnvironmentsGet = <ThrowOnError extends boolean = false>(options?: Options<ListEnvironmentsApiEnvironmentsGetData, ThrowOnError>): RequestResult<ListEnvironmentsApiEnvironmentsGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListEnvironmentsApiEnvironmentsGetResponses, unknown, ThrowOnError>({ url: '/api/environments', ...options });
 

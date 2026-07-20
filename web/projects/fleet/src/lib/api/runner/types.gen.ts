@@ -147,13 +147,35 @@ export type CapacitiesView = {
 /**
  * EnvironmentListResponse
  *
- * Every environment this runner currently holds.
+ * Every environment in the runner's configured pool, held or free.
  */
 export type EnvironmentListResponse = {
     /**
      * Items
      */
-    items?: Array<HeldEnvironmentView>;
+    items?: Array<EnvironmentView>;
+};
+
+/**
+ * EnvironmentView
+ *
+ * One environment in the runner's configured pool — ``GET /api/environments``
+ * (issue #106). ``chunk_id``/``held_since`` are present only while the environment
+ * is currently bound; an unused pool environment carries both as ``None``.
+ */
+export type EnvironmentView = {
+    /**
+     * Chunk Id
+     */
+    chunk_id?: string | null;
+    /**
+     * Environment Id
+     */
+    environment_id: string;
+    /**
+     * Held Since
+     */
+    held_since?: string | null;
 };
 
 /**
@@ -283,26 +305,6 @@ export type HeartbeatResponse = {
      * Recorded
      */
     recorded: boolean;
-};
-
-/**
- * HeldEnvironmentView
- *
- * One environment this runner currently holds — ``GET /api/environments``.
- */
-export type HeldEnvironmentView = {
-    /**
-     * Chunk Id
-     */
-    chunk_id: string;
-    /**
-     * Environment Id
-     */
-    environment_id: string;
-    /**
-     * Held Since
-     */
-    held_since: string;
 };
 
 /**

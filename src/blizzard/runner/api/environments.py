@@ -1,9 +1,12 @@
-"""The runner-local held-environments list — ``GET /api/environments`` (issue #51).
+"""The runner-local environment-pool list — ``GET /api/environments`` (issue #51,
+extended to the full pool by issue #106).
 
-``blizzard runner status``'s held-environments section: every environment this
-runner currently holds, with the chunk it is bound to and when. Derived at read
-time from the same ``held`` binding facts FILL's own capacity math and
-``held_environment_ids`` read (``bzh:facts-not-status``) — no separate stored list.
+``blizzard runner status``'s environments section: every environment in the
+runner's configured pool, held or free — held rows carry the chunk they are
+bound to and when; unused rows carry neither. Derived at read time from the
+same ``held`` binding facts FILL's own capacity math and
+``held_environment_ids`` read (``bzh:facts-not-status``) — no separate stored
+list, and no pool fact invented on the wire that the service didn't derive.
 
 Read-only over its wiring (``bzh:controller-read-only``): the edge holds only the
 composition-root-wired :class:`~blizzard.runner.domain.status.RunnerStatusService`.
@@ -18,14 +21,14 @@ from fastapi.exceptions import HTTPException
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.domain.status import RunnerStatusService
-from blizzard.wire.runner_status import EnvironmentListResponse, HeldEnvironmentView
+from blizzard.wire.runner_status import EnvironmentListResponse, EnvironmentView
 
 router = APIRouter(prefix="/api", tags=["runner"])
 
 
 @router.get("/environments", response_model=EnvironmentListResponse)
 def list_environments(request: Request) -> EnvironmentListResponse:
-    """Every environment this runner currently holds, across every chunk."""
+    """Every environment in this runner's configured pool, held or free."""
     service: RunnerStatusService | None = getattr(request.app.state, "runner_status", None)
     if service is None:
         raise HTTPException(
@@ -34,9 +37,11 @@ def list_environments(request: Request) -> EnvironmentListResponse:
         )
     return EnvironmentListResponse(
         items=[
-            HeldEnvironmentView(
-                environment_id=held.environment_id, chunk_id=held.chunk_id, held_since=iso_utc(held.held_since)
+            EnvironmentView(
+                environment_id=slot.environment_id,
+                chunk_id=slot.chunk_id,
+                held_since=iso_utc(slot.held_since) if slot.held_since is not None else None,
             )
-            for held in service.held_environments()
+            for slot in service.environments()
         ]
     )

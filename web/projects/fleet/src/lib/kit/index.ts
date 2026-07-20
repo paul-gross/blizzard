@@ -6,6 +6,7 @@
 export { KitPanel } from './kit-panel';
 export { KitAsyncState, type KitAsyncStateValue } from './kit-async-state';
 export { KitBadge } from './kit-badge';
+export { KitBeacon, type BeaconTone } from './kit-beacon';
 export { KitButton } from './kit-button';
 export { KitChip, KitChips, type KitChipOption } from './kit-chips';
 export { KitSlotBar } from './kit-slot-bar';

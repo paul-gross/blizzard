@@ -1,7 +1,7 @@
 """The runner's machine-local status view (``bzh:domain-core``, issue #51).
 
 The machine-local counterpart to the hub's fleet-wide ``blizzard hub status``:
-this runner's own capacities, held environments, open asks, and parked
+this runner's own capacities, environment pool, open asks, and parked
 escalations — everything derived from store facts at read time
 (``bzh:facts-not-status``), no new stored status columns. Hub-free by
 construction wherever the hub is not the fact's own home: identity, pause
@@ -26,13 +26,13 @@ from datetime import datetime, timedelta
 
 from blizzard.foundation.clock import IClock
 from blizzard.runner.harness.adapter import IHarnessAdapter
-from blizzard.runner.store.repository import AskRecord, IReadRunnerStore, OutboundFactRecord
+from blizzard.runner.store.repository import AskRecord, EnvBindingRecord, IReadRunnerStore, OutboundFactRecord
 
 __all__ = [
     "HUB_CONTACT_STALENESS_THRESHOLD",
     "Capacities",
+    "EnvironmentSlot",
     "EscalationView",
-    "HeldEnvironment",
     "HubConnectivity",
     "OpenTakeoverView",
     "PauseState",
@@ -96,12 +96,16 @@ class RunnerStatusSummary:
 
 
 @dataclass(frozen=True)
-class HeldEnvironment:
-    """One environment this runner currently holds — ``GET /environments``."""
+class EnvironmentSlot:
+    """One environment in the runner's configured pool — ``GET /environments`` (issue #106).
+
+    Every pool environment surfaces, held or not: ``chunk_id``/``held_since`` are set only
+    while the environment is bound, ``None`` otherwise — the read never invents a chunk
+    ref for an idle slot."""
 
     environment_id: str
-    chunk_id: str
-    held_since: datetime
+    chunk_id: str | None
+    held_since: datetime | None
 
 
 @dataclass(frozen=True)
@@ -144,6 +148,7 @@ class RunnerStatusService:
         workspace_id: str,
         max_agents: int,
         hub_url: str,
+        env_pool: tuple[str, ...],
         contact_staleness: timedelta = HUB_CONTACT_STALENESS_THRESHOLD,
     ) -> None:
         self._store = store
@@ -153,6 +158,7 @@ class RunnerStatusService:
         self._workspace_id = workspace_id
         self._max_agents = max_agents
         self._hub_url = hub_url
+        self._env_pool = env_pool
         self._contact_staleness = contact_staleness
 
     def summary(self) -> RunnerStatusSummary:
@@ -175,11 +181,54 @@ class RunnerStatusService:
             last_tick_at=self._store.last_daemon_liveness(),
         )
 
-    def held_environments(self) -> list[HeldEnvironment]:
-        return [
-            HeldEnvironment(environment_id=b.environment_id, chunk_id=b.chunk_id, held_since=b.bound_at)
-            for b in self._store.held_bindings()
-        ]
+    def environments(self) -> list[EnvironmentSlot]:
+        """The full configured pool (issue #106), each row joined against the same
+        ``held`` binding facts :meth:`bindings_for_chunk`/``held_environment_ids`` read —
+        held slots carry their chunk ref and since-instant, unused slots carry neither.
+        A held binding whose environment id has since fallen out of the configured pool
+        (a resized pool) still surfaces — a bound environment never silently vanishes
+        from the read.
+
+        ``env_bindings`` carries no unique constraint on ``environment_id`` — a
+        crash/requeue race can leave two held bindings on one environment id. That
+        anomaly is exactly what this read exists to expose (``bzh:facts-not-status``),
+        so the join keys by environment id to a *list* and every extra held binding
+        past the first still surfaces as its own row, the same way an out-of-pool
+        binding does below — never silently dropped for being the second one bound."""
+        held_by_env: dict[str, list[EnvBindingRecord]] = {}
+        for binding in self._store.held_bindings():
+            held_by_env.setdefault(binding.environment_id, []).append(binding)
+        slots = []
+        for env_id in self._env_pool:
+            bindings = held_by_env.get(env_id, [])
+            primary = bindings[0] if bindings else None
+            slots.append(
+                EnvironmentSlot(
+                    environment_id=env_id,
+                    chunk_id=primary.chunk_id if primary else None,
+                    held_since=primary.bound_at if primary else None,
+                )
+            )
+            for extra in bindings[1:]:
+                slots.append(
+                    EnvironmentSlot(
+                        environment_id=extra.environment_id,
+                        chunk_id=extra.chunk_id,
+                        held_since=extra.bound_at,
+                    )
+                )
+        pool = set(self._env_pool)
+        for env_id, bindings in held_by_env.items():
+            if env_id not in pool:
+                for binding in bindings:
+                    slots.append(
+                        EnvironmentSlot(
+                            environment_id=binding.environment_id,
+                            chunk_id=binding.chunk_id,
+                            held_since=binding.bound_at,
+                        )
+                    )
+        return slots
 
     def open_asks(self) -> list[AskRecord]:
         return self._store.open_asks()

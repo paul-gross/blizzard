@@ -501,7 +501,10 @@ def status(directory: str, runner_url: str | None) -> None:
     for lease in leases:
         click.echo(f"  {lease['lease_id']}  {lease['state']:<12} chunk={lease['chunk_id']} node={lease['node_name']}")
 
-    envs = envs_resp.json().get("items", [])
+    # `GET /api/environments` now carries the full configured pool (issue #106); this
+    # section stays the *held*-environments view it always was, so unused pool slots
+    # (chunk_id null) are filtered back out here rather than reworking the CLI's shape.
+    envs = [env for env in envs_resp.json().get("items", []) if env.get("chunk_id") is not None]
     click.echo(f"\nheld environments ({len(envs)}):")
     for env in envs:
         click.echo(f"  {env['environment_id']}  chunk={env['chunk_id']}  held since {env['held_since']}")

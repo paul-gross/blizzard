@@ -1,7 +1,8 @@
 """The runner's machine-local status view — wire bodies (issue #51).
 
 Behind ``GET /api/runner`` (identity, pause states, capacities, hub connectivity,
-last tick), ``GET /api/environments`` (held bindings), ``GET /api/asks?open=true``
+last tick), ``GET /api/environments`` (the full configured pool, issue #106), ``GET
+/api/asks?open=true``
 (open questions), ``GET /api/escalations`` (parked escalations with their
 literal resume command), and ``GET /api/takeovers`` (open operator takeovers —
 the stranded-takeover recovery surface, issue #52) — ``blizzard runner status``'s
@@ -54,18 +55,20 @@ class RunnerStatusView(BaseModel):
     last_tick_at: str | None
 
 
-class HeldEnvironmentView(BaseModel):
-    """One environment this runner currently holds — ``GET /api/environments``."""
+class EnvironmentView(BaseModel):
+    """One environment in the runner's configured pool — ``GET /api/environments``
+    (issue #106). ``chunk_id``/``held_since`` are present only while the environment
+    is currently bound; an unused pool environment carries both as ``None``."""
 
     environment_id: str
-    chunk_id: str
-    held_since: str
+    chunk_id: str | None = None
+    held_since: str | None = None
 
 
 class EnvironmentListResponse(BaseModel):
-    """Every environment this runner currently holds."""
+    """Every environment in the runner's configured pool, held or free."""
 
-    items: list[HeldEnvironmentView] = []
+    items: list[EnvironmentView] = []
 
 
 class AskView(BaseModel):

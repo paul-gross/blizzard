@@ -468,5 +468,57 @@ describe('LocalPanel', () => {
       expect(row?.textContent).toContain('C-3YJ9');
       expect(row?.querySelector('[data-testid="env-held-for"]')?.textContent).toContain('42m');
     });
+
+    it('renders a mixed pool — a held row throbbing amber beside a static grey unused row', async () => {
+      stub = stubRequestClient(runnerClient,
+        routes([], (method, path) =>
+          method === 'GET' && path === '/api/environments'
+            ? {
+                items: [
+                  {
+                    environment_id: 'beta',
+                    chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
+                    held_since: '2026-07-16T11:18:00.000Z',
+                  },
+                  { environment_id: 'gamma', chunk_id: null, held_since: null },
+                ],
+              }
+            : undefined,
+        ),
+      );
+      const fixture = await render();
+      const el = fixture.nativeElement as HTMLElement;
+
+      const rows = el.querySelectorAll('[data-testid="env-row"]');
+      expect(rows).toHaveLength(2);
+
+      const heldRow = rows[0];
+      expect(heldRow.getAttribute('data-env-id')).toBe('beta');
+      expect(heldRow.getAttribute('data-held')).toBe('true');
+      expect(
+        heldRow.querySelector('[data-testid="env-beacon"] .beacon')?.classList.contains('active'),
+      ).toBe(true);
+      expect(heldRow.querySelector('[data-testid="env-held-for"]')?.textContent).toContain('42m');
+
+      const unusedRow = rows[1];
+      expect(unusedRow.getAttribute('data-env-id')).toBe('gamma');
+      expect(unusedRow.getAttribute('data-held')).toBe('false');
+      expect(
+        unusedRow.querySelector('[data-testid="env-beacon"] .beacon')?.classList.contains('active'),
+      ).toBe(false);
+      expect(unusedRow.textContent).not.toContain('C-3YJ9');
+      expect(unusedRow.querySelector('[data-testid="env-held-for"]')?.textContent).toBe('');
+    });
+
+    it('renders the empty state only when the pool itself is empty', async () => {
+      stub = stubRequestClient(runnerClient,
+        routes([], (method, path) => (method === 'GET' && path === '/api/environments' ? { items: [] } : undefined)),
+      );
+      const fixture = await render();
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector('[data-testid="env-empty"]')).toBeTruthy();
+      expect(el.querySelector('[data-testid="env-row"]')).toBeNull();
+    });
   });
 });

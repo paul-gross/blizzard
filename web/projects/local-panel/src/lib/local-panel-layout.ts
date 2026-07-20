@@ -79,7 +79,7 @@ import type { MachineChunkRow } from './local-panel';
               </div>
             </fleet-kit-async-state>
           </fleet-kit-panel>
-          <fleet-kit-panel class="envs-panel" label="environments · bindings ride the lease">
+          <fleet-kit-panel class="envs-panel" label="environments">
             <local-env-list />
           </fleet-kit-panel>
         </section>

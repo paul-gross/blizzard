@@ -190,6 +190,30 @@ def test_status_renders_empty_sections_on_a_fresh_runner(tmp_path: Path, monkeyp
     assert "open takeovers (0):" in result.output
 
 
+@pytest.mark.component
+def test_status_omits_an_unheld_pool_slot_from_held_environments(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``GET /api/environments`` now carries the whole configured pool (issue #106):
+    an unheld slot must not leak into the CLI's *held*-environments section — this
+    pins the filter at ``cli.py``'s held-only comment rather than passing by
+    coincidence of a fixture where every configured env happens to be held."""
+    root = _init_runner(tmp_path)
+    config_path = root / "blizzard-runner.toml"
+    config_path.write_text(config_path.read_text().replace('workspace_envs = ["e1"]', 'workspace_envs = ["e1", "e2"]'))
+    _no_hub(monkeypatch)
+    store = _store(root)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+
+    with _serve_local_api(root):
+        result = CliRunner().invoke(runner_group, ["status", "--dir", str(root)])
+
+    assert result.exit_code == 0, result.output
+    assert "held environments (1):" in result.output
+    assert "e1" in result.output
+    assert "e2" not in result.output
+
+
 @pytest.mark.unit
 def test_status_reports_a_daemon_that_is_not_running(tmp_path: Path) -> None:
     root = _init_runner(tmp_path)  # initialized, but nothing is serving

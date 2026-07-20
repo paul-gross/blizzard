@@ -244,6 +244,7 @@ def build_hosted_app(config: RunnerConfig) -> FastAPI:
         workspace_id=config.workspace_id,
         max_agents=config.max_agents,
         hub_url=config.hub_url,
+        env_pool=config.workspace_envs,
     )
     # ``blizzard runner takeover``'s backing service (issue #52). Its own
     # ``LinuxProcessProbe()``/``SystemClock()`` instances, like ``leases``/``runner_status``

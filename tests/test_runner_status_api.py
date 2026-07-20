@@ -34,6 +34,7 @@ def _app_with_status(
     clock: FixedClock | None = None,
     harness: FakeHarness | None = None,
     max_agents: int = 2,
+    env_pool: tuple[str, ...] | None = None,
 ):  # type: ignore[no-untyped-def]
     store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
     config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", max_agents=max_agents)
@@ -49,6 +50,7 @@ def _app_with_status(
         workspace_id=config.workspace_id,
         max_agents=config.max_agents,
         hub_url=config.hub_url,
+        env_pool=config.workspace_envs if env_pool is None else env_pool,
     )
     return create_app(config, runner_store=store, runner_status=service), store
 
@@ -186,8 +188,10 @@ def test_last_tick_reflects_daemon_liveness(tmp_path: Path) -> None:
 
 
 @pytest.mark.component
-def test_environments_lists_every_held_binding_across_chunks(tmp_path: Path) -> None:
-    app, store = _app_with_status(tmp_path)
+def test_environments_lists_every_pool_environment_held_or_not(tmp_path: Path) -> None:
+    """A mixed pool (issue #106): held slots carry their binding, unused slots carry
+    neither — every configured environment surfaces, not only the held ones."""
+    app, store = _app_with_status(tmp_path, env_pool=("e1", "e2", "e3"))
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     store.record_binding(chunk_id="ch_2", environment_id="e2", workdir="/ws/e2", bound_at=_NOW + timedelta(minutes=1))
 
@@ -199,19 +203,68 @@ def test_environments_lists_every_held_binding_across_chunks(tmp_path: Path) -> 
     assert items == [
         {"environment_id": "e1", "chunk_id": "ch_1", "held_since": _NOW.isoformat()},
         {"environment_id": "e2", "chunk_id": "ch_2", "held_since": (_NOW + timedelta(minutes=1)).isoformat()},
+        {"environment_id": "e3", "chunk_id": None, "held_since": None},
     ]
 
 
 @pytest.mark.component
-def test_a_released_binding_does_not_appear(tmp_path: Path) -> None:
-    app, store = _app_with_status(tmp_path)
+def test_a_released_binding_reverts_its_slot_to_unused(tmp_path: Path) -> None:
+    app, store = _app_with_status(tmp_path, env_pool=("e1",))
     store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
     store.record_release(chunk_id="ch_1", environment_id="e1", released_at=_NOW + timedelta(minutes=1))
 
     with TestClient(app) as client:
         resp = client.get("/api/environments")
 
+    assert resp.json()["items"] == [{"environment_id": "e1", "chunk_id": None, "held_since": None}]
+
+
+@pytest.mark.component
+def test_empty_pool_yields_an_empty_response(tmp_path: Path) -> None:
+    app, _store = _app_with_status(tmp_path, env_pool=())
+
+    with TestClient(app) as client:
+        resp = client.get("/api/environments")
+
     assert resp.json()["items"] == []
+
+
+@pytest.mark.component
+def test_a_held_binding_outside_the_configured_pool_still_surfaces(tmp_path: Path) -> None:
+    """A binding for an environment id no longer in the (resized) pool must not vanish —
+    it still holds a chunk, so it still appears."""
+    app, store = _app_with_status(tmp_path, env_pool=("e1",))
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_2", environment_id="e9", workdir="/ws/e9", bound_at=_NOW + timedelta(minutes=1))
+
+    with TestClient(app) as client:
+        resp = client.get("/api/environments")
+
+    items = resp.json()["items"]
+    assert items == [
+        {"environment_id": "e1", "chunk_id": "ch_1", "held_since": _NOW.isoformat()},
+        {"environment_id": "e9", "chunk_id": "ch_2", "held_since": (_NOW + timedelta(minutes=1)).isoformat()},
+    ]
+
+
+@pytest.mark.component
+def test_two_held_bindings_on_one_environment_id_both_surface(tmp_path: Path) -> None:
+    """A crash/requeue race can leave two held bindings on the same environment id —
+    ``env_bindings`` carries no unique constraint on ``environment_id``. The anomaly
+    must not collapse into a single ordinary row: the first binding fills the pool
+    slot, the second still surfaces as its own extra row rather than being dropped."""
+    app, store = _app_with_status(tmp_path, env_pool=("e1",))
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_binding(chunk_id="ch_2", environment_id="e1", workdir="/ws/e1", bound_at=_NOW + timedelta(minutes=1))
+
+    with TestClient(app) as client:
+        resp = client.get("/api/environments")
+
+    items = resp.json()["items"]
+    assert items == [
+        {"environment_id": "e1", "chunk_id": "ch_1", "held_since": _NOW.isoformat()},
+        {"environment_id": "e1", "chunk_id": "ch_2", "held_since": (_NOW + timedelta(minutes=1)).isoformat()},
+    ]
 
 
 # --------------------------------------------------------------------------- #

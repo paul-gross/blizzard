@@ -33,7 +33,7 @@ export function injectRunnerStatusQuery() {
 export function injectRunnerEnvironmentsQuery() {
   return injectQuery(() => ({
     queryKey: runnerEnvironmentsKey,
-    queryFn: async (): Promise<runnerApi.HeldEnvironmentView[]> => {
+    queryFn: async (): Promise<runnerApi.EnvironmentView[]> => {
       const { data, error } = await runnerApi.listEnvironmentsApiEnvironmentsGet({ throwOnError: false });
       if (error) throw error;
       return data?.items ?? [];

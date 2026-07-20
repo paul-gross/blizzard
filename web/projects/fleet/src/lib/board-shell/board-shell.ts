@@ -4,6 +4,7 @@ import type { ChunkStatus, ChunkSummary } from '../api/hub';
 import { compactRef } from '../compact-ref';
 import { LANES, STATUS_LANE } from '../chunk-lanes';
 import { formatCost } from '../cost-format';
+import { KitBeacon } from '../kit/kit-beacon';
 import { KitPanel } from '../kit/kit-panel';
 
 /** One rendered board card — the derived-status view of a chunk. */
@@ -38,7 +39,7 @@ export interface BoardCard {
 @Component({
   selector: 'fleet-board-shell',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitPanel],
+  imports: [KitBeacon, KitPanel],
   template: `
     <div class="mc" data-testid="board-shell">
       <fleet-kit-panel
@@ -57,7 +58,7 @@ export interface BoardCard {
                        ahead of the count — amber for work in flight or parked on a
                        human, red for an escalation. Quiet (empty) lanes show none. -->
                   @if (cardsFor(col.key).length > 0 && blinkFor(col.key); as blink) {
-                    <span class="blink" data-testid="lane-blink" [attr.data-blink]="blink"></span>
+                    <fleet-kit-beacon data-testid="lane-blink" [attr.data-blink]="blink" [active]="true" [tone]="blink" />
                   }
                   {{ cardsFor(col.key).length }}
                 </span>
@@ -198,21 +199,6 @@ export interface BoardCard {
     }
     .b-col[data-col='done'] .b-col-head .n {
       color: var(--green);
-    }
-    /* The occupied-lane beacon ahead of the count — see the template note. */
-    .blink {
-      width: 7px;
-      height: 7px;
-      background: var(--amber);
-      animation: lane-blink 2s ease-in-out infinite;
-    }
-    .blink[data-blink='red'] {
-      background: var(--red);
-    }
-    @keyframes lane-blink {
-      50% {
-        opacity: 0;
-      }
     }
     /* The DONE column keeps its green head accent and card accents. */
     .b-col[data-col='done'] .b-col-head {

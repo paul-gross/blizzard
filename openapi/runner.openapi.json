@@ -184,18 +184,54 @@
         "type": "object"
       },
       "EnvironmentListResponse": {
-        "description": "Every environment this runner currently holds.",
+        "description": "Every environment in the runner's configured pool, held or free.",
         "properties": {
           "items": {
             "default": [],
             "items": {
-              "$ref": "#/components/schemas/HeldEnvironmentView"
+              "$ref": "#/components/schemas/EnvironmentView"
             },
             "title": "Items",
             "type": "array"
           }
         },
         "title": "EnvironmentListResponse",
+        "type": "object"
+      },
+      "EnvironmentView": {
+        "description": "One environment in the runner's configured pool \u2014 ``GET /api/environments``\n(issue #106). ``chunk_id``/``held_since`` are present only while the environment\nis currently bound; an unused pool environment carries both as ``None``.",
+        "properties": {
+          "chunk_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Id"
+          },
+          "environment_id": {
+            "title": "Environment Id",
+            "type": "string"
+          },
+          "held_since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Held Since"
+          }
+        },
+        "required": [
+          "environment_id"
+        ],
+        "title": "EnvironmentView",
         "type": "object"
       },
       "EscalationListResponse": {
@@ -371,30 +407,6 @@
           "lease_id"
         ],
         "title": "HeartbeatResponse",
-        "type": "object"
-      },
-      "HeldEnvironmentView": {
-        "description": "One environment this runner currently holds \u2014 ``GET /api/environments``.",
-        "properties": {
-          "chunk_id": {
-            "title": "Chunk Id",
-            "type": "string"
-          },
-          "environment_id": {
-            "title": "Environment Id",
-            "type": "string"
-          },
-          "held_since": {
-            "title": "Held Since",
-            "type": "string"
-          }
-        },
-        "required": [
-          "environment_id",
-          "chunk_id",
-          "held_since"
-        ],
-        "title": "HeldEnvironmentView",
         "type": "object"
       },
       "HubConnectivityView": {
@@ -1523,7 +1535,7 @@
     },
     "/api/environments": {
       "get": {
-        "description": "Every environment this runner currently holds, across every chunk.",
+        "description": "Every environment in this runner's configured pool, held or free.",
         "operationId": "list_environments_api_environments_get",
         "responses": {
           "200": {
