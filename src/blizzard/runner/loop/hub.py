@@ -25,6 +25,7 @@ from blizzard.wire.route import (
     RouteClaimConflict,
     RouteClaimPausedDenial,
     RouteClaimResponse,
+    RouteClaimTerminalDenial,
     RouteTokenRekeyResponse,
 )
 
@@ -57,14 +58,19 @@ class ChunkNotFoundError(HubClientError):
 @dataclass(frozen=True)
 class RouteClaimOutcome:
     """The result of a route claim: exactly one of ``claimed`` / ``conflict`` /
-    ``denied_paused`` set. ``denied_paused`` (issue #44) is distinguished from
-    ``conflict`` in the loop: a conflict is a race this claim lost, a paused denial
-    means the hub refused it before any race — this runner's own pause brake,
-    read authoritatively at the hub rather than off this runner's last-mirrored copy."""
+    ``denied_paused`` / ``denied_terminal`` set. ``denied_paused`` (issue #44) is
+    distinguished from ``conflict`` in the loop: a conflict is a race this claim
+    lost, a paused denial means the hub refused it before any race — this runner's
+    own pause brake, read authoritatively at the hub rather than off this runner's
+    last-mirrored copy. ``denied_terminal`` (issue #118) is a third shape: the chunk
+    was stopped (or otherwise reached ``done``) between this runner's peek and its
+    claim POST — like a paused denial, refused before any race, but unlike it the
+    chunk itself, not this runner, is why."""
 
     claimed: RouteClaimResponse | None = None
     conflict: RouteClaimConflict | None = None
     denied_paused: RouteClaimPausedDenial | None = None
+    denied_terminal: RouteClaimTerminalDenial | None = None
 
     @property
     def won(self) -> bool:
@@ -79,8 +85,9 @@ class IHubClient(Protocol):
         ...
 
     def claim_route(self, claim: RouteClaim) -> RouteClaimOutcome:
-        """``POST /api/fleet/routes`` — claim work; 409 loses the race, 403 means the hub
-        registry already has this runner paused (issue #44)."""
+        """``POST /api/fleet/routes`` — claim work; 409 loses the race (or, distinctly,
+        the chunk is already terminal — issue #118), 403 means the hub registry already
+        has this runner paused (issue #44)."""
         ...
 
     def submit_completion(self, chunk_id: str, submission: CompletionSubmission) -> ApplyResponse:

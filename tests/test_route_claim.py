@@ -279,3 +279,31 @@ def test_in_flight_submission_unaffected_while_hub_paused(tmp_path: Path) -> Non
     assert resp.status_code == 200
     assert resp.json()["outcome"] != "failure"
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["current_node_name"] == "review"
+
+
+# --------------------------------------------------------------------------- #
+# The hub refuses a claim on an already-terminal chunk outright (issue #118, the
+# #118 pre-push review's must-fix 1) — the peek-then-claim race `hub stop` opens: a
+# runner peeks a ready chunk, an operator stops it, and the runner's in-flight
+# `POST /fleet/routes` must not be granted a route on a chunk that can never run
+# again. The ready queue's own peek-time filter cannot see a stop landing after the
+# peek — this is the hub's own re-derive-under-the-lock backstop.
+# --------------------------------------------------------------------------- #
+
+
+def test_claim_denied_when_the_chunk_is_already_stopped(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = _ingest(hub)
+    assert hub.client.post(f"/api/chunks/{chunk_id}/stop", json={"by": "operator"}).status_code == 202
+
+    resp = hub.client.post("/api/fleet/routes", json=_claim_body(chunk_id))
+
+    assert resp.status_code == 409, resp.text
+    body = resp.json()
+    assert body["chunk_id"] == chunk_id
+    assert body["status"] == "stopped"
+    # Distinguishable from a race-loss 409 (`RouteClaimConflict`): no other runner
+    # holds this chunk, it was simply never eligible to claim in the first place.
+    assert "held_by_runner_id" not in body
+    # The claim did not sneak a route onto the terminal chunk before refusing.
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["route"] is None

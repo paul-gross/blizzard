@@ -642,6 +642,18 @@
         "title": "ChunkStatus",
         "type": "string"
       },
+      "ChunkStopRequest": {
+        "description": "Terminally abandon a chunk \u2014 records who stopped it (issue #118).",
+        "properties": {
+          "by": {
+            "default": "operator",
+            "title": "By",
+            "type": "string"
+          }
+        },
+        "title": "ChunkStopRequest",
+        "type": "object"
+      },
       "ChunkSummary": {
         "description": "One row of the fleet chunk list \u2014 derived status + current node.\n\n``current_node_name`` is the node's human graph name (``build``, ``review``) the\nboard renders in place of the raw ``nd_`` ULID; null when the chunk has no\ncurrent node or its pinned graph cannot resolve the id.\n\nDeliberately status-only: the summary feeds the board **card**, which is a passive\nstatus view (issue #42), so no operator *fact* is carried here. The pause fact \u2014 and\nevery other fact an operator action keys on \u2014 reaches the chunk detail dock through\n:class:`ChunkDetail`, the one place a board action lives. ``runner_id`` (the live\nroute's holder, null when unrouted) is a passive where-is-it fact in that same\nsense \u2014 it lets the fleet registry list each runner's claims \u2014 not an action key.\n``environment_count`` (issue #69) is a passive where-is-it *count* in that same\nspirit: the number of environments the chunk's live route holds, so the fleet registry\ncan sum a runner's slot-bar numerator without the full ``environment_ids`` list (which\nstays out of scope on this status-only summary, reaching only\n:class:`ChunkDetail.route`). ``cost`` is the one exception (issue #59): the derived\nspend total is cheap to carry on every card and is not itself an operator fact, so it\nrides the summary rather than waiting for the detail fetch.",
         "properties": {
@@ -3737,6 +3749,63 @@
         ]
       }
     },
+    "/api/chunks/{chunk_id}/stop": {
+      "post": {
+        "description": "Terminally abandon CHUNK \u2014 the operator's last-resort verb (issue #118).\n\nRecords the ``chunk_stopped`` fact so the chunk derives ``stopped`` and never\nre-derives ``ready``, and releases any live route in the same operation \u2014 the\nholding runner's own detach-discovery abandons the lease and frees the\nenvironments on its next tick, no separate ``detach`` needed. 409 when the chunk\nis already ``done`` or ``stopped`` \u2014 stopping is not retroactive un-delivery.",
+        "operationId": "stop_chunk_api_chunks__chunk_id__stop_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChunkStopRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Stop Chunk Api Chunks  Chunk Id  Stop Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stop Chunk",
+        "tags": [
+          "chunks"
+        ]
+      }
+    },
     "/api/decisions": {
       "get": {
         "description": "The fleet's open (unresolved) decisions \u2014 gate surfacing.",
@@ -4356,7 +4425,7 @@
     },
     "/api/fleet/routes": {
       "post": {
-        "description": "Claim a chunk; 403 if the runner is paused at the hub, 409 if already claimed,\nelse the first node envelope.",
+        "description": "Claim a chunk; 403 if the runner is paused at the hub, 409 if already claimed\nor already terminal ({done, stopped}, issue #118), else the first node envelope.",
         "operationId": "claim_route_api_fleet_routes_post",
         "requestBody": {
           "content": {

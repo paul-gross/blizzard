@@ -417,11 +417,11 @@ see depends on how the daemon left:
 Either way the next `host` start is clean: it clears a socket nothing is serving, and
 refuses to start beside one that is still live (the store is single-writer).
 
-## Four verbs, two axes — pause a chunk, detach a chunk, pause a runner (hub or local)
+## Chunk and runner control verbs, two axes — pause, stop, or detach a chunk; pause a runner (hub or local)
 
-Four verbs stop work, and two of them share the word "pause," which is exactly where
-operators mix them up. They split cleanly along two axes: what they target (one chunk,
-or a whole runner) and what they do to the claim (keep it, or give it away).
+Five verbs stop work, and two of them share the word "pause," which is exactly where
+operators mix them up. The three chunk-level verbs split along what they do to the
+claim: keep it (`pause-chunk`), give it away (`detach`), or end it for good (`stop`).
 
 - **`blizzard hub pause-chunk <chunk_id>` / `resume-chunk <chunk_id>`** (issue #46), or
   the board's **Pause**/**Resume** control in the chunk detail dock beside Detach —
@@ -434,17 +434,18 @@ or a whole runner) and what they do to the claim (keep it, or give it away).
   lease/epoch/session id, consuming no retry (a still-unclaimed chunk just re-derives
   `ready` and rejoins the queue). Refused (`409`) on a chunk that is
   `done`/`stopped`/`delivering`; deliberately **allowed** on
-  `waiting_on_human`/`needs_human` — pause is a broad lever. The pause *fact* survives
-  the answer to that question untouched (answering never un-pauses a chunk), but the
-  *derived status* doesn't show `paused` while the question is open — a chunk both
-  paused and parked on a question derives `waiting_on_human` first, so the board shows
-  a `waiting_on_human` chip, not `paused`, until the question is answered. The dock
-  still says so plainly and still offers **Resume** there — it reads the pause fact
-  (`ChunkDetail.pause`), not the chip. Once
-  answered, the pause fact is still there, so the chunk then derives `paused` (and
-  stays parked) rather than resuming — `resume-chunk` is what actually lets it go.
-  `resume-chunk` is idempotent — resuming an already-running chunk is a harmless
-  no-op.
+  `waiting_on_human`/`needs_human` — pause is a broad lever. (The `stopped` case in
+  that refusal list — see below — was inert until `stop` existed to reach it.) The
+  pause *fact* survives the answer to that question untouched (answering never
+  un-pauses a chunk), but the *derived status* doesn't show `paused` while the
+  question is open — a chunk both paused and parked on a question derives
+  `waiting_on_human` first, so the board shows a `waiting_on_human` chip, not
+  `paused`, until the question is answered. The dock still says so plainly and still
+  offers **Resume** there — it reads the pause fact (`ChunkDetail.pause`), not the
+  chip. Once answered, the pause fact is still there, so the chunk then derives
+  `paused` (and stays parked) rather than resuming — `resume-chunk` is what actually
+  lets it go. `resume-chunk` is idempotent — resuming an already-running chunk is a
+  harmless no-op.
 - **`blizzard hub detach <chunk_id>`**, or the board's **Detach** control in the
   chunk detail dock (issue #42) — also targets **one chunk**, but the opposite direction:
   it **gives the claim away**. Both doors reach the same `POST /api/chunks/{id}/detach`,
@@ -456,6 +457,19 @@ or a whole runner) and what they do to the claim (keep it, or give it away).
   `needs_human` afterward — only the route is gone. Refused (`409`) when the chunk has no
   live route left to release. See `blizzard hub detach --help` for the CLI's full
   contract.
+- **`blizzard hub stop <chunk_id>`** (issue #118) — CLI/API only, with no board
+  control today; there is no Stop button in the chunk detail dock the way Pause and
+  Detach each have one, only `POST /api/chunks/{id}/stop`. Terminal and
+  **irreversible** — there is no `un-stop`. It does **both** of what `pause-chunk` and
+  `detach` each do half of: it writes the terminal `chunk.stopped` fact *and* releases
+  any live route, so the holding runner frees the environments on its own next tick —
+  no separate `detach` call needed. Unlike `detach`, a live route is not required:
+  stop is allowed on `not_ready`, `ready`, and an already-detached chunk alike — the
+  route release is conditional, not required. Refused (`409`) only when the chunk is
+  already `done` or `stopped` — not retroactive un-delivery, and not a lever for
+  clearing a `delivering`/`waiting_on_human`/`needs_human` chunk back to a fresh
+  state, only for ending it. See `blizzard hub stop --help` for the CLI's full
+  contract.
 - **`blizzard hub pause <runner_id>` / `resume <runner_id>`** (the hub brake)
   and **`runner pause` / `runner start`** (the runner's own local brake, issue #45,
   above) are **per-runner**, not per-chunk. Neither kills any particular chunk's
@@ -464,11 +478,11 @@ or a whole runner) and what they do to the claim (keep it, or give it away).
   every other spawn site (restart-resume, an answer-resume, a requeue respawn, …) but
   still never kills a worker that is already running — pausing locally is not a drain.
 
-The distinction worth holding onto: `pause-chunk` is the **only** one of the four that
-kills a live worker, and it is also the only chunk-level lever that **keeps** the
-claim rather than giving it away — `detach` is the one that gives it away. The two
-runner-level brakes sit apart from both: they never touch a live worker, and they
-have no notion of "this one chunk" at all.
+The distinction worth holding onto: `pause-chunk` is the **only** one of the three
+chunk-level verbs that kills a live worker while **keeping** the claim — `detach` and
+`stop` both give it away (or end it), they just differ in whether the chunk can be
+reclaimed afterward. The two runner-level brakes sit apart from all three: they never
+touch a live worker, and they have no notion of "this one chunk" at all.
 
 **A pause-parked chunk still occupies an agent slot.** FILL only ever claims new work
 into a runner's *open* slots, and a chunk pause deliberately leaves the lease active
@@ -476,8 +490,8 @@ and its environments held warm for the resume — that is what makes the resume 
 place instead of re-provisioning. So a paused lease counts against `max_agents`
 exactly like a running one, with no worker consuming it. Pause enough chunks on one
 runner and it silently stops claiming new work — no error, nothing beyond the pause's
-own log line — because every slot is spoken for by parked claims. Detach, by contrast,
-frees the slot immediately (the claim is given away, not held).
+own log line — because every slot is spoken for by parked claims. Detach and stop, by
+contrast, each free the slot immediately (the claim is given away, or ended, not held).
 
 A restart into a **standing** chunk pause does not resume it — the runner checks the
 pause fact first, ahead of the normal restart-resume path described below (see "The

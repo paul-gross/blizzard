@@ -354,6 +354,32 @@ def test_fill_paused_denial_releases_and_stops_filling(tmp_path):  # type: ignor
 
 
 @pytest.mark.unit
+def test_fill_terminal_denial_releases_and_keeps_filling(tmp_path):  # type: ignore[no-untyped-def]
+    """The must-fix-1 claim guard (issue #118): the chunk was stopped between this
+    runner's peek and its claim POST. Unlike the paused denial above, this is not a
+    fleet-wide brake — only this chunk is why — so FILL releases the binding and
+    keeps trying its remaining slots this tick, same as a race-loss conflict."""
+    from blizzard.runner.loop.hub import RouteClaimOutcome
+    from blizzard.wire.route import RouteClaimTerminalDenial
+
+    store = _store(tmp_path)
+    hub = FakeHub()
+    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.claim_outcome = RouteClaimOutcome(denied_terminal=RouteClaimTerminalDenial(chunk_id="ch_1", status="stopped"))
+    provider = FakeProvider({"e1": "/ws/e1"})
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe())
+
+    fill(ctx)
+
+    assert len(hub.claims) == 1  # the claim was actually attempted
+    assert provider.released == ["e1"]  # released the acquired-but-unclaimed env
+    assert store.held_environment_ids() == []
+    assert store.list_active_leases() == []
+    assert harness.spawns == []
+
+
+@pytest.mark.unit
 def test_fill_env_bound_skips(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     hub = FakeHub()

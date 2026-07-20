@@ -44,6 +44,7 @@ from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.graph_authoring import DefaultGraphRetired
 from blizzard.hub.domain.ingest import IngestConflict
 from blizzard.hub.domain.pause import ChunkNotPausable
+from blizzard.hub.domain.stop import ChunkNotStoppable
 from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
@@ -73,6 +74,7 @@ from blizzard.wire.chunk import (
     ChunkModelUpdateRequest,
     ChunkModelView,
     ChunkPauseRequest,
+    ChunkStopRequest,
     ChunkSummary,
     ChunkUsageTotalView,
     ChunkUsageView,
@@ -540,6 +542,30 @@ def resume_chunk(
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
     services.events.publish_queue_changed()  # a resume can re-admit the chunk to the queue (issue #46)
+    return {"chunk_id": chunk_id}
+
+
+@router.post("/chunks/{chunk_id}/stop", status_code=status.HTTP_202_ACCEPTED)
+def stop_chunk(
+    chunk_id: str, request: ChunkStopRequest, services: Annotated[HubServices, Depends(get_services)]
+) -> dict[str, str]:
+    """Terminally abandon CHUNK — the operator's last-resort verb (issue #118).
+
+    Records the ``chunk_stopped`` fact so the chunk derives ``stopped`` and never
+    re-derives ``ready``, and releases any live route in the same operation — the
+    holding runner's own detach-discovery abandons the lease and frees the
+    environments on its next tick, no separate ``detach`` needed. 409 when the chunk
+    is already ``done`` or ``stopped`` — stopping is not retroactive un-delivery."""
+    chunk = services.chunks.get(chunk_id)
+    if chunk is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+    try:
+        services.stop.stop(chunk, by=request.by)
+    except ChunkNotStoppable as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
+    services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
+    services.events.publish_queue_changed()  # a stopped chunk is never offered for claim again
     return {"chunk_id": chunk_id}
 
 

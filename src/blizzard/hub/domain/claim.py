@@ -56,13 +56,24 @@ from blizzard.hub.domain.envelope import build_node_envelope
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import Graph, IReadGraphRepository
 from blizzard.hub.domain.registry import IReadRunnerRegistry
-from blizzard.hub.domain.work import Chunk, IWriteChunkRepository, current_node_id, latest_epoch
+from blizzard.hub.domain.work import (
+    Chunk,
+    ChunkStatus,
+    IWriteChunkRepository,
+    current_node_id,
+    derive_chunk_status,
+    latest_epoch,
+)
 from blizzard.wire.envelope import NodeEnvelope
 
 #: `secrets.token_urlsafe` byte count for the route capability token — same length as
 #: the runner bearer token (`hub/domain/enrollment.py`), for the same reason: a
 #: 43-character URL-safe secret comfortably beyond brute-force range.
 _ROUTE_TOKEN_BYTES = 32
+
+# Same set `apply.py`/`decisions.py` guard on — duplicated here rather than shared,
+# following this codebase's existing per-module convention for this constant.
+_TERMINAL_STATUSES = frozenset({ChunkStatus.STOPPED, ChunkStatus.DONE})
 
 # Crash point (``bzh:crash-point-registry``, issue #84b) — the claim-family boundary: the
 # route and its capability-token fact (``record_route``) are durable, but the plaintext
@@ -99,6 +110,20 @@ class ClaimDeniedPaused(Exception):
     def __init__(self, *, runner_id: str) -> None:
         super().__init__(f"runner {runner_id} is paused at the hub")
         self.runner_id = runner_id
+
+
+class ClaimDeniedTerminal(Exception):
+    """The chunk is already terminal ({done, stopped}) — refused before the race,
+    mirroring :class:`ClaimDeniedPaused`'s shape: this is not a race loss, the chunk
+    can never be claimed again. Closes the peek-then-claim window ``hub stop``
+    (issue #118) leaves open — the ready queue's own peek-time filter cannot see a
+    stop that lands between a runner's peek and its claim POST, so this check
+    re-derives status fresh, under the claim lock, rather than trusting the peek."""
+
+    def __init__(self, *, chunk_id: str, status: ChunkStatus) -> None:
+        super().__init__(f"chunk {chunk_id} is {status.value}, not claimable")
+        self.chunk_id = chunk_id
+        self.status = status
 
 
 @dataclass(frozen=True)
@@ -197,6 +222,15 @@ class ClaimService:
         chunk = current
 
         facts = self._chunks.load_facts(chunk.chunk_id)
+        # A stop (or, degenerately, a done) landing between this runner's peek and its
+        # claim POST is invisible to the queue's peek-time filter (issue #118) — that
+        # filter only excludes a chunk that already derived non-``ready`` when it was
+        # peeked. Re-derive fresh, here, under the claim lock, rather than trusting the
+        # peek to still hold.
+        status = derive_chunk_status(facts) if facts is not None else ChunkStatus.NOT_READY
+        if status in _TERMINAL_STATUSES:
+            raise ClaimDeniedTerminal(chunk_id=chunk.chunk_id, status=status)
+
         # The runner mints the lease and reports its epoch via POST /events;
         # the claim only carries the current epoch (0 before the first report) into
         # the envelope, and does not itself write a lease fact.

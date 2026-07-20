@@ -1275,6 +1275,12 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         """Append a ``chunk.paused``/``chunk.resumed`` fact — newest-fact-wins (issue #46)."""
         ...
 
+    def record_stop(self, chunk_id: str, *, by: str, at: datetime) -> None:
+        """Append the ``chunk.stopped`` fact — terminal operator abandonment (issue #118) —
+        and, atomically in the same store transaction, release any live route and any
+        held fleet-wide hub-exec slot (must-fix 2 from the #118 pre-push review)."""
+        ...
+
     def set_graph(self, chunk_id: str, *, graph_id: str) -> None:
         """Repin a not-ready or ready-unclaimed chunk to a different workflow graph (issue #27, #120).
 

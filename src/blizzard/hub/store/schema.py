@@ -447,6 +447,10 @@ chunk_stopped = Table(
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("stopped_at", UtcDateTime, nullable=False),  # terminal operator abandonment
+    # Who stopped it (issue #118) — nullable: rows written before this column existed
+    # (including a hand-written `INSERT` against a live store) predate it and read back
+    # as `None`, mirroring `runner_local_pause_facts.reason` (issue #61).
+    Column("stopped_by", String, nullable=True),
 )
 
 escalations = Table(

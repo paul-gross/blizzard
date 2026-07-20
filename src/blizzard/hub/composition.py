@@ -45,6 +45,7 @@ from blizzard.hub.domain.promote import PromoteService
 from blizzard.hub.domain.questions import QuestionService
 from blizzard.hub.domain.queue import GroupService, QueueService
 from blizzard.hub.domain.registry import FleetService, IReadRunnerRegistry
+from blizzard.hub.domain.stop import StopService
 from blizzard.hub.domain.work import IReadChunkRepository
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.graphs import default_graph_yaml, load_default_graph_doc
@@ -68,6 +69,7 @@ class HubServices:
     requeue: RequeueService
     detach: DetachService
     pause: PauseService
+    stop: StopService
     edit: EditService
     facts: FactIngestService
     graph_mint: GraphMintService
@@ -160,6 +162,7 @@ def build_services(
         requeue=RequeueService(chunks=chunk_store, clock=clock),
         detach=DetachService(chunks=chunk_store, clock=clock),
         pause=PauseService(chunks=chunk_store, clock=clock),
+        stop=StopService(chunks=chunk_store, clock=clock),
         edit=EditService(chunks=chunk_store, graphs=graph_store, claim_lock=claim_lock),
         facts=FactIngestService(chunks=chunk_store, fleet=fleet, clock=clock),
         graph_mint=GraphMintService(graphs=graph_store, clock=clock),

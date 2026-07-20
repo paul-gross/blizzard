@@ -444,6 +444,34 @@ def detach(chunk_id: str, hub_url: str | None) -> None:
     click.echo(f"detached {chunk_id} — released from its runner, re-claimable at its current node")
 
 
+@hub.command()
+@click.argument("chunk_id")
+@click.option("--by", "by", default="operator", help="Who is stopping (recorded on the fact).")
+@click.option("--hub-url", default=None, help=f"Hub API base URL (default ${ENV_HUB_URL} or {DEFAULT_HUB_URL}).")
+def stop(chunk_id: str, by: str, hub_url: str | None) -> None:
+    """Terminally abandon CHUNK — the operator's last-resort verb (issue #118).
+
+    A pure client of the hub API: ``POST /api/chunks/{id}/stop``. The chunk derives
+    ``stopped`` and never re-derives ``ready``; any live route is released in the same
+    operation, so the holding runner frees its environments on its next tick — no
+    separate ``detach`` needed. 409 when the chunk is already done/stopped. There is no
+    ``un-stop``."""
+    url = f"{_hub_url(hub_url).rstrip('/')}/api/chunks/{chunk_id}/stop"
+    try:
+        resp = httpx.post(url, json={"by": by}, timeout=_CLIENT_TIMEOUT)
+    except httpx.HTTPError as exc:
+        raise _api_error("POST /chunks/{id}/stop", exc) from exc
+    if resp.status_code == httpx.codes.CONFLICT:
+        raise click.ClickException(resp.json().get("detail", "chunk is not stoppable"))
+    if resp.status_code == httpx.codes.NOT_FOUND:
+        raise click.ClickException(f"no such chunk {chunk_id}")
+    try:
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise _api_error("POST /chunks/{id}/stop", exc) from exc
+    click.echo(f"stopped {chunk_id} — terminally abandoned, its route (if any) released")
+
+
 @hub.command("pause-chunk")
 @click.argument("chunk_id")
 @click.option("--by", "by", default="operator", help="Who is pausing (recorded on the fact).")

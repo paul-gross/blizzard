@@ -3,8 +3,8 @@
 
 ``blizzard hub ingest`` (wraps ``POST /api/chunks``) is a pure client of the hub's
 API, driven here with ``httpx.post`` stubbed: the request it builds, the success line, the
-mapped error statuses — no live hub. These (plus ``promote``/``detach``, the same shape)
-are **unit** tier: one verb driven in isolation with its only collaborator stubbed.
+mapped error statuses — no live hub. These (plus ``promote``/``detach``/``stop``, the same
+shape) are **unit** tier: one verb driven in isolation with its only collaborator stubbed.
 
 ``blizzard runner pause`` / ``start`` are pure clients of the *runner's own* local API
 (``PATCH /runner``, issue #43) — a different surface and a different concept from the hub's
@@ -291,6 +291,76 @@ def test_detach_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert result.exit_code != 0
     assert "ch_nope" in result.output
+
+
+# --------------------------------------------------------------------------- #
+# `blizzard hub stop` (issue #118)
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.unit
+def test_stop_posts_to_the_chunk_and_reports_stopped(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The verb POSTs to the chunk's stop sub-resource, carrying ``--by`` (issue #118)."""
+    calls: list[tuple[str, object]] = []
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        calls.append((url, json))
+        return _FakeResponse(202, {"chunk_id": "ch_42"})
+
+    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    result = CliRunner().invoke(
+        hub_group, ["stop", "ch_42", "--by", "alice"], env={"BZ_HUB_URL": "http://hub.local:8421"}
+    )
+
+    assert result.exit_code == 0, result.output
+    url, body = calls[0]
+    assert url == "http://hub.local:8421/api/chunks/ch_42/stop"
+    assert body == {"by": "alice"}
+    assert "stopped ch_42" in result.output
+
+
+@pytest.mark.unit
+def test_stop_maps_a_conflict_with_the_servers_detail(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A 409 (already done/stopped) surfaces the server's own detail text as a ClickException."""
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        return _FakeResponse(409, {"detail": "chunk ch_42 is stopped, not stoppable"})
+
+    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["stop", "ch_42"])
+
+    assert result.exit_code != 0
+    assert "chunk ch_42 is stopped, not stoppable" in result.output
+
+
+@pytest.mark.unit
+def test_stop_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A 404 (no such chunk) is a named error, not a stack trace."""
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        return _FakeResponse(404)
+
+    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["stop", "ch_nope"])
+
+    assert result.exit_code != 0
+    assert "ch_nope" in result.output
+
+
+@pytest.mark.unit
+def test_stop_defaults_by_to_operator(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, object]] = []
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        calls.append((url, json))
+        return _FakeResponse(202, {"chunk_id": "ch_42"})
+
+    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["stop", "ch_42"])
+
+    assert result.exit_code == 0, result.output
+    _, body = calls[0]
+    assert body == {"by": "operator"}
 
 
 # --------------------------------------------------------------------------- #

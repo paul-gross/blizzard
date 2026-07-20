@@ -2,13 +2,13 @@
 
 Slice 2 (the hub endpoint) and slice 4 (the runner PULL step) each mock the other
 side — the hub's tests never call a runner, and the runner's tests drive a
-``FakeHub``. Nothing yet proves the two halves agree on the wire. This test drives
+``FakeHub``. Nothing yet proves the two halves agree on the wire. These tests drive
 the **real** hub app and the **real** ``pull`` step in one process: ``POST
-/chunks/{id}/detach`` against the real FastAPI app, then a real PULL tick reads it
-back through ``HttpHubClient`` — the very same production adapter the daemon runs —
-wrapping the hub's own ``TestClient`` (itself an ``httpx.Client``, so no new
-production code or wiring was needed to point the runner's outbound-only hub client
-at the in-process hub).
+/chunks/{id}/detach`` (or, since issue #118, ``/stop``) against the real FastAPI app,
+then a real PULL tick reads it back through ``HttpHubClient`` — the very same
+production adapter the daemon runs — wrapping the hub's own ``TestClient`` (itself an
+``httpx.Client``, so no new production code or wiring was needed to point the
+runner's outbound-only hub client at the in-process hub).
 """
 
 from __future__ import annotations
@@ -135,3 +135,75 @@ def test_detach_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -
 
     # The seam holds both ways: the chunk still derives `ready` at the real hub.
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
+
+
+def test_stop_at_the_real_hub_is_learned_by_a_real_pull_tick(tmp_path: Path) -> None:
+    """The consider-7 gap from the #118 pre-push review: both docstrings
+    (``blizzard.hub.domain.stop``, ``docs/deployment.md``) claim the holding runner
+    "frees the environments on its next tick" — this is the end-to-end test that
+    actually drives that tick, the same shape as the detach seam test above, so a
+    regression in either the hub's route release or the runner's must-fix-1 status
+    branch (:func:`~blizzard.runner.loop.steps._reconcile_leases`) fails here."""
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/graphs", json={"definition_yaml": _PLAIN_YAML}).status_code == 201
+    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+
+    claim = hub.client.post(
+        "/api/fleet/routes",
+        json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "ws1", "environment_ids": ["e1"]},
+    )
+    assert claim.status_code == 201, claim.text
+    envelope = claim.json()["envelope"]
+    node = envelope["node"]
+    report_lease(hub, chunk_id, epoch=1, seq=1, runner_id="r1")
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "running"
+
+    seed_time = hub.clock.now()
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    store.record_lease(
+        NewLease(
+            lease_id="lease_1",
+            chunk_id=chunk_id,
+            graph_id=envelope["graph_id"],
+            node_id=node["node_id"],
+            node_name=node["node_name"],
+            epoch=1,
+            runner_id="r1",
+            retries_max=2,
+            created_at=seed_time,
+        )
+    )
+    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=seed_time)
+    store.record_binding(chunk_id=chunk_id, environment_id="e1", workdir="/ws/e1", bound_at=seed_time)
+
+    # The operator stops at the REAL hub endpoint.
+    hub.clock.advance(timedelta(seconds=1))
+    stop = hub.client.post(f"/api/chunks/{chunk_id}/stop", json={"by": "operator"})
+    assert stop.status_code == 202, stop.text
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["status"] == "stopped"
+    assert detail["route"] is None  # released in the same atomic write as the stop fact
+
+    provider = FakeProvider({"e1": "/ws/e1"})
+    probe = FakeProbe(alive={(100, "start-100")})
+    ctx = LoopContext(
+        store=store,
+        clock=hub.clock,
+        hub=HttpHubClient(hub.client),
+        provider=provider,
+        harness=FakeHarness(handle=_HANDLE, verdict=None),
+        process=probe,
+        worktree_git=FakeWorktreeGit(),
+        config=LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1),
+    )
+
+    pull(ctx)
+
+    assert probe.killed == [100]  # worker killed
+    assert provider.released == ["e1"]  # environment released
+    assert store.active_lease("lease_1") is None  # lease closed
+    assert store.live_tenure_chunk_ids() == []  # no lingering tenure for FILL to trip on
+
+    # Unlike detach, the chunk stays terminal — it never re-derives `ready`.
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "stopped"

@@ -80,6 +80,23 @@ def test_claim_route_409_is_conflict_not_error() -> None:
 
 
 @pytest.mark.unit
+def test_claim_route_409_with_a_status_field_is_a_terminal_denial_not_a_conflict() -> None:
+    """The two 409 shapes (issue #118) share a status code but not a body — a
+    terminal denial carries ``status``, a race-loss conflict carries
+    ``held_by_runner_id`` — and the adapter tells them apart on that field alone."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(409, json={"chunk_id": "ch_1", "status": "stopped", "detail": "chunk is terminal"})
+
+    outcome = _client(handler).claim_route(
+        RouteClaim(chunk_id="ch_1", runner_id="r1", workspace_id="ws1", environment_ids=["e1"])
+    )
+    assert not outcome.won
+    assert outcome.conflict is None
+    assert outcome.denied_terminal is not None and outcome.denied_terminal.status == "stopped"
+
+
+@pytest.mark.unit
 def test_claim_route_403_is_a_paused_denial_not_a_conflict() -> None:
     """A distinct outcome from the 409 race loss (issue #44): the hub's registry has
     this runner paused and refused the claim outright."""

@@ -941,6 +941,12 @@ def _reconcile_leases(ctx: LoopContext) -> None:
       terminal, not retryable (blizzard#9) — the chunk's tenure ended out from under this
       runner, so the worker is reaped and the environments released rather than the read retried
       forever. Caught **ahead of** the ``HubClientError`` arm below, which it subclasses.
+    * **Stopped** (``detail.status is ChunkStatus.STOPPED``) → :func:`_abandon_reassigned`
+      (issue #118): checked **first** of the fact/status branches, ahead of the route check
+      below, so this runner honors the terminal fact directly rather than depending on
+      ``stop``'s own route release having landed — a belt-and-suspenders backstop, not a
+      replacement, for the ordinary case where the route is already gone by the time this
+      sweep asks.
     * **Detached or reassigned** (``route is None`` or someone else's ``runner_id``) →
       :func:`_abandon_reassigned`: kill the worker, release every environment, close the lease
       ``released`` with no epoch bump, no requeue fact, no retry consumed. Checked **first** of
@@ -993,7 +999,11 @@ def _reconcile_leases(ctx: LoopContext) -> None:
             continue
         except HubClientError:
             continue  # hub unreachable — last-known directive holds; keep working
-        if detail.route is None or detail.route.runner_id != ctx.config.runner_id:
+        if detail.status == ChunkStatus.STOPPED:
+            # Honor the terminal fact directly (issue #118) — do not wait on the route
+            # check below to observe the release; see the docstring's ordering note.
+            _abandon_reassigned(ctx, lease, via="pull")
+        elif detail.route is None or detail.route.runner_id != ctx.config.runner_id:
             _abandon_reassigned(ctx, lease, via="pull")
         elif detail.pause is not None and lease.lease_id not in pause_parked:
             _kill_and_park_paused(ctx, lease, via="pull")
@@ -1403,6 +1413,19 @@ def _fill_one(ctx: LoopContext) -> bool:
         )
         _release_binding(ctx, entry.chunk_id, acquired)
         return False
+    if outcome.denied_terminal is not None:
+        # The chunk was stopped (or otherwise reached done) between this peek and this
+        # claim POST (issue #118) — not a race loss, the chunk itself is why. The ready
+        # queue's own peek-time filter cannot see this: it only excludes a chunk that
+        # already derived non-ready when it was peeked. Undo the binding and move on;
+        # this chunk cannot reappear at the ready queue's head to be peeked again.
+        _log.info(
+            "route claim denied — chunk is terminal",
+            chunk_id=entry.chunk_id,
+            status=outcome.denied_terminal.status,
+        )
+        _release_binding(ctx, entry.chunk_id, acquired)
+        return True  # peek fresh next iteration
     if outcome.conflict is not None or outcome.claimed is None:
         _log.info("route claim lost the race", chunk_id=entry.chunk_id)
         _release_binding(ctx, entry.chunk_id, acquired)  # someone else won — undo our binding

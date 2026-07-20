@@ -26,6 +26,7 @@ from blizzard.wire.route import (
     RouteClaimConflict,
     RouteClaimPausedDenial,
     RouteClaimResponse,
+    RouteClaimTerminalDenial,
     RouteTokenRekeyResponse,
 )
 from blizzard.wire.runner import RunnerRegistrationRequest, RunnerView
@@ -56,7 +57,13 @@ class HttpHubClient:
         except httpx.HTTPError as exc:
             raise self._wrap(exc, "POST /fleet/routes") from exc
         if resp.status_code == httpx.codes.CONFLICT:
-            return RouteClaimOutcome(conflict=RouteClaimConflict.model_validate(resp.json()))
+            body = resp.json()
+            # Two distinct 409 shapes share the status code (issue #118): a race loss
+            # (`held_by_runner_id`) and a terminal denial (`status`) — the hub's own
+            # response body tells them apart, so no separate status code is needed.
+            if "status" in body:
+                return RouteClaimOutcome(denied_terminal=RouteClaimTerminalDenial.model_validate(body))
+            return RouteClaimOutcome(conflict=RouteClaimConflict.model_validate(body))
         if resp.status_code == httpx.codes.FORBIDDEN:
             return RouteClaimOutcome(denied_paused=RouteClaimPausedDenial.model_validate(resp.json()))
         self._raise_for_status(resp, "POST /fleet/routes")

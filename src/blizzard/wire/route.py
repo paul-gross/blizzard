@@ -47,6 +47,18 @@ class RouteClaimConflict(BaseModel):
     detail: str = "chunk already claimed"
 
 
+class RouteClaimTerminalDenial(BaseModel):
+    """The 409 body: the chunk is already terminal ({done, stopped}) — refused
+    outright, not a race loss (issue #118).
+
+    Distinct from :class:`RouteClaimConflict`: no other runner holds this chunk —
+    the claim was refused because the chunk can never be claimed again."""
+
+    chunk_id: str
+    status: str
+    detail: str = "chunk is terminal"
+
+
 class RouteClaimPausedDenial(BaseModel):
     """The 403 body: the claiming runner is paused at the hub registry (issue #44).
 

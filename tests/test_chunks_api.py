@@ -113,9 +113,10 @@ def _ingest_and_deliver(hub, *, yaml: str) -> str:  # type: ignore[no-untyped-de
 
 
 def _stop(tmp_path: Path, chunk_id: str, *, at: datetime) -> None:
-    """Write a ``chunk_stopped`` row directly (issue #46's writer-side counterpart to
-    :func:`tests.support.write_chunk_pause_facts`) — no route reaches ``stopped`` yet
-    (D-067 names it as a future operator lever; only its derivation exists today)."""
+    """Write a ``chunk_stopped`` row directly rather than through ``POST
+    /chunks/{id}/stop`` (issue #118) — a lighter-weight precondition for a test that
+    only needs a stopped chunk to exist, not to exercise the stop route itself (that
+    route's own behavior is proven in ``test_chunk_stop.py``)."""
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'hub.db'}")
     with engine.begin() as conn:
         conn.execute(sa_insert(schema.chunk_stopped).values(chunk_id=chunk_id, stopped_at=at))

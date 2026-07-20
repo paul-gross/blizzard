@@ -328,6 +328,12 @@ class ChunkPauseRequest(BaseModel):
     by: str = "operator"
 
 
+class ChunkStopRequest(BaseModel):
+    """Terminally abandon a chunk — records who stopped it (issue #118)."""
+
+    by: str = "operator"
+
+
 class ChunkGraphUpdateRequest(BaseModel):
     """Repin a not-ready or ready-unclaimed chunk's workflow graph (issue #27, #120) — the target graph's id."""
 

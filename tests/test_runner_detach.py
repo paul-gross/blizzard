@@ -16,7 +16,15 @@ A live runner legitimately holds an active lease while its chunk derives ``deliv
 ``waiting_on_human``, or ``needs_human`` — copying restart-resume's ``status == RUNNING and
 ours`` predicate here would wrongly abandon every one of those. Route identity — ``route is
 None`` (detached) or ``route.runner_id`` naming another runner (reassigned) — is the correct
-and sufficient signal.
+and sufficient signal for every *non-terminal* status.
+
+One exception, added for issue #118: ``stopped`` is checked **ahead of** route identity and
+abandons even when the route still names this runner. ``stop`` releases a live route in the
+same store transaction as its terminal fact, so ordinarily the route-is-gone branch above
+already catches it — this status branch is a backstop for the narrow window where the hub's
+own claim guard or a crash could otherwise leave a stopped chunk routed to a runner that would
+never see the release (``test_pull_abandons_a_lease_whose_chunk_is_stopped_though_still_routed_
+to_this_runner`` below), not a second general status-keyed predicate.
 """
 
 from __future__ import annotations
@@ -167,6 +175,27 @@ def test_pull_abandons_a_chunk_reassigned_to_another_runner(tmp_path):  # type: 
     assert store.latest_epoch("ch_1") == 1
     assert store.pending_outbound() == []
     assert store.attempt_count("ch_1", "nd_build") == 1
+
+
+@pytest.mark.unit
+def test_pull_abandons_a_lease_whose_chunk_is_stopped_though_still_routed_to_this_runner(tmp_path):  # type: ignore[no-untyped-def]
+    """The must-fix-1 backstop (issue #118): the hub still routes the chunk to this
+    runner, but it derives ``stopped``. The route-only predicate above would leave this
+    alone (the route names this runner) — this status branch catches it directly,
+    honoring the terminal fact rather than depending on the route release having landed."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = _routed_chunk(status=ChunkStatus.STOPPED, runner_id="r1")
+    provider = FakeProvider({"e1": "/ws/e1"})
+    probe = FakeProbe(alive={(100, "start-100")})
+    ctx = _ctx(store, hub, provider=provider, probe=probe)
+
+    pull(ctx)
+
+    assert probe.killed == [100]
+    assert provider.released == ["e1"]
+    assert store.active_lease("lease_1") is None
 
 
 # --------------------------------------------------------------------------- #

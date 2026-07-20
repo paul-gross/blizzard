@@ -428,6 +428,18 @@ export type ChunkPauseRequest = {
 export type ChunkStatus = 'not_ready' | 'ready' | 'running' | 'delivering' | 'waiting_on_human' | 'needs_human' | 'paused' | 'stopped' | 'done';
 
 /**
+ * ChunkStopRequest
+ *
+ * Terminally abandon a chunk — records who stopped it (issue #118).
+ */
+export type ChunkStopRequest = {
+    /**
+     * By
+     */
+    by?: string;
+};
+
+/**
  * ChunkSummary
  *
  * One row of the fleet chunk list — derived status + current node.
@@ -2594,6 +2606,40 @@ export type ResumeChunkApiChunksChunkIdResumePostResponses = {
 };
 
 export type ResumeChunkApiChunksChunkIdResumePostResponse = ResumeChunkApiChunksChunkIdResumePostResponses[keyof ResumeChunkApiChunksChunkIdResumePostResponses];
+
+export type StopChunkApiChunksChunkIdStopPostData = {
+    body: ChunkStopRequest;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/stop';
+};
+
+export type StopChunkApiChunksChunkIdStopPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type StopChunkApiChunksChunkIdStopPostError = StopChunkApiChunksChunkIdStopPostErrors[keyof StopChunkApiChunksChunkIdStopPostErrors];
+
+export type StopChunkApiChunksChunkIdStopPostResponses = {
+    /**
+     * Response Stop Chunk Api Chunks  Chunk Id  Stop Post
+     *
+     * Successful Response
+     */
+    202: {
+        [key: string]: string;
+    };
+};
+
+export type StopChunkApiChunksChunkIdStopPostResponse = StopChunkApiChunksChunkIdStopPostResponses[keyof StopChunkApiChunksChunkIdStopPostResponses];
 
 export type ListDecisionsApiDecisionsGetData = {
     body?: never;

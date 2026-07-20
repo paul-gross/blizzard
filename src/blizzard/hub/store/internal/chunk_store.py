@@ -265,7 +265,17 @@ class ChunkStore:
             ]
 
     def route_of(self, chunk_id: str) -> Route | None:
-        """The chunk's live route, or ``None`` if its newest release has caught up to it.
+        """The chunk's live route, or ``None`` if its newest release has caught up to it."""
+        with self._engine.connect() as conn:
+            return self._route_of_conn(conn, chunk_id)
+
+    @staticmethod
+    def _route_of_conn(conn: Connection, chunk_id: str) -> Route | None:
+        """:meth:`route_of`'s query body, taking an already-open ``conn`` — shared with
+        :meth:`record_stop` (issue #118, must-fix 2), which must resolve the same
+        question *inside* its own write transaction to fold the route release into
+        the same commit as the ``chunk.stopped`` fact, rather than a second
+        read-then-write against a stale ``route_of()`` snapshot.
 
         Delegates the tie-break to :func:`~blizzard.hub.domain.work.newest_live_route`
         — the same function :func:`~blizzard.hub.domain.work._has_live_route` calls for
@@ -273,43 +283,38 @@ class ChunkStore:
         same-instant tie (issue #41) rather than two independently-maintained
         comparisons that can drift apart.
         """
-        with self._engine.connect() as conn:
-            # (created_at, seq) desc — must stay in lockstep with the key
-            # newest_live_route orders by; that function, not this query, owns it.
-            created = conn.execute(
-                select(s.route_created)
-                .where(s.route_created.c.chunk_id == chunk_id)
-                .order_by(s.route_created.c.created_at.desc(), s.route_created.c.seq.desc())
-            ).first()
-            if created is None:
-                return None
-            # (released_at, seq) desc — see the order_by above; same owner.
-            released = conn.execute(
-                select(s.route_released.c.released_at, s.route_released.c.seq)
-                .where(s.route_released.c.chunk_id == chunk_id)
-                .order_by(s.route_released.c.released_at.desc(), s.route_released.c.seq.desc())
-            ).first()
-            routes_released = (
-                [RouteReleasedFact(released_at=released.released_at, seq=released.seq)] if released else []
-            )
-            routes_created = [RouteCreatedFact(created_at=created.created_at, seq=created.seq)]
-            if newest_live_route(routes_created, routes_released) is None:
-                return None
-            env_ids = [
-                e.environment_id
-                for e in conn.execute(
-                    select(s.route_environments.c.environment_id).where(
-                        s.route_environments.c.route_id == created.route_id
-                    )
-                ).all()
-            ]
-            return Route(
-                chunk_id=chunk_id,
-                runner_id=created.runner_id,
-                workspace_id=created.workspace_id,
-                environment_ids=env_ids,
-                created_at=created.created_at,
-            )
+        # (created_at, seq) desc — must stay in lockstep with the key
+        # newest_live_route orders by; that function, not this query, owns it.
+        created = conn.execute(
+            select(s.route_created)
+            .where(s.route_created.c.chunk_id == chunk_id)
+            .order_by(s.route_created.c.created_at.desc(), s.route_created.c.seq.desc())
+        ).first()
+        if created is None:
+            return None
+        # (released_at, seq) desc — see the order_by above; same owner.
+        released = conn.execute(
+            select(s.route_released.c.released_at, s.route_released.c.seq)
+            .where(s.route_released.c.chunk_id == chunk_id)
+            .order_by(s.route_released.c.released_at.desc(), s.route_released.c.seq.desc())
+        ).first()
+        routes_released = [RouteReleasedFact(released_at=released.released_at, seq=released.seq)] if released else []
+        routes_created = [RouteCreatedFact(created_at=created.created_at, seq=created.seq)]
+        if newest_live_route(routes_created, routes_released) is None:
+            return None
+        env_ids = [
+            e.environment_id
+            for e in conn.execute(
+                select(s.route_environments.c.environment_id).where(s.route_environments.c.route_id == created.route_id)
+            ).all()
+        ]
+        return Route(
+            chunk_id=chunk_id,
+            runner_id=created.runner_id,
+            workspace_id=created.workspace_id,
+            environment_ids=env_ids,
+            created_at=created.created_at,
+        )
 
     def list_all(self) -> list[Chunk]:
         with self._engine.connect() as conn:
@@ -1030,6 +1035,37 @@ class ChunkStore:
         """Append a ``chunk.paused``/``chunk.resumed`` fact — newest-fact-wins (issue #46)."""
         with self._engine.begin() as conn:
             conn.execute(insert(s.chunk_pause_facts).values(chunk_id=chunk_id, paused=paused, set_at=at, set_by=by))
+
+    def record_stop(self, chunk_id: str, *, by: str, at: datetime) -> None:
+        """Append the ``chunk.stopped`` fact, release any live route, and release any
+        held fleet-wide hub-exec slot — all in **one** transaction (issue #118,
+        must-fix 2 from the #118 pre-push review).
+
+        Previously two store calls in two commits: a ``kill -9`` between them could
+        leave the chunk durably ``stopped`` with its route (or hub-exec slot) still
+        live, and ``stop`` refuses a retry on an already-terminal chunk (``_REFUSED``
+        in :mod:`~blizzard.hub.domain.stop`) — a wedge only ``detach`` could clear.
+        Folding both facts and the slot release into one ``self._engine.begin()``
+        closes that window the same way :meth:`record_route` already does for its own
+        two-fact write (issue #84a) — ``bzh:facts-not-status``'s crash-correctness
+        premise applied to a multi-fact operation. The route check runs against this
+        same connection (:meth:`_route_of_conn`), not a prior ``route_of()`` snapshot,
+        so there is no read-then-write race against a route that lands or releases
+        between the check and this commit. The hub-exec slot release is unconditional
+        and a no-op if this chunk holds none — same shape as :meth:`release_hub_exec_slot`."""
+        with self._engine.begin() as conn:
+            conn.execute(insert(s.chunk_stopped).values(chunk_id=chunk_id, stopped_at=at, stopped_by=by))
+            if self._route_of_conn(conn, chunk_id) is not None:
+                conn.execute(
+                    insert(s.route_released).values(
+                        chunk_id=chunk_id, released_at=at, seq=self._next_route_seq(conn, chunk_id)
+                    )
+                )
+            conn.execute(
+                update(s.hub_exec_slot)
+                .where((s.hub_exec_slot.c.holder_chunk_id == chunk_id) & (s.hub_exec_slot.c.released_at.is_(None)))
+                .values(released_at=at)
+            )
 
     def set_graph(self, chunk_id: str, *, graph_id: str) -> None:
         """Repin a not-ready or ready-unclaimed chunk to a different workflow graph (issue #27, #120)."""
