@@ -358,6 +358,23 @@ def test_judge_resume_output_parses_to_choice(tmp_path: Path) -> None:
 
 
 @pytest.mark.component
+def test_judge_passes_the_permission_mode_flag_when_configured(tmp_path: Path) -> None:
+    # The judgement resume is a headless turn with no one to approve tool use, and a
+    # node's ``judgement_prompt`` can elicit its own ``blizzard runner attach`` (the
+    # ``retrospective``). ``--permission-mode`` is per-invocation, not session-sticky,
+    # so ``judge`` must reassert it exactly as ``spawn``/``resume_with_message`` do —
+    # else the resume drops to the settings default and denies that attach.
+    binary = _fake_binary(tmp_path)
+    workdir = tmp_path / "e1"
+    workdir.mkdir()
+    adapter = ClaudeCodeAdapter(binary=binary, permission_mode="bypassPermissions")
+
+    adapter.judge(str(workdir), "sess-123", "Assess. Reply <Choice>name</Choice>.")
+
+    assert "--permission-mode bypassPermissions" in (workdir / "argv.txt").read_text()
+
+
+@pytest.mark.component
 def test_spawn_runs_at_workspace_root_and_prepends_prefix(tmp_path: Path) -> None:
     # The worker's cwd is the winter workspace root, not the env subdir (issue #17), and the
     # runner-composed preamble is prepended to the node envelope prompt.

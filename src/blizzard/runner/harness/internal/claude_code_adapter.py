@@ -7,9 +7,15 @@ Implements :class:`~blizzard.runner.harness.adapter.IHarnessAdapter` against the
   <worker-settings> <prompt>`` launched headless (fire-and-forget). Claude honors
   the pre-assigned ``--session-id``, so the returned session id is the hint; the pid
   and its start time are stamped from the parent right after launch.
-* **judge** — ``<binary> -p --output-format json --resume <sid> <prompt>`` run
-  synchronously, returning the raw reply for :meth:`parse_verdict` (the two-phase
-  judgement elicitation). Kill-then-resume: never run against a live process.
+* **judge** — ``<binary> -p --output-format json --resume <sid> [--permission-mode
+  <mode>] <prompt>`` run synchronously, returning the raw reply for
+  :meth:`parse_verdict` (the two-phase judgement elicitation). Kill-then-resume:
+  never run against a live process. ``--permission-mode`` is reasserted on this
+  resume exactly as ``spawn``/``resume_with_message`` do: the flag is per-invocation,
+  not session-sticky, so a resume that omits it drops the session back to the
+  settings-resolved default — silently denying the judgement turn's own
+  ``blizzard runner attach`` (the ``retrospective`` a node's ``judgement_prompt``
+  elicits) in a headless session that has no one to approve it.
 * **resume_with_message** — the fire-and-forget resume (answer delivery / CI, P7).
 * **resume_command** — the literal interactive takeover command for the escalation
   record.
@@ -219,7 +225,10 @@ class ClaudeCodeAdapter:
         return WorkerHandle(session_id=session_id, pid=proc.pid, process_start_time=start_time)
 
     def judge(self, environment_id: str, session_id: str, judgement_prompt: str) -> str:
-        cmd = [self._binary, "-p", "--output-format", "json", "--resume", session_id, judgement_prompt]
+        cmd = [self._binary, "-p", "--output-format", "json", "--resume", session_id]
+        if self._permission_mode:
+            cmd += ["--permission-mode", self._permission_mode]
+        cmd.append(judgement_prompt)
         result = subprocess.run(
             cmd, cwd=environment_id, capture_output=True, text=True, env=_allowlisted_env(self._env_passthrough)
         )
