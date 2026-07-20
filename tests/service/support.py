@@ -17,7 +17,9 @@ from __future__ import annotations
 
 import contextlib
 import os
+import queue
 import subprocess
+import threading
 import time
 from collections.abc import Iterator
 from pathlib import Path
@@ -183,6 +185,76 @@ def mock_runner(bin_dir: Path, port: int, hub_port: int, *, runner_id: str = "ru
     finally:
         client.close()
         _terminate(proc)
+
+
+class SseTap:
+    """A background ``text/event-stream`` reader. Prefer the :func:`sse_tap` context manager."""
+
+    def __init__(self, base_url: str) -> None:
+        self.base_url = base_url
+        self.events: queue.Queue[str] = queue.Queue()
+        self._ready = threading.Event()
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+
+    def start(self) -> None:
+        self._thread.start()
+        assert self._ready.wait(20), "the hub's SSE stream never opened"
+
+    def _run(self) -> None:
+        with (
+            httpx.Client(base_url=self.base_url, timeout=None) as client,
+            client.stream("GET", "/api/events/stream") as resp,
+        ):
+            self._ready.set()
+            event_type: str | None = None
+            for raw in resp.iter_lines():
+                if self._stop.is_set():
+                    return
+                line = raw.strip()
+                if line.startswith("event:"):
+                    event_type = line.split(":", 1)[1].strip()
+                elif line.startswith("data:") and event_type:
+                    self.events.put(event_type)
+                    event_type = None
+
+    def drain(self, *, settle: float = 1.5) -> list[str]:
+        """Consume and return everything already queued — the broker's replay tail."""
+        return self.collect(window=settle)
+
+    def collect(self, *, window: float = 6.0) -> list[str]:
+        """Every event type arriving within ``window`` seconds."""
+        seen: list[str] = []
+        deadline = time.monotonic() + window
+        while time.monotonic() < deadline:
+            with contextlib.suppress(queue.Empty):
+                seen.append(self.events.get(timeout=0.25))
+        return seen
+
+    def stop(self) -> None:
+        self._stop.set()
+
+
+@contextlib.contextmanager
+def sse_tap(hub_port: int, *, settle: float = 2.0) -> Iterator[SseTap]:
+    """A **live** SSE subscriber on the hub's ``/api/events/stream``, connected before the act.
+
+    The component tier asserts event publication by reading the broker's *replay tail*
+    (``emitted_events`` -> ``replay_since``). That proves an event was recorded, not that it
+    was **delivered**: the live fan-out leg (publish -> subscriber queue -> wire) is exactly
+    what a board watching the spine depends on, and a regression there is invisible to a
+    replay-tail assertion. This taps the wire instead.
+
+    Connects, then drains and discards whatever the broker replays on connect, so anything
+    :meth:`SseTap.collect` reports afterwards is live fan-out rather than reconnect replay.
+    """
+    tap = SseTap(f"http://127.0.0.1:{hub_port}")
+    tap.start()
+    try:
+        tap.drain(settle=settle)
+        yield tap
+    finally:
+        tap.stop()
 
 
 def poll_until(predicate, *, timeout: float = 20.0, interval: float = 0.2) -> bool:
