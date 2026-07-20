@@ -1,9 +1,5 @@
 # Build — judgement
 
-Assess the build you just completed against this node's criteria: the change
-implements the PM item's intent, with your work committed and pushed.
+Assess the build you just completed against this node's criteria: the change implements the PM item's intent, with your work committed and pushed.
 
-Select `pass` only if both hold — the work then hands to the review node for a
-cold-eyes pass. Select `fail` if the work does not yet meet the item's intent, or
-is not committed and pushed — the failure output will be attached when the build
-node is re-entered.
+Select `pass` only if both hold — the work then hands to the review node for a cold-eyes pass. Select `fail` if the work does not yet meet the item's intent, or is not committed and pushed — the failure output will be attached when the build node is re-entered.
