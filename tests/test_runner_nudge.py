@@ -55,8 +55,8 @@ class _AttachingOnNudgeHarness(FakeHarness):
         self._name = name
         self._content = content
 
-    def judge(self, environment_id: str, session_id: str, judgement_prompt: str) -> str:
-        output = super().judge(environment_id, session_id, judgement_prompt)
+    def judge(self, workdir: str, session_id: str, judgement_prompt: str) -> str:
+        output = super().judge(workdir, session_id, judgement_prompt)
         if len(self.judged) == 2:  # the nudge resume, not the original verdict elicitation
             self._store.record_attachment(
                 lease_id=self._lease_id,

@@ -269,16 +269,16 @@ class FakeHarness:
             process_start_time=self._handle.process_start_time,
         )
 
-    def judge(self, environment_id: str, session_id: str, judgement_prompt: str) -> str:
-        self.judged.append((environment_id, session_id, judgement_prompt))
+    def judge(self, workdir: str, session_id: str, judgement_prompt: str) -> str:
+        self.judged.append((workdir, session_id, judgement_prompt))
         return "<judged output>"
 
-    def resume_with_message(self, environment_id: str, session_id: str, message: str, stdout_path: str = "") -> int:
-        self.resumed.append((environment_id, session_id, message))
+    def resume_with_message(self, workdir: str, session_id: str, message: str, stdout_path: str = "") -> int:
+        self.resumed.append((workdir, session_id, message))
         return self.resume_pid
 
-    def resume_command(self, environment_id: str, session_id: str) -> str:
-        return f"cd {environment_id} && claude --resume {session_id}"
+    def resume_command(self, workdir: str, session_id: str) -> str:
+        return f"cd {workdir} && claude --resume {session_id}"
 
     def parse_verdict(self, output: str) -> str | None:
         return self.verdict

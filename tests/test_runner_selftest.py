@@ -273,13 +273,13 @@ class _HangingAdapter:
         threading.Event().wait()  # blocks forever
         raise AssertionError("unreachable")
 
-    def resume_with_message(self, environment_id: str, session_id: str, message: str, stdout_path: str = "") -> int:
+    def resume_with_message(self, workdir: str, session_id: str, message: str, stdout_path: str = "") -> int:
         raise AssertionError("unreachable — spawn never returns")
 
-    def resume_command(self, environment_id: str, session_id: str) -> str:
+    def resume_command(self, workdir: str, session_id: str) -> str:
         raise AssertionError("unreachable — spawn never returns")
 
-    def judge(self, environment_id: str, session_id: str, judgement_prompt: str) -> str:
+    def judge(self, workdir: str, session_id: str, judgement_prompt: str) -> str:
         raise AssertionError("unreachable — spawn never returns")
 
     def parse_verdict(self, output: str) -> str | None:
@@ -329,13 +329,13 @@ class _FixedPidAdapter:
     def spawn(self, envelope: object, preamble: object, session_hint: str | None) -> WorkerHandle:
         return WorkerHandle(session_id=session_hint or "sid", pid=self.spawn_pid, process_start_time="spawn-t")
 
-    def resume_with_message(self, environment_id: str, session_id: str, message: str, stdout_path: str = "") -> int:
+    def resume_with_message(self, workdir: str, session_id: str, message: str, stdout_path: str = "") -> int:
         return self.resume_pid
 
-    def resume_command(self, environment_id: str, session_id: str) -> str:
-        return f"cd {environment_id} && fake --resume {session_id}"
+    def resume_command(self, workdir: str, session_id: str) -> str:
+        return f"cd {workdir} && fake --resume {session_id}"
 
-    def judge(self, environment_id: str, session_id: str, judgement_prompt: str) -> str:
+    def judge(self, workdir: str, session_id: str, judgement_prompt: str) -> str:
         return json.dumps({"result": "<Choice>pass</Choice>"})
 
     def parse_verdict(self, output: str) -> str | None:

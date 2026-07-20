@@ -45,9 +45,9 @@ Every child env — spawn, judge, resume — is built by :func:`_allowlisted_env
 ``env_passthrough``, never a full ``os.environ`` copy, so a daemon secret (foremost
 ``BZ_HUB_TOKEN``) is absent from a worker/judge/resume child by construction.
 
-The first positional of ``judge`` / ``resume_with_message`` / ``resume_command`` is
-the **working directory** — the provider-returned workdir the runner resolves from
-the chunk→env binding and supplies for the op.
+The ``workdir`` first positional of ``judge`` / ``resume_with_message`` /
+``resume_command`` is the provider-returned path the runner resolves from the
+chunk→env binding and supplies for the op.
 """
 
 from __future__ import annotations
@@ -224,18 +224,18 @@ class ClaudeCodeAdapter:
         _log.info("spawned worker", binary=self._binary, pid=proc.pid, session_id=session_id, cwd=workdir)
         return WorkerHandle(session_id=session_id, pid=proc.pid, process_start_time=start_time)
 
-    def judge(self, environment_id: str, session_id: str, judgement_prompt: str) -> str:
+    def judge(self, workdir: str, session_id: str, judgement_prompt: str) -> str:
         cmd = [self._binary, "-p", "--output-format", "json", "--resume", session_id]
         if self._permission_mode:
             cmd += ["--permission-mode", self._permission_mode]
         cmd.append(judgement_prompt)
         result = subprocess.run(
-            cmd, cwd=environment_id, capture_output=True, text=True, env=_allowlisted_env(self._env_passthrough)
+            cmd, cwd=workdir, capture_output=True, text=True, env=_allowlisted_env(self._env_passthrough)
         )
-        _log.info("judgement resume", pid_returncode=result.returncode, session_id=session_id, cwd=environment_id)
+        _log.info("judgement resume", pid_returncode=result.returncode, session_id=session_id, cwd=workdir)
         return result.stdout
 
-    def resume_with_message(self, environment_id: str, session_id: str, message: str, stdout_path: str = "") -> int:
+    def resume_with_message(self, workdir: str, session_id: str, message: str, stdout_path: str = "") -> int:
         cmd = [self._binary, "-p", "--output-format", "json", "--resume", session_id]
         if self._permission_mode:
             cmd += ["--permission-mode", self._permission_mode]
@@ -245,12 +245,12 @@ class ClaudeCodeAdapter:
         # today's behavior (stdout inherited).
         with _stdout_target(stdout_path) as stdout_file:
             proc = subprocess.Popen(
-                cmd, cwd=environment_id, env=_allowlisted_env(self._env_passthrough), stdout=stdout_file
+                cmd, cwd=workdir, env=_allowlisted_env(self._env_passthrough), stdout=stdout_file
             )
         return proc.pid
 
-    def resume_command(self, environment_id: str, session_id: str) -> str:
-        return f"cd {environment_id} && {self._binary} --resume {session_id}"
+    def resume_command(self, workdir: str, session_id: str) -> str:
+        return f"cd {workdir} && {self._binary} --resume {session_id}"
 
     def parse_verdict(self, output: str) -> str | None:
         text = self._result_text(output)

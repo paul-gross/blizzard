@@ -95,7 +95,7 @@ class IHarnessAdapter(Protocol):
         """Start a headless worker; return its session id, pid, and start time."""
         ...
 
-    def resume_with_message(self, environment_id: str, session_id: str, message: str, stdout_path: str = "") -> int:
+    def resume_with_message(self, workdir: str, session_id: str, message: str, stdout_path: str = "") -> int:
         """Headless resume-with-message; returns the new pid. Kill first.
 
         The fire-and-forget resume behind answer delivery and the CI feedback loop
@@ -109,7 +109,7 @@ class IHarnessAdapter(Protocol):
         """
         ...
 
-    def judge(self, environment_id: str, session_id: str, judgement_prompt: str) -> str:
+    def judge(self, workdir: str, session_id: str, judgement_prompt: str) -> str:
         """Deliver the judgement prompt into the session and return the raw reply.
 
         The synchronous half of the two-phase node judgement: resumes the session
@@ -121,7 +121,7 @@ class IHarnessAdapter(Protocol):
         """
         ...
 
-    def resume_command(self, environment_id: str, session_id: str) -> str:
+    def resume_command(self, workdir: str, session_id: str) -> str:
         """The literal interactive-takeover shell command for the escalation record."""
         ...
 
