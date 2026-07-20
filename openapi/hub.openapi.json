@@ -331,9 +331,31 @@
               }
             ]
           },
+          "graph_created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graph Created At"
+          },
           "graph_id": {
             "title": "Graph Id",
             "type": "string"
+          },
+          "graph_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graph Name"
           },
           "history": {
             "default": [],

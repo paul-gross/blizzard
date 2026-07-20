@@ -232,9 +232,17 @@ export type ChunkDetail = {
     decision?: DecisionView | null;
     escalation?: EscalationView | null;
     /**
+     * Graph Created At
+     */
+    graph_created_at?: string | null;
+    /**
      * Graph Id
      */
     graph_id: string;
+    /**
+     * Graph Name
+     */
+    graph_name?: string | null;
     /**
      * History
      */

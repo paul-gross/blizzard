@@ -376,6 +376,12 @@ class ChunkDetail(BaseModel):
 
     chunk_id: str
     graph_id: str
+    # The pinned graph's name and mint instant (issue #102) — populated from the
+    # already-loaded `Graph` at detail assembly, no extra store read. `None` together
+    # iff the graph could not be resolved; the board's compact-ref label degrades to
+    # the bare ref rather than a dangling `#`/`-`.
+    graph_name: str | None = None
+    graph_created_at: str | None = None
     status: ChunkStatus
     current_node_id: str | None
     current_node_name: str | None = None

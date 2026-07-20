@@ -102,6 +102,16 @@ export function formatUtcClock(iso: string | null | undefined): string {
   return new Date(ms).toISOString().slice(11, 19);
 }
 
+/** `YYYYMMDD` from an ISO instant, rendered in UTC — empty string for an absent or
+ * unparseable input. The chunk-detail graph label's creation-date suffix (issue #102,
+ * `fact-graph`'s `#<name>-<YYYYMMDD>` form). */
+export function formatUtcYmd(iso: string | null | undefined): string {
+  if (iso === null || iso === undefined) return '';
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return '';
+  return new Date(ms).toISOString().slice(0, 10).replace(/-/g, '');
+}
+
 /** Zero-padded local `HH:MM:SS` for an epoch-ms instant — the event log's
  * per-row arrival clock (`event-log-panel.ts`). */
 export function formatClockTime(atMs: number): string {

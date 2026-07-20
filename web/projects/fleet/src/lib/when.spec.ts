@@ -1,4 +1,13 @@
-import { formatAge, formatClockTime, formatHeldFor, formatSeenAgo, formatUtcClock, formatWhen, ageMs } from './when';
+import {
+  formatAge,
+  formatClockTime,
+  formatHeldFor,
+  formatSeenAgo,
+  formatUtcClock,
+  formatUtcYmd,
+  formatWhen,
+  ageMs,
+} from './when';
 
 // A fixed local "now" — mid-afternoon so same-day boundaries sit inside one date.
 const NOW = new Date(2026, 6, 18, 15, 30);
@@ -110,6 +119,18 @@ describe('formatUtcClock', () => {
     expect(formatUtcClock(null)).toBe('');
     expect(formatUtcClock(undefined)).toBe('');
     expect(formatUtcClock('not-a-date')).toBe('');
+  });
+});
+
+describe('formatUtcYmd', () => {
+  it('renders YYYYMMDD in UTC from an ISO instant', () => {
+    expect(formatUtcYmd('2026-07-19T10:00:00Z')).toBe('20260719');
+  });
+
+  it('returns empty for an absent or unparseable input', () => {
+    expect(formatUtcYmd(null)).toBe('');
+    expect(formatUtcYmd(undefined)).toBe('');
+    expect(formatUtcYmd('not-a-date')).toBe('');
   });
 });
 

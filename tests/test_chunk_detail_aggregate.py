@@ -132,3 +132,20 @@ def test_detail_carries_the_full_aggregate(tmp_path: Path) -> None:
     # The open gate decision with its choices.
     assert detail["decision"]["node_name"] == "approve-gate"
     assert {c["name"] for c in detail["decision"]["choices"]} == {"approve", "reject"}
+
+
+def test_detail_carries_the_pinned_graphs_name_and_created_at(tmp_path: Path) -> None:
+    """The board's compact-ref graph label (issue #102) needs the pinned graph's name and
+    mint instant on ``ChunkDetail`` — populated from the ``Graph`` already loaded during
+    detail assembly, so this asserts it matches what `GET /api/graphs` independently reports."""
+    hub = build_hub(tmp_path)
+    graph = hub.client.post("/api/graphs", json={"definition_yaml": _GATE_YAML}).json()
+    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    summary = next(g for g in hub.client.get("/api/graphs").json() if g["graph_id"] == graph["graph_id"])
+
+    assert detail["graph_id"] == graph["graph_id"]
+    assert detail["graph_name"] == "default-delivery"
+    assert detail["graph_name"] == summary["name"]
+    assert detail["graph_created_at"] == summary["created_at"]

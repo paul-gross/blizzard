@@ -407,6 +407,8 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
     return ChunkDetail(
         chunk_id=chunk.chunk_id,
         graph_id=chunk.graph_id,
+        graph_name=_graph_name(graph),
+        graph_created_at=iso_utc(graph.created_at) if graph is not None else None,
         status=derive_chunk_status(facts),
         current_node_id=node_id,
         current_node_name=node_name,

@@ -1,7 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
 import type { ChunkDetail, RouteView } from '../api/hub';
+import { compactRef } from '../compact-ref';
 import { KitButton } from '../kit/kit-button';
+import { formatUtcYmd } from '../when';
 
 /** Emitted when the operator repins a not-ready chunk's graph from the dock (issue #27). */
 export interface EditGraphEvent {
@@ -48,7 +50,7 @@ export interface EditModelEvent {
            answer control, gated on the fact rather than confirmed. -->
       <dt>Graph</dt>
       <dd data-testid="fact-graph">
-        <span data-testid="graph-value" [title]="detail().graph_id">{{ detail().graph_id }}</span>
+        <span data-testid="graph-value" [title]="detail().graph_id">{{ graphLabel() }}</span>
         @if (editable()) {
           <span class="edit-row">
             <input
@@ -160,6 +162,21 @@ export class ChunkFacts {
   protected readonly attempts = computed<string>(() => {
     const epoch = this.detail().latest_epoch;
     return epoch === null || epoch === undefined ? '—' : String(epoch);
+  });
+
+  /** The Graph fact row's label (issue #102) — the pinned graph's {@link compactRef}
+   * (`G-XXXX`), with the graph's `name` and `created_at` (as `YYYYMMDD`) appended as
+   * `#<name>-<YYYYMMDD>` when both are present on the detail *and* `created_at` parses.
+   * Either absent (an older payload) or unparseable (`formatUtcYmd` degrading to `''`)
+   * degrades to the compact ref alone, never a dangling `#`/`-`. The full raw id stays
+   * as the row's `title` tooltip, read straight off `detail().graph_id`. */
+  protected readonly graphLabel = computed<string>(() => {
+    const detail = this.detail();
+    const ref = compactRef(detail.graph_id);
+    if (!detail.graph_name) return ref;
+    const ymd = formatUtcYmd(detail.graph_created_at);
+    if (!ymd) return ref;
+    return `${ref}#${detail.graph_name}-${ymd}`;
   });
 
   /** Whether the chunk's graph and model may be edited — `not_ready` or `ready` with

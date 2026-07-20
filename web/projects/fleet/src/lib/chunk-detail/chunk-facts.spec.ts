@@ -61,14 +61,79 @@ describe('ChunkFacts', () => {
     expect(el.querySelector('[data-testid="fact-runner"]')?.textContent?.trim()).toBe('—');
   });
 
-  it('shows the chunk’s current graph and model as plain facts for a running chunk', async () => {
+  it('shows the chunk’s current graph as a compact ref and model as a plain fact for a running chunk', async () => {
     const fixture = TestBed.createComponent(ChunkFacts);
     fixture.componentRef.setInput('detail', { ...ROUTED_DETAIL, model: 'claude-sonnet-4-5' });
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="graph-value"]')?.textContent?.trim()).toBe('gr_1');
+    const graphValue = el.querySelector('[data-testid="graph-value"]');
+    expect(graphValue?.textContent?.trim()).toBe('G-1');
+    expect(graphValue?.getAttribute('title')).toBe('gr_1');
     expect(el.querySelector('[data-testid="model-value"]')?.textContent?.trim()).toBe('claude-sonnet-4-5');
+  });
+
+  it('renders the graph as compactRef#name-YYYYMMDD when the graph name and creation date are present (issue #102)', async () => {
+    const fixture = TestBed.createComponent(ChunkFacts);
+    fixture.componentRef.setInput('detail', {
+      ...ROUTED_DETAIL,
+      graph_id: 'gr_01KXV4DP7T7NKBE8GJJ1GXG857',
+      graph_name: 'glacier',
+      graph_created_at: '2026-07-19T10:00:00Z',
+    });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const graphValue = el.querySelector('[data-testid="graph-value"]');
+    expect(graphValue?.textContent?.trim()).toBe('G-G857#glacier-20260719');
+    expect(graphValue?.getAttribute('title')).toBe('gr_01KXV4DP7T7NKBE8GJJ1GXG857');
+  });
+
+  it('degrades the graph label to the bare compact ref when the creation date is absent', async () => {
+    const fixture = TestBed.createComponent(ChunkFacts);
+    fixture.componentRef.setInput('detail', {
+      ...ROUTED_DETAIL,
+      graph_id: 'gr_01KXV4DP7T7NKBE8GJJ1GXG857',
+      graph_name: 'glacier',
+    });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    const graphValue = el.querySelector('[data-testid="graph-value"]');
+    expect(graphValue?.textContent?.trim()).toBe('G-G857');
+    expect(graphValue?.textContent).not.toContain('#');
+  });
+
+  it('degrades the graph label to the bare compact ref when the name is absent', async () => {
+    const fixture = TestBed.createComponent(ChunkFacts);
+    fixture.componentRef.setInput('detail', {
+      ...ROUTED_DETAIL,
+      graph_id: 'gr_01KXV4DP7T7NKBE8GJJ1GXG857',
+      graph_created_at: '2026-07-19T10:00:00Z',
+    });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    const graphValue = el.querySelector('[data-testid="graph-value"]');
+    expect(graphValue?.textContent?.trim()).toBe('G-G857');
+    expect(graphValue?.textContent).not.toContain('#');
+  });
+
+  it('degrades the graph label to the bare compact ref when the creation date is present but unparseable', async () => {
+    // consider-5 from the #118 pre-push review: `graphLabel` guarded on field presence,
+    // not parse success — a malformed `graph_created_at` used to fall through to the
+    // dangling `G-G857#glacier-` the docstring rules out, since `formatUtcYmd` degrades
+    // to `''` for an unparseable instant rather than throwing.
+    const fixture = TestBed.createComponent(ChunkFacts);
+    fixture.componentRef.setInput('detail', {
+      ...ROUTED_DETAIL,
+      graph_id: 'gr_01KXV4DP7T7NKBE8GJJ1GXG857',
+      graph_name: 'glacier',
+      graph_created_at: 'not-a-date',
+    });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    const graphValue = el.querySelector('[data-testid="graph-value"]');
+    expect(graphValue?.textContent?.trim()).toBe('G-G857');
+    expect(graphValue?.textContent).not.toContain('#');
   });
 
   it('offers the graph and model edit inputs for a not_ready chunk', async () => {
