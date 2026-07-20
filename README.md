@@ -6,6 +6,21 @@ One repo, one wheel: the single distributable ships both daemons, the CLI, and t
 
 Spend is metered and boundable: every attempt's token usage and cost are recorded as facts, surfaced per chunk and fleet-wide on the board and `blizzard hub status`, and optionally capped — a per-chunk spend cap and a runner spend kill-switch (see [`docs/deployment.md`](docs/deployment.md) → "Bounding fleet spend").
 
+## What Blizzard is, and what it deliberately isn't
+
+Blizzard runs **the loop around the work**: it ingests items, sequences and claims them, leases each worker a poly-repo capable workspace, judges what comes back, drives the result to delivery, and recovers correctly when any of that is interrupted. That loop — and the facts it records — is the whole product.
+
+It is **not** a build system, a test runner, or a code-review engine, and it holds no model of any application it drives.
+
+That absence is a design position, not a gap. Blizzard assumes a **competent agent dropped into a poly-repo capable workspace** can discover and follow the conventions of the repos it finds there — how they build, how they test, what "verified" means, which surfaces a change owes. A worker is leased a whole feature environment rather than a checkout, and one unit of work may span several repos at once, so the repos are the only place those answers stay correct as toolchains diverge and change.
+
+Two things follow, and they explain features you might otherwise expect to find:
+
+- **Workflow graphs are application-agnostic.** A graph declares the shape of the work — node roles, what each node produces, how a verdict is rendered — never a toolchain. The same graph drives twenty unrelated applications unchanged. The enforceable form of this is `bzh:app-agnostic-graphs` in the harness ([`architecture/system-shape.md`](https://github.com/paul-gross/blizzard-harness/blob/master/architecture/system-shape.md)).
+- **There is no per-application configuration.** No repo-convention registry, no per-app graph variants, no place to tell Blizzard how your project is tested. If that seems missing, it is because the answer belongs in your repo, where your agents will read it.
+
+What Blizzard does own is everything an agent cannot be trusted to do by being competent: exactly-once delivery, crash recovery at any step boundary, fencing a zombie worker out of the merge queue, metering spend, and keeping a truthful account of what happened.
+
 ## Install
 
 Milestone builds are published as [GitHub Releases](https://github.com/paul-gross/blizzard/releases) with the wheel attached — no package index. Prerelease candidates are tagged `v0.1.0-rc.N`. Grab the wheel and install it into any Python ≥ 3.12 environment (no Node needed at install or runtime):
