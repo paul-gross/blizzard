@@ -1,0 +1,115 @@
+# The basic-development-workflow graph — build -> review -> pre-push -> deliver,
+# on one single linear track.
+#
+# This is the LIGHTWEIGHT lane, deliberately cut down from glacier's shape: no `plan`
+# or `plan-review` node — small work should not pay for a planning phase, and `build`
+# licenses inline planning instead (the worker may think an approach through as part
+# of building; no plan artifact is produced and nothing waits on one). There is also
+# no standalone `verify` node: `build` fuses build and verification into one node —
+# run the checks and satisfy the item's intent before declaring done, full stop.
+#
+# Because there is no `verify` node, `pre-push`'s three-way severity triage (mirroring
+# glacier's clean/insignificant/significant judgement) differs from glacier's in
+# exactly one edge: where glacier's `significant` outcome (conflict resolution that
+# required semantic choices) re-earns verification, this graph's `significant` routes
+# to `build` instead — the only node left that can re-run the checks. `insignificant`
+# still rides back into `review` for cold eyes, and `clean` proceeds straight to
+# delivery.
+#
+# Delivery is PR-free: `deliver` runs the packaged `land_ff` script, which fast-forwards
+# each repo's base branch ref directly to the chunk's own commit instead of opening and
+# merging a PR — no merge commit, so history stays linear. A rejected fast-forward
+# (the base moved out from under the chunk) reports `conflict`, routed back to
+# `pre-push` — NOT to `build`. That edge is the point of having a pre-push node at all:
+# a rejected fast-forward means the base moved, not that the work is wrong, so the
+# recovery is to rebase again, not to rebuild a change that already passed review.
+# `pre-push` re-triages and returns to delivery; the hub node's bounce_cap bounds the
+# loop if the base keeps moving under it.
+#
+# Conforms to the canonical authoring schema: fused choice/edge entries, prompts as
+# file references inlined at mint, retries escaping to escalation. Every prompt below
+# is this graph's own copy, isolated in ./prompts — never shared with another graph's
+# directory.
+
+name: basic-development-workflow
+entry: build
+
+nodes:
+  build:
+    executor: runner
+    prompt: ./prompts/build.md
+    checks:
+      - mise run lint
+      - mise run test
+    judgement:
+      prompt: ./prompts/build.judgement.md
+      choices:
+        pass:
+          description: The work meets the item's intent and the checks are green.
+          to: review
+        fail:
+          description: The work does not yet meet the criteria; the failure output is attached.
+          to: build
+          prompt_addendum: ./prompts/build.from-build.md
+    retries:
+      max: 2
+      exhausted: escalate
+
+  review:
+    executor: runner
+    prompt: ./prompts/review.md
+    session: fresh  # cold eyes for review; the default is resume
+    produces:
+      - review-findings  # asset artifact — carried back into build on a fail
+    judgement:
+      prompt: ./prompts/review.judgement.md
+      choices:
+        pass:
+          description: The submitted work passes review and is ready for the pre-push integration step.
+          to: pre-push
+        fail:
+          description: Review found blocking issues, recorded in the review-findings asset.
+          to: build  # THE LOOP: the findings asset rides this edge back into build
+          prompt_addendum: ./prompts/build.from-review.md
+    retries:
+      max: 2
+      exhausted: escalate
+
+  pre-push:
+    executor: runner
+    prompt: ./prompts/pre-push.md
+    session: fresh  # cold eyes for the integration step; the default is resume
+    produces:
+      - pre-push-summary
+    judgement:
+      prompt: ./prompts/pre-push.judgement.md
+      choices:
+        clean:
+          description: The rebase applied with no conflicts (or trivial mechanical ones) and lint plus the targeted unit tests are green.
+          to: deliver
+        insignificant:
+          description: Conflicts were resolved without semantic choices; the rebased result re-enters review for cold eyes.
+          to: review
+          prompt_addendum: ./prompts/review.from-pre-push.md
+        significant:
+          description: Conflict resolution required semantic choices (or the rebase reshaped the change); with no verify node in this lane, the work re-enters build to re-earn the checks.
+          to: build
+          prompt_addendum: ./prompts/build.from-pre-push.md
+    retries:
+      max: 2
+      exhausted: escalate
+
+  deliver:
+    executor: hub
+    run:
+      - name: land-every-repo
+        command: python3 -m blizzard.hub.graphs.scripts.land_ff
+    judgement:
+      choices:
+        landed:
+          description: Every repo's base branch ref fast-forwarded cleanly to this chunk's commit.
+          to: done
+        conflict:
+          description: A repo did not fast-forward cleanly (the base moved out from under it); returned to pre-push to rebase against the base as it now stands, not to build.
+          to: pre-push
+          prompt_addendum: ./prompts/pre-push.from-deliver.md
