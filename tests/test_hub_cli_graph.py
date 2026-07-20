@@ -1,8 +1,11 @@
-"""``blizzard hub graph list|retire|enable`` (unit tier) — pure clients of the graph
-lifecycle endpoints, driven here with ``httpx`` stubbed (issue #101).
+"""``blizzard hub graph list|retire|enable|upload`` (unit tier) — pure clients of the
+graph lifecycle and mint endpoints, driven here with ``httpx`` stubbed (issue #101,
+issue #123).
 """
 
 from __future__ import annotations
+
+from pathlib import Path
 
 import httpx
 import pytest
@@ -108,3 +111,102 @@ def test_graph_retire_maps_an_unknown_graph(monkeypatch: pytest.MonkeyPatch) -> 
 
     assert result.exit_code != 0
     assert "gr_ghost" in result.output
+
+
+_UPLOAD_GRAPH_YAML = """
+name: tiny
+entry: build
+nodes:
+  build:
+    executor: runner
+    prompt: ./prompts/build.md
+    judgement:
+      prompt: judge it
+      choices:
+        pass:
+          description: it works
+          to: done
+        fail:
+          description: it does not
+          to: build
+    retries:
+      max: 1
+      exhausted: escalate
+"""
+
+_PROMPT_PROSE = "Build the thing with great care."
+
+
+def _write_graph_with_prompt_ref(tmp_path: Path) -> Path:
+    graph_path = tmp_path / "graph.yaml"
+    graph_path.write_text(_UPLOAD_GRAPH_YAML)
+    prompts_dir = tmp_path / "prompts"
+    prompts_dir.mkdir()
+    (prompts_dir / "build.md").write_text(_PROMPT_PROSE)
+    return graph_path
+
+
+@pytest.mark.unit
+def test_graph_upload_posts_the_prompt_inlined(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    graph_path = _write_graph_with_prompt_ref(tmp_path)
+    calls: list[tuple[str, object]] = []
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        calls.append((url, json))
+        return _FakeResponse(201, {"graph_id": "gr_new", "warnings": []})
+
+    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    result = CliRunner().invoke(
+        hub_group, ["graph", "upload", str(graph_path)], env={"BZ_HUB_URL": "http://hub.local:8421"}
+    )
+
+    assert result.exit_code == 0, result.output
+    assert len(calls) == 1
+    url, body = calls[0]
+    assert url == "http://hub.local:8421/api/graphs"
+    assert isinstance(body, dict)
+    posted_yaml = body["definition_yaml"]
+    assert _PROMPT_PROSE in posted_yaml
+    assert "./prompts/build.md" not in posted_yaml
+
+
+@pytest.mark.unit
+def test_graph_upload_prints_the_minted_graph_id(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    graph_path = _write_graph_with_prompt_ref(tmp_path)
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        return _FakeResponse(201, {"graph_id": "gr_new", "warnings": []})
+
+    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["graph", "upload", str(graph_path)])
+
+    assert result.exit_code == 0, result.output
+    assert "gr_new" in result.output
+
+
+@pytest.mark.unit
+def test_graph_upload_surfaces_mint_warnings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    graph_path = _write_graph_with_prompt_ref(tmp_path)
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        return _FakeResponse(201, {"graph_id": "gr_new", "warnings": ["node build has no incoming edges"]})
+
+    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["graph", "upload", str(graph_path)])
+
+    assert result.exit_code == 0, result.output
+    assert "node build has no incoming edges" in result.output
+
+
+@pytest.mark.unit
+def test_graph_upload_maps_a_validation_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    graph_path = _write_graph_with_prompt_ref(tmp_path)
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        return _FakeResponse(422, {"ok": False, "errors": ["entry node 'build' not found"], "warnings": []})
+
+    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["graph", "upload", str(graph_path)])
+
+    assert result.exit_code != 0
+    assert "entry node 'build' not found" in result.output

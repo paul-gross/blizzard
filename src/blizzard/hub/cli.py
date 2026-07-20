@@ -18,12 +18,14 @@ from types import FrameType
 import click
 import httpx
 import uvicorn
+import yaml
 
 from blizzard.cli.host_directory import resolve_host_directory
 from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.hub.app import build_hosted_app
 from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.hub.delivery.hub_node import ENV_MARKER_CALLBACK_URL
+from blizzard.hub.graphs import inline_graph_yaml
 from blizzard.hub.runtime import ensure_current_revision, init_environment, migrate, migration_runner
 
 # The hub the client verbs talk to: ``BZ_HUB_URL`` overrides the
@@ -598,6 +600,39 @@ def retire_graph(graph_id: str, by: str, hub_url: str | None) -> None:
 def enable_graph(graph_id: str, by: str, hub_url: str | None) -> None:
     """Re-enable a retired GRAPH_ID — restores normal newest-per-name derivation."""
     _set_graph_lifecycle(graph_id, verb="enable", by=by, hub_url=hub_url)
+
+
+@graph_group.command("upload")
+@click.argument("path", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option("--hub-url", default=None, help=f"Hub API base URL (default ${ENV_HUB_URL} or {DEFAULT_HUB_URL}).")
+def upload_graph(path: Path, hub_url: str | None) -> None:
+    """Mint a graph from PATH, inlining prompt file references before posting.
+
+    ``POST /graphs`` parses the YAML body raw — it does not resolve ``prompt`` /
+    ``prompt_addendum`` file references the way the packaged loader does, so posting
+    a graph YAML verbatim would store the literal path string, not the file's prose.
+    This inlines those references relative to PATH's own directory first (issue #123)."""
+    try:
+        definition_yaml = inline_graph_yaml(path)
+    except (yaml.YAMLError, OSError, ValueError) as exc:
+        raise click.ClickException(f"failed to load {path}: {exc}") from exc
+
+    url = f"{_hub_url(hub_url).rstrip('/')}/api/graphs"
+    try:
+        resp = httpx.post(url, json={"definition_yaml": definition_yaml}, timeout=_CLIENT_TIMEOUT)
+    except httpx.HTTPError as exc:
+        raise _api_error("POST /graphs", exc) from exc
+    if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:
+        errors = "; ".join(resp.json().get("errors", []))
+        raise click.ClickException(f"graph definition invalid: {errors}")
+    try:
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise _api_error("POST /graphs", exc) from exc
+    body = resp.json()
+    click.echo(f"minted graph {body['graph_id']}")
+    for warning in body.get("warnings", []):
+        click.echo(f"warning: {warning}")
 
 
 def _set_graph_lifecycle(graph_id: str, *, verb: str, by: str, hub_url: str | None) -> None:

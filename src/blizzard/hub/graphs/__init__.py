@@ -36,16 +36,32 @@ def load_graph_doc(path: Path) -> GraphDoc:
     so the parsed :class:`GraphDoc` carries prose, never paths — exactly what a mint
     persists. A missing referenced file raises :class:`FileNotFoundError`.
     """
-    raw = yaml.safe_load(path.read_text())
-    if not isinstance(raw, dict):
-        raise ValueError(f"{path} is not a graph-definition mapping")
-    _inline_prompts(raw, path.parent)
-    return parse_graph_doc(raw)
+    return parse_graph_doc(_load_and_inline(path))
 
 
 def load_default_graph_doc() -> GraphDoc:
     """Load and parse the packaged default graph."""
     return load_graph_doc(DEFAULT_GRAPH_PATH)
+
+
+def inline_graph_yaml(path: Path) -> str:
+    """Load a graph definition file, inline its prompt references, and re-serialize.
+
+    Same inlining as :func:`load_graph_doc`, but returns YAML **text** rather than a
+    parsed :class:`GraphDoc` — what ``POST /graphs`` (:class:`~blizzard.wire.graph.GraphMintRequest`)
+    needs, since that route parses ``definition_yaml`` raw and does not itself resolve
+    file references (``blizzard hub graph upload``, issue #123).
+    """
+    return yaml.safe_dump(_load_and_inline(path), sort_keys=False)
+
+
+def _load_and_inline(path: Path) -> dict[str, object]:
+    """Read ``path`` as a graph-definition mapping with prompt refs inlined, in place."""
+    raw = yaml.safe_load(path.read_text())
+    if not isinstance(raw, dict):
+        raise ValueError(f"{path} is not a graph-definition mapping")
+    _inline_prompts(raw, path.parent)
+    return raw
 
 
 def _inline_prompts(node: object, base: Path) -> None:
