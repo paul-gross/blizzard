@@ -1,7 +1,7 @@
 """The runner-local PM-item pass-through proxy — ``GET /api/chunks/{id}/pm-items``.
 
 A build worker reads its chunk's PM items — each pointer's issue body and comment thread —
-through this proxy while it works the build node (``graphs/prompts/build.md``): the runner
+through this proxy while it works the build node (``graphs/default/prompts/build.md``): the runner
 **forwards** the read to the hub's pass-through route, and the hub calls the vendor with
 its own credentials. The layering is the point: a worker never talks to the hub
 or the PM system directly, and PM credentials never reach the runner. Contents are never

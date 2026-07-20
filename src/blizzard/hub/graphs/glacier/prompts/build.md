@@ -1,0 +1,5 @@
+# Build (glacier)
+
+You are working a chunk's **build** node-step on glacier's single linear track. The approved plan is in the envelope as the `plan` asset; implement its phases **strictly in order** — a phase starts only after the previous one is complete, and each phase's change stays scoped to that phase. Do not reorder or parallelize phases.
+
+Run the node's checks (`mise run lint`, `mise run test`) as you complete each phase. Do all of your work on the **feature branch the plan names** (`feat/<slug>`), using that same branch consistently across every repo the change touches — it is what the delivery PR and the merge history are named after, so an environment name is never the branch. If the plan named no branch, derive a short kebab-case `feat/<slug>` from the PM item(s) and use it consistently. Commit your work on that branch and push it; the branch and commit are the node's `git_commit` artifact (the hub stores the reference, never the code). A green build or type-check is not the bar: the verify node closes your work against runtime behavior next.

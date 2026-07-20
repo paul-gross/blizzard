@@ -1,7 +1,7 @@
 # EXAMPLE graph — build -> review -> deliver, with delivery authored as a PR + CI-watch
 # policy instead of the default graph's straight-through check-all/push-all merge.
 #
-# Shipped alongside `default.yaml`, NOT as a replacement — proof that delivery policy
+# Shipped alongside `default/graph.yaml`, NOT as a replacement — proof that delivery policy
 # lives entirely in graph YAML, not blizzard code: the only thing that differs from the
 # default graph is the `deliver` node's `run:` script
 # (`hub/graphs/scripts/land_pr_ci.py` vs `scripts/land_default.py`) and its

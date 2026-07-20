@@ -1,9 +1,11 @@
 """Packaged workflow graphs — the hub-configured default graph.
 
 The hub ships a default graph every ingested chunk is pinned to. It
-lives here as packaged data (``default.yaml`` plus its prompt files) so a fresh hub
-mints it at init without any authoring. This module is the *loader* — the edge that
-reads YAML and inlines prompt *file* references before the pure-domain
+lives here as packaged data — one directory per graph, each holding its own
+``graph.yaml`` plus its own ``prompts/`` (never shared across graphs, since two
+packaged graphs can name the same prompt filename with different content) — so a
+fresh hub mints the default without any authoring. This module is the *loader* — the
+edge that reads YAML and inlines prompt *file* references before the pure-domain
 parser and validator run; it is deliberately outside the domain (it touches the
 filesystem and PyYAML), which the domain must not (``bzh:domain-core``).
 """
@@ -17,7 +19,7 @@ import yaml
 from blizzard.hub.domain.graph import GraphDoc, parse_graph_doc
 
 _GRAPHS_DIR = Path(__file__).resolve().parent
-DEFAULT_GRAPH_PATH = _GRAPHS_DIR / "default.yaml"
+DEFAULT_GRAPH_PATH = _GRAPHS_DIR / "default" / "graph.yaml"
 
 # The prompt-carrying fields whose file references are inlined at load.
 _PROMPT_KEYS = ("prompt", "prompt_addendum")

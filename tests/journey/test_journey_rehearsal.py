@@ -269,7 +269,7 @@ def _graph_yaml() -> str:
             # `run:` step is the packaged default graph's own `land_default` script —
             # fetch, check every repo merges cleanly, then push all, recording a
             # `merged/<repo>` marker per repo. `landed -> done` / `conflict -> build`
-            # mirror `hub/graphs/default.yaml`. (Before #67 this was the coordinator's
+            # mirror `hub/graphs/default/graph.yaml`. (Before #67 this was the coordinator's
             # `mode: merge-to-main` special case, deleted with the retirement.)
             "deliver": {
                 "executor": "hub",

@@ -1,0 +1,206 @@
+# The glacier workflow graph — plan -> plan-review -> build -> verify -> review ->
+# pre-push -> deliver, on one single linear track.
+#
+# Modeled on the winter-workflow `glacier` skill: adopt-or-produce a plan gated on the
+# verifiability matrix and architecture guidance, build the phases strictly in order,
+# close the build with the verify finale, cold multi-axes review, then a pre-push
+# rebase: rebase every ahead repo onto the current base branch, resolve conflicts
+# inside the rebase, run lint plus judgement-scoped unit tests, and triage severity —
+# clean proceeds to delivery, insignificant conflicts re-enter review, semantic
+# conflict resolutions re-earn verification. Every backward edge carries its
+# findings asset into the node it re-enters — a bounce is contention, not failure.
+# Delivery is authored as graph content: `deliver` is a generic hub command node
+# running the packaged land_default script, exactly like the default graph.
+
+name: glacier
+entry: plan
+
+nodes:
+  plan:
+    executor: runner
+    prompt: ./prompts/plan.md
+    produces:
+      - plan
+      - retrospective
+    judgement:
+      prompt: ./prompts/plan.judgement.md
+      choices:
+        drafted:
+          description: The plan and its ordered phases are written and ready for the gate.
+          to: plan-review
+    retries:
+      max: 2
+      exhausted: escalate
+
+  plan-review:
+    executor: runner
+    prompt: ./prompts/plan-review.md
+    session: fresh  # cold eyes for the gate; the default is resume
+    produces:
+      - plan-findings
+      - retrospective
+    judgement:
+      prompt: ./prompts/plan-review.judgement.md
+      choices:
+        pass:
+          description: The plan clears the verifiability and architecture gates with no must-fix findings.
+          to: build
+        must-fix:
+          description: The gate found blocking findings, recorded in the plan-findings asset.
+          to: plan
+          prompt_addendum: ./prompts/plan.from-plan-review.md
+    retries:
+      max: 2
+      exhausted: escalate
+
+  build:
+    executor: runner
+    prompt: ./prompts/build.md
+    checks:
+      - mise run lint
+      - mise run test
+    produces:
+      - retrospective
+    judgement:
+      prompt: ./prompts/build.judgement.md
+      choices:
+        pass:
+          description: Every phase is implemented in order and the checks are green.
+          to: verify
+        fail:
+          description: The work does not yet meet the plan; the failure output is attached.
+          to: build
+          prompt_addendum: ./prompts/build.from-build.md
+    retries:
+      max: 3  # glacier's per-phase hard cap
+      exhausted: escalate
+
+  verify:
+    executor: runner
+    prompt: ./prompts/verify.md
+    produces:
+      - verification-report
+      - retrospective
+    judgement:
+      prompt: ./prompts/verify.judgement.md
+      choices:
+        pass:
+          description: The change verified end to end through declared matrix methods.
+          to: review
+        fail:
+          description: Verification surfaced failures the finale could not close, recorded in the verification-report asset.
+          to: build
+          prompt_addendum: ./prompts/build.from-verify.md
+    retries:
+      max: 2
+      exhausted: escalate
+
+  review:
+    executor: runner
+    prompt: ./prompts/review.md
+    session: fresh
+    produces:
+      - review-findings
+      - retrospective
+    judgement:
+      prompt: ./prompts/review.judgement.md
+      choices:
+        pass:
+          description: The work passes the multi-axes review with no blocking findings.
+          to: pre-push
+        fail:
+          description: Review found blocking issues, recorded in the review-findings asset.
+          to: build
+          prompt_addendum: ./prompts/build.from-review.md
+    retries:
+      max: 2
+      exhausted: escalate
+
+  pre-push:
+    executor: runner
+    prompt: ./prompts/pre-push.md
+    session: fresh
+    produces:
+      - pre-push-summary
+      - retrospective
+    judgement:
+      prompt: ./prompts/pre-push.judgement.md
+      choices:
+        clean:
+          description: The rebase applied with no conflicts (or trivial mechanical ones) and lint plus the targeted unit tests are green.
+          to: deliver
+        insignificant:
+          description: Conflicts were resolved without semantic choices; the rebased result re-enters review for cold eyes.
+          to: review
+          prompt_addendum: ./prompts/review.from-pre-push.md
+        significant:
+          description: Conflict resolution required semantic choices or the rebase reshaped the change; the work re-earns its verification.
+          to: verify
+          prompt_addendum: ./prompts/verify.from-pre-push.md
+    retries:
+      max: 2
+      exhausted: escalate
+
+  deliver:
+    executor: hub
+    run:
+      - name: land-every-repo
+        command: python3 -m blizzard.hub.graphs.scripts.land_pr_ci
+    # land_pr_ci reports the reserved `pending` outcome while any PR is `unstable`/
+    # `unknown`/not-yet-clean, so a transient forge state polls in place (freeing the
+    # fleet-wide hub slot between polls) instead of bouncing validated work to build.
+    # Only a PR that NEVER goes clean within poll_timeout — or a crash of the land
+    # script itself — routes the reserved `failure` edge, and that lands on `resolve`,
+    # not `build`: a merge conflict invalidates none of verify/review/pre-push.
+    poll_interval: 30
+    poll_timeout: 1800
+    judgement:
+      choices:
+        landed:
+          description: Every repo's PR merged cleanly into its base branch; the chunk closes with a retrospective.
+          to: retrospective
+        failure:
+          description: poll_timeout exceeded with a repo never going cleanly mergeable, or the land script crashed; routed to resolve to diagnose and repair without discarding the validated spine.
+          to: resolve
+
+  resolve:
+    executor: runner
+    prompt: ./prompts/resolve.md
+    session: fresh
+    checks:
+      - mise run lint
+      - mise run test
+    produces:
+      - resolve-report
+      - retrospective
+    judgement:
+      prompt: ./prompts/resolve.judgement.md
+      choices:
+        resolved:
+          description: The blocker was mechanical — a base-merge with no semantic choices, a transient forge/CI state, or an infra crash; the change's semantics are untouched and delivery retries.
+          to: deliver
+        substantive:
+          description: Resolving the conflict required semantic choices; the change re-earns its verification before delivering again.
+          to: verify
+        broken:
+          description: The PR never went clean because CI exposed a real defect in the change itself; kicked back to build with the resolve-report findings.
+          to: build
+          prompt_addendum: ./prompts/build.from-resolve.md
+    retries:
+      max: 2
+      exhausted: escalate
+
+  retrospective:
+    executor: runner
+    prompt: ./prompts/retrospective.md
+    produces:
+      - retrospective
+    judgement:
+      prompt: ./prompts/retrospective.judgement.md
+      choices:
+        recorded:
+          description: The retrospective is written as the retrospective asset; the work is complete.
+          to: done
+    retries:
+      max: 1
+      exhausted: escalate

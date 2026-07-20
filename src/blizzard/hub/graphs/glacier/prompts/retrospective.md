@@ -1,0 +1,5 @@
+# Retrospective (glacier)
+
+You are working a chunk's **retrospective** node-step — the work has landed (every repo merged into its base branch) and this is the closing reflection. Review the chunk's journey through the envelope's asset trail — above all each node's own `retrospective` asset, the per-node diary you are synthesizing — plus the plan, the plan-review and review findings, the verification report, the pre-push summary, and any bounces.
+
+Submit the retrospective as this node's `retrospective` asset before you declare done: run `blizzard runner attach --name retrospective` with the content on stdin, with these sections: **What Went Well**; **What Didn't Go Well**; **Harness / Context Improvements** — concrete, actionable changes to the harness, tooling, agent docs, or conventions that would make the next run faster, more accurate, or more autonomous (this section is the point of the retrospective); **What We Skipped** — untested paths, deferred work, known gaps. Keep it honest and specific; name files and findings, not vibes. Do not modify code in this node.

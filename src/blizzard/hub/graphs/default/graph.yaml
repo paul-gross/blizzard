@@ -18,7 +18,7 @@
 # and the `merged/<repo>` marker convention; the hub-command-node authoring contract
 # both scripts honor lives in `blizzard-harness:/standards/hub-nodes.md`. A conflict at
 # the check stage routes `conflict -> build` (nothing pushed); a clean land routes
-# `landed -> done`. See `hub/graphs/delivery-pr-ci.yaml` for the alternative PR +
+# `landed -> done`. See `hub/graphs/delivery-pr-ci/graph.yaml` for the alternative PR +
 # CI-watch delivery policy this same primitive expresses — proof that delivery policy
 # lives in YAML, not code.
 # A judgement choice's `to:` normally names a sibling node or the reserved terminal

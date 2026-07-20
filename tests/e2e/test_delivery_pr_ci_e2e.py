@@ -1,7 +1,7 @@
 """The self-healing PR + CI-watch example graph delivers through the generic path (#67).
 
 The e2e-tier proof that delivery **policy lives in YAML**: the shipped example graph
-`hub/graphs/delivery-pr-ci.yaml` differs from the default graph only in its `deliver`
+`hub/graphs/delivery-pr-ci/graph.yaml` differs from the default graph only in its `deliver`
 node's `run:` script (`hub/graphs/scripts/land_pr_ci.py` vs `scripts/land_default.py`)
 and its poll cadence — yet it expresses a wholly different delivery policy through the
 SAME generic `executor: hub` primitive, no engine change. `land_pr_ci` opens a PR per

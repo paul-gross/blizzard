@@ -31,7 +31,7 @@ _PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
 #: with no product-level framing at all. Overridden wholesale by a configured
 #: ``runner_prompt`` (:meth:`blizzard.runner.config.RunnerConfig.resolved_runner_prompt`);
 #: this constant is only the fallback when that knob is unset. Packaged prose, not an
-#: inline literal — the repo's convention for prompt text (``hub/graphs/prompts/*.md``),
+#: inline literal — the repo's convention for prompt text (``hub/graphs/<graph>/prompts/*.md``),
 #: which also keeps it diffable as plain text rather than an escaped Python string.
 DEFAULT_BLIZZARD_PREAMBLE = (_PROMPTS_DIR / "blizzard_preamble.md").read_text().rstrip("\n")
 
