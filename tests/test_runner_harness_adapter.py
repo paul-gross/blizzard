@@ -25,6 +25,7 @@ import pytest
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerPreamble
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
+from tests.conftest import _WORKER_IDENTITY_ENV
 from tests.runner_fakes import make_envelope
 
 _JSON_PASS = '{"type":"result","subtype":"success","is_error":false,"result":"Looks good. <Choice>pass</Choice>","session_id":"s1"}'
@@ -210,6 +211,32 @@ def test_spawn_env_carries_the_lease_capability_token(monkeypatch: pytest.Monkey
     env = adapter._spawn_env(envelope, preamble, "sess-1")
 
     assert env["BLIZZARD_LEASE_TOKEN"] == "plaintext-lease-token"
+
+
+@pytest.mark.unit
+def test_the_suites_worker_identity_strip_list_covers_every_var_spawn_env_injects() -> None:
+    """The conftest strip-list and ``_spawn_env`` agree on the worker identity set.
+
+    Blizzard develops itself, so its suite routinely runs *inside* a blizzard worker and
+    inherits this identity. ``tests/conftest.py``'s autouse ``_strip_worker_identity_env``
+    unsets it so a test asserting a var's *absence* reads the absence rather than the
+    ambient value. That fixture is invisible in CI — CI has no ambient identity, so
+    dropping a var from the strip-list breaks nothing there and the suite only fails for
+    fleet workers, the one place nobody is watching a red suite. This is the guard: add a
+    ``BLIZZARD_*`` var to ``_spawn_env`` without adding it to the strip-list and fail here.
+    """
+    adapter = ClaudeCodeAdapter(binary="claude")
+    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
+    preamble = WorkerPreamble(
+        environments=[AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")],
+        lease_id="lease_1",
+        local_api_url="http://127.0.0.1:8431",
+        lease_token="plaintext-lease-token",
+    )
+
+    injected = {k for k in adapter._spawn_env(envelope, preamble, "sess-1") if k.startswith("BLIZZARD_")}
+
+    assert injected - set(_WORKER_IDENTITY_ENV) == set()
 
 
 _ENV_DUMP_HARNESS = """#!/usr/bin/env python3
