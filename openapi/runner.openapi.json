@@ -363,6 +363,35 @@
         "title": "FactView",
         "type": "object"
       },
+      "FleetSummaryView": {
+        "description": "The runner machine panel's fleet-pulse counts (issue #76) \u2014 every chunk's derived\nstatus folded to the four buckets the counts strip shows:\n\n* ``ready`` \u2014 chunks derived ``ready``;\n* ``running`` \u2014 ``running`` + ``delivering`` (live work, either shape);\n* ``waiting`` \u2014 ``waiting_on_human`` + ``paused`` (human-parked);\n* ``needs`` \u2014 ``needs_human``.\n\nThe remaining derived statuses (``not_ready``, ``stopped``, ``done``) count toward no\nbucket \u2014 the strip is a live-work pulse, not a total. See\n:func:`~blizzard.hub.domain.work.derive_fleet_summary` for the single canonical\nstatement of the fold, which these fields mirror.",
+        "properties": {
+          "needs": {
+            "title": "Needs",
+            "type": "integer"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "integer"
+          },
+          "running": {
+            "title": "Running",
+            "type": "integer"
+          },
+          "waiting": {
+            "title": "Waiting",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ready",
+          "running",
+          "waiting",
+          "needs"
+        ],
+        "title": "FleetSummaryView",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1618,6 +1647,28 @@
           }
         },
         "summary": "List Facts",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/fleet-summary": {
+      "get": {
+        "description": "Forward the fleet-summary read to the hub \u2014 the layered pass-through.",
+        "operationId": "get_fleet_summary_api_fleet_summary_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FleetSummaryView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Fleet Summary",
         "tags": [
           "runner"
         ]

@@ -21,7 +21,7 @@ the one ``waiting_on_human`` branch (see :func:`derive_chunk_status`).
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
@@ -947,6 +947,41 @@ def derive_fleet_usage(rows: list[UsageFact]) -> UsageTotal:
     arbitrary set of rows (here: every usage fact at or after a cutoff instant,
     :meth:`IReadChunkRepository.usage_since`) rather than one chunk's own facts."""
     return _sum_usage(rows)
+
+
+@dataclass(frozen=True)
+class FleetSummary:
+    """The runner machine panel's fleet-pulse counts (issue #76) — every chunk's derived
+    status folded to four buckets. Derived, never stored, same as the per-chunk status it
+    counts over. The wire shape it renders as is
+    :class:`~blizzard.wire.fleet.FleetSummaryView`."""
+
+    ready: int = 0
+    running: int = 0
+    waiting: int = 0
+    needs: int = 0
+
+
+def derive_fleet_summary(statuses: Iterable[ChunkStatus]) -> FleetSummary:
+    """Fold each chunk's derived status into the panel's four buckets (issue #76).
+
+    The one canonical statement of the fold: ``ready`` counts ``ready``; ``running``
+    counts live work in either shape (``running`` + ``delivering``); ``waiting`` counts
+    the human-parked states (``waiting_on_human`` + ``paused``); ``needs`` counts
+    ``needs_human``. The remaining statuses (``not_ready``, ``stopped``, ``done``) count
+    toward no bucket — the strip is a live-work pulse, not a fleet total. Takes already-
+    derived statuses (``bzh:domain-takes-objects``), so it unit-tests with no store."""
+    ready = running = waiting = needs = 0
+    for st in statuses:
+        if st is ChunkStatus.READY:
+            ready += 1
+        elif st in (ChunkStatus.RUNNING, ChunkStatus.DELIVERING):
+            running += 1
+        elif st in (ChunkStatus.WAITING_ON_HUMAN, ChunkStatus.PAUSED):
+            waiting += 1
+        elif st is ChunkStatus.NEEDS_HUMAN:
+            needs += 1
+    return FleetSummary(ready=ready, running=running, waiting=waiting, needs=needs)
 
 
 # --- Question rows (the ask/answer rendezvous) -------------------------------

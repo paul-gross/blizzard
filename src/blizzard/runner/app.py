@@ -26,6 +26,7 @@ from blizzard.runner.api.control import router as control_router
 from blizzard.runner.api.environments import router as environments_router
 from blizzard.runner.api.escalations import router as escalations_router
 from blizzard.runner.api.facts import router as facts_router
+from blizzard.runner.api.fleet_summary import router as fleet_summary_router
 from blizzard.runner.api.health import router as health_router
 from blizzard.runner.api.heartbeat import router as heartbeat_router
 from blizzard.runner.api.leases import router as leases_router
@@ -166,6 +167,10 @@ def create_app(
     # The PM-item pass-through proxy: a build worker reads its issue through
     # this route, which forwards to the hub — the worker never crosses a layer.
     app.include_router(pm_items_router)
+    # The fleet-summary pass-through (issue #76): the machine panel's counts strip reads
+    # the fleet's four bucket counts through this route, forwarded to the hub — the same
+    # layered pass-through as PM-items, keeping the hub-free local rails hub-free.
+    app.include_router(fleet_summary_router)
     # The runtime workspace-prompt control (issue #17): read the effective spawn preamble
     # prompt, or replace the override so the next spawn picks it up with no restart.
     app.include_router(workspace_prompt_router)

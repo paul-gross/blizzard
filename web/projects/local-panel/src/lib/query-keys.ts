@@ -25,6 +25,15 @@ export const runnerTakeoversKey = ['runner', 'takeovers'] as const;
 export const runnerFactsKey = ['runner', 'facts'] as const;
 
 /**
+ * `GET /api/fleet-summary` — the hub-rail counts strip's four bucket counts
+ * (ready/running/waiting/needs), pass-through-forwarded to the hub (issue #76).
+ * Its own key, distinct from the hub-free `runner`-namespaced reads: it is the one
+ * rail read that depends on hub reachability, and degrades on its own error without
+ * disturbing them.
+ */
+export const runnerFleetSummaryKey = ['runner', 'fleet-summary'] as const;
+
+/**
  * One chunk's pass-through PM items (issue title + labels), keyed by chunk id.
  * Deliberately its own key — never invalidated or refetched by the leases poll
  * (issue #28's severable title enrichment) — so a distinct `chunk_id` here can

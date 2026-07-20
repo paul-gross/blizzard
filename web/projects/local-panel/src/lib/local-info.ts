@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 import { ageMs, formatAge, KitAsyncState, type KitAsyncStateValue } from 'fleet';
 
-import { injectRunnerStatusQuery } from './status.query';
+import { injectRunnerFleetSummaryQuery, injectRunnerStatusQuery } from './status.query';
 
 /**
  * The hub-link panel — the discovery mock's "hub · outbound only, nothing
@@ -11,10 +11,13 @@ import { injectRunnerStatusQuery } from './status.query';
  * facts about its hub link, not a live hub read; the board link is the one
  * hand-off to the hub app, minted from the endpoint the wire now carries.
  *
- * The fleet counts strip the mock shows (ready/running/waiting/needs, read
- * from the hub API) is deliberately absent: the hub API allows no cross-origin
- * browser read today, so rendering counts here would mean proxying or CORS —
- * a hub-side decision this panel must not preempt.
+ * Below the link facts is the discovery mock's fleet counts strip
+ * (ready/running/waiting/needs) — a fleet-level pulse. Those counts *are* a
+ * hub read, so unlike the rest of this panel they arrive through the runner's
+ * own `GET /api/fleet-summary` pass-through (issue #76): the hub API allows no
+ * cross-origin browser read, so the runner forwards it. When that forward fails
+ * (hub unreachable), the strip degrades to its last-known/dimmed state and the
+ * rest of the panel — all hub-free — is unaffected.
  */
 @Component({
   selector: 'local-info',
@@ -45,6 +48,18 @@ import { injectRunnerStatusQuery } from './status.query';
               <small class="tick">· tick {{ lastTickLabel() }}</small>
             </dd>
           </dl>
+          <div class="fleet-strip" [class.stale]="fleetStale()" data-testid="fleet-strip">
+            <div class="fs-head">
+              <span class="fs-lbl">Fleet · read from hub API</span>
+              <span class="fs-age" data-testid="fleet-age">{{ fleetStale() ? 'last known' : 'live' }}</span>
+            </div>
+            <div class="fleet-nums">
+              <span class="fn ready" data-testid="fleet-ready">{{ fleet()?.ready ?? '—' }}<small>ready</small></span>
+              <span class="fn running" data-testid="fleet-running">{{ fleet()?.running ?? '—' }}<small>running</small></span>
+              <span class="fn waiting" data-testid="fleet-waiting">{{ fleet()?.waiting ?? '—' }}<small>waiting</small></span>
+              <span class="fn needs" data-testid="fleet-needs">{{ fleet()?.needs ?? '—' }}<small>needs</small></span>
+            </div>
+          </div>
           <a class="board-link" [href]="v.hub.endpoint" target="_blank" rel="noopener" data-testid="board-link">
             open fleet board — hub serving →
           </a>
@@ -112,10 +127,71 @@ import { injectRunnerStatusQuery } from './status.query';
     .board-link:hover {
       text-decoration: underline;
     }
+    .fleet-strip {
+      position: relative;
+      margin-top: 8px;
+      padding: 6px 8px;
+      border: 1px solid var(--bezel);
+      background: rgba(0, 0, 0, 0.25);
+    }
+    .fleet-strip .fs-head {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 5px;
+    }
+    .fs-lbl,
+    .fs-age {
+      color: var(--label);
+      text-transform: uppercase;
+      font-size: var(--fs-label);
+      letter-spacing: 0.1em;
+    }
+    .fleet-nums {
+      display: flex;
+      gap: 14px;
+    }
+    .fleet-nums .fn {
+      font-size: var(--fs-sm);
+    }
+    .fleet-nums .fn small {
+      display: block;
+      color: var(--label);
+      text-transform: uppercase;
+      font-size: var(--fs-label);
+      letter-spacing: 0.14em;
+    }
+    .fleet-nums .fn.ready {
+      color: var(--cyan);
+    }
+    .fleet-nums .fn.running {
+      color: var(--amber);
+    }
+    .fleet-nums .fn.waiting {
+      color: var(--amber-hi);
+    }
+    .fleet-nums .fn.needs {
+      color: var(--red);
+    }
+    /* Hub unreachable: dim the strip and banner it as last-known — the mock's
+       degraded state. The rest of the panel is hub-free, so it stays lit. */
+    .fleet-strip.stale {
+      opacity: 0.45;
+    }
+    .fleet-strip.stale::after {
+      content: 'HUB UNREACHABLE — LAST KNOWN · LOCAL CONTROLS UNAFFECTED';
+      position: absolute;
+      inset: auto 0 -1px 0;
+      padding: 2px 6px;
+      background: var(--red-dim);
+      color: #ffd9dd;
+      font-size: var(--fs-label);
+      letter-spacing: 0.08em;
+    }
   `,
 })
 export class LocalInfo {
   protected readonly query = injectRunnerStatusQuery();
+  protected readonly fleetQuery = injectRunnerFleetSummaryQuery();
 
   protected readonly view = computed(() => {
     const data = this.query.data();
@@ -123,6 +199,16 @@ export class LocalInfo {
     // degraded state, not throw on `hub.endpoint` mid-template.
     return data?.hub && data.capacities && data.pause ? data : null;
   });
+
+  /** The last-known fleet counts, or `null` before the first successful read.
+   * TanStack retains this across a later hub-outage error, so the strip keeps
+   * showing the last-known numbers (dimmed) rather than blanking. */
+  protected readonly fleet = computed(() => this.fleetQuery.data() ?? null);
+
+  /** The hub-summary read failed (hub unreachable / not wired) — the strip
+   * degrades to its dimmed last-known state. The rest of the panel is hub-free,
+   * so it is unaffected. */
+  protected readonly fleetStale = computed<boolean>(() => this.fleetQuery.isError());
 
   /** The async triad's resolved state — no `'empty'` case: a resolved read
    * with a malformed body renders nothing (the `view()` null-guard in the

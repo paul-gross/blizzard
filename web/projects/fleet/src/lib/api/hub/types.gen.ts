@@ -966,6 +966,41 @@ export type FleetSpendView = {
 };
 
 /**
+ * FleetSummaryView
+ *
+ * The runner machine panel's fleet-pulse counts (issue #76) — every chunk's derived
+ * status folded to the four buckets the counts strip shows:
+ *
+ * * ``ready`` — chunks derived ``ready``;
+ * * ``running`` — ``running`` + ``delivering`` (live work, either shape);
+ * * ``waiting`` — ``waiting_on_human`` + ``paused`` (human-parked);
+ * * ``needs`` — ``needs_human``.
+ *
+ * The remaining derived statuses (``not_ready``, ``stopped``, ``done``) count toward no
+ * bucket — the strip is a live-work pulse, not a total. See
+ * :func:`~blizzard.hub.domain.work.derive_fleet_summary` for the single canonical
+ * statement of the fold, which these fields mirror.
+ */
+export type FleetSummaryView = {
+    /**
+     * Needs
+     */
+    needs: number;
+    /**
+     * Ready
+     */
+    ready: number;
+    /**
+     * Running
+     */
+    running: number;
+    /**
+     * Waiting
+     */
+    waiting: number;
+};
+
+/**
  * GraphChoiceView
  *
  * One selectable outcome of a node's judgement.
@@ -3296,6 +3331,22 @@ export type HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostResponses = {
 };
 
 export type HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostResponse = HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostResponses[keyof HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostResponses];
+
+export type FleetSummaryApiFleetSummaryGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/fleet/summary';
+};
+
+export type FleetSummaryApiFleetSummaryGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: FleetSummaryView;
+};
+
+export type FleetSummaryApiFleetSummaryGetResponse = FleetSummaryApiFleetSummaryGetResponses[keyof FleetSummaryApiFleetSummaryGetResponses];
 
 export type ListGraphsApiGraphsGetData = {
     body?: never;

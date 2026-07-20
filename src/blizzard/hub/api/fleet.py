@@ -70,6 +70,7 @@ from blizzard.wire.facts import (
     RunnerFactAck,
     RunnerFactBatch,
 )
+from blizzard.wire.fleet import FleetSummaryView
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekResponse
 from blizzard.wire.route import (
@@ -169,6 +170,15 @@ def get_pm_items(chunk_id: str, services: Annotated[HubServices, Depends(get_ser
     ``blizzard.runner.api.pm_items``), forwarded here with the runner's own bearer
     token — the same pass-through the board reads anonymously."""
     return chunks_api.get_pm_items(chunk_id, services)
+
+
+@router.get("/summary", response_model=FleetSummaryView)
+def fleet_summary(services: Annotated[HubServices, Depends(get_services)]) -> FleetSummaryView:
+    """The runner machine panel's fleet-pulse counts (issue #76), forwarded here with the
+    runner's own bearer token from the runner-local pass-through
+    (:mod:`blizzard.runner.api.fleet_summary`). Fleet-router-only: unlike PM-items, the
+    board has no anonymous counterpart — its card list already carries every status."""
+    return chunks_api.fleet_summary(services)
 
 
 @router.get("/questions/{question_id}", response_model=QuestionView)

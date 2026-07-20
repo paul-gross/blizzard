@@ -63,6 +63,7 @@ from blizzard.hub.domain.work import (
     current_node_id,
     derive_chunk_status,
     derive_chunk_usage,
+    derive_fleet_summary,
     has_landed_repos,
     hub_node_pending,
     latest_epoch,
@@ -103,6 +104,7 @@ from blizzard.wire.chunk import (
     RouteView,
     TransitionView,
 )
+from blizzard.wire.fleet import FleetSummaryView
 
 router = APIRouter(prefix="/api", tags=["chunks"], dependencies=[Depends(reject_runner_principal)])
 
@@ -421,6 +423,28 @@ def list_chunks(services: Annotated[HubServices, Depends(get_services)]) -> list
             )
         )
     return summaries
+
+
+def fleet_summary(services: HubServices) -> FleetSummaryView:
+    """Fold every chunk's derived status into the runner panel's four counts (issue #76).
+
+    Not a route of its own here — the runner reaches it via the fleet router's
+    ``GET /api/fleet/summary`` (:func:`blizzard.hub.api.fleet.fleet_summary`), which
+    forwards from the runner-local pass-through (:mod:`blizzard.runner.api.fleet_summary`).
+    The board has no need for it — its own card list already carries every status — so it
+    stays off the anonymous ``/api`` router. Derives each chunk's status the same way
+    :func:`list_chunks` does, but returns only the four bucket integers, so the payload is
+    a fixed four numbers regardless of fleet size."""
+    summary = derive_fleet_summary(
+        derive_chunk_status(services.chunks.load_facts(chunk.chunk_id) or ChunkFacts(minted=True))
+        for chunk in services.chunks.list_all()
+    )
+    return FleetSummaryView(
+        ready=summary.ready,
+        running=summary.running,
+        waiting=summary.waiting,
+        needs=summary.needs,
+    )
 
 
 @router.get("/chunks/{chunk_id}", response_model=ChunkDetail)

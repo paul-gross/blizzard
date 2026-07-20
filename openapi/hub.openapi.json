@@ -1364,6 +1364,35 @@
         "title": "FleetSpendView",
         "type": "object"
       },
+      "FleetSummaryView": {
+        "description": "The runner machine panel's fleet-pulse counts (issue #76) \u2014 every chunk's derived\nstatus folded to the four buckets the counts strip shows:\n\n* ``ready`` \u2014 chunks derived ``ready``;\n* ``running`` \u2014 ``running`` + ``delivering`` (live work, either shape);\n* ``waiting`` \u2014 ``waiting_on_human`` + ``paused`` (human-parked);\n* ``needs`` \u2014 ``needs_human``.\n\nThe remaining derived statuses (``not_ready``, ``stopped``, ``done``) count toward no\nbucket \u2014 the strip is a live-work pulse, not a total. See\n:func:`~blizzard.hub.domain.work.derive_fleet_summary` for the single canonical\nstatement of the fold, which these fields mirror.",
+        "properties": {
+          "needs": {
+            "title": "Needs",
+            "type": "integer"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "integer"
+          },
+          "running": {
+            "title": "Running",
+            "type": "integer"
+          },
+          "waiting": {
+            "title": "Waiting",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ready",
+          "running",
+          "waiting",
+          "needs"
+        ],
+        "title": "FleetSummaryView",
+        "type": "object"
+      },
       "GraphChoiceView": {
         "description": "One selectable outcome of a node's judgement.",
         "properties": {
@@ -4789,6 +4818,28 @@
           }
         },
         "summary": "Heartbeat Runner",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
+    "/api/fleet/summary": {
+      "get": {
+        "description": "The runner machine panel's fleet-pulse counts (issue #76), forwarded here with the\nrunner's own bearer token from the runner-local pass-through\n(:mod:`blizzard.runner.api.fleet_summary`). Fleet-router-only: unlike PM-items, the\nboard has no anonymous counterpart \u2014 its card list already carries every status.",
+        "operationId": "fleet_summary_api_fleet_summary_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FleetSummaryView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Fleet Summary",
         "tags": [
           "fleet"
         ]

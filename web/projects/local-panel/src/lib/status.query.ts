@@ -6,6 +6,7 @@ import {
   runnerEnvironmentsKey,
   runnerEscalationsKey,
   runnerFactsKey,
+  runnerFleetSummaryKey,
   runnerStatusKey,
   runnerTakeoversKey,
 } from './query-keys';
@@ -85,6 +86,25 @@ export function injectRunnerFactsQuery() {
       const { data, error } = await runnerApi.listFactsApiFactsGet({ throwOnError: false });
       if (error) throw error;
       return data?.items ?? [];
+    },
+    refetchInterval: 5000,
+  }));
+}
+
+/**
+ * The hub-rail counts strip's read (issue #76) — `GET /api/fleet-summary`, the one rail
+ * read forwarded to the hub (via the runner's own pass-through). Errors are *kept*, not
+ * swallowed: the query throws on a hub-outage status so the strip degrades to its
+ * last-known/dimmed state (`isError()`) while TanStack retains the prior counts under
+ * `data()`. Same 5s poll floor as the hub-free reads.
+ */
+export function injectRunnerFleetSummaryQuery() {
+  return injectQuery(() => ({
+    queryKey: runnerFleetSummaryKey,
+    queryFn: async (): Promise<runnerApi.FleetSummaryView> => {
+      const { data, error } = await runnerApi.getFleetSummaryApiFleetSummaryGet({ throwOnError: false });
+      if (error) throw error;
+      return data!;
     },
     refetchInterval: 5000,
   }));
