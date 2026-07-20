@@ -16,6 +16,11 @@ Every assertion is made over the wire against the running hub:
   a reorder moves it to the top; ``GET /api/queue/peek`` reflects both.
 * **SSE contract** — ``GET /api/events/stream`` serves a valid ``text/event-stream`` an
   ``EventSource`` connects to (the reserved comment).
+* **SSE live fan-out** (issue #107) — a *connected* subscriber receives ``queue-changed``
+  the moment a fresh cross-graph migration re-queues a chunk, and receives exactly one
+  across the migration and its duplicate-delivery replay. The component tier can only read
+  the broker's replay tail, which shows an event was recorded, not that it was delivered;
+  this is the tier where the publish -> subscriber queue -> wire leg is real.
 * **route-token authorization** (issue #84b) — under ``route_token_mode=enforce``, the
   mock runner's default (present the claim's own token) completes normally; its
   ``stale_route_token``/``omit_route_token`` levers each get fenced out (``failure``) and
@@ -49,6 +54,7 @@ from tests.service.support import (
     require_mock_fleet,
     require_winter_source,
     service_gate,
+    sse_tap,
 )
 
 pytestmark = [pytest.mark.service, service_gate]
@@ -197,6 +203,91 @@ def test_sse_stream_serves_the_eventsource_contract(tmp_path: Path) -> None:
             assert resp.headers["content-type"].startswith("text/event-stream")
             first = next(resp.iter_text())
         assert first.startswith(": blizzard hub event stream"), first[:80]
+
+
+def _migration_graphs_yaml() -> tuple[str, str]:
+    """A source graph whose ``build`` offers a cross-graph choice, and its target graph."""
+    import yaml
+
+    source = {
+        "name": "default-delivery",
+        "entry": "build",
+        "nodes": {
+            "build": {
+                "executor": "runner",
+                "prompt": "# build",
+                "judgement": {
+                    "prompt": "# judge",
+                    "choices": {
+                        "migrate": {"description": "Hand off to triage.", "to": "graph:triage"},
+                        "fail": {"description": "Retry.", "to": "build"},
+                    },
+                },
+                "retries": {"max": 1, "exhausted": "escalate"},
+            },
+        },
+    }
+    target = {
+        "name": "triage",
+        "entry": "build",
+        "nodes": {
+            "build": {
+                "executor": "runner",
+                "prompt": "# triage",
+                "judgement": {
+                    "prompt": "# judge",
+                    "choices": {
+                        "pass": {"description": "Done.", "to": "done"},
+                        "fail": {"description": "Retry.", "to": "build"},
+                    },
+                },
+                "retries": {"max": 1, "exhausted": "escalate"},
+            },
+        },
+    }
+    return yaml.safe_dump(source, sort_keys=False), yaml.safe_dump(target, sort_keys=False)
+
+
+def test_a_fresh_migration_publishes_queue_changed_to_a_live_subscriber(tmp_path: Path) -> None:
+    """A fresh cross-graph migration reaches a **live** SSE subscriber with ``queue-changed``
+    (issue #107), and its replay does not.
+
+    ``tests/test_migration_apply.py`` fences the same behaviour at the component tier, but
+    against the broker's *replay tail* — which proves the event was recorded, not delivered.
+    #107's claim is immediacy: the board's spine should learn of the re-queued chunk without
+    waiting for a poll tick. Only a real subscriber on a real socket can observe the fan-out
+    leg, so this is the row that actually closes the issue's premise.
+    """
+    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    source_yaml, target_yaml = _migration_graphs_yaml()
+    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+        assert hub.post("/api/graphs", json={"definition_yaml": source_yaml}).status_code == 201
+        assert hub.post("/api/graphs", json={"definition_yaml": target_yaml}).status_code == 201
+        chunk_id = _ingest(forge, hub, "migrate me")
+
+        with mock_runner(bin_dir, _free_port(), hub_port) as runner:
+            runner.post("/_drive/register")
+            assert runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()["claimed"] is True
+
+            # Arm the duplicate-delivery lever: one drive submits the byte-identical
+            # completion twice, so the fresh apply and its lost-ack replay both land inside
+            # a single live window. Exactly one queue-changed must come out — the fresh
+            # apply re-queues, the replay re-pins nothing and must stay silent.
+            assert runner.post("/_levers/replay", json={"chunk_id": chunk_id}).status_code == 200
+
+            # Subscribe before the act, so what arrives after is fan-out and not replay.
+            with sse_tap(hub_port) as tap:
+                drove = runner.post("/_drive/complete", json={"chunk_id": chunk_id, "choice": "migrate"}).json()
+                assert drove["response"]["outcome"] == "migrated", drove
+                assert drove["replayed"]["response"]["outcome"] == "migrated", drove  # idempotent, not an error
+                live = tap.collect(window=6.0)
+            assert live.count("queue-changed") == 1, live
+
+            # ...and the chunk really is re-queued, under the target graph.
+            detail = hub.get(f"/api/chunks/{chunk_id}").json()
+            graphs = {g["graph_id"]: g["name"] for g in hub.get("/api/graphs").json()}
+            assert detail["status"] == "ready", detail
+            assert graphs.get(detail["graph_id"]) == "triage", detail
 
 
 def test_chunk_pause_field_reflects_the_operator_chunk_brake(tmp_path: Path) -> None:

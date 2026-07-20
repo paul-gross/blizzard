@@ -32,7 +32,7 @@ description = "Run the capstone MVP acceptance-journey rehearsal (blizzard:journ
 run = "BLIZZARD_JOURNEY=1 uv run pytest -m journey tests/journey/"
 
 [tasks.service-test]
-description = "Run the service tier — a running daemon's HTTP API exercised from outside with the counterpart mocked: the runner against the mock hub (unreachable→buffered, dropped-ack→idempotent, stale-envelope), and the hub against the mock runner + mock forge (claim/completion, stale-epoch rejection, queue shaping, SSE). sqlite only, no tokens/network; needs the sibling blizzard-mock worktree provisioned (winter provision <env>) — skips cleanly without it"
+description = "Run the service tier — a running daemon's HTTP API exercised from outside with the counterpart mocked: the runner against the mock hub (unreachable→buffered, dropped-ack→idempotent, stale-envelope), and the hub against the mock runner + mock forge (claim/completion, stale-epoch rejection, queue shaping, the SSE contract + live fan-out to a connected subscriber). sqlite only, no tokens/network; needs the sibling blizzard-mock worktree provisioned (winter provision <env>) — skips cleanly without it"
 run = "BLIZZARD_SERVICE=1 uv run pytest tests/service/"
 
 [tasks.lint]
