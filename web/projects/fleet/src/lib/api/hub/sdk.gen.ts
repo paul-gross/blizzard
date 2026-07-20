@@ -59,11 +59,14 @@ export const detachChunkApiChunksChunkIdDetachPost = <ThrowOnError extends boole
 /**
  * Set Chunk Graph
  *
- * Repin a not-ready chunk's workflow graph (issue #27).
+ * Repin a not-ready or ready-and-unclaimed chunk's workflow graph (issue #27, widened by #120).
  *
- * 404 on an unknown chunk or an unknown target graph; 409 on a retired target graph
- * (issue #101 — a retired graph cannot receive new work) or once the chunk has left
- * ``not_ready`` (already promoted, claimed, running, or later).
+ * 404 on an unknown chunk or an unknown target graph; 409 once the chunk is claimed
+ * or later (``running``, ``delivering``, ``waiting_on_human``, ``needs_human``,
+ * ``paused``, ``done``, ``stopped`` — issue #120 widened the admit set to
+ * ``{not_ready, ready}``, not further — checked first, so it wins over the next
+ * cause even when both apply) or on a retired target graph (issue #101 — a retired
+ * graph cannot receive new work).
  */
 export const setChunkGraphApiChunksChunkIdGraphPost = <ThrowOnError extends boolean = false>(options: Options<SetChunkGraphApiChunksChunkIdGraphPostData, ThrowOnError>): RequestResult<SetChunkGraphApiChunksChunkIdGraphPostResponses, SetChunkGraphApiChunksChunkIdGraphPostErrors, ThrowOnError> => (options.client ?? client).post<SetChunkGraphApiChunksChunkIdGraphPostResponses, SetChunkGraphApiChunksChunkIdGraphPostErrors, ThrowOnError>({
     url: '/api/chunks/{chunk_id}/graph',
@@ -113,10 +116,12 @@ export const recordHubMarkerApiChunksChunkIdHubMarkersPost = <ThrowOnError exten
 /**
  * Set Chunk Model
  *
- * Repin a not-ready chunk's model selection (issue #27).
+ * Repin a not-ready or ready-and-unclaimed chunk's model selection (issue #27, widened by #120).
  *
- * 404 on an unknown chunk; 422 on a blank model; 409 once the chunk has left
- * ``not_ready`` (already promoted, claimed, running, or later).
+ * 404 on an unknown chunk; 422 on a blank model; 409 once the chunk is claimed or
+ * later (``running``, ``delivering``, ``waiting_on_human``, ``needs_human``,
+ * ``paused``, ``done``, ``stopped`` — issue #120 widened the admit set to
+ * ``{not_ready, ready}``, not further).
  */
 export const setChunkModelApiChunksChunkIdModelPost = <ThrowOnError extends boolean = false>(options: Options<SetChunkModelApiChunksChunkIdModelPostData, ThrowOnError>): RequestResult<SetChunkModelApiChunksChunkIdModelPostResponses, SetChunkModelApiChunksChunkIdModelPostErrors, ThrowOnError> => (options.client ?? client).post<SetChunkModelApiChunksChunkIdModelPostResponses, SetChunkModelApiChunksChunkIdModelPostErrors, ThrowOnError>({
     url: '/api/chunks/{chunk_id}/model',

@@ -130,8 +130,9 @@ chunks = Table(
     Column("graph_id", String, ForeignKey("graphs.graph_id"), nullable=False),  # pinned at mint
     Column("minted_at", UtcDateTime, nullable=False),
     # The model selection — pinned at mint, editable while the chunk rests `not_ready`
-    # (issue #27, domain/edit.py). A plain mutable column, not a fact log — mirrors
-    # `graph_id` above, which was already mutable-at-mint with no fact table behind it.
+    # or sits `ready` unclaimed (issue #27, #120, domain/edit.py). A plain mutable
+    # column, not a fact log — mirrors `graph_id` above, which was already
+    # mutable-at-mint with no fact table behind it.
     Column("model", String, nullable=False),
 )
 

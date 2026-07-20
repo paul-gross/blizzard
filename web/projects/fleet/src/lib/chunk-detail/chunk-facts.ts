@@ -19,10 +19,10 @@ export interface EditModelEvent {
  * The chunk's own facts (issue #79) — the fixed-height glance a long issue
  * body must not scroll away: status, node, runner, attempts, and its pinned
  * **graph** and **model** — each editable inline, text-input-and-Set, while
- * the chunk sits `not_ready` (issue #27). The edit row is gated on
- * {@link editable} — the fact, not a confirm — so the control simply
- * disappears once the chunk leaves `not_ready` rather than staying up to
- * fail a 409.
+ * the chunk sits `not_ready` or `ready` with no runner holding it yet (issue
+ * #27, widened by #120). The edit row is gated on {@link editable} — the
+ * fact, not a confirm — so the control simply disappears once the chunk is
+ * actually claimed rather than staying up to fail a 409.
  *
  * Projects {@link ChunkTokenBreakdown}'s cost/tokens rows into the `[token-breakdown]`
  * slot between Attempts and Graph, so the two components share one continuous
@@ -162,11 +162,15 @@ export class ChunkFacts {
     return epoch === null || epoch === undefined ? '—' : String(epoch);
   });
 
-  /** Whether the chunk's graph and model may be edited — `not_ready` only (issue #27):
-   * `EditService` refuses both edits 409 the moment a chunk is promoted, claimed, or
-   * later, so the facts column withholds the edit row rather than let an operator
-   * hit that refusal. */
-  protected readonly editable = computed<boolean>(() => this.detail().status === 'not_ready');
+  /** Whether the chunk's graph and model may be edited — `not_ready` or `ready` with
+   * no runner holding it yet (issue #27, widened by #120): `EditService` refuses both
+   * edits 409 the moment a chunk is actually claimed (`running`, `delivering`,
+   * `waiting_on_human`, `needs_human`, `paused` post-claim, `done`, `stopped`), so the
+   * facts column withholds the edit row rather than let an operator hit that refusal. */
+  protected readonly editable = computed<boolean>(() => {
+    const status = this.detail().status;
+    return status === 'not_ready' || status === 'ready';
+  });
 
   /** Emit a graph repin — no-op on a blank id (issue #27). */
   protected submitGraph(graphId: string): void {

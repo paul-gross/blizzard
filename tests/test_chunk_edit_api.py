@@ -1,11 +1,14 @@
-"""The ``/chunks/{id}/graph`` and ``/chunks/{id}/model`` routes over the HTTP surface (issue #27).
+"""The ``/chunks/{id}/graph`` and ``/chunks/{id}/model`` routes over the HTTP surface
+(issue #27, admit set widened to ``ready``-unclaimed by #120).
 
-A not-ready chunk's workflow graph and model selection are editable through these two
-routes; both are refused (409) once the chunk has left ``not_ready`` (promoted, claimed,
-running, or later). The refusal itself (``EditService``) is unit-tested in
-``test_edit_service.py``; this file proves the controller wires it correctly end to end —
-the read side (``graph_id``/``model`` on the list/detail views), the write, the 404s, and
-the ``chunk-changed`` event.
+A not-ready **or** ready-and-unclaimed chunk's workflow graph and model selection are
+editable through these two routes; both are refused (409) once the chunk is actually
+claimed (running, delivering, waiting_on_human, needs_human, paused post-claim, done,
+stopped). The refusal itself (``EditService``) is unit-tested in ``test_edit_service.py``;
+this file proves the controller wires it correctly end to end — the read side
+(``graph_id``/``model`` on the list/detail views), the write, the 404s, and the
+``chunk-changed`` event. The edit/claim race itself (issue #120's atomicity criterion)
+is proven at ``tests/test_edit_claim_race.py``, not here.
 """
 
 from __future__ import annotations
@@ -148,17 +151,53 @@ def test_edit_graph_allows_a_re_enabled_target_graph(tmp_path: Path) -> None:
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["graph_id"] == alt_graph_id
 
 
-def test_edit_graph_refuses_once_the_chunk_is_ready(tmp_path: Path) -> None:
+def test_edit_graph_allows_a_ready_unclaimed_chunk(tmp_path: Path) -> None:
+    """Issue #120 — a promoted-but-unclaimed chunk is still editable; the repin takes
+    and the chunk stays `ready` (no runner anywhere near it)."""
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER])  # promote=True by default
+    alt_graph_id = _mint_alt_graph(hub)
+
+    resp = hub.client.post(f"/api/chunks/{chunk_id}/graph", json={"graph_id": alt_graph_id})
+
+    assert resp.status_code == 202, resp.text
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["graph_id"] == alt_graph_id
+    assert detail["status"] == "ready"
+
+
+def test_edit_graph_refuses_a_retired_target_graph_on_a_ready_chunk(tmp_path: Path) -> None:
+    """Issue #101's retired-target refusal composes with #120's widened admit set —
+    widening to `ready` does not shadow the retired-graph guard."""
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [_POINTER])  # promote=True by default
     alt_graph_id = _mint_alt_graph(hub)
     before = hub.client.get(f"/api/chunks/{chunk_id}").json()["graph_id"]
+    retire = hub.client.post(f"/api/graphs/{alt_graph_id}/retire", json={"by": "operator"})
+    assert retire.status_code == 202, retire.text
 
     resp = hub.client.post(f"/api/chunks/{chunk_id}/graph", json={"graph_id": alt_graph_id})
 
     assert resp.status_code == 409, resp.text
-    assert "ready" in resp.json()["detail"]
+    assert "retired" in resp.json()["detail"]
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["graph_id"] == before
+
+
+def test_edit_graph_queue_position_survives_the_edit(tmp_path: Path) -> None:
+    """Issue #120 — the edit is a plain column write, not a re-enqueue: a ready
+    chunk's position in the queue is unaffected by repinning its graph."""
+    hub = build_hub(tmp_path)
+    first_id = ingest(hub, [{"source": "default", "ref": "101"}])
+    second_id = ingest(hub, [{"source": "default", "ref": "102"}])
+    alt_graph_id = _mint_alt_graph(hub)
+    before = [e["chunk_id"] for e in hub.client.get("/api/queue/peek").json()["entries"]]
+    assert before == [first_id, second_id]
+
+    resp = hub.client.post(f"/api/chunks/{first_id}/graph", json={"graph_id": alt_graph_id})
+
+    assert resp.status_code == 202, resp.text
+    after = [e["chunk_id"] for e in hub.client.get("/api/queue/peek").json()["entries"]]
+    assert after == before
 
 
 def test_edit_graph_refuses_once_the_chunk_is_claimed(tmp_path: Path) -> None:
@@ -225,15 +264,17 @@ def test_edit_model_blank_is_422(tmp_path: Path) -> None:
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["model"] == DEFAULT_MODEL
 
 
-def test_edit_model_refuses_once_the_chunk_is_ready(tmp_path: Path) -> None:
+def test_edit_model_allows_a_ready_unclaimed_chunk(tmp_path: Path) -> None:
+    """Issue #120 — a promoted-but-unclaimed chunk is still editable."""
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [_POINTER])  # promote=True by default
 
     resp = hub.client.post(f"/api/chunks/{chunk_id}/model", json={"model": "claude-sonnet-4-5"})
 
-    assert resp.status_code == 409, resp.text
-    assert "ready" in resp.json()["detail"]
-    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["model"] == DEFAULT_MODEL
+    assert resp.status_code == 202, resp.text
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["model"] == "claude-sonnet-4-5"
+    assert detail["status"] == "ready"
 
 
 def test_edit_model_refuses_once_the_chunk_is_claimed(tmp_path: Path) -> None:

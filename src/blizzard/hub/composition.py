@@ -17,6 +17,7 @@ sees a consistent view.
 from __future__ import annotations
 
 import tempfile
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -140,18 +141,26 @@ def build_services(
     # registry facts, and two instances would be two of the same thing (issue #43).
     fleet = FleetService(registry=registry_store, clock=clock)
     enrollment = RunnerEnrollmentService(registry=registry_store, clock=clock)
+    # Shared between ClaimService and EditService (issue #120) — the one in-process
+    # lock serializing both services' check-then-act sequences over a chunk's live-route
+    # state, so a claim and a graph/model edit racing the same chunk can't interleave.
+    # Constructed once here, at the composition root (``bzh:dependency-injection``),
+    # rather than either service owning a private lock the other cannot see.
+    claim_lock = threading.Lock()
     return HubServices(
         chunks=chunk_store,
         graphs=graph_store,
         ingest=IngestService(chunks=chunk_store, clock=clock),
         promote=PromoteService(chunks=chunk_store, clock=clock),
-        claim=ClaimService(chunks=chunk_store, registry=registry_store, clock=clock),
+        claim=ClaimService(
+            chunks=chunk_store, graphs=graph_store, registry=registry_store, clock=clock, claim_lock=claim_lock
+        ),
         apply=ApplyService(chunks=chunk_store, clock=clock, hub_node_executor=hub_node),
         decisions=DecisionService(chunks=chunk_store, clock=clock),
         requeue=RequeueService(chunks=chunk_store, clock=clock),
         detach=DetachService(chunks=chunk_store, clock=clock),
         pause=PauseService(chunks=chunk_store, clock=clock),
-        edit=EditService(chunks=chunk_store),
+        edit=EditService(chunks=chunk_store, graphs=graph_store, claim_lock=claim_lock),
         facts=FactIngestService(chunks=chunk_store, fleet=fleet, clock=clock),
         graph_mint=GraphMintService(graphs=graph_store, clock=clock),
         graph_lifecycle=GraphLifecycleService(graphs=graph_store, clock=clock),

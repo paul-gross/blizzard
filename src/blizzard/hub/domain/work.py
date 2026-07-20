@@ -1276,16 +1276,17 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         ...
 
     def set_graph(self, chunk_id: str, *, graph_id: str) -> None:
-        """Repin a not-ready chunk to a different workflow graph (issue #27).
+        """Repin a not-ready or ready-unclaimed chunk to a different workflow graph (issue #27, #120).
 
         A plain column overwrite, not an append-only fact: ``graph_id`` was already a
         mint-time column with no fact log behind it, and this keeps the same shape.
         The caller (:class:`~blizzard.hub.domain.edit.EditService`) has already checked
-        the chunk is still ``not_ready``."""
+        the chunk is still ``not_ready`` or ``ready`` with no live route, under the
+        lock shared with :class:`~blizzard.hub.domain.claim.ClaimService` (issue #120)."""
         ...
 
     def set_model(self, chunk_id: str, *, model: str) -> None:
-        """Repin a not-ready chunk's model selection (issue #27) — see :meth:`set_graph`."""
+        """Repin a not-ready or ready-unclaimed chunk's model selection (issue #27, #120) — see :meth:`set_graph`."""
         ...
 
     # --- The generic hub command node (#65) ---------------------------------

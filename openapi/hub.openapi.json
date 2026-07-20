@@ -449,7 +449,7 @@
         "type": "object"
       },
       "ChunkGraphUpdateRequest": {
-        "description": "Repin a not-ready chunk's workflow graph (issue #27) \u2014 the target graph's id.",
+        "description": "Repin a not-ready or ready-unclaimed chunk's workflow graph (issue #27, #120) \u2014 the target graph's id.",
         "properties": {
           "graph_id": {
             "title": "Graph Id",
@@ -560,7 +560,7 @@
         "type": "object"
       },
       "ChunkModelUpdateRequest": {
-        "description": "Repin a not-ready chunk's model selection (issue #27).",
+        "description": "Repin a not-ready or ready-unclaimed chunk's model selection (issue #27, #120).",
         "properties": {
           "model": {
             "title": "Model",
@@ -3236,7 +3236,7 @@
     },
     "/api/chunks/{chunk_id}/graph": {
       "post": {
-        "description": "Repin a not-ready chunk's workflow graph (issue #27).\n\n404 on an unknown chunk or an unknown target graph; 409 on a retired target graph\n(issue #101 \u2014 a retired graph cannot receive new work) or once the chunk has left\n``not_ready`` (already promoted, claimed, running, or later).",
+        "description": "Repin a not-ready or ready-and-unclaimed chunk's workflow graph (issue #27, widened by #120).\n\n404 on an unknown chunk or an unknown target graph; 409 once the chunk is claimed\nor later (``running``, ``delivering``, ``waiting_on_human``, ``needs_human``,\n``paused``, ``done``, ``stopped`` \u2014 issue #120 widened the admit set to\n``{not_ready, ready}``, not further \u2014 checked first, so it wins over the next\ncause even when both apply) or on a retired target graph (issue #101 \u2014 a retired\ngraph cannot receive new work).",
         "operationId": "set_chunk_graph_api_chunks__chunk_id__graph_post",
         "parameters": [
           {
@@ -3413,7 +3413,7 @@
     },
     "/api/chunks/{chunk_id}/model": {
       "post": {
-        "description": "Repin a not-ready chunk's model selection (issue #27).\n\n404 on an unknown chunk; 422 on a blank model; 409 once the chunk has left\n``not_ready`` (already promoted, claimed, running, or later).",
+        "description": "Repin a not-ready or ready-and-unclaimed chunk's model selection (issue #27, widened by #120).\n\n404 on an unknown chunk; 422 on a blank model; 409 once the chunk is claimed or\nlater (``running``, ``delivering``, ``waiting_on_human``, ``needs_human``,\n``paused``, ``done``, ``stopped`` \u2014 issue #120 widened the admit set to\n``{not_ready, ready}``, not further).",
         "operationId": "set_chunk_model_api_chunks__chunk_id__model_post",
         "parameters": [
           {

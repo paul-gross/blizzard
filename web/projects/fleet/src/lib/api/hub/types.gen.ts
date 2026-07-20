@@ -280,7 +280,7 @@ export type ChunkDetail = {
 /**
  * ChunkGraphUpdateRequest
  *
- * Repin a not-ready chunk's workflow graph (issue #27) — the target graph's id.
+ * Repin a not-ready or ready-unclaimed chunk's workflow graph (issue #27, #120) — the target graph's id.
  */
 export type ChunkGraphUpdateRequest = {
     /**
@@ -375,7 +375,7 @@ export type ChunkIngestResponse = {
 /**
  * ChunkModelUpdateRequest
  *
- * Repin a not-ready chunk's model selection (issue #27).
+ * Repin a not-ready or ready-unclaimed chunk's model selection (issue #27, #120).
  */
 export type ChunkModelUpdateRequest = {
     /**

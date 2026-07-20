@@ -1032,12 +1032,12 @@ class ChunkStore:
             conn.execute(insert(s.chunk_pause_facts).values(chunk_id=chunk_id, paused=paused, set_at=at, set_by=by))
 
     def set_graph(self, chunk_id: str, *, graph_id: str) -> None:
-        """Repin a not-ready chunk to a different workflow graph (issue #27)."""
+        """Repin a not-ready or ready-unclaimed chunk to a different workflow graph (issue #27, #120)."""
         with self._engine.begin() as conn:
             conn.execute(update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(graph_id=graph_id))
 
     def set_model(self, chunk_id: str, *, model: str) -> None:
-        """Repin a not-ready chunk's model selection (issue #27)."""
+        """Repin a not-ready or ready-unclaimed chunk's model selection (issue #27, #120)."""
         with self._engine.begin() as conn:
             conn.execute(update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(model=model))
 

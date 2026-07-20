@@ -140,7 +140,8 @@ class ChunkSummary(BaseModel):
     current_node_id: str | None
     current_node_name: str | None = None
     pm_pointers: list[PmPointerView] = []
-    # The chunk's model selection (issue #27) — editable while `not_ready`. Required:
+    # The chunk's model selection (issue #27) — editable while `not_ready` or
+    # `ready`-and-unclaimed (issue #120). Required:
     # the store column is non-nullable and every mint sets DEFAULT_MODEL.
     model: str
     runner_id: str | None = None
@@ -328,7 +329,7 @@ class ChunkPauseRequest(BaseModel):
 
 
 class ChunkGraphUpdateRequest(BaseModel):
-    """Repin a not-ready chunk's workflow graph (issue #27) — the target graph's id."""
+    """Repin a not-ready or ready-unclaimed chunk's workflow graph (issue #27, #120) — the target graph's id."""
 
     graph_id: str
 
@@ -341,7 +342,7 @@ class ChunkGraphView(BaseModel):
 
 
 class ChunkModelUpdateRequest(BaseModel):
-    """Repin a not-ready chunk's model selection (issue #27)."""
+    """Repin a not-ready or ready-unclaimed chunk's model selection (issue #27, #120)."""
 
     model: str
 
@@ -380,7 +381,8 @@ class ChunkDetail(BaseModel):
     current_node_name: str | None = None
     latest_epoch: int | None
     pm_pointers: list[PmPointerView] = []
-    # The chunk's model selection (issue #27) — editable while `not_ready`. Required:
+    # The chunk's model selection (issue #27) — editable while `not_ready` or
+    # `ready`-and-unclaimed (issue #120). Required:
     # the store column is non-nullable and every mint sets DEFAULT_MODEL.
     model: str
     route: RouteView | None = None

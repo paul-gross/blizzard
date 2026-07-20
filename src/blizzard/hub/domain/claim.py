@@ -21,9 +21,20 @@ pause is read at claim time, never persisted onto the chunk or the route).
 The single-claim guarantee is the hub's single-writer property: the daemon
 is the fleet's one arbiter, so the load-facts → check-live-route →
 record-route sequence must run as an atomic compare-and-set. FastAPI serves sync
-routes from a threadpool, so two runners' claims can arrive concurrently; a
-per-service lock serializes the CAS (the hub is one process — an in-process lock is
-the whole arbitration surface, cross-machine or not). The claim does **not** mint the
+routes from a threadpool, so two runners' claims can arrive concurrently; a lock
+serializes the CAS (the hub is one process — an in-process lock is the whole
+arbitration surface, cross-machine or not). The same lock is injected into
+:class:`~blizzard.hub.domain.edit.EditService` (issue #120, one instance per hub built
+at the composition root — ``bzh:dependency-injection``): widening the edit window onto
+``ready`` chunks (#120) means an edit's own check-then-act can now land in the same
+window a claim does, and sharing this lock is what makes the two resolve to exactly one
+winner rather than a torn read of a chunk's live-route state. Sharing the lock alone is
+not enough, though: the edge resolves the chunk (and its pinned graph) *before* the
+claim reaches the lock (``bzh:domain-takes-objects``), so ``_claim_locked`` re-reads
+the chunk fresh once inside it and re-resolves the graph if an edit already moved
+``graph_id`` in that window — otherwise the envelope built for the winning claim could
+still describe the graph the edit just superseded, even though the persisted column
+already shows the new one. The claim does **not** mint the
 executing lease
 : the runner mints it and reports ``lease.minted`` up through its outbound
 buffer to ``POST /events``, and the completion fence checks against that. The
@@ -43,7 +54,7 @@ from blizzard.foundation.crash import crashpoint
 from blizzard.hub.domain.enrollment import hash_token
 from blizzard.hub.domain.envelope import build_node_envelope
 from blizzard.hub.domain.fleet import Route
-from blizzard.hub.domain.graph import Graph
+from blizzard.hub.domain.graph import Graph, IReadGraphRepository
 from blizzard.hub.domain.registry import IReadRunnerRegistry
 from blizzard.hub.domain.work import Chunk, IWriteChunkRepository, current_node_id, latest_epoch
 from blizzard.wire.envelope import NodeEnvelope
@@ -108,14 +119,30 @@ class ClaimResult:
 class ClaimService:
     """Claim a chunk for a runner, exactly-one-wins, and paused-runners-need-not-apply."""
 
-    def __init__(self, *, chunks: IWriteChunkRepository, registry: IReadRunnerRegistry, clock: IClock) -> None:
+    def __init__(
+        self,
+        *,
+        chunks: IWriteChunkRepository,
+        graphs: IReadGraphRepository,
+        registry: IReadRunnerRegistry,
+        clock: IClock,
+        claim_lock: threading.Lock,
+    ) -> None:
         self._chunks = chunks
+        # Re-resolves the chunk's graph fresh under the lock (see `_claim_locked`)
+        # when an edit repinned it after the edge resolved the caller's `graph` but
+        # before this claim reached the lock — never builds the envelope from a
+        # graph the edit already superseded.
+        self._graphs = graphs
         self._registry = registry
         self._clock = clock
         # Serializes the check-live-route → record-route CAS across concurrent claims
-        # on one hub daemon. One ClaimService per hub, so one lock guards every
-        # chunk's claim; contention is a claim-rate concern, not a correctness one.
-        self._claim_lock = threading.Lock()
+        # on one hub daemon, and — since issue #120 — EditService's own
+        # check-status/write over the same chunk. Injected from the composition root
+        # rather than constructed here (``bzh:dependency-injection``): one lock per
+        # hub, shared by both services, so a claim and an edit racing the same chunk
+        # can't interleave; contention is a claim-rate concern, not a correctness one.
+        self._claim_lock = claim_lock
 
     def claim(
         self,
@@ -150,6 +177,24 @@ class ClaimService:
         existing = self._chunks.route_of(chunk.chunk_id)
         if existing is not None:
             raise ClaimConflict(held_by_runner_id=existing.runner_id)
+
+        # The edge resolved `chunk`/`graph` before this claim reached the lock
+        # (``bzh:domain-takes-objects``) — but issue #120 lets an edit's own
+        # check-then-act repin the chunk's graph (or model) in that same window,
+        # sharing this lock precisely so one of the two lands first. Re-read the
+        # chunk now, under the lock, and always build from that fresh copy: an
+        # edit that landed first may have moved `graph_id` and/or `model`, and the
+        # handed-in objects must not be what the envelope is built from — a torn
+        # read of exactly the kind this lock exists to close (see module docstring).
+        current = self._chunks.get(chunk.chunk_id)
+        if current is None:  # pragma: no cover - the chunk cannot vanish mid-claim
+            raise ClaimConflict(held_by_runner_id=runner_id)
+        if current.graph_id != chunk.graph_id:
+            fresh_graph = self._graphs.get(current.graph_id)
+            if fresh_graph is None:  # pragma: no cover - a pinned graph always resolves
+                raise ClaimConflict(held_by_runner_id=runner_id)
+            graph = fresh_graph
+        chunk = current
 
         facts = self._chunks.load_facts(chunk.chunk_id)
         # The runner mints the lease and reports its epoch via POST /events;

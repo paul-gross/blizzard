@@ -466,12 +466,21 @@ recovery contract"), so a chunk still marked paused when the runner comes back i
 (re-)parked, not respawned. The claim is kept exactly as it would be if the pause had
 landed on a live tick; only a chunk that was *not* paused resumes in place on restart.
 
-### Editing a not-ready chunk's build config
+### Editing an unclaimed chunk's build config
 
-While a chunk rests `not_ready` — minted but not yet promoted into the queue — its
-pinned **graph** and **model** are editable, both from the chunk detail dock and via
-`POST /api/chunks/{id}/graph` / `POST /api/chunks/{id}/model`. Once the chunk leaves
-`not_ready` (promoted, claimed, running, or later) both edits are refused with `409`.
+While a chunk sits **unclaimed** — resting `not_ready` (minted but not yet promoted)
+or promoted to `ready` with no runner holding it yet — its pinned **graph** and
+**model** are editable, both from the chunk detail dock and via `POST
+/api/chunks/{id}/graph` / `POST /api/chunks/{id}/model`. Issue #120 widened this past
+its original `not_ready`-only window (issue #27): the wrong graph is often noticed
+only after promote, with no runner anywhere near the chunk yet, so a promoted-but-
+unclaimed chunk stays repinnable. Once the chunk is **claimed or later** — `running`,
+`delivering`, `waiting_on_human`, `needs_human`, `paused` (post-claim), `done`, or
+`stopped` — both edits are refused with `409`.
+
+A graph edit has a second, distinct `409`: targeting a graph that has been
+**retired** (see "Graph lifecycle — retire and re-enable" below) is refused even on an
+otherwise-editable chunk, naming the retired graph id rather than the chunk's status.
 
 ## Graph lifecycle — retire and re-enable
 

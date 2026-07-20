@@ -39,7 +39,7 @@ from blizzard.hub.delivery.hub_node import poll_interval_for
 from blizzard.hub.domain.artifacts import ArtifactRow, GitCommitArtifact, from_row, store_key
 from blizzard.hub.domain.decisions import NotEscalated
 from blizzard.hub.domain.detach import NotRouted
-from blizzard.hub.domain.edit import ChunkNotEditable
+from blizzard.hub.domain.edit import ChunkNotEditable, TargetGraphRetired
 from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.graph_authoring import DefaultGraphRetired
 from blizzard.hub.domain.ingest import IngestConflict
@@ -560,25 +560,25 @@ def promote_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_se
 def set_chunk_graph(
     chunk_id: str, request: ChunkGraphUpdateRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> ChunkGraphView:
-    """Repin a not-ready chunk's workflow graph (issue #27).
+    """Repin a not-ready or ready-and-unclaimed chunk's workflow graph (issue #27, widened by #120).
 
-    404 on an unknown chunk or an unknown target graph; 409 on a retired target graph
-    (issue #101 — a retired graph cannot receive new work) or once the chunk has left
-    ``not_ready`` (already promoted, claimed, running, or later)."""
+    404 on an unknown chunk or an unknown target graph; 409 once the chunk is claimed
+    or later (``running``, ``delivering``, ``waiting_on_human``, ``needs_human``,
+    ``paused``, ``done``, ``stopped`` — issue #120 widened the admit set to
+    ``{not_ready, ready}``, not further — checked first, so it wins over the next
+    cause even when both apply) or on a retired target graph (issue #101 — a retired
+    graph cannot receive new work)."""
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     graph = services.graphs.get(request.graph_id)
     if graph is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {request.graph_id}")
-    if services.graphs.is_retired(request.graph_id):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"graph {request.graph_id} is retired and cannot receive new work",
-        )
     try:
         services.edit.set_graph(chunk, graph=graph)
     except ChunkNotEditable as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except TargetGraphRetired as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
@@ -589,10 +589,12 @@ def set_chunk_graph(
 def set_chunk_model(
     chunk_id: str, request: ChunkModelUpdateRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> ChunkModelView:
-    """Repin a not-ready chunk's model selection (issue #27).
+    """Repin a not-ready or ready-and-unclaimed chunk's model selection (issue #27, widened by #120).
 
-    404 on an unknown chunk; 422 on a blank model; 409 once the chunk has left
-    ``not_ready`` (already promoted, claimed, running, or later)."""
+    404 on an unknown chunk; 422 on a blank model; 409 once the chunk is claimed or
+    later (``running``, ``delivering``, ``waiting_on_human``, ``needs_human``,
+    ``paused``, ``done``, ``stopped`` — issue #120 widened the admit set to
+    ``{not_ready, ready}``, not further)."""
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")

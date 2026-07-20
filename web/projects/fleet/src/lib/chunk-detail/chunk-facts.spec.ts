@@ -83,8 +83,20 @@ describe('ChunkFacts', () => {
     expect(el.querySelector('[data-testid="model-submit"]')).not.toBeNull();
   });
 
-  it('withholds the graph and model edit inputs once the chunk has left not_ready', async () => {
-    for (const status of ['ready', 'running', 'delivering', 'waiting_on_human', 'needs_human', 'paused', 'stopped', 'done'] as const) {
+  it('offers the graph and model edit inputs for a ready, unclaimed chunk (issue #120)', async () => {
+    const fixture = TestBed.createComponent(ChunkFacts);
+    fixture.componentRef.setInput('detail', { ...NOT_READY_DETAIL, status: 'ready' });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="graph-input"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="graph-submit"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="model-input"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="model-submit"]')).not.toBeNull();
+  });
+
+  it('withholds the graph and model edit inputs once the chunk is claimed', async () => {
+    for (const status of ['running', 'delivering', 'waiting_on_human', 'needs_human', 'paused', 'stopped', 'done'] as const) {
       const fixture = TestBed.createComponent(ChunkFacts);
       fixture.componentRef.setInput('detail', { ...NOT_READY_DETAIL, status });
       await fixture.whenStable();
