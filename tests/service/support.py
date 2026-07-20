@@ -199,16 +199,23 @@ class SseTap:
 
     def start(self) -> None:
         self._thread.start()
-        assert self._ready.wait(20), "the hub's SSE stream never opened"
+        assert self._ready.wait(20), "the hub's SSE stream never delivered its first line"
 
     def _run(self) -> None:
         with (
             httpx.Client(base_url=self.base_url, timeout=None) as client,
             client.stream("GET", "/api/events/stream") as resp,
         ):
-            self._ready.set()
             event_type: str | None = None
             for raw in resp.iter_lines():
+                if not self._ready.is_set():
+                    # Starlette sends ``http.response.start`` (what ``stream()`` above waits
+                    # on) before it starts iterating the body, so headers arriving is not
+                    # proof the broker subscription happened — that runs inside the body
+                    # generator (see ``blizzard.hub.api.events._stream``). The first line on
+                    # the wire, though, is only sent *after* ``broker.subscribe()`` runs, so
+                    # it's the true readiness signal.
+                    self._ready.set()
                 if self._stop.is_set():
                     return
                 line = raw.strip()
