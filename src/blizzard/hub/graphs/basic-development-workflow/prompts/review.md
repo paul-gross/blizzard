@@ -7,8 +7,8 @@ and review the change against the PM item's intent.
 
 Blizzard builds no review machinery of its own: use the review tooling of the stack
 below the fleet (in the reference stack, winter-workflow's review engine and its
-axes — correctness, architecture, design quality). Run the project's own checks and
-e2e flows inside the chunk's environment, where the environment's services are
+axes — correctness, architecture, design quality). Exercise the change's end-to-end
+flows inside the chunk's environment, where the environment's services are
 available to drive.
 
 Submit your findings as the node's `review-findings` asset before you declare done:

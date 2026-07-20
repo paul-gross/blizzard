@@ -1,18 +1,20 @@
 # The basic-development-workflow graph — build -> review -> pre-push -> deliver,
 # on one single linear track.
 #
-# This is the LIGHTWEIGHT lane, deliberately cut down from glacier's shape: no `plan`
-# or `plan-review` node — small work should not pay for a planning phase, and `build`
-# licenses inline planning instead (the worker may think an approach through as part
-# of building; no plan artifact is produced and nothing waits on one). There is also
-# no standalone `verify` node: `build` fuses build and verification into one node —
-# run the checks and satisfy the item's intent before declaring done, full stop.
+# This is the LIGHTWEIGHT lane, deliberately cut down from
+# advanced-development-workflow's shape: no `plan` or `plan-review` node — small work
+# should not pay for a planning phase, and `build` licenses inline planning instead
+# (the worker may think an approach through as part of building; no plan artifact is
+# produced and nothing waits on one). There is also no standalone `verify` node:
+# `build` fuses build and verification into one node — validate and satisfy the
+# item's intent before declaring done, full stop.
 #
 # Because there is no `verify` node, `pre-push`'s three-way severity triage (mirroring
-# glacier's clean/insignificant/significant judgement) differs from glacier's in
-# exactly one edge: where glacier's `significant` outcome (conflict resolution that
-# required semantic choices) re-earns verification, this graph's `significant` routes
-# to `build` instead — the only node left that can re-run the checks. `insignificant`
+# advanced-development-workflow's clean/insignificant/significant judgement) differs
+# from that graph's in exactly one edge: where its `significant` outcome (conflict
+# resolution that required semantic choices) re-earns verification, this graph's
+# `significant` routes to `build` instead — the only node left that can revalidate
+# the change. `insignificant`
 # still rides back into `review` for cold eyes, and `clean` proceeds straight to
 # delivery.
 #
@@ -38,14 +40,11 @@ nodes:
   build:
     executor: runner
     prompt: ./prompts/build.md
-    checks:
-      - mise run lint
-      - mise run test
     judgement:
       prompt: ./prompts/build.judgement.md
       choices:
         pass:
-          description: The work meets the item's intent and the checks are green.
+          description: The work meets the item's intent, committed and pushed.
           to: review
         fail:
           description: The work does not yet meet the criteria; the failure output is attached.
@@ -92,7 +91,7 @@ nodes:
           to: review
           prompt_addendum: ./prompts/review.from-pre-push.md
         significant:
-          description: Conflict resolution required semantic choices (or the rebase reshaped the change); with no verify node in this lane, the work re-enters build to re-earn the checks.
+          description: Conflict resolution required semantic choices (or the rebase reshaped the change); with no verify node in this lane, the work re-enters build to revalidate.
           to: build
           prompt_addendum: ./prompts/build.from-pre-push.md
     retries:

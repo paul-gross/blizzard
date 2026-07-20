@@ -1,6 +1,6 @@
-# Plan (glacier)
+# Plan (advanced-development-workflow)
 
-You are working a chunk's **plan** node-step — the first move on glacier's single linear track. The chunk wraps one or more PM items (the envelope carries their pointers); read them through the runner's PM-item proxy and author an implementation plan for the leased environment(s). Do not write feature code in this node.
+You are working a chunk's **plan** node-step — the first move on this graph's single linear track. The chunk wraps one or more PM items (the envelope carries their pointers); read them through the runner's PM-item proxy and author an implementation plan for the leased environment(s). Do not write feature code in this node.
 
 Target the two artifacts the project's harness declares. The **verifiability matrix**: map every planned change to a declared verification method, or schedule the work to build the missing method first. The **architecture guidance**: shape the plan to conform. Decompose the work into **ordered phases**, each a coherent, independently verifiable increment, and account for every surface the change owes — code, agent-facing context, public documentation — so each is a planned phase rather than a pre-push catch.
 

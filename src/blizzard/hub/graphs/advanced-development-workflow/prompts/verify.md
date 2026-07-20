@@ -1,4 +1,4 @@
-# Verify (glacier)
+# Verify (advanced-development-workflow)
 
 You are working a chunk's **verify** node-step — the verify finale. The build node's `git_commit` artifacts are in the envelope; verify the change **through a method the project's verifiability matrix declares**, exercising runtime behavior in the leased environment(s), where the environment's services are available to drive. A green build or type-check is not a verification.
 

@@ -1,10 +1,12 @@
-"""The self-healing PR + CI-watch example graph delivers through the generic path (#67).
+"""The self-healing PR + CI-watch delivery policy delivers through the generic path (#67).
 
-The e2e-tier proof that delivery **policy lives in YAML**: the shipped example graph
-`hub/graphs/delivery-pr-ci/graph.yaml` differs from the default graph only in its `deliver`
-node's `run:` script (`hub/graphs/scripts/land_pr_ci.py` vs `scripts/land_default.py`)
-and its poll cadence — yet it expresses a wholly different delivery policy through the
-SAME generic `executor: hub` primitive, no engine change. `land_pr_ci` opens a PR per
+The e2e-tier proof that delivery **policy lives in YAML**: the graph minted below by
+`_graph_yaml()` differs from the default graph only in its `deliver` node's `run:` script
+(`hub/graphs/scripts/land_pr_ci.py` vs `scripts/land_default.py`) and its poll cadence —
+the same shape the `advanced-development-workflow` graph's own `deliver` node ships
+(`hub/graphs/advanced-development-workflow/graph.yaml`) — yet it expresses a wholly
+different delivery policy through the SAME generic `executor: hub` primitive, no engine
+change. `land_pr_ci` opens a PR per
 repo and routes by the PR's live `mergeable_state`, resolving what is mechanical or
 transient without ever waking the LLM. This module drives that real script end to end
 against the (extended) mock forge, one scenario per route:
@@ -26,9 +28,10 @@ Asserted over the full live stack (mock forge + mock harness + fixture workspace
 hub/runner), exactly like the sibling e2e scenarios — fleet truth (pending/bounce/done)
 and git truth (bare `main` moves exactly once on a land, never on a pend or a bounce).
 
-The shipped graph authors a production 30s `poll_interval`; these scenarios mint the SAME
-`land_pr_ci` script with a brisk 1s cadence so the in-process driver converges in seconds
-— the point proved is the script's policy through the generic executor, not the cadence.
+The shipped `advanced-development-workflow` graph authors a production 30s
+`poll_interval`; these scenarios mint the SAME `land_pr_ci` script with a brisk 1s
+cadence so the in-process driver converges in seconds — the point proved is the
+script's policy through the generic executor, not the cadence.
 
 Gated exactly like the sibling e2e scenarios — skipped unless `BLIZZARD_E2E=1` and the
 sibling `blizzard-mock` worktree + a local winter source are discoverable.
@@ -87,12 +90,13 @@ _BUILD_JUDGEMENT = "verdict('pass', 'committed the change; checks are green')\n"
 
 
 def _graph_yaml() -> str:
-    """The PR+CI example graph's shape, inlined with a re-poll-every-tick cadence.
+    """The PR+CI delivery policy's shape, inlined with a re-poll-every-tick cadence.
 
-    Identical to the shipped `delivery-pr-ci.yaml` (including the `conflict` edge the
-    self-heal script's `dirty` fast-bounce needs) except `poll_interval`/`poll_timeout` —
-    the `deliver` node names the SAME real `land_pr_ci` script, so this exercises the
-    example graph's actual policy, not a stand-in."""
+    Identical to the shipped `advanced-development-workflow` graph's `deliver` node
+    (including the `conflict` edge the self-heal script's `dirty` fast-bounce needs)
+    except `poll_interval`/`poll_timeout` — the `deliver` node names the SAME real
+    `land_pr_ci` script, so this exercises the shipped policy's actual behavior, not a
+    stand-in."""
     import yaml
 
     graph = {

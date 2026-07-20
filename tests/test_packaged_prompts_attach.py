@@ -61,8 +61,8 @@ def test_packaged_graphs_declare_at_least_one_asset_producing_node() -> None:
 
     Guards against the guard silently passing because discovery found nothing (a moved
     graphs dir, a renamed ``produces:`` field). Today it is the ``review`` node's
-    ``review-findings`` asset in ``default`` and ``delivery-pr-ci``, plus several
-    asset-producing nodes in ``glacier``.
+    ``review-findings`` asset in ``default`` and ``basic-development-workflow``, plus
+    several asset-producing nodes in ``advanced-development-workflow``.
     """
     triples = _asset_producing_worker_nodes()
     assert triples, "no asset-producing worker node found in any packaged graph"

@@ -1,5 +1,5 @@
-# The glacier workflow graph — plan -> plan-review -> build -> verify -> review ->
-# pre-push -> deliver, on one single linear track.
+# The advanced-development-workflow graph — plan -> plan-review -> build -> verify ->
+# review -> pre-push -> deliver, on one single linear track.
 #
 # Modeled on the winter-workflow `glacier` skill: adopt-or-produce a plan gated on the
 # verifiability matrix and architecture guidance, build the phases strictly in order,
@@ -10,9 +10,11 @@
 # conflict resolutions re-earn verification. Every backward edge carries its
 # findings asset into the node it re-enters — a bounce is contention, not failure.
 # Delivery is authored as graph content: `deliver` is a generic hub command node
-# running the packaged land_default script, exactly like the default graph.
+# running the packaged land_pr_ci script — the PR + CI-watch delivery policy, which
+# polls until every PR is cleanly mergeable rather than merging straight through as
+# the default graph's land_default does.
 
-name: glacier
+name: advanced-development-workflow
 entry: plan
 
 nodes:
@@ -56,23 +58,20 @@ nodes:
   build:
     executor: runner
     prompt: ./prompts/build.md
-    checks:
-      - mise run lint
-      - mise run test
     produces:
       - retrospective
     judgement:
       prompt: ./prompts/build.judgement.md
       choices:
         pass:
-          description: Every phase is implemented in order and the checks are green.
+          description: Every phase is implemented in order, committed and pushed.
           to: verify
         fail:
           description: The work does not yet meet the plan; the failure output is attached.
           to: build
           prompt_addendum: ./prompts/build.from-build.md
     retries:
-      max: 3  # glacier's per-phase hard cap
+      max: 3  # this graph's per-phase hard cap
       exhausted: escalate
 
   verify:
@@ -167,9 +166,6 @@ nodes:
     executor: runner
     prompt: ./prompts/resolve.md
     session: fresh
-    checks:
-      - mise run lint
-      - mise run test
     produces:
       - resolve-report
       - retrospective

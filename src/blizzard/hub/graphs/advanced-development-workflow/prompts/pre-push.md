@@ -1,4 +1,4 @@
-# Pre-push rebase (glacier)
+# Pre-push rebase (advanced-development-workflow)
 
 You are working a chunk's **pre-push** node-step with cold eyes — the integration step before delivery. The change-set is every repo in the leased environment(s) ahead of its upstream. Your job: rebase it onto the current base branch, absorb whatever that costs, and triage how much the integration disturbed the validated work.
 

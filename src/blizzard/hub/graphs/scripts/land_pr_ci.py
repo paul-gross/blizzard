@@ -1,8 +1,8 @@
-"""The PR + CI-watch example graph's `deliver` node script — self-healing.
+"""The PR + CI-watch delivery policy's `deliver` node script — self-healing.
 
-The alternative delivery policy `hub/graphs/delivery-pr-ci.yaml` ships as an EXAMPLE
-alongside the default graph, proving delivery policy lives in YAML. It honors the same
-hub-command-node authoring contract as the default land script
+This alternative delivery policy backs the `advanced-development-workflow` graph's
+`deliver` node (`hub/graphs/advanced-development-workflow/graph.yaml`), proving delivery
+policy lives in YAML. It honors the same hub-command-node authoring contract as the default land script
 (``blizzard-harness:/standards/hub-nodes.md``): pure stdlib against the forge, env
 injected by the executor, the authored choice (``landed``/``conflict``) or the reserved
 ``pending`` printed as the LAST stdout line, diagnostics to stderr, exit 0 always.

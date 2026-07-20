@@ -18,7 +18,8 @@
 # and the `merged/<repo>` marker convention; the hub-command-node authoring contract
 # both scripts honor lives in `blizzard-harness:/standards/hub-nodes.md`. A conflict at
 # the check stage routes `conflict -> build` (nothing pushed); a clean land routes
-# `landed -> done`. See `hub/graphs/delivery-pr-ci/graph.yaml` for the alternative PR +
+# `landed -> done`. See `tests/e2e/test_delivery_pr_ci_e2e.py` and the
+# `advanced-development-workflow` graph's own `deliver` node for the alternative PR +
 # CI-watch delivery policy this same primitive expresses — proof that delivery policy
 # lives in YAML, not code.
 # A judgement choice's `to:` normally names a sibling node or the reserved terminal
@@ -42,14 +43,11 @@ nodes:
   build:
     executor: runner
     prompt: ./prompts/build.md
-    checks:
-      - mise run lint
-      - mise run test
     judgement:
       prompt: ./prompts/build.judgement.md
       choices:
         pass:
-          description: The work meets this node's criteria and the checks are green.
+          description: The work meets this node's criteria, committed and pushed.
           to: review
         fail:
           description: The work does not meet the criteria; the failure output is attached.
