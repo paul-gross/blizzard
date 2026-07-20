@@ -118,6 +118,36 @@ def test_edit_graph_unknown_graph_is_404(tmp_path: Path) -> None:
     assert original != "gr_nope"
 
 
+def test_edit_graph_refuses_a_retired_target_graph(tmp_path: Path) -> None:
+    """A retired graph cannot receive new work (issue #101) — the re-pin is rejected
+    with a clear error, and the chunk keeps its original graph."""
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER], promote=False)
+    alt_graph_id = _mint_alt_graph(hub)
+    before = hub.client.get(f"/api/chunks/{chunk_id}").json()["graph_id"]
+    retire = hub.client.post(f"/api/graphs/{alt_graph_id}/retire", json={"by": "operator"})
+    assert retire.status_code == 202, retire.text
+
+    resp = hub.client.post(f"/api/chunks/{chunk_id}/graph", json={"graph_id": alt_graph_id})
+
+    assert resp.status_code == 409, resp.text
+    assert "retired" in resp.json()["detail"]
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["graph_id"] == before
+
+
+def test_edit_graph_allows_a_re_enabled_target_graph(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER], promote=False)
+    alt_graph_id = _mint_alt_graph(hub)
+    hub.client.post(f"/api/graphs/{alt_graph_id}/retire", json={"by": "operator"})
+    hub.client.post(f"/api/graphs/{alt_graph_id}/enable", json={"by": "operator"})
+
+    resp = hub.client.post(f"/api/chunks/{chunk_id}/graph", json={"graph_id": alt_graph_id})
+
+    assert resp.status_code == 202, resp.text
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["graph_id"] == alt_graph_id
+
+
 def test_edit_graph_refuses_once_the_chunk_is_ready(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [_POINTER])  # promote=True by default

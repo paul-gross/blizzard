@@ -1,7 +1,9 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 
 import type { GraphEdgeView, GraphNodeView } from '../api/hub';
+import { KitButton } from '../kit/kit-button';
 import { GraphDiagram } from './graph-diagram';
+import { injectGraphLifecycleMutation } from './graph-lifecycle.mutations';
 import { injectHubGraphQuery } from './graphs.query';
 
 /** One outgoing edge, resolved against the choice it fires on (the choice lives on
@@ -10,6 +12,16 @@ interface ResolvedEdge {
   readonly edge: GraphEdgeView;
   readonly choiceName: string;
   readonly choiceDescription: string;
+}
+
+/** The hub's `{"detail": "..."}` error body, or anything close enough to read one
+ * off of — mirrors `chunk-detail.ts`'s own local `errorMessage`; `fallback` names the
+ * verb that failed, for the case where no body can be read. */
+function errorMessage(error: unknown, fallback: string): string {
+  if (error && typeof error === 'object' && 'detail' in error && typeof error.detail === 'string') {
+    return error.detail;
+  }
+  return fallback;
 }
 
 /**
@@ -28,7 +40,7 @@ interface ResolvedEdge {
 @Component({
   selector: 'fleet-graph-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [GraphDiagram],
+  imports: [GraphDiagram, KitButton],
   template: `
     <section class="gd-panel graph-detail" aria-label="Graph detail" data-testid="graph-detail">
       @if (graphQuery.isPending()) {
@@ -39,8 +51,27 @@ interface ResolvedEdge {
         <div class="body" data-testid="graph-detail-body">
           <div class="gd-hdr">
             <span class="gd-lbl">{{ g.name }}</span>
+            <span
+              class="lifecycle-badge"
+              data-testid="graph-detail-lifecycle-badge"
+              [class.retired]="g.retired"
+              [class.enabled]="!g.retired"
+              >{{ g.retired ? 'retired' : 'enabled' }}</span
+            >
             <span class="gid" data-testid="graph-detail-graph-id">{{ g.graph_id }}</span>
           </div>
+          <div class="lifecycle-actions">
+            @if (g.retired) {
+              <fleet-kit-button testid="graph-detail-enable" (click)="onEnable(g.graph_id)">Re-enable</fleet-kit-button>
+            } @else {
+              <fleet-kit-button testid="graph-detail-retire" variant="danger" (click)="onRetire(g.graph_id)"
+                >Retire</fleet-kit-button
+              >
+            }
+          </div>
+          @if (actionError(); as err) {
+            <p class="lifecycle-error" data-testid="graph-detail-lifecycle-error">{{ err }}</p>
+          }
           <p class="entry" data-testid="graph-detail-entry">
             Entry node: <strong>{{ entryNodeName() }}</strong>
           </p>
@@ -159,6 +190,30 @@ interface ResolvedEdge {
       color: var(--label-dim);
       font-size: var(--fs-xs);
     }
+    .lifecycle-badge {
+      padding: 1px 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: var(--fs-xs);
+    }
+    .lifecycle-badge.enabled {
+      color: var(--cyan);
+      border: 1px solid var(--cyan);
+    }
+    .lifecycle-badge.retired {
+      color: var(--red);
+      border: 1px solid var(--red);
+    }
+    .lifecycle-actions {
+      display: flex;
+      padding: 4px 8px 0;
+    }
+    .lifecycle-error {
+      margin: 0;
+      padding: 0 8px;
+      color: var(--red);
+      font-size: var(--fs-xs);
+    }
     .body {
       display: flex;
       flex-direction: column;
@@ -259,8 +314,13 @@ export class GraphDetail {
   readonly graphId = input.required<string>();
 
   protected readonly graphQuery = injectHubGraphQuery(() => this.graphId());
+  private readonly lifecycleMutation = injectGraphLifecycleMutation();
 
   protected readonly graph = computed(() => this.graphQuery.data());
+
+  /** Set on a failed retire/enable (issue #42's report-don't-swallow pattern);
+   * cleared at the start of the next attempt. */
+  protected readonly actionError = signal<string | null>(null);
 
   protected readonly nodes = computed<readonly GraphNodeView[]>(() => this.graph()?.nodes ?? []);
 
@@ -278,6 +338,32 @@ export class GraphDetail {
 
   protected listOrDash(values: readonly string[] | undefined): string {
     return values && values.length > 0 ? values.join(', ') : '—';
+  }
+
+  /** Confirm, then fire the retire mutation (issue #101) — mirrors
+   * `chunk-detail-header.ts`'s confirm-then-emit pattern for pause/detach. */
+  protected onRetire(graphId: string): void {
+    const confirmed = globalThis.confirm(
+      `Retire graph ${graphId}? It is excluded from name resolution and refuses new ` +
+        `re-pins; any chunk already running on it is left to run out.`,
+    );
+    if (!confirmed) return;
+    this.actionError.set(null);
+    this.lifecycleMutation.mutate(
+      { graphId, retired: true },
+      { onError: (error) => this.actionError.set(errorMessage(error, 'Retire failed.')) },
+    );
+  }
+
+  /** Confirm, then fire the enable mutation (issue #101). */
+  protected onEnable(graphId: string): void {
+    const confirmed = globalThis.confirm(`Re-enable graph ${graphId}? It resumes normal newest-per-name derivation.`);
+    if (!confirmed) return;
+    this.actionError.set(null);
+    this.lifecycleMutation.mutate(
+      { graphId, retired: false },
+      { onError: (error) => this.actionError.set(errorMessage(error, 'Enable failed.')) },
+    );
   }
 
   /** This node's outgoing edges, each resolved against the matching choice on the

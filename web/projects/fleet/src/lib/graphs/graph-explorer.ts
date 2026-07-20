@@ -19,12 +19,14 @@ interface GraphGroup {
  * primary object; a name is a lineage of immutable versions). Each group shows its
  * version count and the effective version's summary; expanding a group reveals the
  * full lineage newest-first, each row carrying its `graph_id`, `created_at`, and an
- * **effective** / **superseded** badge — never "active"/"disabled", nothing is
- * persisted as disabled, the marker is the `effective` flag `GET /api/graphs`
- * derives. Any version, effective or superseded, is selectable and opens
- * identically (`selectGraph`). Follows `queue-panel.ts`: a standalone
- * `fleet-`prefixed, OnPush container over the generated client
- * (bzh:generated-client) via TanStack Query.
+ * **effective** / **superseded** / **retired** badge — the `graphs` row itself is
+ * never mutated (still insert-only), the marker is the `effective`/`retired` facts
+ * `GET /api/graphs` derives (issue #101's reversible lifecycle brake, layered on top
+ * of the pre-#101 `effective` derivation). Any version, effective, superseded, or
+ * retired, is selectable and opens identically (`selectGraph`); retiring/re-enabling
+ * itself is driven from the detail view (`graph-detail.ts`), not this list. Follows
+ * `queue-panel.ts`: a standalone `fleet-`prefixed, OnPush container over the
+ * generated client (bzh:generated-client) via TanStack Query.
  */
 @Component({
   selector: 'fleet-graph-explorer',
@@ -74,8 +76,9 @@ interface GraphGroup {
                           class="badge"
                           data-testid="graph-explorer-badge"
                           [class.effective]="version.effective"
-                          [class.superseded]="!version.effective"
-                          >{{ version.effective ? 'effective' : 'superseded' }}</span
+                          [class.retired]="version.retired"
+                          [class.superseded]="!version.effective && !version.retired"
+                          >{{ versionLabel(version) }}</span
                         >
                       </button>
                     </li>
@@ -191,6 +194,10 @@ interface GraphGroup {
       color: var(--label-dim);
       border: 1px solid var(--line);
     }
+    .badge.retired {
+      color: var(--red);
+      border: 1px solid var(--red);
+    }
   `,
 })
 export class GraphExplorer {
@@ -239,5 +246,14 @@ export class GraphExplorer {
     if (this.expandedNames().has(group.name)) return true;
     const selected = this.selectedGraphId();
     return selected !== null && group.versions.some((v) => v.graph_id === selected);
+  }
+
+  /** `effective` takes precedence (a graph can be both, briefly nonsensical, only if
+   * the wire ever disagreed with itself); otherwise `retired` names issue #101's own
+   * lifecycle state distinctly from "merely superseded by a newer version". */
+  protected versionLabel(version: GraphSummaryView): string {
+    if (version.effective) return 'effective';
+    if (version.retired) return 'retired';
+    return 'superseded';
   }
 }

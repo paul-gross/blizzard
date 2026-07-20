@@ -104,6 +104,23 @@ graph_edges = Table(
     Column("to_graph_model", String, nullable=True),
 )
 
+# --- Graph lifecycle facts (graph.retired / graph.enabled — issue #101) -------
+#
+# The reversible retire/re-enable brake over one specific graph_id, keyed the same way
+# chunk_pause_facts mirrors runner_pause_facts: append-only, newest-fact-wins. The
+# graphs table itself stays insert-only and immutable — retiring never touches it, it
+# only excludes the graph_id from name resolution (get_enabled_by_name/mark_effective).
+
+graph_lifecycle_facts = Table(
+    "graph_lifecycle_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("graph_id", String, ForeignKey("graphs.graph_id"), nullable=False),
+    Column("retired", Boolean, nullable=False),  # retired derives from the newest fact
+    Column("set_at", UtcDateTime, nullable=False),
+    Column("set_by", String, nullable=False),  # who flipped it — recorded on the fact
+)
+
 # --- Chunks and their PM pointers (chunk.minted) ------------------------------
 
 chunks = Table(

@@ -6,10 +6,14 @@ The request carries the YAML text; the response is a :class:`GraphView`. An inva
 definition returns **422** with a :class:`GraphValidationReport`.
 
 ``GET /graphs`` lists every minted graph as a :class:`GraphSummaryView`, newest
-first, with the newest graph of each ``name`` marked ``effective``.
+first, with the newest non-retired graph of each ``name`` marked ``effective``.
 ``GET /graphs/{graph_id}`` serves the same :class:`GraphView` the mint response
 returns — the full reified definition, including nodes, edges, choices, and
 prompts.
+
+``POST /graphs/{graph_id}/retire`` and ``POST /graphs/{graph_id}/enable`` flip a
+graph's reversible retire brake (issue #101), both taking a :class:`GraphLifecycleRequest`
+and returning the same :class:`GraphView`, its ``enabled``/``retired`` fields updated.
 """
 
 from __future__ import annotations
@@ -21,6 +25,12 @@ class GraphMintRequest(BaseModel):
     """A graph definition to mint — the raw YAML body."""
 
     definition_yaml: str
+
+
+class GraphLifecycleRequest(BaseModel):
+    """Retire or re-enable a graph — records who flipped it (issue #101)."""
+
+    by: str = "operator"
 
 
 class GraphValidationReport(BaseModel):
@@ -67,22 +77,38 @@ class GraphNodeView(BaseModel):
 
 
 class GraphView(BaseModel):
-    """A minted graph as served by ``GET /graphs/{graph_id}`` and the mint response."""
+    """A minted graph as served by ``GET /graphs/{graph_id}`` and the mint response.
+
+    ``enabled`` is ``not retired`` — the graph's own lifecycle state (issue #101),
+    independent of whether it is currently the newest of its name. ``retired`` is the
+    same fact spelled out explicitly for a board that wants to distinguish "retired"
+    from "merely superseded by a newer version" (:class:`GraphSummaryView`'s
+    ``effective``). Deliberately two wire fields for one fact, not drift: the only
+    constructor, :func:`~blizzard.hub.api.graphs._graph_view`, sets both from the same
+    ``retired`` bool in one call (``enabled=not retired, retired=retired``) — there is
+    no second call site that could set one and forget the other."""
 
     graph_id: str
     name: str
     entry_node_id: str
     enabled: bool
+    retired: bool = False
     nodes: list[GraphNodeView] = []
     edges: list[GraphEdgeView] = []
     warnings: list[str] = []
 
 
 class GraphSummaryView(BaseModel):
-    """One graph's summary row — a name-lineage entry as served by ``GET /graphs``."""
+    """One graph's summary row — a name-lineage entry as served by ``GET /graphs``.
+
+    ``effective`` is the newest **non-retired** graph of this ``name`` (issue #101);
+    ``retired`` is this graph's own lifecycle state, independent of ``effective`` — a
+    retired graph is never effective, but a non-retired, non-effective graph is merely
+    superseded by a newer version of the same name."""
 
     graph_id: str
     name: str
     entry_node_id: str
     created_at: str
     effective: bool
+    retired: bool = False

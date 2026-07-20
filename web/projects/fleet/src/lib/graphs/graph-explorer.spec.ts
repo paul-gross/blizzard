@@ -91,6 +91,25 @@ describe('GraphExplorer', () => {
     expect(emitted).toEqual(['gr_build_v1']);
   });
 
+  it('shows a retired badge for a retired, non-effective version (issue #101)', async () => {
+    const graphs = [
+      { ...GRAPHS[0], effective: false },
+      { ...GRAPHS[1], effective: true, retired: false },
+      GRAPHS[2],
+    ];
+    // gr_build_v2 (newest) is retired; gr_build_v1 (older) is now effective.
+    const fixture = await mount([{ ...graphs[0], retired: true }, graphs[1], graphs[2]]);
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-name="build"] [data-testid="graph-explorer-group-toggle"]')?.click();
+    await settle(fixture);
+
+    const rows = el.querySelectorAll('[data-name="build"] [data-testid="graph-explorer-row"]');
+    expect(rows[0].getAttribute('data-graph-id')).toBe('gr_build_v2');
+    expect(rows[0].querySelector('[data-testid="graph-explorer-badge"]')?.textContent?.trim()).toBe('retired');
+    expect(rows[1].querySelector('[data-testid="graph-explorer-badge"]')?.textContent?.trim()).toBe('effective');
+  });
+
   it('shows an empty state when no graphs are minted', async () => {
     const fixture = await mount([]);
     const el = fixture.nativeElement as HTMLElement;

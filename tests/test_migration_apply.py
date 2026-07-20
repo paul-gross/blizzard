@@ -288,6 +288,26 @@ def test_an_unresolvable_cross_graph_target_escalates_to_needs_human(tmp_path: P
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "needs_human"
 
 
+def test_a_retired_cross_graph_target_escalates_to_needs_human_exactly_like_an_absent_one(tmp_path: Path) -> None:
+    """A migration edge's target resolves by name via ``get_enabled_by_name`` (issue
+    #101) — retiring `triage`'s only minted version leaves the name with **zero**
+    non-retired candidates, so it resolves to ``None`` exactly like an unminted name
+    (the prior test), and the edge caller's escalation path handles both identically."""
+    hub = build_hub(tmp_path)
+    chunk_id, node_id = _setup(hub, target_name="triage", mint_target=True)
+    target_graph_id = hub.client.get("/api/graphs").json()
+    triage_id = next(g["graph_id"] for g in target_graph_id if g["name"] == "triage")
+
+    retire = hub.client.post(f"/api/graphs/{triage_id}/retire", json={"by": "operator"})
+    assert retire.status_code == 202, retire.text
+    assert hub.client.get(f"/api/graphs/{triage_id}").json()["retired"] is True
+
+    resp = _migrate(hub, chunk_id, node_id)
+
+    assert resp.status_code == 200
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "needs_human"
+
+
 def test_a_replayed_migration_completion_is_idempotent(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id, node_id = _setup(hub, target_name="triage", mint_target=True)

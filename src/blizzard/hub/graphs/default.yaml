@@ -30,8 +30,10 @@
 # errors. The full authoring contract lives in `blizzard-harness:/domain/graphs.md`. This
 # default graph uses no cross-graph targets.
 #
-# Operational metadata (enabled, auto_migrate, migration_target) is NOT authored
-# here — it is set after mint via PATCH /graphs/{id}.
+# Operational metadata is NOT authored here. The retire/re-enable lifecycle (issue
+# #101) is set after mint via POST /graphs/{id}/retire|enable, an append-only fact —
+# this graph's row is never touched. The broader auto_migrate/migration_target
+# surface (P7) remains out of scope beyond that lifecycle.
 
 name: default-delivery
 entry: build

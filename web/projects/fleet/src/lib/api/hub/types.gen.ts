@@ -937,6 +937,18 @@ export type GraphEdgeView = {
 };
 
 /**
+ * GraphLifecycleRequest
+ *
+ * Retire or re-enable a graph — records who flipped it (issue #101).
+ */
+export type GraphLifecycleRequest = {
+    /**
+     * By
+     */
+    by?: string;
+};
+
+/**
  * GraphMintRequest
  *
  * A graph definition to mint — the raw YAML body.
@@ -1012,6 +1024,11 @@ export type GraphNodeView = {
  * GraphSummaryView
  *
  * One graph's summary row — a name-lineage entry as served by ``GET /graphs``.
+ *
+ * ``effective`` is the newest **non-retired** graph of this ``name`` (issue #101);
+ * ``retired`` is this graph's own lifecycle state, independent of ``effective`` — a
+ * retired graph is never effective, but a non-retired, non-effective graph is merely
+ * superseded by a newer version of the same name.
  */
 export type GraphSummaryView = {
     /**
@@ -1034,12 +1051,25 @@ export type GraphSummaryView = {
      * Name
      */
     name: string;
+    /**
+     * Retired
+     */
+    retired?: boolean;
 };
 
 /**
  * GraphView
  *
  * A minted graph as served by ``GET /graphs/{graph_id}`` and the mint response.
+ *
+ * ``enabled`` is ``not retired`` — the graph's own lifecycle state (issue #101),
+ * independent of whether it is currently the newest of its name. ``retired`` is the
+ * same fact spelled out explicitly for a board that wants to distinguish "retired"
+ * from "merely superseded by a newer version" (:class:`GraphSummaryView`'s
+ * ``effective``). Deliberately two wire fields for one fact, not drift: the only
+ * constructor, :func:`~blizzard.hub.api.graphs._graph_view`, sets both from the same
+ * ``retired`` bool in one call (``enabled=not retired, retired=retired``) — there is
+ * no second call site that could set one and forget the other.
  */
 export type GraphView = {
     /**
@@ -1066,6 +1096,10 @@ export type GraphView = {
      * Nodes
      */
     nodes?: Array<GraphNodeView>;
+    /**
+     * Retired
+     */
+    retired?: boolean;
     /**
      * Warnings
      */
@@ -3130,6 +3164,66 @@ export type GetGraphApiGraphsGraphIdGetResponses = {
 };
 
 export type GetGraphApiGraphsGraphIdGetResponse = GetGraphApiGraphsGraphIdGetResponses[keyof GetGraphApiGraphsGraphIdGetResponses];
+
+export type EnableGraphApiGraphsGraphIdEnablePostData = {
+    body: GraphLifecycleRequest;
+    path: {
+        /**
+         * Graph Id
+         */
+        graph_id: string;
+    };
+    query?: never;
+    url: '/api/graphs/{graph_id}/enable';
+};
+
+export type EnableGraphApiGraphsGraphIdEnablePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type EnableGraphApiGraphsGraphIdEnablePostError = EnableGraphApiGraphsGraphIdEnablePostErrors[keyof EnableGraphApiGraphsGraphIdEnablePostErrors];
+
+export type EnableGraphApiGraphsGraphIdEnablePostResponses = {
+    /**
+     * Successful Response
+     */
+    202: GraphView;
+};
+
+export type EnableGraphApiGraphsGraphIdEnablePostResponse = EnableGraphApiGraphsGraphIdEnablePostResponses[keyof EnableGraphApiGraphsGraphIdEnablePostResponses];
+
+export type RetireGraphApiGraphsGraphIdRetirePostData = {
+    body: GraphLifecycleRequest;
+    path: {
+        /**
+         * Graph Id
+         */
+        graph_id: string;
+    };
+    query?: never;
+    url: '/api/graphs/{graph_id}/retire';
+};
+
+export type RetireGraphApiGraphsGraphIdRetirePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RetireGraphApiGraphsGraphIdRetirePostError = RetireGraphApiGraphsGraphIdRetirePostErrors[keyof RetireGraphApiGraphsGraphIdRetirePostErrors];
+
+export type RetireGraphApiGraphsGraphIdRetirePostResponses = {
+    /**
+     * Successful Response
+     */
+    202: GraphView;
+};
+
+export type RetireGraphApiGraphsGraphIdRetirePostResponse = RetireGraphApiGraphsGraphIdRetirePostResponses[keyof RetireGraphApiGraphsGraphIdRetirePostResponses];
 
 export type HealthApiHealthGetData = {
     body?: never;

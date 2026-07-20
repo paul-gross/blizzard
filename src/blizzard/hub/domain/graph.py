@@ -17,6 +17,7 @@ validator run — the domain sees only already-loaded data.
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
@@ -448,16 +449,26 @@ class Graph:
         return next((e for e in self.edges if e.from_node_id == node_id and e.choice_id in choice_ids), None)
 
 
-def mark_effective(graphs: list[Graph]) -> dict[str, bool]:
-    """Mark the newest ``created_at`` graph per ``name`` as effective.
+def mark_effective(graphs: list[Graph], *, retired_ids: Collection[str]) -> dict[str, bool]:
+    """Mark the newest non-retired ``created_at`` graph per ``name`` as effective.
 
-    Keyed by ``graph_id``. Encodes the same "newest-per-name" rule
+    Keyed by ``graph_id``. Encodes the same "newest-per-name, retired excluded" rule
     :meth:`IReadGraphRepository.get_enabled_by_name` applies at lookup time — a pure
     domain function so the read-listing surface (``GET /graphs``) does not re-derive
-    it at the edge (``bzh:domain-core``).
+    it at the edge (``bzh:domain-core``). ``retired_ids`` names every ``graph_id``
+    whose newest lifecycle fact (issue #101) reads retired; a retired graph is never a
+    candidate, so a name whose every graph is retired marks none of them effective.
+
+    Required, keyword-only, and carries no default (issue #101 lockstep note): this
+    must stay in lockstep with ``get_enabled_by_name``'s own retired-exclusion, and a
+    caller that forgot the argument silently getting the pre-#101 "every graph is a
+    candidate" behavior back — with no type error — is exactly the kind of drift that
+    would undo. Pass ``retired_ids=frozenset()`` explicitly for the pre-#101 behavior.
     """
     newest_by_name: dict[str, Graph] = {}
     for graph in graphs:
+        if graph.graph_id in retired_ids:
+            continue
         current = newest_by_name.get(graph.name)
         # Tie-break on graph_id descending (ULIDs sort lexically by creation) — kept in
         # lockstep with IReadGraphRepository.get_enabled_by_name's ORDER BY.
@@ -475,10 +486,32 @@ class IReadGraphRepository(Protocol):
 
     def get(self, graph_id: str) -> Graph | None: ...
     def get_enabled_by_name(self, name: str) -> Graph | None:
-        """The newest enabled graph with ``name`` — the default-graph pin lookup."""
+        """The newest non-retired graph with ``name`` — the default-graph pin lookup.
+
+        Excludes every retired ``graph_id`` (issue #101); resolves to ``None`` when
+        ``name``'s every minted graph is retired, kept in lockstep with
+        :func:`mark_effective`.
+        """
         ...
 
     def list_all(self) -> list[Graph]: ...
+
+    def is_retired(self, graph_id: str) -> bool:
+        """Whether ``graph_id``'s newest lifecycle fact reads retired (issue #101).
+
+        ``False`` for a ``graph_id`` with no lifecycle fact at all — every freshly
+        minted graph starts enabled.
+        """
+        ...
+
+    def retired_graph_ids(self) -> set[str]:
+        """Every ``graph_id`` whose newest lifecycle fact reads retired (issue #101).
+
+        The set :func:`mark_effective` excludes from candidacy — the bulk counterpart
+        to :meth:`is_retired`, used by the ``GET /graphs`` listing so it derives
+        ``effective`` once rather than per-row.
+        """
+        ...
 
 
 class IWriteGraphRepository(IReadGraphRepository, Protocol):
@@ -486,4 +519,11 @@ class IWriteGraphRepository(IReadGraphRepository, Protocol):
 
     def mint(self, graph: Graph, *, definition_yaml: str, at: datetime) -> None:
         """Persist a reified, immutable graph and its source YAML."""
+        ...
+
+    def record_lifecycle(self, graph_id: str, *, retired: bool, at: datetime, by: str) -> None:
+        """Append a ``graph.retired``/``graph.enabled`` fact — newest-fact-wins (issue #101).
+
+        Never touches the ``graphs`` row itself — it stays insert-only and immutable.
+        """
         ...

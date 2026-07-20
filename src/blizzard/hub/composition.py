@@ -37,6 +37,7 @@ from blizzard.hub.domain.enrollment import RunnerEnrollmentService
 from blizzard.hub.domain.facts import FactIngestService, RunnerFactsService
 from blizzard.hub.domain.graph import GraphDoc, IReadGraphRepository
 from blizzard.hub.domain.graph_authoring import GraphMintService
+from blizzard.hub.domain.graph_lifecycle import GraphLifecycleService
 from blizzard.hub.domain.ingest import IngestService
 from blizzard.hub.domain.pause import PauseService
 from blizzard.hub.domain.promote import PromoteService
@@ -69,6 +70,7 @@ class HubServices:
     edit: EditService
     facts: FactIngestService
     graph_mint: GraphMintService
+    graph_lifecycle: GraphLifecycleService
     runner_facts: RunnerFactsService
     questions: QuestionService
     queue: QueueService
@@ -152,6 +154,7 @@ def build_services(
         edit=EditService(chunks=chunk_store),
         facts=FactIngestService(chunks=chunk_store, fleet=fleet, clock=clock),
         graph_mint=GraphMintService(graphs=graph_store, clock=clock),
+        graph_lifecycle=GraphLifecycleService(graphs=graph_store, clock=clock),
         runner_facts=RunnerFactsService(chunks=chunk_store, clock=clock),
         questions=QuestionService(chunks=chunk_store, clock=clock),
         queue=QueueService(chunks=chunk_store, clock=clock),

@@ -15,4 +15,5 @@ export {
   type TextKind,
 } from './graph-layout';
 export { injectHubGraphsQuery, injectHubGraphQuery } from './graphs.query';
+export { injectGraphLifecycleMutation, type GraphLifecycleVars } from './graph-lifecycle.mutations';
 export type { GraphSummaryView, GraphView, GraphNodeView, GraphEdgeView, GraphChoiceView } from '../api/hub';

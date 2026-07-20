@@ -29,7 +29,7 @@ blizzard hub host .          # serve the API + embedded mission-control board
 Then open <http://127.0.0.1:8421/> — the default port from the `blizzard-hub.toml` that `blizzard hub init` scaffolds.
 
 - **sqlite is the default store** — postgres is configuration (the `db_url` knob), not a requirement.
-- **The mission-control frontend is embedded in the wheel** — no Node install or runtime. It ships the mission-control board plus a read-only graph explorer.
+- **The mission-control frontend is embedded in the wheel** — no Node install or runtime. It ships the mission-control board plus a graph explorer, whose detail view also carries operator Retire / Re-enable controls over a graph's lifecycle (issue #101).
 - The same `init` / `migrate` / `host` verbs exist under `blizzard runner`.
 
 ## Layout (screaming architecture — `bzh:screaming-architecture`)

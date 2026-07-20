@@ -105,7 +105,13 @@ def _resolve_cross_graph_target(services: HubServices, graph: Graph, submission:
     codebase's own "controller resolves the graph, passes it in" convention. Deliberately
     **total** (A3): a missing node/edge/choice returns ``None`` — it never raises, since
     those are ``apply()``'s authoritative ``_failure`` returns, not a second validation
-    site that would 500 the controller."""
+    site that would 500 the controller. ``get_enabled_by_name`` folds a **retired**
+    target into this same ``None`` bucket (issue #101): a chunk mid-workflow taking a
+    migration edge whose named target has since been retired degrades to the same
+    apply-failure path as a target that was never minted, rather than a distinct
+    refusal — an explicit choice, not an oversight, though it means a retired
+    cross-graph target is indistinguishable from an unminted one from the chunk's own
+    apply-failure detail."""
     from_node = graph.node_by_id(submission.from_node_id)
     if from_node is None:
         return None

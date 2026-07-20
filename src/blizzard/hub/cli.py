@@ -531,6 +531,64 @@ def _set_runner_pause(runner_id: str, *, verb: str, by: str, hub_url: str | None
         click.echo(f"note: runner {runner_id} also paused itself — clear that with `blizzard runner start`")
 
 
+@hub.group("graph")
+def graph_group() -> None:
+    """Operator verbs over minted graphs: list, retire, re-enable (issue #101)."""
+
+
+@graph_group.command("list")
+@click.option("--hub-url", default=None, help=f"Hub API base URL (default ${ENV_HUB_URL} or {DEFAULT_HUB_URL}).")
+def list_graphs(hub_url: str | None) -> None:
+    """List every minted graph, newest first — name, graph_id, effective, retired."""
+    try:
+        resp = httpx.get(f"{_hub_url(hub_url).rstrip('/')}/api/graphs", timeout=_CLIENT_TIMEOUT)
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise _api_error("GET /graphs", exc) from exc
+    rows = resp.json()
+    if not rows:
+        click.echo("no graphs minted yet")
+        return
+    for row in rows:
+        marker = "effective" if row["effective"] else ("retired" if row["retired"] else "superseded")
+        click.echo(f"{row['graph_id']}  name={row['name']}  {marker}  created_at={row['created_at']}")
+
+
+@graph_group.command("retire")
+@click.argument("graph_id")
+@click.option("--by", "by", default="operator", help="Who is retiring (recorded on the fact).")
+@click.option("--hub-url", default=None, help=f"Hub API base URL (default ${ENV_HUB_URL} or {DEFAULT_HUB_URL}).")
+def retire_graph(graph_id: str, by: str, hub_url: str | None) -> None:
+    """Retire GRAPH_ID — excludes it from name resolution; in-flight chunks run on."""
+    _set_graph_lifecycle(graph_id, verb="retire", by=by, hub_url=hub_url)
+
+
+@graph_group.command("enable")
+@click.argument("graph_id")
+@click.option("--by", "by", default="operator", help="Who is re-enabling (recorded on the fact).")
+@click.option("--hub-url", default=None, help=f"Hub API base URL (default ${ENV_HUB_URL} or {DEFAULT_HUB_URL}).")
+def enable_graph(graph_id: str, by: str, hub_url: str | None) -> None:
+    """Re-enable a retired GRAPH_ID — restores normal newest-per-name derivation."""
+    _set_graph_lifecycle(graph_id, verb="enable", by=by, hub_url=hub_url)
+
+
+def _set_graph_lifecycle(graph_id: str, *, verb: str, by: str, hub_url: str | None) -> None:
+    url = f"{_hub_url(hub_url).rstrip('/')}/api/graphs/{graph_id}/{verb}"
+    try:
+        resp = httpx.post(url, json={"by": by}, timeout=_CLIENT_TIMEOUT)
+    except httpx.HTTPError as exc:
+        raise _api_error(f"POST /graphs/{{id}}/{verb}", exc) from exc
+    if resp.status_code == httpx.codes.NOT_FOUND:
+        raise click.ClickException(f"unknown graph {graph_id}")
+    try:
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise _api_error(f"POST /graphs/{{id}}/{verb}", exc) from exc
+    body = resp.json()
+    state = "retired" if body.get("retired") else "enabled"
+    click.echo(f"graph {graph_id} is now {state}")
+
+
 @hub.group("runner")
 def runner_group() -> None:
     """Operator verbs over one runner's identity (issue #86a: currently just enrollment)."""

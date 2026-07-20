@@ -41,6 +41,7 @@ from blizzard.hub.domain.decisions import NotEscalated
 from blizzard.hub.domain.detach import NotRouted
 from blizzard.hub.domain.edit import ChunkNotEditable
 from blizzard.hub.domain.graph import Graph
+from blizzard.hub.domain.graph_authoring import DefaultGraphRetired
 from blizzard.hub.domain.ingest import IngestConflict
 from blizzard.hub.domain.pause import ChunkNotPausable
 from blizzard.hub.domain.work import (
@@ -315,7 +316,9 @@ def _current_node(
 @router.post("/chunks", response_model=ChunkIngestResponse, status_code=status.HTTP_201_CREATED)
 def ingest_chunk(request: ChunkIngestRequest, services: Annotated[HubServices, Depends(get_services)]) -> object:
     """Ingest by source-native token; 422 on a token no configured source
-    claims; 409 on a pointer held by a live chunk."""
+    claims; 409 on a pointer held by a live chunk; 503 if every graph named after the
+    packaged default has been retired (issue #101 — the operator's brake, not a code
+    bug: re-enable one or mint a new one)."""
     if not request.tokens:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="at least one token required")
     # Resolution before minting, and before the live-holder check: an unresolvable
@@ -332,7 +335,12 @@ def ingest_chunk(request: ChunkIngestRequest, services: Annotated[HubServices, D
                 detail=(f"token {token!r} is not claimed by any configured PM source (configured: {configured})"),
             )
         pointers.append(pointer)
-    graph = services.graph_mint.ensure_default(services.default_graph_doc, definition_yaml=services.default_graph_yaml)
+    try:
+        graph = services.graph_mint.ensure_default(
+            services.default_graph_doc, definition_yaml=services.default_graph_yaml
+        )
+    except DefaultGraphRetired as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     try:
         chunk_id = services.ingest.ingest(pointers, graph=graph)
     except IngestConflict as exc:
@@ -554,7 +562,8 @@ def set_chunk_graph(
 ) -> ChunkGraphView:
     """Repin a not-ready chunk's workflow graph (issue #27).
 
-    404 on an unknown chunk or an unknown target graph; 409 once the chunk has left
+    404 on an unknown chunk or an unknown target graph; 409 on a retired target graph
+    (issue #101 — a retired graph cannot receive new work) or once the chunk has left
     ``not_ready`` (already promoted, claimed, running, or later)."""
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
@@ -562,6 +571,11 @@ def set_chunk_graph(
     graph = services.graphs.get(request.graph_id)
     if graph is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {request.graph_id}")
+    if services.graphs.is_retired(request.graph_id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"graph {request.graph_id} is retired and cannot receive new work",
+        )
     try:
         services.edit.set_graph(chunk, graph=graph)
     except ChunkNotEditable as exc:

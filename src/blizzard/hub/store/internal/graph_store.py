@@ -6,9 +6,10 @@ Implements :class:`~blizzard.hub.domain.graph.IWriteGraphRepository` over the
 sees only reified :class:`~blizzard.hub.domain.graph.Graph` objects.
 
 Graphs are immutable: :meth:`mint` is insert-only, and there is no update
-path. ``enabled`` is not a stored column in the walking skeleton — every minted
-graph is enabled, so ``get_enabled_by_name`` returns the newest graph of that name;
-the metadata-fact derivation bolts on in P7.
+path. ``enabled``/``retired`` is not a column on ``graphs`` — it is derived from the
+append-only ``graph_lifecycle_facts`` table (issue #101): ``get_enabled_by_name``
+returns the newest **non-retired** graph of that name, newest-fact-wins per
+``graph_id``, exactly like ``chunk_pause_facts``.
 """
 
 from __future__ import annotations
@@ -30,7 +31,7 @@ from blizzard.hub.domain.graph import (
     SessionMode,
     target_graph_of,
 )
-from blizzard.hub.store.schema import graph_choices, graph_edges, graph_nodes, graphs
+from blizzard.hub.store.schema import graph_choices, graph_edges, graph_lifecycle_facts, graph_nodes, graphs
 
 
 class GraphStore:
@@ -103,20 +104,57 @@ class GraphStore:
     def get_enabled_by_name(self, name: str) -> Graph | None:
         with self._engine.connect() as conn:
             # Tie-break on graph_id descending (ULIDs sort lexically by creation) — kept
-            # in lockstep with domain.graph.mark_effective's tie order.
-            row = conn.execute(
+            # in lockstep with domain.graph.mark_effective's tie order. Walked
+            # newest-first, skipping every retired graph_id (issue #101), so the
+            # candidate is the newest **non-retired** graph of that name — or None once
+            # every candidate has been skipped.
+            rows = conn.execute(
                 select(graphs)
                 .where(graphs.c.name == name)
                 .order_by(graphs.c.created_at.desc(), graphs.c.graph_id.desc())
-            ).first()
-            if row is None:
-                return None
-            return self._reify(conn, row)
+            ).all()
+            for row in rows:
+                if not self._is_retired(conn, row.graph_id):
+                    return self._reify(conn, row)
+            return None
 
     def list_all(self) -> list[Graph]:
         with self._engine.connect() as conn:
             rows = conn.execute(select(graphs).order_by(graphs.c.created_at.desc())).all()
             return [self._reify(conn, row) for row in rows]
+
+    def is_retired(self, graph_id: str) -> bool:
+        with self._engine.connect() as conn:
+            return self._is_retired(conn, graph_id)
+
+    def _is_retired(self, conn, graph_id: str) -> bool:  # type: ignore[no-untyped-def]
+        """Newest ``graph_lifecycle_facts`` row for ``graph_id`` wins; no row reads
+        not-retired (a freshly minted graph starts enabled)."""
+        row = conn.execute(
+            select(graph_lifecycle_facts.c.retired)
+            .where(graph_lifecycle_facts.c.graph_id == graph_id)
+            .order_by(graph_lifecycle_facts.c.id.desc())
+            .limit(1)
+        ).first()
+        return bool(row.retired) if row is not None else False
+
+    def retired_graph_ids(self) -> set[str]:
+        """Every ``graph_id`` whose newest lifecycle fact reads retired (issue #101)."""
+        with self._engine.connect() as conn:
+            rows = conn.execute(
+                select(graph_lifecycle_facts.c.graph_id, graph_lifecycle_facts.c.retired).order_by(
+                    graph_lifecycle_facts.c.id
+                )
+            ).all()
+        newest: dict[str, bool] = {}
+        for row in rows:
+            newest[row.graph_id] = row.retired  # newest-fact-wins: ascending id order overwrites
+        return {graph_id for graph_id, retired in newest.items() if retired}
+
+    def record_lifecycle(self, graph_id: str, *, retired: bool, at: datetime, by: str) -> None:
+        """Append a ``graph.retired``/``graph.enabled`` fact — newest-fact-wins (issue #101)."""
+        with self._engine.begin() as conn:
+            conn.execute(insert(graph_lifecycle_facts).values(graph_id=graph_id, retired=retired, set_at=at, set_by=by))
 
     def _reify(self, conn, graph_row) -> Graph:  # type: ignore[no-untyped-def]
         node_rows = conn.execute(select(graph_nodes).where(graph_nodes.c.graph_id == graph_row.graph_id)).all()

@@ -1,6 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import { vi } from 'vitest';
 
 import { settle } from '../testing/settle';
 import { client as hubClient } from '../api/hub/client.gen';
@@ -101,5 +102,100 @@ describe('GraphDetail', () => {
 
     expect(el.querySelector('[data-testid="graph-detail-error"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="graph-detail-body"]')).toBeNull();
+  });
+
+  // --- Retire / re-enable (issue #101) -----------------------------------------
+
+  it('shows the enabled badge and a Retire button for a non-retired graph', async () => {
+    const fixture = await mount('gr_build_v2', (method, path) => {
+      if (method === 'GET' && path === '/api/graphs/gr_build_v2') return GRAPH;
+      return {};
+    });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="graph-detail-lifecycle-badge"]')?.textContent).toContain('enabled');
+    expect(el.querySelector('[data-testid="graph-detail-retire"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="graph-detail-enable"]')).toBeNull();
+  });
+
+  it('shows the retired badge and an Enable button for a retired graph', async () => {
+    const fixture = await mount('gr_build_v2', (method, path) => {
+      if (method === 'GET' && path === '/api/graphs/gr_build_v2') return { ...GRAPH, enabled: false, retired: true };
+      return {};
+    });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="graph-detail-lifecycle-badge"]')?.textContent).toContain('retired');
+    expect(el.querySelector('[data-testid="graph-detail-enable"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="graph-detail-retire"]')).toBeNull();
+  });
+
+  it('fires the retire client call once the operator confirms', async () => {
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
+    const fixture = await mount('gr_build_v2', (method, path) => {
+      if (method === 'GET' && path === '/api/graphs/gr_build_v2') return GRAPH;
+      return {};
+    });
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="graph-detail-retire"]')?.click();
+    await settle(fixture);
+
+    const calls = stub.forRoute('/api/graphs/gr_build_v2/retire', 'POST');
+    expect(calls).toHaveLength(1);
+    expect(calls[0].body).toMatchObject({ by: 'operator' });
+    confirmSpy.mockRestore();
+  });
+
+  it('does not fire the retire call when the operator cancels the confirm', async () => {
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
+    const fixture = await mount('gr_build_v2', (method, path) => {
+      if (method === 'GET' && path === '/api/graphs/gr_build_v2') return GRAPH;
+      return {};
+    });
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="graph-detail-retire"]')?.click();
+    await settle(fixture);
+
+    expect(stub.forRoute('/api/graphs/gr_build_v2/retire', 'POST')).toHaveLength(0);
+    confirmSpy.mockRestore();
+  });
+
+  it('fires the enable client call for a retired graph once the operator confirms', async () => {
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
+    const fixture = await mount('gr_build_v2', (method, path) => {
+      if (method === 'GET' && path === '/api/graphs/gr_build_v2') return { ...GRAPH, enabled: false, retired: true };
+      return {};
+    });
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="graph-detail-enable"]')?.click();
+    await settle(fixture);
+
+    const calls = stub.forRoute('/api/graphs/gr_build_v2/enable', 'POST');
+    expect(calls).toHaveLength(1);
+    expect(calls[0].body).toMatchObject({ by: 'operator' });
+    confirmSpy.mockRestore();
+  });
+
+  it('surfaces a 409 refusal from retire rather than swallowing it', async () => {
+    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
+    const fixture = await mount('gr_build_v2', (method, path) => {
+      if (method === 'GET' && path === '/api/graphs/gr_build_v2') return GRAPH;
+      if (method === 'POST' && path === '/api/graphs/gr_build_v2/retire') {
+        return stubError(409, { detail: 'graph gr_build_v2 already retired somehow' });
+      }
+      return {};
+    });
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="graph-detail-retire"]')?.click();
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="graph-detail-lifecycle-error"]')?.textContent).toContain(
+      'already retired somehow',
+    );
+    confirmSpy.mockRestore();
   });
 });

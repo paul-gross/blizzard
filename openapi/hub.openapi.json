@@ -1306,6 +1306,18 @@
         "title": "GraphEdgeView",
         "type": "object"
       },
+      "GraphLifecycleRequest": {
+        "description": "Retire or re-enable a graph \u2014 records who flipped it (issue #101).",
+        "properties": {
+          "by": {
+            "default": "operator",
+            "title": "By",
+            "type": "string"
+          }
+        },
+        "title": "GraphLifecycleRequest",
+        "type": "object"
+      },
       "GraphMintRequest": {
         "description": "A graph definition to mint \u2014 the raw YAML body.",
         "properties": {
@@ -1434,7 +1446,7 @@
         "type": "object"
       },
       "GraphSummaryView": {
-        "description": "One graph's summary row \u2014 a name-lineage entry as served by ``GET /graphs``.",
+        "description": "One graph's summary row \u2014 a name-lineage entry as served by ``GET /graphs``.\n\n``effective`` is the newest **non-retired** graph of this ``name`` (issue #101);\n``retired`` is this graph's own lifecycle state, independent of ``effective`` \u2014 a\nretired graph is never effective, but a non-retired, non-effective graph is merely\nsuperseded by a newer version of the same name.",
         "properties": {
           "created_at": {
             "title": "Created At",
@@ -1455,6 +1467,11 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "retired": {
+            "default": false,
+            "title": "Retired",
+            "type": "boolean"
           }
         },
         "required": [
@@ -1468,7 +1485,7 @@
         "type": "object"
       },
       "GraphView": {
-        "description": "A minted graph as served by ``GET /graphs/{graph_id}`` and the mint response.",
+        "description": "A minted graph as served by ``GET /graphs/{graph_id}`` and the mint response.\n\n``enabled`` is ``not retired`` \u2014 the graph's own lifecycle state (issue #101),\nindependent of whether it is currently the newest of its name. ``retired`` is the\nsame fact spelled out explicitly for a board that wants to distinguish \"retired\"\nfrom \"merely superseded by a newer version\" (:class:`GraphSummaryView`'s\n``effective``). Deliberately two wire fields for one fact, not drift: the only\nconstructor, :func:`~blizzard.hub.api.graphs._graph_view`, sets both from the same\n``retired`` bool in one call (``enabled=not retired, retired=retired``) \u2014 there is\nno second call site that could set one and forget the other.",
         "properties": {
           "edges": {
             "default": [],
@@ -1501,6 +1518,11 @@
             },
             "title": "Nodes",
             "type": "array"
+          },
+          "retired": {
+            "default": false,
+            "title": "Retired",
+            "type": "boolean"
           },
           "warnings": {
             "default": [],
@@ -3082,7 +3104,7 @@
         ]
       },
       "post": {
-        "description": "Ingest by source-native token; 422 on a token no configured source\nclaims; 409 on a pointer held by a live chunk.",
+        "description": "Ingest by source-native token; 422 on a token no configured source\nclaims; 409 on a pointer held by a live chunk; 503 if every graph named after the\npackaged default has been retired (issue #101 \u2014 the operator's brake, not a code\nbug: re-enable one or mint a new one).",
         "operationId": "ingest_chunk_api_chunks_post",
         "requestBody": {
           "content": {
@@ -3214,7 +3236,7 @@
     },
     "/api/chunks/{chunk_id}/graph": {
       "post": {
-        "description": "Repin a not-ready chunk's workflow graph (issue #27).\n\n404 on an unknown chunk or an unknown target graph; 409 once the chunk has left\n``not_ready`` (already promoted, claimed, running, or later).",
+        "description": "Repin a not-ready chunk's workflow graph (issue #27).\n\n404 on an unknown chunk or an unknown target graph; 409 on a retired target graph\n(issue #101 \u2014 a retired graph cannot receive new work) or once the chunk has left\n``not_ready`` (already promoted, claimed, running, or later).",
         "operationId": "set_chunk_graph_api_chunks__chunk_id__graph_post",
         "parameters": [
           {
@@ -4475,7 +4497,7 @@
     },
     "/api/graphs": {
       "get": {
-        "description": "Every minted graph, newest first, newest per name marked ``effective``.",
+        "description": "Every minted graph, newest first, newest non-retired per name marked ``effective``.",
         "operationId": "list_graphs_api_graphs_get",
         "responses": {
           "200": {
@@ -4577,6 +4599,112 @@
           }
         },
         "summary": "Get Graph",
+        "tags": [
+          "graphs"
+        ]
+      }
+    },
+    "/api/graphs/{graph_id}/enable": {
+      "post": {
+        "description": "Re-enable a retired graph \u2014 restores normal newest-per-name derivation\n(issue #101). Idempotent on an already-enabled graph; 404 on an unknown id.",
+        "operationId": "enable_graph_api_graphs__graph_id__enable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "graph_id",
+            "required": true,
+            "schema": {
+              "title": "Graph Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GraphLifecycleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enable Graph",
+        "tags": [
+          "graphs"
+        ]
+      }
+    },
+    "/api/graphs/{graph_id}/retire": {
+      "post": {
+        "description": "Retire a graph \u2014 excludes it from name resolution; the claim on any chunk\nalready pinned to it runs on untouched (issue #101). 404 on an unknown id.",
+        "operationId": "retire_graph_api_graphs__graph_id__retire_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "graph_id",
+            "required": true,
+            "schema": {
+              "title": "Graph Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GraphLifecycleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retire Graph",
         "tags": [
           "graphs"
         ]

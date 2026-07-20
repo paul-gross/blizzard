@@ -473,6 +473,36 @@ pinned **graph** and **model** are editable, both from the chunk detail dock and
 `POST /api/chunks/{id}/graph` / `POST /api/chunks/{id}/model`. Once the chunk leaves
 `not_ready` (promoted, claimed, running, or later) both edits are refused with `409`.
 
+## Graph lifecycle — retire and re-enable
+
+`blizzard hub graph list` / `graph retire <graph_id>` / `graph enable <graph_id>`
+(issue #101), or the graph explorer's own **Retire** / **Re-enable** buttons and
+lifecycle badge in the web board — an operator's brake over which graph a **name**
+resolves to. Not a work-stopping lever like the four verbs above: a graph carries no
+chunk, no claim, no live worker to interrupt. Retiring never touches the graph's own
+immutable row — it appends a `graph.retired` fact, reversed by `graph enable`'s
+`graph.enabled` fact — so the brake is **reversible**, and every toggle is itself an
+append-only audit trail rather than a destructive edit.
+
+**What retiring changes, and what it deliberately leaves alone.** A chunk that
+already pins a retired graph keeps running it to completion — existing pins are left
+to run out; issue #101 is scoped to blocking only *new* resolution by name, never
+touching a chunk mid-workflow. What a retire blocks is every name lookup: the
+default-graph pin at ingest and a cross-graph migration's `graph:<name>` judgement
+target both resolve through the newest **non-retired** graph of that name, skipping
+every retired `graph_id` entirely.
+
+**Retiring every version of a name is a real trap, not a hypothetical.** If every
+graph ever minted under one name — including the packaged `default-delivery` the hub
+ingests against out of the box — is retired, name resolution has nothing left to hand
+back. The next ingest that would otherwise lazily mint a fresh copy of the packaged
+default **refuses with `503`** instead: minting a fresh copy there would be
+immediately effective and would silently undo the retire the moment it landed,
+including across a hub restart. Re-enable one of the retired versions, or mint a new
+graph under that name, to clear it. A cross-graph migration choice naming an
+all-retired target has the same "nothing left to resolve" shape at the moment a
+chunk takes it.
+
 ## Bounding fleet spend — cost caps and the spend kill-switch
 
 An unattended overnight fleet spends against the operator's harness billing with no ceiling

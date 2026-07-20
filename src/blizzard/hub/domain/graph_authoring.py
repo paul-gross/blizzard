@@ -37,6 +37,22 @@ class GraphValidationError(Exception):
         self.result = result
 
 
+class DefaultGraphRetired(Exception):
+    """Every minted graph named ``name`` is retired — refuses to silently re-mint over
+    an operator's deliberate brake (issue #101).
+
+    Distinct from "no graph of this name has ever been minted": that case still mints
+    the packaged default (:meth:`GraphMintService.ensure_default`'s original
+    idempotent-by-name behavior). This case means the operator has already retired
+    every version on purpose — surfacing the refusal is the whole point of the brake
+    surviving a restart.
+    """
+
+    def __init__(self, name: str) -> None:
+        super().__init__(f"every graph named {name!r} is retired — re-enable one or mint a new one before ingesting")
+        self.name = name
+
+
 def reify_graph(doc: GraphDoc, clock: IClock) -> Graph:
     """Compile a validated authoring doc into an immutable, id-carrying graph.
 
@@ -145,13 +161,24 @@ class GraphMintService:
         return warnings
 
     def ensure_default(self, doc: GraphDoc, *, definition_yaml: str) -> Graph:
-        """Mint the configured default graph if no enabled graph of its name exists.
+        """Mint the configured default graph if no graph of its name has ever existed.
 
         Idempotent by name: a fresh hub mints the packaged default on first use, and
         re-checks are no-ops. Graphs stay immutable — this never edits an existing one.
+
+        ``get_enabled_by_name`` returning ``None`` is ambiguous by itself — no graph of
+        this name was ever minted, or every one that was has since been retired
+        (issue #101). Those two must not collapse to the same "mint a fresh copy"
+        outcome: retiring every version of the default graph is an operator's
+        deliberate brake, and it must survive a restart rather than be silently undone
+        the next time this runs (a re-mint would be immediately effective, since a
+        freshly minted graph starts enabled). :meth:`list_all` disambiguates by
+        checking whether *any* graph of this name exists at all, retired or not.
         """
         existing = self._graphs.get_enabled_by_name(doc.name)
         if existing is not None:
             return existing
+        if any(g.name == doc.name for g in self._graphs.list_all()):
+            raise DefaultGraphRetired(doc.name)
         graph, _ = self.mint(doc, definition_yaml=definition_yaml)
         return graph
