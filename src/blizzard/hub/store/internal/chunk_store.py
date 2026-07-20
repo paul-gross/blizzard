@@ -37,9 +37,11 @@ from blizzard.hub.domain.work import (
     DecisionRow,
     EscalationFact,
     HubNodePollFact,
+    IntendedMigration,
     IWriteChunkRepository,
     LeaseFact,
     MigrationFact,
+    MigrationMode,
     PauseFact,
     PmPointer,
     PrOpenedFact,
@@ -58,6 +60,21 @@ from blizzard.hub.store import schema as s
 
 _ROUTE_PREFIX = "route"
 _TERMINAL = frozenset({ChunkStatus.STOPPED, ChunkStatus.DONE})
+
+
+def _serialize_intended_migration(intended: IntendedMigration | None) -> str | None:
+    """``chunks.intended_migration``'s wire shape — ``None`` writes ``NULL`` (issue #124)."""
+    if intended is None:
+        return None
+    return json.dumps({"mode": intended.mode.value, "graph_id": intended.graph_id, "node_name": intended.node_name})
+
+
+def _deserialize_intended_migration(value: str | None) -> IntendedMigration | None:
+    """The counterpart read — ``NULL``/absent reads back as ``None`` (issue #124)."""
+    if value is None:
+        return None
+    data = json.loads(value)
+    return IntendedMigration(mode=MigrationMode(data["mode"]), graph_id=data["graph_id"], node_name=data["node_name"])
 
 
 class ChunkStore:
@@ -918,6 +935,7 @@ class ChunkStore:
         at: datetime,
         artifacts: list[ArtifactRow],
         release_route: bool = True,
+        clear_intent: bool = False,
     ) -> bool:
         """Record a cross-graph migration **atomically and idempotently** (#90).
 
@@ -943,7 +961,14 @@ class ChunkStore:
 
         No lease is minted here (unlike :meth:`finalize_delivery`): the migration is
         recorded at the *submitting* epoch, and the re-queue means the **next** claim mints
-        a fresh higher lease above it, fencing the abandoned attempt."""
+        a fresh higher lease above it, fencing the abandoned attempt.
+
+        ``clear_intent`` (issue #124), when ``True``, folds ``chunks.intended_migration =
+        NULL`` into this same ``chunks`` update — the applied intent's fact and its clear
+        land in the one transaction the fact itself does, so a durable fact implies a
+        durably-cleared intent (a crash between them is impossible; there is no between).
+        ``False`` (default) for an ordinary #90 authored-choice migration, which carries no
+        intent to clear."""
         with self._engine.begin() as conn:
             if self._migration_exists(conn, chunk_id, from_node_id=from_node_id, epoch=epoch):
                 return False
@@ -962,9 +987,11 @@ class ChunkStore:
                     recorded_at=at,
                 )
             )
-            values = {"graph_id": to_graph_id}
+            values: dict[str, str | None] = {"graph_id": to_graph_id}
             if model is not None:
                 values["model"] = model
+            if clear_intent:
+                values["intended_migration"] = None
             conn.execute(update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(**values))
             if release_route:
                 conn.execute(
@@ -1076,6 +1103,21 @@ class ChunkStore:
         """Repin a not-ready or ready-unclaimed chunk's model selection (issue #27, #120)."""
         with self._engine.begin() as conn:
             conn.execute(update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(model=model))
+
+    def set_intended_migration(self, chunk_id: str, *, intended: IntendedMigration | None) -> None:
+        """Set, overwrite, or clear a chunk's standing migration intent (issue #124).
+
+        A plain column overwrite, mirroring :meth:`set_graph`/:meth:`set_model` — see
+        :meth:`IWriteChunkRepository.set_intended_migration`. Editable at any
+        non-terminal status, ``not_ready``/``ready`` included; the column carries no
+        timestamp, so this write takes no ``at`` (unlike this repository's other
+        writes, ``bzh:injected-clock``)."""
+        with self._engine.begin() as conn:
+            conn.execute(
+                update(s.chunks)
+                .where(s.chunks.c.chunk_id == chunk_id)
+                .values(intended_migration=_serialize_intended_migration(intended))
+            )
 
     # --- The generic hub command node (#65) ---------------------------------
 
@@ -1353,6 +1395,7 @@ class ChunkStore:
             pm_pointers=pointers,
             minted_at=row.minted_at,
             model=row.model,
+            intended_migration=_deserialize_intended_migration(row.intended_migration),
         )
 
     def _status(self, chunk_id: str) -> ChunkStatus:

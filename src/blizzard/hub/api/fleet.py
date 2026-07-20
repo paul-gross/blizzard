@@ -49,6 +49,7 @@ from blizzard.hub.domain.claim import ClaimConflict, ClaimDeniedPaused, ClaimDen
 from blizzard.hub.domain.envelope import addendum_for_transition, build_node_envelope
 from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.work import (
+    Chunk,
     ChunkFacts,
     current_node_id,
     derive_chunk_status,
@@ -94,6 +95,29 @@ def _route_token_mode(request: Request) -> str:
 
 def _produces_mode(request: Request) -> str:
     return request.app.state.config.produces_mode
+
+
+def _resolve_intended_migration_target(services: HubServices, chunk: Chunk) -> Graph | None:
+    """The chunk's own standing migration intent's target, resolved by id (issue #124) —
+    or ``None`` when no intent is set, the target was never minted, or it has since been
+    retired.
+
+    Resolved here, at the edge, so :class:`~blizzard.hub.domain.apply.ApplyService` stays
+    a pure taker-of-objects holding no graph repo of its own (``bzh:domain-takes-objects``),
+    the same convention :func:`_resolve_cross_graph_target` follows for a #90 migration
+    edge's target. Unlike that helper's name lookup, the intent stores a resolved graph
+    **id** (request-time resolution, ``EditService``/``chunks.py``), so this resolves by
+    id via ``services.graphs.get`` and folds a retired target into the same ``None``
+    bucket ``get_enabled_by_name`` already does for #90 — the consult (``apply.py``)
+    treats an unresolvable target as a deferred no-op: the transition applies unchanged
+    and the intent stays set for the operator to see on ``GET``."""
+    intent = chunk.intended_migration
+    if intent is None:
+        return None
+    target = services.graphs.get(intent.graph_id)
+    if target is None or services.graphs.is_retired(target.graph_id):
+        return None
+    return target
 
 
 def _resolve_cross_graph_target(services: HubServices, graph: Graph, submission: CompletionSubmission) -> Graph | None:
@@ -335,6 +359,7 @@ def submit_completion(
     already_migrated = services.chunks.accepted_migration(
         chunk_id, from_node_id=submission.from_node_id, epoch=submission.epoch
     )
+    intended_target_graph = _resolve_intended_migration_target(services, chunk)
     response = services.apply.apply(
         chunk,
         graph,
@@ -342,6 +367,7 @@ def submit_completion(
         route_token_mode=_route_token_mode(http_request),
         produces_mode=_produces_mode(http_request),
         target_graph=target_graph,
+        intended_target_graph=intended_target_graph,
     )
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)

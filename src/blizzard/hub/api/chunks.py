@@ -39,7 +39,14 @@ from blizzard.hub.delivery.hub_node import poll_interval_for
 from blizzard.hub.domain.artifacts import ArtifactRow, GitCommitArtifact, from_row, store_key
 from blizzard.hub.domain.decisions import NotEscalated
 from blizzard.hub.domain.detach import NotRouted
-from blizzard.hub.domain.edit import ChunkNotEditable, TargetGraphRetired
+from blizzard.hub.domain.edit import (
+    UNSET,
+    ChunkEdit,
+    ChunkNotEditable,
+    ForcedNodeUnknown,
+    MigrationTargetIsCurrentPin,
+    TargetGraphRetired,
+)
 from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.graph_authoring import DefaultGraphRetired
 from blizzard.hub.domain.ingest import IngestConflict
@@ -49,6 +56,8 @@ from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
     ChunkStatus,
+    IntendedMigration,
+    MigrationMode,
     PmPointer,
     awaiting_external_merge,
     current_node_id,
@@ -73,6 +82,8 @@ from blizzard.wire.chunk import (
     ChunkIngestResponse,
     ChunkModelUpdateRequest,
     ChunkModelView,
+    ChunkPatchRequest,
+    ChunkPatchResponse,
     ChunkPauseRequest,
     ChunkStopRequest,
     ChunkSummary,
@@ -81,6 +92,7 @@ from blizzard.wire.chunk import (
     EscalationView,
     HubMarkerRequest,
     HubMarkerResponse,
+    IntendedMigrationView,
     MigrationView,
     PauseView,
     PendingView,
@@ -194,6 +206,35 @@ def _migration_views(facts: ChunkFacts, graphs: dict[str | None, Graph | None]) 
             )
         )
     return views
+
+
+def _intended_migration_view(services: HubServices, chunk: Chunk) -> IntendedMigrationView | None:
+    """The chunk's standing migration intent as a view (issue #124), or ``None`` when no
+    intent is set. ``graph_name`` is resolved from the stored ``graph_id`` the same way
+    ``_migration_views`` resolves a recorded migration's target name — null when the
+    target graph cannot be resolved."""
+    intent = chunk.intended_migration
+    if intent is None:
+        return None
+    target_graph = services.graphs.get(intent.graph_id)
+    return IntendedMigrationView(
+        mode=intent.mode,
+        graph_id=intent.graph_id,
+        graph_name=_graph_name(target_graph),
+        node_name=intent.node_name,
+    )
+
+
+def _resolve_graph_by_id_or_name(services: HubServices, ref: str) -> Graph | None:
+    """Resolve a PATCH ``to_graph`` reference (issue #124) — a graph id, tried first, or
+    a graph name resolved to the newest enabled graph of that name. Mirrors #90's
+    ``_resolve_cross_graph_target`` (``hub/api/fleet.py``) id/name duality, but also
+    admits an id — the PATCH caller may already hold one (e.g. round-tripping a value
+    read off ``GET``), where a #90 migration edge only ever names a graph."""
+    graph = services.graphs.get(ref)
+    if graph is not None:
+        return graph
+    return services.graphs.get_enabled_by_name(ref)
 
 
 def _history_graphs(services: HubServices, chunk: Chunk, facts: ChunkFacts) -> dict[str | None, Graph | None]:
@@ -417,6 +458,7 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
         latest_epoch=latest_epoch(facts),
         pm_pointers=_pointer_views(chunk, services.pm),
         model=chunk.model,
+        intended_migration=_intended_migration_view(services, chunk),
         route=RouteView(
             runner_id=route.runner_id,
             workspace_id=route.workspace_id,
@@ -636,6 +678,90 @@ def set_chunk_model(
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
     return ChunkModelView(chunk_id=chunk_id, model=model)
+
+
+@router.patch("/chunks/{chunk_id}", response_model=ChunkPatchResponse, status_code=status.HTTP_202_ACCEPTED)
+def patch_chunk(
+    chunk_id: str, request: ChunkPatchRequest, services: Annotated[HubServices, Depends(get_services)]
+) -> ChunkPatchResponse:
+    """Apply any of ``graph_id``, ``model``, ``intended_migration`` in one all-or-nothing
+    edit (issue #124, in #104's shape) — the claimed-chunk counterpart to
+    ``POST .../graph``/``POST .../model``, which stay refused past ``ready``.
+
+    ``graph_id``/``model`` behave exactly as their single-field POST siblings (404 on an
+    unknown chunk or graph, 422 on a blank model). ``intended_migration``, present only
+    once the request body actually names it (``model_fields_set`` — see
+    ``ChunkPatchRequest``), sets or overwrites the standing intent when it carries a
+    value, or clears it on explicit ``null``; its ``to_graph`` resolves by id or name to
+    the newest enabled graph (404 unresolvable), and a blank ``to_graph``/``node`` is
+    422. Each field's own editable-status window (409, naming the field) and the
+    intended-migration semantic refusals — a retired target, a target equal to the
+    chunk's current pin, or a ``forced`` node absent from the target (all 409) — are
+    ``EditService.edit``'s (``domain/edit.py``); a refused field means **nothing** in the
+    body is applied.
+    """
+    chunk = services.chunks.get(chunk_id)
+    if chunk is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+
+    graph_id = UNSET
+    graph_target: Graph | None = None
+    if request.graph_id is not None:
+        graph_target = services.graphs.get(request.graph_id)
+        if graph_target is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {request.graph_id}")
+        graph_id = graph_target.graph_id
+
+    model = UNSET
+    if request.model is not None:
+        model_value = request.model.strip()
+        if not model_value:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="model must not be blank")
+        model = model_value
+
+    intended_migration = UNSET
+    migration_target: Graph | None = None
+    if "intended_migration" in request.model_fields_set:
+        patch = request.intended_migration
+        if patch is None:
+            intended_migration = None
+        else:
+            to_graph = patch.to_graph.strip()
+            if not to_graph:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="to_graph must not be blank"
+                )
+            node_name = patch.node.strip() if patch.node is not None else None
+            if patch.node is not None and not node_name:
+                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="node must not be blank")
+            migration_target = _resolve_graph_by_id_or_name(services, to_graph)
+            if migration_target is None:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {to_graph}")
+            mode = MigrationMode.FORCED if node_name is not None else MigrationMode.AUTO
+            intended_migration = IntendedMigration(mode=mode, graph_id=migration_target.graph_id, node_name=node_name)
+
+    edit = ChunkEdit(graph_id=graph_id, model=model, intended_migration=intended_migration)
+    try:
+        services.edit.edit(chunk, edit, graph_target=graph_target, migration_target=migration_target)
+    except ChunkNotEditable as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except TargetGraphRetired as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except MigrationTargetIsCurrentPin as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ForcedNodeUnknown as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    updated = services.chunks.get(chunk_id)
+    assert updated is not None, "the chunk existed a moment ago and this edit does not delete chunks"
+    facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
+    services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
+    return ChunkPatchResponse(
+        chunk_id=chunk_id,
+        graph_id=updated.graph_id,
+        model=updated.model,
+        intended_migration=_intended_migration_view(services, updated),
+    )
 
 
 @router.get("/chunks/{chunk_id}/pm-items", response_model=PmItemsView)

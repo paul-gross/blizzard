@@ -247,6 +247,7 @@ export type ChunkDetail = {
      * History
      */
     history?: Array<TransitionView>;
+    intended_migration?: IntendedMigrationView | null;
     /**
      * Landed
      */
@@ -402,6 +403,58 @@ export type ChunkModelView = {
      * Chunk Id
      */
     chunk_id: string;
+    /**
+     * Model
+     */
+    model: string;
+};
+
+/**
+ * ChunkPatchRequest
+ *
+ * The multi-field ``PATCH /chunks/{id}`` body (issue #124, in #104's shape) — every
+ * field independently optional, applied all-or-nothing by ``EditService.edit``.
+ *
+ * ``graph_id``/``model`` mean "leave unchanged" whether omitted or sent explicit
+ * ``null`` — neither is a nullable chunk property, so there is no "clear" state to
+ * distinguish. ``intended_migration`` is different: it *is* nullable (clearing a
+ * standing intent is a real operation, the CLI's ``--cancel``), so **omitted** ("leave
+ * the intent unchanged") must be distinguishable from **explicit ``null``** ("clear
+ * it") — a plain ``Optional`` default cannot tell those apart, since both decode to
+ * ``None`` on this model. The controller resolves the distinction via
+ * ``"intended_migration" in request.model_fields_set`` (pydantic's own record of which
+ * fields the request body actually named), not this field's value alone.
+ */
+export type ChunkPatchRequest = {
+    /**
+     * Graph Id
+     */
+    graph_id?: string | null;
+    intended_migration?: IntendedMigrationPatch | null;
+    /**
+     * Model
+     */
+    model?: string | null;
+};
+
+/**
+ * ChunkPatchResponse
+ *
+ * The result of one ``PATCH /chunks/{id}`` (issue #124) — the chunk's three
+ * editable build properties after the edit, mirroring
+ * :class:`ChunkGraphView`/:class:`ChunkModelView`'s single-field shape but carrying
+ * all three since a PATCH can apply more than one at once.
+ */
+export type ChunkPatchResponse = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Graph Id
+     */
+    graph_id: string;
+    intended_migration?: IntendedMigrationView | null;
     /**
      * Model
      */
@@ -1209,6 +1262,61 @@ export type HubMarkerResponse = {
 };
 
 /**
+ * IntendedMigrationPatch
+ *
+ * The intended-migration value a :class:`ChunkPatchRequest` carries (issue #124).
+ *
+ * ``to_graph`` names the migration target — a graph id, or a graph name resolved
+ * server-side to the newest enabled graph of that name at request time (the resolved
+ * **id** is what gets stored, so a later mint under the same name never silently
+ * re-aims a pending intent). ``node`` present selects ``forced`` (the unconditional
+ * landing target); absent selects ``auto`` — this shape carries no separate ``mode``
+ * field, so "node supplied under auto" is unrepresentable rather than a 422 the
+ * controller must catch.
+ */
+export type IntendedMigrationPatch = {
+    /**
+     * Node
+     */
+    node?: string | null;
+    /**
+     * To Graph
+     */
+    to_graph: string;
+};
+
+/**
+ * IntendedMigrationView
+ *
+ * A chunk's standing migration intent (issue #124) — editable at any non-terminal
+ * status, ``not_ready``/``ready`` included, and consulted (never applied eagerly) at
+ * the chunk's next transition through the common apply path. Present on
+ * :class:`ChunkDetail` so the board and CLI can show a chunk is queued to move;
+ * ``None`` when no intent is set.
+ *
+ * ``graph_name`` is resolved server-side from the stored ``graph_id`` the same way
+ * :class:`MigrationView`'s ``to_graph_name`` is (null when the target graph cannot be
+ * resolved). ``node_name`` is the ``forced`` mode's unconditional landing target;
+ * null for ``auto`` (the landing name is derived at consult time from the
+ * transition's own destination, never carried here).
+ */
+export type IntendedMigrationView = {
+    /**
+     * Graph Id
+     */
+    graph_id: string;
+    /**
+     * Graph Name
+     */
+    graph_name?: string | null;
+    mode: MigrationMode;
+    /**
+     * Node Name
+     */
+    node_name?: string | null;
+};
+
+/**
  * JudgedBy
  *
  * Who renders a node's exit judgement — the structural gate marker.
@@ -1230,6 +1338,19 @@ export type LeaseMintReport = {
      */
     runner_id: string;
 };
+
+/**
+ * MigrationMode
+ *
+ * How a chunk's :class:`IntendedMigration` fires at its next transition (issue #124).
+ *
+ * ``AUTO`` fires only when the transition's own destination node name also exists on
+ * the target graph (a name match); with no match the transition applies unchanged and
+ * the intent stays set for the transition after. ``FORCED`` fires unconditionally,
+ * landing on the intent's named ``node_name`` regardless of the transition's own
+ * destination.
+ */
+export type MigrationMode = 'auto' | 'forced';
 
 /**
  * MigrationView
@@ -2277,6 +2398,36 @@ export type GetChunkApiChunksChunkIdGetResponses = {
 };
 
 export type GetChunkApiChunksChunkIdGetResponse = GetChunkApiChunksChunkIdGetResponses[keyof GetChunkApiChunksChunkIdGetResponses];
+
+export type PatchChunkApiChunksChunkIdPatchData = {
+    body: ChunkPatchRequest;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}';
+};
+
+export type PatchChunkApiChunksChunkIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PatchChunkApiChunksChunkIdPatchError = PatchChunkApiChunksChunkIdPatchErrors[keyof PatchChunkApiChunksChunkIdPatchErrors];
+
+export type PatchChunkApiChunksChunkIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    202: ChunkPatchResponse;
+};
+
+export type PatchChunkApiChunksChunkIdPatchResponse = PatchChunkApiChunksChunkIdPatchResponses[keyof PatchChunkApiChunksChunkIdPatchResponses];
 
 export type DetachChunkApiChunksChunkIdDetachPostData = {
     body?: never;

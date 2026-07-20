@@ -67,6 +67,48 @@ class PmPointer:
 DEFAULT_MODEL = "claude-opus-4-8"
 
 
+class MigrationMode(StrEnum):
+    """How a chunk's :class:`IntendedMigration` fires at its next transition (issue #124).
+
+    ``AUTO`` fires only when the transition's own destination node name also exists on
+    the target graph (a name match); with no match the transition applies unchanged and
+    the intent stays set for the transition after. ``FORCED`` fires unconditionally,
+    landing on the intent's named ``node_name`` regardless of the transition's own
+    destination.
+    """
+
+    AUTO = "auto"
+    FORCED = "forced"
+
+
+@dataclass(frozen=True)
+class IntendedMigration:
+    """A chunk's standing intent to move onto another graph (issue #124).
+
+    Editable at any non-terminal status — ``not_ready``/``ready`` included, not just
+    once a chunk is claimed. Consulted — never applied eagerly — at the chunk's next
+    transition through the common apply path: the in-flight attempt finishes and
+    renders its verdict normally, and only *that* transition either fires the intent
+    (recording a :class:`MigrationFact`, never a ``transitions`` row, and clearing the
+    intent) or, for :attr:`MigrationMode.AUTO` with no name match, leaves the intent
+    set for the transition after. Because it is only ever consulted at a transition,
+    it matters in practice once a chunk is claimed and progressing — which is why it
+    complements, rather than replaces, the pre-claim :attr:`Chunk.graph_id` repin. A
+    plain mutable chunk property (``bzh:facts-not-status`` governs status derivation,
+    not every mutable field), the same precedent :attr:`Chunk.graph_id` and
+    :attr:`Chunk.model` set — the durable record of a migration that actually
+    happened remains the :class:`MigrationFact`.
+
+    ``node_name`` is required for :attr:`MigrationMode.FORCED` (the unconditional
+    landing target) and ``None`` for :attr:`MigrationMode.AUTO` (the landing name is the
+    transition's own destination, resolved at consult time, not carried here).
+    """
+
+    mode: MigrationMode
+    graph_id: str
+    node_name: str | None
+
+
 @dataclass(frozen=True)
 class Chunk:
     """The unit of work that travels the workflow graph."""
@@ -79,6 +121,10 @@ class Chunk:
     # ``domain/edit.py``). Defaulted so the many fakes/tests that build a ``Chunk``
     # without opinion on it keep compiling.
     model: str = DEFAULT_MODEL
+    # The chunk's standing intent to migrate onto another graph at its next transition
+    # (issue #124) — ``None`` while no intent is set. Defaulted so the many fakes/tests
+    # that build a ``Chunk`` without opinion on it keep compiling, mirroring ``model``.
+    intended_migration: IntendedMigration | None = None
 
 
 # --- Facts that feed the derivations ---------------------------------------
@@ -1239,6 +1285,7 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         at: datetime,
         artifacts: list[ArtifactRow],
         release_route: bool = True,
+        clear_intent: bool = False,
     ) -> bool:
         """Record a cross-graph migration atomically and idempotently (issue #90).
 
@@ -1256,7 +1303,14 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         completion, exactly as a transition-into-a-hub-node retains the route. Idempotent
         by ``(chunk_id, from_node_id, epoch)`` — a redelivery replay writes nothing. No
         lease is minted: the fact is recorded at the submitting epoch, and the next claim
-        mints a fresh higher one. Returns True iff it wrote, False on a replay."""
+        mints a fresh higher one. Returns True iff it wrote, False on a replay.
+
+        ``clear_intent`` (issue #124), when ``True``, adds ``chunks.intended_migration =
+        NULL`` to the same ``chunks`` update this already writes for the re-pin — the same
+        transaction as the fact insert, so a durable fact implies a durably-cleared intent
+        (load-bearing: a crash that recorded the migration but left the intent set would
+        re-fire it on the next transition, a double migration). ``False`` for an ordinary
+        #90 authored-choice migration, which carries no intent to clear."""
         ...
 
     def record_queue_position(self, chunk_id: str, *, position: float, at: datetime) -> None:
@@ -1293,6 +1347,23 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
 
     def set_model(self, chunk_id: str, *, model: str) -> None:
         """Repin a not-ready or ready-unclaimed chunk's model selection (issue #27, #120) — see :meth:`set_graph`."""
+        ...
+
+    def set_intended_migration(self, chunk_id: str, *, intended: IntendedMigration | None) -> None:
+        """Set, overwrite, or clear a chunk's standing migration intent (issue #124).
+
+        A plain column overwrite, not an append-only fact — the same ``bzh:facts-not-status``
+        shape :meth:`set_graph`/:meth:`set_model` already carry: ``intended_migration`` is a
+        mutable chunk property, consulted (never applied) at the chunk's next transition
+        (``domain/apply.py``). ``intended=None`` clears it (an operator cancel); a non-``None``
+        value overwrites whatever was set before. Unlike :meth:`set_graph`/:meth:`set_model`,
+        this field's editable window spans every non-terminal status, ``not_ready``/``ready``
+        included — the caller (:class:`~blizzard.hub.domain.edit.EditService`) enforces the
+        window, this method only writes. Setting it pre-claim is legitimate (an operator
+        queuing a migration before a runner ever picks the chunk up); it is only *consulted*
+        once a claimed chunk actually reaches a transition, which is why it complements the
+        pre-claim ``graph_id`` repin rather than replacing it. Carries no timestamp — the
+        column itself records no ``at``, unlike this repository's other writes."""
         ...
 
     # --- The generic hub command node (#65) ---------------------------------

@@ -11,6 +11,7 @@ structlog inside the runtime and app.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 from pathlib import Path
 from types import FrameType
@@ -650,6 +651,87 @@ def _set_graph_lifecycle(graph_id: str, *, verb: str, by: str, hub_url: str | No
     body = resp.json()
     state = "retired" if body.get("retired") else "enabled"
     click.echo(f"graph {graph_id} is now {state}")
+
+
+@hub.group("chunk")
+def chunk_group() -> None:
+    """Operator verbs over one chunk's editable build properties (issue #124: currently
+    just its standing migration intent — #104 extends this group with further verbs)."""
+
+
+@chunk_group.command("migrate")
+@click.argument("chunk_id")
+@click.option("--to-graph", default=None, help="Migration target — a graph id or name. Required unless --cancel.")
+@click.option(
+    "--node",
+    default=None,
+    help="Force landing on this node name on the target graph (forced mode). Omit for auto (name-matched).",
+)
+@click.option("--cancel", is_flag=True, default=False, help="Clear the chunk's standing migration intent.")
+@click.option("--json", "as_json", is_flag=True, default=False, help="Print the raw response body as JSON.")
+@click.option("--hub-url", default=None, help=f"Hub API base URL (default ${ENV_HUB_URL} or {DEFAULT_HUB_URL}).")
+def migrate_chunk(
+    chunk_id: str, to_graph: str | None, node: str | None, cancel: bool, as_json: bool, hub_url: str | None
+) -> None:
+    """Set, overwrite, or clear CHUNK's standing migration intent (issue #124).
+
+    A pure client of ``PATCH /api/chunks/{id}``, naming only ``intended_migration`` in
+    the body. ``--node`` present selects ``forced`` (an unconditional landing target on
+    the target graph); absent selects ``auto`` (migrates only when the next
+    transition's own destination name also exists on the target graph). ``--cancel``
+    clears a standing intent instead (body ``{"intended_migration": null}``) and
+    conflicts with ``--to-graph``/``--node``. The intent is consulted — never applied
+    eagerly — at the chunk's next transition; 409 on a not-editable status (chunk is
+    terminal), a retired target graph, a target equal to the chunk's current pin, or a
+    ``forced`` node absent from the target; 422 on a malformed request; 404 on an
+    unknown chunk or target graph."""
+    if cancel and (to_graph is not None or node is not None):
+        raise click.UsageError("--cancel cannot be combined with --to-graph/--node")
+    if not cancel and to_graph is None:
+        raise click.UsageError("--to-graph is required unless --cancel")
+
+    if cancel:
+        body: dict[str, object] = {"intended_migration": None}
+    else:
+        assert to_graph is not None, "checked above: --to-graph is required unless --cancel"
+        intended: dict[str, str] = {"to_graph": to_graph}
+        if node is not None:
+            intended["node"] = node
+        body = {"intended_migration": intended}
+
+    url = f"{_hub_url(hub_url).rstrip('/')}/api/chunks/{chunk_id}"
+    try:
+        resp = httpx.patch(url, json=body, timeout=_CLIENT_TIMEOUT)
+    except httpx.HTTPError as exc:
+        raise _api_error("PATCH /chunks/{id}", exc) from exc
+    if resp.status_code == httpx.codes.NOT_FOUND:
+        raise click.ClickException(resp.json().get("detail", f"unknown chunk {chunk_id}"))
+    if resp.status_code == httpx.codes.CONFLICT:
+        raise click.ClickException(resp.json().get("detail", "chunk is not editable"))
+    if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:
+        raise click.ClickException(resp.json().get("detail", "invalid migration request"))
+    try:
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise _api_error("PATCH /chunks/{id}", exc) from exc
+
+    view = resp.json()
+    if as_json:
+        click.echo(json.dumps(view))
+        return
+    if cancel:
+        click.echo(f"cleared {chunk_id}'s standing migration intent")
+        return
+    intent = view.get("intended_migration")
+    if intent is None:
+        # Shouldn't happen for a successful set, but degrade legibly rather than raise.
+        click.echo(f"{chunk_id}: migration intent not set")
+        return
+    target = intent.get("graph_name") or intent.get("graph_id")
+    if intent.get("mode") == "forced":
+        click.echo(f"{chunk_id} will migrate to {target} node {intent.get('node_name')} at its next transition")
+    else:
+        click.echo(f"{chunk_id} will auto-migrate to {target} at its next transition (name-matched node)")
 
 
 @hub.group("runner")

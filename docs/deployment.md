@@ -504,16 +504,57 @@ landed on a live tick; only a chunk that was *not* paused resumes in place on re
 While a chunk sits **unclaimed** — resting `not_ready` (minted but not yet promoted)
 or promoted to `ready` with no runner holding it yet — its pinned **graph** and
 **model** are editable, both from the chunk detail dock and via `POST
-/api/chunks/{id}/graph` / `POST /api/chunks/{id}/model`. Issue #120 widened this past
-its original `not_ready`-only window (issue #27): the wrong graph is often noticed
-only after promote, with no runner anywhere near the chunk yet, so a promoted-but-
-unclaimed chunk stays repinnable. Once the chunk is **claimed or later** — `running`,
-`delivering`, `waiting_on_human`, `needs_human`, `paused` (post-claim), `done`, or
-`stopped` — both edits are refused with `409`.
+/api/chunks/{id}/graph` / `POST /api/chunks/{id}/model`, or together via `PATCH
+/api/chunks/{id}` (below). Issue #120 widened this past its original `not_ready`-only
+window (issue #27): the wrong graph is often noticed only after promote, with no
+runner anywhere near the chunk yet, so a promoted-but-unclaimed chunk stays
+repinnable. Once the chunk is **claimed or later** — `running`, `delivering`,
+`waiting_on_human`, `needs_human`, `paused` (post-claim), `done`, or `stopped` — both
+edits are refused with `409`.
+
+`PATCH /api/chunks/{id}` (issue #124) applies any of `graph_id`, `model`, and
+`intended_migration` in one request, all-or-nothing: if any supplied field is outside
+*its own* editable window, the whole request is refused (`409`, naming the field) and
+nothing in the body is applied. `graph_id`/`model` share the unclaimed-only window
+above; `intended_migration` — see "Migrating a claimed chunk to another graph" below —
+is different: it is editable at **any non-terminal status**, claimed or not, so a
+`PATCH` naming it alongside a claimed chunk's now-sealed `graph_id` still refuses the
+whole request on `graph_id`.
 
 A graph edit has a second, distinct `409`: targeting a graph that has been
 **retired** (see "Graph lifecycle — retire and re-enable" below) is refused even on an
 otherwise-editable chunk, naming the retired graph id rather than the chunk's status.
+
+### Migrating a claimed chunk to another graph
+
+`blizzard hub chunk migrate <chunk-id> --to-graph <graph> [--node <name>] [--cancel]`,
+or `PATCH /api/chunks/{id}` `intended_migration` (issue #124) — sets a **standing
+intent** to move a chunk onto another graph, consulted (never applied eagerly) at the
+chunk's *next* transition. Unlike the stop-work verbs above, it does not stop or
+interrupt any in-flight work: the current attempt runs to its normal verdict, and only
+that transition either fires the intent or, for `auto` mode with no name match, leaves
+it set for the transition after. `--to-graph` names a graph id or a graph name
+resolved to the newest enabled graph of that name; a blank name, a retired target, or
+a target equal to the chunk's own current pin is refused (`409`). With no `--node`,
+the intent is `auto`: it fires only when the transition's own destination node name
+also exists on the target graph, landing there; with no name match the transition
+applies unchanged and the intent stays set for next time. `--node <name>` makes it
+`forced`: it fires unconditionally at the next transition, landing on the named node
+regardless of the transition's own destination — refused (`409`) up front if that node
+does not exist on the target graph. `--cancel` (or `PATCH` with `intended_migration:
+null`) clears a standing intent without firing it.
+
+Editable at **any non-terminal status** — `not_ready` and `ready` too, not just once
+claimed — since the intent is a plain mutable chunk property, not a transition itself;
+it is only ever *consulted* at a transition, which is why in practice it matters once
+a chunk is claimed and progressing, and why it complements rather than replaces the
+pre-claim graph repin above. When the intent fires, the chunk's movement is recorded
+as a migration exactly like an authored cross-graph judgement choice (see "Graph
+lifecycle" below): it re-pins the chunk's graph, lands it on the resolved node, and
+clears the intent in the same write. Landing governs by the landed node's own
+executor — a migration landing on a hub-executed node derives `delivering`, exactly as
+a transition into one does. See `blizzard hub chunk migrate --help` for the CLI's full
+contract.
 
 ## Graph lifecycle — retire and re-enable
 

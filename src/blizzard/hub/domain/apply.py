@@ -40,6 +40,7 @@ from blizzard.hub.domain.work import (
     ChunkStatus,
     DecisionChoice,
     IWriteChunkRepository,
+    MigrationMode,
     derive_chunk_status,
     landing_node,
     latest_epoch,
@@ -126,12 +127,20 @@ class ApplyService:
         route_token_mode: str = ROUTE_TOKEN_WARN,
         produces_mode: str = PRODUCES_WARN,
         target_graph: Graph | None = None,
+        intended_target_graph: Graph | None = None,
     ) -> ApplyResponse:
         """Apply a completion. ``target_graph`` is the pre-resolved cross-graph migration
         target (issue #90) — the edge caller resolves the chosen edge's ``graph:<name>``
         via the read graph repository and passes the ``Graph`` (or ``None`` if it names no
         enabled graph) here, so this stays a pure taker-of-objects (``bzh:domain-takes-objects``)
-        holding no graph repo of its own."""
+        holding no graph repo of its own. ``intended_target_graph`` is the chunk's own
+        standing migration intent's target (issue #124), pre-resolved the same way — the
+        controller resolves ``chunk.intended_migration.graph_id`` via the graph repository
+        and passes the ``Graph`` (or ``None`` when it is unresolvable/retired) here. It is
+        only ever *consulted*, never applied eagerly: at the first fresh transition this
+        completion produces, it either fires (recording a migration, never this
+        transition) or — for ``auto`` with no destination-name match — falls through to
+        an ordinary transition, leaving the intent set for next time."""
         facts = self._chunks.load_facts(chunk.chunk_id)
         if facts is None:
             return _failure(f"unknown chunk {chunk.chunk_id}")
@@ -196,7 +205,7 @@ class ApplyService:
         # graph gate (human node) or runner-config gate (worker node): validate and
         # record it against the resolved decision, marking that decision transitioned.
         if submission.decision_id is not None:
-            return self._apply_gate_resolution(chunk, graph, from_node, submission, target_graph)
+            return self._apply_gate_resolution(chunk, graph, from_node, submission, target_graph, intended_target_graph)
         # A plain transition OUT of a human-judged node is rejected — human signoff
         # required; only the resolving transition above may leave a gate node.
         if from_node.judged_by is JudgedBy.HUMAN:
@@ -229,6 +238,17 @@ class ApplyService:
         if produces_rejection is not None:
             return _failure(produces_rejection)
 
+        # The transition-time consult (issue #124) — the chunk's own standing migration
+        # intent, if any, gets its one shot at THIS fresh transition: it either fires
+        # (recording a migration in place of the transition below and clearing the
+        # intent) or falls through, leaving the intent untouched for the transition
+        # after. Ordered after every rejection above (never on a replay, a stale/terminal
+        # chunk, or a produces-backstop refusal) and before ``record_transition`` so a
+        # firing intent writes no transition row of its own.
+        migrated = self._consult_intended_migration(chunk, from_node, submission, edge, intended_target_graph)
+        if migrated is not None:
+            return migrated
+
         self._chunks.record_transition(
             transition_id=mint(TRANSITION_PREFIX, self._clock),
             chunk_id=chunk.chunk_id,
@@ -249,13 +269,16 @@ class ApplyService:
         gate_node: Node,
         submission: CompletionSubmission,
         target_graph: Graph | None = None,
+        intended_target_graph: Graph | None = None,
     ) -> ApplyResponse:
         """Advance a chunk past a resolved gate — the resolving transition.
 
         The runner picks the resolution up on PULL and submits this to record the
         transition along the chosen edge, referencing the decision (which marks it
         transitioned). Works for both a graph gate (human node) and a runner-config gate
-        (worker node); the decision's artifacts already landed, so this carries none."""
+        (worker node); the decision's artifacts already landed, so this carries none.
+        ``intended_target_graph`` (issue #124) is the chunk's own standing migration
+        intent's pre-resolved target — see :meth:`apply`."""
         assert submission.decision_id is not None  # the caller dispatches only when set
         decision = self._chunks.get_decision(submission.decision_id)
         if decision is None or decision.chunk_id != chunk.chunk_id or decision.node_id != gate_node.node_id:
@@ -288,6 +311,14 @@ class ApplyService:
         to_node_id = RESERVED_TERMINAL if edge.to_node_name == RESERVED_TERMINAL else _resolve(graph, edge.to_node_name)
         if to_node_id is None:
             return _failure(f"choice `{submission.choice}` routes to unknown node {edge.to_node_name}")
+
+        # The transition-time consult (issue #124) — see the sibling call in ``apply``.
+        # A resolved gate's own migration intent gets its one shot here too, threading
+        # ``submission.decision_id`` through so the resolved decision derives closed
+        # exactly as the #90 gate-migration branch above does.
+        migrated = self._consult_intended_migration(chunk, gate_node, submission, edge, intended_target_graph)
+        if migrated is not None:
+            return migrated
 
         self._chunks.record_transition(
             transition_id=mint(TRANSITION_PREFIX, self._clock),
@@ -360,6 +391,100 @@ class ApplyService:
             )
         submitted = submission.artifacts if artifacts is None else artifacts
         landed_node_id = landing_node(target_graph, from_node.name)
+        return self._land_migration(
+            chunk,
+            from_node,
+            submission,
+            target_graph=target_graph,
+            landed_node_id=landed_node_id,
+            choice_name=submission.choice,
+            decision_id=submission.decision_id,
+            model=edge.model,
+            artifacts=submitted,
+            clear_intent=False,
+        )
+
+    def _consult_intended_migration(
+        self,
+        chunk: Chunk,
+        from_node: Node,
+        submission: CompletionSubmission,
+        edge: Edge,
+        intended_target_graph: Graph | None,
+    ) -> ApplyResponse | None:
+        """The transition-time consult (issue #124) — the shared helper wired at both
+        common-apply-path transition sites (the ordinary worker verdict in :meth:`apply`
+        and the resolved gate in :meth:`_apply_gate_resolution`), each after its own
+        destination is resolved and before its own ``record_transition``.
+
+        Returns the migration's :class:`ApplyResponse` when the chunk's standing intent
+        fires, or ``None`` to fall through to the caller's ordinary ``record_transition``
+        (the transition applies unchanged; the intent, if ``auto`` with no name match,
+        stays set for next time). ``intent is None`` (no standing intent) and
+        ``intended_target_graph is None`` (the intent's target is unresolvable — never
+        minted, or retired since the intent was set) both fall through the same way: a
+        retired target is not an error here, just a deferred no-op, so the operator sees
+        the still-set intent on ``GET`` and can cancel or re-aim it.
+
+        ``forced`` fires unconditionally, landing on the intent's own named node
+        regardless of this transition's destination. ``auto`` fires only when this
+        transition's own destination node name also exists on the target graph (a name
+        match) — otherwise the transition applies unchanged and the intent stays set for
+        the transition after."""
+        intent = chunk.intended_migration
+        if intent is None or intended_target_graph is None:
+            return None
+        if intent.mode is MigrationMode.FORCED:
+            assert intent.node_name is not None  # request-time validation requires this for `forced`
+            landed_node_name = intent.node_name
+        elif intended_target_graph.node_by_name(edge.to_node_name) is not None:
+            landed_node_name = edge.to_node_name
+        else:
+            return None  # auto, no name match: unchanged transition, intent stays set
+        landed_node = intended_target_graph.node_by_name(landed_node_name)
+        assert landed_node is not None, (
+            f"consult resolved landed node `{landed_node_name}` on graph {intended_target_graph.graph_id}, "
+            "but it does not exist there"
+        )
+        return self._land_migration(
+            chunk,
+            from_node,
+            submission,
+            target_graph=intended_target_graph,
+            landed_node_id=landed_node.node_id,
+            choice_name=submission.choice,
+            decision_id=submission.decision_id,
+            model=None,
+            artifacts=submission.artifacts,
+            clear_intent=True,
+        )
+
+    def _land_migration(
+        self,
+        chunk: Chunk,
+        from_node: Node,
+        submission: CompletionSubmission,
+        *,
+        target_graph: Graph,
+        landed_node_id: str,
+        choice_name: str | None,
+        decision_id: str | None,
+        model: str | None,
+        artifacts: list[SubmittedArtifact],
+        clear_intent: bool,
+    ) -> ApplyResponse:
+        """The landing tail shared by a #90 authored-choice migration
+        (:meth:`_apply_migration`) and an issue #124 applied intent
+        (:meth:`_consult_intended_migration`) — the only differences between the two
+        callers are the landing-node anchor (the departed node's name-match-else-entry
+        for #90; the destination/forced node for #124) and ``clear_intent``.
+
+        Records the migration atomically (fact + graph/model re-pin + artifacts +
+        route release/retain + intent clear, all in :meth:`record_migration`'s one
+        transaction), fires the crash point, then governs by the landed node's executor
+        exactly as a transition into that node would (issue #111): a hub-executed
+        landing runs inline and retains the route (``HUB_NODE_TAKEN``); a runner-executed
+        landing releases the route and re-queues (``MIGRATED``)."""
         landed_node = target_graph.node_by_id(landed_node_id)
         lands_on_hub = landed_node is not None and landed_node.executor is Executor.HUB
         self._chunks.record_migration(
@@ -368,13 +493,14 @@ class ApplyService:
             from_graph_id=from_node.graph_id,
             to_graph_id=target_graph.graph_id,
             landed_node_id=landed_node_id,
-            choice_name=submission.choice,
-            decision_id=submission.decision_id,
-            model=edge.model,
+            choice_name=choice_name,
+            decision_id=decision_id,
+            model=model,
             epoch=submission.epoch,
             at=self._clock.now(),
-            artifacts=[self._row(chunk, from_node, submission.epoch, a) for a in submitted],
+            artifacts=[self._row(chunk, from_node, submission.epoch, a) for a in artifacts],
             release_route=not lands_on_hub,
+            clear_intent=clear_intent,
         )
         _CP_MIGRATE_AFTER_RECORD.reached()
         if lands_on_hub:

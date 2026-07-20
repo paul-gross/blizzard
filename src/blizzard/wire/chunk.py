@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from blizzard.hub.domain.work import ChunkStatus
+from blizzard.hub.domain.work import ChunkStatus, MigrationMode
 from blizzard.wire.decision import DecisionView
 from blizzard.wire.question import QuestionView
 
@@ -224,6 +224,40 @@ class MigrationView(BaseModel):
     recorded_at: str
 
 
+class IntendedMigrationView(BaseModel):
+    """A chunk's standing migration intent (issue #124) — editable at any non-terminal
+    status, ``not_ready``/``ready`` included, and consulted (never applied eagerly) at
+    the chunk's next transition through the common apply path. Present on
+    :class:`ChunkDetail` so the board and CLI can show a chunk is queued to move;
+    ``None`` when no intent is set.
+
+    ``graph_name`` is resolved server-side from the stored ``graph_id`` the same way
+    :class:`MigrationView`'s ``to_graph_name`` is (null when the target graph cannot be
+    resolved). ``node_name`` is the ``forced`` mode's unconditional landing target;
+    null for ``auto`` (the landing name is derived at consult time from the
+    transition's own destination, never carried here)."""
+
+    mode: MigrationMode
+    graph_id: str
+    graph_name: str | None = None
+    node_name: str | None = None
+
+
+class IntendedMigrationPatch(BaseModel):
+    """The intended-migration value a :class:`ChunkPatchRequest` carries (issue #124).
+
+    ``to_graph`` names the migration target — a graph id, or a graph name resolved
+    server-side to the newest enabled graph of that name at request time (the resolved
+    **id** is what gets stored, so a later mint under the same name never silently
+    re-aims a pending intent). ``node`` present selects ``forced`` (the unconditional
+    landing target); absent selects ``auto`` — this shape carries no separate ``mode``
+    field, so "node supplied under auto" is unrepresentable rather than a 422 the
+    controller must catch."""
+
+    to_graph: str
+    node: str | None = None
+
+
 class ArtifactView(BaseModel):
     """One entry of a chunk's inline artifact store.
 
@@ -360,6 +394,37 @@ class ChunkModelView(BaseModel):
     model: str
 
 
+class ChunkPatchRequest(BaseModel):
+    """The multi-field ``PATCH /chunks/{id}`` body (issue #124, in #104's shape) — every
+    field independently optional, applied all-or-nothing by ``EditService.edit``.
+
+    ``graph_id``/``model`` mean "leave unchanged" whether omitted or sent explicit
+    ``null`` — neither is a nullable chunk property, so there is no "clear" state to
+    distinguish. ``intended_migration`` is different: it *is* nullable (clearing a
+    standing intent is a real operation, the CLI's ``--cancel``), so **omitted** ("leave
+    the intent unchanged") must be distinguishable from **explicit ``null``** ("clear
+    it") — a plain ``Optional`` default cannot tell those apart, since both decode to
+    ``None`` on this model. The controller resolves the distinction via
+    ``"intended_migration" in request.model_fields_set`` (pydantic's own record of which
+    fields the request body actually named), not this field's value alone."""
+
+    graph_id: str | None = None
+    model: str | None = None
+    intended_migration: IntendedMigrationPatch | None = None
+
+
+class ChunkPatchResponse(BaseModel):
+    """The result of one ``PATCH /chunks/{id}`` (issue #124) — the chunk's three
+    editable build properties after the edit, mirroring
+    :class:`ChunkGraphView`/:class:`ChunkModelView`'s single-field shape but carrying
+    all three since a PATCH can apply more than one at once."""
+
+    chunk_id: str
+    graph_id: str
+    model: str
+    intended_migration: IntendedMigrationView | None = None
+
+
 class PauseView(BaseModel):
     """An open pause on a chunk (issue #46) — who set it and when.
 
@@ -397,6 +462,10 @@ class ChunkDetail(BaseModel):
     # `ready`-and-unclaimed (issue #120). Required:
     # the store column is non-nullable and every mint sets DEFAULT_MODEL.
     model: str
+    # The chunk's standing migration intent (issue #124) — non-None iff an `auto` or
+    # `forced` intent is set, consulted (never applied eagerly) at the chunk's next
+    # transition. See IntendedMigrationView.
+    intended_migration: IntendedMigrationView | None = None
     route: RouteView | None = None
     escalation: EscalationView | None = None
     # The operator's per-chunk pause brake (issue #46) — non-None iff currently paused.

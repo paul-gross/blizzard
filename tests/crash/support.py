@@ -364,6 +364,48 @@ def migrate_hub_target_yaml() -> str:
     return yaml.safe_dump(graph, sort_keys=False)
 
 
+def intended_migrate_source_yaml() -> str:
+    """A plain single-graph source (`default-delivery`, so ingest pins it) for the
+    **intended**-migration crash scenario (issue #124) — unlike :func:`migrate_source_yaml`,
+    no edge here is a `graph:<name>` cross-graph edge at all; this is an entirely ordinary
+    graph. The migration is driven out of band: a claimed chunk's PATCHed
+    `intended_migration` (set before the runner ever claims it — the window is open at
+    `ready` too) is consulted at the ordinary `build -pass-> deliver` transition below.
+    `deliver` is a dummy hub node, never actually reached: the scenario arms a `forced`
+    intent naming the migration target's own `build` node, which fires unconditionally
+    regardless of this transition's own destination name."""
+    import yaml
+
+    graph = {
+        "name": "default-delivery",
+        "entry": "build",
+        "nodes": {
+            "build": {
+                "executor": "runner",
+                "prompt": "pass\n",
+                "judgement": {
+                    "prompt": _JUDGEMENT_SCRIPT,
+                    "choices": {
+                        "pass": {"description": "Ready.", "to": "deliver"},
+                    },
+                },
+                "retries": {"max": 1, "exhausted": "escalate"},
+            },
+            "deliver": {
+                "executor": "hub",
+                "run": [{"command": "true"}],
+                "judgement": {
+                    "choices": {
+                        "success": {"description": "Delivered.", "to": "done"},
+                        "failure": {"description": "Failed to deliver.", "to": "build"},
+                    }
+                },
+            },
+        },
+    }
+    return yaml.safe_dump(graph, sort_keys=False)
+
+
 # --------------------------------------------------------------------------- #
 # Process helpers
 # --------------------------------------------------------------------------- #

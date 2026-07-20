@@ -6,6 +6,11 @@ superseded pre-migration transition), and the pure ``landing_node`` resolver pic
 name-match-else-entry. Component tier: ``record_migration`` re-pins the graph (+ model),
 releases the route, and persists the submitting node-step's artifacts in one write
 (MUST-FIX 1); a replay is idempotent (no duplicate artifacts, no transition row).
+
+Issue #124 (Phase 1, storage + domain types only — no behavior change) adds:
+``IntendedMigration``'s round-trip through :meth:`ChunkStore.set_intended_migration`/
+:meth:`ChunkStore.get`, and ``record_migration``'s ``clear_intent`` flag landing the
+intent's clear in the same atomic write as the fact and re-pin.
 """
 
 from __future__ import annotations
@@ -24,8 +29,10 @@ from blizzard.hub.domain.graph_authoring import reify_graph
 from blizzard.hub.domain.work import (
     ChunkFacts,
     ChunkStatus,
+    IntendedMigration,
     IWriteChunkRepository,
     MigrationFact,
+    MigrationMode,
     TransitionFact,
     current_node_id,
     derive_chunk_status,
@@ -329,3 +336,161 @@ def test_a_migration_landing_on_a_hub_node_derives_delivering_and_is_not_ready(t
 
     ready_ids = {c.chunk_id for c in hub.services.chunks.list_ready()}
     assert chunk_id not in ready_ids
+
+
+# --------------------------------------------------------------------------- #
+# intended_migration (issue #124, Phase 1) — storage + domain types only
+# --------------------------------------------------------------------------- #
+
+
+@component
+def test_set_intended_migration_sets_overwrites_and_clears(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    chunks = cast(IWriteChunkRepository, hub.services.chunks)
+
+    pre = hub.services.chunks.get(chunk_id)
+    assert pre is not None and pre.intended_migration is None  # unset by default
+
+    auto = IntendedMigration(mode=MigrationMode.AUTO, graph_id="gr_target", node_name=None)
+    chunks.set_intended_migration(chunk_id, intended=auto)
+    chunk = hub.services.chunks.get(chunk_id)
+    assert chunk is not None
+    assert chunk.intended_migration == auto  # round-trips through the store
+
+    forced = IntendedMigration(mode=MigrationMode.FORCED, graph_id="gr_other", node_name="build")
+    chunks.set_intended_migration(chunk_id, intended=forced)
+    chunk = hub.services.chunks.get(chunk_id)
+    assert chunk is not None
+    assert chunk.intended_migration == forced  # overwrite
+
+    chunks.set_intended_migration(chunk_id, intended=None)
+    chunk = hub.services.chunks.get(chunk_id)
+    assert chunk is not None
+    assert chunk.intended_migration is None  # clear
+
+
+@component
+def test_record_migration_with_clear_intent_clears_the_intent_atomically(tmp_path: Path) -> None:
+    """``clear_intent=True`` folds the intent's clear into the same write as the fact,
+    the re-pin, the artifacts, and the route release — a runner landing (issue #124)."""
+    hub = build_hub(tmp_path)
+    chunk_id, node_id, target_graph_id = _claimed(hub)
+    chunks = cast(IWriteChunkRepository, hub.services.chunks)
+    pre_migration = hub.services.chunks.get(chunk_id)
+    assert pre_migration is not None
+    source_graph_id = pre_migration.graph_id
+
+    intent = IntendedMigration(mode=MigrationMode.AUTO, graph_id=target_graph_id, node_name=None)
+    chunks.set_intended_migration(chunk_id, intended=intent)
+    armed = hub.services.chunks.get(chunk_id)
+    assert armed is not None and armed.intended_migration == intent
+
+    wrote = chunks.record_migration(
+        chunk_id,
+        from_node_id=node_id,
+        from_graph_id=source_graph_id,
+        to_graph_id=target_graph_id,
+        landed_node_id="nd_landed",
+        choice_name="migrate",
+        model=None,
+        epoch=1,
+        at=hub.clock.now(),
+        artifacts=[_artifact(chunk_id, node_id)],
+        clear_intent=True,
+    )
+    assert wrote is True
+
+    chunk = hub.services.chunks.get(chunk_id)
+    assert chunk is not None
+    assert chunk.graph_id == target_graph_id  # re-pinned
+    assert chunk.intended_migration is None  # intent cleared, atomically with the fact
+    assert hub.services.chunks.route_of(chunk_id) is None  # released (runner landing default)
+    assert any(a.name == "triage-notes" for a in hub.services.chunks.load_artifacts(chunk_id))
+    facts = hub.services.chunks.load_facts(chunk_id)
+    assert facts is not None
+    assert len(facts.migrations) == 1
+
+
+@component
+def test_record_migration_without_clear_intent_leaves_a_set_intent_untouched(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, node_id, target_graph_id = _claimed(hub)
+    chunks = cast(IWriteChunkRepository, hub.services.chunks)
+    pre_migration = hub.services.chunks.get(chunk_id)
+    assert pre_migration is not None
+    source_graph_id = pre_migration.graph_id
+
+    intent = IntendedMigration(mode=MigrationMode.FORCED, graph_id=target_graph_id, node_name="build")
+    chunks.set_intended_migration(chunk_id, intended=intent)
+
+    wrote = chunks.record_migration(
+        chunk_id,
+        from_node_id=node_id,
+        from_graph_id=source_graph_id,
+        to_graph_id=target_graph_id,
+        landed_node_id="nd_landed",
+        choice_name="migrate",
+        model=None,
+        epoch=1,
+        at=hub.clock.now(),
+        artifacts=[],
+        # clear_intent defaults False — an ordinary #90 authored-choice migration,
+        # which carries no intent of its own to clear.
+    )
+    assert wrote is True
+    chunk = hub.services.chunks.get(chunk_id)
+    assert chunk is not None
+    assert chunk.intended_migration == intent
+
+
+@component
+def test_record_migration_with_clear_intent_on_a_hub_landing_retains_the_route(tmp_path: Path) -> None:
+    """The intent's clear lands atomically on the ``release_route=False`` hub-landing
+    branch too (issue #111 + #124 together): the route stays retained, the intent still
+    clears in the same transaction as the fact."""
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/graphs", json={"definition_yaml": _SRC_YAML}).status_code == 201
+    target = hub.client.post("/api/graphs", json={"definition_yaml": _HUB_TARGET_YAML}).json()
+    target_graph_id = target["graph_id"]
+    landed = next(n for n in target["nodes"] if n["name"] == "build")
+    assert landed["executor"] == "hub"
+
+    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    node_id = hub.client.post(
+        "/api/fleet/routes",
+        json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
+    ).json()["envelope"]["node"]["node_id"]
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+    pre_migration = hub.services.chunks.get(chunk_id)
+    assert pre_migration is not None
+    source_graph_id = pre_migration.graph_id
+
+    chunks = cast(IWriteChunkRepository, hub.services.chunks)
+    intent = IntendedMigration(mode=MigrationMode.FORCED, graph_id=target_graph_id, node_name="build")
+    chunks.set_intended_migration(chunk_id, intended=intent)
+
+    wrote = chunks.record_migration(
+        chunk_id,
+        from_node_id=node_id,
+        from_graph_id=source_graph_id,
+        to_graph_id=target_graph_id,
+        landed_node_id=landed["node_id"],
+        choice_name="migrate",
+        model=None,
+        epoch=1,
+        at=hub.clock.now(),
+        artifacts=[],
+        release_route=False,
+        clear_intent=True,
+    )
+    assert wrote is True
+
+    chunk = hub.services.chunks.get(chunk_id)
+    assert chunk is not None
+    assert chunk.intended_migration is None  # cleared even though the route is retained
+    assert hub.services.chunks.route_of(chunk_id) is not None  # retained (hub landing, issue #111)
+    facts = hub.services.chunks.load_facts(chunk_id)
+    assert facts is not None
+    migration = newest_migration(facts)
+    assert migration is not None and migration.landed_node_executor is Executor.HUB

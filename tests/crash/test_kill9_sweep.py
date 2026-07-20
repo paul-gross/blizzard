@@ -104,6 +104,7 @@ from tests.crash.support import (
     free_port,
     git_bare,
     graph_yaml,
+    intended_migrate_source_yaml,
     migrate_hub_source_yaml,
     migrate_hub_target_yaml,
     migrate_source_yaml,
@@ -492,6 +493,116 @@ def test_kill9_at_migrate_crash_point(crash_env: CrashEnv, tmp_path: Path, point
         detail = hub.get(f"/api/chunks/{chunk_id}").json()
         assert detail["graph_id"] == target_graph_id, "the chunk was not re-pinned to the target graph"
         assert len(detail["migrations"]) == 1, "the two-graph history is missing its migration step"
+
+        # Exactly-once: the target graph's build is the only branch that lands the file.
+        tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
+        commits = [line for line in tree.splitlines() if line.strip()]
+        assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
+    finally:
+        hub.close()
+        terminate(runner_proc)
+        terminate(hub_proc)
+
+
+def _ingest_intended_migrate_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str) -> tuple[str, str]:
+    """Mint the (plain, single-graph) source and its migration target, file a fresh
+    issue, ingest + promote a chunk pinned to the source, then PATCH a ``forced``
+    migration intent onto it — the intent's window is open at ``ready`` (before any
+    claim), so this stands the intent up before the runner ever touches the chunk.
+    Returns ``(chunk_id, target_graph_id)``."""
+    target = hub.post("/api/graphs", json={"definition_yaml": migrate_target_yaml(landed_file)})
+    assert target.status_code == 201, target.text
+    target_graph_id = target.json()["graph_id"]
+    src = hub.post("/api/graphs", json={"definition_yaml": intended_migrate_source_yaml()})
+    assert src.status_code == 201, src.text
+    issue = forge.post(
+        f"/repos/{REPO}/issues", json={"title": landed_file, "body": "an intended-migration crash-sweep chunk"}
+    )
+    assert issue.status_code == 201, issue.text
+    number = issue.json()["number"]
+    ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{number}"]})
+    assert ingested.status_code == 201, ingested.text
+    chunk_id = ingested.json()["chunk_id"]
+    assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+    assert hub.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
+    patched = hub.patch(
+        f"/api/chunks/{chunk_id}", json={"intended_migration": {"to_graph": target_graph_id, "node": "build"}}
+    )
+    assert patched.status_code == 202, patched.text
+    return chunk_id, target_graph_id
+
+
+@pytest.mark.parametrize("point", _MIGRATE_SWEEP)
+def test_kill9_at_migrate_crash_point_for_an_intended_migration(
+    crash_env: CrashEnv, tmp_path: Path, point: str
+) -> None:
+    """A ``kill -9`` right after an **intended** migration is recorded still recovers
+    (issue #124) — the same durable write and recovery path #90's crash coverage above
+    proves, now reached through a claimed chunk's standing intent rather than a
+    ``graph:<name>`` edge.
+
+    The source graph here is entirely ordinary — no cross-graph edge at all. A
+    ``forced`` intent, PATCHed onto the chunk before the runner ever claims it, names
+    the migration target's own ``build`` node. At the source's ordinary
+    ``build -pass-> deliver`` transition the consult (``ApplyService._consult_intended_migration``)
+    fires unconditionally, landing on the target's ``build`` — never the transition's own
+    ``deliver`` — then the hub self-SIGKILLs right after the atomic re-pin (the same
+    ``migrate.after-record.before-response`` window). The claim under test: the intent is
+    durably cleared in the same transaction as the migration fact (so recovery never
+    re-fires it — a double migration), the runner's lost-ack replay re-derives
+    ``MIGRATED``, the chunk re-queues at the target's ``build`` node, and a claim there
+    runs the target's own real build + deliver to ``done`` — landing the file on bare
+    ``main`` exactly once."""
+    landed_file = f"LANDED-INTENDED-{point.replace('.', '_')}.md"
+    hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
+    hub_port, runner_port = free_port(), free_port()
+
+    # Arm the HUB: the migrate window opens inside its completions handler, not the runner.
+    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=point)
+    runner_proc = None
+    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    try:
+        await_http(hub, "/api/health", proc=hub_proc)
+        chunk_id, target_graph_id = _ingest_intended_migrate_chunk(hub, crash_env.forge, landed_file)
+
+        write_runner_config(
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+        )
+        runner_proc = start_runner(runner_dir, crash_point=None)
+
+        # The runner claims, the worker completes `build`, the consult fires the standing
+        # intent, and the hub self-SIGKILLs in the window.
+        code = wait_death(hub_proc)
+        assert code == -9, f"armed hub at {point} exited {code}, not SIGKILL (-9); point never reached?"
+        _assert_invariants(runner_dir, hub_dir, when=f"immediately after intended-migration kill at {point}")
+
+        # The migration is durable even though the MIGRATED response never returned, and
+        # the intent was cleared in the SAME transaction (load-bearing: a crash that
+        # recorded the fact but left the intent set would re-fire it on recovery).
+        hub_engine = create_engine_from_url(HubConfig.load(hub_dir).db_url)
+        with hub_engine.connect() as conn:
+            migrations = conn.execute(
+                select(hub_schema.chunk_migrations).where(hub_schema.chunk_migrations.c.chunk_id == chunk_id)
+            ).all()
+            intent = conn.execute(
+                select(hub_schema.chunks.c.intended_migration).where(hub_schema.chunks.c.chunk_id == chunk_id)
+            ).scalar_one()
+        assert len(migrations) == 1, "the migration fact was not durably recorded before the crash"
+        assert intent is None, "the intent was not durably cleared alongside the migration fact"
+
+        # Restart the hub UNARMED; the runner's replayed completion re-derives MIGRATED and
+        # the chunk re-queues + lands under the target graph — the intent never re-fires.
+        hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+        await_http(hub, "/api/health", proc=hub_proc)
+
+        status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"})
+        assert status == "done", f"chunk did not converge to done after kill at {point} (last {status!r})"
+        _assert_invariants(runner_dir, hub_dir, when=f"after intended-migration convergence past {point}")
+
+        detail = hub.get(f"/api/chunks/{chunk_id}").json()
+        assert detail["graph_id"] == target_graph_id, "the chunk was not re-pinned to the intent's target graph"
+        assert len(detail["migrations"]) == 1, "the two-graph history is missing its migration step — or has two"
+        assert detail["intended_migration"] is None, "the intent re-appeared on recovery — it must land only once"
 
         # Exactly-once: the target graph's build is the only branch that lands the file.
         tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)

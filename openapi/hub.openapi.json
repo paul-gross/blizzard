@@ -365,6 +365,16 @@
             "title": "History",
             "type": "array"
           },
+          "intended_migration": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IntendedMigrationView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "landed": {
             "default": false,
             "title": "Landed",
@@ -612,6 +622,79 @@
           "model"
         ],
         "title": "ChunkModelView",
+        "type": "object"
+      },
+      "ChunkPatchRequest": {
+        "description": "The multi-field ``PATCH /chunks/{id}`` body (issue #124, in #104's shape) \u2014 every\nfield independently optional, applied all-or-nothing by ``EditService.edit``.\n\n``graph_id``/``model`` mean \"leave unchanged\" whether omitted or sent explicit\n``null`` \u2014 neither is a nullable chunk property, so there is no \"clear\" state to\ndistinguish. ``intended_migration`` is different: it *is* nullable (clearing a\nstanding intent is a real operation, the CLI's ``--cancel``), so **omitted** (\"leave\nthe intent unchanged\") must be distinguishable from **explicit ``null``** (\"clear\nit\") \u2014 a plain ``Optional`` default cannot tell those apart, since both decode to\n``None`` on this model. The controller resolves the distinction via\n``\"intended_migration\" in request.model_fields_set`` (pydantic's own record of which\nfields the request body actually named), not this field's value alone.",
+        "properties": {
+          "graph_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graph Id"
+          },
+          "intended_migration": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IntendedMigrationPatch"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          }
+        },
+        "title": "ChunkPatchRequest",
+        "type": "object"
+      },
+      "ChunkPatchResponse": {
+        "description": "The result of one ``PATCH /chunks/{id}`` (issue #124) \u2014 the chunk's three\neditable build properties after the edit, mirroring\n:class:`ChunkGraphView`/:class:`ChunkModelView`'s single-field shape but carrying\nall three since a PATCH can apply more than one at once.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "graph_id": {
+            "title": "Graph Id",
+            "type": "string"
+          },
+          "intended_migration": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IntendedMigrationView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "graph_id",
+          "model"
+        ],
+        "title": "ChunkPatchResponse",
         "type": "object"
       },
       "ChunkPauseRequest": {
@@ -1682,6 +1765,71 @@
         "title": "HubMarkerResponse",
         "type": "object"
       },
+      "IntendedMigrationPatch": {
+        "description": "The intended-migration value a :class:`ChunkPatchRequest` carries (issue #124).\n\n``to_graph`` names the migration target \u2014 a graph id, or a graph name resolved\nserver-side to the newest enabled graph of that name at request time (the resolved\n**id** is what gets stored, so a later mint under the same name never silently\nre-aims a pending intent). ``node`` present selects ``forced`` (the unconditional\nlanding target); absent selects ``auto`` \u2014 this shape carries no separate ``mode``\nfield, so \"node supplied under auto\" is unrepresentable rather than a 422 the\ncontroller must catch.",
+        "properties": {
+          "node": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node"
+          },
+          "to_graph": {
+            "title": "To Graph",
+            "type": "string"
+          }
+        },
+        "required": [
+          "to_graph"
+        ],
+        "title": "IntendedMigrationPatch",
+        "type": "object"
+      },
+      "IntendedMigrationView": {
+        "description": "A chunk's standing migration intent (issue #124) \u2014 editable at any non-terminal\nstatus, ``not_ready``/``ready`` included, and consulted (never applied eagerly) at\nthe chunk's next transition through the common apply path. Present on\n:class:`ChunkDetail` so the board and CLI can show a chunk is queued to move;\n``None`` when no intent is set.\n\n``graph_name`` is resolved server-side from the stored ``graph_id`` the same way\n:class:`MigrationView`'s ``to_graph_name`` is (null when the target graph cannot be\nresolved). ``node_name`` is the ``forced`` mode's unconditional landing target;\nnull for ``auto`` (the landing name is derived at consult time from the\ntransition's own destination, never carried here).",
+        "properties": {
+          "graph_id": {
+            "title": "Graph Id",
+            "type": "string"
+          },
+          "graph_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graph Name"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/MigrationMode"
+          },
+          "node_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Name"
+          }
+        },
+        "required": [
+          "mode",
+          "graph_id"
+        ],
+        "title": "IntendedMigrationView",
+        "type": "object"
+      },
       "JudgedBy": {
         "description": "Who renders a node's exit judgement \u2014 the structural gate marker.",
         "enum": [
@@ -1709,6 +1857,15 @@
         ],
         "title": "LeaseMintReport",
         "type": "object"
+      },
+      "MigrationMode": {
+        "description": "How a chunk's :class:`IntendedMigration` fires at its next transition (issue #124).\n\n``AUTO`` fires only when the transition's own destination node name also exists on\nthe target graph (a name match); with no match the transition applies unchanged and\nthe intent stays set for the transition after. ``FORCED`` fires unconditionally,\nlanding on the intent's named ``node_name`` regardless of the transition's own\ndestination.",
+        "enum": [
+          "auto",
+          "forced"
+        ],
+        "title": "MigrationMode",
+        "type": "string"
       },
       "MigrationView": {
         "description": "One cross-graph migration step in a chunk's history (issue #90).\n\nA judgement choice targeting another graph ends the chunk's attempt in ``from_graph``\nand re-queues it at ``landed_node`` in ``to_graph`` \u2014 its own step in the timeline,\nnever a transition (``bzh:migration-not-transition``). The board renders it as a\ngraph-to-graph hop: ``from_graph/from_node --choice--> to_graph/landed_node``. Node and\ngraph names are resolved server-side against each side's own graph (null when\nunresolvable); ``model`` is the re-pinned model, or null when the chunk kept its own.",
@@ -3216,6 +3373,57 @@
           }
         },
         "summary": "Get Chunk",
+        "tags": [
+          "chunks"
+        ]
+      },
+      "patch": {
+        "description": "Apply any of ``graph_id``, ``model``, ``intended_migration`` in one all-or-nothing\nedit (issue #124, in #104's shape) \u2014 the claimed-chunk counterpart to\n``POST .../graph``/``POST .../model``, which stay refused past ``ready``.\n\n``graph_id``/``model`` behave exactly as their single-field POST siblings (404 on an\nunknown chunk or graph, 422 on a blank model). ``intended_migration``, present only\nonce the request body actually names it (``model_fields_set`` \u2014 see\n``ChunkPatchRequest``), sets or overwrites the standing intent when it carries a\nvalue, or clears it on explicit ``null``; its ``to_graph`` resolves by id or name to\nthe newest enabled graph (404 unresolvable), and a blank ``to_graph``/``node`` is\n422. Each field's own editable-status window (409, naming the field) and the\nintended-migration semantic refusals \u2014 a retired target, a target equal to the\nchunk's current pin, or a ``forced`` node absent from the target (all 409) \u2014 are\n``EditService.edit``'s (``domain/edit.py``); a refused field means **nothing** in the\nbody is applied.",
+        "operationId": "patch_chunk_api_chunks__chunk_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChunkPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChunkPatchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Chunk",
         "tags": [
           "chunks"
         ]

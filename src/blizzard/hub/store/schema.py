@@ -134,6 +134,13 @@ chunks = Table(
     # column, not a fact log — mirrors `graph_id` above, which was already
     # mutable-at-mint with no fact table behind it.
     Column("model", String, nullable=False),
+    # The chunk's standing intent to migrate onto another graph at its next transition
+    # (issue #124) — nullable, NULL while no intent is set. A single JSON `Text` column
+    # (`{"mode", "graph_id", "node_name"}`) rather than a fact table: it is a plain
+    # mutable property read whole at consult time, the same `bzh:facts-not-status` shape
+    # `graph_id`/`model` already carry, and nothing filters on its contents
+    # (`bzh:sql-portable`).
+    Column("intended_migration", Text, nullable=True),
 )
 
 chunk_pm_pointers = Table(
