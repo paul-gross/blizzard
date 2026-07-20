@@ -39,11 +39,20 @@ _log = get_logger("blizzard.runner.loop")
 _HTTP_TIMEOUT = 30.0
 
 
-def build_loop_context(config: RunnerConfig, hub: IHubClient) -> LoopContext:
+def build_loop_context(
+    config: RunnerConfig, hub: IHubClient, *, workspace_prompt: str, runner_prompt: str
+) -> LoopContext:
     """Wire a :class:`LoopContext` from resolved config and an injected hub client.
 
     The hub client is passed in so the caller owns the ``httpx.Client`` lifecycle
     (a tick opens and closes it; the daemon keeps one for the driver's lifetime).
+
+    ``workspace_prompt``/``runner_prompt`` are the caller's **already-resolved**
+    values (``RunnerConfig.resolved_workspace_prompt()``/``resolved_runner_prompt()``),
+    not re-derived here: both can raise ``ConfigError`` on a configured-but-missing
+    prompt file, and resolving them on the caller's own thread — before this ever runs
+    on :class:`PeriodicDriver`'s background thread — is what lets ``host`` turn that
+    into a startup ``ClickException`` instead of a silently-killed loop thread.
     """
     engine = create_engine_from_url(config.db_url)
     store = SqlAlchemyRunnerStore(engine)
@@ -72,7 +81,8 @@ def build_loop_context(config: RunnerConfig, hub: IHubClient) -> LoopContext:
         # The spawn cwd + static workspace-prompt fallback (issue #17). The prompt file is
         # resolved once here at loop-context build, not re-read per spawn.
         workspace_root=config.workspace_root,
-        workspace_prompt=config.resolved_workspace_prompt(),
+        workspace_prompt=workspace_prompt,
+        runner_prompt=runner_prompt,
         worker_stdout_dir=str(worker_stdout_dir),
         chunk_cap_usd=config.chunk_cap_usd,
         runner_ceiling_usd=config.runner_ceiling_usd,
@@ -99,8 +109,12 @@ def build_loop_context(config: RunnerConfig, hub: IHubClient) -> LoopContext:
 
 def run_single_tick(config: RunnerConfig) -> None:
     """Run one synchronous reconciliation tick — the CLI verb and e2e driver."""
+    workspace_prompt = config.resolved_workspace_prompt()
+    runner_prompt = config.resolved_runner_prompt()
     with httpx.Client(base_url=config.hub_url, timeout=_HTTP_TIMEOUT, headers=config.auth_headers()) as client:
-        ctx = build_loop_context(config, HttpHubClient(client))
+        ctx = build_loop_context(
+            config, HttpHubClient(client), workspace_prompt=workspace_prompt, runner_prompt=runner_prompt
+        )
         tick(ctx)
 
 
@@ -149,6 +163,14 @@ class PeriodicDriver:
     def __init__(self, config: RunnerConfig, *, interval_seconds: float) -> None:
         self._config = config
         self._interval = interval_seconds
+        # Resolved eagerly here, on the constructing (``host``) thread, rather than
+        # inside `_run` on the background loop thread it starts: a configured-but-
+        # missing prompt file raises ``ConfigError`` from these calls, so the
+        # constructor call in ``host`` — which turns it into a ``ClickException``
+        # before any socket binds — is where that failure now surfaces, not a
+        # silently-killed loop thread while uvicorn keeps serving ``/api/health`` 200s.
+        self._workspace_prompt = config.resolved_workspace_prompt()
+        self._runner_prompt = config.resolved_runner_prompt()
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, name="blizzard-runner-loop", daemon=True)
         self._client: httpx.Client | None = None
@@ -174,7 +196,12 @@ class PeriodicDriver:
         self._client = httpx.Client(
             base_url=self._config.hub_url, timeout=_HTTP_TIMEOUT, headers=self._config.auth_headers()
         )
-        ctx = build_loop_context(self._config, HttpHubClient(self._client))
+        ctx = build_loop_context(
+            self._config,
+            HttpHubClient(self._client),
+            workspace_prompt=self._workspace_prompt,
+            runner_prompt=self._runner_prompt,
+        )
         _log.info("reconciliation loop started", runner_id=self._config.runner_id, interval=self._interval)
         try:
             while not self._stop.is_set():

@@ -52,6 +52,12 @@ class LoopConfig:
     #: startup. The fallback under the store's runtime override: the effective spawn
     #: preamble prose is ``store.workspace_prompt_override(workspace_id)`` when set, else this.
     workspace_prompt: str = ""
+    #: The operator's override of the baked-in blizzard preamble (issue #103), resolved
+    #: once at ``host`` startup from ``RunnerConfig.resolved_runner_prompt()``. Empty
+    #: means unset — ``render_worker_preamble`` falls back to
+    #: ``DEFAULT_BLIZZARD_PREAMBLE`` in that case. Config/startup only: unlike
+    #: ``workspace_prompt`` there is no store-backed runtime override.
+    runner_prompt: str = ""
     #: Node NAMES this runner imposes a human gate on: for a gated
     #: node the runner submits a Decision instead of a transition, so an operator dials
     #: their own HITL level without forking the fleet's graph. Matched by name across all

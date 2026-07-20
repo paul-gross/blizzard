@@ -1981,6 +1981,7 @@ def _spawn_attempt(
     override = ctx.store.workspace_prompt_override(ctx.config.workspace_id)
     workspace_prompt = override if override is not None else ctx.config.workspace_prompt
     prompt_prefix = render_worker_preamble(
+        runner_prompt=ctx.config.runner_prompt,
         workspace_prompt=workspace_prompt,
         environments=environments,
         lease_id=lease_id,

@@ -231,3 +231,27 @@ def test_hub_host_reports_an_unset_pm_source_token_env_as_a_clean_error(
     assert "BZ_PM_TOKEN" in result.output  # names the variable the operator must set
     # It never claims to be serving a daemon it then fails to build.
     assert "serving blizzard-hub" not in result.output
+
+
+def test_runner_host_reports_a_missing_runner_prompt_file_as_a_clean_error(tmp_path: Path) -> None:
+    """A configured-but-missing ``runner_prompt_file`` (issue #103) fails at boot as a
+    clean CLI error, not a traceback from inside the loop's background thread.
+
+    ``PeriodicDriver`` resolves it in its constructor, on `host`'s own thread, before
+    any socket binds — so the failure surfaces here rather than silently killing the
+    reconciliation loop while uvicorn keeps serving."""
+    runner = CliRunner()
+    root = tmp_path / "runner"
+    assert runner.invoke(blizzard, ["runner", "init", str(root)]).exit_code == 0
+    config_path = root / "blizzard-runner.toml"
+    config_path.write_text(
+        config_path.read_text().replace('runner_prompt_file = ""', 'runner_prompt_file = "does-not-exist.md"')
+    )
+
+    result = runner.invoke(blizzard, ["runner", "host", "--dir", str(root)])
+
+    assert result.exit_code != 0
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+    assert "does-not-exist.md" in result.output
+    # It never claims to be serving a daemon it then fails to build.
+    assert "serving blizzard-runner" not in result.output

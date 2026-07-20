@@ -122,6 +122,63 @@ def test_workspace_prompt_env_seeds_scaffold(tmp_path: Path, monkeypatch: pytest
 
 
 @pytest.mark.unit
+def test_runner_prompt_defaults_empty_and_round_trips_inline(tmp_path: Path) -> None:
+    # Absent on a fresh scaffold — the baked DEFAULT_BLIZZARD_PREAMBLE is used instead
+    # (issue #103); a multi-line inline prompt round-trips through to_toml intact.
+    root = tmp_path / "runner"
+    root.mkdir()
+    scaffolded = RunnerConfig.scaffold(root)
+    assert scaffolded.resolved_runner_prompt() == ""
+
+    edited = RunnerConfig(
+        root=root,
+        db_url=scaffolded.db_url,
+        runner_prompt="You are a blizzard fleet worker.\nUse the CLI.",
+    )
+    root_written = root / "blizzard-runner.toml"
+    root_written.write_text(edited.to_toml())
+    reloaded = RunnerConfig.load(root)
+    assert reloaded.runner_prompt == "You are a blizzard fleet worker.\nUse the CLI."
+    assert reloaded.resolved_runner_prompt() == "You are a blizzard fleet worker.\nUse the CLI."
+
+
+@pytest.mark.unit
+def test_runner_prompt_file_wins_and_resolves_relative_to_root(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    (root / "runner-prompt.md").write_text("# Blizzard preamble\nFrom a file.")
+    config = RunnerConfig(
+        root=root,
+        db_url=RunnerConfig.default_db_url(root),
+        runner_prompt="inline-loses",
+        runner_prompt_file="runner-prompt.md",
+    )
+    # The file wins over the inline value, and a relative path resolves under root.
+    assert config.resolved_runner_prompt() == "# Blizzard preamble\nFrom a file."
+
+
+@pytest.mark.unit
+def test_runner_prompt_env_seeds_scaffold(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BZ_RUNNER_PROMPT", "seeded by the service")
+    assert RunnerConfig.scaffold(tmp_path).runner_prompt == "seeded by the service"
+
+
+@pytest.mark.unit
+def test_missing_runner_prompt_file_raises(tmp_path: Path) -> None:
+    from blizzard.runner.config import ConfigError
+
+    root = tmp_path / "runner"
+    root.mkdir()
+    config = RunnerConfig(
+        root=root,
+        db_url=RunnerConfig.default_db_url(root),
+        runner_prompt_file="does-not-exist.md",
+    )
+    with pytest.raises(ConfigError):
+        config.resolved_runner_prompt()
+
+
+@pytest.mark.unit
 def test_transcripts_root_defaults_empty_and_round_trips(tmp_path: Path) -> None:
     # Empty on a fresh scaffold — resolved to ~/.claude/projects at the composition
     # root (issue #29), never here; a configured value round-trips through to_toml.

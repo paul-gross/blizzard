@@ -312,6 +312,25 @@ into every spawn too. Empty (the fresh-scaffold default) means the base allowlis
 only; a daemon credential such as `BZ_HUB_TOKEN` is never in scope for this list, so
 it is absent from a worker child by construction unless deliberately named here.
 
+### The worker spawn preamble
+
+Every worker's spawn prompt is three ordered layers ahead of the node's own envelope
+prompt: (1) a baked-in blizzard preamble — always present, framing the worker as
+operating inside the fleet and naming its worker-facing `blizzard runner` verbs
+(`ask`, `pm-items`) — (2) the operator's own `workspace_prompt` prose, layered on top
+when set, and (3) a machine-local facts table (runner/chunk/lease identity, held
+environment(s)).
+
+Layer 1 is overridable but never absent: `blizzard-runner.toml`'s `runner_prompt`
+(inline text) or `runner_prompt_file` (a path, wins over inline text when both are
+set) — or `BZ_RUNNER_PROMPT` seeding a fresh scaffold — replaces the baked default
+wholesale when set; unset, the baked default renders. Both are config/startup knobs,
+resolved once at `host` startup — unlike `workspace_prompt`, which also has a live
+`PUT /api/workspace-prompt` override, `runner_prompt` has no runtime door, so changing
+it means restarting the runner. A `runner_prompt_file` naming a path that does not
+exist raises a `ConfigError` at startup, the same fail-fast the workspace-prompt
+file knob already gives.
+
 ## Produces-artifact enforcement
 
 `produces_mode` is a third rollout flag, scaffolded into `blizzard-hub.toml` by

@@ -41,6 +41,7 @@ ENV_HARNESS_PERMISSION_MODE = "BZ_HARNESS_PERMISSION_MODE"
 ENV_BASE_BRANCH = "BZ_BASE_BRANCH"
 ENV_GATES = "BZ_RUNNER_GATES"  # comma-separated node names this runner gates
 ENV_WORKSPACE_PROMPT = "BZ_WORKSPACE_PROMPT"  # the runner-owned workspace prompt, inline (issue #17)
+ENV_RUNNER_PROMPT = "BZ_RUNNER_PROMPT"  # the blizzard-preamble override, inline (issue #103)
 # Where the coding harness writes session transcripts (issue #29); empty defaults to
 # `~/.claude/projects`, resolved once at the composition root (`runner/app.py`), never here.
 ENV_TRANSCRIPTS_ROOT = "BZ_TRANSCRIPTS_ROOT"
@@ -125,6 +126,17 @@ class RunnerConfig:
     #: runtime override (local API, no restart) lives in the store, not here.
     workspace_prompt: str = ""
     workspace_prompt_file: str = ""
+    #: The operator's override of the baked-in blizzard preamble (issue #103) — layer 1
+    #: of the spawn preamble, prepended ahead of :attr:`workspace_prompt`. Mirrors
+    #: ``workspace_prompt`` exactly: ``runner_prompt`` is the inline text;
+    #: ``runner_prompt_file`` (a path, absolute or relative to :attr:`root`) wins over
+    #: the inline text when set (:meth:`resolved_runner_prompt`). Empty on a fresh
+    #: scaffold means the resolved value is also empty, in which case
+    #: ``render_worker_preamble`` falls back to the baked ``DEFAULT_BLIZZARD_PREAMBLE`` —
+    #: this layer is config/startup only, unlike ``workspace_prompt``'s live runtime
+    #: override (out of scope for issue #103).
+    runner_prompt: str = ""
+    runner_prompt_file: str = ""
     #: Where the coding harness writes session transcripts (issue #29). Empty (the
     #: fresh-scaffold default) means ``~/.claude/projects`` — resolved once at the
     #: composition root (``runner/app.py``), never inside the transcript adapter.
@@ -205,6 +217,25 @@ class RunnerConfig:
             return path.read_text()
         return self.workspace_prompt
 
+    def resolved_runner_prompt(self) -> str:
+        """The effective override for the blizzard preamble (issue #103), from its two knobs.
+
+        Mirrors :meth:`resolved_workspace_prompt` exactly: ``runner_prompt_file`` wins
+        when set — read once at ``host`` startup, a relative path resolving under
+        :attr:`root` — and a configured-but-missing file raises here (fail fast at
+        startup). Both knobs empty is a valid state and returns ``""``, which
+        ``render_worker_preamble`` treats as "use the baked default", never as an
+        absent layer.
+        """
+        if self.runner_prompt_file:
+            path = Path(self.runner_prompt_file)
+            if not path.is_absolute():
+                path = self.root / path
+            if not path.exists():
+                raise ConfigError(f"runner_prompt_file does not exist: {path}")
+            return path.read_text()
+        return self.runner_prompt
+
     def auth_headers(self) -> dict[str, str]:
         """The outbound ``Authorization`` header every runner->hub call carries (issue #86b).
 
@@ -254,6 +285,10 @@ class RunnerConfig:
             # replaces it at runtime through the local API. Seeded from the environment so a
             # service's `blizzard runner init` can inject a default without hand-editing.
             workspace_prompt=os.environ.get(ENV_WORKSPACE_PROMPT, ""),
+            # The operator's override of the baked-in blizzard preamble (issue #103):
+            # empty on a fresh scaffold means the baked default is used. Seeded from the
+            # environment like `workspace_prompt`, for the same reason.
+            runner_prompt=os.environ.get(ENV_RUNNER_PROMPT, ""),
             transcripts_root=os.environ.get(ENV_TRANSCRIPTS_ROOT, ""),
         )
 
@@ -265,6 +300,8 @@ class RunnerConfig:
         # (\n, \t, \", \\, \uXXXX), so a multi-line inline prompt round-trips intact.
         workspace_prompt = json.dumps(self.workspace_prompt)
         workspace_prompt_file = json.dumps(self.workspace_prompt_file)
+        runner_prompt = json.dumps(self.runner_prompt)
+        runner_prompt_file = json.dumps(self.runner_prompt_file)
         return (
             "# blizzard-runner runtime configuration (blizzard runner init)\n"
             f'db_url = "{self.db_url}"\n'
@@ -291,6 +328,12 @@ class RunnerConfig:
             "# Empty = table-only injection. Replace at runtime via PUT /api/workspace-prompt.\n"
             f"workspace_prompt = {workspace_prompt}\n"
             f"workspace_prompt_file = {workspace_prompt_file}\n"
+            "\n# The operator's override of the baked-in blizzard preamble (issue #103) — layer 1\n"
+            "# of the spawn preamble, ahead of `workspace_prompt` above. `runner_prompt` is inline\n"
+            "# text; `runner_prompt_file` (a path) wins when set. Empty = the baked default\n"
+            "# (DEFAULT_BLIZZARD_PREAMBLE) is used instead; config/startup only, no runtime override.\n"
+            f"runner_prompt = {runner_prompt}\n"
+            f"runner_prompt_file = {runner_prompt_file}\n"
             "\n# Where the coding harness writes session transcripts (issue #29);\n"
             "# empty = ~/.claude/projects.\n"
             f'transcripts_root = "{self.transcripts_root}"\n'
@@ -353,6 +396,8 @@ class RunnerConfig:
             gates=tuple(str(g) for g in raw.get("gates", ())),
             workspace_prompt=str(raw.get("workspace_prompt", "")),
             workspace_prompt_file=str(raw.get("workspace_prompt_file", "")),
+            runner_prompt=str(raw.get("runner_prompt", "")),
+            runner_prompt_file=str(raw.get("runner_prompt_file", "")),
             transcripts_root=str(raw.get("transcripts_root", "")),
             chunk_cap_usd=_parse_chunk_cap_usd(raw.get("cost", {})),
             runner_ceiling_usd=_parse_runner_ceiling_usd(raw.get("cost", {})),

@@ -195,7 +195,14 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
         raise click.ClickException(str(exc)) from exc
     app = build_hosted_app(config)
     interval = float(os.environ.get(ENV_TICK_SECONDS, DEFAULT_TICK_SECONDS))
-    driver = PeriodicDriver(config, interval_seconds=interval)
+    # `PeriodicDriver` resolves `workspace_prompt`/`runner_prompt` in its constructor
+    # (on this thread) rather than inside its background loop thread — a configured-but-
+    # missing prompt file raises `ConfigError` here, before any socket binds, instead of
+    # silently killing the loop thread later while uvicorn keeps serving `/api/health` 200s.
+    try:
+        driver = PeriodicDriver(config, interval_seconds=interval)
+    except ConfigError as exc:
+        raise click.ClickException(str(exc)) from exc
 
     # Two doors onto the one app (issue #43): the unix socket the CLI's local verbs
     # address, and the TCP port the browser and the worker hooks address. Bound up front so

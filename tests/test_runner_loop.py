@@ -21,6 +21,7 @@ from blizzard.hub.domain.enrollment import hash_token
 from blizzard.hub.domain.work import DEFAULT_MODEL, ChunkStatus
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.preamble import DEFAULT_BLIZZARD_PREAMBLE
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.steps import _collect_asset_artifacts, advance, fill, pull, reap
 from blizzard.runner.loop.tick import tick
@@ -1350,7 +1351,9 @@ def test_spawn_prefixes_static_workspace_prompt_and_sets_workspace_root(tmp_path
 
     _, preamble = harness.spawns[0]
     assert preamble.workspace_root == "/ws"
-    assert preamble.prompt_prefix.startswith("STATIC-PROMPT\n\n")
+    # Layer 1 (the baked blizzard preamble, since runner_prompt is unset) leads,
+    # followed by the static workspace prompt (issue #103).
+    assert preamble.prompt_prefix.startswith(f"{DEFAULT_BLIZZARD_PREAMBLE}\n\nSTATIC-PROMPT\n\n")
     assert "| winter environment name | `e1` |" in preamble.prompt_prefix
 
 
@@ -1377,5 +1380,5 @@ def test_spawn_reflects_runtime_prompt_override_with_no_restart(tmp_path):  # ty
     fill(ctx)
 
     _, preamble = harness.spawns[0]
-    assert preamble.prompt_prefix.startswith("OVERRIDDEN\n\n")
+    assert preamble.prompt_prefix.startswith(f"{DEFAULT_BLIZZARD_PREAMBLE}\n\nOVERRIDDEN\n\n")
     assert "STATIC-PROMPT" not in preamble.prompt_prefix
