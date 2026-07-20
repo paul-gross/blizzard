@@ -101,8 +101,11 @@ default `uv run pytest` gate stays hermetic.
   runner** (`blizzard-mock-runner`, a levered driver) and the **mock forge** as its
   counterparts, asserting over the wire: a claim + completion advances the chunk; the
   runner's `stale_epoch` lever gets the completion **rejected**; queue **grouping +
-  reorder** are reflected in `peek`; and `GET /api/events/stream` serves the
-  **SSE contract** an `EventSource` subscribes to.
+  reorder** are reflected in `peek`; `GET /api/events/stream` serves the
+  **SSE contract** an `EventSource` subscribes to; and a subscriber connected before the
+  act receives `queue-changed` **live** the instant a fresh cross-graph migration
+  re-queues a chunk — exactly once across that migration and its duplicate-delivery
+  replay.
 
 The counterpart mocks and their lever surfaces live in the `blizzard-mock` repo
 (`blizzard_mock.mock_hub` / `blizzard_mock.mock_runner`). sqlite only, no tokens, no
