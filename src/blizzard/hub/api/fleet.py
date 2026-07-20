@@ -330,6 +330,8 @@ def submit_completion(
     if graph is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
     target_graph = _resolve_cross_graph_target(services, graph, submission)
+    # Must precede apply() below — after apply() this always answers True, silencing the
+    # publish_queue_changed() fresh-migration check further down.
     already_migrated = services.chunks.accepted_migration(
         chunk_id, from_node_id=submission.from_node_id, epoch=submission.epoch
     )
