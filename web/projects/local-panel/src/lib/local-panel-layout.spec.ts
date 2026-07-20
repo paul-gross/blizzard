@@ -134,4 +134,16 @@ describe('LocalPanelLayout', () => {
 
     expect(el.querySelector('[data-testid="detail-chunk-ref"]')?.textContent).toContain('C-3YJ9');
   });
+
+  it('buries the viewport toggle behind the header menu, closed by default', async () => {
+    const fixture = await render();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('fleet-viewport-toggle')).toBeNull();
+
+    el.querySelector<HTMLElement>('[data-testid="local-panel-menu"]')?.click();
+    await fixture.whenStable();
+
+    expect(el.querySelector('[data-testid="local-panel-menu-panel"] fleet-viewport-toggle')).not.toBeNull();
+  });
 });

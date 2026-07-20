@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideRouter, Router } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { EVENT_SOURCE_FACTORY, FleetLiveUpdates, type EventSourceFactory } from 'fleet';
+import { EVENT_SOURCE_FACTORY, FleetLiveUpdates, ViewportService, type EventSourceFactory } from 'fleet';
 import { vi } from 'vitest';
 
 import { App } from './app';
@@ -128,5 +128,37 @@ describe('hub App', () => {
 
     const boardAfter = fixture.debugElement.query(By.directive(BoardPage));
     expect(boardAfter.injector.get(QueryClient)).toBe(queryClient);
+  });
+
+  describe('the mobile shell fork (ViewportService)', () => {
+    afterEach(() => localStorage.removeItem('blizzard.viewport.override'));
+
+    it('desktop mode renders the board-header/nav pair and no mobile chrome', async () => {
+      TestBed.inject(ViewportService).setOverride('desktop');
+      const fixture = TestBed.createComponent(App);
+      const router = TestBed.inject(Router);
+      await router.navigateByUrl('/');
+      await fixture.whenStable();
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector('[data-testid="board-header"]')).not.toBeNull();
+      expect(el.querySelector('[data-testid="app-nav"]')).not.toBeNull();
+      expect(el.querySelector('[data-testid="mobile-titlebar"]')).toBeNull();
+      expect(el.querySelector('[data-testid="mobile-tab-bar"]')).toBeNull();
+    });
+
+    it('mobile mode renders the mobile titlebar and the persistent tab bar instead', async () => {
+      TestBed.inject(ViewportService).setOverride('mobile');
+      const fixture = TestBed.createComponent(App);
+      const router = TestBed.inject(Router);
+      await router.navigateByUrl('/');
+      await fixture.whenStable();
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector('[data-testid="mobile-titlebar"]')).not.toBeNull();
+      expect(el.querySelector('[data-testid="mobile-tab-bar"]')).not.toBeNull();
+      expect(el.querySelector('[data-testid="board-header"]')).toBeNull();
+      expect(el.querySelector('[data-testid="app-nav"]')).toBeNull();
+    });
   });
 });

@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { runnerClient } from 'fleet';
+import { runnerClient, ViewportService } from 'fleet';
 import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
 import { vi } from 'vitest';
 
@@ -519,6 +519,101 @@ describe('LocalPanel', () => {
 
       expect(el.querySelector('[data-testid="env-empty"]')).toBeTruthy();
       expect(el.querySelector('[data-testid="env-row"]')).toBeNull();
+    });
+  });
+
+  describe('the shell picker (ViewportService)', () => {
+    afterEach(() => localStorage.removeItem('blizzard.viewport.override'));
+
+    it('desktop mode renders the existing three-column layout, unchanged', async () => {
+      stub = stubRequestClient(runnerClient, routes([]));
+      await setUp();
+      TestBed.inject(ViewportService).setOverride('desktop');
+      const fixture = TestBed.createComponent(LocalPanel);
+      await settle(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector('[data-testid="local-panel"]')).not.toBeNull();
+      expect(el.querySelector('[data-testid="local-panel-mobile"]')).toBeNull();
+    });
+
+    it('mobile mode renders the deferred mobile stack instead, off the same reads', async () => {
+      stub = stubRequestClient(runnerClient, routes([LEASE()]));
+      await setUp();
+      TestBed.inject(ViewportService).setOverride('mobile');
+      const fixture = TestBed.createComponent(LocalPanel);
+      await settle(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector('[data-testid="local-panel-mobile"]')).not.toBeNull();
+      expect(el.querySelector('[data-testid="local-panel"]')).toBeNull();
+      expect(el.querySelectorAll('[data-testid="agent-row"]')).toHaveLength(1);
+    });
+
+    it('the viewport toggle sits behind a quiet header menu, reachable in both modes', async () => {
+      stub = stubRequestClient(runnerClient, routes([]));
+      await setUp();
+      const viewport = TestBed.inject(ViewportService);
+      const fixture = TestBed.createComponent(LocalPanel);
+
+      viewport.setOverride('desktop');
+      await settle(fixture);
+      let el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelector('fleet-viewport-toggle')).toBeNull();
+      el.querySelector<HTMLElement>('[data-testid="local-panel-menu"]')?.click();
+      await settle(fixture);
+      el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelector('[data-testid="local-panel-menu-panel"] fleet-viewport-toggle')).not.toBeNull();
+
+      viewport.setOverride('mobile');
+      await settle(fixture);
+      el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelector('fleet-viewport-toggle')).toBeNull();
+      el.querySelector<HTMLElement>('[data-testid="local-panel-mobile-titlebar-menu"]')?.click();
+      await settle(fixture);
+      el = fixture.nativeElement as HTMLElement;
+      expect(
+        el.querySelector('[data-testid="local-panel-mobile-titlebar-menu-panel"] fleet-viewport-toggle'),
+      ).not.toBeNull();
+    });
+
+    it('renders the persistent mobile tab bar with Machine active and Asks/Transcripts inert', async () => {
+      stub = stubRequestClient(runnerClient, routes([]));
+      await setUp();
+      TestBed.inject(ViewportService).setOverride('mobile');
+      const fixture = TestBed.createComponent(LocalPanel);
+      await settle(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector('[data-testid="local-panel-mobile-tab-bar"]')).not.toBeNull();
+      const machine = el.querySelector('[data-testid="tab-machine"]');
+      const asks = el.querySelector('[data-testid="tab-asks-runner"]');
+      const transcripts = el.querySelector('[data-testid="tab-transcripts"]');
+      expect(machine?.textContent).toContain('Machine');
+      expect(machine?.classList.contains('on')).toBe(true);
+      expect(asks?.hasAttribute('disabled')).toBe(true);
+      expect(transcripts?.hasAttribute('disabled')).toBe(true);
+    });
+
+    it('shows the local asks open count on the mobile tab bar', async () => {
+      const ask = {
+        question_id: 'qn_1',
+        chunk_id: 'ch_1',
+        runner_id: 'r1',
+        question: 'a?',
+        options: [],
+      };
+      stub = stubRequestClient(
+        runnerClient,
+        routes([], (method, path) => (method === 'GET' && path === '/api/asks' ? { items: [ask] } : undefined)),
+      );
+      await setUp();
+      TestBed.inject(ViewportService).setOverride('mobile');
+      const fixture = TestBed.createComponent(LocalPanel);
+      await settle(fixture);
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector('[data-testid="tab-asks-runner-badge"]')?.textContent).toBe('1');
     });
   });
 });

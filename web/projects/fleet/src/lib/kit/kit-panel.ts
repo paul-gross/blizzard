@@ -17,15 +17,21 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
  * gradient panel vs. `local-panel`'s flat one — override it from outside
  * without forking this component; custom properties cascade through view
  * encapsulation, so a parent's own styles can set them on `<fleet-kit-panel>`.
+ *
+ * An optional `accent` input colors the label (and switches the count to the
+ * mock's bright `--snow`, mock screen C's "Needs you"/"In motion"/"Done today"
+ * headers, `../../../hub/src/app/board/glance/glance-view.ts`) — `null`
+ * (the default) leaves both exactly as every existing consumer already
+ * renders them, so this is additive, not a restyle.
  */
 @Component({
   selector: 'fleet-kit-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="p-hdr">
-      <span class="lbl">{{ label() }}</span>
+      <span class="lbl" [style.color]="accent()">{{ label() }}</span>
       @if (hasCount()) {
-        <span class="lbl" [attr.data-testid]="countTestid()">{{ count() }}</span>
+        <span class="lbl" [class.cnt-accent]="!!accent()" [attr.data-testid]="countTestid()">{{ count() }}</span>
       }
       <ng-content select="[header]" />
     </div>
@@ -58,6 +64,11 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
       color: var(--label);
       text-shadow: 0 1px 0 var(--overlay-90);
     }
+    /* Only set when accent is present — the mock's count reads bright
+       against a colored label, never the muted engraved-label grey. */
+    .lbl.cnt-accent {
+      color: var(--snow);
+    }
     .p-body {
       overflow-y: auto;
       overflow-x: hidden;
@@ -77,6 +88,11 @@ export class KitPanel {
   /** The count span's `data-testid`, or `null` for none — a consumer whose
    * existing testid the count span replaces names it here. */
   readonly countTestid = input<string | null>(null);
+
+  /** A design-token color (e.g. `'var(--red)'`) the label resolves to instead
+   * of the default `--label` grey, and that flips the count span to
+   * `--snow` — `null` (the default) is the panel's existing look, unchanged. */
+  readonly accent = input<string | null>(null);
 
   protected hasCount(): boolean {
     const c = this.count();

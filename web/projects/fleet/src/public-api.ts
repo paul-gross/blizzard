@@ -30,6 +30,8 @@ export * from './lib/sse';
 export * from './lib/health';
 export * from './lib/fleet-spend';
 export * from './lib/chunks';
+export * from './lib/viewport';
+export * from './lib/mobile-chrome';
 
 export {
   hubHealthKey,

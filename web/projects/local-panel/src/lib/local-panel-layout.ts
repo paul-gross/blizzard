@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import type { runnerApi } from 'fleet';
 
-import { BrandMark, KitAsyncState, type KitAsyncStateValue, KitPanel } from 'fleet';
+import { BrandMark, KitAsyncState, type KitAsyncStateValue, KitMenu, KitPanel, ViewportToggle } from 'fleet';
 
 import { AgentRow } from './agent-row';
 import { MachineDetail } from './chunk-detail';
@@ -33,11 +33,29 @@ import type { MachineChunkRow } from './local-panel';
  * the selection state live in the container ({@link LocalPanel}). Color
  * resolves through the shared design tokens (`fleet` library,
  * design/tokens.css), never hard-coded hex.
+ *
+ * The header's own {@link KitMenu} buries {@link ViewportToggle} (mobile
+ * polish feedback item 5) — this is the existing header region the desktop
+ * shell's override lives behind now, replacing {@link LocalPanel}'s old
+ * always-visible `.viewport-strip`.
  */
 @Component({
   selector: 'local-panel-layout',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [AgentRow, BrandMark, MachineDetail, ChunkRow, EnvList, FactLog, KitAsyncState, KitPanel, LocalAsks, LocalInfo],
+  imports: [
+    AgentRow,
+    BrandMark,
+    MachineDetail,
+    ChunkRow,
+    EnvList,
+    FactLog,
+    KitAsyncState,
+    KitMenu,
+    KitPanel,
+    LocalAsks,
+    LocalInfo,
+    ViewportToggle,
+  ],
   template: `
     <div class="lp" data-testid="local-panel">
       <header class="lp-header">
@@ -50,6 +68,9 @@ import type { MachineChunkRow } from './local-panel';
           <span class="conn-lbl">Runner</span>
           <span class="v">{{ connection() }}</span>
         </div>
+        <fleet-kit-menu class="menu" ariaLabel="Shell options" testid="local-panel-menu">
+          <fleet-viewport-toggle />
+        </fleet-kit-menu>
       </header>
       <main class="cols">
         <section class="col left">
@@ -189,6 +210,11 @@ import type { MachineChunkRow } from './local-panel';
     .conn .v {
       color: var(--cyan);
       font-size: var(--fs-lg);
+    }
+    .menu {
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
     }
     .cols {
       flex: 1;

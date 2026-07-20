@@ -1,9 +1,10 @@
-import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
-import { type KitAsyncStateValue, type runnerApi } from 'fleet';
+import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
+import { type KitAsyncStateValue, MobileTabBar, type MobileTabItem, type runnerApi, ViewportService } from 'fleet';
 
 import { type MachineChunkStatus, deriveMachineChunkStatus } from './chunk-status';
 import { injectRunnerLeasesQuery } from './leases.query';
 import { LocalPanelLayout } from './local-panel-layout';
+import { LocalPanelMobile } from './local-panel-mobile';
 import {
   injectRunnerAsksQuery,
   injectRunnerEscalationsQuery,
@@ -35,27 +36,77 @@ export interface MachineChunkRow {
 @Component({
   selector: 'local-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [LocalPanelLayout],
+  imports: [LocalPanelLayout, LocalPanelMobile, MobileTabBar],
   template: `
-    <local-panel-layout
-      [connection]="connection()"
-      [activeLeases]="activeLeases()"
-      [leasesTriadState]="leasesTriadState()"
-      [chunksTriadState]="chunksTriadState()"
-      [machineChunks]="machineChunks()"
-      [openAskCount]="openAskCount()"
-      [selectedChunkId]="selectedChunkId()"
-      [selectedChunkLeases]="selectedChunkLeases()"
-      [selectedStatus]="selectedStatus()"
-      [selectedEscalation]="selectedEscalation()"
-      (selectLease)="selectLease($event)"
-      (selectChunk)="selectedChunkId.set($event)"
-    />
+    <div class="lp-shell">
+      <div class="lp-content">
+        @if (mode() === 'desktop') {
+          <local-panel-layout
+            [connection]="connection()"
+            [activeLeases]="activeLeases()"
+            [leasesTriadState]="leasesTriadState()"
+            [chunksTriadState]="chunksTriadState()"
+            [machineChunks]="machineChunks()"
+            [openAskCount]="openAskCount()"
+            [selectedChunkId]="selectedChunkId()"
+            [selectedChunkLeases]="selectedChunkLeases()"
+            [selectedStatus]="selectedStatus()"
+            [selectedEscalation]="selectedEscalation()"
+            (selectLease)="selectLease($event)"
+            (selectChunk)="selectedChunkId.set($event)"
+          />
+        } @else {
+          @defer (on immediate) {
+            <local-panel-mobile
+              [activeLeases]="activeLeases()"
+              [leasesTriadState]="leasesTriadState()"
+              [chunksTriadState]="chunksTriadState()"
+              [machineChunks]="machineChunks()"
+              [openAskCount]="openAskCount()"
+            />
+          }
+        }
+      </div>
+      @if (mode() === 'mobile') {
+        <fleet-mobile-tab-bar [items]="tabItems()" testid="local-panel-mobile-tab-bar" />
+      }
+    </div>
+  `,
+  styles: `
+    :host {
+      display: block;
+      height: 100%;
+    }
+    .lp-shell {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+    .lp-content {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+    }
   `,
 })
 export class LocalPanel {
   /** A short connection/health status shown in the header (e.g. `ok`, `offline`). */
   readonly connection = input('—');
+
+  /** The page-level shell picker (`../docs/designs/mobile/README.md`'s
+   * "adaptive shells over shared guts") — desktop renders the existing
+   * three-column {@link LocalPanelLayout} unchanged; mobile renders
+   * {@link LocalPanelMobile} instead, `@defer`-loaded so the desktop bundle
+   * doesn't carry it, plus the persistent {@link MobileTabBar} below the
+   * scrolling `.lp-content` (mirroring the hub app-root's own placement,
+   * issue #92) so it never scrolls out of view. The viewport override itself
+   * lives behind each shell's own header menu (`KitMenu`, mobile polish
+   * feedback item 5) — `LocalPanelLayout`'s `.lp-header` and
+   * `LocalPanelMobile`'s shared `MobileTitlebar` menu slot — rather than an
+   * always-visible strip above both. */
+  protected readonly viewport = inject(ViewportService);
+
+  protected readonly mode = this.viewport.mode;
 
   protected readonly leasesQuery = injectRunnerLeasesQuery();
   protected readonly asksQuery = injectRunnerAsksQuery();
@@ -124,6 +175,27 @@ export class LocalPanel {
 
   /** The open-ask count for the asks panel's header note. */
   protected readonly openAskCount = computed(() => (this.asksQuery.data() ?? []).length);
+
+  /**
+   * The mobile bottom tab bar's items (issue #92) — Machine is this shell's
+   * one always-current screen (no router in the runner app, so it is a
+   * statically `active` tab rather than a routed one, unlike the hub's
+   * Board); Asks carries the same {@link openAskCount} the local-asks
+   * section's own header note reads; Transcripts has no mobile screen of its
+   * own yet (a future chunk), so it renders inert — the same "not yet"
+   * treatment the hub gives Asks/Fleet today.
+   */
+  protected readonly tabItems = computed<readonly MobileTabItem[]>(() => [
+    { testid: 'tab-machine', label: 'Machine', active: true },
+    {
+      testid: 'tab-asks-runner',
+      label: 'Asks',
+      inert: true,
+      badge: this.openAskCount(),
+      badgeTestid: 'tab-asks-runner-badge',
+    },
+    { testid: 'tab-transcripts', label: 'Transcripts', inert: true },
+  ]);
 
   /**
    * The `chunk_id` currently selected on the chunks list, or `null`. A lease

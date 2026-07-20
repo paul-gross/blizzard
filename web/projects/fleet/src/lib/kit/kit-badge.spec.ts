@@ -11,7 +11,7 @@ import type { Tone } from './tone';
 })
 class TestHost {
   readonly tone = signal<Tone>('running');
-  readonly variant = signal<'text' | 'pill'>('text');
+  readonly variant = signal<'text' | 'pill' | 'soft'>('text');
 }
 
 describe('KitBadge', () => {
@@ -62,5 +62,21 @@ describe('KitBadge', () => {
     await fixture.whenStable();
     el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('.badge')?.classList.contains('pill')).toBe(true);
+  });
+
+  it('the soft variant keeps the tone color but adds a dimmed border and a tinted fill', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    fixture.componentInstance.variant.set('soft');
+    fixture.componentInstance.tone.set('needs');
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const badge = el.querySelector('.badge') as HTMLElement;
+    expect(badge.classList.contains('soft')).toBe(true);
+    expect(badge.classList.contains('pill')).toBe(false);
+    const style = badge.getAttribute('style') ?? '';
+    expect(style).toContain('var(--red)');
+    expect(style).toContain('var(--red-dim)');
+    expect(style).toContain('color-mix(in srgb, var(--red) 12%, transparent)');
   });
 });

@@ -1,6 +1,7 @@
 import { ApplicationConfig, provideBrowserGlobalErrorListeners, provideZonelessChangeDetection } from '@angular/core';
-import { provideRouter } from '@angular/router';
+import { provideRouter, withRouterConfig } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import { provideViewportRenavigation } from 'fleet';
 
 import { routes } from './app.routes';
 
@@ -13,6 +14,11 @@ export const appConfig: ApplicationConfig = {
     provideBrowserGlobalErrorListeners(),
     provideZonelessChangeDetection(),
     provideTanStackQuery(new QueryClient()),
-    provideRouter(routes),
+    // `onSameUrlNavigation: 'reload'` is required by `provideViewportRenavigation`
+    // below — it re-navigates to the router's own current URL on a viewport-mode
+    // flip so `board`'s route-table guard (`matchesMobileViewport`) re-evaluates;
+    // without this config, a same-URL navigation is a router no-op.
+    provideRouter(routes, withRouterConfig({ onSameUrlNavigation: 'reload' })),
+    provideViewportRenavigation(),
   ],
 };

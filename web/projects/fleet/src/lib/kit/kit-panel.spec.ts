@@ -7,7 +7,7 @@ import { KitPanel } from './kit-panel';
   selector: 'fleet-test-host',
   imports: [KitPanel],
   template: `
-    <fleet-kit-panel [label]="label()" [count]="count()" [countTestid]="'the-count'">
+    <fleet-kit-panel [label]="label()" [count]="count()" [countTestid]="'the-count'" [accent]="accent()">
       @if (withHeaderExtra()) {
         <span header data-testid="extra-header">extra</span>
       }
@@ -19,6 +19,7 @@ class TestHost {
   readonly label = signal('Runners · fleet registry');
   readonly count = signal<number | string | null>(null);
   readonly withHeaderExtra = signal(false);
+  readonly accent = signal<string | null>(null);
 }
 
 describe('KitPanel', () => {
@@ -65,5 +66,28 @@ describe('KitPanel', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="extra-header"]')?.textContent).toBe('extra');
+  });
+
+  it('leaves the label and count uncolored when accent is unset', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    fixture.componentInstance.count.set(4);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const labels = el.querySelectorAll('.lbl');
+    expect((labels[0] as HTMLElement).style.color).toBe('');
+    expect(labels[1].classList.contains('cnt-accent')).toBe(false);
+  });
+
+  it('colors the label and flips the count to the accent look when set', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    fixture.componentInstance.count.set(2);
+    fixture.componentInstance.accent.set('var(--red)');
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const labels = el.querySelectorAll('.lbl');
+    expect((labels[0] as HTMLElement).style.color).toBe('var(--red)');
+    expect(labels[1].classList.contains('cnt-accent')).toBe(true);
   });
 });
