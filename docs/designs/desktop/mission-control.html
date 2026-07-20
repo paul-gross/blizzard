@@ -1,0 +1,1058 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>blizzard hub — mission control</title>
+<style>
+  :root {
+    --bg: #060a12;
+    --ground: #080d17;
+    --panel: #0b1120;
+    --panel-deep: #080d19;
+    --bezel: #1d2b44;
+    --bezel-hi: #27395c;
+    --line: #131d30;
+    --amber: #f2b25c;
+    --amber-hi: #ffcf8a;
+    --amber-dim: #8f7548;
+    --amber-faint: #4d4130;
+    --cyan: #5cd1e5;
+    --cyan-dim: #2b6675;
+    --red: #f05c6c;
+    --red-dim: #7a3540;
+    --green: #4fc57e;
+    --green-dim: #2b5c40;
+    --label: #5c7089;
+    --label-dim: #3c4d63;
+    --text: #b8c6d8;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background:
+      radial-gradient(ellipse at 50% -20%, #0c1526 0%, var(--bg) 60%),
+      var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  button {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    background: var(--panel-deep);
+    color: var(--cyan);
+    border: 1px solid var(--cyan-dim);
+    cursor: pointer;
+    font-size: 11px;
+    padding: 1px 6px;
+  }
+  button:hover:not(:disabled) { border-color: var(--cyan); background: #0d1a28; }
+  button:disabled { color: var(--label-dim); border-color: var(--line); cursor: default; }
+  button:focus-visible, [tabindex]:focus-visible, input:focus-visible {
+    outline: 2px solid var(--cyan);
+    outline-offset: 1px;
+  }
+  ::selection { background: var(--cyan-dim); color: #eaf6f9; }
+
+  /* ---------- engraved labels + bezeled panels ---------- */
+  .lbl {
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--label);
+    text-shadow: 0 1px 0 rgba(0,0,0,0.9);
+  }
+  .panel {
+    background: linear-gradient(180deg, var(--panel) 0%, var(--panel-deep) 100%);
+    border: 1px solid var(--bezel);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.04),
+      inset 0 -1px 0 rgba(0,0,0,0.6),
+      0 0 0 1px rgba(0,0,0,0.55);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(0,0,0,0.25);
+    flex: none;
+  }
+  .panel-body { overflow-y: auto; overflow-x: hidden; flex: 1; min-height: 0; }
+  .panel-body::-webkit-scrollbar { width: 6px; }
+  .panel-body::-webkit-scrollbar-thumb { background: var(--bezel); }
+
+  /* ---------- header ---------- */
+  header {
+    flex: none;
+    display: flex;
+    align-items: stretch;
+    border-bottom: 1px solid var(--bezel);
+    background: linear-gradient(180deg, #0d1526, #080d18);
+    height: 40px;
+  }
+  .hdr-cell {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 0 14px;
+    border-right: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  .hdr-cell .v { color: var(--amber); font-size: 15px; line-height: 1.1; }
+  .hdr-cell .v .u { color: var(--amber-dim); font-size: 11px; }
+  #brand { color: var(--amber-hi); font-size: 15px; letter-spacing: 0.28em; text-transform: uppercase; }
+  #brand small { color: var(--label); font-size: 9px; letter-spacing: 0.18em; display: block; }
+  #hdr-clock .v { color: var(--cyan); }
+  #hdr-needs .v.alert { color: var(--red); }
+  #hdr-done .v { color: var(--green); }
+  header .spacer { flex: 1; border-right: none; }
+
+  /* ---------- main grid ---------- */
+  main {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 330px 1fr 330px;
+    gap: 6px;
+    padding: 6px;
+  }
+  .col { display: flex; flex-direction: column; gap: 6px; min-height: 0; min-width: 0; }
+
+  /* ---------- ready queue ---------- */
+  #queue-panel { flex: 1.35; }
+  .q-row {
+    display: grid;
+    grid-template-columns: 18px 16px 42px 1fr 34px;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 6px 3px 4px;
+    border-bottom: 1px solid var(--line);
+    border-left: 2px solid transparent;
+    cursor: pointer;
+  }
+  .q-row:hover { background: rgba(92,209,229,0.05); }
+  .q-row.cursor { border-left-color: var(--amber); background: rgba(242,178,92,0.07); }
+  .q-row .pos { color: var(--label-dim); font-size: 10px; text-align: right; }
+  .q-row.cursor .pos { color: var(--amber); }
+  .q-row .cid { color: var(--amber); font-size: 11px; }
+  .q-row .ttl { color: var(--text); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .q-row .ttl .chips { color: var(--cyan); }
+  .q-row input[type="checkbox"] {
+    appearance: none;
+    width: 11px; height: 11px;
+    border: 1px solid var(--cyan-dim);
+    background: var(--panel-deep);
+    cursor: pointer;
+  }
+  .q-row input[type="checkbox"]:checked { background: var(--cyan); box-shadow: inset 0 0 0 2px var(--panel-deep); }
+  .q-mv { display: flex; gap: 2px; }
+  .q-mv button { padding: 0 3px; font-size: 9px; line-height: 14px; }
+
+  /* ---------- event log ---------- */
+  #log-panel { flex: 1; }
+  .ev {
+    display: grid;
+    grid-template-columns: 58px 1fr;
+    gap: 6px;
+    padding: 2px 8px;
+    border-bottom: 1px solid rgba(19,29,48,0.6);
+    font-size: 10.5px;
+    line-height: 1.5;
+  }
+  .ev .t { color: var(--label-dim); }
+  .ev .m { color: var(--text); }
+  .ev .m b { color: var(--amber); font-weight: normal; }
+  .ev.kind-ask .m { color: var(--amber-hi); }
+  .ev.kind-esc .m { color: var(--red); }
+  .ev.kind-land .m { color: var(--green); }
+  .ev.new { animation: evflash 1.2s steps(2, jump-none); }
+  @keyframes evflash { 0% { background: rgba(242,178,92,0.22); } 100% { background: transparent; } }
+
+  /* ---------- board ---------- */
+  #board-panel { flex: 1.15; }
+  #board {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 1px;
+    background: var(--line);
+    height: 100%;
+  }
+  .b-col { background: var(--panel-deep); display: flex; flex-direction: column; min-height: 0; }
+  .b-col-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 4px 6px;
+    border-bottom: 1px solid var(--line);
+    flex: none;
+  }
+  .b-col-head .n { font-size: 13px; }
+  .b-col-body { overflow-y: auto; flex: 1; padding: 4px; display: flex; flex-direction: column; gap: 4px; }
+  .tile {
+    border: 1px solid var(--line);
+    border-left-width: 2px;
+    background: var(--panel);
+    padding: 4px 6px;
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+    color: var(--text);
+  }
+  .tile:hover { border-color: var(--bezel-hi); }
+  .tile.sel { border-color: var(--cyan); box-shadow: 0 0 0 1px var(--cyan-dim); }
+  .tile .tid { font-size: 11px; display: flex; justify-content: space-between; }
+  .tile .tid .node { color: var(--label); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; }
+  .tile .iss { color: var(--cyan); font-size: 10px; margin-top: 1px; }
+  .tile .sub { color: var(--label); font-size: 9.5px; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .st-ready    { border-left-color: var(--cyan-dim); }   .st-ready .tid { color: var(--cyan); }
+  .st-running  { border-left-color: var(--amber); }      .st-running .tid { color: var(--amber); }
+  .st-waiting  { border-left-color: var(--amber-hi); }   .st-waiting .tid { color: var(--amber-hi); }
+  .st-needs    { border-left-color: var(--red); }        .st-needs .tid { color: var(--red); }
+  .st-done     { border-left-color: var(--green-dim); }  .st-done .tid { color: var(--green); }
+  .hd-ready .n { color: var(--cyan); }
+  .hd-running .n { color: var(--amber); }
+  .hd-waiting .n { color: var(--amber-hi); }
+  .hd-needs .n { color: var(--red); }
+  .hd-done .n { color: var(--green); }
+  .blip { display: inline-block; width: 6px; height: 6px; background: currentColor; margin-right: 4px; animation: blink 1.6s steps(2, jump-none) infinite; vertical-align: 1px; }
+  @keyframes blink { 50% { opacity: 0.15; } }
+
+  /* ---------- detail ---------- */
+  #detail-panel { flex: 1; }
+  #detail-body { display: grid; grid-template-columns: 1.1fr 1.2fr 1fr; gap: 1px; background: var(--line); overflow: hidden; }
+  .d-sec { background: var(--panel-deep); padding: 6px 8px; overflow-y: auto; min-height: 0; }
+  .d-sec h3 { margin-bottom: 5px; }
+  .chip {
+    display: inline-block;
+    border: 1px solid var(--cyan-dim);
+    color: var(--cyan);
+    padding: 0 5px;
+    font-size: 10px;
+    margin: 0 4px 4px 0;
+    line-height: 16px;
+  }
+  .d-issue-title { color: var(--text); font-size: 11px; margin: 2px 0 8px; line-height: 1.45; }
+  .kv { display: grid; grid-template-columns: 74px 1fr; gap: 2px 8px; font-size: 11px; }
+  .kv dt { color: var(--label); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; align-self: center; }
+  .kv dd { color: var(--amber); }
+  .hist-row { display: grid; grid-template-columns: 14px 62px 1fr; gap: 6px; padding: 2px 0; font-size: 10.5px; border-bottom: 1px solid rgba(19,29,48,0.6); line-height: 1.5; }
+  .hist-row .att { color: var(--label-dim); }
+  .hist-row .nd { color: var(--text); text-transform: uppercase; font-size: 9.5px; letter-spacing: 0.1em; align-self: center; }
+  .hist-row .jg { color: var(--label); }
+  .hist-row .jg .pass { color: var(--amber); }
+  .hist-row .jg .fail { color: var(--red); }
+  .hist-row .jg .run { color: var(--cyan); }
+  .art-row { display: flex; justify-content: space-between; gap: 8px; font-size: 10.5px; padding: 2px 0; border-bottom: 1px solid rgba(19,29,48,0.6); }
+  .art-row .a { color: var(--cyan); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .art-row .b { color: var(--amber); white-space: nowrap; }
+  .q-box { border: 1px solid var(--amber-faint); background: rgba(242,178,92,0.05); padding: 6px; margin-top: 6px; }
+  .q-box .qt { color: var(--amber-hi); font-size: 11px; line-height: 1.5; margin-bottom: 6px; }
+  .q-opt { display: block; width: 100%; text-align: left; margin-bottom: 4px; padding: 3px 6px; line-height: 1.4; white-space: normal; }
+  .q-opt .k { color: var(--amber); }
+  .resume-box { border: 1px solid var(--red-dim); background: rgba(240,92,108,0.06); padding: 6px; margin-top: 6px; }
+  .resume-box .rt { color: var(--red); font-size: 10px; margin-bottom: 4px; letter-spacing: 0.12em; text-transform: uppercase; }
+  .resume-box code { display: block; color: var(--amber-hi); background: #000; border: 1px solid var(--line); padding: 4px 6px; font-size: 11px; user-select: all; overflow-x: auto; white-space: nowrap; }
+  .d-empty { color: var(--label-dim); padding: 14px; font-size: 11px; letter-spacing: 0.1em; }
+
+  /* ---------- runners ---------- */
+  .runner { padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  .runner .r1 { display: flex; justify-content: space-between; align-items: baseline; }
+  .runner .name { color: var(--amber); font-size: 13px; }
+  .runner .name::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 6px; background: var(--green); }
+  .runner.offline .name { color: var(--label); }
+  .runner.offline .name::before { background: var(--red); animation: blink 1.2s steps(2, jump-none) infinite; }
+  .runner .ws { color: var(--label); font-size: 10px; }
+  .gauge { display: flex; gap: 3px; margin-top: 5px; }
+  .gauge .cell { flex: 1; height: 10px; border: 1px solid var(--bezel); background: var(--panel-deep); }
+  .gauge .cell.on { background: var(--amber); border-color: var(--amber-dim); box-shadow: 0 0 6px rgba(242,178,92,0.35); }
+  .runner.offline .gauge .cell { border-color: var(--line); }
+  .gauge-lbl { display: flex; justify-content: space-between; margin-top: 3px; }
+  .r-agents { margin-top: 4px; font-size: 10px; color: var(--label); line-height: 1.6; }
+  .r-agents b { color: var(--amber); font-weight: normal; }
+
+  /* ---------- merge queue ---------- */
+  .mq-row { display: grid; grid-template-columns: 46px 66px 1fr; gap: 6px; align-items: center; padding: 4px 8px; border-bottom: 1px solid var(--line); font-size: 11px; }
+  .mq-row .st { font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; }
+  .mq-row.landing .st { color: var(--amber); }
+  .mq-row.queued .st { color: var(--cyan-dim); }
+  .mq-row.landed .st { color: var(--green); }
+  .mq-row .cid { color: var(--amber); }
+  .mq-prog { display: flex; gap: 2px; }
+  .mq-prog .seg { flex: 1; height: 8px; border: 1px solid var(--bezel); }
+  .mq-prog .seg.on { background: var(--amber); border-color: var(--amber-dim); }
+  .mq-note { color: var(--label); font-size: 10px; }
+
+  /* ---------- questions panel ---------- */
+  .qq { padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  .qq .h { display: flex; justify-content: space-between; font-size: 11px; }
+  .qq .h .cid { color: var(--amber-hi); cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+  .qq .h .age { color: var(--label-dim); font-size: 10px; }
+  .qq .qt { color: var(--text); font-size: 10.5px; line-height: 1.5; margin: 3px 0 5px; }
+  .qq .q-opt { font-size: 10px; padding: 2px 5px; margin-bottom: 3px; }
+  .qq-none { color: var(--label-dim); padding: 10px 8px; font-size: 10.5px; letter-spacing: 0.08em; }
+
+  /* ---------- ticker ---------- */
+  #ticker {
+    flex: none;
+    height: 24px;
+    border-top: 1px solid var(--bezel);
+    background: #05080f;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    position: relative;
+  }
+  #ticker .tag {
+    flex: none;
+    z-index: 2;
+    background: #05080f;
+    border-right: 1px solid var(--bezel);
+    padding: 0 10px;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    color: var(--red);
+  }
+  #ticker-track {
+    white-space: nowrap;
+    color: var(--amber-dim);
+    font-size: 11px;
+    animation: tickscroll 55s linear infinite;
+    padding-left: 100%;
+  }
+  #ticker-track b { color: var(--amber); font-weight: normal; }
+  #ticker-track .sep { color: var(--label-dim); margin: 0 12px; }
+  @keyframes tickscroll { from { transform: translateX(0); } to { transform: translateX(-100%); } }
+
+  /* ---------- footer ---------- */
+  footer {
+    flex: none;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 0 12px;
+    border-top: 1px solid var(--line);
+    background: #04070d;
+    font-size: 10px;
+    color: var(--label);
+  }
+  footer kbd {
+    font-family: var(--mono);
+    border: 1px solid var(--bezel);
+    border-bottom-color: var(--bezel-hi);
+    background: var(--panel);
+    color: var(--cyan);
+    padding: 0 4px;
+    font-size: 9px;
+    line-height: 13px;
+    display: inline-block;
+  }
+  footer .fr { margin-left: auto; color: var(--label-dim); letter-spacing: 0.14em; text-transform: uppercase; }
+
+  @media (prefers-reduced-motion: reduce) {
+    #ticker-track { animation: none; padding-left: 12px; }
+    .blip, .runner.offline .name::before { animation: none; }
+    .ev.new { animation: none; background: rgba(242,178,92,0.12); }
+  }
+</style>
+</head>
+<body>
+  <header>
+    <div class="hdr-cell" id="brand">blizzard<small>fleet hub · mission control</small></div>
+    <div class="hdr-cell" id="hdr-clock"><span class="lbl">UTC</span><span class="v" id="clock">--:--:--</span></div>
+    <div class="hdr-cell"><span class="lbl">Chunks</span><span class="v" id="st-total">0</span></div>
+    <div class="hdr-cell"><span class="lbl">Ready</span><span class="v" id="st-ready">0</span></div>
+    <div class="hdr-cell"><span class="lbl">Running</span><span class="v" id="st-running">0</span></div>
+    <div class="hdr-cell"><span class="lbl">Waiting</span><span class="v" id="st-waiting">0</span></div>
+    <div class="hdr-cell" id="hdr-needs"><span class="lbl">Needs human</span><span class="v" id="st-needs">0</span></div>
+    <div class="hdr-cell" id="hdr-done"><span class="lbl">Done</span><span class="v" id="st-done">0</span></div>
+    <div class="hdr-cell"><span class="lbl">Slots</span><span class="v" id="st-slots">0<span class="u">/0</span></span></div>
+    <div class="hdr-cell"><span class="lbl">Events</span><span class="v" id="st-events">0</span></div>
+    <div class="hdr-cell spacer"></div>
+    <div class="hdr-cell"><span class="lbl">Session</span><span class="v">OVN-0712<span class="u"> · pgross</span></span></div>
+  </header>
+
+  <main>
+    <div class="col">
+      <section class="panel" id="queue-panel" aria-label="Ready queue">
+        <div class="panel-head">
+          <span class="lbl">Ready queue · dispatch order</span>
+          <button id="group-btn" disabled>GROUP (0)</button>
+        </div>
+        <div class="panel-body" id="queue-body"></div>
+      </section>
+      <section class="panel" id="log-panel" aria-label="Event log">
+        <div class="panel-head"><span class="lbl">Event log</span><span class="lbl" id="log-count"></span></div>
+        <div class="panel-body" id="log-body"></div>
+      </section>
+    </div>
+
+    <div class="col">
+      <section class="panel" id="board-panel" aria-label="Chunk board">
+        <div class="panel-head"><span class="lbl">Chunk board · workflow build → review → deliver</span><span class="lbl">graph: default</span></div>
+        <div class="panel-body" style="overflow:hidden; padding:0;">
+          <div id="board"></div>
+        </div>
+      </section>
+      <section class="panel" id="detail-panel" aria-label="Chunk detail">
+        <div class="panel-head"><span class="lbl" id="detail-title">Chunk detail</span><span class="lbl" id="detail-status"></span></div>
+        <div class="panel-body" id="detail-body" style="padding:0;"></div>
+      </section>
+    </div>
+
+    <div class="col">
+      <section class="panel" style="flex:none;" aria-label="Runners">
+        <div class="panel-head"><span class="lbl">Runners · agent slot capacity</span></div>
+        <div id="runners-body"></div>
+      </section>
+      <section class="panel" style="flex:none;" aria-label="Merge queue">
+        <div class="panel-head"><span class="lbl">Merge queue · serialized landings</span><span class="lbl" id="mq-count"></span></div>
+        <div id="mq-body"></div>
+      </section>
+      <section class="panel" style="flex:1;" aria-label="Open questions">
+        <div class="panel-head"><span class="lbl">Open questions · agent asks</span><span class="lbl" id="qq-count"></span></div>
+        <div class="panel-body" id="qq-body"></div>
+      </section>
+    </div>
+  </main>
+
+  <div id="ticker" aria-hidden="true">
+    <span class="tag lbl" style="color:var(--amber);">Ticker</span>
+    <div id="ticker-track"></div>
+  </div>
+
+  <footer>
+    <span><kbd>j</kbd>/<kbd>k</kbd> move queue item down/up</span>
+    <span><kbd>↑</kbd>/<kbd>↓</kbd> queue cursor</span>
+    <span><kbd>x</kbd> mark for group</span>
+    <span><kbd>g</kbd> group marked</span>
+    <span><kbd>↵</kbd> open detail</span>
+    <span class="fr">blizzard hub · design mock · fake data</span>
+  </footer>
+
+<script>
+"use strict";
+
+/* ============================== seed data ============================== */
+
+const iss = (repo, num, title) => ({ repo, num, title });
+
+const chunks = [
+  { id: "C-131", status: "ready", node: "build", runner: null,
+    issues: [iss("winter", 427, "repo status: show divergence glyphs in dashboard")],
+    history: [], artifacts: [], question: null, resume: null },
+  { id: "C-132", status: "ready", node: "build", runner: null,
+    issues: [iss("winter-docs", 88, "document capabilities binding for service slot")],
+    history: [], artifacts: [], question: null, resume: null },
+  { id: "C-133", status: "ready", node: "build", runner: null,
+    issues: [iss("winter-workflow", 54, "flurry: dedupe env allocation under parallel claims")],
+    history: [], artifacts: [], question: null, resume: null },
+  { id: "C-134", status: "ready", node: "build", runner: null,
+    issues: [iss("winter", 431, "lint: warn on orphaned worktrees after env destroy")],
+    history: [], artifacts: [], question: null, resume: null },
+
+  { id: "C-125", status: "running", node: "build", runner: "atlas/2",
+    issues: [iss("winter", 412, "ws pull: treat unfetched upstream as no-upstream")],
+    history: [
+      { att: 1, node: "build", verdict: "pass", note: "worker: pass · lint ok · 14 tests ok" },
+      { att: 1, node: "review", verdict: "fail", note: "review: fail — 2 findings, routed back to build" },
+      { att: 2, node: "build", verdict: "run", note: "rework in progress · fixing finding 2/2" },
+    ],
+    artifacts: [
+      { name: "winter@feat/ws-pull-unfetched", kind: "branch", commits: 3 },
+      { name: "review-notes.md", kind: "asset" },
+    ],
+    question: null, resume: null },
+  { id: "C-126", status: "running", node: "review", runner: "atlas/4",
+    issues: [iss("winter-service-docker", 19, "health probe timeout should be configurable per service")],
+    history: [
+      { att: 1, node: "build", verdict: "pass", note: "worker: pass · lint ok · 9 tests ok" },
+      { att: 1, node: "review", verdict: "run", note: "reviewer reading diff · 2 repos in scope" },
+    ],
+    artifacts: [
+      { name: "winter-service-docker@feat/probe-timeout", kind: "branch", commits: 2 },
+      { name: "winter-docs@feat/probe-timeout", kind: "branch", commits: 1 },
+    ],
+    question: null, resume: null },
+  { id: "C-127", status: "running", node: "deliver", runner: "atlas/1",
+    issues: [iss("winter-harness", 33, "verifiability matrix: add doctor probe row")],
+    history: [
+      { att: 1, node: "build", verdict: "pass", note: "worker: pass · links ok" },
+      { att: 1, node: "review", verdict: "pass", note: "review: pass — 0 findings, 1 nit noted" },
+      { att: 1, node: "deliver", verdict: "run", note: "in merge queue · landing" },
+    ],
+    artifacts: [
+      { name: "winter-harness@feat/doctor-probe-row", kind: "branch", commits: 1 },
+      { name: "review-notes.md", kind: "asset" },
+    ],
+    question: null, resume: null },
+
+  { id: "C-121", status: "waiting", node: "build", runner: null,
+    issues: [iss("winter-github", 12, "issue skill: settle label taxonomy for chunk-sized work")],
+    history: [
+      { att: 1, node: "build", verdict: "run", note: "parked — agent asked operator, slot released" },
+    ],
+    artifacts: [{ name: "winter-github@feat/label-taxonomy", kind: "branch", commits: 1 }],
+    question: {
+      text: "Two label schemes fit the existing 41 issues. Which do I standardize on?",
+      askedAt: "02:41Z",
+      options: [
+        "kind/* + area/* two-axis scheme (rename 12 labels)",
+        "flat chunk:* prefix scheme (rename 4 labels)",
+        "keep current labels, document mapping only",
+      ] },
+    resume: null },
+  { id: "C-122", status: "waiting", node: "review", runner: null,
+    issues: [iss("winter", 405, "port registry: retry on collision instead of hard fail")],
+    history: [
+      { att: 1, node: "build", verdict: "pass", note: "worker: pass · 11 tests ok" },
+      { att: 1, node: "review", verdict: "run", note: "parked — reviewer asked operator, slot released" },
+    ],
+    artifacts: [
+      { name: "winter@feat/port-collision-retry", kind: "branch", commits: 2 },
+      { name: "review-notes.md", kind: "asset" },
+    ],
+    question: {
+      text: "Retry policy disagrees with resilience.md. Reviewer asks: cap collision retries at?",
+      askedAt: "03:07Z",
+      options: [
+        "3 retries, fixed 250ms spacing (matches fetch retry)",
+        "5 retries, exponential from 100ms",
+        "no cap — scan until port range exhausted",
+      ] },
+    resume: null },
+
+  { id: "C-118", status: "needs", node: "build", runner: null,
+    issues: [iss("winter-service-tmux", 41, "restart: pattern globbing matches zero services silently")],
+    history: [
+      { att: 1, node: "build", verdict: "fail", note: "worker: fail — flaky tmux pane race, retry 1/3" },
+      { att: 2, node: "build", verdict: "fail", note: "worker: fail — same race, retry 2/3" },
+      { att: 3, node: "build", verdict: "fail", note: "worker: fail — retries exhausted, escalated" },
+    ],
+    artifacts: [
+      { name: "winter-service-tmux@feat/restart-glob", kind: "branch", commits: 4 },
+      { name: "failure-triage.md", kind: "asset" },
+    ],
+    question: null,
+    resume: "cd alpha && claude --resume 9f2c" },
+
+  { id: "C-110", status: "done", node: "deliver", runner: null,
+    issues: [iss("winter", 398, "dashboard: reload config on refresh")],
+    history: [
+      { att: 1, node: "build", verdict: "pass", note: "worker: pass · 22 tests ok" },
+      { att: 1, node: "review", verdict: "pass", note: "review: pass — 0 findings" },
+      { att: 1, node: "deliver", verdict: "pass", note: "merged to main · e645e91" },
+    ],
+    artifacts: [{ name: "winter@feat/dash-reload", kind: "branch", commits: 5 }],
+    question: null, resume: null },
+  { id: "C-112", status: "done", node: "deliver", runner: null,
+    issues: [iss("winter-workflow", 48, "delegate: queue conflicting targets instead of failing")],
+    history: [
+      { att: 1, node: "build", verdict: "pass", note: "worker: pass" },
+      { att: 1, node: "review", verdict: "fail", note: "review: fail — 1 finding, routed back to build" },
+      { att: 2, node: "build", verdict: "pass", note: "worker: pass · finding resolved" },
+      { att: 2, node: "review", verdict: "pass", note: "review: pass" },
+      { att: 1, node: "deliver", verdict: "pass", note: "merged to main · 02:14Z" },
+    ],
+    artifacts: [{ name: "winter-workflow@feat/delegate-queue", kind: "branch", commits: 3 }],
+    question: null, resume: null },
+];
+
+const runners = [
+  { name: "atlas", workspace: "winter-workspace", slots: 5, online: true },
+  { name: "zephyr", workspace: "winter-workspace-2", slots: 4, online: false },
+];
+
+let readyOrder = ["C-131", "C-132", "C-133", "C-134"];
+
+const mergeQueue = [
+  { id: "C-127", state: "landing", progress: 40 },
+  { id: "C-126", state: "queued", progress: 0 },
+  { id: "C-112", state: "landed", progress: 100, at: "02:14Z" },
+];
+
+const events = [
+  { t: "02:14:09", kind: "land", msg: "merge queue: C-112 landed on main (winter-workflow)" },
+  { t: "02:41:52", kind: "ask", msg: "C-121 asked operator: label taxonomy — parked, slot released" },
+  { t: "02:58:31", kind: "info", msg: "atlas/1 claimed C-127 → deliver" },
+  { t: "03:03:44", kind: "esc", msg: "C-118 escalated: build retries exhausted (3/3) — needs human" },
+  { t: "03:07:18", kind: "ask", msg: "C-122 asked operator: retry cap policy — parked, slot released" },
+  { t: "03:09:02", kind: "info", msg: "runner zephyr missed heartbeat ×3 — marked offline" },
+  { t: "03:11:40", kind: "info", msg: "atlas/2 pushed a3f19c2 to winter@feat/ws-pull-unfetched" },
+  { t: "03:12:05", kind: "info", msg: "merge queue: C-127 landing — rebase clean, checks running" },
+];
+
+/* ============================== state ============================== */
+
+let cursor = 0;                 // queue cursor index
+let checked = new Set();        // chunk ids marked for grouping
+let selectedId = "C-125";       // detail view chunk
+let evSinceLoad = 0;
+
+const $ = (id) => document.getElementById(id);
+const chunk = (id) => chunks.find((c) => c.id === id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[m]));
+const chipTxt = (i) => `${i.repo}#${i.num}`;
+
+const STATUS = {
+  ready:   { label: "READY",       cls: "ready" },
+  running: { label: "RUNNING",     cls: "running" },
+  waiting: { label: "WAIT/HUMAN",  cls: "waiting" },
+  needs:   { label: "NEEDS HUMAN", cls: "needs" },
+  done:    { label: "DONE",        cls: "done" },
+};
+
+function nowT() {
+  const d = new Date();
+  return [d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds()].map((n) => String(n).padStart(2, "0")).join(":");
+}
+
+function pushEvent(kind, msg) {
+  events.push({ t: nowT(), kind, msg, fresh: true });
+  evSinceLoad++;
+  if (events.length > 60) events.shift();
+  renderLog();
+  renderTicker();
+  renderHeader();
+}
+
+function slotsUsed(rname) {
+  return chunks.filter((c) => c.status === "running" && c.runner && c.runner.split("/")[0] === rname).length;
+}
+
+/* ============================== renderers ============================== */
+
+function renderHeader() {
+  const by = (s) => chunks.filter((c) => c.status === s).length;
+  $("st-total").textContent = chunks.length;
+  $("st-ready").textContent = by("ready");
+  $("st-running").textContent = by("running");
+  $("st-waiting").textContent = by("waiting");
+  const needs = by("needs");
+  $("st-needs").textContent = needs;
+  $("st-needs").classList.toggle("alert", needs > 0);
+  $("st-done").textContent = by("done");
+  const used = runners.filter((r) => r.online).reduce((a, r) => a + slotsUsed(r.name), 0);
+  const cap = runners.filter((r) => r.online).reduce((a, r) => a + r.slots, 0);
+  $("st-slots").innerHTML = `${used}<span class="u">/${cap}</span>`;
+  $("st-events").textContent = events.length + (evSinceLoad > 0 ? "" : "");
+}
+
+function renderQueue() {
+  readyOrder = readyOrder.filter((id) => chunk(id) && chunk(id).status === "ready");
+  if (cursor >= readyOrder.length) cursor = Math.max(0, readyOrder.length - 1);
+  const body = $("queue-body");
+  body.innerHTML = "";
+  readyOrder.forEach((id, i) => {
+    const c = chunk(id);
+    const row = document.createElement("div");
+    row.className = "q-row" + (i === cursor ? " cursor" : "");
+    row.tabIndex = 0;
+    row.setAttribute("role", "button");
+    row.setAttribute("aria-label", `queue position ${i + 1}: ${c.id}`);
+    const chips = c.issues.map(chipTxt).join(" ");
+    row.innerHTML =
+      `<span class="pos">${String(i + 1).padStart(2, "0")}</span>` +
+      `<input type="checkbox" ${checked.has(id) ? "checked" : ""} aria-label="mark ${c.id} for grouping">` +
+      `<span class="cid">${c.id}</span>` +
+      `<span class="ttl"><span class="chips">${esc(chips)}</span> ${esc(c.issues[0].title)}</span>` +
+      `<span class="q-mv"><button data-mv="-1" aria-label="move ${c.id} up">▲</button><button data-mv="1" aria-label="move ${c.id} down">▼</button></span>`;
+    row.querySelector("input").addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggleCheck(id);
+    });
+    row.querySelectorAll("button").forEach((b) =>
+      b.addEventListener("click", (e) => {
+        e.stopPropagation();
+        cursor = i;
+        moveQueueItem(parseInt(b.dataset.mv, 10));
+      }));
+    row.addEventListener("click", () => { cursor = i; selectChunk(id); renderQueue(); });
+    row.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); cursor = i; selectChunk(id); renderQueue(); }
+    });
+    body.appendChild(row);
+  });
+  const btn = $("group-btn");
+  btn.textContent = `GROUP (${checked.size})`;
+  btn.disabled = checked.size < 2;
+}
+
+function renderBoard() {
+  const board = $("board");
+  board.innerHTML = "";
+  for (const key of Object.keys(STATUS)) {
+    const col = document.createElement("div");
+    col.className = "b-col";
+    const items = key === "ready"
+      ? readyOrder.map(chunk)
+      : chunks.filter((c) => c.status === key);
+    const blip = (key === "running") ? '<span class="blip"></span>' : "";
+    col.innerHTML =
+      `<div class="b-col-head hd-${key}"><span class="lbl">${STATUS[key].label}</span><span class="n">${blip}${items.length}</span></div>`;
+    const bod = document.createElement("div");
+    bod.className = "b-col-body";
+    items.forEach((c) => {
+      const t = document.createElement("button");
+      t.className = `tile st-${key}` + (c.id === selectedId ? " sel" : "");
+      const sub = key === "running" ? `${c.runner} · ${c.node}`
+        : key === "waiting" ? `asked ${c.question ? c.question.askedAt : ""} · parked`
+        : key === "needs" ? "escalated · resume avail"
+        : key === "done" ? "merged to main"
+        : `queued · pos ${readyOrder.indexOf(c.id) + 1}`;
+      t.innerHTML =
+        `<span class="tid">${c.id}<span class="node">${c.node}</span></span>` +
+        `<span class="iss">${esc(c.issues.map(chipTxt).join(" "))}</span>` +
+        `<span class="sub">${esc(sub)}</span>`;
+      t.addEventListener("click", () => selectChunk(c.id));
+      bod.appendChild(t);
+    });
+    col.appendChild(bod);
+    board.appendChild(col);
+  }
+}
+
+function renderDetail() {
+  const c = chunk(selectedId);
+  const body = $("detail-body");
+  if (!c) {
+    $("detail-title").textContent = "Chunk detail";
+    $("detail-status").textContent = "";
+    body.innerHTML = '<div class="d-empty">NO CHUNK SELECTED — CLICK A TILE OR QUEUE ROW</div>';
+    return;
+  }
+  $("detail-title").textContent = `Chunk detail · ${c.id}`;
+  $("detail-status").textContent = `${STATUS[c.status].label} · node ${c.node.toUpperCase()}`;
+
+  const chips = c.issues.map((i) => `<span class="chip">${esc(chipTxt(i))}</span>`).join("");
+  const titles = c.issues.map((i) => `<div class="d-issue-title"><span style="color:var(--cyan)">${esc(chipTxt(i))}</span> ${esc(i.title)}</div>`).join("");
+
+  const hist = c.history.length
+    ? c.history.map((h) =>
+        `<div class="hist-row"><span class="att">${h.att}</span><span class="nd">${esc(h.node)}</span>` +
+        `<span class="jg"><span class="${h.verdict === "pass" ? "pass" : h.verdict === "fail" ? "fail" : "run"}">${h.verdict.toUpperCase()}</span> · ${esc(h.note)}</span></div>`
+      ).join("")
+    : '<div class="d-empty" style="padding:4px 0;">NO NODE HISTORY — UNCLAIMED</div>';
+
+  const arts = c.artifacts.length
+    ? c.artifacts.map((a) =>
+        `<div class="art-row"><span class="a">${esc(a.name)}</span><span class="b">${a.kind === "branch" ? "→ " + a.commits + " commit" + (a.commits === 1 ? "" : "s") : "asset"}</span></div>`
+      ).join("")
+    : '<div class="d-empty" style="padding:4px 0;">NO ARTIFACTS YET</div>';
+
+  let ask = "";
+  if (c.question) {
+    ask = `<div class="q-box"><div class="qt">${esc(c.question.text)}</div>` +
+      c.question.options.map((o, i) =>
+        `<button class="q-opt" data-q="${c.id}" data-i="${i}"><span class="k">[${i + 1}]</span> ${esc(o)}</button>`).join("") +
+      `</div>`;
+  }
+  let resume = "";
+  if (c.resume) {
+    resume = `<div class="resume-box"><div class="rt">Escalated — resume session</div><code>${esc(c.resume)}</code></div>`;
+  }
+
+  body.innerHTML =
+    `<div class="d-sec"><h3 class="lbl">Issue pointers</h3>${chips}${titles}` +
+      `<dl class="kv"><dt>Status</dt><dd>${STATUS[c.status].label}</dd>` +
+      `<dt>Node</dt><dd>${esc(c.node)}</dd>` +
+      `<dt>Agent</dt><dd>${c.runner ? esc(c.runner) : "—"}</dd>` +
+      `<dt>Attempts</dt><dd>${c.history.length ? Math.max(...c.history.map((h) => h.att)) : 0}</dd></dl></div>` +
+    `<div class="d-sec"><h3 class="lbl">Node history · judgements</h3>${hist}</div>` +
+    `<div class="d-sec"><h3 class="lbl">Artifacts</h3>${arts}${ask}${resume}</div>`;
+
+  body.querySelectorAll(".q-opt").forEach((b) =>
+    b.addEventListener("click", () => answerQuestion(b.dataset.q, parseInt(b.dataset.i, 10))));
+}
+
+function renderRunners() {
+  const body = $("runners-body");
+  body.innerHTML = "";
+  runners.forEach((r) => {
+    const used = r.online ? slotsUsed(r.name) : 0;
+    const div = document.createElement("div");
+    div.className = "runner" + (r.online ? "" : " offline");
+    const cells = Array.from({ length: r.slots }, (_, i) =>
+      `<span class="cell${i < used ? " on" : ""}"></span>`).join("");
+    const agents = r.online
+      ? chunks.filter((c) => c.status === "running" && c.runner && c.runner.split("/")[0] === r.name)
+          .map((c) => `<b>${esc(c.runner)}</b> ${c.id} · ${esc(c.node)}`).join("<br>")
+      : "no heartbeat · last seen 03:09Z";
+    div.innerHTML =
+      `<div class="r1"><span class="name">${esc(r.name)}</span><span class="ws">${esc(r.workspace)}</span></div>` +
+      `<div class="gauge">${cells}</div>` +
+      `<div class="gauge-lbl"><span class="lbl">${r.online ? "online" : "offline"}</span><span class="lbl" style="color:${r.online ? "var(--amber)" : "var(--label-dim)"}">${used}/${r.slots} slots</span></div>` +
+      `<div class="r-agents">${agents}</div>`;
+    body.appendChild(div);
+  });
+}
+
+function renderMergeQueue() {
+  const body = $("mq-body");
+  body.innerHTML = "";
+  $("mq-count").textContent = mergeQueue.filter((m) => m.state !== "landed").length + " active";
+  mergeQueue.forEach((m) => {
+    const row = document.createElement("div");
+    row.className = "mq-row " + m.state;
+    let right;
+    if (m.state === "landing") {
+      const segs = Array.from({ length: 5 }, (_, i) =>
+        `<span class="seg${m.progress >= (i + 1) * 20 ? " on" : ""}"></span>`).join("");
+      right = `<span class="mq-prog" aria-label="landing ${m.progress}%">${segs}</span>`;
+    } else if (m.state === "landed") {
+      right = `<span class="mq-note">on main · ${esc(m.at || "")}</span>`;
+    } else {
+      right = `<span class="mq-note">holds until head lands</span>`;
+    }
+    row.innerHTML = `<span class="cid">${m.id}</span><span class="st">${m.state}</span>${right}`;
+    body.appendChild(row);
+  });
+}
+
+function renderQuestions() {
+  const body = $("qq-body");
+  const waiting = chunks.filter((c) => c.status === "waiting" && c.question);
+  $("qq-count").textContent = waiting.length + " open";
+  body.innerHTML = "";
+  if (!waiting.length) {
+    body.innerHTML = '<div class="qq-none">NO OPEN QUESTIONS — FLEET UNBLOCKED</div>';
+    return;
+  }
+  waiting.forEach((c) => {
+    const div = document.createElement("div");
+    div.className = "qq";
+    div.innerHTML =
+      `<div class="h"><span class="cid" tabindex="0" role="button">${c.id} · ${esc(c.issues.map(chipTxt).join(" "))}</span><span class="age">asked ${esc(c.question.askedAt)}</span></div>` +
+      `<div class="qt">${esc(c.question.text)}</div>` +
+      c.question.options.map((o, i) =>
+        `<button class="q-opt" data-q="${c.id}" data-i="${i}"><span class="k">[${i + 1}]</span> ${esc(o)}</button>`).join("");
+    div.querySelector(".cid").addEventListener("click", () => selectChunk(c.id));
+    div.querySelector(".cid").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") selectChunk(c.id);
+    });
+    div.querySelectorAll(".q-opt").forEach((b) =>
+      b.addEventListener("click", () => answerQuestion(b.dataset.q, parseInt(b.dataset.i, 10))));
+    body.appendChild(div);
+  });
+}
+
+function renderLog() {
+  const body = $("log-body");
+  body.innerHTML = "";
+  [...events].reverse().forEach((e) => {
+    const div = document.createElement("div");
+    div.className = "ev kind-" + e.kind + (e.fresh ? " new" : "");
+    e.fresh = false;
+    div.innerHTML = `<span class="t">${esc(e.t)}</span><span class="m">${e.msg.replace(/(C-\d+|atlas\/\d|zephyr)/g, "<b>$1</b>")}</span>`;
+    body.appendChild(div);
+  });
+  $("log-count").textContent = events.length + " ev";
+}
+
+function renderTicker() {
+  const recent = [...events].slice(-10).reverse()
+    .map((e) => `<b>${esc(e.t)}</b> ${esc(e.msg)}`)
+    .join('<span class="sep">///</span>');
+  $("ticker-track").innerHTML = recent;
+}
+
+function renderAll() {
+  renderHeader();
+  renderQueue();
+  renderBoard();
+  renderDetail();
+  renderRunners();
+  renderMergeQueue();
+  renderQuestions();
+  renderLog();
+  renderTicker();
+}
+
+/* ============================== interactions ============================== */
+
+function selectChunk(id) {
+  selectedId = id;
+  renderBoard();
+  renderDetail();
+}
+
+function toggleCheck(id) {
+  if (checked.has(id)) checked.delete(id); else checked.add(id);
+  renderQueue();
+}
+
+function moveQueueItem(dir) {
+  const j = cursor + dir;
+  if (j < 0 || j >= readyOrder.length) return;
+  [readyOrder[cursor], readyOrder[j]] = [readyOrder[j], readyOrder[cursor]];
+  const moved = readyOrder[j];
+  cursor = j;
+  pushEvent("info", `operator reordered ready queue: ${moved} → pos ${j + 1}`);
+  renderQueue();
+  renderBoard();
+}
+
+function groupChecked() {
+  if (checked.size < 2) return;
+  const ids = readyOrder.filter((id) => checked.has(id));
+  const target = chunk(ids[0]);
+  const absorbed = ids.slice(1);
+  absorbed.forEach((id) => {
+    const c = chunk(id);
+    target.issues.push(...c.issues);
+    chunks.splice(chunks.indexOf(c), 1);
+  });
+  readyOrder = readyOrder.filter((id) => !absorbed.includes(id));
+  checked = new Set();
+  cursor = readyOrder.indexOf(target.id);
+  selectedId = target.id;
+  pushEvent("info", `operator grouped ${ids.join("+")} → ${target.id} (${target.issues.length} issues)`);
+  renderAll();
+}
+
+function answerQuestion(id, optIdx) {
+  const c = chunk(id);
+  if (!c || !c.question) return;
+  const opt = c.question.options[optIdx];
+  const atlas = runners[0];
+  const free = atlas.slots - slotsUsed(atlas.name);
+  c.history.push({ att: Math.max(1, ...c.history.map((h) => h.att)), node: c.node, verdict: "run",
+    note: `operator answered: "${opt}" — resuming` });
+  c.question = null;
+  if (free > 0) {
+    c.status = "running";
+    c.runner = `atlas/${slotsUsed("atlas") + 3 <= atlas.slots ? slotsUsed("atlas") + 3 : 5}`;
+    pushEvent("info", `${c.id} answer received — atlas reclaimed → ${c.node}`);
+  } else {
+    c.status = "ready";
+    readyOrder.push(c.id);
+    pushEvent("info", `${c.id} answer received — no free slot, requeued at pos ${readyOrder.length}`);
+  }
+  selectedId = id;
+  renderAll();
+}
+
+/* ---------- keyboard ---------- */
+document.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT" || e.metaKey || e.ctrlKey || e.altKey) return;
+  switch (e.key) {
+    case "j": e.preventDefault(); moveQueueItem(1); break;
+    case "k": e.preventDefault(); moveQueueItem(-1); break;
+    case "ArrowDown":
+      e.preventDefault();
+      if (cursor < readyOrder.length - 1) { cursor++; renderQueue(); }
+      break;
+    case "ArrowUp":
+      e.preventDefault();
+      if (cursor > 0) { cursor--; renderQueue(); }
+      break;
+    case "x":
+      if (readyOrder[cursor]) toggleCheck(readyOrder[cursor]);
+      break;
+    case "g": groupChecked(); break;
+    case "Enter":
+      if (document.activeElement === document.body && readyOrder[cursor]) selectChunk(readyOrder[cursor]);
+      break;
+  }
+});
+
+$("group-btn").addEventListener("click", groupChecked);
+
+/* ============================== live simulation ============================== */
+
+const HASHES = ["a3f19c2", "7d02be1", "c49aa08", "0be3417", "f81d5c9", "22e7d30", "b5c9114", "9e04f7a"];
+let simStep = 0;
+
+function simTick() {
+  simStep++;
+  const phase = simStep % 4;
+
+  if (phase === 0 || phase === 2) {
+    // a running builder pushes a commit
+    const runningBuild = chunks.filter((c) => c.status === "running" && c.artifacts.some((a) => a.kind === "branch"));
+    if (runningBuild.length) {
+      const c = runningBuild[simStep % runningBuild.length];
+      const br = c.artifacts.find((a) => a.kind === "branch");
+      br.commits++;
+      const h = HASHES[simStep % HASHES.length];
+      pushEvent("info", `${c.runner || "atlas/?"} pushed ${h} to ${br.name}`);
+      if (c.id === selectedId) renderDetail();
+    }
+  } else if (phase === 1) {
+    // landing chunk progresses in the merge queue
+    const landing = mergeQueue.find((m) => m.state === "landing");
+    if (landing) {
+      landing.progress = Math.min(100, landing.progress + 20);
+      if (landing.progress >= 100) {
+        landing.state = "landed";
+        landing.at = nowT().slice(0, 5) + "Z";
+        const c = chunk(landing.id);
+        if (c) {
+          c.status = "done";
+          c.runner = null;
+          c.node = "deliver";
+          c.history.push({ att: 1, node: "deliver", verdict: "pass", note: "merged to main · " + landing.at });
+        }
+        pushEvent("land", `merge queue: ${landing.id} landed on main`);
+        const next = mergeQueue.find((m) => m.state === "queued");
+        if (next) {
+          next.state = "landing";
+          next.progress = 20;
+          const nc = chunk(next.id);
+          if (nc) { nc.node = "deliver"; nc.status = "running"; }
+          pushEvent("info", `merge queue: ${next.id} landing — rebase onto new main`);
+        }
+        renderAll();
+      } else {
+        pushEvent("info", `merge queue: ${landing.id} landing · checks ${landing.progress}%`);
+        renderMergeQueue();
+      }
+    } else {
+      pushEvent("info", "merge queue idle — head slot open");
+    }
+  } else {
+    // atlas claims a ready chunk if capacity allows and queue is deep enough
+    const atlas = runners[0];
+    const free = atlas.slots - slotsUsed(atlas.name);
+    if (free > 0 && readyOrder.length > 2) {
+      const id = readyOrder.shift();
+      const c = chunk(id);
+      c.status = "running";
+      c.node = "build";
+      c.runner = `atlas/${atlas.slots - free + 1}`;
+      c.history.push({ att: 1, node: "build", verdict: "run", note: "claimed · env provisioning" });
+      if (!c.artifacts.length) {
+        c.artifacts.push({ name: `${c.issues[0].repo}@feat/${c.issues[0].repo.replace("winter-", "")}-${c.issues[0].num}`, kind: "branch", commits: 0 });
+      }
+      checked.delete(id);
+      pushEvent("info", `${c.runner} claimed ${c.id} → build (queue depth ${readyOrder.length})`);
+      renderAll();
+    } else {
+      pushEvent("info", `heartbeat: atlas ok · ${slotsUsed("atlas")}/${atlas.slots} slots · zephyr offline`);
+    }
+  }
+  renderHeader();
+  renderRunners();
+}
+
+/* ---------- clock ---------- */
+function tickClock() { $("clock").textContent = nowT(); }
+
+renderAll();
+tickClock();
+setInterval(tickClock, 1000);
+setInterval(simTick, 4000);
+</script>
+</body>
+</html>

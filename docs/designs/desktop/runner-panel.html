@@ -1,0 +1,781 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>blizzard runner — machine panel</title>
+<style>
+  :root {
+    --bg: #060a12;
+    --panel: #0b1120;
+    --panel-deep: #080d19;
+    --bezel: #1d2b44;
+    --bezel-hi: #27395c;
+    --line: #131d30;
+    --amber: #f2b25c;
+    --amber-hi: #ffcf8a;
+    --amber-dim: #8f7548;
+    --amber-faint: #4d4130;
+    --cyan: #5cd1e5;
+    --cyan-dim: #2b6675;
+    --red: #f05c6c;
+    --red-dim: #7a3540;
+    --green: #4fc57e;
+    --green-dim: #2b5c40;
+    --label: #5c7089;
+    --label-dim: #3c4d63;
+    --text: #b8c6d8;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: radial-gradient(ellipse at 50% -20%, #0c1526 0%, var(--bg) 60%), var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  button {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    background: var(--panel-deep);
+    color: var(--cyan);
+    border: 1px solid var(--cyan-dim);
+    cursor: pointer;
+    font-size: 11px;
+    padding: 1px 6px;
+  }
+  button:hover:not(:disabled) { border-color: var(--cyan); background: #0d1a28; }
+  button:disabled { color: var(--label-dim); border-color: var(--line); cursor: default; }
+  button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--cyan); outline-offset: 1px; }
+  ::selection { background: var(--cyan-dim); color: #eaf6f9; }
+
+  .lbl {
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--label);
+    text-shadow: 0 1px 0 rgba(0,0,0,0.9);
+  }
+  .panel {
+    background: linear-gradient(180deg, var(--panel) 0%, var(--panel-deep) 100%);
+    border: 1px solid var(--bezel);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), inset 0 -1px 0 rgba(0,0,0,0.6), 0 0 0 1px rgba(0,0,0,0.55);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .panel-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(0,0,0,0.25);
+    flex: none;
+  }
+  .panel-body { overflow-y: auto; overflow-x: hidden; flex: 1; min-height: 0; }
+  .panel-body::-webkit-scrollbar { width: 6px; }
+  .panel-body::-webkit-scrollbar-thumb { background: var(--bezel); }
+
+  /* ---------- header ---------- */
+  header {
+    flex: none;
+    display: flex;
+    align-items: stretch;
+    border-bottom: 1px solid var(--bezel);
+    background: linear-gradient(180deg, #0d1526, #080d18);
+    height: 40px;
+  }
+  .hdr-cell {
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 0 14px;
+    border-right: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  .hdr-cell .v { color: var(--amber); font-size: 15px; line-height: 1.1; }
+  .hdr-cell .v .u { color: var(--amber-dim); font-size: 11px; }
+  #brand { color: var(--amber-hi); font-size: 15px; letter-spacing: 0.28em; text-transform: uppercase; }
+  #brand small { color: var(--label); font-size: 9px; letter-spacing: 0.18em; display: block; }
+  #hdr-clock .v { color: var(--cyan); }
+  header .spacer { flex: 1; border-right: none; }
+  .hdr-btn { align-self: center; margin: 0 8px; }
+  #pause-btn.on { color: var(--amber-hi); border-color: var(--amber-dim); }
+
+  /* capacity meter in header */
+  .cap { display: flex; gap: 2px; margin-top: 2px; }
+  .cap .cell { width: 9px; height: 7px; border: 1px solid var(--bezel); background: var(--panel-deep); }
+  .cap .cell.on { background: var(--amber); border-color: var(--amber-dim); box-shadow: 0 0 5px rgba(242,178,92,0.35); }
+
+  #hdr-hub .v.ok { color: var(--green); }
+  #hdr-hub .v.down { color: var(--red); animation: blink 1.2s steps(2, jump-none) infinite; }
+  #hdr-paused .v { color: var(--label-dim); font-size: 12px; }
+  #hdr-paused .v.on { color: var(--amber-hi); }
+  @keyframes blink { 50% { opacity: 0.2; } }
+
+  /* ---------- main grid ---------- */
+  main {
+    flex: 1; min-height: 0;
+    display: grid;
+    grid-template-columns: 340px 1fr 330px;
+    gap: 6px;
+    padding: 6px;
+  }
+  .col { display: flex; flex-direction: column; gap: 6px; min-height: 0; min-width: 0; }
+
+  /* ---------- leases ---------- */
+  #lease-panel { flex: 1.25; }
+  .lease { padding: 5px 8px; border-bottom: 1px solid var(--line); }
+  .lease .l1 { display: flex; justify-content: space-between; align-items: baseline; }
+  .lease .lid { color: var(--amber); font-size: 12px; }
+  .lease .lid small { color: var(--label); font-size: 9.5px; }
+  .lease .st { font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; }
+  .lease.running .st { color: var(--green); }
+  .lease.stale .st { color: var(--red); animation: blink 1.2s steps(2, jump-none) infinite; }
+  .lease.parked .st { color: var(--amber-hi); }
+  .lease .l2 { display: flex; justify-content: space-between; color: var(--label); font-size: 10px; margin-top: 2px; }
+  .lease .l2 b { color: var(--cyan); font-weight: normal; }
+  .hb { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+  .hb-track { flex: 1; height: 8px; border: 1px solid var(--bezel); background: var(--panel-deep); position: relative; overflow: hidden; }
+  .hb-fill { position: absolute; inset: 0; transform-origin: left; background: var(--green); opacity: 0.85; }
+  .lease.stale .hb-fill { background: var(--red); }
+  .hb-age { width: 46px; text-align: right; font-size: 10px; color: var(--label); }
+  .lease.stale .hb-age { color: var(--red); }
+
+  /* ---------- environments ---------- */
+  .env-row {
+    display: grid;
+    grid-template-columns: 64px 14px 52px 1fr 58px;
+    gap: 6px; align-items: center;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--line);
+    font-size: 11px;
+  }
+  .env-row .eid { color: var(--cyan); }
+  .env-row .led { width: 8px; height: 8px; background: var(--amber); box-shadow: 0 0 6px rgba(242,178,92,0.4); }
+  .env-row.free .led { background: var(--panel-deep); border: 1px solid var(--bezel); box-shadow: none; }
+  .env-row .cid { color: var(--amber); }
+  .env-row.free .cid, .env-row.free .note { color: var(--label-dim); }
+  .env-row .note { color: var(--label); font-size: 10px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .env-row .held { color: var(--label-dim); font-size: 10px; text-align: right; }
+
+  /* ---------- chunk rows ---------- */
+  #chunks-panel { flex: 1; }
+  .c-row {
+    display: grid;
+    grid-template-columns: 48px 74px 1fr 96px;
+    gap: 6px; align-items: center;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--line);
+    border-left: 2px solid transparent;
+    cursor: pointer;
+    font-size: 11px;
+  }
+  .c-row:hover { background: rgba(92,209,229,0.05); }
+  .c-row.sel { border-left-color: var(--cyan); background: rgba(92,209,229,0.06); }
+  .c-row .cid { color: var(--amber); }
+  .c-row .nd { color: var(--label); font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; }
+  .c-row .ttl { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 10.5px; }
+  .c-row .ttl .chips { color: var(--cyan); }
+  .c-row .st { font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; text-align: right; }
+  .st-running { color: var(--green); }
+  .st-stale { color: var(--red); }
+  .st-parked { color: var(--amber-hi); }
+  .st-needs { color: var(--red); }
+  .st-hub { color: var(--cyan); }
+  .st-takeover { color: var(--amber); }
+
+  /* ---------- detail ---------- */
+  #detail-panel { flex: 1.15; }
+  #detail-body { display: grid; grid-template-columns: 1fr 1.15fr; gap: 1px; background: var(--line); }
+  .d-sec { background: var(--panel-deep); padding: 6px 8px; overflow-y: auto; min-height: 0; }
+  .d-sec h3 { margin-bottom: 5px; }
+  .kv { display: grid; grid-template-columns: 86px 1fr; gap: 2px 8px; font-size: 11px; }
+  .kv dt { color: var(--label); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; align-self: center; }
+  .kv dd { color: var(--amber); }
+  .kv dd.dim { color: var(--label-dim); }
+  .fact-row { display: grid; grid-template-columns: 58px 1fr; gap: 6px; padding: 2px 0; font-size: 10.5px; border-bottom: 1px solid rgba(19,29,48,0.6); line-height: 1.5; }
+  .fact-row .t { color: var(--label-dim); }
+  .fact-row .m { color: var(--text); }
+  .fact-row .m b { color: var(--amber); font-weight: normal; }
+  .resume-box { border: 1px solid var(--red-dim); background: rgba(240,92,108,0.06); padding: 6px; margin-top: 8px; }
+  .resume-box .rt { color: var(--red); font-size: 10px; margin-bottom: 4px; letter-spacing: 0.12em; text-transform: uppercase; display: flex; justify-content: space-between; }
+  .resume-box code, .tk-box code {
+    display: block; color: var(--amber-hi); background: #000;
+    border: 1px solid var(--line); padding: 4px 6px; font-size: 11px;
+    user-select: all; overflow-x: auto; white-space: nowrap; margin-top: 4px;
+  }
+  .tk-box { border: 1px solid var(--amber-faint); background: rgba(242,178,92,0.05); padding: 6px; margin-top: 8px; }
+  .tk-box .rt { color: var(--amber-hi); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; display: flex; justify-content: space-between; }
+  .d-actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .d-empty { color: var(--label-dim); padding: 14px; font-size: 11px; letter-spacing: 0.1em; }
+  .link { color: var(--cyan); text-decoration: underline dotted; text-underline-offset: 3px; cursor: pointer; }
+
+  /* ---------- hub link panel ---------- */
+  #hub-panel .panel-body { padding: 8px; overflow: visible; }
+  .hub-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; font-size: 11px; }
+  .hub-grid .k { color: var(--label); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; align-self: center; }
+  .hub-grid .w { color: var(--amber); }
+  .hub-grid .w.ok { color: var(--green); }
+  .hub-grid .w.bad { color: var(--red); }
+  .fleet-strip { margin-top: 8px; border: 1px solid var(--bezel); padding: 6px 8px; background: rgba(0,0,0,0.25); position: relative; }
+  .fleet-strip .fs-head { display: flex; justify-content: space-between; margin-bottom: 5px; }
+  .fleet-nums { display: flex; gap: 14px; font-size: 13px; }
+  .fleet-nums .fn small { display: block; font-size: 8.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--label); }
+  .fleet-nums .fn.c1 { color: var(--cyan); }
+  .fleet-nums .fn.c2 { color: var(--amber); }
+  .fleet-nums .fn.c3 { color: var(--amber-hi); }
+  .fleet-nums .fn.c4 { color: var(--red); }
+  .fleet-strip.stale { opacity: 0.45; }
+  .fleet-strip.stale::after {
+    content: "HUB UNREACHABLE — SHOWING LAST KNOWN · LOCAL CONTROLS UNAFFECTED";
+    position: absolute; inset: auto 0 -1px 0;
+    background: var(--red-dim); color: #ffd9dd;
+    font-size: 8.5px; letter-spacing: 0.1em; padding: 2px 6px;
+  }
+  .board-link { display: block; margin-top: 10px; text-align: center; padding: 3px; border: 1px solid var(--cyan-dim); color: var(--cyan); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; }
+  .board-link:hover { border-color: var(--cyan); background: #0d1a28; }
+  .board-link.dead { color: var(--label-dim); border-color: var(--line); cursor: default; }
+
+  /* ---------- asks ---------- */
+  .ask { padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  .ask .h { display: flex; justify-content: space-between; font-size: 11px; }
+  .ask .h .cid { color: var(--amber-hi); }
+  .ask .h .age { color: var(--label-dim); font-size: 10px; }
+  .ask .qt { color: var(--text); font-size: 10.5px; line-height: 1.5; margin: 3px 0 5px; }
+  .ask .route { font-size: 9.5px; color: var(--label); letter-spacing: 0.06em; }
+  .ask .route b { color: var(--cyan); font-weight: normal; }
+  .ask-none { color: var(--label-dim); padding: 10px 8px; font-size: 10.5px; letter-spacing: 0.08em; }
+
+  /* ---------- local event log ---------- */
+  .ev { display: grid; grid-template-columns: 58px 1fr; gap: 6px; padding: 2px 8px; border-bottom: 1px solid rgba(19,29,48,0.6); font-size: 10.5px; line-height: 1.5; }
+  .ev .t { color: var(--label-dim); }
+  .ev .m { color: var(--text); }
+  .ev .m b { color: var(--amber); font-weight: normal; }
+  .ev.kind-reap .m { color: var(--red); }
+  .ev.kind-ctl .m { color: var(--cyan); }
+  .ev.kind-flush .m { color: var(--green); }
+  .ev.new { animation: evflash 1.2s steps(2, jump-none); }
+  @keyframes evflash { 0% { background: rgba(242,178,92,0.22); } 100% { background: transparent; } }
+
+  /* ---------- footer ---------- */
+  footer {
+    flex: none; height: 22px;
+    display: flex; align-items: center; gap: 18px;
+    padding: 0 12px;
+    border-top: 1px solid var(--line);
+    background: #04070d;
+    font-size: 10px; color: var(--label);
+  }
+  footer kbd {
+    font-family: var(--mono);
+    border: 1px solid var(--bezel); border-bottom-color: var(--bezel-hi);
+    background: var(--panel); color: var(--cyan);
+    padding: 0 4px; font-size: 9px; line-height: 13px; display: inline-block;
+  }
+  footer .fr { margin-left: auto; color: var(--label-dim); letter-spacing: 0.14em; text-transform: uppercase; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ev.new { animation: none; background: rgba(242,178,92,0.12); }
+    #hdr-hub .v.down, .lease.stale .st { animation: none; }
+  }
+</style>
+</head>
+<body>
+  <header>
+    <div class="hdr-cell" id="brand">blizzard<small>runner · machine panel</small></div>
+    <div class="hdr-cell"><span class="lbl">Runner</span><span class="v">atlas<span class="u"> · winter-workspace</span></span></div>
+    <div class="hdr-cell" id="hdr-clock"><span class="lbl">UTC</span><span class="v" id="clock">--:--:--</span></div>
+    <div class="hdr-cell"><span class="lbl">Work 5/6</span><span class="cap" id="cap-work"></span></div>
+    <div class="hdr-cell"><span class="lbl" id="cap-agents-lbl">Agents 0/4</span><span class="cap" id="cap-agents"></span></div>
+    <div class="hdr-cell"><span class="lbl" id="cap-envs-lbl">Envs 0/5</span><span class="cap" id="cap-envs"></span></div>
+    <div class="hdr-cell" id="hdr-hub"><span class="lbl">Hub link</span><span class="v ok" id="hub-state">OK</span></div>
+    <div class="hdr-cell"><span class="lbl">Outbound buf</span><span class="v" id="hub-buf">0</span></div>
+    <div class="hdr-cell"><span class="lbl">Last tick</span><span class="v" id="tick-age">0s</span></div>
+    <div class="hdr-cell" id="hdr-paused"><span class="lbl">Loop</span><span class="v" id="loop-state">FILLING</span></div>
+    <div class="hdr-cell spacer"></div>
+    <button class="hdr-btn" id="pause-btn">PAUSE</button>
+    <button class="hdr-btn" id="hub-sim-btn" title="mock: simulate hub outage">SIM: DROP HUB</button>
+  </header>
+
+  <main>
+    <div class="col">
+      <section class="panel" id="lease-panel" aria-label="Leases">
+        <div class="panel-head"><span class="lbl">Leases · heartbeat freshness</span><span class="lbl" id="lease-count"></span></div>
+        <div class="panel-body" id="lease-body"></div>
+      </section>
+      <section class="panel" style="flex:1;" aria-label="Environments">
+        <div class="panel-head"><span class="lbl">Environments · bindings ride the lease</span><span class="lbl" id="env-count"></span></div>
+        <div class="panel-body" id="env-body"></div>
+      </section>
+    </div>
+
+    <div class="col">
+      <section class="panel" id="chunks-panel" aria-label="Chunks on this machine">
+        <div class="panel-head"><span class="lbl">Chunks on this machine · derived status</span><span class="lbl">status = SELECT, never a column</span></div>
+        <div class="panel-body" id="chunks-body"></div>
+      </section>
+      <section class="panel" id="detail-panel" aria-label="Chunk detail">
+        <div class="panel-head"><span class="lbl" id="detail-title">Machine detail</span><span class="lbl" id="detail-status"></span></div>
+        <div class="panel-body" id="detail-body" style="padding:0;"></div>
+      </section>
+    </div>
+
+    <div class="col">
+      <section class="panel" id="hub-panel" style="flex:none;" aria-label="Hub link">
+        <div class="panel-head"><span class="lbl">Hub · outbound only, nothing dials in</span></div>
+        <div class="panel-body">
+          <div class="hub-grid">
+            <span class="k">Endpoint</span><span class="w" style="color:var(--cyan)">hub.tail3702.ts.net</span>
+            <span class="k">Link</span><span class="w ok" id="hub-g-state">CONNECTED</span>
+            <span class="k">Last flush</span><span class="w" id="hub-g-flush">03:12:41Z</span>
+            <span class="k">Buffered</span><span class="w" id="hub-g-buf">0 events</span>
+          </div>
+          <div class="fleet-strip" id="fleet-strip">
+            <div class="fs-head"><span class="lbl">Fleet · read from hub API</span><span class="lbl" id="fleet-age">live</span></div>
+            <div class="fleet-nums">
+              <span class="fn c1">4<small>ready</small></span>
+              <span class="fn c2">3<small>running</small></span>
+              <span class="fn c3">2<small>waiting</small></span>
+              <span class="fn c4">1<small>needs</small></span>
+            </div>
+          </div>
+          <span class="board-link" id="board-link" tabindex="0" role="link">Open fleet board — same app, hub serving →</span>
+        </div>
+      </section>
+
+      <section class="panel" style="flex:1;" aria-label="Local asks">
+        <div class="panel-head"><span class="lbl">Local asks · answers live at the hub</span><span class="lbl" id="ask-count"></span></div>
+        <div class="panel-body" id="ask-body"></div>
+      </section>
+
+      <section class="panel" style="flex:1.25;" aria-label="Local fact log">
+        <div class="panel-head"><span class="lbl">Local fact log · runner store</span><span class="lbl" id="ev-count"></span></div>
+        <div class="panel-body" id="ev-body"></div>
+      </section>
+    </div>
+  </main>
+
+  <footer>
+    <span><kbd>↑</kbd>/<kbd>↓</kbd> select chunk</span>
+    <span><kbd>p</kbd> pause/start loop</span>
+    <span><kbd>h</kbd> sim hub outage</span>
+    <span><kbd>c</kbd> copy resume cmd</span>
+    <span class="fr">blizzard runner · design mock · fake data</span>
+  </footer>
+
+<script>
+"use strict";
+
+/* ============================== seed data ============================== */
+
+const iss = (repo, num, title) => ({ repo, num, title });
+const chipTxt = (i) => `${i.repo}#${i.num}`;
+const esc = (s) => String(s).replace(/[&<>"]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[m]));
+
+/* leases: hb = seconds since last heartbeat (sim advances it) */
+const leases = [
+  { id: "L-903", chunk: "C-125", epoch: 2, pid: 41233, session: "7d1a", tool: "Edit", hb: 3, drift: false },
+  { id: "L-905", chunk: "C-126", epoch: 1, pid: 41310, session: "b2e8", tool: "Bash", hb: 11, drift: false },
+  { id: "L-907", chunk: "C-133", epoch: 1, pid: 41402, session: "e491", tool: "Read", hb: 34, drift: true },
+];
+
+const STALE_AT = 60; /* mock stale threshold, seconds */
+
+const chunks = [
+  { id: "C-125", node: "build", att: 2, lease: "L-903", env: "beta",
+    issues: [iss("winter", 412, "ws pull: treat unfetched upstream as no-upstream")],
+    kind: "leased" },
+  { id: "C-126", node: "review", att: 1, lease: "L-905", env: "gamma",
+    issues: [iss("winter-service-docker", 19, "health probe timeout configurable per service")],
+    kind: "leased" },
+  { id: "C-133", node: "build", att: 1, lease: "L-907", env: "delta",
+    issues: [iss("winter-workflow", 54, "flurry: dedupe env allocation under parallel claims")],
+    kind: "leased" },
+  { id: "C-127", node: "deliver", att: 1, lease: null, env: "epsilon",
+    issues: [iss("winter-harness", 33, "verifiability matrix: add doctor probe row")],
+    kind: "deliver" },
+  { id: "C-121", node: "build", att: 1, lease: null, env: "alpha",
+    issues: [iss("winter-github", 12, "issue skill: settle label taxonomy")],
+    kind: "parked",
+    ask: { text: "Two label schemes fit the existing 41 issues. Which do I standardize on?", at: "02:41Z" } },
+  { id: "C-118", node: "build", att: 3, lease: null, env: null,
+    issues: [iss("winter-service-tmux", 41, "restart: pattern globbing matches zero services silently")],
+    kind: "needs",
+    resume: "cd /ws/alpha && claude --resume 9f2c",
+    takeover: null /* null | "open" | "ended" */ },
+];
+
+const ENV_POOL = ["alpha", "beta", "gamma", "delta", "epsilon"];
+const AGENT_SLOTS = 4;
+
+const events = [
+  { t: "02:41:52", kind: "info",  msg: "ask recorded on L-889 (C-121) — forwarded to hub, worker exited, slot released" },
+  { t: "02:58:31", kind: "info",  msg: "FILL: minted L-905 for C-126 → review · env gamma acquired (clean by contract)" },
+  { t: "03:03:41", kind: "info",  msg: "verdict parsed FAIL on C-118 build att 3 — retries exhausted" },
+  { t: "03:03:44", kind: "reap",  msg: "escalation recorded: C-118 needs-human · resume command composed · env epsilon released" },
+  { t: "03:07:02", kind: "flush", msg: "flush → hub: 6 events delivered FIFO · buffer empty" },
+  { t: "03:09:12", kind: "info",  msg: "FILL: minted L-907 for C-133 → build · env delta acquired" },
+  { t: "03:11:40", kind: "info",  msg: "artifact pushed: winter@feat/ws-pull-unfetched a3f19c2 · submitted to hub" },
+  { t: "03:12:41", kind: "flush", msg: "flush → hub: 3 events delivered FIFO · buffer empty" },
+];
+
+/* ============================== state ============================== */
+
+let paused = false;
+let hubUp = true;
+let hubBuf = 0;
+let hubDownSince = null;
+let tickAge = 4;
+let selectedId = "C-125";
+let simStep = 0;
+
+const $ = (id) => document.getElementById(id);
+const chunk = (id) => chunks.find((c) => c.id === id);
+const lease = (id) => leases.find((l) => l.id === id);
+
+function nowT() {
+  const d = new Date();
+  return [d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds()].map((n) => String(n).padStart(2, "0")).join(":");
+}
+
+function pushEvent(kind, msg) {
+  events.push({ t: nowT(), kind, msg, fresh: true });
+  if (events.length > 60) events.shift();
+  if (!hubUp && kind !== "ctl") { hubBuf++; }
+  renderLog(); renderHub(); renderHeader();
+}
+
+/* derived — the mock's little D-004 demo: status computed from facts every render */
+function chunkStatus(c) {
+  if (c.kind === "needs")   return c.takeover === "open" ? { k: "takeover", label: "HUMAN IN SESSION" } : { k: "needs", label: "NEEDS HUMAN" };
+  if (c.kind === "parked")  return { k: "parked", label: "PARKED · ASK" };
+  if (c.kind === "parked-requeue") return { k: "hub", label: "REQUEUED · AWAIT FILL" };
+  if (c.kind === "deliver") return { k: "hub", label: "DELIVER @ HUB" };
+  const l = lease(c.lease);
+  if (l && l.hb >= STALE_AT) return { k: "stale", label: "STALE" };
+  return { k: "running", label: "RUNNING" };
+}
+
+/* ============================== renderers ============================== */
+
+function capCells(el, used, total, lblEl, name) {
+  el.innerHTML = Array.from({ length: total }, (_, i) => `<span class="cell${i < used ? " on" : ""}"></span>`).join("");
+  if (lblEl) $(lblEl).textContent = `${name} ${used}/${total}`;
+}
+
+function renderHeader() {
+  const agentsUsed = leases.length;
+  const envsUsed = chunks.filter((c) => c.env).length;
+  capCells($("cap-work"), chunks.length, 6, null, "");
+  capCells($("cap-agents"), agentsUsed, AGENT_SLOTS, "cap-agents-lbl", "Agents");
+  capCells($("cap-envs"), envsUsed, ENV_POOL.length, "cap-envs-lbl", "Envs");
+  const hs = $("hub-state");
+  hs.textContent = hubUp ? "OK" : "DOWN";
+  hs.className = "v " + (hubUp ? "ok" : "down");
+  $("hub-buf").textContent = hubBuf;
+  $("tick-age").textContent = tickAge + "s";
+  const ls = $("loop-state");
+  ls.textContent = paused ? "PAUSED" : "FILLING";
+  ls.className = "v" + (paused ? " on" : "");
+  $("pause-btn").textContent = paused ? "START" : "PAUSE";
+  $("pause-btn").classList.toggle("on", paused);
+  $("hub-sim-btn").textContent = hubUp ? "SIM: DROP HUB" : "SIM: RESTORE HUB";
+}
+
+function renderLeases() {
+  const body = $("lease-body");
+  body.innerHTML = "";
+  $("lease-count").textContent = leases.length + " live";
+  leases.forEach((l) => {
+    const stale = l.hb >= STALE_AT;
+    const div = document.createElement("div");
+    div.className = "lease " + (stale ? "stale" : "running");
+    const frac = Math.max(0, 1 - l.hb / STALE_AT);
+    div.innerHTML =
+      `<div class="l1"><span class="lid">${l.id} <small>· ${l.chunk} · epoch ${l.epoch}</small></span>` +
+      `<span class="st">${stale ? "STALE — REAP PENDING" : "RUNNING"}</span></div>` +
+      `<div class="l2"><span>pid <b>${l.pid}</b> · session <b>${l.session}</b></span><span>last tool <b>${esc(l.tool)}</b></span></div>` +
+      `<div class="hb"><span class="lbl" style="flex:none;">HB</span>` +
+      `<span class="hb-track"><span class="hb-fill" style="transform:scaleX(${frac.toFixed(3)})"></span></span>` +
+      `<span class="hb-age">-${l.hb}s</span></div>`;
+    body.appendChild(div);
+  });
+  if (!leases.length) body.innerHTML = '<div class="ask-none">NO LIVE LEASES — LOOP IDLE OR PAUSED</div>';
+}
+
+function renderEnvs() {
+  const body = $("env-body");
+  body.innerHTML = "";
+  const used = chunks.filter((c) => c.env).length;
+  $("env-count").textContent = `${used}/${ENV_POOL.length} held`;
+  ENV_POOL.forEach((e) => {
+    const c = chunks.find((x) => x.env === e);
+    const div = document.createElement("div");
+    div.className = "env-row" + (c ? "" : " free");
+    const note = c
+      ? (c.kind === "deliver" ? "held while hub deliver runs" : c.kind === "parked" ? "held · worker parked on ask" : "leased · " + c.node)
+      : "free · clean by contract";
+    div.innerHTML =
+      `<span class="eid">${e}</span><span class="led"></span>` +
+      `<span class="cid">${c ? c.id : "—"}</span>` +
+      `<span class="note">${esc(note)}</span>` +
+      `<span class="held">${c ? "42m" : ""}</span>`;
+    body.appendChild(div);
+  });
+}
+
+function renderChunks() {
+  const body = $("chunks-body");
+  body.innerHTML = "";
+  chunks.forEach((c) => {
+    const st = chunkStatus(c);
+    const row = document.createElement("div");
+    row.className = "c-row" + (c.id === selectedId ? " sel" : "");
+    row.tabIndex = 0;
+    row.setAttribute("role", "button");
+    row.innerHTML =
+      `<span class="cid">${c.id}</span>` +
+      `<span class="nd">${c.node} · a${c.att}</span>` +
+      `<span class="ttl"><span class="chips">${esc(c.issues.map(chipTxt).join(" "))}</span> ${esc(c.issues[0].title)}</span>` +
+      `<span class="st st-${st.k}">${st.label}</span>`;
+    row.addEventListener("click", () => selectChunk(c.id));
+    row.addEventListener("keydown", (e) => { if (e.key === "Enter") selectChunk(c.id); });
+    body.appendChild(row);
+  });
+}
+
+function renderDetail() {
+  const c = chunk(selectedId);
+  const body = $("detail-body");
+  if (!c) {
+    $("detail-title").textContent = "Machine detail";
+    $("detail-status").textContent = "";
+    body.innerHTML = '<div class="d-empty">SELECT A CHUNK</div>';
+    return;
+  }
+  const st = chunkStatus(c);
+  $("detail-title").textContent = `Machine detail · ${c.id}`;
+  $("detail-status").textContent = `${st.label} · NODE ${c.node.toUpperCase()} · ATT ${c.att}`;
+
+  const l = lease(c.lease);
+  const facts = events.filter((e) => e.msg.includes(c.id)).slice(-6).reverse();
+  const factRows = facts.length
+    ? facts.map((e) => `<div class="fact-row"><span class="t">${esc(e.t)}</span><span class="m">${e.msg.replace(/(C-\d+|L-\d+)/g, "<b>$1</b>")}</span></div>`).join("")
+    : '<div class="d-empty" style="padding:4px 0;">NO RECENT LOCAL FACTS</div>';
+
+  let boxes = "";
+  if (c.kind === "needs") {
+    boxes += `<div class="resume-box"><div class="rt"><span>Escalated — resume session</span>` +
+      `<button data-act="copy">COPY</button></div><code id="resume-code">${esc(c.resume)}</code></div>`;
+    if (c.takeover === "open") {
+      boxes += `<div class="tk-box"><div class="rt"><span>Takeover open — session in your terminal</span>` +
+        `<button data-act="endtk">MARK ENDED</button></div>` +
+        `<code>blizzard runner takeover ${c.id}   # running as your child process</code></div>`;
+    } else {
+      boxes += `<div class="tk-box"><div class="rt"><span>Takeover — runs in your terminal, not here</span>` +
+        `<button data-act="tk">COPY CMD</button></div>` +
+        `<code>blizzard runner takeover ${c.id}</code></div>`;
+    }
+  }
+  if (c.kind === "parked" && c.ask) {
+    boxes += `<div class="tk-box"><div class="rt"><span>Parked on ask ${esc(c.ask.at)}</span></div>` +
+      `<div style="color:var(--text);font-size:10.5px;line-height:1.5;margin-top:4px;">${esc(c.ask.text)}</div>` +
+      `<div style="margin-top:5px;font-size:9.5px;color:var(--label);">answer is a hub write → <span class="link" id="ask-link">open on fleet board</span> or <span style="color:var(--amber)">blizzard hub answer Q-77 …</span></div></div>`;
+  }
+
+  const requeueable = c.kind === "needs" && c.takeover !== "open";
+  const actions =
+    `<div class="d-actions">` +
+    (c.kind === "needs" ? `<button data-act="requeue" ${requeueable ? "" : "disabled title='409 — takeover session still open'"}>REQUEUE → FILL</button>` : "") +
+    `<button data-act="transcripts">TRANSCRIPTS →</button>` +
+    `</div>`;
+
+  body.innerHTML =
+    `<div class="d-sec"><h3 class="lbl">Execution facts · this box only</h3>` +
+      `<dl class="kv">` +
+      `<dt>Lease</dt><dd${l ? "" : ' class="dim"'}>${l ? l.id + " · epoch " + l.epoch : "none"}</dd>` +
+      `<dt>Session</dt><dd${l ? "" : ' class="dim"'}>${l ? l.session : c.kind === "needs" ? "9f2c (dead)" : "—"}</dd>` +
+      `<dt>PID</dt><dd${l ? "" : ' class="dim"'}>${l ? l.pid : "—"}</dd>` +
+      `<dt>Env</dt><dd${c.env ? "" : ' class="dim"'}>${c.env || "released"}</dd>` +
+      `<dt>Workdir</dt><dd style="color:var(--cyan)">${c.env ? "/ws/" + c.env : "—"}</dd>` +
+      `<dt>Heartbeat</dt><dd>${l ? "-" + l.hb + "s · " + l.tool : "n/a"}</dd>` +
+      `</dl>${actions}</div>` +
+    `<div class="d-sec"><h3 class="lbl">Local fact record · ${c.id}</h3>${factRows}${boxes}</div>`;
+
+  body.querySelectorAll("[data-act]").forEach((b) => b.addEventListener("click", () => act(b.dataset.act, c)));
+}
+
+function renderAsks() {
+  const body = $("ask-body");
+  const open = chunks.filter((c) => c.kind === "parked" && c.ask);
+  $("ask-count").textContent = open.length + " open";
+  body.innerHTML = "";
+  if (!open.length) { body.innerHTML = '<div class="ask-none">NO OPEN ASKS ON THIS MACHINE</div>'; return; }
+  open.forEach((c) => {
+    const div = document.createElement("div");
+    div.className = "ask";
+    div.innerHTML =
+      `<div class="h"><span class="cid">${c.id} · ${esc(c.issues.map(chipTxt).join(" "))}</span><span class="age">asked ${esc(c.ask.at)}</span></div>` +
+      `<div class="qt">${esc(c.ask.text)}</div>` +
+      `<div class="route">forwarded → hub Q-row · answer with <b>blizzard hub answer</b> or the fleet board${hubUp ? "" : ' · <span style="color:var(--red)">hub down — answering unavailable from anywhere until link returns</span>'}</div>`;
+    div.addEventListener("click", () => selectChunk(c.id));
+    body.appendChild(div);
+  });
+}
+
+function renderHub() {
+  $("hub-g-state").textContent = hubUp ? "CONNECTED" : "RETRYING · BACKOFF 8s";
+  $("hub-g-state").className = "w " + (hubUp ? "ok" : "bad");
+  $("hub-g-buf").textContent = hubBuf + " events";
+  $("fleet-strip").classList.toggle("stale", !hubUp);
+  $("fleet-age").textContent = hubUp ? "live · sse" : "stale " + staleFor();
+  const bl = $("board-link");
+  bl.classList.toggle("dead", !hubUp);
+  bl.textContent = hubUp ? "Open fleet board — same app, hub serving →" : "Fleet board unreachable — local panel unaffected";
+}
+
+function staleFor() {
+  if (!hubDownSince) return "";
+  const s = Math.floor((Date.now() - hubDownSince) / 1000);
+  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+}
+
+function renderLog() {
+  const body = $("ev-body");
+  body.innerHTML = "";
+  [...events].reverse().forEach((e) => {
+    const div = document.createElement("div");
+    div.className = "ev kind-" + e.kind + (e.fresh ? " new" : "");
+    e.fresh = false;
+    div.innerHTML = `<span class="t">${esc(e.t)}</span><span class="m">${e.msg.replace(/(C-\d+|L-\d+|atlas)/g, "<b>$1</b>")}</span>`;
+    body.appendChild(div);
+  });
+  $("ev-count").textContent = events.length + " facts";
+}
+
+function renderAll() {
+  renderHeader(); renderLeases(); renderEnvs(); renderChunks(); renderDetail(); renderAsks(); renderHub(); renderLog();
+}
+
+/* ============================== interactions ============================== */
+
+function selectChunk(id) { selectedId = id; renderChunks(); renderDetail(); }
+
+function act(kind, c) {
+  if (kind === "copy" || kind === "tk") {
+    const txt = kind === "copy" ? c.resume : `blizzard runner takeover ${c.id}`;
+    navigator.clipboard && navigator.clipboard.writeText(txt).catch(() => {});
+    if (kind === "tk") { c.takeover = "open"; pushEvent("ctl", `takeover fact recorded on ${c.id} — flushed to hub so the board shows human-in-session`); }
+    else pushEvent("ctl", `resume command copied for ${c.id}`);
+    renderAll();
+  } else if (kind === "endtk") {
+    c.takeover = "ended";
+    pushEvent("ctl", `takeover on ${c.id} marked ended — requeue now permitted`);
+    renderAll();
+  } else if (kind === "requeue") {
+    if (c.takeover === "open") return;
+    c.kind = "parked-requeue"; /* transient */
+    pushEvent("ctl", `requeue fact appended: ${c.id} clears needs-human · leasable at node ${c.node} next FILL`);
+    setTimeout(() => {
+      if (paused) { pushEvent("info", `FILL skipped — loop paused · ${c.id} waits in local ready set`); c.kind = "needs"; c.takeover = "ended"; renderAll(); return; }
+      const nl = { id: "L-9" + (10 + simStep), chunk: c.id, epoch: 4, pid: 41500 + simStep, session: "f3a" + simStep, tool: "Read", hb: 1, drift: false };
+      leases.push(nl);
+      c.kind = "leased"; c.lease = nl.id; c.env = ENV_POOL.find((e) => !chunks.some((x) => x.env === e)) || "alpha"; c.att += 1;
+      pushEvent("info", `FILL: minted ${nl.id} for ${c.id} → ${c.node} att ${c.att} · env ${c.env} acquired (clean by contract)`);
+      renderAll();
+    }, 1600);
+    renderAll();
+  } else if (kind === "transcripts") {
+    window.location.href = "runner-transcripts.html";
+  }
+}
+
+$("pause-btn").addEventListener("click", () => {
+  paused = !paused;
+  pushEvent("ctl", paused
+    ? "operator PATCH /runner {paused:true} — local fact appended · effective regardless of hub link"
+    : "operator PATCH /runner {paused:false} — FILL resumes next tick");
+  renderAll();
+});
+
+$("hub-sim-btn").addEventListener("click", () => {
+  hubUp = !hubUp;
+  if (!hubUp) { hubDownSince = Date.now(); pushEvent("ctl", "SIM: hub link dropped — fleet views stale out, local pages and controls keep working"); }
+  else {
+    const n = hubBuf; hubBuf = 0; hubDownSince = null;
+    pushEvent("flush", `hub link restored — flushed ${n} buffered events FIFO (lease facts precede their transitions)`);
+    $("hub-g-flush").textContent = nowT().slice(0, 5) + "Z";
+  }
+  renderAll();
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT" || e.metaKey || e.ctrlKey || e.altKey) return;
+  const idx = chunks.findIndex((c) => c.id === selectedId);
+  switch (e.key) {
+    case "ArrowDown": e.preventDefault(); if (idx < chunks.length - 1) selectChunk(chunks[idx + 1].id); break;
+    case "ArrowUp":   e.preventDefault(); if (idx > 0) selectChunk(chunks[idx - 1].id); break;
+    case "p": $("pause-btn").click(); break;
+    case "h": $("hub-sim-btn").click(); break;
+    case "c": { const c = chunk(selectedId); if (c && c.resume) act("copy", c); break; }
+  }
+});
+
+/* ============================== live simulation ============================== */
+
+const TOOLS = ["Read", "Edit", "Bash", "Grep", "Write", "Bash"];
+
+function secondTick() {
+  $("clock").textContent = nowT();
+  tickAge = (tickAge + 1) % 30;
+  leases.forEach((l) => { l.hb += 1; });
+  /* healthy leases heartbeat on a believable cadence; the drifting one doesn't */
+  leases.forEach((l) => {
+    if (!l.drift && l.hb > 4 + Math.floor(Math.random() * 14)) {
+      l.hb = 0;
+      l.tool = TOOLS[Math.floor(Math.random() * TOOLS.length)];
+    }
+  });
+  /* reap at threshold */
+  /* REAP runs even while paused — pause gates FILL, never crash recovery */
+  const dead = leases.find((l) => l.hb >= STALE_AT + 12);
+  if (dead) {
+    const c = chunk(dead.chunk);
+    leases.splice(leases.indexOf(dead), 1);
+    if (c) { c.kind = "needs"; c.lease = null; c.resume = `cd /ws/${c.env} && claude --resume ${dead.session}`; c.env = null; c.takeover = null; }
+    pushEvent("reap", `REAP: ${dead.id} stale ${STALE_AT + 12}s, pid ${dead.pid} unresponsive — lease reaped, ${dead.chunk} needs-human, resume command composed`);
+    renderAll();
+    return;
+  }
+  renderHeader(); renderLeases(); renderHub();
+  if (!hubUp) $("fleet-age").textContent = "stale " + staleFor();
+}
+
+function simTick() {
+  simStep++;
+  if (paused) { if (simStep % 3 === 0) pushEvent("info", "tick: loop paused — REAP only, FILL and PULL skipped"); return; }
+  const phase = simStep % 4;
+  if (phase === 0) {
+    const l = leases[simStep % Math.max(1, leases.length)];
+    if (l) pushEvent("info", `heartbeat fact on ${l.id} (${l.chunk}) · tool ${l.tool} · 204`);
+  } else if (phase === 1) {
+    pushEvent("flush", hubUp ? "flush → hub: 2 events delivered FIFO · buffer empty" : "flush deferred — hub unreachable, events buffering");
+    if (hubUp) $("hub-g-flush").textContent = nowT().slice(0, 5) + "Z";
+  } else if (phase === 2) {
+    pushEvent("info", "PULL: hub answers none · reassignment floor clear · 0 chunks acquired (agents at capacity)");
+  } else {
+    const l = leases[0];
+    if (l) pushEvent("info", `artifact pushed: ${chunk(l.chunk).issues[0].repo}@feat/… · submitted to hub with epoch ${l.epoch}`);
+  }
+}
+
+renderAll();
+$("clock").textContent = nowT();
+setInterval(secondTick, 1000);
+setInterval(simTick, 4000);
+</script>
+</body>
+</html>

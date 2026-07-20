@@ -1,0 +1,625 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>blizzard runner — transcripts</title>
+<style>
+  :root {
+    --bg: #060a12;
+    --panel: #0b1120;
+    --panel-deep: #080d19;
+    --bezel: #1d2b44;
+    --bezel-hi: #27395c;
+    --line: #131d30;
+    --amber: #f2b25c;
+    --amber-hi: #ffcf8a;
+    --amber-dim: #8f7548;
+    --amber-faint: #4d4130;
+    --cyan: #5cd1e5;
+    --cyan-dim: #2b6675;
+    --red: #f05c6c;
+    --red-dim: #7a3540;
+    --green: #4fc57e;
+    --green-dim: #2b5c40;
+    --label: #5c7089;
+    --label-dim: #3c4d63;
+    --text: #b8c6d8;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: radial-gradient(ellipse at 50% -20%, #0c1526 0%, var(--bg) 60%), var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  button {
+    font-family: var(--mono);
+    background: var(--panel-deep);
+    color: var(--cyan);
+    border: 1px solid var(--cyan-dim);
+    cursor: pointer;
+    font-size: 11px;
+    padding: 1px 6px;
+  }
+  button:hover:not(:disabled) { border-color: var(--cyan); background: #0d1a28; }
+  button.on { color: var(--amber-hi); border-color: var(--amber-dim); }
+  button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 2px solid var(--cyan); outline-offset: 1px; }
+  ::selection { background: var(--cyan-dim); color: #eaf6f9; }
+  input[type="search"] {
+    font-family: var(--mono); font-size: 11px;
+    background: #000; color: var(--amber-hi);
+    border: 1px solid var(--bezel);
+    padding: 2px 6px; width: 200px;
+  }
+  input::placeholder { color: var(--label-dim); }
+
+  .lbl {
+    font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--label); text-shadow: 0 1px 0 rgba(0,0,0,0.9);
+  }
+  .panel {
+    background: linear-gradient(180deg, var(--panel) 0%, var(--panel-deep) 100%);
+    border: 1px solid var(--bezel);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), inset 0 -1px 0 rgba(0,0,0,0.6), 0 0 0 1px rgba(0,0,0,0.55);
+    display: flex; flex-direction: column; min-height: 0;
+  }
+  .panel-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(0,0,0,0.25);
+    flex: none;
+  }
+  .panel-body { overflow-y: auto; overflow-x: hidden; flex: 1; min-height: 0; }
+  .panel-body::-webkit-scrollbar { width: 6px; }
+  .panel-body::-webkit-scrollbar-thumb { background: var(--bezel); }
+
+  /* ---------- header ---------- */
+  header {
+    flex: none; display: flex; align-items: stretch;
+    border-bottom: 1px solid var(--bezel);
+    background: linear-gradient(180deg, #0d1526, #080d18);
+    height: 40px;
+  }
+  .hdr-cell {
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 0 14px;
+    border-right: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  .hdr-cell .v { color: var(--amber); font-size: 15px; line-height: 1.1; }
+  .hdr-cell .v .u { color: var(--amber-dim); font-size: 11px; }
+  #brand { color: var(--amber-hi); font-size: 15px; letter-spacing: 0.28em; text-transform: uppercase; }
+  #brand small { color: var(--label); font-size: 9px; letter-spacing: 0.18em; display: block; }
+  header .spacer { flex: 1; border-right: none; }
+  header a.back { align-self: center; margin-right: 10px; color: var(--cyan); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; text-decoration: none; border: 1px solid var(--cyan-dim); padding: 2px 8px; }
+  header a.back:hover { border-color: var(--cyan); }
+
+  /* ---------- main ---------- */
+  main {
+    flex: 1; min-height: 0;
+    display: grid;
+    grid-template-columns: 320px 1fr 320px;
+    gap: 6px;
+    padding: 6px;
+  }
+
+  /* ---------- session list ---------- */
+  .sess-group { border-bottom: 1px solid var(--bezel); }
+  .sess-group-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 5px 8px 3px;
+    background: rgba(0,0,0,0.25);
+  }
+  .sess-group-head .cid { color: var(--amber); font-size: 12px; }
+  .sess-group-head .iss { color: var(--cyan); font-size: 9.5px; }
+  .sess {
+    display: grid;
+    grid-template-columns: 16px 1fr auto;
+    gap: 6px; align-items: center;
+    padding: 4px 8px 4px 10px;
+    border-top: 1px solid rgba(19,29,48,0.6);
+    border-left: 2px solid transparent;
+    cursor: pointer;
+  }
+  .sess:hover { background: rgba(92,209,229,0.05); }
+  .sess.sel { border-left-color: var(--cyan); background: rgba(92,209,229,0.06); }
+  .sess .vd { font-size: 9px; letter-spacing: 0.06em; }
+  .sess .vd.pass { color: var(--green); }
+  .sess .vd.fail { color: var(--red); }
+  .sess .vd.live { color: var(--amber); animation: blink 1.6s steps(2, jump-none) infinite; }
+  .sess .vd.esc { color: var(--red); }
+  .sess .meta { min-width: 0; }
+  .sess .meta .n { color: var(--text); font-size: 11px; }
+  .sess .meta .s { color: var(--label); font-size: 9.5px; }
+  .sess .sz { color: var(--label-dim); font-size: 9.5px; text-align: right; }
+  @keyframes blink { 50% { opacity: 0.15; } }
+
+  /* ---------- transcript ---------- */
+  #tr-body { padding: 4px 0 12px; }
+  .turn {
+    display: grid;
+    grid-template-columns: 56px 16px 1fr;
+    gap: 8px;
+    padding: 4px 10px 4px 8px;
+    border-bottom: 1px solid rgba(19,29,48,0.45);
+  }
+  .turn .t { color: var(--label-dim); font-size: 9.5px; padding-top: 2px; }
+  .turn .g { position: relative; }
+  .turn .g::before {
+    content: ""; position: absolute; left: 6px; top: 0; bottom: -1px;
+    width: 1px; background: var(--line);
+  }
+  .turn .g .tick {
+    position: absolute; left: 3px; top: 5px;
+    width: 7px; height: 7px;
+    background: var(--panel-deep);
+    border: 1px solid var(--label-dim);
+    z-index: 1;
+  }
+  .turn.k-tool .g .tick { background: var(--green-dim); border-color: var(--green); }
+  .turn.k-ask .g .tick { background: var(--amber); border-color: var(--amber-hi); box-shadow: 0 0 6px rgba(242,178,92,0.5); }
+  .turn.k-verdict .g .tick { background: var(--red-dim); border-color: var(--red); }
+  .turn.k-env .g .tick { background: var(--cyan-dim); border-color: var(--cyan); }
+  .turn .b { min-width: 0; font-size: 11px; line-height: 1.55; }
+  .turn .who { font-size: 8.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--label); margin-bottom: 1px; }
+  .turn.k-env .who { color: var(--cyan); }
+  .turn.k-asst .b .tx { color: var(--text); white-space: pre-wrap; }
+  .turn.k-env .b .tx { color: var(--label); white-space: pre-wrap; font-size: 10.5px; }
+  .turn.k-ask { background: rgba(242,178,92,0.06); }
+  .turn.k-ask .who { color: var(--amber-hi); }
+  .turn.k-ask .b .tx { color: var(--amber-hi); }
+  .turn.k-verdict { background: rgba(240,92,108,0.05); }
+  .turn.k-verdict .who { color: var(--red); }
+  .turn.k-verdict .b .tx { color: var(--red); }
+  .turn.k-verdict.pass { background: rgba(79,197,126,0.05); }
+  .turn.k-verdict.pass .who, .turn.k-verdict.pass .b .tx { color: var(--green); }
+  .tool-call {
+    border: 1px solid var(--line); border-left: 2px solid var(--green-dim);
+    background: rgba(0,0,0,0.3);
+    padding: 2px 6px; cursor: pointer;
+  }
+  .tool-call .tc-head { display: flex; justify-content: space-between; gap: 8px; }
+  .tool-call .tc-name { color: var(--green); font-size: 10.5px; }
+  .tool-call .tc-name b { color: var(--amber); font-weight: normal; }
+  .tool-call .tc-hb { color: var(--label-dim); font-size: 8.5px; letter-spacing: 0.1em; text-transform: uppercase; }
+  .tool-call .tc-out {
+    display: none;
+    margin-top: 3px; padding: 3px 6px;
+    background: #000; border: 1px solid var(--line);
+    color: var(--label); font-size: 10px;
+    white-space: pre-wrap; max-height: 120px; overflow-y: auto;
+  }
+  .tool-call.open .tc-out { display: block; }
+  .turn.hit { background: rgba(92,209,229,0.10); }
+  .turn.hidden { display: none; }
+  .tr-empty { color: var(--label-dim); padding: 16px; font-size: 11px; letter-spacing: 0.1em; }
+
+  /* ---------- fact rail ---------- */
+  .fact {
+    display: grid;
+    grid-template-columns: 56px 1fr;
+    gap: 8px;
+    padding: 5px 8px;
+    border-bottom: 1px solid var(--line);
+    border-left: 2px solid transparent;
+    cursor: pointer;
+    font-size: 10.5px;
+    line-height: 1.5;
+  }
+  .fact:hover { background: rgba(92,209,229,0.05); }
+  .fact .t { color: var(--label-dim); font-size: 9.5px; padding-top: 1px; }
+  .fact .m { color: var(--text); }
+  .fact .m b { color: var(--amber); font-weight: normal; }
+  .fact .m .k { display: block; font-size: 8.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--label); }
+  .fact.f-lease { border-left-color: var(--cyan-dim); }
+  .fact.f-hb .m .k { color: var(--green-dim); }
+  .fact.f-ask { border-left-color: var(--amber); }
+  .fact.f-verdict { border-left-color: var(--red); }
+  .fact.f-flush .m .k { color: var(--green); }
+  .fact-note {
+    padding: 8px; font-size: 9.5px; line-height: 1.6; color: var(--label);
+    border-bottom: 1px solid var(--bezel);
+    background: rgba(0,0,0,0.25);
+  }
+  .fact-note b { color: var(--amber); font-weight: normal; }
+
+  .kv { display: grid; grid-template-columns: 78px 1fr; gap: 2px 8px; font-size: 11px; padding: 8px; border-bottom: 1px solid var(--bezel); }
+  .kv dt { color: var(--label); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; align-self: center; }
+  .kv dd { color: var(--amber); }
+
+  /* ---------- footer ---------- */
+  footer {
+    flex: none; height: 22px;
+    display: flex; align-items: center; gap: 18px;
+    padding: 0 12px;
+    border-top: 1px solid var(--line);
+    background: #04070d;
+    font-size: 10px; color: var(--label);
+  }
+  footer kbd {
+    font-family: var(--mono);
+    border: 1px solid var(--bezel); border-bottom-color: var(--bezel-hi);
+    background: var(--panel); color: var(--cyan);
+    padding: 0 4px; font-size: 9px; line-height: 13px; display: inline-block;
+  }
+  footer .fr { margin-left: auto; color: var(--label-dim); letter-spacing: 0.14em; text-transform: uppercase; }
+
+  @media (prefers-reduced-motion: reduce) { .sess .vd.live { animation: none; } }
+</style>
+</head>
+<body>
+  <header>
+    <div class="hdr-cell" id="brand">blizzard<small>runner · transcripts</small></div>
+    <div class="hdr-cell"><span class="lbl">Runner</span><span class="v">atlas<span class="u"> · winter-workspace</span></span></div>
+    <div class="hdr-cell"><span class="lbl">Sessions on disk</span><span class="v">37</span></div>
+    <div class="hdr-cell"><span class="lbl">Retention</span><span class="v">14d<span class="u"> · 412 MB</span></span></div>
+    <div class="hdr-cell"><span class="lbl">Hub holds</span><span class="v" style="color:var(--cyan); font-size:12px;">pointers only<span class="u"> · never transcripts</span></span></div>
+    <div class="hdr-cell spacer"></div>
+    <a class="back" href="runner-panel.html">← machine panel</a>
+  </header>
+
+  <main>
+    <section class="panel" aria-label="Sessions">
+      <div class="panel-head"><span class="lbl">Sessions · one per node-step</span><span class="lbl" id="sess-count"></span></div>
+      <div class="panel-body" id="sess-body"></div>
+    </section>
+
+    <section class="panel" aria-label="Transcript">
+      <div class="panel-head">
+        <span class="lbl" id="tr-title">Transcript</span>
+        <span style="display:flex; gap:6px; align-items:center;">
+          <input type="search" id="tr-search" placeholder="/ filter turns…" aria-label="filter transcript">
+          <button id="tools-btn">TOOLS: EXPANDED</button>
+          <button id="follow-btn" class="on">FOLLOW</button>
+        </span>
+      </div>
+      <div class="panel-body" id="tr-body"></div>
+    </section>
+
+    <section class="panel" aria-label="Fact record">
+      <div class="panel-head"><span class="lbl">Fact record · runner store</span><span class="lbl" id="fact-count"></span></div>
+      <div class="fact-note">The store explains the <b>lifecycle</b>; the transcript explains the <b>reasoning</b>. Click a fact to jump to the transcript moment it timestamps.</div>
+      <dl class="kv" id="fact-kv"></dl>
+      <div class="panel-body" id="fact-body"></div>
+    </section>
+  </main>
+
+  <footer>
+    <span><kbd>↑</kbd>/<kbd>↓</kbd> select session</span>
+    <span><kbd>/</kbd> filter</span>
+    <span><kbd>t</kbd> collapse/expand tools</span>
+    <span><kbd>f</kbd> follow live tail</span>
+    <span class="fr">blizzard runner · design mock · fake data</span>
+  </footer>
+
+<script>
+"use strict";
+
+/* ============================== seed data ==============================
+   turn kinds: env (node envelope), asst, tool, ask, verdict
+   each tool turn implies a heartbeat fact — the gutter tick shows it       */
+
+const T = (t, kind, a, b, c) => ({ t, kind, a, b, c });
+
+const sessions = [
+  {
+    id: "9f2c", chunk: "C-118", node: "build", att: 3, verdict: "fail", escalated: true,
+    issue: "winter-service-tmux#41 restart: pattern globbing matches zero services silently",
+    dur: "22m", size: "1.9 MB", live: false,
+    lease: { id: "L-871", epoch: 3, minted: "02:41:33", pid: 40988 },
+    env: "epsilon",
+    turns: [
+      T("02:41:36", "env", "NODE ENVELOPE · build (attempt 3/3)",
+        "chunk C-118 · winter-service-tmux#41\nprior attempts failed on: tmux pane race in restart_glob test\naddendum (fail edge): the race reproduces under load — isolate the pane\npoll from the glob match before touching the retry logic."),
+      T("02:41:58", "asst", null, "Attempt 3. The two prior failures both died in test_restart_glob_matches_zero — the pane poll races the server's pane registry. I'll reproduce it in isolation first instead of re-fixing the glob logic."),
+      T("02:42:10", "tool", "Read", "winter-service-tmux/tests/test_restart.py", "…120 lines… test_restart_glob_matches_zero spawns 3 panes then polls list-panes with 50ms budget…"),
+      T("02:42:31", "tool", "Bash", "pytest tests/test_restart.py -k glob -x --count 20", "FAILED on iteration 7 — pane registry returned 2 of 3 panes\n1 failed, 19 passed"),
+      T("02:43:05", "asst", null, "Reproduced: 1-in-20 under repetition. The poll reads `list-panes` once; the server registers panes asynchronously after `split-window` returns. The fix is a bounded wait on pane count, not a longer sleep."),
+      T("02:44:20", "tool", "Edit", "winter_service_tmux/panes.py", "replaced single list-panes read with wait_for_pane_count(session, n, timeout=2.0)"),
+      T("02:45:02", "tool", "Bash", "pytest tests/test_restart.py -k glob --count 50", "FAILED on iteration 31 — pane registry returned 4 of 3 panes (?)\n1 failed, 49 passed"),
+      T("02:46:40", "asst", null, "Different failure: now it sees FOUR panes — a pane from the previous test's session leaks into the glob when session names share a prefix. This isn't a race in my fix; the glob `svc-*` matches `svc-old` from the torn-down env. That's the actual bug the issue describes."),
+      T("02:47:12", "tool", "Grep", "session_name pattern in winter_service_tmux/", "7 matches — naming uses env prefix only, no boundary char"),
+      T("02:49:36", "tool", "Edit", "winter_service_tmux/naming.py", "session names now `{env}.{svc}` — glob anchored with fnmatch on full name"),
+      T("02:50:14", "tool", "Bash", "pytest tests/ --count 30", "FAILED — 3 pre-existing tests assert the old `{env}-{svc}` name format\n3 failed, 87 passed"),
+      T("02:52:44", "asst", null, "The rename breaks the name-format contract three other tests assert. Changing the separator is a compatibility decision — existing user layouts key off `{env}-{svc}` in layout-hook.sh. I can't decide the naming contract unilaterally and I'm out of retry budget for a third approach."),
+      T("02:53:20", "tool", "Bash", "pytest tests/ -k 'not name_format' --count 30", "90 passed — fix is sound except the contract question"),
+      T("03:03:38", "verdict", "FAIL", "worker verdict: FAIL — root cause found (session-name glob boundary) and fix validated, but it changes the `{env}-{svc}` naming contract; needs a human call on compatibility. Retries exhausted (3/3)."),
+    ],
+  },
+  {
+    id: "c7d0", chunk: "C-118", node: "build", att: 2, verdict: "fail", escalated: false,
+    issue: "winter-service-tmux#41", dur: "18m", size: "1.4 MB", live: false,
+    lease: { id: "L-864", epoch: 2, minted: "02:12:04", pid: 40711 },
+    env: "epsilon",
+    turns: [
+      T("02:12:08", "env", "NODE ENVELOPE · build (attempt 2/3)", "chunk C-118 · prior attempt failed: flaky tmux pane race"),
+      T("02:12:30", "asst", null, "Retrying with a longer settle sleep after split-window."),
+      T("02:13:01", "tool", "Edit", "winter_service_tmux/panes.py", "sleep 0.1 → 0.5 after split-window"),
+      T("02:14:12", "tool", "Bash", "pytest tests/test_restart.py --count 20", "FAILED on iteration 12 — same race\n1 failed, 19 passed"),
+      T("02:29:44", "verdict", "FAIL", "worker verdict: FAIL — sleep-based fix does not close the race; same failure class as attempt 1."),
+    ],
+  },
+  {
+    id: "7d1a", chunk: "C-125", node: "build", att: 2, verdict: null, escalated: false,
+    issue: "winter#412 ws pull: treat unfetched upstream as no-upstream", dur: "live", size: "0.8 MB", live: true,
+    lease: { id: "L-903", epoch: 2, minted: "02:58:31", pid: 41233 },
+    env: "beta",
+    turns: [
+      T("02:58:40", "env", "NODE ENVELOPE · build (attempt 2)",
+        "chunk C-125 · winter#412\naddendum (review-fail edge): 2 findings — (1) upstream probe swallows\nstderr, (2) no test for the connected-but-unfetched case."),
+      T("02:59:02", "asst", null, "Two review findings to resolve. Starting with finding 2 — the missing test — so finding 1's fix has a failing test to land against."),
+      T("02:59:30", "tool", "Read", "winter/tests/test_pull.py", "…test matrix covers no-upstream and diverged; nothing for connected-but-unfetched…"),
+      T("03:00:55", "tool", "Write", "winter/tests/test_pull_unfetched.py", "added 3 cases: unfetched remote, fetched-then-pruned, empty remote"),
+      T("03:01:40", "tool", "Bash", "pytest tests/test_pull_unfetched.py", "2 failed, 1 passed — failing as expected pre-fix"),
+      T("03:02:31", "asst", null, "Good — red first. Now finding 1: the probe in repo_status.py drops stderr from `git ls-remote`, which is how the unfetched case got misclassified."),
+      T("03:03:12", "tool", "Edit", "winter/internal/repo_status.py", "probe now captures stderr; unfetched upstream classified as NoUpstream"),
+    ],
+  },
+  {
+    id: "b2e8", chunk: "C-126", node: "review", att: 1, verdict: null, escalated: false,
+    issue: "winter-service-docker#19 health probe timeout per service", dur: "live", size: "0.3 MB", live: true,
+    lease: { id: "L-905", epoch: 1, minted: "02:58:31", pid: 41310 },
+    env: "gamma",
+    turns: [
+      T("02:58:44", "env", "NODE ENVELOPE · review (attempt 1)", "chunk C-126 · 2 repos in scope · review axes: correctness, contract drift, docs"),
+      T("02:59:20", "tool", "Bash", "git diff main...feat/probe-timeout --stat", "6 files changed, 214 insertions, 38 deletions across 2 repos"),
+      T("03:00:03", "asst", null, "Reading the compose-manifest schema change first — a new per-service key is a contract change and the provider-contract doc must move with it."),
+      T("03:00:41", "tool", "Read", "winter-service-docker/context/provider-contract.md", "…healthcheck mapping table — no timeout row yet…"),
+    ],
+  },
+  {
+    id: "a114", chunk: "C-110", node: "review", att: 1, verdict: "pass", escalated: false,
+    issue: "winter#398 dashboard: reload config on refresh", dur: "9m", size: "0.6 MB", live: false,
+    lease: { id: "L-822", epoch: 1, minted: "01:44:19", pid: 39907 },
+    env: "delta",
+    turns: [
+      T("01:44:25", "env", "NODE ENVELOPE · review (attempt 1)", "chunk C-110 · winter#398"),
+      T("01:45:00", "tool", "Bash", "git diff main...feat/dash-reload --stat", "3 files changed, 88 insertions"),
+      T("01:47:31", "asst", null, "Change is tight: config re-read moved behind the refresh handler with a mtime guard. Tests cover the added-repo and added-extension cases. One nit: the mtime guard swallows a PermissionError — noted, not blocking."),
+      T("01:52:48", "verdict", "PASS", "review verdict: PASS — 0 findings, 1 nit noted in review-notes.md"),
+    ],
+  },
+];
+
+/* per-session fact records (the right rail) */
+function factsFor(s) {
+  const f = [];
+  f.push({ t: s.lease.minted, k: "lease", cls: "f-lease", m: `lease <b>${s.lease.id}</b> minted · chunk ${s.chunk} · epoch ${s.lease.epoch} · reported to hub (fence input)` , link: 0 });
+  f.push({ t: addS(s.lease.minted, 2), k: "env bind", cls: "f-lease", m: `env <b>${s.env}</b> acquired by id · clean by contract · binding rides the lease`, link: 0 });
+  f.push({ t: addS(s.lease.minted, 4), k: "spawn", cls: "f-lease", m: `worker spawned pid <b>${s.lease.pid}</b> · session <b>${s.id}</b> injected via BLIZZARD_SESSION_ID`, link: 0 });
+  const tools = s.turns.map((t, i) => ({ t, i })).filter((x) => x.t.kind === "tool");
+  if (tools.length) {
+    const last = tools[tools.length - 1];
+    f.push({ t: last.t.t, k: "heartbeats", cls: "f-hb", m: `<b>${tools.length}</b> heartbeat facts this session — one per tool call · last: ${last.t.a} · 204`, link: last.i });
+  }
+  s.turns.forEach((t, i) => {
+    if (t.kind === "ask") f.push({ t: t.t, k: "ask", cls: "f-ask", m: `ask fact recorded · forwarded to hub → question row born · worker exited, slot released`, link: i });
+    if (t.kind === "verdict") f.push({ t: t.t, k: "verdict", cls: "f-verdict", m: `verdict parsed <b>${t.a}</b> · judgement recorded in-process`, link: i });
+  });
+  if (s.escalated) {
+    f.push({ t: "03:03:44", k: "escalate", cls: "f-verdict", m: `retries exhausted → <b>needs-human</b> · resume command composed · env released`, link: s.turns.length - 1 });
+    f.push({ t: "03:07:02", k: "flush", cls: "f-flush", m: `transition + escalation flushed to hub FIFO · board shows needs-human`, link: s.turns.length - 1 });
+  } else if (!s.live && s.verdict === "pass") {
+    f.push({ t: addS(s.turns[s.turns.length - 1].t, 3), k: "transition", cls: "f-flush", m: `transition recorded: ${s.node} → next node per graph edge · flushed to hub`, link: s.turns.length - 1 });
+  } else if (s.live) {
+    f.push({ t: "now", k: "lease live", cls: "f-hb", m: `lease healthy · heartbeat fresh · nothing to derive but <b>RUNNING</b>`, link: s.turns.length - 1 });
+  }
+  return f;
+}
+
+function addS(t, n) {
+  const [h, m, sec] = t.split(":").map(Number);
+  const total = h * 3600 + m * 60 + sec + n;
+  return [Math.floor(total / 3600) % 24, Math.floor(total / 60) % 60, total % 60].map((x) => String(x).padStart(2, "0")).join(":");
+}
+
+/* ============================== state ============================== */
+
+let selected = "9f2c";
+let toolsOpen = true;
+let follow = true;
+let filter = "";
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[m]));
+const sess = (id) => sessions.find((s) => s.id === id);
+
+/* ============================== renderers ============================== */
+
+function renderSessions() {
+  const body = $("sess-body");
+  body.innerHTML = "";
+  $("sess-count").textContent = sessions.length + " shown";
+  const byChunk = {};
+  sessions.forEach((s) => { (byChunk[s.chunk] = byChunk[s.chunk] || []).push(s); });
+  Object.entries(byChunk).forEach(([cid, list]) => {
+    const g = document.createElement("div");
+    g.className = "sess-group";
+    g.innerHTML = `<div class="sess-group-head"><span class="cid">${cid}</span><span class="iss">${esc(list[0].issue.split(" ")[0])}</span></div>`;
+    list.forEach((s) => {
+      const row = document.createElement("div");
+      row.className = "sess" + (s.id === selected ? " sel" : "");
+      row.tabIndex = 0;
+      row.setAttribute("role", "button");
+      const vd = s.live ? '<span class="vd live">●</span>'
+        : s.escalated ? '<span class="vd esc">ESC</span>'
+        : s.verdict === "pass" ? '<span class="vd pass">PASS</span>'
+        : '<span class="vd fail">FAIL</span>';
+      row.innerHTML =
+        vd +
+        `<span class="meta"><span class="n">${s.node} · att ${s.att}</span><br><span class="s">session ${s.id} · ${s.live ? "live now" : s.dur}</span></span>` +
+        `<span class="sz">${s.size}</span>`;
+      row.addEventListener("click", () => selectSession(s.id));
+      row.addEventListener("keydown", (e) => { if (e.key === "Enter") selectSession(s.id); });
+      g.appendChild(row);
+    });
+    body.appendChild(g);
+  });
+}
+
+function turnEl(t, i) {
+  const div = document.createElement("div");
+  div.className = `turn k-${t.kind}` + (t.kind === "verdict" && t.a === "PASS" ? " pass" : "");
+  div.dataset.i = i;
+  let body;
+  if (t.kind === "tool") {
+    body =
+      `<div class="who">tool call · heartbeat fact ✓</div>` +
+      `<div class="tool-call${toolsOpen ? " open" : ""}">` +
+      `<div class="tc-head"><span class="tc-name">${esc(t.a)} <b>${esc(t.b)}</b></span><span class="tc-hb">click to ${toolsOpen ? "fold" : "unfold"}</span></div>` +
+      `<div class="tc-out">${esc(t.c)}</div></div>`;
+  } else if (t.kind === "env") {
+    body = `<div class="who">${esc(t.a)}</div><div class="tx">${esc(t.b)}</div>`;
+  } else if (t.kind === "verdict") {
+    body = `<div class="who">verdict · parsed by runner from session</div><div class="tx">${esc(t.b)}</div>`;
+  } else if (t.kind === "ask") {
+    body = `<div class="who">ask · durable before exit</div><div class="tx">${esc(t.b)}</div>`;
+  } else {
+    body = `<div class="who">assistant</div><div class="tx">${esc(t.b)}</div>`;
+  }
+  div.innerHTML = `<span class="t">${esc(t.t)}</span><span class="g"><span class="tick"></span></span><span class="b">${body}</span>`;
+  const tc = div.querySelector(".tool-call");
+  if (tc) tc.addEventListener("click", () => tc.classList.toggle("open"));
+  return div;
+}
+
+function renderTranscript() {
+  const s = sess(selected);
+  const body = $("tr-body");
+  body.innerHTML = "";
+  if (!s) { body.innerHTML = '<div class="tr-empty">SELECT A SESSION</div>'; return; }
+  $("tr-title").textContent = `Transcript · ${s.chunk} · ${s.node} att ${s.att} · session ${s.id}${s.live ? " · LIVE" : ""}`;
+  s.turns.forEach((t, i) => {
+    const el = turnEl(t, i);
+    applyFilter(el, t);
+    body.appendChild(el);
+  });
+  if (follow && s.live) body.scrollTop = body.scrollHeight;
+}
+
+function applyFilter(el, t) {
+  if (!filter) { el.classList.remove("hidden", "hit"); return; }
+  const hay = [t.a, t.b, t.c].filter(Boolean).join(" ").toLowerCase();
+  const hit = hay.includes(filter);
+  el.classList.toggle("hidden", !hit);
+  el.classList.toggle("hit", hit);
+}
+
+function renderFacts() {
+  const s = sess(selected);
+  const kv = $("fact-kv");
+  const body = $("fact-body");
+  body.innerHTML = "";
+  if (!s) { kv.innerHTML = ""; return; }
+  kv.innerHTML =
+    `<dt>Lease</dt><dd>${s.lease.id} · epoch ${s.lease.epoch}</dd>` +
+    `<dt>PID</dt><dd>${s.lease.pid}${s.live ? "" : " (exited)"}</dd>` +
+    `<dt>Env</dt><dd>${s.escalated ? "released" : s.env}</dd>` +
+    `<dt>Derived</dt><dd style="color:${s.live ? "var(--green)" : s.escalated ? "var(--red)" : s.verdict === "pass" ? "var(--green)" : "var(--red)"}">${s.live ? "RUNNING" : s.escalated ? "NEEDS-HUMAN" : s.verdict.toUpperCase()}</dd>`;
+  const facts = factsFor(s);
+  $("fact-count").textContent = facts.length + " facts";
+  facts.forEach((f) => {
+    const div = document.createElement("div");
+    div.className = "fact " + f.cls;
+    div.tabIndex = 0;
+    div.setAttribute("role", "button");
+    div.innerHTML = `<span class="t">${esc(f.t)}</span><span class="m"><span class="k">${esc(f.k)}</span>${f.m}</span>`;
+    div.addEventListener("click", () => jumpTo(f.link));
+    div.addEventListener("keydown", (e) => { if (e.key === "Enter") jumpTo(f.link); });
+    body.appendChild(div);
+  });
+}
+
+function jumpTo(i) {
+  const el = document.querySelector(`.turn[data-i="${i}"]`);
+  if (!el) return;
+  follow = false; $("follow-btn").classList.remove("on");
+  el.scrollIntoView({ block: "center" });
+  el.classList.add("hit");
+  setTimeout(() => { if (!filter) el.classList.remove("hit"); }, 1400);
+}
+
+function selectSession(id) {
+  selected = id;
+  renderSessions(); renderTranscript(); renderFacts();
+}
+
+/* ============================== interactions ============================== */
+
+$("tr-search").addEventListener("input", (e) => {
+  filter = e.target.value.trim().toLowerCase();
+  const s = sess(selected);
+  document.querySelectorAll(".turn").forEach((el) => applyFilter(el, s.turns[parseInt(el.dataset.i, 10)]));
+});
+
+$("tools-btn").addEventListener("click", () => {
+  toolsOpen = !toolsOpen;
+  $("tools-btn").textContent = toolsOpen ? "TOOLS: EXPANDED" : "TOOLS: FOLDED";
+  document.querySelectorAll(".tool-call").forEach((el) => el.classList.toggle("open", toolsOpen));
+});
+
+$("follow-btn").addEventListener("click", () => {
+  follow = !follow;
+  $("follow-btn").classList.toggle("on", follow);
+  if (follow) $("tr-body").scrollTop = $("tr-body").scrollHeight;
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT") { if (e.key === "Escape") { e.target.value = ""; e.target.dispatchEvent(new Event("input")); e.target.blur(); } return; }
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const idx = sessions.findIndex((s) => s.id === selected);
+  switch (e.key) {
+    case "/": e.preventDefault(); $("tr-search").focus(); break;
+    case "t": $("tools-btn").click(); break;
+    case "f": $("follow-btn").click(); break;
+    case "ArrowDown": e.preventDefault(); if (idx < sessions.length - 1) selectSession(sessions[idx + 1].id); break;
+    case "ArrowUp":   e.preventDefault(); if (idx > 0) selectSession(sessions[idx - 1].id); break;
+  }
+});
+
+/* ============================== live tail simulation ============================== */
+
+const LIVE_FEED = {
+  "7d1a": [
+    T("", "tool", "Bash", "pytest tests/test_pull_unfetched.py", "3 passed — all green post-fix"),
+    T("", "asst", null, "Both findings resolved. Running the full suite before declaring the verdict."),
+    T("", "tool", "Bash", "pytest tests/ -q", "214 passed, 0 failed"),
+    T("", "verdict", "PASS", "worker verdict: PASS — 2 review findings resolved, full suite green, branch pushed."),
+  ],
+  "b2e8": [
+    T("", "tool", "Read", "winter-service-docker/winter_service_docker/manifest.py", "…timeout key parsed with 5s default, validated ≥1s…"),
+    T("", "asst", null, "Parser and default look right. Checking the docs moved with the contract — the provider-contract table needs a timeout row."),
+    T("", "tool", "Grep", "probe_timeout in winter-service-docker/context/", "0 matches — contract doc NOT updated"),
+  ],
+};
+
+function liveTick() {
+  for (const [sid, feed] of Object.entries(LIVE_FEED)) {
+    const s = sess(sid);
+    if (!s || !s.live || !feed.length) continue;
+    const t = feed.shift();
+    const d = new Date();
+    t.t = [d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds()].map((n) => String(n).padStart(2, "0")).join(":");
+    s.turns.push(t);
+    if (t.kind === "verdict") { s.live = false; s.verdict = t.a.toLowerCase(); s.dur = "24m"; }
+    if (sid === selected) { renderTranscript(); renderFacts(); }
+    else renderSessions();
+    if (t.kind === "verdict") renderSessions();
+  }
+}
+
+renderSessions();
+renderTranscript();
+renderFacts();
+setInterval(liveTick, 6000);
+</script>
+</body>
+</html>

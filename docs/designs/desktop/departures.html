@@ -1,0 +1,913 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>blizzard hub — departures</title>
+<style>
+  :root{
+    --navy:#14305f;
+    --navy-deep:#0c1f42;
+    --ink:#091730;
+    --cell:#0e2247;
+    --ivory:#f4eeda;
+    --ivory-dim:#c9c2a6;
+    --paper:#efe7cd;
+    --paper-2:#e7dcbc;
+    --signal:#ffb52d;
+    --signal-deep:#8a5a00;
+    --muted:#8fa0c2;
+    --track-y:128px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html{-webkit-text-size-adjust:100%;}
+  body{
+    background:var(--paper);
+    background-image:radial-gradient(circle at 50% -20%, #f6f0da 0%, var(--paper) 60%);
+    color:var(--ink);
+    font-family:system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    font-size:15px;line-height:1.45;
+    padding-bottom:48px;
+  }
+  .disp{
+    font-family:"Arial Narrow","Helvetica Neue Condensed","Liberation Sans Narrow","Helvetica Neue",Arial,sans-serif;
+    font-stretch:condensed;
+    text-transform:uppercase;
+    letter-spacing:.14em;
+    font-weight:700;
+  }
+  .num{font-variant-numeric:tabular-nums;}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;}
+  button{font:inherit;color:inherit;cursor:pointer;}
+  :focus-visible{outline:3px solid var(--signal);outline-offset:2px;border-radius:2px;}
+  .wrap{max-width:1280px;margin:0 auto;padding:20px 22px 0;}
+
+  /* ---------- enamel signage ---------- */
+  .sign{
+    background:var(--navy);color:var(--ivory);border-radius:12px;
+    box-shadow:inset 0 0 0 4px var(--navy), inset 0 0 0 6px rgba(244,238,218,.75), 0 2px 0 rgba(9,23,48,.25);
+  }
+
+  /* ---------- masthead ---------- */
+  .masthead{display:flex;gap:18px;align-items:stretch;flex-wrap:wrap;}
+  .titlesign{flex:1 1 420px;padding:20px 28px 18px;}
+  .titlesign .kicker{font-size:12px;letter-spacing:.32em;color:var(--signal);margin-bottom:6px;}
+  .titlesign h1{font-size:52px;line-height:.95;letter-spacing:.1em;}
+  .titlesign h1 .thin{color:var(--ivory-dim);font-weight:700;}
+  .titlesign .sub{margin-top:8px;font-size:12px;color:var(--ivory-dim);letter-spacing:.22em;}
+  .clockbox{
+    min-width:230px;padding:16px 22px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:2px;
+  }
+  #clock{font-size:40px;font-weight:700;letter-spacing:.06em;color:var(--signal);}
+  .clockbox .date{font-size:12px;color:var(--ivory-dim);letter-spacing:.28em;}
+
+  /* ---------- stat plaques + runners ---------- */
+  .statrow{display:flex;gap:12px;margin-top:14px;flex-wrap:wrap;align-items:stretch;}
+  .plaque{
+    background:var(--navy);color:var(--ivory);border-radius:8px;padding:9px 16px 8px;text-align:center;min-width:96px;
+    box-shadow:inset 0 0 0 2px var(--navy), inset 0 0 0 3.5px rgba(244,238,218,.55);
+  }
+  .plaque .n{font-size:26px;font-weight:700;line-height:1;color:var(--signal);}
+  .plaque .l{font-size:10px;letter-spacing:.24em;color:var(--ivory-dim);margin-top:4px;}
+  .runnerbar{display:flex;gap:12px;margin-left:auto;flex-wrap:wrap;}
+  .runner{
+    display:flex;align-items:center;gap:10px;background:var(--navy);color:var(--ivory);
+    border-radius:8px;padding:8px 16px;font-size:12px;letter-spacing:.12em;
+    box-shadow:inset 0 0 0 2px var(--navy), inset 0 0 0 3.5px rgba(244,238,218,.55);
+  }
+  .runner .lamp{width:10px;height:10px;border-radius:50%;background:var(--signal);box-shadow:0 0 8px var(--signal);animation:lamp 2.4s ease-in-out infinite;}
+  .runner.offline{opacity:.55;}
+  .runner.offline .lamp{background:#5a6b8f;box-shadow:none;animation:none;}
+  .runner .slots{color:var(--signal);font-weight:700;}
+  @keyframes lamp{0%,100%{opacity:1}50%{opacity:.45}}
+
+  /* ---------- section headers ---------- */
+  .sect-h{display:flex;align-items:baseline;gap:14px;margin:26px 0 10px;}
+  .sect-h h2{font-size:17px;letter-spacing:.3em;color:var(--navy);}
+  .sect-h .rule{flex:1;height:3px;background:var(--navy);border-radius:2px;position:relative;top:-3px;}
+  .sect-h .tag{font-size:10px;letter-spacing:.2em;color:var(--signal-deep);}
+
+  /* ---------- main line map ---------- */
+  .linemap{padding:14px 14px 10px;position:relative;}
+  .line-stage{position:relative;height:208px;}
+  #lineSvg{display:block;width:100%;height:208px;}
+  .svg-station{fill:var(--ivory);font-family:"Arial Narrow","Helvetica Neue",Arial,sans-serif;font-weight:700;font-size:16px;letter-spacing:3px;}
+  .svg-sub{fill:var(--muted);font-size:9px;letter-spacing:2px;font-family:ui-monospace,Menlo,monospace;}
+  .svg-loop{fill:var(--signal);font-size:10px;letter-spacing:2.5px;font-family:"Arial Narrow",Arial,sans-serif;font-weight:700;}
+  #trains{position:absolute;inset:0;pointer-events:none;}
+  .train{
+    position:absolute;transform:translate(-50%,-50%);display:flex;align-items:center;gap:3px;
+    background:none;border:0;padding:5px 4px 9px;pointer-events:auto;
+    transition:left 2.2s linear, top .6s ease;
+  }
+  .train::after{
+    content:"";position:absolute;left:50%;bottom:-2px;transform:translateX(-50%);
+    width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid var(--signal);
+  }
+  .train:hover .loco{background:var(--ivory);}
+  .loco{
+    background:var(--signal);color:var(--ink);border:2px solid var(--ink);
+    border-radius:9px 3px 3px 9px;padding:2px 7px 1px;font-size:12px;letter-spacing:.1em;white-space:nowrap;
+  }
+  .car{
+    background:var(--ivory);color:var(--navy-deep);border:2px solid var(--ink);border-radius:3px;
+    padding:1px 6px;font-size:10.5px;white-space:nowrap;
+  }
+  .keyline{display:flex;gap:18px;font-size:10px;letter-spacing:.18em;color:var(--muted);padding:2px 10px 6px;text-transform:uppercase;}
+  .keyline b{color:var(--signal);font-weight:700;}
+
+  /* ---------- arrivals track ---------- */
+  .arrivals{border-top:2px dashed rgba(244,238,218,.35);margin-top:2px;padding:10px 10px 12px;}
+  .arrivals h3{font-size:12px;letter-spacing:.3em;color:var(--ivory-dim);margin-bottom:10px;}
+  .arrivals h3 b{color:var(--signal);}
+  .mq-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+  .mq-landing{display:flex;align-items:center;gap:3px;}
+  .mq-landing.moving{animation:creep 2.6s ease-in-out infinite alternate;}
+  @keyframes creep{from{transform:translateX(0)}to{transform:translateX(16px)}}
+  .buffer{width:14px;height:26px;border:3px solid var(--ivory);border-left:none;border-radius:0 4px 4px 0;margin-left:6px;}
+  .mq-note{font-size:11px;letter-spacing:.14em;color:var(--signal);text-transform:uppercase;}
+  .mq-held{display:flex;gap:8px;align-items:center;font-size:11px;color:var(--ivory-dim);letter-spacing:.1em;}
+  .mq-held .car{border-color:var(--ivory-dim);opacity:.8;}
+  .mq-landed{margin-left:auto;display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted);}
+  .mq-landed .ok{color:var(--ivory-dim);}
+  .mq-landed b{color:var(--ivory);font-weight:600;}
+
+  /* ---------- columns ---------- */
+  .cols{display:grid;grid-template-columns:minmax(0,1fr) 350px;gap:22px;align-items:start;}
+  @media (max-width:1020px){.cols{grid-template-columns:1fr}}
+
+  /* ---------- departures board ---------- */
+  .board-wrap{background:var(--ink);border-radius:12px;padding:12px;box-shadow:inset 0 0 0 2px #000, 0 3px 0 rgba(9,23,48,.3);}
+  .board-head{display:flex;align-items:center;gap:12px;padding:4px 6px 12px;}
+  .board-head .bt{font-size:15px;letter-spacing:.34em;color:var(--signal);}
+  .board-head .hint{font-size:10px;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;}
+  .group-btn{
+    margin-left:auto;background:var(--signal);color:var(--ink);border:2px solid var(--ink);
+    border-radius:5px;padding:5px 14px 4px;font-size:12px;letter-spacing:.16em;
+  }
+  .group-btn:disabled{background:#2a3d63;color:var(--muted);cursor:not-allowed;border-color:#2a3d63;}
+  .board{perspective:900px;display:flex;flex-direction:column;gap:3px;}
+  .board-cols,.board-row{
+    display:grid;grid-template-columns:40px 60px 92px minmax(0,1fr) 118px 74px;gap:3px;
+  }
+  .board-cols span{font-size:9px;letter-spacing:.22em;color:var(--muted);padding:2px 8px 6px;text-transform:uppercase;}
+  .board-row{transform-origin:center;}
+  .board-row.flap{animation:flap .55s ease;}
+  @keyframes flap{
+    0%{transform:rotateX(0);}
+    45%{transform:rotateX(-86deg);filter:brightness(.55);}
+    55%{transform:rotateX(86deg);filter:brightness(.55);}
+    100%{transform:rotateX(0);}
+  }
+  .cell{
+    background:var(--cell);color:var(--ivory);border-radius:4px;padding:8px;min-height:38px;
+    display:flex;align-items:center;gap:5px;overflow:hidden;
+    background-image:linear-gradient(180deg,rgba(255,255,255,.06) 0 49%,rgba(0,0,0,.28) 50% 100%);
+  }
+  .cell.order{justify-content:center;color:var(--signal);font-weight:700;font-size:17px;letter-spacing:.08em;}
+  .cell.sel{justify-content:center;}
+  .cell.sel input{width:16px;height:16px;accent-color:var(--signal);cursor:pointer;}
+  .svc-btn{
+    background:none;border:0;padding:0;color:var(--ivory);letter-spacing:.08em;font-size:13px;
+    text-decoration:underline transparent;
+  }
+  .svc-btn:hover{color:var(--signal);}
+  .chip{
+    background:var(--ivory);color:var(--navy-deep);border-radius:3px;padding:1px 6px;font-size:10.5px;white-space:nowrap;
+  }
+  .cell.issues{flex-wrap:wrap;row-gap:3px;}
+  .cell.platform{font-size:11px;letter-spacing:.14em;color:var(--ivory-dim);text-transform:uppercase;}
+  .cell.ctrl{justify-content:center;gap:4px;padding:4px;}
+  .mv{
+    width:26px;height:26px;border:1px solid #33507f;background:#122a52;color:var(--ivory);
+    border-radius:4px;font-size:12px;line-height:1;
+  }
+  .mv:hover:not(:disabled){background:var(--signal);color:var(--ink);border-color:var(--signal);}
+  .mv:disabled{opacity:.3;cursor:default;}
+  .board-empty{color:var(--muted);font-size:12px;letter-spacing:.14em;padding:14px 8px;text-transform:uppercase;}
+
+  /* ---------- announcements ---------- */
+  .ann-col{display:flex;flex-direction:column;gap:14px;}
+  .ann{
+    background:var(--ivory);border:2px solid var(--navy);border-radius:10px;overflow:hidden;
+    box-shadow:0 2px 0 rgba(9,23,48,.18);
+  }
+  .ann-head{
+    background:var(--navy);color:var(--ivory);padding:7px 12px 6px;font-size:11px;letter-spacing:.2em;
+    display:flex;align-items:center;gap:8px;
+  }
+  .ann-head .dot{width:8px;height:8px;border-radius:50%;background:var(--signal);animation:lamp 1.8s ease-in-out infinite;}
+  .ann-head .who{margin-left:auto;color:var(--ivory-dim);letter-spacing:.1em;font-size:10px;}
+  .ann-body{padding:12px 14px 14px;}
+  .ann-body .q{font-size:14px;line-height:1.5;margin-bottom:4px;}
+  .ann-body .ctx{font-size:11px;color:#5a6480;margin-bottom:10px;}
+  .opts{display:flex;flex-direction:column;gap:7px;}
+  .opt{
+    text-align:left;background:var(--paper);border:2px solid var(--navy);border-radius:6px;
+    padding:7px 11px;font-size:13px;line-height:1.35;
+  }
+  .opt::before{content:"○ ";color:var(--signal-deep);font-weight:700;}
+  .opt:hover{background:var(--navy);color:var(--ivory);}
+  .opt:hover::before{content:"● ";color:var(--signal);}
+  .ticket{border-style:dashed;border-width:2px;}
+  .ticket .ann-head{background:var(--signal);color:var(--ink);}
+  .ticket .ann-head .dot{background:var(--ink);animation:none;}
+  .ticket .ann-head .who{color:#5a4200;}
+  .resume{
+    display:flex;align-items:center;gap:8px;background:var(--ink);color:var(--signal);
+    border-radius:6px;padding:9px 11px;font-size:12.5px;margin-top:10px;overflow-x:auto;
+  }
+  .resume code{white-space:nowrap;}
+  .copy-btn{
+    margin-left:auto;flex:none;background:var(--signal);color:var(--ink);border:0;border-radius:4px;
+    padding:4px 10px 3px;font-size:10px;letter-spacing:.16em;font-weight:700;text-transform:uppercase;
+  }
+  .stamp{
+    display:inline-block;border:2px solid var(--signal-deep);color:var(--signal-deep);border-radius:4px;
+    padding:1px 8px;font-size:10px;letter-spacing:.24em;transform:rotate(-2deg);margin-top:10px;text-transform:uppercase;
+  }
+
+  /* ---------- events ---------- */
+  .events{margin-top:22px;background:var(--paper-2);border:2px solid var(--navy);border-radius:10px;padding:12px 16px;}
+  .events ul{list-style:none;display:flex;flex-direction:column;gap:5px;max-height:220px;overflow-y:auto;}
+  .events li{display:flex;gap:12px;font-size:12.5px;border-bottom:1px dotted #b9ad89;padding-bottom:4px;}
+  .events li .t{color:var(--signal-deep);font-weight:700;flex:none;}
+  .events li.fresh{background:linear-gradient(90deg,rgba(255,181,45,.35),transparent 70%);}
+
+  /* ---------- modal (timetable) ---------- */
+  .modal{position:fixed;inset:0;z-index:40;display:flex;align-items:flex-start;justify-content:center;padding:5vh 16px;}
+  .modal[hidden]{display:none;}
+  .modal .backdrop{position:absolute;inset:0;background:rgba(9,23,48,.62);border:0;width:100%;height:100%;cursor:default;}
+  .sheet{
+    position:relative;background:var(--ivory);border-radius:12px;max-width:720px;width:100%;
+    max-height:88vh;overflow-y:auto;border:3px solid var(--navy);box-shadow:0 18px 60px rgba(9,23,48,.5);
+  }
+  .sheet-head{
+    position:sticky;top:0;background:var(--navy);color:var(--ivory);padding:14px 18px;
+    display:flex;align-items:center;gap:14px;
+  }
+  .sheet-head h3{font-size:20px;letter-spacing:.18em;}
+  .sheet-head .status-stamp{
+    border:2px solid var(--signal);color:var(--signal);border-radius:4px;padding:2px 9px;
+    font-size:10px;letter-spacing:.22em;transform:rotate(-2deg);text-transform:uppercase;white-space:nowrap;
+  }
+  .close-btn{margin-left:auto;background:none;border:2px solid var(--ivory-dim);color:var(--ivory);border-radius:6px;width:32px;height:32px;font-size:15px;line-height:1;flex:none;}
+  .close-btn:hover{background:var(--signal);color:var(--ink);border-color:var(--signal);}
+  .sheet-body{padding:16px 20px 22px;}
+  .sheet-body h4{font-size:11px;letter-spacing:.28em;color:var(--signal-deep);margin:18px 0 8px;text-transform:uppercase;}
+  .sheet-body h4:first-child{margin-top:0;}
+  .sheet-title{font-size:16px;font-weight:600;margin-bottom:2px;}
+  .sheet-sub{font-size:12px;color:#5a6480;}
+  .issue-line{display:flex;gap:10px;align-items:baseline;padding:5px 0;border-bottom:1px dotted #c9bd97;font-size:13.5px;}
+  .issue-line .chip{flex:none;border:1px solid var(--navy);}
+  .tl{list-style:none;}
+  .tl li{display:grid;grid-template-columns:52px 78px 1fr;gap:10px;padding:7px 0;border-bottom:1px dotted #c9bd97;font-size:13px;align-items:baseline;}
+  .tl .t{color:var(--signal-deep);font-weight:700;font-size:12px;}
+  .tl .node-b{font-size:10px;letter-spacing:.18em;background:var(--navy);color:var(--ivory);border-radius:3px;padding:2px 7px;text-align:center;text-transform:uppercase;}
+  .tl li.v-fail .node-b{background:var(--signal);color:var(--ink);}
+  .tl li.v-fail .note{color:#7a4a00;font-weight:600;}
+  .art-line{display:flex;gap:8px;align-items:center;padding:4px 0;font-size:13px;flex-wrap:wrap;}
+  .art-line .arrow{color:var(--signal-deep);}
+  .asset{background:var(--paper);border:1px dashed var(--navy);border-radius:4px;padding:1px 8px;font-size:11.5px;}
+  .sheet-q{background:var(--paper);border:2px solid var(--navy);border-radius:8px;padding:12px;margin-top:6px;}
+  .sheet-q .q{font-size:13.5px;margin-bottom:9px;}
+  .quiet{color:#5a6480;font-size:12.5px;}
+
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{animation:none !important;transition:none !important;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="sign titlesign">
+      <div class="kicker disp">Blizzard Hub · Autonomous Agent Fleet · Terminal 1</div>
+      <h1 class="disp">Departures <span class="thin">&amp; Arrivals</span></h1>
+      <div class="sub disp">All services call at Build · Review · Deliver — terminating at Main</div>
+    </div>
+    <div class="sign clockbox">
+      <div id="clock" class="num disp">--:--:--</div>
+      <div class="date disp" id="dateline">— — —</div>
+    </div>
+  </header>
+
+  <section class="statrow" id="statrow" aria-label="Fleet status"></section>
+
+  <div class="sect-h"><h2 class="disp">Main Line</h2><div class="rule"></div><span class="tag disp">Running services — click a train for its timetable</span></div>
+  <section class="sign linemap" aria-label="Workflow line map">
+    <div class="line-stage" id="lineStage">
+      <svg id="lineSvg" aria-hidden="true"></svg>
+      <div id="trains"></div>
+    </div>
+    <div class="keyline disp"><span><b>▮</b> locomotive = chunk</span><span>▯ carriages = issue pointers</span><span><b>- - -</b> fail loop (review → build)</span></div>
+    <div class="arrivals">
+      <h3 class="disp">Arrivals — <b>Main</b> · merge queue (one train may land at a time)</h3>
+      <div class="mq-row" id="mqRow"></div>
+    </div>
+  </section>
+
+  <div class="cols">
+    <div>
+      <div class="sect-h"><h2 class="disp">Departures Board</h2><div class="rule"></div><span class="tag disp">Ready queue — unclaimed</span></div>
+      <section class="board-wrap" aria-label="Ready queue departures board">
+        <div class="board-head">
+          <span class="bt disp">Ready to Depart</span>
+          <span class="hint">reorder with ▲▼ · tick two or more to couple</span>
+          <button class="group-btn disp" id="groupBtn" disabled>Group ⛓ couple</button>
+        </div>
+        <div class="board" id="board"></div>
+      </section>
+
+      <div class="sect-h"><h2 class="disp">Movements Log</h2><div class="rule"></div><span class="tag disp">Live event stream</span></div>
+      <section class="events" aria-label="Event stream"><ul id="events" aria-live="polite"></ul></section>
+    </div>
+
+    <aside>
+      <div class="sect-h"><h2 class="disp">Announcements</h2><div class="rule"></div></div>
+      <div class="ann-col" id="annCol" aria-label="Station announcements"></div>
+    </aside>
+  </div>
+
+</div>
+
+<div class="modal" id="modal" hidden role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+  <button class="backdrop" id="backdrop" tabindex="-1" aria-label="Close timetable"></button>
+  <div class="sheet">
+    <div class="sheet-head">
+      <h3 class="disp" id="sheetTitle">Timetable</h3>
+      <span class="status-stamp disp" id="sheetStamp"></span>
+      <button class="close-btn" id="closeBtn" aria-label="Close timetable">✕</button>
+    </div>
+    <div class="sheet-body" id="sheetBody"></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* =========================================================
+   blizzard hub — departures (design mock, fake data only)
+   ========================================================= */
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pad = n => String(n).padStart(2,'0');
+function hhmmss(d){ d = d || new Date(); return pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds()); }
+function hhmm(d){ d = d || new Date(); return pad(d.getHours())+':'+pad(d.getMinutes()); }
+function agoMin(m){ return hhmm(new Date(Date.now() - m*60000)); }
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------------- seed data ---------------- */
+
+function iss(ref, title){ return { ref, title }; }
+
+const state = {
+  chunks: [
+    /* --- running (trains on the line) --- */
+    { id:'CHK-7408', title:'ws pull hardening', status:'running', node:'build', progress:0.42, runner:'atlas',
+      issues:[ iss('winter#412','ws pull: treat unfetched upstream as no-upstream'), iss('winter#415','ws pull: retry transient fetch errors') ],
+      history:[
+        {at:agoMin(96), node:'build',  verdict:'pass', note:'worker: pass — 12 tests green; checks: lint ok, typecheck ok'},
+        {at:agoMin(41), node:'review', verdict:'fail', note:'review: fail — 2 findings, routed back to build'},
+        {at:agoMin(33), node:'build',  verdict:'running', note:'rework in progress — finding 1/2 addressed'}
+      ],
+      branches:[ {repo:'winter', ref:'feat/pull-unfetched-upstream', commits:5} ],
+      assets:['review-notes.md','test-plan.md'] },
+
+    { id:'CHK-7411', title:'teammate heartbeat timeouts', status:'running', node:'review', progress:0.58, runner:'atlas',
+      issues:[ iss('winter-workflow#77','blizzard: teammate heartbeat timeouts') ],
+      history:[
+        {at:agoMin(64), node:'build',  verdict:'pass', note:'worker: pass — 8 tests green; checks: lint ok, typecheck ok'},
+        {at:agoMin(18), node:'review', verdict:'running', note:'reviewer spawned cold — reading change-set manifest'}
+      ],
+      branches:[ {repo:'winter-workflow', ref:'feat/heartbeat-timeout', commits:3} ],
+      assets:['review-manifest.md'] },
+
+    { id:'CHK-7416', title:'graph cycle detection message', status:'running', node:'deliver', progress:0.81, runner:'atlas',
+      issues:[ iss('winter#429','graph: cycle detection error message') ],
+      history:[
+        {at:agoMin(140), node:'build',   verdict:'pass', note:'worker: pass — 6 tests green; checks: lint ok, typecheck ok'},
+        {at:agoMin(52),  node:'review',  verdict:'pass', note:'review: pass — 0 blocking findings; checks: diff-cover ok'},
+        {at:agoMin(9),   node:'deliver', verdict:'running', note:'rebased onto origin/master — merge queue slot acquired'}
+      ],
+      branches:[ {repo:'winter', ref:'fix/graph-cycle-msg', commits:2} ],
+      assets:['review-notes.md'] },
+
+    /* --- ready (departures board) --- */
+    { id:'CHK-7421', title:'detached HEAD surfacing', status:'ready', order:1,
+      issues:[ iss('winter#431','repo status: surface detached HEAD worktrees') ],
+      history:[], branches:[], assets:[] },
+    { id:'CHK-7424', title:'restart glob patterns', status:'ready', order:2,
+      issues:[ iss('winter-service-tmux#88','restart: accept glob patterns for service names') ],
+      history:[], branches:[], assets:[] },
+    { id:'CHK-7426', title:'dashboard port column', status:'ready', order:3,
+      issues:[ iss('winter#437','dashboard: per-env port registry column'), iss('winter#438','dashboard: sort envs by last activity') ],
+      history:[], branches:[], assets:[] },
+    { id:'CHK-7428', title:'issue label prefill', status:'ready', order:4,
+      issues:[ iss('winter-github#54','issue: prefill labels from routing table') ],
+      history:[], branches:[], assets:[] },
+
+    /* --- waiting_on_human (announcements with options) --- */
+    { id:'CHK-7409', title:'doctor docker-socket probe', status:'waiting_on_human', node:'build', progress:0.7, runner:'atlas',
+      issues:[ iss('winter#418','doctor: probe docker socket permissions') ],
+      question:{ text:'Probe found the docker socket owned by root with no docker group present. How should doctor report this on rootless hosts?',
+                 options:['Fail, print a fix-it command','Warn only, keep doctor green','Skip the probe on rootless docker'] },
+      history:[
+        {at:agoMin(75), node:'build', verdict:'running', note:'claimed by atlas — build started'},
+        {at:agoMin(22), node:'build', verdict:'ask', note:'agent parked — asked operator about rootless-docker policy'}
+      ],
+      branches:[ {repo:'winter', ref:'feat/doctor-docker-socket', commits:2} ],
+      assets:['probe-findings.md'] },
+
+    { id:'CHK-7414', title:'capabilities doc conflict', status:'waiting_on_human', node:'build', progress:0.35, runner:'atlas',
+      issues:[ iss('winter-docs#23','document capabilities slot binding') ],
+      question:{ text:'The README snippet and capabilities.md give conflicting [capabilities] examples. Which is canonical?',
+                 options:['README snippet is canonical','capabilities.md is canonical','Rewrite both from a shared include'] },
+      history:[
+        {at:agoMin(48), node:'build', verdict:'running', note:'claimed by atlas — drafting doc section'},
+        {at:agoMin(11), node:'build', verdict:'ask', note:'agent parked — found two conflicting config examples'}
+      ],
+      branches:[ {repo:'winter-docs', ref:'docs/capabilities-binding', commits:1} ],
+      assets:[] },
+
+    /* --- needs_human (escalation ticket) --- */
+    { id:'CHK-7403', title:'ws init idempotent ext clone', status:'needs_human', node:'build', progress:0.5, runner:'atlas',
+      issues:[ iss('winter#402','ws init: idempotent extension clone') ],
+      resume:'cd alpha && claude --resume 9f2c',
+      escalation:'escalated after 3 retries — extension clone leaves a dirty half-checkout; agent cannot reconcile without destructive rm',
+      history:[
+        {at:agoMin(210), node:'build', verdict:'running', note:'claimed by atlas — build started'},
+        {at:agoMin(150), node:'build', verdict:'fail', note:'checks: fail — ws init left .winter/ext/tmp-clone dirty (retry 1/3)'},
+        {at:agoMin(95),  node:'build', verdict:'fail', note:'checks: fail — same dirty half-checkout (retry 2/3)'},
+        {at:agoMin(40),  node:'build', verdict:'fail', note:'checks: fail — retries exhausted, escalated to operator'}
+      ],
+      branches:[ {repo:'winter', ref:'fix/ws-init-ext-clone', commits:4} ],
+      assets:['escalation-report.md','repro.sh'] },
+
+    /* --- done (landed) --- */
+    { id:'CHK-7391', title:'lint relative-link rule', status:'done', landedAt:'11:42',
+      issues:[ iss('winter#396','lint: forbid relative context links') ],
+      history:[
+        {at:'10:31', node:'build',   verdict:'pass', note:'worker: pass — 9 tests green'},
+        {at:'11:12', node:'review',  verdict:'pass', note:'review: pass — 1 advisory finding, waived'},
+        {at:'11:42', node:'deliver', verdict:'pass', note:'merged to main — env torn down'}
+      ],
+      branches:[ {repo:'winter', ref:'feat/lint-relative-links', commits:3} ], assets:['review-notes.md'] },
+    { id:'CHK-7387', title:'verifiability matrix template', status:'done', landedAt:'10:58',
+      issues:[ iss('winter-harness#61','verifiability matrix template') ],
+      history:[
+        {at:'09:44', node:'build',   verdict:'pass', note:'worker: pass — docs build green'},
+        {at:'10:30', node:'review',  verdict:'pass', note:'review: pass — 0 findings'},
+        {at:'10:58', node:'deliver', verdict:'pass', note:'merged to main'}
+      ],
+      branches:[ {repo:'winter-harness', ref:'docs/verifiability-matrix', commits:2} ], assets:[] }
+  ],
+
+  runners:[
+    { name:'atlas',  workspace:'winter-workspace', slots:5, online:true },
+    { name:'zephyr', workspace:'winter-workspace', slots:4, online:false }
+  ],
+
+  /* merge queue: front non-landed entry is the landing train */
+  mq:[
+    { id:'CHK-7416', mqs:'landing' },
+    { id:'CHK-7391', mqs:'landed', at:'11:42' },
+    { id:'CHK-7387', mqs:'landed', at:'10:58' }
+  ],
+
+  events:[
+    { t:agoMin(9),  txt:'CHK-7416 cleared REVIEW — joined merge queue, now landing at MAIN' },
+    { t:agoMin(11), txt:'CHK-7414 parked at BUILD — operator question raised (capabilities doc conflict)' },
+    { t:agoMin(18), txt:'reviewer claimed CHK-7411 — cold review started' },
+    { t:agoMin(22), txt:'CHK-7409 parked at BUILD — operator question raised (docker socket policy)' },
+    { t:agoMin(33), txt:'CHK-7408 rework departed BUILD platform — addressing 2 review findings' },
+    { t:agoMin(40), txt:'CHK-7403 ESCALATED — retries exhausted at BUILD, resume ticket printed' },
+    { t:agoMin(41), txt:'review: fail on CHK-7408 — 2 findings, routed back to BUILD via fail loop' },
+    { t:agoMin(78), txt:'CHK-7391 LANDED at MAIN — merged (11:42)' }
+  ],
+
+  selected:new Set(),
+  openChunk:null,
+  nextId:7431,
+  freshEvent:false
+};
+
+function chunk(id){ return state.chunks.find(c => c.id === id); }
+function readySorted(){ return state.chunks.filter(c => c.status==='ready').sort((a,b)=>a.order-b.order); }
+function runningOn(name){ return state.chunks.filter(c => c.status==='running' && c.runner===name).length; }
+function addEvent(txt){ state.events.unshift({ t:hhmm(), txt }); state.events.length = Math.min(state.events.length, 40); state.freshEvent = true; }
+
+/* ---------------- line map (SVG drawn from data) ---------------- */
+
+const STX = { depot:0.045, build:0.185, review:0.505, deliver:0.805, main:0.958 };
+const PREV = { build:'depot', review:'build', deliver:'review' };
+const TRACK_Y = 128;
+
+function drawLine(){
+  const stage = $('#lineStage');
+  const w = stage.clientWidth, h = 208, y = TRACK_Y;
+  const svg = $('#lineSvg');
+  svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  const X = k => Math.round(STX[k]*w);
+  let s = '';
+  /* fail loop: review -> build */
+  s += `<path d="M ${X('review')} ${y-6} C ${X('review')} ${y-96}, ${X('build')} ${y-96}, ${X('build')} ${y-6}"
+          fill="none" stroke="#ffb52d" stroke-width="3" stroke-dasharray="7 6" opacity=".9"/>`;
+  s += `<polygon points="${X('build')-7},${y-16} ${X('build')+7},${y-22} ${X('build')+3},${y-7}" fill="#ffb52d"/>`;
+  s += `<text class="svg-loop" x="${(X('review')+X('build'))/2}" y="${y-80}" text-anchor="middle">FAIL LOOP · REVIEW → BUILD</text>`;
+  /* main running line */
+  s += `<line x1="${X('depot')}" y1="${y}" x2="${X('main')}" y2="${y}" stroke="#f4eeda" stroke-width="6" stroke-linecap="round"/>`;
+  /* depot stub */
+  s += `<line x1="${X('depot')}" y1="${y-12}" x2="${X('depot')}" y2="${y+12}" stroke="#8fa0c2" stroke-width="4" stroke-linecap="round"/>`;
+  s += `<text class="svg-sub" x="${X('depot')}" y="${y+32}" text-anchor="middle">DEPOT</text>`;
+  /* stations */
+  const stations = [ ['build','BUILD','NODE 01'], ['review','REVIEW','NODE 02'], ['deliver','DELIVER','NODE 03'] ];
+  for (const [k,label,sub] of stations){
+    s += `<circle cx="${X(k)}" cy="${y}" r="11" fill="#14305f" stroke="#f4eeda" stroke-width="5"/>`;
+    s += `<text class="svg-station" x="${X(k)}" y="${y+38}" text-anchor="middle">${label}</text>`;
+    s += `<text class="svg-sub" x="${X(k)}" y="${y+54}" text-anchor="middle">${sub}</text>`;
+  }
+  /* main terminus */
+  s += `<rect x="${X('main')-9}" y="${y-16}" width="18" height="32" rx="3" fill="#ffb52d" stroke="#f4eeda" stroke-width="4"/>`;
+  s += `<text class="svg-station" x="${X('main')}" y="${y+38}" text-anchor="middle" fill="#ffb52d">MAIN</text>`;
+  s += `<text class="svg-sub" x="${X('main')}" y="${y+54}" text-anchor="middle">TERMINUS</text>`;
+  svg.innerHTML = s;
+}
+
+const trainEls = new Map();
+function trainX(c){
+  const a = STX[PREV[c.node]], b = STX[c.node];
+  return a + Math.min(c.progress, 1) * (b - a);
+}
+function renderTrains(){
+  const layer = $('#trains');
+  const running = state.chunks.filter(c => c.status==='running');
+  const bySeg = {};
+  running.forEach(c => { (bySeg[c.node] = bySeg[c.node] || []).push(c); });
+  const seen = new Set();
+  running.forEach(c => {
+    seen.add(c.id);
+    let el = trainEls.get(c.id);
+    if (!el){
+      el = document.createElement('button');
+      el.type = 'button'; el.className = 'train';
+      el.addEventListener('click', () => openTimetable(c.id));
+      layer.appendChild(el); trainEls.set(c.id, el);
+    }
+    el.innerHTML = `<span class="loco disp num">${esc(c.id.replace('CHK-',''))}</span>`
+      + c.issues.map(i => `<span class="car mono">${esc(i.ref)}</span>`).join('');
+    el.setAttribute('aria-label', `${c.id} ${c.title} — running, between ${PREV[c.node]} and ${c.node}. Open timetable.`);
+    const lane = bySeg[c.node].indexOf(c);
+    el.style.left = (trainX(c)*100).toFixed(2) + '%';
+    el.style.top = (TRACK_Y - 26 - lane*32) + 'px';
+  });
+  for (const [id, el] of trainEls){ if (!seen.has(id)){ el.remove(); trainEls.delete(id); } }
+}
+
+/* ---------------- arrivals / merge queue ---------------- */
+
+function renderMq(){
+  const row = $('#mqRow');
+  const landing = state.mq.find(m => m.mqs === 'landing');
+  const queued  = state.mq.filter(m => m.mqs === 'queued');
+  const landed  = state.mq.filter(m => m.mqs === 'landed').slice(0,3);
+  let html = '';
+  if (landing){
+    const c = chunk(landing.id);
+    html += `<div class="mq-landing ${REDUCED ? '' : 'moving'}">
+        <span class="loco disp num">${esc(c.id.replace('CHK-',''))}</span>
+        ${c.issues.map(i => `<span class="car mono">${esc(i.ref)}</span>`).join('')}
+      </div>
+      <span class="buffer" aria-hidden="true"></span>
+      <span class="mq-note disp">▸ landing at main — final checks, one slot</span>`;
+  } else {
+    html += `<span class="mq-note disp" style="color:var(--muted)">platform clear — no train landing</span>`;
+  }
+  if (queued.length){
+    html += `<span class="mq-held disp">holding: ${queued.map((m,i) =>
+      `<span class="car mono">${esc(m.id)}·pos ${i+2}</span>`).join(' ')}</span>`;
+  }
+  html += `<div class="mq-landed num">` + landed.map(m =>
+      `<span class="ok">✓ <b>${esc(m.id)}</b> landed ${esc(m.at || '')}</span>`).join('') + `</div>`;
+  row.innerHTML = html;
+}
+
+/* ---------------- stats + runners ---------------- */
+
+function renderStats(){
+  const counts = { ready:0, running:0, waiting_on_human:0, needs_human:0, done:0 };
+  state.chunks.forEach(c => counts[c.status]++);
+  const P = (n,l) => `<div class="plaque"><div class="n num">${n}</div><div class="l disp">${l}</div></div>`;
+  let html = P(counts.ready,'Ready') + P(counts.running,'Running') + P(counts.waiting_on_human,'Waiting')
+           + P(counts.needs_human,'Needs Human') + P(counts.done,'Done');
+  html += `<div class="runnerbar">` + state.runners.map(r => {
+    const used = r.online ? Math.min(runningOn(r.name) + (r.name==='atlas' ? 0 : 0), r.slots) : 0;
+    return `<div class="runner disp ${r.online ? '' : 'offline'}">
+      <span class="lamp" aria-hidden="true"></span>
+      <span>Runner <b>${esc(r.name)}</b> · ${esc(r.workspace)}</span>
+      <span class="slots num">${r.online ? used + '/' + r.slots + ' slots' : 'out of service'}</span>
+    </div>`;
+  }).join('') + `</div>`;
+  $('#statrow').innerHTML = html;
+}
+
+/* ---------------- departures board ---------------- */
+
+function renderBoard(flapIds){
+  const ready = readySorted();
+  const board = $('#board');
+  let html = `<div class="board-cols disp"><span>cpl</span><span>dep</span><span>service</span><span>calling at</span><span>platform</span><span>order</span></div>`;
+  if (!ready.length) html += `<div class="board-empty disp">— queue empty · all services departed —</div>`;
+  ready.forEach((c, i) => {
+    const checked = state.selected.has(c.id) ? 'checked' : '';
+    html += `<div class="board-row ${flapIds && flapIds.has(c.id) ? 'flap' : ''}" data-id="${esc(c.id)}">
+      <span class="cell sel"><input type="checkbox" data-sel="${esc(c.id)}" ${checked} aria-label="Select ${esc(c.id)} for coupling"></span>
+      <span class="cell order num disp">${pad(i+1)}</span>
+      <span class="cell"><button class="svc-btn disp num" data-open="${esc(c.id)}">${esc(c.id)}</button></span>
+      <span class="cell issues">${c.issues.map(x => `<span class="chip mono">${esc(x.ref)}</span>`).join('')}</span>
+      <span class="cell platform disp">atlas · plat ${i+1}</span>
+      <span class="cell ctrl">
+        <button class="mv" data-mv="up" data-id="${esc(c.id)}" ${i===0?'disabled':''} aria-label="Move ${esc(c.id)} earlier in the queue">▲</button>
+        <button class="mv" data-mv="dn" data-id="${esc(c.id)}" ${i===ready.length-1?'disabled':''} aria-label="Move ${esc(c.id)} later in the queue">▼</button>
+      </span>
+    </div>`;
+  });
+  board.innerHTML = html;
+  board.querySelectorAll('[data-mv]').forEach(b => b.addEventListener('click', () => moveReady(b.dataset.id, b.dataset.mv)));
+  board.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => openTimetable(b.dataset.open)));
+  board.querySelectorAll('[data-sel]').forEach(cb => cb.addEventListener('change', () => {
+    cb.checked ? state.selected.add(cb.dataset.sel) : state.selected.delete(cb.dataset.sel);
+    updateGroupBtn();
+  }));
+  updateGroupBtn();
+}
+
+function updateGroupBtn(){
+  const n = [...state.selected].filter(id => { const c = chunk(id); return c && c.status==='ready'; }).length;
+  const btn = $('#groupBtn');
+  btn.disabled = n < 2;
+  btn.textContent = n >= 2 ? `Group ⛓ couple ${n}` : 'Group ⛓ couple';
+}
+
+function moveReady(id, dir){
+  const ready = readySorted();
+  const i = ready.findIndex(c => c.id === id);
+  const j = dir === 'up' ? i-1 : i+1;
+  if (j < 0 || j >= ready.length) return;
+  const a = ready[i], b = ready[j];
+  const tmp = a.order; a.order = b.order; b.order = tmp;
+  addEvent(`operator reordered departures — ${a.id} now departs ${dir === 'up' ? 'earlier' : 'later'}`);
+  renderBoard(new Set([a.id, b.id]));
+  renderEvents();
+}
+
+function groupSelected(){
+  const ids = [...state.selected].filter(id => { const c = chunk(id); return c && c.status==='ready'; });
+  if (ids.length < 2) return;
+  const members = ids.map(chunk).sort((a,b)=>a.order-b.order);
+  const merged = {
+    id:'CHK-' + (state.nextId++),
+    title:'coupled service (' + members.map(m => m.id.replace('CHK-','')).join('+') + ')',
+    status:'ready',
+    order: members[0].order,
+    issues: members.flatMap(m => m.issues),
+    history:[{ at:hhmm(), node:'build', verdict:'info',
+               note:'coupled from ' + members.map(m => m.id).join(' + ') + ' by operator' }],
+    branches:[], assets:[]
+  };
+  state.chunks = state.chunks.filter(c => !ids.includes(c.id));
+  state.chunks.push(merged);
+  readySorted().forEach((c, i) => { c.order = i + 1; });
+  state.selected.clear();
+  addEvent(`operator coupled ${members.map(m=>m.id).join(' + ')} → ${merged.id} (${merged.issues.length} issue pointers, one service)`);
+  renderBoard(new Set([merged.id]));
+  renderStats(); renderEvents();
+}
+$('#groupBtn').addEventListener('click', groupSelected);
+
+/* ---------------- announcements ---------------- */
+
+function renderAnnouncements(){
+  const col = $('#annCol');
+  let html = '';
+  state.chunks.filter(c => c.status==='waiting_on_human' && c.question).forEach(c => {
+    html += `<div class="ann">
+      <div class="ann-head disp"><span class="dot" aria-hidden="true"></span> Attention please — question <span class="who num">${esc(c.id)}</span></div>
+      <div class="ann-body">
+        <p class="q">${esc(c.question.text)}</p>
+        <p class="ctx mono">${c.issues.map(i => esc(i.ref)).join(' · ')} — parked at ${esc(c.node)} on ${esc(c.runner)}</p>
+        <div class="opts">${c.question.options.map((o, i) =>
+          `<button class="opt" data-ans="${esc(c.id)}" data-opt="${i}">${esc(o)}</button>`).join('')}</div>
+      </div>
+    </div>`;
+  });
+  state.chunks.filter(c => c.status==='needs_human').forEach(c => {
+    html += `<div class="ann ticket">
+      <div class="ann-head disp"><span class="dot" aria-hidden="true"></span> Escalation — service suspended <span class="who num">${esc(c.id)}</span></div>
+      <div class="ann-body">
+        <p class="q">${esc(c.escalation)}</p>
+        <p class="ctx mono">${c.issues.map(i => esc(i.ref)).join(' · ')}</p>
+        <div class="resume mono"><code>${esc(c.resume)}</code>
+          <button class="copy-btn disp" data-copy="${esc(c.resume)}">Copy</button></div>
+        <span class="stamp disp">Present ticket to resume manually</span>
+      </div>
+    </div>`;
+  });
+  if (!html) html = `<div class="ann"><div class="ann-body quiet">No open announcements — all services running to time.</div></div>`;
+  col.innerHTML = html;
+  col.querySelectorAll('[data-ans]').forEach(b => b.addEventListener('click', () => answer(b.dataset.ans, Number(b.dataset.opt))));
+  bindCopy(col);
+}
+
+function answer(id, optIdx){
+  const c = chunk(id);
+  if (!c || c.status !== 'waiting_on_human') return;
+  const choice = c.question.options[optIdx];
+  c.question.answered = choice;
+  c.status = 'running';
+  c.progress = Math.min(c.progress || 0.3, 0.9);
+  c.history.push({ at:hhmm(), node:c.node, verdict:'info', note:`operator answered: "${choice}" — agent resumed` });
+  addEvent(`operator answered ${c.id}: "${choice}" — service resumed at ${c.node.toUpperCase()}`);
+  renderAll();
+  if (state.openChunk === id) fillSheet(c);
+}
+
+function bindCopy(root){
+  root.querySelectorAll('[data-copy]').forEach(b => b.addEventListener('click', () => {
+    const done = ok => { b.textContent = ok ? 'Copied' : 'Select+copy'; setTimeout(() => { b.textContent = 'Copy'; }, 1600); };
+    try { navigator.clipboard.writeText(b.dataset.copy).then(() => done(true), () => done(false)); }
+    catch (e) { done(false); }
+  }));
+}
+
+/* ---------------- events ---------------- */
+
+function renderEvents(){
+  $('#events').innerHTML = state.events.slice(0, 12).map((e, i) =>
+    `<li class="${i===0 && state.freshEvent ? 'fresh' : ''}"><span class="t num mono">${esc(e.t)}</span><span>${esc(e.txt)}</span></li>`).join('');
+  state.freshEvent = false;
+}
+
+/* ---------------- timetable modal ---------------- */
+
+const STATUS_LABEL = { ready:'ready — queued', running:'running', waiting_on_human:'waiting on human', needs_human:'needs human', done:'done — merged' };
+
+function openTimetable(id){
+  const c = chunk(id);
+  if (!c) return;
+  state.openChunk = id;
+  fillSheet(c);
+  $('#modal').hidden = false;
+  $('#closeBtn').focus();
+}
+function closeTimetable(){
+  $('#modal').hidden = true;
+  state.openChunk = null;
+}
+function fillSheet(c){
+  $('#sheetTitle').textContent = c.id + ' — timetable';
+  $('#sheetStamp').textContent = STATUS_LABEL[c.status] || c.status;
+  const body = $('#sheetBody');
+  let html = `<p class="sheet-title">${esc(c.title)}</p>
+    <p class="sheet-sub">${c.status==='running' || c.status==='waiting_on_human' || c.status==='needs_human'
+        ? 'runner ' + esc(c.runner || '—') + ' · currently at ' + esc(c.node || '—') + ' node'
+        : c.status==='done' ? 'landed at main ' + esc(c.landedAt || '') : 'awaiting departure — unclaimed'}</p>`;
+
+  html += `<h4 class="disp">Issue pointers</h4>` + c.issues.map(i =>
+    `<div class="issue-line"><span class="chip mono">${esc(i.ref)}</span><span>${esc(i.title)}</span></div>`).join('');
+
+  html += `<h4 class="disp">Node history &amp; judgements</h4>`;
+  html += c.history.length
+    ? `<ul class="tl">` + c.history.map(h =>
+        `<li class="v-${esc(h.verdict)}"><span class="t num mono">${esc(h.at)}</span><span class="node-b disp">${esc(h.node)}</span><span class="note">${esc(h.note)}</span></li>`).join('') + `</ul>`
+    : `<p class="quiet">No movements yet — service has not departed.</p>`;
+
+  html += `<h4 class="disp">Artifacts</h4>`;
+  if (c.branches.length || c.assets.length){
+    html += c.branches.map(b =>
+      `<div class="art-line mono"><span class="chip">${esc(b.repo)}@${esc(b.ref)}</span><span class="arrow">→</span><span class="num">${b.commits} commit${b.commits===1?'':'s'}</span></div>`).join('');
+    if (c.assets.length) html += `<div class="art-line">${c.assets.map(a => `<span class="asset mono">${esc(a)}</span>`).join('')}</div>`;
+  } else {
+    html += `<p class="quiet">None yet.</p>`;
+  }
+
+  if (c.status==='waiting_on_human' && c.question && !c.question.answered){
+    html += `<h4 class="disp">Open question</h4><div class="sheet-q">
+      <p class="q">${esc(c.question.text)}</p>
+      <div class="opts">${c.question.options.map((o,i) =>
+        `<button class="opt" data-ans="${esc(c.id)}" data-opt="${i}">${esc(o)}</button>`).join('')}</div>
+    </div>`;
+  }
+  if (c.status==='needs_human'){
+    html += `<h4 class="disp">Resume ticket</h4>
+      <div class="resume mono"><code>${esc(c.resume)}</code><button class="copy-btn disp" data-copy="${esc(c.resume)}">Copy</button></div>`;
+  }
+  body.innerHTML = html;
+  body.querySelectorAll('[data-ans]').forEach(b => b.addEventListener('click', () => answer(b.dataset.ans, Number(b.dataset.opt))));
+  bindCopy(body);
+}
+$('#closeBtn').addEventListener('click', closeTimetable);
+$('#backdrop').addEventListener('click', closeTimetable);
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#modal').hidden) closeTimetable(); });
+
+/* ---------------- live simulation ---------------- */
+
+function promoteMq(){
+  const front = state.mq.find(m => m.mqs !== 'landed');
+  if (front) front.mqs = 'landing';
+}
+
+function advance(c){
+  const t = hhmm();
+  if (c.node === 'build'){
+    c.history.push({ at:t, node:'build', verdict:'pass', note:'worker: pass — tests green; checks: lint ok, typecheck ok' });
+    c.node = 'review'; c.progress = 0.06;
+    addEvent(`${c.id} departed BUILD — now approaching REVIEW`);
+  } else if (c.node === 'review'){
+    if (Math.random() < 0.62){
+      c.history.push({ at:t, node:'review', verdict:'pass', note:'review: pass — 0 blocking findings; checks: diff-cover ok' });
+      c.node = 'deliver'; c.progress = 0.06;
+      state.mq.splice(state.mq.findIndex(m => m.mqs==='landed') === -1 ? state.mq.length : state.mq.findIndex(m => m.mqs==='landed'), 0, { id:c.id, mqs:'queued' });
+      promoteMq();
+      addEvent(`${c.id} cleared REVIEW — joined the merge queue for MAIN`);
+    } else {
+      const n = 1 + Math.floor(Math.random()*3);
+      c.history.push({ at:t, node:'review', verdict:'fail', note:`review: fail — ${n} finding${n>1?'s':''}, routed back to build` });
+      c.node = 'build'; c.progress = 0.12;
+      addEvent(`review: fail on ${c.id} — ${n} finding${n>1?'s':''}, looped back to BUILD`);
+    }
+  } else if (c.node === 'deliver'){
+    const entry = state.mq.find(m => m.id === c.id && m.mqs !== 'landed');
+    if (entry && entry.mqs !== 'landing'){ c.progress = 0.97; return; } /* hold outside the terminus */
+    c.status = 'done'; c.landedAt = t;
+    if (entry){ entry.mqs = 'landed'; entry.at = t; }
+    c.history.push({ at:t, node:'deliver', verdict:'pass', note:'merged to main — branch fast-forwarded, feature env torn down' });
+    promoteMq();
+    addEvent(`${c.id} LANDED at MAIN — merged to master`);
+  }
+}
+
+function maybeClaim(){
+  const atlas = state.runners[0];
+  if (!atlas.online || runningOn('atlas') >= atlas.slots) return;
+  const ready = readySorted();
+  if (!ready.length) return;
+  const c = ready[0];
+  c.status = 'running'; c.node = 'build'; c.progress = 0.05; c.runner = 'atlas';
+  delete c.order;
+  readySorted().forEach((r, i) => { r.order = i + 1; });
+  state.selected.delete(c.id);
+  c.history.push({ at:hhmm(), node:'build', verdict:'running', note:'claimed by atlas — build started' });
+  addEvent(`runner atlas claimed ${c.id} — departing BUILD, next service moves up`);
+}
+
+const FLAVOR = [
+  c => `${c.id} — worker heartbeat ok at ${c.node.toUpperCase()} (slot on atlas)`,
+  c => `${c.id} pushed ${1 + Math.floor(Math.random()*3)} commit(s) to ${c.branches[0] ? c.branches[0].repo + '@' + c.branches[0].ref : 'winter@feat/wip'}`,
+  c => `${c.id} — deterministic checks re-ran green at ${c.node.toUpperCase()}`,
+  c => `signal check: ${c.id} on time between ${PREV[c.node].toUpperCase()} and ${c.node.toUpperCase()}`
+];
+
+function tick(){
+  const running = state.chunks.filter(c => c.status==='running');
+  if (running.length){
+    const c = running[Math.floor(Math.random()*running.length)];
+    c.progress += 0.07 + Math.random()*0.12;
+    if (c.branches[0] && Math.random() < 0.4) c.branches[0].commits += 1;
+    if (c.progress >= 1) advance(c);
+    else if (Math.random() < 0.35) addEvent(FLAVOR[Math.floor(Math.random()*FLAVOR.length)](c));
+  }
+  if (Math.random() < 0.22) maybeClaim();
+  renderAll();
+  if (state.openChunk){ const oc = chunk(state.openChunk); if (oc) fillSheet(oc); }
+}
+
+/* ---------------- boot ---------------- */
+
+function renderAll(){
+  renderStats();
+  renderTrains();
+  renderMq();
+  renderBoard();
+  renderAnnouncements();
+  renderEvents();
+}
+
+function tickClock(){
+  $('#clock').textContent = hhmmss();
+  const d = new Date();
+  const days = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+  const mons = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  $('#dateline').textContent = `${days[d.getDay()]} ${pad(d.getDate())} ${mons[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+drawLine();
+addEventListener('resize', drawLine);
+renderAll();
+tickClock();
+setInterval(tickClock, 1000);
+setInterval(tick, 4200);
+</script>
+</body>
+</html>

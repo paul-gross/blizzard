@@ -1,0 +1,1012 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>blizzard hub — flow board</title>
+<style>
+  :root{
+    --ground:#F8EFE2;
+    --surface:#FFFDF8;
+    --surface-dim:#FBF5EA;
+    --ink:#3D3227;
+    --ink-soft:#7A6B58;
+    --ink-faint:#A99A85;
+    --line:#E8DCC8;
+    --line-strong:#D9C9AE;
+    --primary:#C2490D;
+    --primary-deep:#9E3907;
+    --primary-tint:#FBE4D4;
+    --r:12px;
+    --r-pill:999px;
+    /* column tints */
+    --tint-upnext-bg:#F8E3A8; --tint-upnext-ink:#775711;
+    --tint-build-bg:#F9D4B2;  --tint-build-ink:#87491A;
+    --tint-review-bg:#F6C9C3; --tint-review-ink:#8C3A33;
+    --tint-deliver-bg:#D8E4C2;--tint-deliver-ink:#4B6A2E;
+    --tint-landed-bg:#C6E0DA; --tint-landed-ink:#2E6A61;
+    --rail-accent:#DE9A2B;
+    /* semantic status hues (distinct from primary) */
+    --st-ready-bg:#EEE6D6;   --st-ready-ink:#6E6250;
+    --st-running-bg:#DCEBF8; --st-running-ink:#1D5FA0;
+    --st-waiting-bg:#FBEBC0; --st-waiting-ink:#8A5E00;
+    --st-needs-bg:#F9D8D3;   --st-needs-ink:#A72B1D;
+    --st-done-bg:#DCEFDF;    --st-done-ink:#2A6E3F;
+    --shadow-card:0 1px 2px rgba(94,72,40,.08), 0 3px 10px rgba(94,72,40,.07);
+    --shadow-lift:0 4px 8px rgba(94,72,40,.12), 0 12px 28px rgba(94,72,40,.14);
+    --font:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono:ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:var(--font);
+    background:var(--ground);
+    color:var(--ink);
+    font-size:14px;
+    line-height:1.45;
+    overflow-x:hidden;
+    display:flex;flex-direction:column;
+  }
+  button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+  :focus-visible{outline:2px solid var(--primary);outline-offset:2px;border-radius:4px}
+
+  /* ── Header ─────────────────────────────── */
+  header.app{
+    display:flex;align-items:center;gap:20px;flex-wrap:wrap;
+    padding:12px 20px;
+    background:var(--surface);
+    border-bottom:1px solid var(--line);
+  }
+  .brand{display:flex;align-items:baseline;gap:8px}
+  .brand .logo{
+    font-weight:800;font-size:19px;letter-spacing:-.02em;color:var(--primary);
+  }
+  .brand .sub{font-size:13px;color:var(--ink-soft)}
+  .fleet-stats{display:flex;gap:10px;flex-wrap:wrap}
+  .stat{
+    display:flex;align-items:center;gap:7px;
+    background:var(--surface-dim);border:1px solid var(--line);
+    border-radius:var(--r);padding:5px 12px;
+  }
+  .stat .num{font-weight:700;font-size:16px}
+  .stat .lbl{font-size:12px;color:var(--ink-soft)}
+  .stat .dot{width:8px;height:8px;border-radius:50%}
+  .runners{display:flex;gap:8px;margin-left:auto}
+  .runner-badge{
+    display:flex;align-items:center;gap:7px;
+    border:1px solid var(--line);border-radius:var(--r);
+    background:var(--surface-dim);padding:5px 11px;font-size:12.5px;
+  }
+  .runner-badge .rdot{width:8px;height:8px;border-radius:50%}
+  .rdot.on{background:#3E9E5B}
+  .rdot.off{background:#B9AA92}
+  .runner-badge .rname{font-weight:700}
+  .runner-badge .rmeta{color:var(--ink-soft)}
+  .clock{font-variant-numeric:tabular-nums;color:var(--ink-soft);font-size:12.5px}
+
+  /* ── Merge queue strip ─────────────────── */
+  .merge-strip{
+    display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+    padding:8px 20px;
+    background:var(--surface-dim);
+    border-bottom:1px solid var(--line);
+    font-size:12.5px;
+  }
+  .merge-strip .mq-label{font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.06em;font-size:11px}
+  .mq-item{
+    display:inline-flex;align-items:center;gap:7px;
+    background:var(--surface);border:1px solid var(--line-strong);
+    border-radius:var(--r-pill);padding:3px 12px 3px 9px;
+  }
+  .mq-item .pulse{
+    width:8px;height:8px;border-radius:50%;background:#3E9E5B;
+    animation:pulse 1.4s ease-in-out infinite;
+  }
+  .mq-item.queued .pulse{background:var(--ink-faint);animation:none}
+  .mq-empty{color:var(--ink-faint);font-style:italic}
+  .mq-landed{color:var(--ink-soft);margin-left:auto}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.75)}}
+
+  /* ── Main layout ────────────────────────── */
+  main{flex:1;display:flex;min-height:0;overflow:hidden}
+  .board{
+    flex:1;display:flex;gap:14px;align-items:flex-start;
+    overflow-x:auto;overflow-y:hidden;
+    padding:16px 8px 16px 20px;
+  }
+  .col{
+    flex:0 0 268px;max-height:100%;
+    display:flex;flex-direction:column;
+    background:var(--surface-dim);
+    border:1px solid var(--line);
+    border-radius:var(--r);
+  }
+  .col-head{
+    display:flex;align-items:center;gap:8px;
+    padding:9px 12px;
+    border-radius:var(--r) var(--r) 0 0;
+    font-weight:700;font-size:13px;
+  }
+  .col-head .count{
+    margin-left:auto;font-size:12px;font-weight:700;
+    background:rgba(255,255,255,.55);border-radius:var(--r-pill);
+    padding:1px 9px;
+  }
+  .col[data-col="upnext"]  .col-head{background:var(--tint-upnext-bg); color:var(--tint-upnext-ink)}
+  .col[data-col="build"]   .col-head{background:var(--tint-build-bg);  color:var(--tint-build-ink)}
+  .col[data-col="review"]  .col-head{background:var(--tint-review-bg); color:var(--tint-review-ink)}
+  .col[data-col="deliver"] .col-head{background:var(--tint-deliver-bg);color:var(--tint-deliver-ink)}
+  .col[data-col="landed"]  .col-head{background:var(--tint-landed-bg); color:var(--tint-landed-ink)}
+  .col-hint{padding:6px 12px 0;font-size:11.5px;color:var(--ink-faint)}
+  .col-body{padding:10px;display:flex;flex-direction:column;gap:10px;overflow-y:auto}
+  .col-empty{color:var(--ink-faint);font-size:12.5px;text-align:center;padding:18px 6px;font-style:italic}
+
+  /* group action bar */
+  .group-bar{
+    margin:8px 10px 0;display:none;align-items:center;gap:8px;
+    background:var(--primary-tint);border:1px dashed var(--primary);
+    border-radius:var(--r);padding:6px 10px;font-size:12.5px;color:var(--primary-deep);
+  }
+  .group-bar.show{display:flex}
+  .group-bar button.go{
+    margin-left:auto;background:var(--primary);color:#fff;font-weight:700;
+    border-radius:var(--r-pill);padding:4px 14px;font-size:12.5px;
+  }
+  .group-bar button.go:hover{background:var(--primary-deep)}
+
+  /* ── Cards ──────────────────────────────── */
+  .card{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:var(--r);
+    box-shadow:var(--shadow-card);
+    padding:11px 12px 10px;
+    cursor:pointer;
+    transition:box-shadow .15s ease, transform .15s ease;
+    position:relative;
+  }
+  .card:hover{box-shadow:var(--shadow-lift);transform:translateY(-1px)}
+  .card.dragging{opacity:.45}
+  .card.selected{border-color:var(--primary);box-shadow:0 0 0 2px var(--primary-tint), var(--shadow-card)}
+  .card .top{display:flex;align-items:flex-start;gap:8px}
+  .card h3{font-size:13.5px;font-weight:700;line-height:1.3;flex:1}
+  .card .pos{
+    flex:0 0 auto;font-size:11px;font-weight:800;color:var(--tint-upnext-ink);
+    background:var(--tint-upnext-bg);border-radius:var(--r-pill);
+    min-width:22px;text-align:center;padding:1px 7px;
+  }
+  .chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+  .chip{
+    font-family:var(--mono);font-size:11px;
+    background:var(--surface-dim);border:1px solid var(--line);
+    border-radius:var(--r-pill);padding:1px 8px;color:var(--ink-soft);
+  }
+  .bundle-note{margin-top:6px;font-size:11.5px;color:var(--primary-deep);font-weight:600}
+  .card .meta{display:flex;align-items:center;gap:8px;margin-top:9px;flex-wrap:wrap}
+  .pill{
+    font-size:10.5px;font-weight:700;letter-spacing:.03em;
+    border-radius:var(--r-pill);padding:2px 9px;text-transform:uppercase;
+  }
+  .pill.ready{background:var(--st-ready-bg);color:var(--st-ready-ink)}
+  .pill.running{background:var(--st-running-bg);color:var(--st-running-ink)}
+  .pill.waiting_on_human{background:var(--st-waiting-bg);color:var(--st-waiting-ink)}
+  .pill.needs_human{background:var(--st-needs-bg);color:var(--st-needs-ink)}
+  .pill.done{background:var(--st-done-bg);color:var(--st-done-ink)}
+  .mini-runner{
+    display:inline-flex;align-items:center;gap:5px;
+    font-size:11.5px;color:var(--ink-soft);
+  }
+  .mini-runner::before{content:"";width:7px;height:7px;border-radius:50%;background:#3E9E5B}
+  .trail{display:inline-flex;gap:5px;margin-left:auto;align-items:center}
+  .trail .tdot{width:9px;height:9px;border-radius:50%;background:var(--line-strong)}
+  .trail .tdot.visited{background:var(--tint-landed-ink)}
+  .trail .tdot.current{background:#fff;border:2.5px solid var(--primary)}
+  .landed-note{margin-top:8px;font-size:11.5px;color:var(--st-done-ink);font-weight:600}
+  .commits-note{margin-top:6px;font-size:11.5px;color:var(--ink-soft);font-family:var(--mono)}
+
+  /* reorder handles on ready cards */
+  .card .row-controls{display:flex;align-items:center;gap:4px;margin-top:9px}
+  .sel-box{width:15px;height:15px;accent-color:var(--primary);cursor:pointer}
+  .nudge{
+    font-size:12px;color:var(--ink-soft);border:1px solid var(--line);
+    border-radius:6px;width:24px;height:22px;line-height:1;background:var(--surface-dim);
+  }
+  .nudge:hover{background:var(--primary-tint);color:var(--primary-deep)}
+  .drag-hint{font-size:10.5px;color:var(--ink-faint);margin-left:auto}
+
+  /* ── Needs you rail ─────────────────────── */
+  .rail{
+    flex:0 0 296px;display:flex;flex-direction:column;gap:0;
+    border-left:1px solid var(--line);
+    background:var(--surface);
+    overflow-y:auto;
+  }
+  .rail-section{padding:14px 14px 6px}
+  .rail h2{
+    font-size:12px;text-transform:uppercase;letter-spacing:.07em;
+    color:var(--ink-soft);display:flex;align-items:center;gap:8px;
+  }
+  .rail h2 .accent{width:10px;height:10px;border-radius:50%;background:var(--rail-accent)}
+  .rail h2 .rc{margin-left:auto;font-size:11px;background:var(--st-waiting-bg);color:var(--st-waiting-ink);border-radius:var(--r-pill);padding:1px 8px}
+  .ask-card{
+    margin-top:10px;background:var(--surface-dim);
+    border:1px solid var(--line-strong);border-left:4px solid var(--rail-accent);
+    border-radius:var(--r);padding:10px 11px;
+  }
+  .ask-card.escalated{border-left-color:var(--st-needs-ink)}
+  .ask-card .who{font-size:11.5px;color:var(--ink-soft);margin-bottom:3px}
+  .ask-card .who b{color:var(--ink)}
+  .ask-card .q{font-size:13px;font-weight:600;margin:4px 0 8px;line-height:1.35}
+  .opt{
+    display:block;width:100%;text-align:left;
+    background:var(--surface);border:1px solid var(--line-strong);
+    border-radius:var(--r);padding:6px 10px;font-size:12.5px;margin-top:6px;
+    transition:background .12s ease,border-color .12s ease;
+  }
+  .opt:hover{background:var(--primary-tint);border-color:var(--primary)}
+  .resume-block{margin-top:6px}
+  .resume-block code{
+    display:block;font-family:var(--mono);font-size:11.5px;
+    background:#3D3227;color:#F5E9D6;border-radius:8px;padding:7px 9px;
+    overflow-x:auto;white-space:nowrap;
+  }
+  .copy-btn{
+    margin-top:6px;font-size:11.5px;font-weight:700;color:var(--primary-deep);
+    background:var(--primary-tint);border-radius:var(--r-pill);padding:3px 12px;
+  }
+  .copy-btn:hover{background:var(--primary);color:#fff}
+  .rail-empty{margin-top:10px;font-size:12.5px;color:var(--ink-faint);font-style:italic}
+
+  /* event stream */
+  .events{list-style:none;margin-top:10px;padding-bottom:16px}
+  .events li{
+    display:flex;gap:9px;padding:6px 0;font-size:12px;
+    border-bottom:1px dashed var(--line);
+    animation:slidein .3s ease;
+  }
+  @keyframes slidein{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+  .events .edot{flex:0 0 8px;width:8px;height:8px;border-radius:50%;margin-top:5px}
+  .edot.transition{background:var(--st-running-ink)}
+  .edot.claim{background:var(--tint-build-ink)}
+  .edot.ask{background:var(--rail-accent)}
+  .edot.deliver{background:var(--st-done-ink)}
+  .edot.commit{background:var(--ink-faint)}
+  .edot.system{background:var(--st-needs-ink)}
+  .events .etime{flex:0 0 auto;color:var(--ink-faint);font-variant-numeric:tabular-nums;font-size:11px;margin-top:1px}
+  .events .etext{color:var(--ink-soft)}
+  .events .etext b{color:var(--ink)}
+
+  /* ── Detail overlay ─────────────────────── */
+  .overlay{
+    position:fixed;inset:0;background:rgba(61,50,39,.35);
+    display:none;align-items:stretch;justify-content:flex-end;z-index:40;
+  }
+  .overlay.open{display:flex}
+  .detail{
+    width:min(480px,94vw);background:var(--surface);height:100%;
+    box-shadow:-8px 0 32px rgba(61,50,39,.25);
+    overflow-y:auto;padding:20px 22px 40px;
+    animation:slidepanel .22s ease;
+  }
+  @keyframes slidepanel{from{transform:translateX(30px);opacity:.5}to{transform:none;opacity:1}}
+  .detail .d-close{
+    float:right;font-size:20px;line-height:1;color:var(--ink-soft);
+    border-radius:8px;padding:4px 9px;
+  }
+  .detail .d-close:hover{background:var(--surface-dim)}
+  .detail .d-id{font-family:var(--mono);font-size:11.5px;color:var(--ink-faint)}
+  .detail h2.d-title{font-size:18px;font-weight:800;margin:4px 0 10px;line-height:1.25}
+  .detail section{margin-top:18px}
+  .detail section > h4{
+    font-size:11px;text-transform:uppercase;letter-spacing:.07em;
+    color:var(--ink-soft);margin-bottom:8px;
+  }
+  .issue-row{
+    display:flex;gap:9px;align-items:baseline;padding:6px 0;
+    border-bottom:1px dashed var(--line);font-size:13px;
+  }
+  .issue-row .ptr{font-family:var(--mono);font-size:12px;color:var(--primary-deep);font-weight:700;flex:0 0 auto}
+  .hist{list-style:none}
+  .hist li{
+    position:relative;padding:0 0 14px 22px;font-size:12.5px;
+  }
+  .hist li::before{
+    content:"";position:absolute;left:5px;top:5px;width:9px;height:9px;border-radius:50%;
+    background:var(--tint-landed-ink);
+  }
+  .hist li::after{
+    content:"";position:absolute;left:9px;top:16px;bottom:-2px;width:1.5px;background:var(--line-strong);
+  }
+  .hist li:last-child::after{display:none}
+  .hist li.fail::before{background:var(--st-needs-ink)}
+  .hist li.active::before{background:#fff;border:2.5px solid var(--primary);left:3px;top:3px}
+  .hist .h-node{font-weight:700}
+  .hist .h-verdict{color:var(--ink-soft)}
+  .hist .h-verdict.fail{color:var(--st-needs-ink);font-weight:600}
+  .art-row{
+    display:flex;align-items:center;gap:8px;padding:6px 0;
+    border-bottom:1px dashed var(--line);font-size:12.5px;
+  }
+  .art-row .a-kind{
+    font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;
+    background:var(--surface-dim);border:1px solid var(--line);border-radius:var(--r-pill);
+    padding:1px 8px;color:var(--ink-soft);flex:0 0 auto;
+  }
+  .art-row code{font-family:var(--mono);font-size:11.5px;color:var(--ink)}
+  .art-row .a-commits{margin-left:auto;color:var(--ink-soft);font-size:11.5px;white-space:nowrap}
+  .d-question{
+    background:var(--st-waiting-bg);border-radius:var(--r);padding:11px 12px;
+  }
+  .d-question .q{font-weight:600;font-size:13px;color:var(--st-waiting-ink);margin-bottom:4px}
+  .d-resume{background:var(--st-needs-bg);border-radius:var(--r);padding:11px 12px}
+  .d-resume p{font-size:12.5px;color:var(--st-needs-ink);font-weight:600;margin-bottom:7px}
+
+  .toast{
+    position:fixed;bottom:18px;left:50%;transform:translateX(-50%);
+    background:var(--ink);color:#F8EFE2;border-radius:var(--r-pill);
+    padding:8px 18px;font-size:13px;box-shadow:var(--shadow-lift);
+    opacity:0;pointer-events:none;transition:opacity .25s ease;z-index:60;
+  }
+  .toast.show{opacity:1}
+
+  @media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{animation:none !important;transition:none !important}
+  }
+</style>
+</head>
+<body>
+<header class="app">
+  <div class="brand">
+    <span class="logo">blizzard</span>
+    <span class="sub">flow board</span>
+  </div>
+  <div class="fleet-stats" id="fleetStats"></div>
+  <div class="runners" id="runnerBadges"></div>
+  <span class="clock" id="clock"></span>
+</header>
+
+<div class="merge-strip" id="mergeStrip"></div>
+
+<main>
+  <div class="board" id="board"></div>
+  <aside class="rail" aria-label="Needs you and live events">
+    <div class="rail-section">
+      <h2><span class="accent"></span> Needs you <span class="rc" id="railCount">0</span></h2>
+      <div id="railList"></div>
+    </div>
+    <div class="rail-section">
+      <h2>Live events</h2>
+      <ul class="events" id="eventList"></ul>
+    </div>
+  </aside>
+</main>
+
+<div class="overlay" id="overlay">
+  <div class="detail" role="dialog" aria-modal="true" aria-labelledby="detailTitle" id="detailPanel"></div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+/* ═════════ fake clock ═════════ */
+let clockMin = 9*60 + 41;
+function fmtTime(m){
+  let h = Math.floor(m/60)%24, mm = m%60;
+  const ap = h >= 12 ? 'pm' : 'am';
+  h = h%12; if(h===0) h=12;
+  return h + ':' + String(mm).padStart(2,'0') + ap;
+}
+function now(){ return fmtTime(clockMin); }
+
+/* ═════════ seed data ═════════ */
+const runners = [
+  { name:'atlas',  workspace:'winter-workspace',   slots:5, used:3, online:true },
+  { name:'zephyr', workspace:'winter-workspace-2', slots:4, used:0, online:false, lastSeen:'11:20pm' }
+];
+
+const chunks = [
+  /* ready queue */
+  { id:'c-214', title:'Dashboard config reload on refresh',
+    issues:[{repo:'winter', num:431, title:'Reload config on dashboard refresh so new repos appear'}],
+    repos:['winter'], node:'ready', status:'ready', runner:null,
+    history:[{node:'queued', at:'8:55am', verdict:'', note:'Added to the ready queue'}],
+    artifacts:[] },
+  { id:'c-215', title:'Doctor probe for docker healthchecks',
+    issues:[{repo:'winter-service-docker', num:57, title:'Doctor probe should surface unhealthy containers'}],
+    repos:['winter-service-docker'], node:'ready', status:'ready', runner:null,
+    history:[{node:'queued', at:'9:02am', verdict:'', note:'Added to the ready queue'}],
+    artifacts:[] },
+  { id:'c-216', title:'Issue-format lint for epics',
+    issues:[{repo:'winter-github', num:23, title:'Lint epic issues for required sections'}],
+    repos:['winter-github'], node:'ready', status:'ready', runner:null,
+    history:[{node:'queued', at:'9:15am', verdict:'', note:'Added to the ready queue'}],
+    artifacts:[] },
+  { id:'c-217', title:'Docs: capabilities routing pages',
+    issues:[
+      {repo:'winter-docs', num:88, title:'Document the capabilities slot contract'},
+      {repo:'winter-docs', num:91, title:'Add provider comparison table (tmux vs docker)'}
+    ],
+    repos:['winter-docs'], node:'ready', status:'ready', runner:null,
+    history:[{node:'queued', at:'9:20am', verdict:'', note:'2 issues bundled by you'}],
+    artifacts:[], bundled:true },
+
+  /* running */
+  { id:'c-208', title:'ws push --dry-run flag',
+    issues:[{repo:'winter', num:427, title:'ws push: add --dry-run to preview per-repo pushes'}],
+    repos:['winter'], node:'build', status:'running', runner:'atlas',
+    history:[
+      {node:'queued', at:'8:12am', verdict:'', note:'Added to the ready queue'},
+      {node:'build', at:'8:47am', verdict:'running', note:'Claimed by atlas — slot 1/5'}
+    ],
+    artifacts:[{kind:'branch', repo:'winter', ref:'feat/push-dry-run', commits:3}] },
+  { id:'c-209', title:'Port registry drift repair',
+    issues:[
+      {repo:'winter', num:419, title:'Detect and repair port-registry drift on ws init'},
+      {repo:'winter-harness', num:12, title:'Verifiability row for port-registry repair'}
+    ],
+    repos:['winter','winter-harness'], node:'review', status:'running', runner:'atlas',
+    history:[
+      {node:'queued', at:'7:40am', verdict:'', note:'Added to the ready queue'},
+      {node:'build', at:'8:05am', verdict:'pass', note:'worker: pass · checks: lint ✓ tests ✓ (34/34)'},
+      {node:'review', at:'9:12am', verdict:'running', note:'Reviewer reading the diff'}
+    ],
+    artifacts:[
+      {kind:'branch', repo:'winter', ref:'feat/port-drift', commits:5},
+      {kind:'branch', repo:'winter-harness', ref:'feat/port-drift', commits:1},
+      {kind:'asset', name:'review-notes.md'}
+    ] },
+  { id:'c-210', title:'tmux layout hook v2',
+    issues:[{repo:'winter-service-tmux', num:34, title:'Layout hook: per-service pane sizing'}],
+    repos:['winter-service-tmux'], node:'deliver', status:'running', runner:'atlas',
+    history:[
+      {node:'queued', at:'6:58am', verdict:'', note:'Added to the ready queue'},
+      {node:'build', at:'7:20am', verdict:'pass', note:'worker: pass · checks: lint ✓ tests ✓ (18/18)'},
+      {node:'review', at:'8:40am', verdict:'pass', note:'review: pass — 0 findings'},
+      {node:'deliver', at:'9:31am', verdict:'running', note:'Entered the merge queue — landing now'}
+    ],
+    artifacts:[{kind:'branch', repo:'winter-service-tmux', ref:'feat/layout-hook-v2', commits:4}] },
+
+  /* waiting on human */
+  { id:'c-205', title:'Extension scaffold command',
+    issues:[{repo:'winter', num:402, title:'winter ext scaffold: generate a new extension skeleton'}],
+    repos:['winter'], node:'build', status:'waiting_on_human', runner:'atlas',
+    history:[
+      {node:'queued', at:'7:02am', verdict:'', note:'Added to the ready queue'},
+      {node:'build', at:'7:31am', verdict:'paused', note:'Agent asked a question and parked'}
+    ],
+    artifacts:[{kind:'branch', repo:'winter', ref:'feat/ext-scaffold', commits:2}],
+    question:{
+      text:'Where should the scaffold place the new extension’s config?',
+      askedAt:'8:58am',
+      options:[
+        '.winter/config/<ext>/ — match tmux + docker',
+        'Extension-local defaults, no workspace file',
+        'Prompt per extension at scaffold time'
+      ]
+    } },
+  { id:'c-206', title:'Retry policy for flaky fetch',
+    issues:[{repo:'winter', num:415, title:'Back off and retry transient fetch failures'}],
+    repos:['winter'], node:'review', status:'waiting_on_human', runner:'atlas',
+    history:[
+      {node:'queued', at:'7:10am', verdict:'', note:'Added to the ready queue'},
+      {node:'build', at:'7:48am', verdict:'pass', note:'worker: pass · checks: lint ✓ tests ✓ (26/26)'},
+      {node:'review', at:'9:24am', verdict:'paused', note:'Reviewer asked a question and parked'}
+    ],
+    artifacts:[
+      {kind:'branch', repo:'winter', ref:'feat/fetch-retry', commits:6},
+      {kind:'asset', name:'review-notes.md'}
+    ],
+    question:{
+      text:'Review found the backoff cap unspecified — pick a max delay:',
+      askedAt:'9:24am',
+      options:['Cap at 30 seconds', 'Cap at 2 minutes', 'No cap — stop after 6 attempts']
+    } },
+
+  /* needs human */
+  { id:'c-203', title:'Env-index migration',
+    issues:[{repo:'winter', num:398, title:'Migrate env-index.json to the v2 schema'}],
+    repos:['winter'], node:'build', status:'needs_human', runner:null,
+    history:[
+      {node:'queued', at:'6:20am', verdict:'', note:'Added to the ready queue'},
+      {node:'build', at:'6:44am', verdict:'fail', note:'Merge conflict in env-index.json — retry 1'},
+      {node:'build', at:'7:16am', verdict:'fail', note:'Merge conflict persists — retry 2'},
+      {node:'build', at:'8:03am', verdict:'fail', note:'Escalated after 3 retries — needs a human'}
+    ],
+    artifacts:[{kind:'branch', repo:'winter', ref:'feat/env-index-v2', commits:7}],
+    resume:'cd alpha && claude --resume 9f2c' },
+
+  /* done */
+  { id:'c-201', title:'README contribution policy',
+    issues:[{repo:'winter-docs', num:77, title:'Open the contribution policy in the README'}],
+    repos:['winter-docs'], node:'landed', status:'done', runner:null, landedAt:'7:03am',
+    history:[
+      {node:'build', at:'5:40am', verdict:'pass', note:'worker: pass · checks: lint ✓'},
+      {node:'review', at:'6:22am', verdict:'pass', note:'review: pass — 0 findings'},
+      {node:'deliver', at:'7:03am', verdict:'pass', note:'Merged to main'}
+    ],
+    artifacts:[{kind:'branch', repo:'winter-docs', ref:'feat/contrib-policy', commits:2}] },
+  { id:'c-198', title:'ws pull: unfetched upstream as no-upstream',
+    issues:[{repo:'winter', num:412, title:'ws pull: treat unfetched upstream as no-upstream'}],
+    repos:['winter'], node:'landed', status:'done', runner:null, landedAt:'6:12am',
+    history:[
+      {node:'build', at:'4:10am', verdict:'pass', note:'worker: pass · checks: lint ✓ tests ✓ (22/22)'},
+      {node:'review', at:'5:05am', verdict:'fail', note:'review: fail — 1 finding, routed back to build'},
+      {node:'build', at:'5:28am', verdict:'pass', note:'Finding addressed · checks: tests ✓ (23/23)'},
+      {node:'review', at:'5:51am', verdict:'pass', note:'review: pass'},
+      {node:'deliver', at:'6:12am', verdict:'pass', note:'Merged to main'}
+    ],
+    artifacts:[{kind:'branch', repo:'winter', ref:'fix/unfetched-upstream', commits:4},
+               {kind:'asset', name:'review-notes.md'}] },
+  { id:'c-199', title:'repo-status model split',
+    issues:[{repo:'winter', num:409, title:'Split repo-status into composable status/history pieces'}],
+    repos:['winter'], node:'landed', status:'done', runner:null, landedAt:'4:48am',
+    history:[
+      {node:'build', at:'3:02am', verdict:'pass', note:'worker: pass · checks: lint ✓ tests ✓ (41/41)'},
+      {node:'review', at:'4:11am', verdict:'pass', note:'review: pass — 0 findings'},
+      {node:'deliver', at:'4:48am', verdict:'pass', note:'Merged to main'}
+    ],
+    artifacts:[{kind:'branch', repo:'winter', ref:'refactor/repo-status', commits:9}] }
+];
+
+let queue = ['c-214','c-215','c-216','c-217'];       // ready order, top leaves first
+let mergeQueue = [{id:'c-210', state:'landing'}];     // one at a time
+let landedToday = 3;
+let nextChunkNum = 218;
+
+let events = [
+  {t:'9:38am', kind:'claim',      text:'<b>atlas</b> claimed <b>tmux layout hook v2</b> — slot 3/5'},
+  {t:'9:31am', kind:'deliver',    text:'<b>tmux layout hook v2</b> entered the merge queue — landing now'},
+  {t:'9:24am', kind:'ask',        text:'<b>Retry policy for flaky fetch</b> asked a question — waiting on you'},
+  {t:'9:12am', kind:'transition', text:'<b>Port registry drift repair</b> moved build → review'},
+  {t:'8:58am', kind:'ask',        text:'<b>Extension scaffold command</b> asked a question — waiting on you'},
+  {t:'8:03am', kind:'system',     text:'<b>Env-index migration</b> escalated after 3 retries — needs a human'},
+  {t:'7:03am', kind:'deliver',    text:'<b>README contribution policy</b> merged to main'},
+  {t:'6:12am', kind:'deliver',    text:'<b>ws pull: unfetched upstream</b> merged to main'}
+];
+
+let selected = new Set();
+let openDetailId = null;
+
+/* ═════════ helpers ═════════ */
+const $ = (s)=>document.querySelector(s);
+function byId(id){ return chunks.find(c=>c.id===id); }
+function esc(s){ return String(s).replace(/[&<>"]/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch])); }
+function ev(kind, text){ events.unshift({t:now(), kind, text}); if(events.length>40) events.pop(); }
+function toast(msg){
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast._h); toast._h = setTimeout(()=>t.classList.remove('show'), 2400);
+}
+
+const NODE_LABEL = {build:'Build', review:'Review', deliver:'Deliver', queued:'Queued', landed:'Landed'};
+const STATUS_LABEL = {ready:'ready', running:'running', waiting_on_human:'waiting on you', needs_human:'needs you', done:'done'};
+
+/* ═════════ rendering ═════════ */
+function renderHeader(){
+  const running = chunks.filter(c=>c.status==='running').length;
+  const waiting = chunks.filter(c=>c.status==='waiting_on_human'||c.status==='needs_human').length;
+  $('#fleetStats').innerHTML = `
+    <span class="stat"><span class="dot" style="background:var(--st-running-ink)"></span><span class="num">${running}</span><span class="lbl">running</span></span>
+    <span class="stat"><span class="dot" style="background:var(--rail-accent)"></span><span class="num">${waiting}</span><span class="lbl">waiting on you</span></span>
+    <span class="stat"><span class="dot" style="background:var(--st-done-ink)"></span><span class="num">${landedToday}</span><span class="lbl">landed overnight</span></span>`;
+  $('#runnerBadges').innerHTML = runners.map(r=>`
+    <span class="runner-badge" title="workspace: ${esc(r.workspace)}">
+      <span class="rdot ${r.online?'on':'off'}"></span>
+      <span class="rname">${esc(r.name)}</span>
+      <span class="rmeta">${r.online ? r.used+'/'+r.slots+' slots' : 'offline · last seen '+esc(r.lastSeen)}</span>
+    </span>`).join('');
+  $('#clock').textContent = now();
+}
+
+function renderMergeQueue(){
+  const landing = mergeQueue.find(m=>m.state==='landing');
+  const queued = mergeQueue.filter(m=>m.state==='queued');
+  let html = `<span class="mq-label">Merge queue</span>`;
+  if(landing){
+    const c = byId(landing.id);
+    html += `<span class="mq-item"><span class="pulse"></span> landing: <b>&nbsp;${esc(c.title)}</b></span>`;
+  } else {
+    html += `<span class="mq-empty">nothing landing right now</span>`;
+  }
+  if(queued.length){
+    html += queued.map(m=>`<span class="mq-item queued"><span class="pulse"></span> then: ${esc(byId(m.id).title)}</span>`).join('');
+  } else if(landing){
+    html += `<span class="mq-empty">then: queue is clear</span>`;
+  }
+  html += `<span class="mq-landed">${landedToday} landed today · one lands at a time</span>`;
+  $('#mergeStrip').innerHTML = html;
+}
+
+function chipRow(c){
+  return `<div class="chips">
+    ${c.issues.map(i=>`<span class="chip">${esc(i.repo)}#${i.num}</span>`).join('')}
+  </div>`;
+}
+
+function trail(c){
+  const order = ['build','review','review','deliver'];
+  const nodes = ['build','review','deliver'];
+  const idx = c.status==='done' ? 3 : nodes.indexOf(c.node);
+  return `<span class="trail" title="build · review · deliver" aria-label="progress">
+    ${nodes.map((n,i)=>{
+      let cls = '';
+      if(c.status==='done' || i < idx) cls = 'visited';
+      else if(i === idx) cls = 'current';
+      return `<span class="tdot ${cls}"></span>`;
+    }).join('')}
+  </span>`;
+}
+
+function cardHTML(c, opts={}){
+  const isReady = c.status==='ready';
+  const branch = c.artifacts.find(a=>a.kind==='branch');
+  return `
+  <article class="card ${selected.has(c.id)?'selected':''}" data-id="${c.id}"
+           tabindex="0" role="button" aria-label="Open ${esc(c.title)}"
+           ${isReady?'draggable="true"':''}>
+    <div class="top">
+      ${isReady?`<span class="pos">#${opts.pos}</span>`:''}
+      <h3>${esc(c.title)}</h3>
+    </div>
+    ${chipRow(c)}
+    ${c.issues.length>1?`<div class="bundle-note">${c.issues.length} issues bundled</div>`:''}
+    ${branch && (c.status==='running')?`<div class="commits-note">${esc(branch.repo)}@${esc(branch.ref)} · ${branch.commits} commit${branch.commits===1?'':'s'}</div>`:''}
+    ${c.status==='done'?`<div class="landed-note">Landed ${esc(c.landedAt)}</div>`:''}
+    <div class="meta">
+      <span class="pill ${c.status}">${STATUS_LABEL[c.status]}</span>
+      ${c.runner?`<span class="mini-runner">${esc(c.runner)}</span>`:''}
+      ${!isReady?trail(c):''}
+    </div>
+    ${isReady?`
+    <div class="row-controls">
+      <input type="checkbox" class="sel-box" aria-label="Select ${esc(c.title)} for grouping" ${selected.has(c.id)?'checked':''}>
+      <button class="nudge up" aria-label="Move ${esc(c.title)} up in queue">↑</button>
+      <button class="nudge down" aria-label="Move ${esc(c.title)} down in queue">↓</button>
+      <span class="drag-hint">drag to reorder</span>
+    </div>`:''}
+  </article>`;
+}
+
+function renderBoard(){
+  const cols = [
+    { key:'upnext',  title:'Up next',  hint:'top card leaves first — drag, or tick two to group',
+      cards: queue.map((id,i)=>({c:byId(id), pos:i+1})) },
+    { key:'build',   title:'Build',    hint:'',
+      cards: chunks.filter(c=>c.node==='build' && c.status!=='ready' && c.status!=='done').map(c=>({c})) },
+    { key:'review',  title:'Review',   hint:'',
+      cards: chunks.filter(c=>c.node==='review' && c.status!=='done').map(c=>({c})) },
+    { key:'deliver', title:'Deliver',  hint:'merge queue lands one at a time',
+      cards: chunks.filter(c=>c.node==='deliver' && c.status!=='done').map(c=>({c})) },
+    { key:'landed',  title:'Landed',   hint:'',
+      cards: chunks.filter(c=>c.status==='done')
+                   .sort((a,b)=> (b.landedAt||'').localeCompare(a.landedAt||'')).map(c=>({c})) }
+  ];
+  $('#board').innerHTML = cols.map(col=>`
+    <section class="col" data-col="${col.key}" aria-label="${esc(col.title)} column">
+      <div class="col-head">${esc(col.title)}<span class="count">${col.cards.length}</span></div>
+      ${col.hint?`<div class="col-hint">${esc(col.hint)}</div>`:''}
+      ${col.key==='upnext'?`
+        <div class="group-bar ${selected.size>=2?'show':''}" id="groupBar">
+          <span>${selected.size} selected</span>
+          <button class="go" id="groupGo">Group into one chunk</button>
+        </div>`:''}
+      <div class="col-body" data-col-body="${col.key}">
+        ${col.cards.length
+          ? col.cards.map(x=>cardHTML(x.c, {pos:x.pos})).join('')
+          : `<div class="col-empty">${col.key==='upnext'?'queue is clear — nice':'nothing here right now'}</div>`}
+      </div>
+    </section>`).join('');
+  wireBoard();
+}
+
+function renderRail(){
+  const need = chunks.filter(c=>c.status==='waiting_on_human'||c.status==='needs_human');
+  $('#railCount').textContent = need.length;
+  $('#railList').innerHTML = need.length ? need.map(c=>{
+    if(c.status==='waiting_on_human' && c.question){
+      return `<div class="ask-card" data-id="${c.id}">
+        <div class="who"><b>${esc(c.title)}</b> · at ${NODE_LABEL[c.node].toLowerCase()} · asked ${esc(c.question.askedAt)}</div>
+        <div class="q">${esc(c.question.text)}</div>
+        ${c.question.options.map((o,i)=>`<button class="opt" data-answer="${i}" data-chunk="${c.id}">${esc(o)}</button>`).join('')}
+      </div>`;
+    }
+    return `<div class="ask-card escalated" data-id="${c.id}">
+      <div class="who"><b>${esc(c.title)}</b> · escalated after retries</div>
+      <div class="q">Needs hands-on help. Resume the session:</div>
+      <div class="resume-block">
+        <code>${esc(c.resume)}</code>
+        <button class="copy-btn" data-copy="${esc(c.resume)}">Copy command</button>
+      </div>
+    </div>`;
+  }).join('') : `<div class="rail-empty">Nothing needs you — enjoy the coffee.</div>`;
+}
+
+function renderEvents(){
+  $('#eventList').innerHTML = events.map(e=>`
+    <li><span class="edot ${e.kind}"></span><span class="etime">${esc(e.t)}</span><span class="etext">${e.text}</span></li>`).join('');
+}
+
+function renderDetail(){
+  if(!openDetailId){ $('#overlay').classList.remove('open'); return; }
+  const c = byId(openDetailId);
+  if(!c){ openDetailId = null; $('#overlay').classList.remove('open'); return; }
+  const p = $('#detailPanel');
+  p.innerHTML = `
+    <button class="d-close" aria-label="Close detail">×</button>
+    <div class="d-id">${esc(c.id)}</div>
+    <h2 class="d-title" id="detailTitle">${esc(c.title)}</h2>
+    <span class="pill ${c.status}">${STATUS_LABEL[c.status]}</span>
+    ${c.runner?`&nbsp;<span class="mini-runner">running on ${esc(c.runner)}</span>`:''}
+
+    <section>
+      <h4>Issues · ${c.issues.length}</h4>
+      ${c.issues.map(i=>`<div class="issue-row"><span class="ptr">${esc(i.repo)}#${i.num}</span><span>${esc(i.title)}</span></div>`).join('')}
+    </section>
+
+    <section>
+      <h4>Node history</h4>
+      <ul class="hist">
+        ${c.history.map((h,i)=>{
+          const last = i===c.history.length-1;
+          const failed = h.verdict==='fail';
+          const active = last && (c.status==='running'||c.status==='waiting_on_human');
+          return `<li class="${failed?'fail':''} ${active?'active':''}">
+            <span class="h-node">${esc(NODE_LABEL[h.node]||h.node)}</span>
+            <span class="etime"> · ${esc(h.at)}</span><br>
+            <span class="h-verdict ${failed?'fail':''}">${esc(h.note)}</span>
+          </li>`;
+        }).join('')}
+      </ul>
+    </section>
+
+    <section>
+      <h4>Artifacts</h4>
+      ${c.artifacts.length ? c.artifacts.map(a=> a.kind==='branch'
+        ? `<div class="art-row"><span class="a-kind">branch</span><code>${esc(a.repo)}@${esc(a.ref)}</code><span class="a-commits">→ ${a.commits} commit${a.commits===1?'':'s'}</span></div>`
+        : `<div class="art-row"><span class="a-kind">asset</span><code>${esc(a.name)}</code></div>`
+      ).join('') : `<div class="rail-empty">no artifacts yet</div>`}
+    </section>
+
+    ${c.question && c.status==='waiting_on_human' ? `
+    <section>
+      <h4>Open question</h4>
+      <div class="d-question">
+        <div class="q">${esc(c.question.text)}</div>
+        ${c.question.options.map((o,i)=>`<button class="opt" data-answer="${i}" data-chunk="${c.id}">${esc(o)}</button>`).join('')}
+      </div>
+    </section>`:''}
+
+    ${c.resume && c.status==='needs_human' ? `
+    <section>
+      <h4>Escalation</h4>
+      <div class="d-resume">
+        <p>Escalated after 3 retries. Pick up the session where the agent left off:</p>
+        <div class="resume-block">
+          <code>${esc(c.resume)}</code>
+          <button class="copy-btn" data-copy="${esc(c.resume)}">Copy command</button>
+        </div>
+      </div>
+    </section>`:''}
+  `;
+  p.querySelector('.d-close').addEventListener('click', ()=>{ openDetailId=null; renderDetail(); });
+  $('#overlay').classList.add('open');
+}
+
+function renderAll(){
+  renderHeader(); renderMergeQueue(); renderBoard(); renderRail(); renderEvents(); renderDetail();
+}
+
+/* ═════════ interactions ═════════ */
+let dragId = null;
+
+function wireBoard(){
+  document.querySelectorAll('.card').forEach(card=>{
+    const id = card.dataset.id;
+
+    card.addEventListener('click', (e)=>{
+      if(e.target.closest('.sel-box, .nudge, .opt, .copy-btn')) return;
+      openDetailId = id; renderDetail();
+    });
+    card.addEventListener('keydown', (e)=>{
+      if((e.key==='Enter'||e.key===' ') && e.target===card){
+        e.preventDefault(); openDetailId = id; renderDetail();
+      }
+    });
+
+    const box = card.querySelector('.sel-box');
+    if(box) box.addEventListener('change', ()=>{
+      box.checked ? selected.add(id) : selected.delete(id);
+      renderBoard();
+    });
+
+    const up = card.querySelector('.nudge.up');
+    const down = card.querySelector('.nudge.down');
+    if(up) up.addEventListener('click', ()=>{
+      const i = queue.indexOf(id);
+      if(i>0){ [queue[i-1],queue[i]]=[queue[i],queue[i-1]]; ev('system',`You moved <b>${esc(byId(id).title)}</b> up to #${i}`); renderAll(); }
+    });
+    if(down) down.addEventListener('click', ()=>{
+      const i = queue.indexOf(id);
+      if(i>-1 && i<queue.length-1){ [queue[i+1],queue[i]]=[queue[i],queue[i+1]]; ev('system',`You moved <b>${esc(byId(id).title)}</b> down to #${i+2}`); renderAll(); }
+    });
+
+    /* drag-and-drop reorder — ready column only */
+    if(card.draggable){
+      card.addEventListener('dragstart', (e)=>{
+        dragId = id; card.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', id);
+      });
+      card.addEventListener('dragend', ()=>{
+        card.classList.remove('dragging');
+        const body = document.querySelector('[data-col-body="upnext"]');
+        const newOrder = [...body.querySelectorAll('.card')].map(el=>el.dataset.id);
+        if(newOrder.join()!==queue.join()){
+          queue = newOrder;
+          ev('system',`You reordered the ready queue — <b>${esc(byId(queue[0]).title)}</b> is up next`);
+        }
+        dragId = null; renderAll();
+      });
+      card.addEventListener('dragover', (e)=>{
+        e.preventDefault();
+        if(!dragId || dragId===id) return;
+        const dragged = document.querySelector(`.card[data-id="${dragId}"]`);
+        if(!dragged) return;
+        const rect = card.getBoundingClientRect();
+        const before = e.clientY < rect.top + rect.height/2;
+        before ? card.before(dragged) : card.after(dragged);
+      });
+    }
+  });
+
+  const body = document.querySelector('[data-col-body="upnext"]');
+  if(body){
+    body.addEventListener('dragover', e=>e.preventDefault());
+    body.addEventListener('drop', e=>e.preventDefault());
+  }
+
+  const go = document.getElementById('groupGo');
+  if(go) go.addEventListener('click', groupSelected);
+}
+
+function groupSelected(){
+  const ids = queue.filter(id=>selected.has(id));
+  if(ids.length<2) return;
+  const members = ids.map(byId);
+  const issues = members.flatMap(c=>c.issues);
+  const repos = [...new Set(members.flatMap(c=>c.repos))];
+  const newChunk = {
+    id:'c-'+(nextChunkNum++),
+    title: members[0].title + ' + ' + (members.length-1) + ' more',
+    issues, repos, node:'ready', status:'ready', runner:null,
+    history:[{node:'queued', at:now(), verdict:'', note:`${issues.length} issues bundled by you from ${ids.length} chunks`}],
+    artifacts:[], bundled:true
+  };
+  chunks.push(newChunk);
+  const insertAt = Math.min(...ids.map(id=>queue.indexOf(id)));
+  queue = queue.filter(id=>!selected.has(id));
+  queue.splice(insertAt, 0, newChunk.id);
+  ids.forEach(id=>{ const i = chunks.findIndex(c=>c.id===id); if(i>-1) chunks.splice(i,1); });
+  selected.clear();
+  ev('system',`You grouped ${ids.length} chunks into <b>${esc(newChunk.id)}</b> — ${issues.length} issues bundled`);
+  toast(`${issues.length} issues bundled into ${newChunk.id}`);
+  renderAll();
+}
+
+function answerQuestion(chunkId, optIdx){
+  const c = byId(chunkId);
+  if(!c || !c.question) return;
+  const choice = c.question.options[optIdx];
+  c.history.push({node:c.node, at:now(), verdict:'running', note:`You answered: “${choice}” — agent resumed`});
+  c.status = 'running';
+  const q = c.question; delete c.question;
+  ev('transition',`You answered <b>${esc(c.title)}</b> — “${esc(choice)}”. Agent resumed at ${NODE_LABEL[c.node].toLowerCase()}.`);
+  toast('Answer sent — agent is back to work');
+  renderAll();
+}
+
+/* delegated clicks: answers + copy buttons (rail + detail) */
+document.addEventListener('click', (e)=>{
+  const opt = e.target.closest('.opt');
+  if(opt){ answerQuestion(opt.dataset.chunk, +opt.dataset.answer); return; }
+  const cp = e.target.closest('.copy-btn');
+  if(cp){
+    const txt = cp.dataset.copy;
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(txt).then(()=>toast('Copied to clipboard'), ()=>toast(txt));
+    } else { toast(txt); }
+    return;
+  }
+  if(e.target.id==='overlay'){ openDetailId=null; renderDetail(); }
+});
+document.addEventListener('keydown', (e)=>{
+  if(e.key==='Escape' && openDetailId){ openDetailId=null; renderDetail(); }
+});
+
+/* ═════════ fake live feed ═════════ */
+function freeSlot(runnerName){
+  const r = runners.find(r=>r.name===runnerName);
+  if(r && r.used>0) r.used--;
+}
+function land(id){
+  const c = byId(id); if(!c || c.status==='done') return;
+  c.status='done'; c.node='landed'; c.landedAt = now();
+  c.history.push({node:'deliver', at:now(), verdict:'pass', note:'Merged to main'});
+  if(c.runner){ freeSlot(c.runner); c.runner=null; }
+  mergeQueue = mergeQueue.filter(m=>m.id!==id);
+  const next = mergeQueue.find(m=>m.state==='queued');
+  if(next) next.state='landing';
+  landedToday++;
+  ev('deliver',`<b>${esc(c.title)}</b> merged to main — landed ${esc(c.landedAt)}`);
+}
+function claimNext(){
+  const atlas = runners.find(r=>r.name==='atlas');
+  if(!queue.length || atlas.used>=atlas.slots) return;
+  const id = queue.shift();
+  const c = byId(id);
+  selected.delete(id);
+  c.status='running'; c.node='build'; c.runner='atlas'; atlas.used++;
+  const ref = 'feat/' + c.id;
+  c.artifacts.push({kind:'branch', repo:c.repos[0], ref, commits:1});
+  c.history.push({node:'build', at:now(), verdict:'running', note:`Claimed by atlas — slot ${atlas.used}/${atlas.slots}`});
+  ev('claim',`<b>atlas</b> claimed <b>${esc(c.title)}</b> — slot ${atlas.used}/${atlas.slots}`);
+}
+function bumpCommits(id, note){
+  const c = byId(id); if(!c) return;
+  const b = c.artifacts.find(a=>a.kind==='branch'); if(!b) return;
+  b.commits++;
+  ev('commit', note || `<b>${esc(c.runner||'atlas')}</b> pushed a commit to ${esc(b.repo)}@${esc(b.ref)} — now ${b.commits} commits`);
+}
+
+const liveScript = [
+  ()=>bumpCommits('c-208'),
+  ()=>land('c-210'),
+  ()=>claimNext(),
+  ()=>{ const c=byId('c-209'); if(!c||c.node!=='review') return;
+        c.node='build';
+        c.history.push({node:'review', at:now(), verdict:'fail', note:'review: fail — 2 findings, routed back to build'});
+        ev('transition',`review: <b>fail</b> — 2 findings on <b>${esc(c.title)}</b>, routed back to build`); },
+  ()=>bumpCommits('c-209', `<b>atlas</b> pushed a fix to winter@feat/port-drift — finding 1 of 2 addressed`),
+  ()=>{ bumpCommits('c-209', `<b>atlas</b> pushed a fix to winter@feat/port-drift — finding 2 of 2 addressed`); },
+  ()=>{ const c=byId('c-209'); if(!c||c.node!=='build'||c.status!=='running') return;
+        c.node='review';
+        c.history.push({node:'build', at:now(), verdict:'pass', note:'Findings addressed · checks: lint ✓ tests ✓ (36/36)'});
+        ev('transition',`<b>${esc(c.title)}</b> moved build → review (second pass)`); },
+  ()=>{ const c=byId('c-209'); if(!c||c.node!=='review') return;
+        c.node='deliver';
+        c.history.push({node:'review', at:now(), verdict:'pass', note:'review: pass — 0 findings'});
+        const landing = mergeQueue.some(m=>m.state==='landing');
+        mergeQueue.push({id:c.id, state: landing?'queued':'landing'});
+        ev('deliver',`<b>${esc(c.title)}</b> passed review — entered the merge queue`); },
+  ()=>bumpCommits('c-208'),
+  ()=>land('c-209'),
+  ()=>claimNext(),
+  ()=>{ const c=byId('c-208'); if(!c||c.node!=='build'||c.status!=='running') return;
+        c.node='review';
+        c.history.push({node:'build', at:now(), verdict:'pass', note:'worker: pass · checks: lint ✓ tests ✓ (29/29)'});
+        ev('transition',`<b>${esc(c.title)}</b> moved build → review`); }
+];
+let liveStep = 0;
+
+function tick(){
+  clockMin += 1 + Math.floor(Math.random()*2);
+  if(liveStep < liveScript.length){
+    liveScript[liveStep++]();
+  } else {
+    /* steady-state heartbeat: keep the board breathing */
+    const running = chunks.filter(c=>c.status==='running' && c.node==='build' && c.artifacts.some(a=>a.kind==='branch'));
+    if(running.length && Math.random()<0.7){
+      bumpCommits(running[Math.floor(Math.random()*running.length)].id);
+    } else if(Math.random()<0.5){
+      ev('system','<b>zephyr</b> still offline — last seen 11:20pm');
+    } else {
+      ev('commit','<b>atlas</b> heartbeat — '+runners[0].used+'/'+runners[0].slots+' slots busy, all agents healthy');
+    }
+  }
+  renderAll();
+}
+
+renderAll();
+setInterval(tick, 4000);
+</script>
+</body>
+</html>
