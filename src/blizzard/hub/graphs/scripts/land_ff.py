@@ -56,6 +56,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 from typing import Any
 
 from blizzard.hub.graphs.scripts.land_default import forge_request, qualify_repo
@@ -68,7 +69,42 @@ _ENV_GIT_COMMITS = "BZ_HUB_GIT_COMMITS"
 _ENV_ARTIFACT_NAMES = "BZ_HUB_ARTIFACT_NAMES"
 _ENV_MARKER_CALLBACK_URL = "BZ_HUB_MARKER_CALLBACK_URL"
 
+# Test-only instrumentation for the mid-script crash sweep
+# (``tests/crash/test_kill9_sweep.py::test_kill9_between_ff_graph_repo_pushes``) — the
+# same mechanism and env var as ``land_default``'s own hook
+# (:func:`~blizzard.hub.graphs.scripts.land_default._test_pause_after_first_marker`),
+# duplicated here rather than shared because this script's update stage has its own
+# loop and its own no-op (already-advanced) branch to pause after. Because this script
+# loops over an arbitrary, chunk-dynamic number of repos inside ONE ``run:`` step —
+# recording each ``merged/<repo>`` marker through the mid-run callback, not the
+# executor's static per-step ``produces:`` — its "kill between two repos' updates"
+# window is a WALL-CLOCK race an external ``kill -9`` of the hub daemon must land
+# inside, not a named in-process ``hubnode.*`` registry point. When set to a positive
+# number of seconds, the script pauses that long immediately after recording the FIRST
+# repo's marker on a multi-repo run, widening that window so the kill is deterministic.
+# It fires at most once and never on a crash-recovery re-run (which updates only the
+# still-unmarked remainder, so ``pending_count`` is then 1), and is wholly inert unless
+# the env var is set — never present in a production land.
+_ENV_TEST_PAUSE_AFTER_FIRST_MARKER = "BZ_HUB_LAND_TEST_PAUSE_SECONDS"
+
 _MARKER_PREFIX = "merged/"
+
+
+def _test_pause_after_first_marker(*, marker_index: int, pending_count: int) -> None:
+    """Widen the between-repo-updates window for the mid-script crash sweep — test-only.
+
+    Inert unless :data:`_ENV_TEST_PAUSE_AFTER_FIRST_MARKER` names a positive number of
+    seconds. Fires only after the FIRST repo's marker (``marker_index == 1``) on a
+    genuinely multi-repo update (``pending_count >= 2``) — so a crash-recovery re-run, which
+    updates only the still-unmarked remainder (``pending_count == 1`` for a 2-repo chunk),
+    never pauses and the script converges immediately."""
+    raw = os.environ.get(_ENV_TEST_PAUSE_AFTER_FIRST_MARKER)
+    if not raw or marker_index != 1 or pending_count < 2:
+        return
+    seconds = float(raw)
+    if seconds > 0:
+        print(f"[test] pausing {seconds}s after the first marker to widen the crash window", file=sys.stderr)
+        time.sleep(seconds)
 
 
 class _Conflict(Exception):
@@ -116,7 +152,8 @@ def main() -> int:
             current_shas[bare_repo] = sha
 
         # --- update stage: fast-forward every repo's base ref to its own commit ---
-        for commit in pending:
+        pending_count = len(pending)
+        for marker_index, commit in enumerate(pending, start=1):
             bare_repo = commit["repo"]
             repo = qualify_repo(bare_repo, owner)
             target = commit["commit"]
@@ -126,6 +163,7 @@ def main() -> int:
                 # already treat this as a no-op success (bzh:hub-node-step-idempotence) —
                 # no PATCH needed, just (re-)record the marker.
                 record_marker(bare_repo, target)
+                _test_pause_after_first_marker(marker_index=marker_index, pending_count=pending_count)
                 continue
             status, result = api(
                 "PATCH",
@@ -135,6 +173,7 @@ def main() -> int:
             if status != 200:
                 raise _Conflict(f"could not fast-forward {repo}'s {base_branch} to {target}: {result}")
             record_marker(bare_repo, target)
+            _test_pause_after_first_marker(marker_index=marker_index, pending_count=pending_count)
     except _Conflict as exc:
         print(f"conflict: {exc}", file=sys.stderr)
         print("conflict")

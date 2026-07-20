@@ -45,21 +45,24 @@ a merged head is a no-op), and at ``hubnode.after-marker.before-next`` only the 
 remainder re-runs (the marked land step is skipped). Either way the chunk lands exactly
 once and the ``hub:one-live-exec-slot`` invariant is green with no leaked live slot.
 
-Two whole-process cases round it out: an external ``kill -9`` of the runner daemon
+Three whole-process cases round it out: an external ``kill -9`` of the runner daemon
 mid-flight, and — closing the #67 gap the per-step registry cannot express — an external
-``kill -9`` of the whole hub process group MID-SCRIPT, inside the packaged default
-graph's own ``land_default.py`` between two repos' pushes
-(``test_kill9_between_default_graph_repo_pushes``). That script loops over an arbitrary,
-chunk-dynamic number of repos inside ONE ``run:`` step, recording each ``merged/<repo>``
-marker through the MID-RUN CALLBACK rather than the executor's static per-step
-``produces:`` — so its "between two repos' pushes" boundary is a WALL-CLOCK race an
-external kill (of the hub daemon AND the land subprocess it spawned) must land inside,
-never a named ``hubnode.*`` registry point (the registry arms points inside blizzard's
-OWN process, never inside a spawned script). The dedicated scenario mints a 2-repo chunk
-against the real default graph, arms the script's test-only pause
+``kill -9`` of the whole hub process group MID-SCRIPT, inside EITHER of the two packaged
+deliver scripts' own between-repos window: ``land_default.py``
+(``test_kill9_between_default_graph_repo_pushes``) and its PR-free sibling
+``land_ff.py`` (``test_kill9_between_ff_graph_repo_pushes``, #123). Both scripts loop over
+an arbitrary, chunk-dynamic number of repos inside ONE ``run:`` step, recording each
+``merged/<repo>`` marker through the MID-RUN CALLBACK rather than the executor's static
+per-step ``produces:`` — so each script's "between two repos' pushes" boundary is a
+WALL-CLOCK race an external kill (of the hub daemon AND the land subprocess it spawned)
+must land inside, never a named ``hubnode.*`` registry point (the registry arms points
+inside blizzard's OWN process, never inside a spawned script). Each dedicated scenario
+mints a 2-repo chunk against the real script, arms its test-only pause
 (``BZ_HUB_LAND_TEST_PAUSE_SECONDS``) so the kill lands right after the first repo's
-marker is durable, and asserts recovery re-runs the script and re-merges ONLY the
-unmarked repo — each repo landing exactly once, one PR apiece, no leaked exec slot.
+marker is durable, and asserts recovery re-runs the script and re-lands ONLY the
+unmarked repo — each repo landing exactly once, no leaked exec slot (``land_default``
+additionally opens exactly one PR apiece; ``land_ff`` opens none to double-check, so its
+exactly-once proof reads straight off each bare repo's history).
 
 Gated like the e2e tier — needs the sibling ``blizzard-mock`` worktree, a local winter
 source, and ``BLIZZARD_CRASH_SWEEP=1``; skipped otherwise (see ``conftest.py``). Run it::
@@ -204,7 +207,7 @@ _GENERIC_POINTS = [p for p in _ALL_POINTS if not p.startswith(_DEDICATED_PREFIXE
 # multiples of that on a 2-core GitHub runner; the master `push` workflow sets
 # BLIZZARD_CRASH_SWEEP_CI=1 to run this subset so the named gap is a REAL gate at bounded
 # runtime, while the FULL sweep stays the documented local command (`mise run crash-sweep`)
-# and the tag `release` workflow. The two whole-process cases below are never parametrized,
+# and the tag `release` workflow. The three whole-process cases below are never parametrized,
 # so they run in both profiles.
 _CI_SUBSET = (
     "reap.after-expire",
@@ -1909,6 +1912,49 @@ def _default_graph_two_repo_yaml(landed_file: str) -> str:
     return yaml.safe_dump(graph, sort_keys=False)
 
 
+_LAND_FF_STEP_COMMAND = "python3 -m blizzard.hub.graphs.scripts.land_ff"
+
+
+def _ff_graph_two_repo_yaml(landed_file: str) -> str:
+    """:func:`_default_graph_two_repo_yaml`'s twin for the PR-free lane: a ``build ->
+    deliver`` graph named ``default-delivery`` whose ``deliver`` node is the REAL
+    packaged ``land_ff`` script (the same one ``basic-development-workflow/graph.yaml``
+    wires its own ``deliver`` node to), not ``land_default``.
+
+    The build commits in both repos; ``deliver`` runs ``land_ff.py``, which fast-forwards
+    each repo's base branch ref directly to the chunk's own commit (no PR, no merge
+    commit) and records each ``merged/<repo>`` marker via the mid-run callback.
+    ``landed -> done`` / ``conflict -> build`` mirror the packaged graph's own edges."""
+    import yaml
+
+    graph = {
+        "name": "default-delivery",
+        "entry": "build",
+        "nodes": {
+            "build": {
+                "executor": "runner",
+                "prompt": _two_repo_build_script(landed_file),
+                "judgement": {
+                    "prompt": "verdict('pass', 'committed the change in both repos; checks are green')\n",
+                    "choices": {"pass": {"description": "Committed and green.", "to": "deliver"}},
+                },
+                "retries": {"max": 1, "exhausted": "escalate"},
+            },
+            "deliver": {
+                "executor": "hub",
+                "run": [{"name": "land-every-repo", "command": _LAND_FF_STEP_COMMAND}],
+                "judgement": {
+                    "choices": {
+                        "landed": {"description": "Every repo fast-forwarded cleanly.", "to": "done"},
+                        "conflict": {"description": "A repo did not fast-forward; back to build.", "to": "build"},
+                    }
+                },
+            },
+        },
+    }
+    return yaml.safe_dump(graph, sort_keys=False)
+
+
 def _merged_markers(hub: httpx.Client, chunk_id: str) -> list[str]:
     """The chunk's durable ``merged/<repo>`` marker artifact names, read through the hub API."""
     detail = hub.get(f"/api/chunks/{chunk_id}")
@@ -2021,6 +2067,134 @@ def test_kill9_between_default_graph_repo_pushes(crash_env: CrashEnv, tmp_path: 
         # The marked repo was NOT re-merged: each repo created exactly one PR across the whole run.
         assert _repo_pull_count(crash_env.forge, REPO_NAME) - api_pulls_before == 1, "toy-api opened != 1 PR"
         assert _repo_pull_count(crash_env.forge, _WEB_REPO_NAME) - web_pulls_before == 1, "toy-web opened != 1 PR"
+    finally:
+        hub.close()
+        terminate(runner_proc)
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.killpg(os.getpgid(hub_proc.pid), signal.SIGKILL)
+        terminate(hub_proc)
+
+
+# --------------------------------------------------------------------------- #
+# Mid-script inter-repo-update crash for the PR-free lane — `land_ff`'s own window
+# --------------------------------------------------------------------------- #
+#
+# `land_ff.py`'s mirror of the closed #67 gap above: its own `deliver` node runs the
+# real `land_ff.py` across an arbitrary, chunk-dynamic number of repos INSIDE ONE
+# `run:` step, recording each `merged/<repo>` marker through the mid-run callback
+# rather than the executor's static per-step `produces:`. Repos are updated ONE AT A
+# TIME (no PR to check first, unlike `land_default` — see the module docstring), so its
+# "kill between two repos' fast-forwards" boundary is the same kind of WALL-CLOCK race
+# an external `kill -9` of the hub daemon (and the land subprocess it spawned) must
+# land inside — not a named in-process crash point the registry can arm.
+#
+# This scenario mints a 2-repo chunk against the REAL `land_ff.py`, arms the script's
+# own test-only pause (`BZ_HUB_LAND_TEST_PAUSE_SECONDS`, the same env var and guard
+# shape as `land_default`'s) so it stalls right after the FIRST repo's marker is
+# durable, and `kill -9`s the whole hub process group (hub + land script) inside that
+# pause. Recovery re-drives the executor off the re-flushed build completion;
+# `land_ff` re-runs, skips the marked repo (`merged/<repo>` already in
+# `BZ_HUB_ARTIFACT_NAMES`), and fast-forwards only the still-unmarked one. Both repos
+# land exactly once and the `hub:one-live-exec-slot` invariant holds with no leaked
+# slot — no PR count to check (this lane opens none), so exactly-once is proven
+# directly against each bare repo's own history.
+
+
+def test_kill9_between_ff_graph_repo_pushes(crash_env: CrashEnv, tmp_path: Path) -> None:
+    """A ``kill -9`` between two repos' fast-forwards in the real ``land_ff`` re-runs only the
+    unmarked repo, landing each exactly once — ``land_ff``'s own mid-script window, the PR-free
+    lane's mirror of ``test_kill9_between_default_graph_repo_pushes`` (#67, #123).
+
+    The packaged fast-forward graph's own mid-script window, unreachable by the per-step
+    ``hubnode.*`` registry points: ``land_ff.py`` loops over both fixture repos inside ONE
+    ``run:`` step. Armed with its test-only pause, it stalls right after the FIRST repo's
+    ``merged/<repo>`` marker is durable; the whole hub process group (the hub daemon plus the
+    land subprocess it spawned) is ``kill -9``ed inside that pause — a faithful reboot mid-land.
+
+    The claim: recovery re-drives the executor off the re-flushed build completion, and the
+    re-run of ``land_ff`` skips the already-marked repo and fast-forwards only the unmarked one.
+
+    * the invariant checker is green the instant after the crash and again after convergence;
+    * exactly one ``merged/<repo>`` marker was durable at crash time (one repo landed, one not);
+    * both repos' change lands on their bare ``main`` **exactly once** (no PR to double-check —
+      the lane opens none — so exactly-once is read straight off each bare repo's history);
+    * the ``hub:one-live-exec-slot`` slot is released after convergence — no leaked live slot.
+    """
+    landed_file = "LANDED-mid-script-ff-sweep.md"
+    hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
+    hub_port, runner_port = free_port(), free_port()
+    api_bare = crash_env.origins / f"{REPO_NAME}.git"
+    web_bare = crash_env.origins / f"{_WEB_REPO_NAME}.git"
+
+    # The hub is a session/group leader (new_session) so its whole tree can be killpg'd,
+    # and carries the land script's test-only pause so the between-repos window is wide.
+    hub_proc = start_hub(
+        hub_dir,
+        forge_port=crash_env.forge_port,
+        port=hub_port,
+        crash_point=None,
+        new_session=True,
+        extra_env={"BZ_HUB_LAND_TEST_PAUSE_SECONDS": "30"},
+    )
+    runner_proc = None
+    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    try:
+        await_http(hub, "/api/health", proc=hub_proc)
+
+        minted = hub.post("/api/graphs", json={"definition_yaml": _ff_graph_two_repo_yaml(landed_file)})
+        assert minted.status_code == 201, minted.text
+        issue = crash_env.forge.post(f"/repos/{REPO}/issues", json={"title": landed_file, "body": "a mid-script chunk"})
+        assert issue.status_code == 201, issue.text
+        number = issue.json()["number"]
+        ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{number}"]})
+        assert ingested.status_code == 201, ingested.text
+        chunk_id = ingested.json()["chunk_id"]
+        assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+
+        write_runner_config(
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+        )
+        runner_proc = start_runner(runner_dir, crash_point=None)
+
+        # Wait until exactly ONE repo's marker is durable — the land script is now paused,
+        # inside the between-repos window, with the second repo not yet fast-forwarded.
+        deadline = time.monotonic() + 90.0
+        markers: list[str] = []
+        while time.monotonic() < deadline:
+            markers = _merged_markers(hub, chunk_id)
+            if len(markers) == 1:
+                break
+            assert len(markers) < 2, f"both markers landed before the kill — pause too short? ({markers})"
+            time.sleep(0.25)
+        assert len(markers) == 1, f"the land script never reached its one-marker pause window (saw {markers})"
+
+        # kill -9 the WHOLE hub tree (daemon + the paused land subprocess) mid-script.
+        os.killpg(os.getpgid(hub_proc.pid), signal.SIGKILL)
+        assert wait_death(hub_proc) == -9
+
+        # Invariant checker green right after the crash — one marker durable, one repo unlanded.
+        _assert_invariants(runner_dir, hub_dir, when="immediately after mid-script kill -9 (land_ff)")
+
+        # Restart the hub UNARMED (no pause env): the runner re-flushes the build completion,
+        # land_ff re-runs, skips the marked repo, and fast-forwards only the unmarked one.
+        hub_proc = start_hub(
+            hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None, new_session=True
+        )
+        await_http(hub, "/api/health", proc=hub_proc)
+        status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"}, timeout=120.0)
+        assert status == "done", f"chunk did not converge to done after the mid-script kill (last {status!r})"
+        _assert_invariants(runner_dir, hub_dir, when="after convergence past the mid-script kill (land_ff)")
+
+        # Both markers are now durable, and no live exec slot leaked.
+        assert _merged_markers(hub, chunk_id) == sorted([f"merged/{REPO_NAME}", f"merged/{_WEB_REPO_NAME}"])
+        assert _live_exec_slots(hub_dir) == 0, "a hub_exec_slot leaked live after the mid-script recovery (land_ff)"
+
+        # Exactly-once: each repo's change is reachable from its bare main exactly once — no
+        # PR to double-check in this lane, so this is the whole exactly-once proof.
+        for bare in (api_bare, web_bare):
+            tree = git_bare(bare, "log", "--oneline", "--", landed_file)
+            landings = [ln for ln in tree.splitlines() if ln.strip()]
+            assert len(landings) == 1, f"{landed_file} landed {len(landings)}x on {bare.name}:\n{tree}"
     finally:
         hub.close()
         terminate(runner_proc)

@@ -24,7 +24,7 @@ description = "Run the FULL kill-9 crash sweep (blizzard:crash-sweep) — arms E
 run = "BLIZZARD_CRASH_SWEEP=1 uv run pytest -m crash_sweep tests/crash/"
 
 [tasks.crash-sweep-ci]
-description = "Run the kill-9 crash sweep's bounded CI profile (BLIZZARD_CRASH_SWEEP_CI=1) — a representative crash-point subset (one per boundary family + the recovery-critical windows) plus the two whole-process cases, so the `pr` and `push` gates both stay real at bounded GitHub-runner runtime. The FULL sweep is `mise run crash-sweep`."
+description = "Run the kill-9 crash sweep's bounded CI profile (BLIZZARD_CRASH_SWEEP_CI=1) — a representative crash-point subset (one per boundary family + the recovery-critical windows) plus the three whole-process cases, so the `pr` and `push` gates both stay real at bounded GitHub-runner runtime. The FULL sweep is `mise run crash-sweep`."
 run = "BLIZZARD_CRASH_SWEEP=1 BLIZZARD_CRASH_SWEEP_CI=1 uv run pytest -m crash_sweep tests/crash/"
 
 [tasks.journey]
