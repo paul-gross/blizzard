@@ -33,7 +33,7 @@
 # is this graph's own copy, isolated in ./prompts — never shared with another graph's
 # directory.
 
-name: basic-development-workflow
+name: bas-dwf
 entry: build
 
 nodes:

@@ -14,7 +14,7 @@
 # polls until every PR is cleanly mergeable rather than merging straight through as
 # the default graph's land_default does.
 
-name: advanced-development-workflow
+name: adv-dwf
 entry: plan
 
 nodes:
