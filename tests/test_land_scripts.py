@@ -136,7 +136,12 @@ def _forge_with_state(
 ):
     """A double whose one already-open PR reads ``mergeable_state``. Records every call."""
     base = f"http://forge/repos/{_REPO}"
-    pull = {"number": 1, "merged": merged, "mergeable_state": mergeable_state, "head": {"ref": _BRANCH, "sha": "headsha"}}
+    pull = {
+        "number": 1,
+        "merged": merged,
+        "mergeable_state": mergeable_state,
+        "head": {"ref": _BRANCH, "sha": "headsha"},
+    }
     responses = {
         ("GET", f"{base}/pulls?state=open"): (200, [{"number": 1, "head": {"ref": _BRANCH, "sha": "headsha"}}]),
         ("GET", f"{base}/pulls/1"): (200, pull),
@@ -208,5 +213,5 @@ def test_clean_pr_merges_the_current_head_sha(
 
     assert land_pr_ci.main() == 0
     assert _last_line(capsys) == "landed"
-    merge = [body for m, url, body in calls if m == "PUT" and url.endswith("/merge")]
+    merge = [body for m, url, body in calls if m == "PUT" and url.endswith("/merge") and body is not None]
     assert merge and merge[0]["sha"] == "headsha", "a self-heal must merge the CURRENT head, not a stale commit"

@@ -226,7 +226,9 @@ def test_pr_ci_pends_on_blocked_then_lands_when_green(tmp_path: Path) -> None:
 
     main_after = _git_bare(origin_bare, "rev-parse", "main").strip()
     assert main_after != main_before, "bare main did not move despite a clean merge"
-    landings = [ln for ln in _git_bare(origin_bare, "log", "--oneline", "--", "PR_CI_LANDED.md").splitlines() if ln.strip()]
+    landings = [
+        ln for ln in _git_bare(origin_bare, "log", "--oneline", "--", "PR_CI_LANDED.md").splitlines() if ln.strip()
+    ]
     assert len(landings) == 1, f"PR_CI_LANDED.md landed {len(landings)} times on bare main"
 
 
