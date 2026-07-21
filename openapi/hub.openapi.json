@@ -849,6 +849,44 @@
         "title": "ChunkUsageView",
         "type": "object"
       },
+      "CliTokenRequest": {
+        "description": "``POST /api/auth/cli/token``'s body (issue #96) \u2014 the CLI's PKCE code exchange.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "code_verifier": {
+            "title": "Code Verifier",
+            "type": "string"
+          },
+          "redirect_uri": {
+            "title": "Redirect Uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "code_verifier",
+          "redirect_uri"
+        ],
+        "title": "CliTokenRequest",
+        "type": "object"
+      },
+      "CliTokenResponse": {
+        "description": "The minted hub session token (decision D6) \u2014 never a runner-style JWT.",
+        "properties": {
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "title": "CliTokenResponse",
+        "type": "object"
+      },
       "CompletionSubmission": {
         "description": "A node-step's completion \u2014 judgement choice + checks + artifacts + epoch.",
         "properties": {
@@ -3444,6 +3482,38 @@
               "title": "Response Mode",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "code_challenge",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code Challenge"
+            }
+          },
+          {
+            "in": "query",
+            "name": "code_challenge_method",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code Challenge Method"
+            }
           }
         ],
         "responses": {
@@ -3467,6 +3537,48 @@
           }
         },
         "summary": "Authorize",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/cli/token": {
+      "post": {
+        "description": "Redeem a ``client=cli`` authorize code for a hub session token (issue #96).\n\nPublic plane, like ``authorize`` itself \u2014 there is no session yet at this point,\nthat is what this route mints. One undifferentiated 400 covers every failure\n(unknown/expired/already-consumed code, a mismatched ``redirect_uri``, or a PKCE\nverifier that does not hash to the stored challenge) \u2014 mirrors ``authorize``'s own\n\"don't tell a caller which check failed\" shape.",
+        "operationId": "cli_token_api_auth_cli_token_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CliTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CliTokenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cli Token",
         "tags": [
           "auth"
         ]

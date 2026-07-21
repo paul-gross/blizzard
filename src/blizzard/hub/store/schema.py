@@ -834,7 +834,17 @@ sessions = Table(
 # here; the same table is reused, unmodified, by #95's hub-as-IdP authorize).
 # ``provider_name`` cross-checks the callback's own ``{name}`` path segment. No
 # separate cleanup job removes expired rows — a stale row simply never resolves
-# (``expires_at`` is checked at read, not swept).
+# (``expires_at`` is checked at read, not swept). ``user_id`` (issue #96) is set only on
+# a ``kind="cli_login"`` row, whose ``state`` column holds the minted authorization
+# `code`: the user to mint a session for once the CLI presents the PKCE verifier at
+# ``POST /api/auth/cli/token`` — every other ``kind`` leaves it null. Deliberately no
+# ``ForeignKey`` (unlike ``sessions.user_id``/``identities.user_id``): the column is
+# added to an already-existing table via a later migration's ``ALTER TABLE ADD
+# COLUMN``, and SQLite refuses to ever ``DROP COLUMN`` an FK-participating column
+# baked into a table's original ``CREATE TABLE`` (which this one would be on a fresh
+# ``base -> head`` build, since this ``Table`` object — not a frozen literal copy — is
+# what the *creating* migration's own ``table.create()`` uses) short of a full
+# batch-mode table rebuild; the reference is enforced at the application layer only.
 auth_state = Table(
     "auth_state",
     metadata,
@@ -845,6 +855,7 @@ auth_state = Table(
     Column("code_challenge", String, nullable=True),  # reserved for #96's PKCE public client
     Column("created_at", UtcDateTime, nullable=False),
     Column("expires_at", UtcDateTime, nullable=False),
+    Column("user_id", String, nullable=True),  # issue #96, cli_login rows only — see note above
 )
 
 # The append-only, non-chunk auth/security event log (``bzh:facts-not-status``) —

@@ -15,6 +15,7 @@ resource's own noun."""
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
 from collections.abc import Callable
@@ -28,6 +29,7 @@ import yaml
 
 from blizzard.cli.host_directory import resolve_host_directory
 from blizzard.foundation.store.migrations import RevisionMismatchError
+from blizzard.hub import cli_login, session_store
 from blizzard.hub.app import build_hosted_app
 from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.hub.delivery.hub_node import ENV_MARKER_CALLBACK_URL
@@ -74,6 +76,15 @@ def _api_error(operation: str, exc: Exception) -> click.ClickException:
     return click.ClickException(f"{operation} failed: {exc}")
 
 
+def _bearer_headers(resolved_hub_url: str) -> dict[str, str]:
+    """The ``Authorization: Bearer <session-token>`` header for ``resolved_hub_url``
+    (issue #96), read from the local session store — empty when no session is stored
+    for this hub (an ``auth.mode=none`` hub, or one never logged into), so every verb
+    keeps working with no login, as today."""
+    token = session_store.load_session(resolved_hub_url)
+    return {"Authorization": f"Bearer {token}"} if token else {}
+
+
 def _request(
     method: str,
     path: str,
@@ -88,14 +99,25 @@ def _request(
     persistent ``httpx.Client`` in the way), and wraps a transport failure in a
     ``ClickException`` naming the call. Response-status handling is the caller's
     (:func:`_check`) — a shared transport seam, not a shared status-branch policy,
-    since the right fallback message and which codes matter both vary per verb."""
-    full_url = f"{_hub_url(hub_url).rstrip('/')}{path}"
+    since the right fallback message and which codes matter both vary per verb.
+
+    Attaches the stored session token (issue #96), if any, as a bearer header — the
+    same seam every verb already goes through, so login/logout are the only commands
+    that need to think about the token file at all. Omitted (not even an empty dict)
+    when no session is stored, so every existing test's ``httpx``-stubbing fake — none
+    of which accept a ``headers`` kwarg — keeps working unchanged, exactly like
+    ``json``/``params`` above."""
+    resolved = _hub_url(hub_url)
+    full_url = f"{resolved.rstrip('/')}{path}"
     call = getattr(httpx, method)
     kwargs: dict[str, object] = {"timeout": _CLIENT_TIMEOUT}
     if json_body is not None:
         kwargs["json"] = json_body
     if params is not None:
         kwargs["params"] = params
+    headers = _bearer_headers(resolved)
+    if headers:
+        kwargs["headers"] = headers
     try:
         return call(full_url, **kwargs)
     except httpx.HTTPError as exc:
@@ -116,13 +138,25 @@ def _detail(resp: httpx.Response, fallback: str) -> str:
     return fallback
 
 
+#: The actionable hint every verb's own 401 maps to (issue #96), unless the caller
+#: named its own 401 entry in ``on_status`` (a route with a more specific meaning for
+#: it). An expired/revoked session, or none at all against an ``oauth`` hub, both land
+#: here — never a raw ``401 Unauthorized`` traceback-shaped message.
+_LOGIN_HINT = "not authenticated — run `blizzard hub login`"
+
+
 def _check(resp: httpx.Response, operation: str, *, on_status: dict[int, str] | None = None) -> None:
     """Map a handful of status codes to a ``ClickException`` reading the body's own
     ``detail`` (falling back to the per-code default named in ``on_status``);
     anything else still genuinely errors via ``raise_for_status``. The shared
-    404/409/422-ish status-branch block every verb used to carry inline."""
+    404/409/422-ish status-branch block every verb used to carry inline.
+
+    A bare 401 not already named in ``on_status`` gets the actionable login hint
+    (issue #96) rather than ``raise_for_status``'s generic message."""
     if on_status and resp.status_code in on_status:
         raise click.ClickException(_detail(resp, on_status[resp.status_code]))
+    if resp.status_code == httpx.codes.UNAUTHORIZED:
+        raise click.ClickException(_LOGIN_HINT)
     try:
         resp.raise_for_status()
     except httpx.HTTPError as exc:
@@ -370,10 +404,60 @@ def rotate_signing_key(hub_url: str | None) -> None:
     demoting the old current to previous; runners pick up the new key by re-fetching
     JWKS on an unknown ``kid``, no restart. A no-op error under ``auth.mode = "none"``
     (no keypair exists). Human-plane, gated on ``user:manage`` — under ``auth.mode =
-    "oauth"`` this requires a hub session the CLI does not yet mint (issue #96)."""
+    "oauth"`` this requires a hub session (``blizzard hub login``, issue #96)."""
     resp = _request("post", "/api/auth/rotate-signing-key", hub_url=hub_url, json_body=None)
     _check(resp, "POST /auth/rotate-signing-key", on_status={404: "the IdP surface is not enabled (auth.mode=none)"})
     click.echo("signing key rotated")
+
+
+@hub.command()
+@_hub_url_options
+@click.option(
+    "--paste",
+    "paste",
+    is_flag=True,
+    default=False,
+    help="Use the paste-code flow (no local loopback listener) instead of opening a browser.",
+)
+@click.option(
+    "--no-browser", "no_browser", is_flag=True, default=False, help="Print the login URL instead of opening it."
+)
+def login(hub_url: str | None, paste: bool, no_browser: bool) -> None:
+    """Log into the hub (issue #96) — opens the browser to the hub's own authorize
+    endpoint (PKCE, an ephemeral ``127.0.0.1`` loopback redirect); the user completes
+    login *at the hub* (an existing session, or the hub's own provider dance), and the
+    resulting session token is stored locally for subsequent verbs. The CLI never
+    contacts a provider directly.
+
+    ``--paste`` uses the paste-code fallback instead: the hub renders a short
+    one-time code the user pastes back into this prompt — for a headless/remote shell
+    with no reachable loopback listener. ``--no-browser`` alone still runs the
+    loopback flow (it only skips the automatic ``webbrowser.open`` call, printing the
+    URL to visit instead)."""
+    base = _hub_url(hub_url)
+    try:
+        if paste:
+            token = cli_login.paste_code_login(base, prompt_for_code=lambda: click.prompt("Paste the code"))
+        else:
+            token = cli_login.loopback_login(base, open_browser=not no_browser)
+    except cli_login.LoginError as exc:
+        raise click.ClickException(f"login failed: {exc}") from exc
+    session_store.save_session(base, token)
+    click.echo(f"logged in to {base}")
+
+
+@hub.command()
+@_hub_url_options
+def logout(hub_url: str | None) -> None:
+    """Log out of the hub (issue #96) — deletes the locally stored session token and
+    revokes it at the hub, so it stops resolving even if it leaked. A no-op (locally)
+    if never logged in; the revoke call is best-effort (a hub already unreachable, or
+    an already-expired session, does not block the local cleanup)."""
+    base = _hub_url(hub_url)
+    with contextlib.suppress(click.ClickException):
+        _request("post", "/api/auth/logout", hub_url=base, json_body=None)
+    session_store.delete_session(base)
+    click.echo(f"logged out of {base}")
 
 
 # --------------------------------------------------------------------------- #

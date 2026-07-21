@@ -23,6 +23,10 @@ pytestmark = pytest.mark.component
 class _FakeResponse:
     def __init__(self, payload: object) -> None:
         self._payload = payload
+        # issue #96's `_check` reads `.status_code` unconditionally (the actionable
+        # 401 mapping), not just inside an `on_status` branch — every response this
+        # file installs is a plain 200.
+        self.status_code = 200
 
     def raise_for_status(self) -> None:
         pass

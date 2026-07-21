@@ -34,6 +34,10 @@ dependencies = [
     # (decision D1, epic #89). The same library backs #95's hub-signed runner JWTs, so
     # it is declared here rather than deferred to that phase.
     "pyjwt[crypto]>=2.9.0",
+    # `blizzard hub login`'s local session-token store (issue #96) — the
+    # per-platform user config dir (`~/.config/blizzard/` on Linux) `sessions.json`
+    # is written under.
+    "platformdirs>=4.0.0",
 ]
 
 [build-system]

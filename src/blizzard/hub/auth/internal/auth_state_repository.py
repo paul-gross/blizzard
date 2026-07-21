@@ -43,6 +43,7 @@ class AuthStateRepository:
                         code_challenge=entry.code_challenge,
                         created_at=entry.created_at,
                         expires_at=entry.expires_at,
+                        user_id=entry.user_id,
                     )
                 )
         except IntegrityError as exc:
@@ -75,6 +76,7 @@ class AuthStateRepository:
             code_challenge=row.code_challenge,
             created_at=row.created_at,
             expires_at=row.expires_at,
+            user_id=row.user_id,
         )
 
 

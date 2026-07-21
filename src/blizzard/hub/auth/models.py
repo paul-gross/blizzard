@@ -82,6 +82,9 @@ class AuthStateEntry:
     code_challenge: str | None
     created_at: datetime
     expires_at: datetime
+    #: The resolved user this row will mint a session for (issue #96) — set only on a
+    #: ``kind="cli_login"`` row (every earlier ``kind`` leaves it ``None``).
+    user_id: str | None = None
 
 
 @dataclass(frozen=True)

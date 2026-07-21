@@ -45,6 +45,7 @@ def test_tables_and_columns_exist_after_upgrading_an_existing_store(tmp_path: Pa
         "code_challenge",
         "created_at",
         "expires_at",
+        "user_id",  # issue #96, added by a later revision
     }
 
     facts_columns = {c["name"] for c in inspector.get_columns("auth_facts")}

@@ -582,6 +582,38 @@ export type ChunkUsageView = {
 };
 
 /**
+ * CliTokenRequest
+ *
+ * ``POST /api/auth/cli/token``'s body (issue #96) — the CLI's PKCE code exchange.
+ */
+export type CliTokenRequest = {
+    /**
+     * Code
+     */
+    code: string;
+    /**
+     * Code Verifier
+     */
+    code_verifier: string;
+    /**
+     * Redirect Uri
+     */
+    redirect_uri: string;
+};
+
+/**
+ * CliTokenResponse
+ *
+ * The minted hub session token (decision D6) — never a runner-style JWT.
+ */
+export type CliTokenResponse = {
+    /**
+     * Token
+     */
+    token: string;
+};
+
+/**
  * CompletionSubmission
  *
  * A node-step's completion — judgement choice + checks + artifacts + epoch.
@@ -2438,6 +2470,14 @@ export type AuthorizeApiAuthAuthorizeGetData = {
          * Response Mode
          */
         response_mode?: string;
+        /**
+         * Code Challenge
+         */
+        code_challenge?: string | null;
+        /**
+         * Code Challenge Method
+         */
+        code_challenge_method?: string | null;
     };
     url: '/api/auth/authorize';
 };
@@ -2457,6 +2497,31 @@ export type AuthorizeApiAuthAuthorizeGetResponses = {
      */
     200: unknown;
 };
+
+export type CliTokenApiAuthCliTokenPostData = {
+    body: CliTokenRequest;
+    path?: never;
+    query?: never;
+    url: '/api/auth/cli/token';
+};
+
+export type CliTokenApiAuthCliTokenPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CliTokenApiAuthCliTokenPostError = CliTokenApiAuthCliTokenPostErrors[keyof CliTokenApiAuthCliTokenPostErrors];
+
+export type CliTokenApiAuthCliTokenPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: CliTokenResponse;
+};
+
+export type CliTokenApiAuthCliTokenPostResponse = CliTokenApiAuthCliTokenPostResponses[keyof CliTokenApiAuthCliTokenPostResponses];
 
 export type JwksApiAuthJwksJsonGetData = {
     body?: never;

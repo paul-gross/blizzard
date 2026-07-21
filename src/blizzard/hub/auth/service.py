@@ -51,6 +51,7 @@ from blizzard.hub.auth.models import (
     SuperuserBootstrap,
     User,
 )
+from blizzard.hub.auth.pkce import verify_code_challenge
 from blizzard.hub.auth.sessions import IWriteSessionRepository
 from blizzard.hub.auth.superuser_bootstrap import IWriteSuperuserBootstrapRepository
 from blizzard.hub.auth.users import IWriteUserRepository
@@ -84,6 +85,24 @@ STATE_TTL = timedelta(minutes=10)
 #: The ``auth_state.kind`` this phase's provider-login dance writes (decision D5) — the
 #: same table's ``kind`` column distinguishes #95's later hub-as-IdP authorize entries.
 PROVIDER_LOGIN_STATE_KIND = "provider_login"
+
+#: The registered public client id the CLI authenticates as (issue #96) — a built-in
+#: convention, not a per-user/per-runner registration (mirrors #95's runner clients,
+#: which *are* registered rows; ``cli`` never is).
+CLI_CLIENT_ID = "cli"
+
+#: The ``auth_state.kind`` a ``client=cli`` authorize mints (issue #96) — this table's
+#: ``state`` column holds the minted authorization *code* for this kind, not a
+#: round-tripped anti-CSRF value the way the other two kinds use it.
+CLI_LOGIN_STATE_KIND = "cli_login"
+
+#: ``secrets.token_urlsafe`` byte count for a minted CLI authorization code.
+CLI_CODE_BYTES = 32
+
+#: How long a minted CLI authorization code stays redeemable — short-lived (unlike the
+#: 10-minute provider-dance ``state``): the loopback/paste exchange happens within
+#: seconds of the browser completing the hub login.
+CLI_CODE_TTL = timedelta(minutes=5)
 
 _SLUG_DISALLOWED = re.compile(r"[^a-z0-9-]+")
 
@@ -260,6 +279,59 @@ class AuthService:
         if entry.expires_at <= self._clock.now():
             return None
         return entry
+
+    # --- CLI login (issue #96) -----------------------------------------------
+
+    def mint_cli_code(self, user: User, *, code_challenge: str, redirect_uri: str) -> str:
+        """Mint a single-use authorization code for the CLI's PKCE exchange, once
+        ``GET /api/auth/authorize?client=cli`` has already resolved ``user`` (an
+        existing hub session, or freshly minted by the #92 provider dance it bounced
+        through). Reuses the same ``auth_state`` table/mechanism as ``start_state``
+        (decision D5) — ``code_challenge`` and ``user_id`` are the two fields no other
+        ``kind`` populates. The returned code is opaque; the redeeming exchange
+        (:meth:`exchange_cli_code`) is the only place ``user_id`` and
+        ``code_challenge`` are read back."""
+        code = secrets.token_urlsafe(CLI_CODE_BYTES)
+        now = self._clock.now()
+        self._auth_state.create(
+            AuthStateEntry(
+                state=code,
+                kind=CLI_LOGIN_STATE_KIND,
+                provider_name=CLI_CLIENT_ID,
+                return_to=redirect_uri,
+                code_challenge=code_challenge,
+                created_at=now,
+                expires_at=now + CLI_CODE_TTL,
+                user_id=user.user_id,
+            )
+        )
+        return code
+
+    def exchange_cli_code(self, code: str, *, code_verifier: str, redirect_uri: str) -> str | None:
+        """Redeem a code minted by :meth:`mint_cli_code` for a fresh hub session token
+        (decision D6 — a session, never a runner-style JWT), or ``None`` on any
+        failure: an unknown/already-consumed/expired code, a ``redirect_uri`` that
+        does not exact-match the one the code was minted for, or a PKCE verifier that
+        does not hash to the stored challenge. Every failure is treated identically —
+        the route (``hub/api/idp.py``) raises one undifferentiated 400, mirroring
+        ``consume_state``'s own "bad state" uniformity, so a caller cannot fingerprint
+        which check failed."""
+        entry = self._auth_state.consume(code)
+        if entry is None or entry.kind != CLI_LOGIN_STATE_KIND:
+            return None
+        if entry.expires_at <= self._clock.now():
+            return None
+        if entry.return_to != redirect_uri:
+            return None
+        if entry.code_challenge is None or entry.user_id is None:
+            return None
+        if not verify_code_challenge(code_verifier, entry.code_challenge):
+            return None
+        user = self._users.get(entry.user_id)
+        if user is None:
+            return None
+        plaintext, _session = self.mint_session(user)
+        return plaintext
 
     def mint_username(self, handle: str) -> str:
         """A collision-free username from a provider ``handle`` — the slug, or the slug

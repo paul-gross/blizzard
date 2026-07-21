@@ -55,6 +55,9 @@ _PUBLIC: set[tuple[str, str]] = {
     # one; `jwks.json` is by definition public key material.
     ("GET", "/api/auth/authorize"),
     ("GET", "/api/auth/jwks.json"),
+    # The CLI's PKCE code exchange (issue #96) — there is no session yet at this
+    # point, that is what this route mints.
+    ("POST", "/api/auth/cli/token"),
 }
 
 #: Human plane — ``(method, path) -> permission`` required via ``require(<permission>)``.
