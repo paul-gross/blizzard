@@ -35,6 +35,7 @@ from blizzard.hub.auth.oauth.registry import OAuthProviderRegistry
 from blizzard.hub.composition import HubServices, build_services
 from blizzard.hub.config import (
     AUTH_MODE_NONE,
+    AUTH_MODE_OAUTH,
     PRODUCES_WARN,
     ROUTE_TOKEN_WARN,
     RUNNER_AUTH_WARN,
@@ -384,6 +385,9 @@ def build_hub(
         hub_marker_callback_base_url="http://testserver",
         forge_owner=forge_owner,
         oauth_registry=OAuthProviderRegistry(oauth_providers) if oauth_providers is not None else None,
+        # The IdP signing-key lifecycle (issue #95) — wired only under `oauth`, mirroring
+        # `hub/app.py`'s own `build_hosted_app` gating exactly.
+        signing_keys_dir=(tmp_path / "auth" / "signing-keys") if auth_mode == AUTH_MODE_OAUTH else None,
     )
     app = create_app(config, services=services)
     client = TestClient(app)

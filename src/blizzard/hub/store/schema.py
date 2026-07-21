@@ -706,6 +706,19 @@ runner_registrations = Table(
     # total. A reported fact refreshed in place on each re-registration (like `last_seen_at`
     # / `token_hash` above), so a `workspace_envs` change converges on the next pull.
     Column("env_capacity", Integer, nullable=True),
+    # The runner's own browser-reachable base URL (issue #95) — nullable: a runner that
+    # never registers one cannot be a federation target (its human web surface has no
+    # bounce endpoint the hub can validate a redirect against). Reported on every
+    # (re-)registration, refreshed in place like `env_capacity`/`token_hash` above.
+    Column("public_url", Text, nullable=True),
+    # The runner's allowed redirect URIs (issue #95), JSON-encoded (`json.dumps` of a
+    # `list[str]`) — the hub's IdP authorize endpoint exact-matches a presented
+    # `redirect_uri` against this set before ever minting a JWT (the open-redirect
+    # guard). `NULL`/empty means the runner has registered no callback and cannot be
+    # bounced to. A plain `Text` column (not a child table): the set is small,
+    # runner-owned, and rewritten wholesale on every registration — never queried by
+    # its members, only read back whole and matched in Python.
+    Column("redirect_uris", Text, nullable=True),
 )
 
 runner_pause_facts = Table(

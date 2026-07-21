@@ -86,6 +86,17 @@ class RunnerRegistration:
     #: ``len(workspace_envs)``), refreshed in place on each re-registration, so a config
     #: change converges; ``None`` for a runner registered by a client that predates it.
     env_capacity: int | None = None
+    #: The runner's own browser-reachable base URL (issue #95) — ``None`` for a runner
+    #: that has never registered one (or predates the field). A prerequisite for
+    #: federation: the hub's IdP authorize endpoint only bounces a browser to a
+    #: ``redirect_uri`` that exact-matches an entry in :attr:`redirect_uris`, so a
+    #: runner with no ``public_url``/``redirect_uris`` simply cannot be an authorize
+    #: ``client``.
+    public_url: str | None = None
+    #: The runner's allowed redirect URIs (issue #95) — the open-redirect guard the
+    #: hub's IdP authorize endpoint exact-matches a presented ``redirect_uri`` against.
+    #: Empty for a runner that has registered none.
+    redirect_uris: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -127,7 +138,16 @@ class IReadRunnerRegistry(Protocol):
 class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
     """Read-write registry access — only the domain layer depends on this variant."""
 
-    def upsert_registration(self, runner_id: str, *, workspace_id: str, env_capacity: int | None, at: datetime) -> bool:
+    def upsert_registration(
+        self,
+        runner_id: str,
+        *,
+        workspace_id: str,
+        env_capacity: int | None,
+        public_url: str | None = None,
+        redirect_uris: tuple[str, ...] = (),
+        at: datetime,
+    ) -> bool:
         """Register a runner (idempotent upsert), refreshing ``last_seen_at``.
 
         Returns True if the row was newly created (a first registration), False if it
@@ -136,7 +156,11 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
         ``env_capacity`` (issue #69) is the runner's reported environment-pool size,
         written on **both** the insert and the refresh branch so a ``workspace_envs``
         change converges on the next re-registration; an absent value (``None`` from an
-        older client) is written verbatim, correctly resetting the stored total to null."""
+        older client) is written verbatim, correctly resetting the stored total to null.
+
+        ``public_url``/``redirect_uris`` (issue #95) are written the same way — an
+        operator changing a runner's registered URL/callbacks converges on the next
+        re-registration, and an absent value resets the stored fields to null/empty."""
         ...
 
     def touch_last_seen(self, runner_id: str, *, at: datetime) -> bool:
@@ -178,20 +202,39 @@ class FleetService:
         self._clock = clock
         self._stale_after = stale_after
 
-    def register(self, runner_id: str, workspace_id: str, *, env_capacity: int | None = None) -> bool:
+    def register(
+        self,
+        runner_id: str,
+        workspace_id: str,
+        *,
+        env_capacity: int | None = None,
+        public_url: str | None = None,
+        redirect_uris: tuple[str, ...] = (),
+    ) -> bool:
         """Register (or refresh) a runner; returns True on a first registration.
 
         ``env_capacity`` (issue #69) rides the registration — the runner reports its
         ``len(workspace_envs)`` here, and a re-registration (its heartbeat) converges a
-        changed pool. ``None`` from a client that predates the field stores as null."""
+        changed pool. ``None`` from a client that predates the field stores as null.
+
+        ``public_url``/``redirect_uris`` (issue #95) are the runner's own optional
+        federation identity — its browser-reachable base URL and the callback(s) the
+        hub's IdP authorize endpoint is allowed to bounce a browser to. Recorded the
+        same way: unconditionally overwritten on every (re-)registration."""
         created = self._registry.upsert_registration(
-            runner_id, workspace_id=workspace_id, env_capacity=env_capacity, at=self._clock.now()
+            runner_id,
+            workspace_id=workspace_id,
+            env_capacity=env_capacity,
+            public_url=public_url,
+            redirect_uris=redirect_uris,
+            at=self._clock.now(),
         )
         _log.info(
             "runner registered",
             runner_id=runner_id,
             workspace_id=workspace_id,
             env_capacity=env_capacity,
+            public_url=public_url,
             first_time=created,
         )
         return created

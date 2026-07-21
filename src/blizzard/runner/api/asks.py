@@ -18,13 +18,14 @@ is unwired and the probe answers 503 rather than pretending.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.exceptions import HTTPException
 from pydantic import BaseModel
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import QUESTION_PREFIX, mint
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.runner.auth.federation import require_human_api
 from blizzard.runner.store.repository import AskRecord, IReadRunnerStore, IWriteRunnerStore
 from blizzard.wire.runner_status import AskListResponse, AskView
 
@@ -84,9 +85,14 @@ def _ask_view(ask: AskRecord) -> AskView:
     )
 
 
-@router.get("/asks", response_model=AskListResponse)
+@router.get("/asks", response_model=AskListResponse, dependencies=[Depends(require_human_api)])
 def list_asks(request: Request, open_only: bool = Query(True, alias="open")) -> AskListResponse:
     """Every ask still awaiting an answer — ``GET /api/asks?open=true`` (issue #51).
+
+    The one **human-web-lane** route on this otherwise worker-hook router: it is the
+    panel's / ``blizzard runner status``'s open-asks read, so it carries
+    ``require_human_api`` (issue #95) while the worker-hook POST above stays ungated. Over
+    the socket and under a ``none``-mode hub the gate resolves to the implicit identity.
 
     Derived, hub-free: an ask reads open while its ``question_id`` carries no answer
     fact (:meth:`~blizzard.runner.store.repository.IReadRunnerStore.open_asks`), whether

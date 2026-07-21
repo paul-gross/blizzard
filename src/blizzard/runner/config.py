@@ -45,6 +45,9 @@ ENV_RUNNER_PROMPT = "BZ_RUNNER_PROMPT"  # the blizzard-preamble override, inline
 # Where the coding harness writes session transcripts (issue #29); empty defaults to
 # `~/.claude/projects`, resolved once at the composition root (`runner/app.py`), never here.
 ENV_TRANSCRIPTS_ROOT = "BZ_TRANSCRIPTS_ROOT"
+# This runner's own browser-reachable base URL (issue #95) — seeded into a fresh
+# scaffold's `public_url` the same way the loop seams above are.
+ENV_PUBLIC_URL = "BZ_RUNNER_PUBLIC_URL"
 
 # Reconciliation-loop defaults. The runner is machine-level
 # and single-workspace; these seam the loop to the hub, the workspace it
@@ -181,6 +184,40 @@ class RunnerConfig:
     #: is absent from every worker/judge/resume child by construction unless an operator
     #: deliberately names it here. Empty on a fresh scaffold.
     worker_env_passthrough: tuple[str, ...] = ()
+    #: The runner's own browser-reachable base URL (issue #95) — read from the
+    #: `public_url` key. Empty (the fresh-scaffold default) means this runner does not
+    #: register a federation identity at the hub, so its human web surface stays
+    #: unreachable via the SSO bounce (and, per issue #95, stays authless when the hub
+    #: itself runs `auth.mode = "none"` — there is no IdP to bounce to either way).
+    public_url: str = ""
+    #: The hub **username** naming this runner's own sovereign (issue #95,
+    #: `[auth].superuser`) — never assignable through a JWT claim; a config-only
+    #: designation, mirroring the hub's own `auth.superuser` (a bootstrap identity, not
+    #: API-assignable). `None` (the fresh-scaffold default) names no runner-local
+    #: superuser.
+    auth_superuser: str | None = None
+    #: The fallback runner-local role for a hub identity with no `[auth.users]`
+    #: override (issue #95) — `"mirror"` reproduces the hub's own `role` claim, or a
+    #: fixed cap (`"contributor"`/`"guest"`) floors every unmatched identity there
+    #: regardless of hub role. Defaults to `"mirror"` — a fresh scaffold trusts the
+    #: hub's own role claims verbatim until an operator narrows it.
+    auth_hub_role_default: str = "mirror"
+    #: Per-hub-username role overrides (issue #95, `[auth.users]`) — a tuple of
+    #: `(username, role)` pairs (not a `dict`, so the frozen dataclass keeps every
+    #: field hashable/immutable like `workspace_envs`/`gates` above). Resolution keys
+    #: on the JWT's `username` claim only, never `email` (mutable, may be null).
+    auth_users: tuple[tuple[str, str], ...] = ()
+
+    @property
+    def redirect_uris(self) -> tuple[str, ...]:
+        """The one redirect URI this runner presents to the hub's IdP authorize
+        endpoint (issue #95) — derived from :attr:`public_url`, never independently
+        configured: the runner's own federation callback route
+        (``runner/auth/federation.py``) lives at exactly this one path, so there is
+        nothing a second, independently-configured URI could ever legitimately name."""
+        if not self.public_url:
+            return ()
+        return (f"{self.public_url.rstrip('/')}/api/auth/callback",)
 
     @property
     def config_path(self) -> Path:
@@ -290,6 +327,7 @@ class RunnerConfig:
             # environment like `workspace_prompt`, for the same reason.
             runner_prompt=os.environ.get(ENV_RUNNER_PROMPT, ""),
             transcripts_root=os.environ.get(ENV_TRANSCRIPTS_ROOT, ""),
+            public_url=os.environ.get(ENV_PUBLIC_URL, ""),
         )
 
     def to_toml(self) -> str:
@@ -309,6 +347,9 @@ class RunnerConfig:
             f"port = {self.port}\n"
             "\n# Reconciliation-loop seams.\n"
             f'hub_url = "{self.hub_url}"\n'
+            "\n# This runner's own browser-reachable base URL (issue #95); empty = no federation\n"
+            "# identity registered at the hub, so its human web surface stays unreachable via SSO.\n"
+            f'public_url = "{self.public_url}"\n'
             "\n# Names the env var carrying this runner's hub bearer token (issue #86b);\n"
             "# the secret itself lives in the runtime env file, never here.\n"
             f'token_env = "{self.token_env}"\n'
@@ -361,6 +402,14 @@ class RunnerConfig:
             + "# BLIZZARD_* identity vars are injected per spawn/judge/resume, not passed through.\n"
             + "[worker]\n"
             + f"env_passthrough = [{', '.join(f'"{v}"' for v in self.worker_env_passthrough)}]\n"
+            + "\n# Runner-local role resolution, keyed by hub username (issue #95) — lives only here,\n"
+            + '# never in the hub store/admin page. `hub_role_default` is "mirror" or a fixed cap\n'
+            + '# ("contributor"/"guest"); `superuser` names this runner\'s own sovereign.\n'
+            + "[auth]\n"
+            + (f'superuser = "{self.auth_superuser}"\n' if self.auth_superuser else '# superuser = "<hub-username>"\n')
+            + f'hub_role_default = "{self.auth_hub_role_default}"\n'
+            + "\n[auth.users]\n"
+            + "".join(f'{username} = "{role}"\n' for username, role in self.auth_users)
         )
 
     @classmethod
@@ -403,6 +452,10 @@ class RunnerConfig:
             runner_ceiling_usd=_parse_runner_ceiling_usd(raw.get("cost", {})),
             runner_ceiling_window_hours=_parse_runner_ceiling_window_hours(raw.get("cost", {})),
             worker_env_passthrough=_parse_worker_env_passthrough(raw.get("worker", {})),
+            public_url=str(raw.get("public_url", "")),
+            auth_superuser=_parse_auth_superuser(raw.get("auth", {})),
+            auth_hub_role_default=_parse_auth_hub_role_default(raw.get("auth", {})),
+            auth_users=_parse_auth_users(raw.get("auth", {})),
         )
 
 
@@ -442,3 +495,33 @@ def _parse_worker_env_passthrough(worker: object) -> tuple[str, ...]:
     if not isinstance(worker, dict) or worker.get("env_passthrough") is None:
         return ()
     return tuple(str(v) for v in worker["env_passthrough"])
+
+
+def _parse_auth_superuser(auth: object) -> str | None:
+    """``[auth].superuser`` (issue #95) — a hub **username**; absent means this runner
+    names no local sovereign."""
+    if not isinstance(auth, dict) or not auth.get("superuser"):
+        return None
+    return str(auth["superuser"])
+
+
+def _parse_auth_hub_role_default(auth: object) -> str:
+    """``[auth].hub_role_default`` (issue #95) — defaults to ``"mirror"`` when absent
+    (the table, or just this key), mirroring :func:`_parse_runner_ceiling_window_hours`'s
+    shape."""
+    if not isinstance(auth, dict) or not auth.get("hub_role_default"):
+        return "mirror"
+    return str(auth["hub_role_default"])
+
+
+def _parse_auth_users(auth: object) -> tuple[tuple[str, str], ...]:
+    """``[auth.users]`` (issue #95) — a hub-username-keyed table of per-user role
+    overrides, projected into an immutable pair tuple (see :attr:`RunnerConfig.auth_users`'s
+    own docstring for why: a frozen dataclass field must stay hashable). Absent (the
+    table, or an empty one) means no override."""
+    if not isinstance(auth, dict):
+        return ()
+    users = auth.get("users")
+    if not isinstance(users, dict):
+        return ()
+    return tuple((str(username), str(role)) for username, role in users.items())

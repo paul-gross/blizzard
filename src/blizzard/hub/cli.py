@@ -363,6 +363,19 @@ def record_marker(name: str, content: str) -> None:
     click.echo(f"recorded marker `{name}`")
 
 
+@hub.command("rotate-signing-key")
+@_hub_url_options
+def rotate_signing_key(hub_url: str | None) -> None:
+    """Rotate the hub's IdP signing keypair (issue #95) — mints a fresh current key,
+    demoting the old current to previous; runners pick up the new key by re-fetching
+    JWKS on an unknown ``kid``, no restart. A no-op error under ``auth.mode = "none"``
+    (no keypair exists). Human-plane, gated on ``user:manage`` — under ``auth.mode =
+    "oauth"`` this requires a hub session the CLI does not yet mint (issue #96)."""
+    resp = _request("post", "/api/auth/rotate-signing-key", hub_url=hub_url, json_body=None)
+    _check(resp, "POST /auth/rotate-signing-key", on_status={404: "the IdP surface is not enabled (auth.mode=none)"})
+    click.echo("signing key rotated")
+
+
 # --------------------------------------------------------------------------- #
 # `blizzard hub chunk` — issue #104
 # --------------------------------------------------------------------------- #

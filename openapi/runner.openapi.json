@@ -1410,7 +1410,7 @@
   "paths": {
     "/api/asks": {
       "get": {
-        "description": "Every ask still awaiting an answer \u2014 ``GET /api/asks?open=true`` (issue #51).\n\nDerived, hub-free: an ask reads open while its ``question_id`` carries no answer\nfact (:meth:`~blizzard.runner.store.repository.IReadRunnerStore.open_asks`), whether\nor not it has been forwarded to the hub yet. There is no closed-ask history to serve,\nso ``open=false`` is refused rather than silently answered as if it were true.",
+        "description": "Every ask still awaiting an answer \u2014 ``GET /api/asks?open=true`` (issue #51).\n\nThe one **human-web-lane** route on this otherwise worker-hook router: it is the\npanel's / ``blizzard runner status``'s open-asks read, so it carries\n``require_human_api`` (issue #95) while the worker-hook POST above stays ungated. Over\nthe socket and under a ``none``-mode hub the gate resolves to the implicit identity.\n\nDerived, hub-free: an ask reads open while its ``question_id`` carries no answer\nfact (:meth:`~blizzard.runner.store.repository.IReadRunnerStore.open_asks`), whether\nor not it has been forwarded to the hub yet. There is no closed-ask history to serve,\nso ``open=false`` is refused rather than silently answered as if it were true.",
         "operationId": "list_asks_api_asks_get",
         "parameters": [
           {
@@ -1449,6 +1449,66 @@
         "summary": "List Asks",
         "tags": [
           "runner"
+        ]
+      }
+    },
+    "/api/auth/callback": {
+      "post": {
+        "operationId": "callback_api_auth_callback_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Callback",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/login": {
+      "get": {
+        "operationId": "login_api_auth_login_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "return_to",
+            "required": false,
+            "schema": {
+              "default": "/",
+              "title": "Return To",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Login",
+        "tags": [
+          "auth"
         ]
       }
     },

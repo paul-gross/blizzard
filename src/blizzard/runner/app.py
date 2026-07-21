@@ -9,9 +9,13 @@ build the app without a migrated database.
 
 from __future__ import annotations
 
+import secrets
 from pathlib import Path
+from urllib.parse import quote
 
-from fastapi import FastAPI
+import httpx
+from fastapi import Depends, FastAPI, Request
+from fastapi.responses import RedirectResponse
 
 from blizzard import __version__
 from blizzard.foundation.assets import frontend_dir
@@ -39,6 +43,16 @@ from blizzard.runner.api.session_end import router as session_end_router
 from blizzard.runner.api.takeovers import router as takeovers_router
 from blizzard.runner.api.transcripts import router as transcripts_router
 from blizzard.runner.api.workspace_prompt import router as workspace_prompt_router
+from blizzard.runner.auth.federation import (
+    HubAuthModeCache,
+    NeedsFederationBounce,
+    require_human_api,
+    require_human_session,
+)
+from blizzard.runner.auth.federation import router as auth_router
+from blizzard.runner.auth.internal.jti_cache_repository import JtiCacheRepository
+from blizzard.runner.auth.jti_cache import IJtiCache
+from blizzard.runner.auth.jwks_cache import JwksCache
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.attachments import AttachmentService
 from blizzard.runner.domain.leases import LocalLeaseService
@@ -80,6 +94,8 @@ def create_app(
     requeue: RequeueService | None = None,
     selftests: SelfTestService | None = None,
     attachments: AttachmentService | None = None,
+    hub_http_client: httpx.Client | None = None,
+    jti_cache: IJtiCache | None = None,
 ) -> FastAPI:
     """Build a fully wired runner app from resolved config.
 
@@ -127,7 +143,10 @@ def create_app(
     # The runner store backs the local-API heartbeat write; the injected clock
     # stamps the beat (``bzh:injected-clock``). Both None on the store-free app.
     app.state.runner_store = runner_store
-    app.state.clock = SystemClock() if runner_store is not None else None
+    # Unconditional (unlike the store-backed seams below): a stateless wrapper over the
+    # wall clock, and issue #95's session-gating dependency needs it regardless of
+    # whether a store is wired.
+    app.state.clock = SystemClock()
     # The panel's derived-lease-state read (issue #28) — hub-free by construction.
     app.state.leases = leases
     # The panel's transcript read (issue #29) — hub-free, filesystem-backed.
@@ -152,52 +171,129 @@ def create_app(
         process=LinuxProcessProbe(),
         clock=SystemClock(),
     )
+    # The SSO federation seam (issue #95). `hub_http_client` defaults to a plain
+    # `httpx.Client` against the configured hub. Unlike every other seam above,
+    # `create_app`'s own default here must **not** reach the real network at
+    # `config.hub_url` — this is the app the OpenAPI exporter and every unit/component
+    # test build, and probing a real address (which may coincidentally have something
+    # listening — this exact daemon, dogfooded, commonly does) would make the human
+    # lane's gating flip on nondeterministically outside the `host` composition root's
+    # control. So the default here is a local, transport-level double that always
+    # answers 404 (`HubAuthModeCache.enabled()` reads that as "no IdP surface" and
+    # falls back to the implicit identity) — safe and hermetic, mirroring the
+    # store-free seams' own "leave it honestly unwired" posture. Only
+    # :func:`build_hosted_app` (the real `host` composition root) wires a client that
+    # actually reaches the configured hub.
+    hub_http_client = hub_http_client or httpx.Client(
+        transport=httpx.MockTransport(lambda _request: httpx.Response(404)),
+        # A fixed placeholder, deliberately **not** `config.hub_url` — that may be
+        # empty (an unenrolled runner, `hub_url=""`) or otherwise not a valid absolute
+        # base for httpx's own URL machinery, and the exact value is irrelevant here
+        # since every request against it is answered locally by the transport above.
+        base_url="http://runner-hub-client-hermetic-default.invalid",
+    )
+    app.state.hub_auth_mode = HubAuthModeCache(hub_http_client)
+    app.state.jwks_cache = JwksCache(hub_http_client, "/api/auth/jwks.json")
+    app.state.jti_cache = jti_cache
+    # A per-process secret signing the runner's own session cookie (`runner/auth/
+    # session.py`) — minted fresh at every daemon start, so a restart invalidates
+    # every live session (see that module's docstring for why this is an accepted
+    # tradeoff, not a gap).
+    app.state.session_secret = secrets.token_bytes(32)
+
+    @app.exception_handler(NeedsFederationBounce)
+    def _bounce_to_login(_: Request, exc: NeedsFederationBounce) -> RedirectResponse:
+        return RedirectResponse(f"/api/auth/login?return_to={quote(exc.return_to, safe='')}")
+
+    # The three-tenant partition (issue #95). The runner's API seam is split into three
+    # lanes, and only the **human web lane** is session-gated when the hub runs an IdP
+    # surface (`auth.mode = "oauth"`):
+    #   - **worker-hook lane** (ungated) — asks-POST/heartbeat/session-end/attachments/
+    #     pm-items: workers call these over TCP via `BLIZZARD_RUNNER_URL` and *cannot*
+    #     SSO-bounce, so they keep their existing lanes (lease-token auth where present).
+    #   - **CLI unix-socket lane** (ungated) — the CLI's local verbs dial the human-lane
+    #     routes over the socket, whose access control is the socket file's filesystem
+    #     permissions; `require_human_api`/`require_human_session` grant the implicit
+    #     identity to any socket peer (`request.client is None`), so the socket door is
+    #     never gated. A CLI reaching a human route over `--runner-url` **TCP** under an
+    #     oauth-mode hub instead gets a 401 — CLI session auth is #96.
+    #   - **human web lane** (gated) — the served web app *and the JSON API it reads*.
+    #     The static app mounted at `/` is gated by the middleware below (a 302 bounce a
+    #     page load follows); its reads/writes — the panel's own `/api/*` routes — carry
+    #     `Depends(require_human_api)` at their router includes below (a 401 the SPA acts
+    #     on). Gating the served shell alone would leave the JSON API it renders wide open
+    #     to any browser or curl over TCP, which is not a gated surface at all.
+    # Under `auth.mode = "none"` (no hub IdP surface) every lane resolves to the implicit
+    # identity, preserving today's fully-authless behaviour.
+    @app.middleware("http")
+    async def _gate_web_surface(request: Request, call_next):  # type: ignore[no-untyped-def]
+        if not request.url.path.startswith("/api"):
+            try:
+                require_human_session(request)
+            except NeedsFederationBounce as exc:
+                return RedirectResponse(f"/api/auth/login?return_to={quote(exc.return_to, safe='')}")
+        return await call_next(request)
+
+    # The human-web-lane gate the panel's own reads/writes carry (issue #95). Declared
+    # once here and attached at each human router's `include_router` below.
+    human_api = [Depends(require_human_api)]
 
     # API routers first, so /api/* always wins over the web mount at /.
     app.include_router(health_router)
     app.include_router(readiness_router)
+    # The SSO federation bounce (issue #95) — public: it is what *establishes* a
+    # session, so it cannot itself be session-gated.
+    app.include_router(auth_router)
+    # Worker-hook lane (ungated): workers call these over TCP and cannot SSO-bounce.
     app.include_router(heartbeat_router)
     app.include_router(session_end_router)
+    # `asks_router` is the one mixed router: its POST `/leases/{id}/asks` is the
+    # worker-hook record (ungated), while its GET `/asks` is a human-lane panel/status
+    # read that carries `Depends(require_human_api)` at the route itself (`api/asks.py`).
     app.include_router(asks_router)
     # The worker attach channel (issue #113, Phase 2): a lease-token-authorized,
-    # explicit artifact submission for a `produces:` name.
+    # explicit artifact submission for a `produces:` name — worker-hook lane, ungated.
     app.include_router(attachments_router)
     # The worker artifact read (issue #127): the same lease-token-authorized, lease-scoped
     # shape as attach, but proxied to the hub's envelope so the worker reads its own
-    # node-step inputs (`blizzard runner artifact list|get`) without a hub credential.
+    # node-step inputs (`blizzard runner artifact list|get`) without a hub credential —
+    # worker-hook lane, ungated.
     app.include_router(artifacts_router)
-    app.include_router(leases_router)
-    app.include_router(transcripts_router)
-    app.include_router(selftests_router)
-    # The PM-item pass-through proxy: a build worker reads its issue through
-    # this route, which forwards to the hub — the worker never crosses a layer.
+    # The PM-item pass-through proxy: a build worker reads its issue through this route
+    # (`blizzard runner pm-items` over `BLIZZARD_RUNNER_URL`), which forwards to the hub —
+    # worker-hook lane, ungated (the worker never crosses a layer).
     app.include_router(pm_items_router)
+    # Human web lane (gated under an oauth-mode hub): the panel's own reads/writes.
+    app.include_router(leases_router, dependencies=human_api)
+    app.include_router(transcripts_router, dependencies=human_api)
+    app.include_router(selftests_router, dependencies=human_api)
     # The fleet-summary pass-through (issue #76): the machine panel's counts strip reads
     # the fleet's four bucket counts through this route, forwarded to the hub — the same
     # layered pass-through as PM-items, keeping the hub-free local rails hub-free.
-    app.include_router(fleet_summary_router)
+    app.include_router(fleet_summary_router, dependencies=human_api)
     # The runtime workspace-prompt control (issue #17): read the effective spawn preamble
     # prompt, or replace the override so the next spawn picks it up with no restart.
-    app.include_router(workspace_prompt_router)
+    app.include_router(workspace_prompt_router, dependencies=human_api)
     # The runner's own declarative pause brake (issue #43): local, distinct from the hub's,
     # and reachable with the hub down — the operator contract's standing requirement. Also
     # carries `GET /runner` (issue #51), the status summary.
-    app.include_router(control_router)
+    app.include_router(control_router, dependencies=human_api)
     # The machine-local status view's remaining list routes (issue #51): held
     # environments and parked escalations. `GET /asks` rides the existing `asks_router`.
-    app.include_router(environments_router)
-    app.include_router(escalations_router)
+    app.include_router(environments_router, dependencies=human_api)
+    app.include_router(escalations_router, dependencies=human_api)
     # The local fact log: the outbound buffer read as a ledger, for the local panel.
-    app.include_router(facts_router)
+    app.include_router(facts_router, dependencies=human_api)
     # The operator takeover (issue #52): open/close a chunk's interactive session over
     # the local API — the CLI is a pure client of these two routes.
-    app.include_router(takeovers_router)
+    app.include_router(takeovers_router, dependencies=human_api)
     # The operator requeue (issue #53): clear a needs_human chunk's local hold so the
     # next FILL spawns a fresh attempt at its current node.
-    app.include_router(requeues_router)
+    app.include_router(requeues_router, dependencies=human_api)
 
     # The runner-served web app (post-MVP); the mount point is live from the
-    # scaffold so the seam is exercised.
+    # scaffold so the seam is exercised. This is the human web lane the middleware
+    # above gates (issue #95) — the only browser-facing surface this daemon serves.
     mount_web_app(app, frontend_dir("runner"), app_name="blizzard-runner")
 
     log.info("runner app created", db_url=config.db_url, readiness_wired=readiness is not None)
@@ -268,6 +364,13 @@ def build_hosted_app(config: RunnerConfig) -> FastAPI:
     # ``SystemClock()`` instance, like the siblings above: stateless, so a second
     # instance is equivalent to sharing one.
     attachments = AttachmentService(runner_store, SystemClock())
+    # The SSO federation jti replay cache (issue #95, decision D4) — store-backed over
+    # the same engine every other seam above shares.
+    jti_cache = JtiCacheRepository(engine)
+    # The real, network-reaching hub client (issue #95) — only the `host` composition
+    # root wires one; `create_app`'s own default is a hermetic double (see its own
+    # docstring for why).
+    hub_http_client = httpx.Client(base_url=config.hub_url, timeout=5.0)
     return create_app(
         config,
         readiness=readiness,
@@ -280,6 +383,8 @@ def build_hosted_app(config: RunnerConfig) -> FastAPI:
         takeover=takeover,
         requeue=requeue,
         attachments=attachments,
+        jti_cache=jti_cache,
+        hub_http_client=hub_http_client,
     )
 
 

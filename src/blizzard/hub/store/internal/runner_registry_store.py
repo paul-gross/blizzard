@@ -22,6 +22,7 @@ hash-indexed read the runner-auth dependency resolves a presented token through.
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 
 from sqlalchemy import Engine, insert, select
@@ -70,11 +71,23 @@ class RunnerRegistryStore:
 
     # --- writes -------------------------------------------------------------
 
-    def upsert_registration(self, runner_id: str, *, workspace_id: str, env_capacity: int | None, at: datetime) -> bool:
-        # `env_capacity` is written on both branches — an unconditional overwrite on refresh
-        # is what converges a changed `workspace_envs` on the next re-registration, and
-        # writes `None` verbatim (an older client that omits it resets the stored total to
-        # null), mirroring the `workspace_id`/`last_seen_at` rewrite-in-place upsert.
+    def upsert_registration(
+        self,
+        runner_id: str,
+        *,
+        workspace_id: str,
+        env_capacity: int | None,
+        public_url: str | None = None,
+        redirect_uris: tuple[str, ...] = (),
+        at: datetime,
+    ) -> bool:
+        # `env_capacity`/`public_url`/`redirect_uris` are written on both branches — an
+        # unconditional overwrite on refresh is what converges a changed `workspace_envs`
+        # (or federation identity, issue #95) on the next re-registration, and writes
+        # `None`/empty verbatim (an older client that omits them resets the stored
+        # values to null), mirroring the `workspace_id`/`last_seen_at` rewrite-in-place
+        # upsert.
+        redirect_uris_json = json.dumps(list(redirect_uris)) if redirect_uris else None
         with self._engine.begin() as conn:
             existing = conn.execute(
                 select(s.runner_registrations.c.runner_id).where(s.runner_registrations.c.runner_id == runner_id)
@@ -87,13 +100,21 @@ class RunnerRegistryStore:
                         registered_at=at,
                         last_seen_at=at,
                         env_capacity=env_capacity,
+                        public_url=public_url,
+                        redirect_uris=redirect_uris_json,
                     )
                 )
                 return True
             conn.execute(
                 s.runner_registrations.update()
                 .where(s.runner_registrations.c.runner_id == runner_id)
-                .values(workspace_id=workspace_id, last_seen_at=at, env_capacity=env_capacity)
+                .values(
+                    workspace_id=workspace_id,
+                    last_seen_at=at,
+                    env_capacity=env_capacity,
+                    public_url=public_url,
+                    redirect_uris=redirect_uris_json,
+                )
             )
             return False
 
@@ -188,6 +209,8 @@ class RunnerRegistryStore:
             locally_paused_reason=locally_paused_reason,
             token_hash=row.token_hash,
             env_capacity=row.env_capacity,
+            public_url=row.public_url,
+            redirect_uris=tuple(json.loads(row.redirect_uris)) if row.redirect_uris else (),
         )
 
 

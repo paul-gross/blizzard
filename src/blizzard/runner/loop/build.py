@@ -76,6 +76,8 @@ def build_loop_context(
         max_agents=config.max_agents,
         base_branch=config.base_branch,
         env_capacity=len(config.workspace_envs),  # issue #69 — the board's slot-bar total
+        public_url=config.public_url,  # issue #95 — this runner's own federation identity
+        redirect_uris=config.redirect_uris,
         local_api_url=f"http://{config.host}:{config.port}",
         gates=config.gates,
         # The spawn cwd + static workspace-prompt fallback (issue #17). The prompt file is

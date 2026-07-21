@@ -1000,6 +1000,48 @@ export type ListAsksApiAsksGetResponses = {
 
 export type ListAsksApiAsksGetResponse = ListAsksApiAsksGetResponses[keyof ListAsksApiAsksGetResponses];
 
+export type CallbackApiAuthCallbackPostData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/callback';
+};
+
+export type CallbackApiAuthCallbackPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type LoginApiAuthLoginGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Return To
+         */
+        return_to?: string;
+    };
+    url: '/api/auth/login';
+};
+
+export type LoginApiAuthLoginGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type LoginApiAuthLoginGetError = LoginApiAuthLoginGetErrors[keyof LoginApiAuthLoginGetErrors];
+
+export type LoginApiAuthLoginGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
 export type GetPmItemsApiChunksChunkIdPmItemsGetData = {
     body?: never;
     path: {

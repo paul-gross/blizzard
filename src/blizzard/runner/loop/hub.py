@@ -128,7 +128,15 @@ class IHubClient(Protocol):
         true the answer is delivered by resuming the dormant session around it."""
         ...
 
-    def register_runner(self, runner_id: str, workspace_id: str, *, env_capacity: int | None = None) -> None:
+    def register_runner(
+        self,
+        runner_id: str,
+        workspace_id: str,
+        *,
+        env_capacity: int | None = None,
+        url: str | None = None,
+        redirect_uris: tuple[str, ...] = (),
+    ) -> None:
         """``POST /api/fleet/runners`` — register into the fleet registry.
 
         Idempotent upsert: the runner registers on startup and re-registers each pull,
@@ -138,7 +146,13 @@ class IHubClient(Protocol):
 
         ``env_capacity`` (issue #69) reports the runner's configured environment-pool size
         (``len(workspace_envs)``) so the board can render a ``used/total`` slot bar; because
-        re-registration is the heartbeat, a changed pool converges on the next pull."""
+        re-registration is the heartbeat, a changed pool converges on the next pull.
+
+        ``url``/``redirect_uris`` (issue #95) are this runner's own optional federation
+        identity — its browser-reachable base URL and the callback(s) the hub's IdP
+        authorize endpoint may bounce a browser to. Reported the same way: an
+        unconditional overwrite on every (re-)registration, so a changed
+        ``public_url`` converges on the next pull exactly like ``env_capacity``."""
         ...
 
     def fetch_runner_paused(self, runner_id: str) -> bool:

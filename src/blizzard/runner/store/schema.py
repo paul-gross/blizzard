@@ -575,3 +575,25 @@ nudge_facts = Table(
     Column("epoch", Integer, nullable=False),
     Column("nudged_at", UtcDateTime, nullable=False),
 )
+
+# --- SSO federation jti replay cache (issue #95, decision D4) ---------------
+#
+# The single-use guard a hub-signed JWT's `jti` claim is checked against before the
+# runner's federation callback (`runner/auth/federation.py`) ever mints its own
+# session: store-backed (not in-memory) so the single-use guarantee survives a runner
+# restart within the JWT's own <=60s+-30s-skew lifetime, at negligible cost — see
+# `runner/auth/jti_cache.py`'s module docstring for the crash-correctness position
+# (no `bzh:crash-point-registry` entry, no new `bzh:invariant-checker` assertion: the
+# `jti` primary key alone is the single-use guarantee, enforced by the store, not a
+# derived cross-fact invariant). `expires_at` mirrors the claim's own `exp` (the
+# runner never needs to invent a retention window) so a periodic prune (or simply
+# never pruning — the row count is bounded by mint rate over a ~90s worst-case
+# window) can drop rows safely past it.
+
+jwt_jti_seen = Table(
+    "jwt_jti_seen",
+    metadata,
+    Column("jti", String, primary_key=True),
+    Column("aud", String, nullable=False),
+    Column("expires_at", UtcDateTime, nullable=False),
+)

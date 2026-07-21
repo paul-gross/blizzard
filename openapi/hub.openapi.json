@@ -2984,9 +2984,28 @@
             ],
             "title": "Env Capacity"
           },
+          "redirect_uris": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Redirect Uris",
+            "type": "array"
+          },
           "runner_id": {
             "title": "Runner Id",
             "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
           },
           "workspace_id": {
             "title": "Workspace Id",
@@ -3385,6 +3404,97 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/auth/authorize": {
+      "get": {
+        "operationId": "authorize_api_auth_authorize_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "client",
+            "required": true,
+            "schema": {
+              "title": "Client",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "redirect_uri",
+            "required": true,
+            "schema": {
+              "title": "Redirect Uri",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": true,
+            "schema": {
+              "title": "State",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "response_mode",
+            "required": false,
+            "schema": {
+              "default": "form_post",
+              "title": "Response Mode",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Authorize",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/jwks.json": {
+      "get": {
+        "operationId": "jwks_api_auth_jwks_json_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Jwks Api Auth Jwks Json Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Jwks",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/api/auth/logout": {
       "post": {
         "operationId": "logout_api_auth_logout_post",
@@ -3419,6 +3529,21 @@
           }
         },
         "summary": "List Providers",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/rotate-signing-key": {
+      "post": {
+        "description": "``blizzard hub rotate-signing-key`` (issue #95) \u2014 mint a fresh current key,\ndemoting the old current to previous. Human-plane, gated on ``user:manage`` (the\nsame admin-tier permission the user-management API uses \u2014 no new permission is\nminted for this one verb) and closed to a runner's own bearer token\n(``reject_runner_principal``, mirroring every other operator router).",
+        "operationId": "rotate_signing_key_api_auth_rotate_signing_key_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Rotate Signing Key",
         "tags": [
           "auth"
         ]
@@ -4828,7 +4953,7 @@
     },
     "/api/fleet/runners": {
       "post": {
-        "description": "Register a runner \u2014 runner id + workspace binding; idempotent upsert.\n\nRunner-auth checked (issue #86a): ``warn`` (the default) logs and proceeds on a\nmissing/invalid/mismatched token; ``enforce`` rejects.",
+        "description": "Register a runner \u2014 runner id + workspace binding; idempotent upsert.\n\nRunner-auth checked (issue #86a): ``warn`` (the default) logs and proceeds on a\nmissing/invalid/mismatched token; ``enforce`` rejects. Issue #95's optional\n``url``/``redirect_uris`` extension rides the same authenticated write \u2014 this route\nsits behind ``require_runner_principal`` at the router level\n(``fleet_router``'s own ``dependencies=``), so an unauthenticated attempt to set or\nchange a runner's federation identity is rejected exactly like every other fleet\nwrite, once #86 is enforced.",
         "operationId": "register_runner_api_fleet_runners_post",
         "requestBody": {
           "content": {

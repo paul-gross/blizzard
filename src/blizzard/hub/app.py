@@ -38,6 +38,7 @@ from blizzard.hub.api.events import router as events_router
 from blizzard.hub.api.fleet import router as fleet_router
 from blizzard.hub.api.graphs import router as graphs_router
 from blizzard.hub.api.health import router as health_router
+from blizzard.hub.api.idp import router as idp_router
 from blizzard.hub.api.me import router as me_router
 from blizzard.hub.api.questions import router as questions_router
 from blizzard.hub.api.queue import router as queue_router
@@ -120,6 +121,7 @@ def create_app(
     app.include_router(readiness_router)
     app.include_router(me_router)
     app.include_router(auth_login_router)
+    app.include_router(idp_router)
     app.include_router(events_router)
     app.include_router(graphs_router)
     app.include_router(chunks_router)
@@ -157,6 +159,9 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
     # there is no login mechanism, so no provider is built even if `[[auth.oauth.
     # provider]]` entries are configured (mirrors #95's "no IdP surface under none").
     oauth_providers = config.auth.oauth_providers if config.auth.mode == AUTH_MODE_OAUTH else ()
+    # The IdP signing-key lifecycle (issue #95) — likewise built only under `oauth`; a
+    # `none` deployment never touches disk for a keypair it will never mint or publish.
+    signing_keys_dir = config.data_dir / "auth" / "signing-keys" if config.auth.mode == AUTH_MODE_OAUTH else None
 
     services = build_services(
         engine,
@@ -169,6 +174,7 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
         forge_token=os.environ.get(ENV_FORGE_TOKEN),
         forge_owner=owner,
         oauth_providers=oauth_providers,
+        signing_keys_dir=signing_keys_dir,
     )
     # Only checked once the store is confirmed at the expected schema head — reusing
     # the same readiness evaluation `/api/ready` reports rather than a raw query, so a

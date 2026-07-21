@@ -41,6 +41,16 @@ class LoopConfig:
     #: ``total``; the loop consumes only the count, so the full pool stays with the provider.
     #: ``None`` means unreported — the hub stores null and the board omits the bar.
     env_capacity: int | None = None
+    #: This runner's own browser-reachable base URL (issue #95), mirrored once at
+    #: composition from :attr:`~blizzard.runner.config.RunnerConfig.public_url`.
+    #: Reported to the hub on each registration alongside :attr:`redirect_uris`; empty
+    #: means this runner registers no federation identity.
+    public_url: str = ""
+    #: The redirect URI(s) this runner presents to the hub's IdP authorize endpoint
+    #: (issue #95), mirrored once from
+    #: :attr:`~blizzard.runner.config.RunnerConfig.redirect_uris` (itself derived from
+    #: ``public_url``).
+    redirect_uris: tuple[str, ...] = ()
     default_retries_max: int = DEFAULT_RETRIES_MAX
     #: The runner's own local-API base URL, handed to a spawned worker as
     #: ``BLIZZARD_RUNNER_URL`` so its heartbeat hook posts back.

@@ -19,6 +19,7 @@ live daemon (no daemon serving; the flag-conflict validation) stay **unit**.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import threading
 import time
@@ -482,6 +483,14 @@ def _serve_local_api(root: Path) -> Iterator[tuple[Path, str]]:
     daemon on the box.
     """
     config = RunnerConfig.load(root, port=0)
+    # Pin the runner's SSO auth-mode probe (issue #95) to a none-mode (unreachable) hub so
+    # the human-lane gating resolves deterministically to the authless path these hub-free
+    # local-verb tests assume — never flipping *on* because a real oauth hub happens to be
+    # listening on the default port (a dogfooded local instance commonly is). The
+    # `--runner-url` **TCP** CLI-admin lane is legitimately session-gated under an *oauth*
+    # hub (a 401; CLI session auth is issue #96); the socket door and a none-mode hub keep
+    # it open, which is exactly the surface this suite exercises.
+    config = dataclasses.replace(config, hub_url="http://127.0.0.1:1")
     app = build_hosted_app(config)
     sockets = bind_listeners(config)
     tcp_url = f"http://{sockets[1].getsockname()[0]}:{sockets[1].getsockname()[1]}"

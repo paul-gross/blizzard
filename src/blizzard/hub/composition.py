@@ -41,6 +41,7 @@ from blizzard.hub.auth.oauth.internal.factory import build_oauth_registry
 from blizzard.hub.auth.oauth.registry import IOAuthProviderRegistry
 from blizzard.hub.auth.service import AuthService
 from blizzard.hub.auth.sessions import IReadSessionRepository
+from blizzard.hub.auth.signing import SigningKeyService
 from blizzard.hub.auth.throttle import IpThrottle
 from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.config import OAuthProviderConfig
@@ -141,6 +142,11 @@ class HubServices:
     auth_throttle: IpThrottle
     #: The non-chunk auth/security fact log (issue #92) — ``login_failed``/``sso_refused``.
     auth_facts: AuthFactsService
+    #: The hub's IdP signing-key lifecycle (issue #95) — ``None`` under ``auth.mode =
+    #: "none"`` (mirrors ``oauth_providers`` being empty in that case): there is no
+    #: keypair on disk, no JWKS, and ``hub/api/idp.py`` 404s every route rather than
+    #: reaching for a service that was never wired.
+    signing: SigningKeyService | None
 
 
 def build_services(
@@ -160,6 +166,7 @@ def build_services(
     oauth_providers: Sequence[OAuthProviderConfig] = (),
     oauth_http_client: httpx.Client | None = None,
     oauth_registry: IOAuthProviderRegistry | None = None,
+    signing_keys_dir: Path | None = None,
 ) -> HubServices:
     """Construct and wire every fleet service over a migrated store engine.
 
@@ -233,6 +240,11 @@ def build_services(
     # is every pre-#92 and every ``auth.mode = "none"`` deployment (the ``host`` root
     # passes an empty sequence in that case).
     oauth_registry = oauth_registry or build_oauth_registry(oauth_providers, http_client=oauth_http_client)
+    # The hub's IdP signing-key lifecycle (issue #95) — constructed only when the `host`
+    # composition root passes a directory (under `auth.mode = "oauth"`, mirroring
+    # `oauth_providers`'s own "empty under none"); `None` under `none` so
+    # `hub/api/idp.py` 404s rather than reaching for a service that was never wired.
+    signing = SigningKeyService(signing_keys_dir) if signing_keys_dir is not None else None
     auth_throttle = IpThrottle(clock=clock)
     # Shared between ClaimService and EditService (issue #120) — the one in-process
     # lock serializing both services' check-then-act sequences over a chunk's live-route
@@ -278,4 +290,5 @@ def build_services(
         oauth_providers=oauth_registry,
         auth_throttle=auth_throttle,
         auth_facts=auth_facts_service,
+        signing=signing,
     )

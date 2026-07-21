@@ -50,6 +50,11 @@ _PUBLIC: set[tuple[str, str]] = {
     ("GET", "/api/auth/{name}/authorize"),
     ("GET", "/api/auth/{name}/callback"),
     ("POST", "/api/auth/logout"),
+    # The hub-as-IdP surface (issue #95) — `authorize` authenticates the browser
+    # itself (via an existing session, or the #92 dance) rather than being gated by
+    # one; `jwks.json` is by definition public key material.
+    ("GET", "/api/auth/authorize"),
+    ("GET", "/api/auth/jwks.json"),
 }
 
 #: Human plane — ``(method, path) -> permission`` required via ``require(<permission>)``.
@@ -88,6 +93,9 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("GET", "/api/spend"): FLEET_VIEW,
     ("GET", "/api/users"): USER_MANAGE,
     ("POST", "/api/users/{user_id}/role"): USER_MANAGE,
+    # Key rotation (issue #95) — the same admin-tier permission the user-management
+    # API uses; no new permission is minted for this one verb.
+    ("POST", "/api/auth/rotate-signing-key"): USER_MANAGE,
 }
 
 #: Fleet plane — every route mounted under ``/api/fleet/*`` (issue #87's own

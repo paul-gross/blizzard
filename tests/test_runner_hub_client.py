@@ -168,7 +168,8 @@ def test_register_runner_posts_registration() -> None:
 
     _client(handler).register_runner("r1", "ws1", env_capacity=4)
     # env_capacity (issue #69) rides the registration body — the board's slot-bar total.
-    assert seen == {"runner_id": "r1", "workspace_id": "ws1", "env_capacity": 4}
+    # url/redirect_uris (issue #95) default to null/empty when the caller omits them.
+    assert seen == {"runner_id": "r1", "workspace_id": "ws1", "env_capacity": 4, "url": None, "redirect_uris": []}
 
 
 @pytest.mark.unit
@@ -184,7 +185,25 @@ def test_register_runner_sends_null_capacity_when_unset() -> None:
         return httpx.Response(201, json={"runner_id": "r1", "first_registration": True})
 
     _client(handler).register_runner("r1", "ws1")
-    assert seen == {"runner_id": "r1", "workspace_id": "ws1", "env_capacity": None}
+    assert seen == {"runner_id": "r1", "workspace_id": "ws1", "env_capacity": None, "url": None, "redirect_uris": []}
+
+
+@pytest.mark.unit
+def test_register_runner_posts_its_own_federation_identity() -> None:
+    """``url``/``redirect_uris`` (issue #95) ride the registration body when given."""
+    seen: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+
+        seen.update(json.loads(request.content))
+        return httpx.Response(201, json={"runner_id": "r1", "first_registration": True})
+
+    _client(handler).register_runner(
+        "r1", "ws1", url="https://runner-a.example", redirect_uris=("https://runner-a.example/api/auth/callback",)
+    )
+    assert seen["url"] == "https://runner-a.example"
+    assert seen["redirect_uris"] == ["https://runner-a.example/api/auth/callback"]
 
 
 @pytest.mark.unit

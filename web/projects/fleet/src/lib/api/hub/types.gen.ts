@@ -2152,9 +2152,17 @@ export type RunnerRegistrationRequest = {
      */
     env_capacity?: number | null;
     /**
+     * Redirect Uris
+     */
+    redirect_uris?: Array<string>;
+    /**
      * Runner Id
      */
     runner_id: string;
+    /**
+     * Url
+     */
+    url?: string | null;
     /**
      * Workspace Id
      */
@@ -2410,6 +2418,66 @@ export type ValidationError = {
     type: string;
 };
 
+export type AuthorizeApiAuthAuthorizeGetData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Client
+         */
+        client: string;
+        /**
+         * Redirect Uri
+         */
+        redirect_uri: string;
+        /**
+         * State
+         */
+        state: string;
+        /**
+         * Response Mode
+         */
+        response_mode?: string;
+    };
+    url: '/api/auth/authorize';
+};
+
+export type AuthorizeApiAuthAuthorizeGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AuthorizeApiAuthAuthorizeGetError = AuthorizeApiAuthAuthorizeGetErrors[keyof AuthorizeApiAuthAuthorizeGetErrors];
+
+export type AuthorizeApiAuthAuthorizeGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type JwksApiAuthJwksJsonGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/jwks.json';
+};
+
+export type JwksApiAuthJwksJsonGetResponses = {
+    /**
+     * Response Jwks Api Auth Jwks Json Get
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type JwksApiAuthJwksJsonGetResponse = JwksApiAuthJwksJsonGetResponses[keyof JwksApiAuthJwksJsonGetResponses];
+
 export type LogoutApiAuthLogoutPostData = {
     body?: never;
     path?: never;
@@ -2443,6 +2511,22 @@ export type ListProvidersApiAuthProvidersGetResponses = {
 };
 
 export type ListProvidersApiAuthProvidersGetResponse = ListProvidersApiAuthProvidersGetResponses[keyof ListProvidersApiAuthProvidersGetResponses];
+
+export type RotateSigningKeyApiAuthRotateSigningKeyPostData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/rotate-signing-key';
+};
+
+export type RotateSigningKeyApiAuthRotateSigningKeyPostResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type RotateSigningKeyApiAuthRotateSigningKeyPostResponse = RotateSigningKeyApiAuthRotateSigningKeyPostResponses[keyof RotateSigningKeyApiAuthRotateSigningKeyPostResponses];
 
 export type AuthorizeApiAuthNameAuthorizeGetData = {
     body?: never;

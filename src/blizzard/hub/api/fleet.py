@@ -499,9 +499,20 @@ def register_runner(
     """Register a runner — runner id + workspace binding; idempotent upsert.
 
     Runner-auth checked (issue #86a): ``warn`` (the default) logs and proceeds on a
-    missing/invalid/mismatched token; ``enforce`` rejects."""
+    missing/invalid/mismatched token; ``enforce`` rejects. Issue #95's optional
+    ``url``/``redirect_uris`` extension rides the same authenticated write — this route
+    sits behind ``require_runner_principal`` at the router level
+    (``fleet_router``'s own ``dependencies=``), so an unauthenticated attempt to set or
+    change a runner's federation identity is rejected exactly like every other fleet
+    write, once #86 is enforced."""
     assert_owns(principal, request.runner_id, mode=_mode(http_request))
-    first = services.fleet.register(request.runner_id, request.workspace_id, env_capacity=request.env_capacity)
+    first = services.fleet.register(
+        request.runner_id,
+        request.workspace_id,
+        env_capacity=request.env_capacity,
+        public_url=request.url,
+        redirect_uris=tuple(request.redirect_uris),
+    )
     services.events.publish_runner_changed(request.runner_id)
     return RunnerRegistrationResponse(runner_id=request.runner_id, first_registration=first)
 

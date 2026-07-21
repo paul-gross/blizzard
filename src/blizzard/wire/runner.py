@@ -31,6 +31,15 @@ class RunnerRegistrationRequest(BaseModel):
     runner_id: str
     workspace_id: str
     env_capacity: int | None = None
+    #: The runner's own browser-reachable base URL (issue #95) — optional; a runner
+    #: that never registers one cannot be an IdP-authorize ``client`` (the hub has no
+    #: registered redirect to validate a bounce against). Recorded verbatim on every
+    #: (re-)registration, like ``env_capacity``.
+    url: str | None = None
+    #: The allowed redirect URIs the hub's IdP authorize endpoint may bounce a browser
+    #: to for this runner (issue #95) — exact-match only (the open-redirect guard).
+    #: Empty registers none.
+    redirect_uris: list[str] = []
 
 
 class RunnerRegistrationResponse(BaseModel):
