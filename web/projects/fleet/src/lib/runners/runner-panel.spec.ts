@@ -5,8 +5,17 @@ import { vi } from 'vitest';
 
 import { settle } from '../testing/settle';
 import { client as hubClient } from '../api/hub/client.gen';
+import { OPERATOR_ME_RESPONSE } from '../testing/auth-fixtures';
 import { type RequestClientStub, stubRequestClient } from '../testing/stub-request-client';
 import { RunnerPanel } from './runner-panel';
+
+/** A `contributor`'s `/api/me` — every day-to-day operating permission, but not the
+ * admin-tier `runner:pause` (#93). Drives the brake-gating assertion. */
+const CONTRIBUTOR_ME = {
+  ...OPERATOR_ME_RESPONSE,
+  role: 'contributor',
+  permissions: OPERATOR_ME_RESPONSE.permissions.filter((p) => p !== 'runner:pause' && p !== 'graph:edit' && p !== 'user:manage'),
+};
 
 const NOW = new Date().toISOString();
 // One runner per pause state: none, the fleet's brake, the runner's own, and both
@@ -76,6 +85,7 @@ describe('RunnerPanel', () => {
 
   beforeEach(async () => {
     stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
       if (method === 'GET' && path === '/api/runners') return RUNNERS;
       if (method === 'GET' && path === '/api/chunks') return CHUNKS;
       if (path === '/api/runners/rn_online/pause') return RUNNERS.runners[0];
@@ -193,6 +203,26 @@ describe('RunnerPanel', () => {
     expect(calls[0].body).toEqual({ by: 'operator' });
     expect(stub.forRoute('/api/runners/rn_paused/pause', 'POST')).toHaveLength(0);
   });
+
+  it('withholds the hub brake for a contributor (no runner:pause, #93) — the registry still renders', async () => {
+    // The adjudication case: `runner:pause` is admin-tier, so a contributor who reaches
+    // the board must not be offered the brake it could only 403 on. The registry and its
+    // paused badges (a `fleet:view` read) stay; only the toggle button is withheld.
+    stub.restore();
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/me') return CONTRIBUTOR_ME;
+      if (method === 'GET' && path === '/api/runners') return RUNNERS;
+      if (method === 'GET' && path === '/api/chunks') return CHUNKS;
+      return {};
+    });
+    const fixture = TestBed.createComponent(RunnerPanel);
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelectorAll('[data-testid="runner"]')).toHaveLength(5);
+    expect(el.querySelector('[data-runner="rn_paused"] [data-testid="runner-hub-paused"]')).not.toBeNull();
+    expect(el.querySelectorAll('[data-testid="runner-toggle"]')).toHaveLength(0);
+  });
 });
 
 describe('RunnerPanel seenLabel (bzh:utc-instants)', () => {
@@ -209,6 +239,7 @@ describe('RunnerPanel seenLabel (bzh:utc-instants)', () => {
       ],
     };
     stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
       if (method === 'GET' && path === '/api/runners') return runners;
       if (method === 'GET' && path === '/api/chunks') return [];
       return {};

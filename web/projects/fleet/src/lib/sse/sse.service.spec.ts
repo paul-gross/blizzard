@@ -2,15 +2,24 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { vi } from 'vitest';
 
-import { EVENT_SOURCE_FACTORY, type EventSourceFactory, SseService, backoffDelay, withLastEventId } from './sse.service';
+import {
+  EVENT_SOURCE_FACTORY,
+  type EventSourceFactory,
+  type FleetEventSource,
+  SseService,
+  backoffDelay,
+  withLastEventId,
+} from './sse.service';
 
-/** Minimal EventSource stand-in — jsdom ships none, and reconnect must be driven deterministically. */
+/** Minimal transport stand-in — jsdom ships no `EventSource`, and reconnect (plus, since
+ * issue #93, the auth-failure channel) must be driven deterministically. */
 class FakeEventSource {
   static readonly instances: FakeEventSource[] = [];
   readyState = 0; // CONNECTING
   onopen: (() => void) | null = null;
   onmessage: ((event: MessageEvent) => void) | null = null;
   onerror: (() => void) | null = null;
+  onautherror: (() => void) | null = null;
   closed = false;
   private readonly listeners = new Map<string, (event: MessageEvent) => void>();
 
@@ -40,6 +49,13 @@ class FakeEventSource {
     this.onerror?.();
   }
 
+  /** A `401` on this (re)connect attempt — only the fetch-based transport can ever
+   * see this in practice; the fake reports it the same way. */
+  authError(): void {
+    this.readyState = 2; // CLOSED
+    this.onautherror?.();
+  }
+
   close(): void {
     this.closed = true;
     this.readyState = 2;
@@ -49,7 +65,7 @@ class FakeEventSource {
 describe('SseService', () => {
   beforeEach(() => {
     FakeEventSource.instances.length = 0;
-    const factory: EventSourceFactory = (url) => new FakeEventSource(url) as unknown as EventSource;
+    const factory: EventSourceFactory = (url) => new FakeEventSource(url) as unknown as FleetEventSource;
     TestBed.configureTestingModule({
       providers: [provideZonelessChangeDetection(), { provide: EVENT_SOURCE_FACTORY, useValue: factory }],
     });
@@ -135,6 +151,31 @@ describe('SseService', () => {
       // The re-opened source carries the cursor so the hub replays the gap.
       const second = FakeEventSource.instances[1];
       expect(second.url).toContain('last_event_id=42');
+
+      handle.close();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('surfaces authFailed on a 401 and schedules no reconnect (issue #93)', () => {
+    vi.useFakeTimers();
+    try {
+      const handle = TestBed.inject(SseService).connect('/api/events/stream', {
+        backoff: { baseMs: 10, capMs: 100 },
+      });
+
+      const first = FakeEventSource.instances[0];
+      first.open();
+      expect(handle.authFailed()).toBe(false);
+
+      first.authError();
+      expect(handle.authFailed()).toBe(true);
+      expect(handle.status()).toBe('closed');
+      // Unlike a hard drop, no reconnect timer is armed — advancing time opens no
+      // second source, so a session that will never resolve again is never retried.
+      vi.advanceTimersByTime(1000);
+      expect(FakeEventSource.instances).toHaveLength(1);
 
       handle.close();
     } finally {

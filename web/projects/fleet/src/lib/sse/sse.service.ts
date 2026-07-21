@@ -16,23 +16,175 @@ import { Observable, Subject } from 'rxjs';
  * the types it wants via {@link SseConnectOptions.events} and reads them off
  * {@link SseHandle.events}. Unnamed frames still surface on {@link SseHandle.messages}.
  *
- * When auth arrives the `EventSource` seam swaps to a fetch-based source
- * with no change above this service.
+ * Now that auth has arrived (issue #93), the default factory is the **fetch-based**
+ * transport ({@link fetchEventSourceFactory}) rather than native `EventSource`:
+ * `EventSource` sends no cookie-auth-aware status to script (it exposes no response
+ * code at all), so a session expiring mid-stream would otherwise read as an
+ * indistinguishable transient blip and retry forever. The fetch-based source detects
+ * a `401` specifically and reports it through {@link SseHandle.authFailed} instead of
+ * scheduling a reconnect — no change to any caller above this service.
  */
 
 /** Connection lifecycle the UI can render (a status dot in the header). */
 export type SseStatus = 'idle' | 'open' | 'reconnecting' | 'closed';
 
 /**
- * Factory seam for constructing the underlying `EventSource`. Injected so tests
- * can drive reconnect deterministically with a fake — jsdom ships no
- * `EventSource` — and so the fetch-based transport can replace it later.
+ * The narrow surface {@link SseService} needs from its underlying transport — native
+ * `EventSource` satisfies this structurally (unused members are simply ignored), and
+ * {@link FetchEventSource} is the fetch-based implementation. `onautherror` is the one
+ * member `EventSource` never calls (it cannot: it has no access to the response
+ * status) — declared optional so `EventSource`'s own type, which does not declare it
+ * at all, still satisfies this interface.
  */
-export type EventSourceFactory = (url: string) => EventSource;
+export interface FleetEventSource {
+  onopen: (() => void) | null;
+  onmessage: ((event: MessageEvent) => void) | null;
+  onerror: (() => void) | null;
+  /** Called once, instead of {@link onerror}, when the stream closed because the
+   * server answered `401` — a distinct terminal condition from a transient drop. */
+  onautherror?: (() => void) | null;
+  readonly readyState: number;
+  addEventListener(type: string, listener: (event: MessageEvent) => void): void;
+  close(): void;
+}
+
+/**
+ * Factory seam for constructing the underlying transport. Injected so tests
+ * can drive reconnect deterministically with a fake — jsdom ships no
+ * `EventSource` — and so the transport can be swapped without touching
+ * {@link SseService} itself.
+ */
+export type EventSourceFactory = (url: string) => FleetEventSource;
 export const EVENT_SOURCE_FACTORY = new InjectionToken<EventSourceFactory>('fleet.EVENT_SOURCE_FACTORY', {
   providedIn: 'root',
-  factory: () => (url: string) => new EventSource(url),
+  factory: () => fetchEventSourceFactory,
 });
+
+/** `SSE` frame parse result: `data` is `undefined` for a comment-only/keepalive
+ * frame (no `data:` line), which the reader skips rather than emitting. */
+interface ParsedFrame {
+  readonly event?: string;
+  readonly data?: string;
+  readonly id?: string;
+}
+
+function parseSseFrame(raw: string): ParsedFrame {
+  let event: string | undefined;
+  const dataLines: string[] = [];
+  let id: string | undefined;
+  for (const line of raw.split('\n')) {
+    if (line.startsWith('event:')) event = line.slice('event:'.length).trim();
+    else if (line.startsWith('data:')) dataLines.push(line.slice('data:'.length).replace(/^ /, ''));
+    else if (line.startsWith('id:')) id = line.slice('id:'.length).trim();
+  }
+  return { event, data: dataLines.length > 0 ? dataLines.join('\n') : undefined, id };
+}
+
+/**
+ * The fetch-based `EventSource` counterpart (issue #93): reads the stream as a raw
+ * `fetch` response body so a `401` (an expired/absent session — `EventSource` cannot
+ * see this at all) is detectable and reported via {@link FleetEventSource.onautherror}
+ * rather than folded into the generic {@link FleetEventSource.onerror} a transient
+ * network blip also uses. `credentials: 'include'` carries the session cookie exactly
+ * as the browser did for `EventSource` automatically.
+ */
+export class FetchEventSource implements FleetEventSource {
+  onopen: (() => void) | null = null;
+  onmessage: ((event: MessageEvent) => void) | null = null;
+  onerror: (() => void) | null = null;
+  onautherror: (() => void) | null = null;
+  readyState = 0;
+
+  private readonly listeners = new Map<string, Set<(event: MessageEvent) => void>>();
+  private readonly controller = new AbortController();
+  private closed = false;
+
+  constructor(private readonly url: string) {
+    void this.run();
+  }
+
+  addEventListener(type: string, listener: (event: MessageEvent) => void): void {
+    const set = this.listeners.get(type) ?? new Set();
+    set.add(listener);
+    this.listeners.set(type, set);
+  }
+
+  close(): void {
+    if (this.closed) return;
+    this.closed = true;
+    this.readyState = 2;
+    this.controller.abort();
+  }
+
+  private async run(): Promise<void> {
+    let response: Response;
+    try {
+      response = await fetch(this.url, {
+        headers: { accept: 'text/event-stream' },
+        credentials: 'include',
+        signal: this.controller.signal,
+      });
+    } catch {
+      if (!this.closed) this.fail();
+      return;
+    }
+    if (this.closed) return;
+    if (response.status === 401) {
+      this.readyState = 2;
+      this.onautherror?.();
+      return;
+    }
+    if (!response.ok || response.body === null) {
+      this.fail();
+      return;
+    }
+    this.readyState = 1;
+    this.onopen?.();
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let lastEventId: string | undefined;
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let sep = buffer.indexOf('\n\n');
+        while (sep !== -1) {
+          const raw = buffer.slice(0, sep);
+          buffer = buffer.slice(sep + 2);
+          const frame = parseSseFrame(raw);
+          if (frame.id) lastEventId = frame.id;
+          if (frame.data !== undefined) {
+            const event = { data: frame.data, lastEventId: lastEventId ?? '' } as MessageEvent;
+            if (frame.event && frame.event !== 'message') {
+              for (const listener of this.listeners.get(frame.event) ?? []) listener(event);
+            } else {
+              this.onmessage?.(event);
+            }
+          }
+          sep = buffer.indexOf('\n\n');
+        }
+      }
+    } catch {
+      if (this.closed) return;
+      this.fail();
+      return;
+    }
+    if (!this.closed) this.fail();
+  }
+
+  private fail(): void {
+    this.readyState = 2;
+    this.onerror?.();
+  }
+}
+
+/** The default {@link EventSourceFactory} — one {@link FetchEventSource} per `connect`. */
+export function fetchEventSourceFactory(url: string): FleetEventSource {
+  return new FetchEventSource(url);
+}
 
 /** Backoff schedule for reconnect attempts. */
 export interface SseBackoff {
@@ -73,6 +225,12 @@ export interface SseHandle<T> {
   readonly messages: Observable<T>;
   /** Parsed **named** frames (the type the caller subscribed to), in arrival order. */
   readonly events: Observable<SseEvent<T>>;
+  /** `true` once the stream closed on a `401` (issue #93) — a session that expired
+   * mid-stream, distinct from a transient drop (which keeps retrying instead). Set
+   * at most once; no further reconnect is scheduled once this flips. A consumer
+   * (the app root) watches this to route to `/login` within the one reconnect cycle
+   * that surfaced it, rather than an unbounded retry loop. */
+  readonly authFailed: Signal<boolean>;
   /** Close the stream and stop reconnecting. */
   close(): void;
 }
@@ -98,10 +256,11 @@ export class SseService {
     const eventTypes = options.events ?? [];
     const status = signal<SseStatus>('idle');
     const reopens = signal(0);
+    const authFailed = signal(false);
     const messages = new Subject<T>();
     const events = new Subject<SseEvent<T>>();
 
-    let source: EventSource | null = null;
+    let source: FleetEventSource | null = null;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let attempt = 0;
     let closed = false;
@@ -139,6 +298,17 @@ export class SseService {
         reopens.update((n) => n + 1);
         timer = setTimeout(open, backoffDelay(attempt, backoff));
       };
+      // Only the fetch-based transport ever calls this (native `EventSource` cannot
+      // see a status code at all) — a `401` is terminal: no reconnect is scheduled,
+      // so a session that expired mid-stream surfaces once, on this one reconnect
+      // cycle, rather than retrying against a session that will never resolve again.
+      es.onautherror = () => {
+        if (closed) return;
+        es.close();
+        source = null;
+        status.set('closed');
+        authFailed.set(true);
+      };
     };
 
     open();
@@ -146,6 +316,7 @@ export class SseService {
     return {
       status: status.asReadonly(),
       reopens: reopens.asReadonly(),
+      authFailed: authFailed.asReadonly(),
       messages: messages.asObservable(),
       events: events.asObservable(),
       close: () => {

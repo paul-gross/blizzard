@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
-import { EVENT_SOURCE_FACTORY, type EventSourceFactory } from './sse.service';
+import { EVENT_SOURCE_FACTORY, type EventSourceFactory, type FleetEventSource } from './sse.service';
 import { FleetLiveUpdates } from './fleet-live';
 
 /** EventSource stand-in with named-listener support — jsdom ships none. */
@@ -48,7 +48,7 @@ describe('FleetLiveUpdates', () => {
   beforeEach(() => {
     FakeEventSource.instances.length = 0;
     queryClient = new QueryClient();
-    const factory: EventSourceFactory = (url) => new FakeEventSource(url) as unknown as EventSource;
+    const factory: EventSourceFactory = (url) => new FakeEventSource(url) as unknown as FleetEventSource;
     TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),

@@ -133,6 +133,13 @@ export class FleetLiveUpdates {
     return this.handle?.status ?? IDLE_STATUS;
   }
 
+  /** `true` once the stream closed on a `401` (issue #93) — a session that expired
+   * mid-stream. The app root watches this and routes to `/login`; `false` before
+   * {@link start} and for the whole life of a stream that never sees one. */
+  get authFailed(): Signal<boolean> {
+    return this.handle?.authFailed ?? FALSE_STATUS;
+  }
+
   /**
    * The recent-event feed for the Event log (issue #25), oldest → newest, capped at
    * {@link LOG_LIMIT}. Empty before {@link start}; the panel reverses it for display.
@@ -199,4 +206,10 @@ export class FleetLiveUpdates {
 const IDLE_STATUS: Signal<SseStatus> = (() => {
   const s = () => 'idle' as const;
   return s as Signal<SseStatus>;
+})();
+
+/** A frozen `false` used for {@link FleetLiveUpdates.authFailed} before the stream is opened. */
+const FALSE_STATUS: Signal<boolean> = (() => {
+  const s = () => false;
+  return s as Signal<boolean>;
 })();

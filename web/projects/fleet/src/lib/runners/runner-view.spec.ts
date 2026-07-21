@@ -93,6 +93,7 @@ describe('RunnerPanelView', () => {
     const fixture = TestBed.createComponent(RunnerPanelView);
     const target = row('rn_online');
     fixture.componentRef.setInput('rows', [target]);
+    fixture.componentRef.setInput('canPause', true);
     let emitted: RunnerRow | undefined;
     fixture.componentInstance.togglePause.subscribe((r) => (emitted = r));
     await fixture.whenStable();
@@ -100,6 +101,30 @@ describe('RunnerPanelView', () => {
 
     el.querySelector<HTMLButtonElement>('[data-testid="runner-toggle"]')?.click();
     expect(emitted).toEqual(target);
+  });
+
+  it('withholds the hub pause/resume brake when canPause is false (contributor — #93), keeping the row and its paused badges', async () => {
+    // `runner:pause` is admin-tier: a contributor still reads the registry and its live
+    // liveness/paused state, but is not offered the brake it could only 403 on.
+    const fixture = TestBed.createComponent(RunnerPanelView);
+    fixture.componentRef.setInput('rows', [row('rn_paused', { hub_paused: true })]);
+    fixture.componentRef.setInput('canPause', false);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="runner-toggle"]')).toBeNull();
+    // The registry row and its informational paused badge (a `fleet:view` read) stay.
+    expect(el.querySelector('[data-runner="rn_paused"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="runner-hub-paused"]')).not.toBeNull();
+  });
+
+  it('defaults to withholding the brake when canPause is unset', async () => {
+    const fixture = TestBed.createComponent(RunnerPanelView);
+    fixture.componentRef.setInput('rows', [row('rn_online')]);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="runner-toggle"]')).toBeNull();
   });
 
   describe('seenLabel (bzh:utc-instants)', () => {

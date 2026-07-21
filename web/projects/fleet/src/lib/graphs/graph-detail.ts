@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 
 import type { GraphEdgeView, GraphNodeView } from '../api/hub';
+import { hasPermission, injectMeQuery } from '../auth/me.query';
 import { KitButton } from '../kit/kit-button';
 import { GraphDiagram } from './graph-diagram';
 import { injectGraphLifecycleMutation } from './graph-lifecycle.mutations';
@@ -60,15 +61,21 @@ function errorMessage(error: unknown, fallback: string): string {
             >
             <span class="gid" data-testid="graph-detail-graph-id">{{ g.graph_id }}</span>
           </div>
-          <div class="lifecycle-actions">
-            @if (g.retired) {
-              <fleet-kit-button testid="graph-detail-enable" (click)="onEnable(g.graph_id)">Re-enable</fleet-kit-button>
-            } @else {
-              <fleet-kit-button testid="graph-detail-retire" variant="danger" (click)="onRetire(g.graph_id)"
-                >Retire</fleet-kit-button
-              >
-            }
-          </div>
+          <!-- Retire/re-enable are graph authoring — gated on graph:edit (admin-tier,
+               issue #93): a contributor reads the structure + badge but not the controls. -->
+          @if (canEdit()) {
+            <div class="lifecycle-actions">
+              @if (g.retired) {
+                <fleet-kit-button testid="graph-detail-enable" (click)="onEnable(g.graph_id)"
+                  >Re-enable</fleet-kit-button
+                >
+              } @else {
+                <fleet-kit-button testid="graph-detail-retire" variant="danger" (click)="onRetire(g.graph_id)"
+                  >Retire</fleet-kit-button
+                >
+              }
+            </div>
+          }
           @if (actionError(); as err) {
             <p class="lifecycle-error" data-testid="graph-detail-lifecycle-error">{{ err }}</p>
           }
@@ -315,8 +322,13 @@ export class GraphDetail {
 
   protected readonly graphQuery = injectHubGraphQuery(() => this.graphId());
   private readonly lifecycleMutation = injectGraphLifecycleMutation();
+  private readonly meQuery = injectMeQuery();
 
   protected readonly graph = computed(() => this.graphQuery.data());
+
+  /** Whether the current identity may author graphs (`graph:edit`, admin-tier — issue
+   * #93) — gates the retire/re-enable controls; `null`/pending resolves to `false`. */
+  protected readonly canEdit = computed(() => hasPermission(this.meQuery.data(), 'graph:edit'));
 
   /** Set on a failed retire/enable (issue #42's report-don't-swallow pattern);
    * cleared at the start of the next attempt. */

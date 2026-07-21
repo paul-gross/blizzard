@@ -16,6 +16,7 @@
  */
 
 export * from './lib/kit';
+export * from './lib/auth';
 export * from './lib/design';
 export * from './lib/format';
 export * from './lib/board-header';

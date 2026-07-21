@@ -14,3 +14,4 @@ export {
   type CapturedRequest,
   type StubHttpError,
 } from './stub-request-client';
+export { OPERATOR_ME_RESPONSE } from './auth-fixtures';

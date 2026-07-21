@@ -2,8 +2,15 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter, withRouterConfig } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { EVENT_SOURCE_FACTORY, ViewportService, provideViewportRenavigation, type EventSourceFactory } from 'fleet';
-import { settle } from 'fleet/testing';
+import {
+  EVENT_SOURCE_FACTORY,
+  ViewportService,
+  hubClient,
+  provideViewportRenavigation,
+  type EventSourceFactory,
+  type FleetEventSource,
+} from 'fleet';
+import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
 
 import { App } from './app';
 import { routes } from './app.routes';
@@ -31,10 +38,24 @@ class FakeEventSource {
  * guard wiring itself (not just one page's own template) is caught here.
  */
 describe('the board route (route-table mobile/desktop fork)', () => {
+  let authStub: RequestClientStub;
+
   beforeEach(async () => {
     // ViewportService's override persists to localStorage — cleared so a prior
     // test's override never bleeds into the next one.
     localStorage.clear();
+    // The app root's session gate (issue #93) needs `/api/me` to resolve before it
+    // renders `<router-outlet>` at all — stub the full-permission operator identity
+    // (`auth.mode = "none"`'s shape) so these route-fork assertions, which predate
+    // auth, keep exercising exactly what they did before.
+    authStub = stubRequestClient(hubClient, (method, path) => {
+      if (path === '/api/me') return OPERATOR_ME_RESPONSE;
+      if (path === '/api/auth/providers') return [];
+      // See `app.spec.ts`'s `stubAuth` for why these need their real empty shape.
+      if (path === '/api/chunks' || path === '/api/questions' || path === '/api/graphs') return [];
+      if (path === '/api/spend') return { cost_usd: 0, cost_partial: false };
+      return {};
+    });
     await TestBed.configureTestingModule({
       imports: [App],
       providers: [
@@ -42,10 +63,12 @@ describe('the board route (route-table mobile/desktop fork)', () => {
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
         provideRouter(routes, withRouterConfig({ onSameUrlNavigation: 'reload' })),
         provideViewportRenavigation(),
-        { provide: EVENT_SOURCE_FACTORY, useValue: (() => new FakeEventSource() as unknown as EventSource) as EventSourceFactory },
+        { provide: EVENT_SOURCE_FACTORY, useValue: (() => new FakeEventSource() as unknown as FleetEventSource) as EventSourceFactory },
       ],
     }).compileComponents();
   });
+
+  afterEach(() => authStub.restore());
 
   it('renders the mobile glance shell at /board when forced to mobile', async () => {
     TestBed.inject(ViewportService).setOverride('mobile');

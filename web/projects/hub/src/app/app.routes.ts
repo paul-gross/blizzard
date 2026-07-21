@@ -29,4 +29,11 @@ export const routes: Routes = [
   { path: 'board', loadComponent: () => import('./board/board-page').then((m) => m.BoardPage) },
   { path: 'graphs', loadComponent: () => import('./graphs/graphs-page').then((m) => m.GraphsPage) },
   { path: 'graphs/:graphId', loadComponent: () => import('./graphs/graphs-page').then((m) => m.GraphsPage) },
+  // The login surface (issue #93) — public, reached directly or via the 401
+  // interceptor. Rendered outside the app shell (`App`'s own `authState` branch),
+  // so it carries no header/nav chrome of its own.
+  { path: 'login', loadComponent: () => import('./login/login-page').then((m) => m.LoginPage) },
+  // A deliberate stub (issue #93's scope note) — the admin page itself is #94's; this
+  // phase only needs a route the gated nav entry can point at.
+  { path: 'admin', loadComponent: () => import('./admin/admin-page').then((m) => m.AdminPage) },
 ];

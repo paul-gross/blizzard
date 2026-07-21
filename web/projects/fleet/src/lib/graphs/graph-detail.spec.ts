@@ -5,8 +5,17 @@ import { vi } from 'vitest';
 
 import { settle } from '../testing/settle';
 import { client as hubClient } from '../api/hub/client.gen';
+import { OPERATOR_ME_RESPONSE } from '../testing/auth-fixtures';
 import { type RequestClientStub, stubError, stubRequestClient } from '../testing/stub-request-client';
 import { GraphDetail } from './graph-detail';
+
+/** A `contributor`'s `/api/me` — no admin-tier `graph:edit` (#93), so the retire/enable
+ * lifecycle controls must not render for it. */
+const CONTRIBUTOR_ME = {
+  ...OPERATOR_ME_RESPONSE,
+  role: 'contributor',
+  permissions: OPERATOR_ME_RESPONSE.permissions.filter((p) => p !== 'runner:pause' && p !== 'graph:edit' && p !== 'user:manage'),
+};
 
 const GRAPH = {
   graph_id: 'gr_build_v2',
@@ -46,8 +55,14 @@ const GRAPH = {
 describe('GraphDetail', () => {
   let stub: RequestClientStub;
 
-  async function mount(graphId: string, route: (m: string, p: string) => unknown) {
-    stub = stubRequestClient(hubClient, route);
+  async function mount(graphId: string, route: (m: string, p: string) => unknown, me: unknown = OPERATOR_ME_RESPONSE) {
+    // Every mount resolves `/api/me` (the graph-edit gate reads it); the per-test
+    // `route` handles the graph reads. `me` defaults to the full-permission operator so
+    // the lifecycle controls render, exactly as before the #93 gating landed.
+    stub = stubRequestClient(hubClient, (m, p) => {
+      if (m === 'GET' && p === '/api/me') return me;
+      return route(m, p);
+    });
     await TestBed.configureTestingModule({
       imports: [GraphDetail],
       providers: [
@@ -177,6 +192,27 @@ describe('GraphDetail', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].body).toMatchObject({ by: 'operator' });
     confirmSpy.mockRestore();
+  });
+
+  it('withholds the retire/enable controls for a contributor (no graph:edit, #93), keeping the structure and badge', async () => {
+    // The adjudication case: `graph:edit` is admin-tier. A contributor reads a graph's
+    // full immutable structure and its enabled/retired badge, but is not offered the
+    // lifecycle controls it could only 403 on.
+    const fixture = await mount(
+      'gr_build_v2',
+      (method, path) => {
+        if (method === 'GET' && path === '/api/graphs/gr_build_v2') return GRAPH;
+        return {};
+      },
+      CONTRIBUTOR_ME,
+    );
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="graph-detail-body"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="graph-detail-lifecycle-badge"]')?.textContent).toContain('enabled');
+    expect(el.querySelector('[data-testid="graph-detail-nodes"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="graph-detail-retire"]')).toBeNull();
+    expect(el.querySelector('[data-testid="graph-detail-enable"]')).toBeNull();
   });
 
   it('surfaces a 409 refusal from retire rather than swallowing it', async () => {

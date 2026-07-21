@@ -1,7 +1,7 @@
 import { ApplicationConfig, provideBrowserGlobalErrorListeners, provideZonelessChangeDetection } from '@angular/core';
 import { provideRouter, withRouterConfig } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
-import { provideViewportRenavigation } from 'fleet';
+import { provideAuthInterceptor, provideViewportRenavigation } from 'fleet';
 
 import { routes } from './app.routes';
 
@@ -20,5 +20,6 @@ export const appConfig: ApplicationConfig = {
     // without this config, a same-URL navigation is a router no-op.
     provideRouter(routes, withRouterConfig({ onSameUrlNavigation: 'reload' })),
     provideViewportRenavigation(),
+    provideAuthInterceptor(),
   ],
 };

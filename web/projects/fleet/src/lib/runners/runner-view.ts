@@ -95,17 +95,22 @@ import type { RunnerRow } from './runner-panel';
                     }
                   </span>
                   <!-- The button is the hub's brake only: the board cannot clear a brake the
-                       runner set on itself, so it never offers to. -->
-                  <button
-                    type="button"
-                    class="act"
-                    data-testid="runner-toggle"
-                    [attr.aria-label]="(row.hub_paused ? 'Resume ' : 'Pause ') + row.runner_id + ' at the hub'"
-                    [title]="toggleHint(row)"
-                    (click)="togglePause.emit(row)"
-                  >
-                    {{ row.hub_paused ? 'Resume' : 'Pause' }}
-                  </button>
+                       runner set on itself, so it never offers to. Gated on runner:pause
+                       (issue #93): that permission is admin-tier, so a contributor sees the
+                       registry and its live paused state but not the brake it cannot operate —
+                       a control that would only 403. -->
+                  @if (canPause()) {
+                    <button
+                      type="button"
+                      class="act"
+                      data-testid="runner-toggle"
+                      [attr.aria-label]="(row.hub_paused ? 'Resume ' : 'Pause ') + row.runner_id + ' at the hub'"
+                      [title]="toggleHint(row)"
+                      (click)="togglePause.emit(row)"
+                    >
+                      {{ row.hub_paused ? 'Resume' : 'Pause' }}
+                    </button>
+                  }
                 </div>
               </li>
             }
@@ -255,6 +260,14 @@ import type { RunnerRow } from './runner-panel';
 export class RunnerPanelView {
   /** The registry rows to render — each runner plus its pre-folded claims. */
   readonly rows = input.required<readonly RunnerRow[]>();
+
+  /** Whether to render the hub pause/resume brake (issue #93) — the container passes
+   * `hasPermission(me, 'runner:pause')`. Admin-tier: a `contributor` sees the registry
+   * and its liveness/paused badges but not the toggle it could only 403 on. Defaults
+   * `false` so the brake stays withheld until permission is confirmed (no flash of a
+   * control the identity cannot use). Under `auth.mode = "none"` the implicit operator
+   * holds every permission, so the brake renders exactly as before. */
+  readonly canPause = input(false);
 
   /** Whether to render the env-slot bar (issue #69): only when the runner reported a
    * capacity. A runner registered by a client that predates the field has a null (or

@@ -14,6 +14,12 @@ export const hubQuestionsKey = ['hub', 'questions'] as const;
  * cached window at once (TanStack's default prefix match on `invalidateQueries`). */
 export const hubFleetSpendKey = ['hub', 'fleet-spend'] as const;
 export const hubGraphsKey = ['hub', 'graphs'] as const;
+/** The resolved-identity read (issue #93) — `GET /api/me`. Never invalidated by an
+ * SSE event (no event names an identity change yet, #94); the login/logout flows
+ * invalidate it explicitly instead. */
+export const hubMeKey = ['hub', 'me'] as const;
+/** The configured login-provider list (issue #93) — `GET /api/auth/providers`. */
+export const hubAuthProvidersKey = ['hub', 'auth', 'providers'] as const;
 
 /** One chunk's full aggregate, keyed by id. */
 export function hubChunkKey(chunkId: string | null): readonly unknown[] {

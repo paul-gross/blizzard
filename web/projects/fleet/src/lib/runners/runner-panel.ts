@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 
 import type { RunnerView } from '../api/hub';
+import { hasPermission, injectMeQuery } from '../auth/me.query';
 import { compactRef } from '../compact-ref';
 import { injectHubChunksQuery } from '../chunks/chunks.query';
 import { RunnerPanelView } from './runner-view';
@@ -38,12 +39,19 @@ export interface RunnerRow extends RunnerView {
   selector: 'fleet-runner-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [RunnerPanelView],
-  template: `<fleet-runner-view [rows]="rows()" (togglePause)="toggle($event)" />`,
+  template: `<fleet-runner-view [rows]="rows()" [canPause]="canPause()" (togglePause)="toggle($event)" />`,
 })
 export class RunnerPanel {
   private readonly runnersQuery = injectHubRunnersQuery();
   private readonly chunksQuery = injectHubChunksQuery();
   private readonly pauseMutation = injectRunnerPauseMutation();
+  private readonly meQuery = injectMeQuery();
+
+  /** Whether the current identity may operate the hub pause/resume brake
+   * (`runner:pause`, admin-tier — issue #93). Passed to the presentational view, which
+   * withholds the toggle button when false so a `contributor` never sees a control that
+   * would 403. `null`/pending resolves to `false` (hidden until confirmed). */
+  protected readonly canPause = computed(() => hasPermission(this.meQuery.data(), 'runner:pause'));
 
   /** The fleet registry; empty until the first read resolves. */
   private readonly runners = computed<readonly RunnerView[]>(() => this.runnersQuery.data() ?? []);
