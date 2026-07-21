@@ -1979,7 +1979,16 @@ def _spawn_attempt(
     if _spawn_suppressed(ctx, via=via, chunk_id=chunk_id):
         return
     now = ctx.clock.now()
-    epoch = ctx.store.latest_epoch(chunk_id) + 1
+    # Mint above the max of two floors (bzh:epoch-fencing, #112): the runner-local fence
+    # source (`store.latest_epoch` — the highest epoch *this runner* minted for the chunk, 0
+    # if it never drove it) and the **hub-supplied** floor `envelope.epoch` (the hub's own
+    # `latest_epoch(facts)`, carried on every claim/advance response). Local alone is wrong for
+    # the migration-reclaim path (#90): a cross-graph migration re-queues the chunk `ready` for
+    # a fresh claim, possibly by a runner with no local history (floor 0) while the hub carries
+    # prior-graph epochs > 0 — minting local+1 would land at or below hub truth and every
+    # completion would bounce off the hub's stale-epoch fence. `max(local, hub) + 1` is >= the
+    # old `local + 1` always, so existing non-migration fences are strengthened, never weakened.
+    epoch = max(ctx.store.latest_epoch(chunk_id), envelope.epoch) + 1
     lease_id = mint(LEASE_PREFIX, ctx.clock)
     node = envelope.node
     retries_max = node.retries_max if node.retries_max is not None else ctx.config.default_retries_max

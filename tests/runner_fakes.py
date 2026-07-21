@@ -409,8 +409,15 @@ def make_envelope(
     node_id: str,
     choices: list[tuple[str, str]],
     produces: list[str] | None = None,
+    epoch: int = 0,
 ) -> NodeEnvelope:
-    """A minimal runner-node envelope for a step test."""
+    """A minimal runner-node envelope for a step test.
+
+    ``epoch`` is the hub-supplied epoch floor the claim response carries — the runner's
+    mint seeds off ``max(local, envelope.epoch)`` since #112. It defaults to 0, the value
+    the hub sends for a fresh, never-leased claim (``latest_epoch(facts) or 0``); a test
+    modelling a reclaim of a chunk with prior hub history (e.g. a migration) passes the
+    carried-forward floor explicitly."""
     from blizzard.hub.domain.graph import Executor, JudgedBy, SessionMode
     from blizzard.wire.envelope import EnvelopeChoice
 
@@ -427,7 +434,7 @@ def make_envelope(
     return NodeEnvelope(
         chunk_id=chunk_id,
         graph_id="gr_test",
-        epoch=1,
+        epoch=epoch,
         node=node,
         prompt="commit('work')",
         judgement_prompt="Assess the build.",
