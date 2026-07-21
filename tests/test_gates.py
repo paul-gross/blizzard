@@ -327,6 +327,10 @@ def test_requeue_closes_an_escalation_by_supersession(tmp_path: Path) -> None:
     hub.clock.advance(timedelta(seconds=1))
     rq = hub.client.post(f"/api/chunks/{chunk_id}/requeues")
     assert rq.status_code == 202, rq.text
+    # The response is the transitioned chunk's summary (issue #104), not a bare
+    # `{"chunk_id": ...}`.
+    assert rq.json()["chunk_id"] == chunk_id
+    assert rq.json()["status"] == "ready"
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
     # It re-enters the ready queue for a fresh claim at its current node.
     peek = hub.client.get("/api/queue/peek").json()
@@ -355,6 +359,10 @@ def test_detach_a_claimed_chunk_re_derives_ready_and_reenters_the_queue(tmp_path
     # decides the tie — see test_detach_at_a_same_instant_tie_still_takes_effect.
     resp = hub.client.post(f"/api/chunks/{chunk_id}/detach")
     assert resp.status_code == 202, resp.text
+    # The response is the transitioned chunk's summary (issue #104), not a bare
+    # `{"chunk_id": ...}`.
+    assert resp.json()["chunk_id"] == chunk_id
+    assert resp.json()["status"] == "ready"
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
     # The detached chunk re-enters the ready queue, claimable at its current node.
     peek = hub.client.get("/api/queue/peek").json()

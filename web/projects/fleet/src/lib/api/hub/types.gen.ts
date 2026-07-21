@@ -1900,6 +1900,23 @@ export type QueueReorderResponse = {
 };
 
 /**
+ * QueueReplaceRequest
+ *
+ * Idempotent whole-order replacement of the ready queue — ``PUT /api/queue``.
+ *
+ * ``chunk_ids`` is the desired order, front to back; every id must name a
+ * currently-ready chunk (``409`` otherwise) and must not repeat (``422``
+ * otherwise). A ready chunk not named here keeps its current relative order,
+ * appended after the named ones.
+ */
+export type QueueReplaceRequest = {
+    /**
+     * Chunk Ids
+     */
+    chunk_ids: Array<string>;
+};
+
+/**
  * ReadinessResponse
  *
  * The wire shape of a readiness reading (openapi-ts consumes this).
@@ -2495,13 +2512,9 @@ export type DetachChunkApiChunksChunkIdDetachPostError = DetachChunkApiChunksChu
 
 export type DetachChunkApiChunksChunkIdDetachPostResponses = {
     /**
-     * Response Detach Chunk Api Chunks  Chunk Id  Detach Post
-     *
      * Successful Response
      */
-    202: {
-        [key: string]: string;
-    };
+    202: ChunkSummary;
 };
 
 export type DetachChunkApiChunksChunkIdDetachPostResponse = DetachChunkApiChunksChunkIdDetachPostResponses[keyof DetachChunkApiChunksChunkIdDetachPostResponses];
@@ -2658,13 +2671,9 @@ export type PauseChunkApiChunksChunkIdPausePostError = PauseChunkApiChunksChunkI
 
 export type PauseChunkApiChunksChunkIdPausePostResponses = {
     /**
-     * Response Pause Chunk Api Chunks  Chunk Id  Pause Post
-     *
      * Successful Response
      */
-    202: {
-        [key: string]: string;
-    };
+    202: ChunkSummary;
 };
 
 export type PauseChunkApiChunksChunkIdPausePostResponse = PauseChunkApiChunksChunkIdPausePostResponses[keyof PauseChunkApiChunksChunkIdPausePostResponses];
@@ -2722,13 +2731,9 @@ export type PromoteChunkApiChunksChunkIdPromotePostError = PromoteChunkApiChunks
 
 export type PromoteChunkApiChunksChunkIdPromotePostResponses = {
     /**
-     * Response Promote Chunk Api Chunks  Chunk Id  Promote Post
-     *
      * Successful Response
      */
-    202: {
-        [key: string]: string;
-    };
+    202: ChunkSummary;
 };
 
 export type PromoteChunkApiChunksChunkIdPromotePostResponse = PromoteChunkApiChunksChunkIdPromotePostResponses[keyof PromoteChunkApiChunksChunkIdPromotePostResponses];
@@ -2756,13 +2761,9 @@ export type RequeueChunkApiChunksChunkIdRequeuesPostError = RequeueChunkApiChunk
 
 export type RequeueChunkApiChunksChunkIdRequeuesPostResponses = {
     /**
-     * Response Requeue Chunk Api Chunks  Chunk Id  Requeues Post
-     *
      * Successful Response
      */
-    202: {
-        [key: string]: string;
-    };
+    202: ChunkSummary;
 };
 
 export type RequeueChunkApiChunksChunkIdRequeuesPostResponse = RequeueChunkApiChunksChunkIdRequeuesPostResponses[keyof RequeueChunkApiChunksChunkIdRequeuesPostResponses];
@@ -2790,13 +2791,9 @@ export type ResumeChunkApiChunksChunkIdResumePostError = ResumeChunkApiChunksChu
 
 export type ResumeChunkApiChunksChunkIdResumePostResponses = {
     /**
-     * Response Resume Chunk Api Chunks  Chunk Id  Resume Post
-     *
      * Successful Response
      */
-    202: {
-        [key: string]: string;
-    };
+    202: ChunkSummary;
 };
 
 export type ResumeChunkApiChunksChunkIdResumePostResponse = ResumeChunkApiChunksChunkIdResumePostResponses[keyof ResumeChunkApiChunksChunkIdResumePostResponses];
@@ -2824,13 +2821,9 @@ export type StopChunkApiChunksChunkIdStopPostError = StopChunkApiChunksChunkIdSt
 
 export type StopChunkApiChunksChunkIdStopPostResponses = {
     /**
-     * Response Stop Chunk Api Chunks  Chunk Id  Stop Post
-     *
      * Successful Response
      */
-    202: {
-        [key: string]: string;
-    };
+    202: ChunkSummary;
 };
 
 export type StopChunkApiChunksChunkIdStopPostResponse = StopChunkApiChunksChunkIdStopPostResponses[keyof StopChunkApiChunksChunkIdStopPostResponses];
@@ -2851,7 +2844,7 @@ export type ListDecisionsApiDecisionsGetResponses = {
 
 export type ListDecisionsApiDecisionsGetResponse = ListDecisionsApiDecisionsGetResponses[keyof ListDecisionsApiDecisionsGetResponses];
 
-export type ResolveDecisionApiDecisionsDecisionIdResolutionPostData = {
+export type ResolveDecisionSingularApiDecisionsDecisionIdResolutionPostData = {
     body: DecisionResolutionRequest;
     path: {
         /**
@@ -2863,23 +2856,53 @@ export type ResolveDecisionApiDecisionsDecisionIdResolutionPostData = {
     url: '/api/decisions/{decision_id}/resolution';
 };
 
-export type ResolveDecisionApiDecisionsDecisionIdResolutionPostErrors = {
+export type ResolveDecisionSingularApiDecisionsDecisionIdResolutionPostErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type ResolveDecisionApiDecisionsDecisionIdResolutionPostError = ResolveDecisionApiDecisionsDecisionIdResolutionPostErrors[keyof ResolveDecisionApiDecisionsDecisionIdResolutionPostErrors];
+export type ResolveDecisionSingularApiDecisionsDecisionIdResolutionPostError = ResolveDecisionSingularApiDecisionsDecisionIdResolutionPostErrors[keyof ResolveDecisionSingularApiDecisionsDecisionIdResolutionPostErrors];
 
-export type ResolveDecisionApiDecisionsDecisionIdResolutionPostResponses = {
+export type ResolveDecisionSingularApiDecisionsDecisionIdResolutionPostResponses = {
     /**
      * Successful Response
      */
     200: DecisionResolutionResponse;
 };
 
-export type ResolveDecisionApiDecisionsDecisionIdResolutionPostResponse = ResolveDecisionApiDecisionsDecisionIdResolutionPostResponses[keyof ResolveDecisionApiDecisionsDecisionIdResolutionPostResponses];
+export type ResolveDecisionSingularApiDecisionsDecisionIdResolutionPostResponse = ResolveDecisionSingularApiDecisionsDecisionIdResolutionPostResponses[keyof ResolveDecisionSingularApiDecisionsDecisionIdResolutionPostResponses];
+
+export type ResolveDecisionApiDecisionsDecisionIdResolutionsPostData = {
+    body: DecisionResolutionRequest;
+    path: {
+        /**
+         * Decision Id
+         */
+        decision_id: string;
+    };
+    query?: never;
+    url: '/api/decisions/{decision_id}/resolutions';
+};
+
+export type ResolveDecisionApiDecisionsDecisionIdResolutionsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ResolveDecisionApiDecisionsDecisionIdResolutionsPostError = ResolveDecisionApiDecisionsDecisionIdResolutionsPostErrors[keyof ResolveDecisionApiDecisionsDecisionIdResolutionsPostErrors];
+
+export type ResolveDecisionApiDecisionsDecisionIdResolutionsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: DecisionResolutionResponse;
+};
+
+export type ResolveDecisionApiDecisionsDecisionIdResolutionsPostResponse = ResolveDecisionApiDecisionsDecisionIdResolutionsPostResponses[keyof ResolveDecisionApiDecisionsDecisionIdResolutionsPostResponses];
 
 export type GetChunkApiFleetChunksChunkIdGetData = {
     body?: never;
@@ -3556,7 +3579,7 @@ export type AskQuestionApiQuestionsPostResponses = {
 
 export type AskQuestionApiQuestionsPostResponse = AskQuestionApiQuestionsPostResponses[keyof AskQuestionApiQuestionsPostResponses];
 
-export type AnswerQuestionApiQuestionsQuestionIdAnswerPostData = {
+export type AnswerQuestionSingularApiQuestionsQuestionIdAnswerPostData = {
     body: AnswerRequest;
     path: {
         /**
@@ -3568,23 +3591,94 @@ export type AnswerQuestionApiQuestionsQuestionIdAnswerPostData = {
     url: '/api/questions/{question_id}/answer';
 };
 
-export type AnswerQuestionApiQuestionsQuestionIdAnswerPostErrors = {
+export type AnswerQuestionSingularApiQuestionsQuestionIdAnswerPostErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type AnswerQuestionApiQuestionsQuestionIdAnswerPostError = AnswerQuestionApiQuestionsQuestionIdAnswerPostErrors[keyof AnswerQuestionApiQuestionsQuestionIdAnswerPostErrors];
+export type AnswerQuestionSingularApiQuestionsQuestionIdAnswerPostError = AnswerQuestionSingularApiQuestionsQuestionIdAnswerPostErrors[keyof AnswerQuestionSingularApiQuestionsQuestionIdAnswerPostErrors];
 
-export type AnswerQuestionApiQuestionsQuestionIdAnswerPostResponses = {
+export type AnswerQuestionSingularApiQuestionsQuestionIdAnswerPostResponses = {
     /**
      * Successful Response
      */
     201: AnswerResult;
 };
 
-export type AnswerQuestionApiQuestionsQuestionIdAnswerPostResponse = AnswerQuestionApiQuestionsQuestionIdAnswerPostResponses[keyof AnswerQuestionApiQuestionsQuestionIdAnswerPostResponses];
+export type AnswerQuestionSingularApiQuestionsQuestionIdAnswerPostResponse = AnswerQuestionSingularApiQuestionsQuestionIdAnswerPostResponses[keyof AnswerQuestionSingularApiQuestionsQuestionIdAnswerPostResponses];
+
+export type AnswerQuestionApiQuestionsQuestionIdAnswersPostData = {
+    body: AnswerRequest;
+    path: {
+        /**
+         * Question Id
+         */
+        question_id: string;
+    };
+    query?: never;
+    url: '/api/questions/{question_id}/answers';
+};
+
+export type AnswerQuestionApiQuestionsQuestionIdAnswersPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AnswerQuestionApiQuestionsQuestionIdAnswersPostError = AnswerQuestionApiQuestionsQuestionIdAnswersPostErrors[keyof AnswerQuestionApiQuestionsQuestionIdAnswersPostErrors];
+
+export type AnswerQuestionApiQuestionsQuestionIdAnswersPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: AnswerResult;
+};
+
+export type AnswerQuestionApiQuestionsQuestionIdAnswersPostResponse = AnswerQuestionApiQuestionsQuestionIdAnswersPostResponses[keyof AnswerQuestionApiQuestionsQuestionIdAnswersPostResponses];
+
+export type GetQueueApiQueueGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/queue';
+};
+
+export type GetQueueApiQueueGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: QueuePeekResponse;
+};
+
+export type GetQueueApiQueueGetResponse = GetQueueApiQueueGetResponses[keyof GetQueueApiQueueGetResponses];
+
+export type ReplaceQueueApiQueuePutData = {
+    body: QueueReplaceRequest;
+    path?: never;
+    query?: never;
+    url: '/api/queue';
+};
+
+export type ReplaceQueueApiQueuePutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ReplaceQueueApiQueuePutError = ReplaceQueueApiQueuePutErrors[keyof ReplaceQueueApiQueuePutErrors];
+
+export type ReplaceQueueApiQueuePutResponses = {
+    /**
+     * Successful Response
+     */
+    200: QueuePeekResponse;
+};
+
+export type ReplaceQueueApiQueuePutResponse = ReplaceQueueApiQueuePutResponses[keyof ReplaceQueueApiQueuePutResponses];
 
 export type PeekQueueApiQueuePeekGetData = {
     body?: never;
@@ -3658,6 +3752,36 @@ export type ListRunnersApiRunnersGetResponses = {
 };
 
 export type ListRunnersApiRunnersGetResponse = ListRunnersApiRunnersGetResponses[keyof ListRunnersApiRunnersGetResponses];
+
+export type GetRunnerApiRunnersRunnerIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Runner Id
+         */
+        runner_id: string;
+    };
+    query?: never;
+    url: '/api/runners/{runner_id}';
+};
+
+export type GetRunnerApiRunnersRunnerIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetRunnerApiRunnersRunnerIdGetError = GetRunnerApiRunnersRunnerIdGetErrors[keyof GetRunnerApiRunnersRunnerIdGetErrors];
+
+export type GetRunnerApiRunnersRunnerIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: RunnerView;
+};
+
+export type GetRunnerApiRunnersRunnerIdGetResponse = GetRunnerApiRunnersRunnerIdGetResponses[keyof GetRunnerApiRunnersRunnerIdGetResponses];
 
 export type EnrollRunnerApiRunnersRunnerIdEnrollmentsPostData = {
     body?: never;

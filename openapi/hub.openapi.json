@@ -2675,6 +2675,23 @@
         "title": "QueueReorderResponse",
         "type": "object"
       },
+      "QueueReplaceRequest": {
+        "description": "Idempotent whole-order replacement of the ready queue \u2014 ``PUT /api/queue``.\n\n``chunk_ids`` is the desired order, front to back; every id must name a\ncurrently-ready chunk (``409`` otherwise) and must not repeat (``422``\notherwise). A ready chunk not named here keeps its current relative order,\nappended after the named ones.",
+        "properties": {
+          "chunk_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Chunk Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "chunk_ids"
+        ],
+        "title": "QueueReplaceRequest",
+        "type": "object"
+      },
       "ReadinessResponse": {
         "description": "The wire shape of a readiness reading (openapi-ts consumes this).",
         "properties": {
@@ -3500,11 +3517,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Detach Chunk Api Chunks  Chunk Id  Detach Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ChunkSummary"
                 }
               }
             },
@@ -3529,7 +3542,8 @@
     },
     "/api/chunks/{chunk_id}/graph": {
       "post": {
-        "description": "Repin a not-ready or ready-and-unclaimed chunk's workflow graph (issue #27, widened by #120).\n\n404 on an unknown chunk or an unknown target graph; 409 once the chunk is claimed\nor later (``running``, ``delivering``, ``waiting_on_human``, ``needs_human``,\n``paused``, ``done``, ``stopped`` \u2014 issue #120 widened the admit set to\n``{not_ready, ready}``, not further \u2014 checked first, so it wins over the next\ncause even when both apply) or on a retired target graph (issue #101 \u2014 a retired\ngraph cannot receive new work).",
+        "deprecated": true,
+        "description": "Deprecated alias of ``PATCH /chunks/{id}`` (``{\"graph_id\": ...}``, issue #104) \u2014\nrepins a not-ready or ready-and-unclaimed chunk's workflow graph (issue #27,\nwidened by #120). Identical request/response body and ``EditService`` delegation\nas before; only the deprecation marker and headers are new.\n\n404 on an unknown chunk or an unknown target graph; 409 once the chunk is claimed\nor later (``running``, ``delivering``, ``waiting_on_human``, ``needs_human``,\n``paused``, ``done``, ``stopped`` \u2014 issue #120 widened the admit set to\n``{not_ready, ready}``, not further \u2014 checked first, so it wins over the next\ncause even when both apply) or on a retired target graph (issue #101 \u2014 a retired\ngraph cannot receive new work).",
         "operationId": "set_chunk_graph_api_chunks__chunk_id__graph_post",
         "parameters": [
           {
@@ -3706,7 +3720,8 @@
     },
     "/api/chunks/{chunk_id}/model": {
       "post": {
-        "description": "Repin a not-ready or ready-and-unclaimed chunk's model selection (issue #27, widened by #120).\n\n404 on an unknown chunk; 422 on a blank model; 409 once the chunk is claimed or\nlater (``running``, ``delivering``, ``waiting_on_human``, ``needs_human``,\n``paused``, ``done``, ``stopped`` \u2014 issue #120 widened the admit set to\n``{not_ready, ready}``, not further).",
+        "deprecated": true,
+        "description": "Deprecated alias of ``PATCH /chunks/{id}`` (``{\"model\": ...}``, issue #104) \u2014\nrepins a not-ready or ready-and-unclaimed chunk's model selection (issue #27,\nwidened by #120). Identical request/response body and ``EditService`` delegation\nas before; only the deprecation marker and headers are new.\n\n404 on an unknown chunk; 422 on a blank model; 409 once the chunk is claimed or\nlater (``running``, ``delivering``, ``waiting_on_human``, ``needs_human``,\n``paused``, ``done``, ``stopped`` \u2014 issue #120 widened the admit set to\n``{not_ready, ready}``, not further).",
         "operationId": "set_chunk_model_api_chunks__chunk_id__model_post",
         "parameters": [
           {
@@ -3787,11 +3802,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Pause Chunk Api Chunks  Chunk Id  Pause Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ChunkSummary"
                 }
               }
             },
@@ -3877,11 +3888,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Promote Chunk Api Chunks  Chunk Id  Promote Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ChunkSummary"
                 }
               }
             },
@@ -3924,11 +3931,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Requeue Chunk Api Chunks  Chunk Id  Requeues Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ChunkSummary"
                 }
               }
             },
@@ -3981,11 +3984,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Resume Chunk Api Chunks  Chunk Id  Resume Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ChunkSummary"
                 }
               }
             },
@@ -4038,11 +4037,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Stop Chunk Api Chunks  Chunk Id  Stop Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ChunkSummary"
                 }
               }
             },
@@ -4089,8 +4084,62 @@
     },
     "/api/decisions/{decision_id}/resolution": {
       "post": {
+        "deprecated": true,
+        "description": "Deprecated alias of ``POST /api/decisions/{id}/resolutions`` \u2014 kept for\nversion-skewed clients (``blizzard hub decide``, until it migrates).",
+        "operationId": "resolve_decision_singular_api_decisions__decision_id__resolution_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "decision_id",
+            "required": true,
+            "schema": {
+              "title": "Decision Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecisionResolutionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionResolutionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resolve Decision Singular",
+        "tags": [
+          "decisions"
+        ]
+      }
+    },
+    "/api/decisions/{decision_id}/resolutions": {
+      "post": {
         "description": "Resolve an open decision, first-write-wins CAS.",
-        "operationId": "resolve_decision_api_decisions__decision_id__resolution_post",
+        "operationId": "resolve_decision_api_decisions__decision_id__resolutions_post",
         "parameters": [
           {
             "in": "path",
@@ -5179,8 +5228,62 @@
     },
     "/api/questions/{question_id}/answer": {
       "post": {
+        "deprecated": true,
+        "description": "Deprecated alias of ``POST /api/questions/{id}/answers`` \u2014 kept for\nversion-skewed clients (``blizzard hub answer``, until it migrates).",
+        "operationId": "answer_question_singular_api_questions__question_id__answer_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "title": "Question Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnswerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnswerResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Answer Question Singular",
+        "tags": [
+          "questions"
+        ]
+      }
+    },
+    "/api/questions/{question_id}/answers": {
+      "post": {
         "description": "Answer a question first-write-wins; 409 carries the winning answer.",
-        "operationId": "answer_question_api_questions__question_id__answer_post",
+        "operationId": "answer_question_api_questions__question_id__answers_post",
         "parameters": [
           {
             "in": "path",
@@ -5230,9 +5333,72 @@
         ]
       }
     },
+    "/api/queue": {
+      "get": {
+        "description": "The hub-ordered ready queue, read-only \u2014 honours reorder/replace + grouping.",
+        "operationId": "get_queue_api_queue_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueuePeekResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Queue",
+        "tags": [
+          "queue"
+        ]
+      },
+      "put": {
+        "description": "Idempotent whole-order replacement of the ready queue \u2014 the board's queue panel.\n\nResolves every named id against the current ready set here (the edge concern,\n``bzh:domain-takes-objects``): ``409`` names the first id that is not a ready\nchunk, ``422`` rejects a duplicate id. A ready chunk not named keeps its current\nrelative order, appended after the named ones, so the replacement is total and\nidempotent.",
+        "operationId": "replace_queue_api_queue_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QueueReplaceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueuePeekResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Replace Queue",
+        "tags": [
+          "queue"
+        ]
+      }
+    },
     "/api/queue/peek": {
       "get": {
-        "description": "The hub-ordered ready queue, read-only \u2014 honours reorder + grouping.",
+        "deprecated": true,
+        "description": "Deprecated alias of ``GET /api/queue`` \u2014 kept for version-skewed clients.",
         "operationId": "peek_queue_api_queue_peek_get",
         "responses": {
           "200": {
@@ -5254,7 +5420,8 @@
     },
     "/api/queue/reorder": {
       "post": {
-        "description": "Move a ready chunk to a queue position \u2014 the board's Prioritize control.",
+        "deprecated": true,
+        "description": "Move a ready chunk to a queue position \u2014 the board's Prioritize control.\n\nDeprecated alias of ``PUT /api/queue`` (single-move, unchanged behavior); the\nwhole-order successor is the only one that can express an arbitrary reshuffle in\none call, but this stays functional for the board's move-one-to-position control\nand any version-skewed client until they migrate.",
         "operationId": "reorder_queue_api_queue_reorder_post",
         "requestBody": {
           "content": {
@@ -5332,6 +5499,49 @@
           }
         },
         "summary": "List Runners",
+        "tags": [
+          "runners"
+        ]
+      }
+    },
+    "/api/runners/{runner_id}": {
+      "get": {
+        "description": "One runner's derived liveness + paused state \u2014 the operator's detail read,\nsymmetric with the list. 404 on unknown.",
+        "operationId": "get_runner_api_runners__runner_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "runner_id",
+            "required": true,
+            "schema": {
+              "title": "Runner Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Runner",
         "tags": [
           "runners"
         ]

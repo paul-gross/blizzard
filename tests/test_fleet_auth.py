@@ -158,12 +158,17 @@ def test_moved_write_verbs_404_or_405_at_their_old_path(tmp_path: Path) -> None:
 
 
 def test_moved_read_verbs_are_gone_from_the_route_inventory(tmp_path: Path) -> None:
-    """The moved GET reads (envelope, the runner's answer poll, the runner's own pull
-    read) no longer resolve as API routes: their old path templates are absent from
-    the app's OpenAPI path inventory, and the fleet-side counterparts are present.
-    Asserted against the inventory rather than over HTTP because what a dead GET path
-    serves depends on whether the SPA bundle is built (catch-all HTML) or not (a
-    JSON 404)."""
+    """The moved GET reads (envelope, the runner's answer poll) no longer resolve as
+    operator API routes: their old path templates are absent from the app's OpenAPI
+    path inventory, and the fleet-side counterparts are present. Asserted against the
+    inventory rather than over HTTP because what a dead GET path serves depends on
+    whether the SPA bundle is built (catch-all HTML) or not (a JSON 404).
+
+    ``/api/runners/{runner_id}`` is excluded from this table (issue #104, S5): it was
+    reintroduced as the operator's own detail read (``reject_runner_principal``-gated,
+    reusing ``runner_view``) — see ``test_runners_api.py`` — coexisting with the
+    runner-authenticated ``/api/fleet/runners/{runner_id}`` (the runner's own pull
+    read) at a different prefix."""
     hub = build_hub(tmp_path)
     app = hub.client.app
     assert isinstance(app, FastAPI)
@@ -171,7 +176,7 @@ def test_moved_read_verbs_are_gone_from_the_route_inventory(tmp_path: Path) -> N
     for old, new in [
         ("/api/chunks/{chunk_id}/envelope", "/api/fleet/chunks/{chunk_id}/envelope"),
         ("/api/questions/{question_id}", "/api/fleet/questions/{question_id}"),
-        ("/api/runners/{runner_id}", "/api/fleet/runners/{runner_id}"),
     ]:
         assert "get" not in paths.get(old, {}), f"GET {old} still resolves as an API route"
         assert "get" in paths.get(new, {}), f"GET {new} missing from the fleet router"
+    assert "get" in paths.get("/api/fleet/runners/{runner_id}", {}), "fleet runner pull read missing"

@@ -1,14 +1,21 @@
-"""Queue routes — peek, reorder, and group — the anonymous **operator** surface (issue #87).
+"""Queue routes — peek, reorder, replace, and group — the anonymous **operator**
+surface (issues #87, #104).
 
-``GET /queue/peek`` is the read-only ready-queue peek the board's queue panel polls;
+``GET /api/queue`` is the read-only ready-queue view the board's queue panel polls;
 ready is a **derived** status (a minted chunk with no live route) and the queue's order
 is an explicit hub-side property. A runner's FILL step peeks the same ready queue
 through its own fleet-side counterpart (``GET /api/fleet/queue/peek``,
-:mod:`blizzard.hub.api.fleet`) rather than this route — both share :func:`peek_queue`.
-``POST /queue/reorder`` is the board's Prioritize control, and ``POST
-/chunks/{id}/group`` is the Group control — both shape the ready queue without
-executing work. Controllers stay read-only over the store and delegate the writes to
-the queue-shaping domain services (``bzh:controller-read-only``).
+:mod:`blizzard.hub.api.fleet`) rather than this route — both share :func:`_entries`.
+``PUT /api/queue`` is the idempotent whole-order replacement the board's queue panel
+drives (issue #104); ``POST /chunks/{id}/group`` is the Group control. Controllers stay
+read-only over the store and delegate the writes to the queue-shaping domain services
+(``bzh:controller-read-only``).
+
+``GET /queue/peek`` and ``POST /queue/reorder`` (single-move) are kept mounted as
+``deprecated=True`` aliases that delegate to the successor handlers and mark the
+response deprecated (:func:`blizzard.hub.api.deprecation.mark_deprecated`) — the board's
+move-one-to-position control still uses the reorder alias until it migrates.
+
 ``dependencies=[Depends(reject_runner_principal)]`` rejects a runner's bearer token
 here rather than treating it as anonymous-plus-credential.
 """
@@ -17,10 +24,11 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.responses import JSONResponse
 
 from blizzard.hub.api.auth import reject_runner_principal
+from blizzard.hub.api.deprecation import mark_deprecated
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.queue import ChunkNotFound, ChunkNotReady
@@ -33,6 +41,7 @@ from blizzard.wire.queue import (
     QueuePeekResponse,
     QueueReorderRequest,
     QueueReorderResponse,
+    QueueReplaceRequest,
 )
 
 router = APIRouter(prefix="/api", tags=["queue"], dependencies=[Depends(reject_runner_principal)])
@@ -50,17 +59,56 @@ def _entries(ready: list[Chunk]) -> list[QueuePeekEntry]:
     ]
 
 
-@router.get("/queue/peek", response_model=QueuePeekResponse)
-def peek_queue(services: Annotated[HubServices, Depends(get_services)]) -> QueuePeekResponse:
-    """The hub-ordered ready queue, read-only — honours reorder + grouping."""
+@router.get("/queue", response_model=QueuePeekResponse)
+def get_queue(services: Annotated[HubServices, Depends(get_services)]) -> QueuePeekResponse:
+    """The hub-ordered ready queue, read-only — honours reorder/replace + grouping."""
     return QueuePeekResponse(entries=_entries(services.queue.ordered_ready()))
 
 
-@router.post("/queue/reorder", response_model=QueueReorderResponse)
+@router.get("/queue/peek", response_model=QueuePeekResponse, deprecated=True)
+def peek_queue(response: Response, services: Annotated[HubServices, Depends(get_services)]) -> QueuePeekResponse:
+    """Deprecated alias of ``GET /api/queue`` — kept for version-skewed clients."""
+    result = get_queue(services)
+    mark_deprecated(response, successor="/api/queue")
+    return result
+
+
+@router.put("/queue", response_model=QueuePeekResponse)
+def replace_queue(
+    request: QueueReplaceRequest, services: Annotated[HubServices, Depends(get_services)]
+) -> QueuePeekResponse:
+    """Idempotent whole-order replacement of the ready queue — the board's queue panel.
+
+    Resolves every named id against the current ready set here (the edge concern,
+    ``bzh:domain-takes-objects``): ``409`` names the first id that is not a ready
+    chunk, ``422`` rejects a duplicate id. A ready chunk not named keeps its current
+    relative order, appended after the named ones, so the replacement is total and
+    idempotent."""
+    if len(set(request.chunk_ids)) != len(request.chunk_ids):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="chunk_ids must not repeat")
+    ready = services.queue.ordered_ready()
+    ready_by_id = {chunk.chunk_id: chunk for chunk in ready}
+    for chunk_id in request.chunk_ids:
+        if chunk_id not in ready_by_id:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"chunk {chunk_id} is not a ready chunk")
+    named_ids = set(request.chunk_ids)
+    ordered = [ready_by_id[chunk_id] for chunk_id in request.chunk_ids]
+    ordered.extend(chunk for chunk in ready if chunk.chunk_id not in named_ids)
+    services.queue.replace_order(ordered)
+    services.events.publish_queue_changed()
+    return QueuePeekResponse(entries=_entries(services.queue.ordered_ready()))
+
+
+@router.post("/queue/reorder", response_model=QueueReorderResponse, deprecated=True)
 def reorder_queue(
-    request: QueueReorderRequest, services: Annotated[HubServices, Depends(get_services)]
+    request: QueueReorderRequest, response: Response, services: Annotated[HubServices, Depends(get_services)]
 ) -> QueueReorderResponse:
-    """Move a ready chunk to a queue position — the board's Prioritize control."""
+    """Move a ready chunk to a queue position — the board's Prioritize control.
+
+    Deprecated alias of ``PUT /api/queue`` (single-move, unchanged behavior); the
+    whole-order successor is the only one that can express an arbitrary reshuffle in
+    one call, but this stays functional for the board's move-one-to-position control
+    and any version-skewed client until they migrate."""
     try:
         services.queue.reorder(request.chunk_id, to_index=request.position)
     except ChunkNotFound as exc:
@@ -68,6 +116,7 @@ def reorder_queue(
     except ChunkNotReady as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     services.events.publish_queue_changed()
+    mark_deprecated(response, successor="/api/queue")
     return QueueReorderResponse(entries=_entries(services.queue.ordered_ready()))
 
 

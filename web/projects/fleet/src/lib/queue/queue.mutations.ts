@@ -3,9 +3,10 @@ import { QueryClient, injectMutation } from '@tanstack/angular-query-experimenta
 
 import {
   type ChunkGroupResponse,
-  type QueueReorderResponse,
+  type QueuePeekEntry,
+  type QueuePeekResponse,
   groupChunksApiChunksChunkIdGroupPost,
-  reorderQueueApiQueueReorderPost,
+  replaceQueueApiQueuePut,
 } from '../api/hub';
 import { hubChunksKey, hubQueueKey } from '../query-keys';
 
@@ -16,16 +17,26 @@ export interface ReorderVars {
 }
 
 /**
- * `POST /api/queue/reorder` — reorder the ready queue through the generated client
- * (bzh:generated-client). On success it re-peeks the queue and re-reads the fleet
- * list; the live stream will also fire `queue-changed`, so this is belt-and-braces.
+ * `PUT /api/queue` — a whole-order replace (issue #104's R1), through the
+ * generated client (bzh:generated-client); `POST /api/queue/reorder` is now a
+ * deprecated alias this board no longer calls. The board's move-to-position
+ * control only expresses a single move, so this composes the full order
+ * client-side from the currently-cached queue: the named chunk is spliced out
+ * and reinserted at the clamped target index, every other ready chunk keeping
+ * its current relative order. On success it invalidates the queue and the
+ * fleet list; the live stream will also fire `queue-changed`, so this is
+ * belt-and-braces.
  */
 export function injectReorderQueueMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
-    mutationFn: async (vars: ReorderVars): Promise<QueueReorderResponse> => {
-      const { data, error } = await reorderQueueApiQueueReorderPost({
-        body: { chunk_id: vars.chunkId, position: vars.position },
+    mutationFn: async (vars: ReorderVars): Promise<QueuePeekResponse> => {
+      const current = queryClient.getQueryData<QueuePeekEntry[]>(hubQueueKey) ?? [];
+      const rest = current.filter((entry) => entry.chunk_id !== vars.chunkId).map((entry) => entry.chunk_id);
+      const index = Math.min(Math.max(vars.position, 0), rest.length);
+      const chunkIds = [...rest.slice(0, index), vars.chunkId, ...rest.slice(index)];
+      const { data, error } = await replaceQueueApiQueuePut({
+        body: { chunk_ids: chunkIds },
         throwOnError: false,
       });
       if (error) throw error;

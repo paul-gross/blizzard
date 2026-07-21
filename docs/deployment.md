@@ -227,7 +227,7 @@ fix the `name` (or add a second `[[pm_source]]` under the correct tail) and rest
 
 ### Ingest tokens
 
-`blizzard hub ingest` takes one or more source-native tokens and mints a chunk. Each
+`blizzard hub chunk ingest` takes one or more source-native tokens and mints a chunk. Each
 token is one of:
 
 - `<source>:<ref>` — e.g. `blizzard:26`
@@ -387,7 +387,7 @@ mints per worker — setting one does not affect the other.
 
 `runner pause` and `runner start` are pure clients of this API and never contact the hub,
 so they keep working while it is unreachable. They set the runner's **own** brake, which
-means something different from `blizzard hub pause <runner_id>`: the hub brake still just
+means something different from `blizzard hub runner pause <runner_id>`: the hub brake still just
 stops new claims (in-flight chunks always run on); the runner's own brake means "start no
 processes on this machine" — no new claims, but also no restart-resume, no requeue
 respawn, and no judging a worker that exits while it's on, since judging one resumes its
@@ -395,7 +395,7 @@ session. Nothing is lost either way: a live worker already running is left alone
 not a drain), and every lease, route, and retry budget the brake defers is picked up
 exactly where it left off once the brake clears — see `blizzard-runner pause --help` for
 the full contract. Each brake is cleared only where it was set — `runner start` locally,
-`blizzard hub resume` at the hub.
+`blizzard hub runner resume` at the hub.
 
 The local brake has one **non-operator** trigger too: a configured runner spend ceiling
 engages this same brake automatically when the fleet's rolling-window spend crosses it (see
@@ -421,16 +421,16 @@ refuses to start beside one that is still live (the store is single-writer).
 
 Five verbs stop work, and two of them share the word "pause," which is exactly where
 operators mix them up. The three chunk-level verbs split along what they do to the
-claim: keep it (`pause-chunk`), give it away (`detach`), or end it for good (`stop`).
+claim: keep it (`chunk pause`), give it away (`detach`), or end it for good (`stop`).
 
-- **`blizzard hub pause-chunk <chunk_id>` / `resume-chunk <chunk_id>`** (issue #46), or
+- **`blizzard hub chunk pause <chunk_id>` / `chunk resume <chunk_id>`** (issue #46), or
   the board's **Pause**/**Resume** control in the chunk detail dock beside Detach —
   targets **one chunk**. On a chunk with a live claim, the runner kills that chunk's
   live worker but **keeps the claim**: the lease, route, epoch, held environments, and
   retry budget all survive untouched — only the process dies. Pause is also allowed on
   a chunk that hasn't been claimed yet (`ready`): there it holds the chunk out of the
   queue instead — it derives `paused`, not `ready`, so FILL skips it until it's
-  resumed. `resume-chunk` respawns a parked session **in place**, under the unchanged
+  resumed. `chunk resume` respawns a parked session **in place**, under the unchanged
   lease/epoch/session id, consuming no retry (a still-unclaimed chunk just re-derives
   `ready` and rejoins the queue). Refused (`409`) on a chunk that is
   `done`/`stopped`/`delivering`; deliberately **allowed** on
@@ -443,10 +443,10 @@ claim: keep it (`pause-chunk`), give it away (`detach`), or end it for good (`st
   `paused`, until the question is answered. The dock still says so plainly and still
   offers **Resume** there — it reads the pause fact (`ChunkDetail.pause`), not the
   chip. Once answered, the pause fact is still there, so the chunk then derives
-  `paused` (and stays parked) rather than resuming — `resume-chunk` is what actually
-  lets it go. `resume-chunk` is idempotent — resuming an already-running chunk is a
+  `paused` (and stays parked) rather than resuming — `chunk resume` is what actually
+  lets it go. `chunk resume` is idempotent — resuming an already-running chunk is a
   harmless no-op.
-- **`blizzard hub detach <chunk_id>`**, or the board's **Detach** control in the
+- **`blizzard hub chunk detach <chunk_id>`**, or the board's **Detach** control in the
   chunk detail dock (issue #42) — also targets **one chunk**, but the opposite direction:
   it **gives the claim away**. Both doors reach the same `POST /api/chunks/{id}/detach`,
   so either does exactly the same thing. The route is released, every held environment is
@@ -455,12 +455,12 @@ claim: keep it (`pause-chunk`), give it away (`detach`), or end it for good (`st
   else, not merely killed-and-kept. It is **not** requeue: no supersession fact is
   recorded and no epoch bumps, so a `needs_human` chunk detached this way is still
   `needs_human` afterward — only the route is gone. Refused (`409`) when the chunk has no
-  live route left to release. See `blizzard hub detach --help` for the CLI's full
+  live route left to release. See `blizzard hub chunk detach --help` for the CLI's full
   contract.
-- **`blizzard hub stop <chunk_id>`** (issue #118) — CLI/API only, with no board
+- **`blizzard hub chunk stop <chunk_id>`** (issue #118) — CLI/API only, with no board
   control today; there is no Stop button in the chunk detail dock the way Pause and
   Detach each have one, only `POST /api/chunks/{id}/stop`. Terminal and
-  **irreversible** — there is no `un-stop`. It does **both** of what `pause-chunk` and
+  **irreversible** — there is no `un-stop`. It does **both** of what `chunk pause` and
   `detach` each do half of: it writes the terminal `chunk.stopped` fact *and* releases
   any live route, so the holding runner frees the environments on its own next tick —
   no separate `detach` call needed. Unlike `detach`, a live route is not required:
@@ -468,9 +468,9 @@ claim: keep it (`pause-chunk`), give it away (`detach`), or end it for good (`st
   route release is conditional, not required. Refused (`409`) only when the chunk is
   already `done` or `stopped` — not retroactive un-delivery, and not a lever for
   clearing a `delivering`/`waiting_on_human`/`needs_human` chunk back to a fresh
-  state, only for ending it. See `blizzard hub stop --help` for the CLI's full
+  state, only for ending it. See `blizzard hub chunk stop --help` for the CLI's full
   contract.
-- **`blizzard hub pause <runner_id>` / `resume <runner_id>`** (the hub brake)
+- **`blizzard hub runner pause <runner_id>` / `runner resume <runner_id>`** (the hub brake)
   and **`runner pause` / `runner start`** (the runner's own local brake, issue #45,
   above) are **per-runner**, not per-chunk. Neither kills any particular chunk's
   worker: the hub brake only stops that runner from claiming *new* work (every
@@ -478,7 +478,7 @@ claim: keep it (`pause-chunk`), give it away (`detach`), or end it for good (`st
   every other spawn site (restart-resume, an answer-resume, a requeue respawn, …) but
   still never kills a worker that is already running — pausing locally is not a drain.
 
-The distinction worth holding onto: `pause-chunk` is the **only** one of the three
+The distinction worth holding onto: `chunk pause` is the **only** one of the three
 chunk-level verbs that kills a live worker while **keeping** the claim — `detach` and
 `stop` both give it away (or end it), they just differ in whether the chunk can be
 reclaimed afterward. The two runner-level brakes sit apart from all three: they never

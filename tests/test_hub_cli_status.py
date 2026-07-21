@@ -1,10 +1,11 @@
 """``blizzard hub status`` — the per-chunk cost column and fleet total (issue #60).
 
 A pure client of the hub API: ``GET /chunks`` + ``GET /runners`` + ``GET /questions``
-+ ``GET /spend``. This file stubs ``httpx.Client`` (the same monkeypatch seam
-``tests/test_ingest_and_pause_verbs.py`` uses for the POST verbs) with canned
-responses keyed by path, so it proves the CLI's own rendering — the per-chunk cost
-column, the fleet total, and the lower-bound PARTIAL marker — without a running hub.
++ ``GET /spend``, all through the shared ``_request`` seam (issue #104) — this file
+stubs ``httpx.get`` (the same monkeypatch seam every other CLI unit test uses) with
+canned responses keyed by the full URL, so it proves the CLI's own rendering — the
+per-chunk cost column, the fleet total, and the lower-bound PARTIAL marker — without a
+running hub.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ import pytest
 from click.testing import CliRunner
 
 import blizzard.hub.cli as hub_cli
+from blizzard.hub.cli import DEFAULT_HUB_URL
 from blizzard.hub.cli import hub as hub_group
 
 pytestmark = pytest.mark.component
@@ -29,25 +31,14 @@ class _FakeResponse:
         return self._payload
 
 
-class _FakeClient:
-    """A stand-in for ``httpx.Client`` — a context manager returning a canned
-    response keyed by path, the same shape ``status()`` GETs against."""
-
-    def __init__(self, responses: dict[str, object]) -> None:
-        self._responses = responses
-
-    def __enter__(self) -> _FakeClient:
-        return self
-
-    def __exit__(self, *exc: object) -> None:
-        return None
-
-    def get(self, path: str, params: dict[str, str] | None = None) -> _FakeResponse:
-        return _FakeResponse(self._responses[path])
-
-
 def _install(monkeypatch: pytest.MonkeyPatch, responses: dict[str, object]) -> None:
-    monkeypatch.setattr(hub_cli.httpx, "Client", lambda *args, **kwargs: _FakeClient(responses))
+    """Key ``responses`` by full URL (``DEFAULT_HUB_URL`` + path) — what ``_request``
+    actually calls ``httpx.get`` with."""
+
+    def fake_get(url: str, *, timeout: float, params: dict[str, str] | None = None) -> _FakeResponse:
+        return _FakeResponse(responses[url])
+
+    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
 
 
 def _cost(cost_usd: float, *, partial: bool) -> dict:
@@ -63,12 +54,12 @@ def _cost(cost_usd: float, *, partial: bool) -> dict:
 
 def _responses(chunk_cost: dict, fleet_cost: dict, runners: list[dict] | None = None) -> dict[str, object]:
     return {
-        "/api/chunks": [
+        f"{DEFAULT_HUB_URL}/api/chunks": [
             {"chunk_id": "ch_1", "status": "running", "current_node_id": "nd_1", "cost": chunk_cost},
         ],
-        "/api/runners": {"runners": runners or []},
-        "/api/questions": [],
-        "/api/spend": {"since": "1970-01-01T00:00:00+00:00", **fleet_cost},
+        f"{DEFAULT_HUB_URL}/api/runners": {"runners": runners or []},
+        f"{DEFAULT_HUB_URL}/api/questions": [],
+        f"{DEFAULT_HUB_URL}/api/spend": {"since": "1970-01-01T00:00:00+00:00", **fleet_cost},
     }
 
 

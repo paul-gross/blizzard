@@ -1,6 +1,7 @@
-"""``blizzard hub graph list|retire|enable|upload`` (unit tier) — pure clients of the
+"""``blizzard hub graph list|show|retire|enable|mint`` (unit tier) — pure clients of the
 graph lifecycle and mint endpoints, driven here with ``httpx`` stubbed (issue #101,
-issue #123).
+issue #104, issue #123). ``mint`` supersedes the former ``upload`` — same file-inlining
+behavior, plus stdin (``-``) support and a fuller validation report.
 """
 
 from __future__ import annotations
@@ -113,6 +114,44 @@ def test_graph_retire_maps_an_unknown_graph(monkeypatch: pytest.MonkeyPatch) -> 
     assert "gr_ghost" in result.output
 
 
+@pytest.mark.unit
+def test_graph_show_prints_the_reified_graph(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+        return _FakeResponse(
+            200,
+            {
+                "graph_id": "gr_1",
+                "name": "alpha",
+                "entry_node_id": "nd_1",
+                "enabled": True,
+                "retired": False,
+                "nodes": [{"node_id": "nd_1", "name": "build", "executor": "runner"}],
+                "edges": [{"from_node_id": "nd_1", "choice_id": "pass", "to_node_name": "done"}],
+                "warnings": [],
+            },
+        )
+
+    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
+    result = CliRunner().invoke(hub_group, ["graph", "show", "gr_1"], env={"BZ_HUB_URL": "http://hub.local:8421"})
+
+    assert result.exit_code == 0, result.output
+    assert "gr_1" in result.output
+    assert "build" in result.output
+    assert "done" in result.output
+
+
+@pytest.mark.unit
+def test_graph_show_maps_an_unknown_graph(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_get(url: str, *, timeout: float) -> _FakeResponse:
+        return _FakeResponse(404)
+
+    monkeypatch.setattr(hub_cli.httpx, "get", fake_get)
+    result = CliRunner().invoke(hub_group, ["graph", "show", "gr_ghost"])
+
+    assert result.exit_code != 0
+    assert "gr_ghost" in result.output
+
+
 _UPLOAD_GRAPH_YAML = """
 name: tiny
 entry: build
@@ -147,7 +186,7 @@ def _write_graph_with_prompt_ref(tmp_path: Path) -> Path:
 
 
 @pytest.mark.unit
-def test_graph_upload_posts_the_prompt_inlined(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_graph_mint_posts_the_prompt_inlined(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     graph_path = _write_graph_with_prompt_ref(tmp_path)
     calls: list[tuple[str, object]] = []
 
@@ -157,7 +196,7 @@ def test_graph_upload_posts_the_prompt_inlined(monkeypatch: pytest.MonkeyPatch, 
 
     monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
     result = CliRunner().invoke(
-        hub_group, ["graph", "upload", str(graph_path)], env={"BZ_HUB_URL": "http://hub.local:8421"}
+        hub_group, ["graph", "mint", str(graph_path)], env={"BZ_HUB_URL": "http://hub.local:8421"}
     )
 
     assert result.exit_code == 0, result.output
@@ -171,42 +210,91 @@ def test_graph_upload_posts_the_prompt_inlined(monkeypatch: pytest.MonkeyPatch, 
 
 
 @pytest.mark.unit
-def test_graph_upload_prints_the_minted_graph_id(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_graph_mint_prints_the_minted_graph_id(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     graph_path = _write_graph_with_prompt_ref(tmp_path)
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(201, {"graph_id": "gr_new", "warnings": []})
 
     monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["graph", "upload", str(graph_path)])
+    result = CliRunner().invoke(hub_group, ["graph", "mint", str(graph_path)])
 
     assert result.exit_code == 0, result.output
     assert "gr_new" in result.output
 
 
 @pytest.mark.unit
-def test_graph_upload_surfaces_mint_warnings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_graph_mint_surfaces_mint_warnings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     graph_path = _write_graph_with_prompt_ref(tmp_path)
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(201, {"graph_id": "gr_new", "warnings": ["node build has no incoming edges"]})
 
     monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["graph", "upload", str(graph_path)])
+    result = CliRunner().invoke(hub_group, ["graph", "mint", str(graph_path)])
 
     assert result.exit_code == 0, result.output
     assert "node build has no incoming edges" in result.output
 
 
 @pytest.mark.unit
-def test_graph_upload_maps_a_validation_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_graph_mint_maps_a_validation_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     graph_path = _write_graph_with_prompt_ref(tmp_path)
 
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(422, {"ok": False, "errors": ["entry node 'build' not found"], "warnings": []})
 
     monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["graph", "upload", str(graph_path)])
+    result = CliRunner().invoke(hub_group, ["graph", "mint", str(graph_path)])
 
     assert result.exit_code != 0
     assert "entry node 'build' not found" in result.output
+
+
+@pytest.mark.unit
+def test_graph_mint_validation_failure_also_renders_warnings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A 422's report can carry both errors and warnings — both render, not just errors."""
+    graph_path = _write_graph_with_prompt_ref(tmp_path)
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        return _FakeResponse(
+            422,
+            {
+                "ok": False,
+                "errors": ["entry node 'build' not found"],
+                "warnings": ["node build has no incoming edges"],
+            },
+        )
+
+    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["graph", "mint", str(graph_path)])
+
+    assert result.exit_code != 0
+    assert "entry node 'build' not found" in result.output
+    assert "node build has no incoming edges" in result.output
+
+
+@pytest.mark.unit
+def test_graph_mint_reads_the_definition_from_stdin(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``-`` reads stdin verbatim — no file, no prompt-ref inlining."""
+    calls: list[tuple[str, object]] = []
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        calls.append((url, json))
+        return _FakeResponse(201, {"graph_id": "gr_new", "warnings": []})
+
+    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    result = CliRunner().invoke(
+        hub_group,
+        ["graph", "mint", "-"],
+        input=_UPLOAD_GRAPH_YAML,
+        env={"BZ_HUB_URL": "http://hub.local:8421"},
+    )
+
+    assert result.exit_code == 0, result.output
+    assert len(calls) == 1
+    url, body = calls[0]
+    assert url == "http://hub.local:8421/api/graphs"
+    assert isinstance(body, dict)
+    assert body["definition_yaml"] == _UPLOAD_GRAPH_YAML
+    assert "gr_new" in result.output

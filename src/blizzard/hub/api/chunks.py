@@ -9,7 +9,16 @@ column. The PM read is a vendor-native pass-through whose contents are never sto
 ``POST /chunks/{id}/graph`` and ``POST /chunks/{id}/model`` (issue #27) repin a
 not-ready chunk's workflow graph or model selection — read is already carried on the
 list/detail views' ``graph_id``/``model`` fields; write is refused (409) once the chunk
-has left ``not_ready``.
+has left ``not_ready``. Both are now ``deprecated=True`` aliases of the unified
+``PATCH /chunks/{id}`` (issue #104) — same request/response bodies and same
+``EditService`` delegation as before, plus the
+:func:`~blizzard.hub.api.deprecation.mark_deprecated` headers; no domain change.
+
+The transition verbs (``promote``/``detach``/``pause``/``resume``/``stop``/``requeues``,
+issue #104) return the transitioned chunk's :class:`~blizzard.wire.chunk.ChunkSummary`
+rather than a bare ``{"chunk_id": ...}`` — the same derived row :func:`list_chunks`
+builds per chunk, shared through :func:`_summary_view` (``canon:one-owner``). Status
+codes are unchanged; only the body is enriched.
 
 The envelope read, the completion/decision/lease/escalation writes, and ``hub-advance``
 (#65/#66, driven by the runner's own ADVANCE poll) moved to the runner-authenticated
@@ -25,13 +34,14 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.responses import JSONResponse
 
 from blizzard.foundation.ids import minted_at
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.decisions import to_decision_view
+from blizzard.hub.api.deprecation import mark_deprecated
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.api.questions import question_view
 from blizzard.hub.composition import HubServices
@@ -399,30 +409,36 @@ def ingest_chunk(request: ChunkIngestRequest, services: Annotated[HubServices, D
     return ChunkIngestResponse(chunk_id=chunk_id)
 
 
+def _summary_view(
+    services: HubServices, chunk: Chunk, *, graph_cache: dict[str, Graph | None] | None = None
+) -> ChunkSummary:
+    """One chunk's derived fleet-list row (issue #104) — shared by :func:`list_chunks`
+    and every transition verb (``promote``/``detach``/``pause``/``resume``/``stop``/
+    ``requeues``), so both derive the same row from the same facts (``canon:one-owner``).
+    ``graph_cache`` lets a full-list caller memoise each graph lookup across chunks; a
+    single-chunk caller (a transition verb) gets a fresh one when it passes none."""
+    facts = services.chunks.load_facts(chunk.chunk_id) or ChunkFacts(minted=True)
+    node_id, node_name = _current_node(services, chunk, facts, graph_cache if graph_cache is not None else {})
+    route = services.chunks.route_of(chunk.chunk_id)
+    return ChunkSummary(
+        chunk_id=chunk.chunk_id,
+        graph_id=chunk.graph_id,
+        status=derive_chunk_status(facts),
+        current_node_id=node_id,
+        current_node_name=node_name,
+        pm_pointers=_pointer_views(chunk, services.pm),
+        model=chunk.model,
+        runner_id=route.runner_id if route is not None else None,
+        environment_count=len(route.environment_ids) if route is not None else 0,
+        cost=_usage_total_view(facts),
+    )
+
+
 @router.get("/chunks", response_model=list[ChunkSummary])
 def list_chunks(services: Annotated[HubServices, Depends(get_services)]) -> list[ChunkSummary]:
     """The fleet chunk list — derived status per chunk."""
-    summaries: list[ChunkSummary] = []
     graph_cache: dict[str, Graph | None] = {}
-    for chunk in services.chunks.list_all():
-        facts = services.chunks.load_facts(chunk.chunk_id) or ChunkFacts(minted=True)
-        node_id, node_name = _current_node(services, chunk, facts, graph_cache)
-        route = services.chunks.route_of(chunk.chunk_id)
-        summaries.append(
-            ChunkSummary(
-                chunk_id=chunk.chunk_id,
-                graph_id=chunk.graph_id,
-                status=derive_chunk_status(facts),
-                current_node_id=node_id,
-                current_node_name=node_name,
-                pm_pointers=_pointer_views(chunk, services.pm),
-                model=chunk.model,
-                runner_id=route.runner_id if route is not None else None,
-                environment_count=len(route.environment_ids) if route is not None else 0,
-                cost=_usage_total_view(facts),
-            )
-        )
-    return summaries
+    return [_summary_view(services, chunk, graph_cache=graph_cache) for chunk in services.chunks.list_all()]
 
 
 def fleet_summary(services: HubServices) -> FleetSummaryView:
@@ -547,10 +563,11 @@ def record_hub_marker(
     return HubMarkerResponse(recorded=recorded, chunk_id=chunk_id, name=request_body.name)
 
 
-@router.post("/chunks/{chunk_id}/requeues", status_code=status.HTTP_202_ACCEPTED)
-def requeue_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> dict[str, str]:
+@router.post("/chunks/{chunk_id}/requeues", response_model=ChunkSummary, status_code=status.HTTP_202_ACCEPTED)
+def requeue_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> ChunkSummary:
     """Close an escalation by supersession: requeue at the current node."""
-    if services.chunks.get(chunk_id) is None:
+    chunk = services.chunks.get(chunk_id)
+    if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     try:
         services.requeue.requeue(chunk_id)
@@ -559,11 +576,11 @@ def requeue_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_se
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
     services.events.publish_queue_changed()  # requeue can re-admit the chunk to the queue
-    return {"chunk_id": chunk_id}
+    return _summary_view(services, chunk)
 
 
-@router.post("/chunks/{chunk_id}/detach", status_code=status.HTTP_202_ACCEPTED)
-def detach_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> dict[str, str]:
+@router.post("/chunks/{chunk_id}/detach", response_model=ChunkSummary, status_code=status.HTTP_202_ACCEPTED)
+def detach_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> ChunkSummary:
     """Forcibly release a chunk from its runner without touching any escalation."""
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
@@ -575,13 +592,13 @@ def detach_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_ser
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
     services.events.publish_queue_changed()  # a detached chunk re-enters the ready queue
-    return {"chunk_id": chunk_id}
+    return _summary_view(services, chunk)
 
 
-@router.post("/chunks/{chunk_id}/pause", status_code=status.HTTP_202_ACCEPTED)
+@router.post("/chunks/{chunk_id}/pause", response_model=ChunkSummary, status_code=status.HTTP_202_ACCEPTED)
 def pause_chunk(
     chunk_id: str, request: ChunkPauseRequest, services: Annotated[HubServices, Depends(get_services)]
-) -> dict[str, str]:
+) -> ChunkSummary:
     """Set a chunk's operator pause brake — the claim is kept, unlike detach (issue #46)."""
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
@@ -593,13 +610,13 @@ def pause_chunk(
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
     services.events.publish_queue_changed()  # a pause moves the chunk out of the ready queue (issue #46)
-    return {"chunk_id": chunk_id}
+    return _summary_view(services, chunk)
 
 
-@router.post("/chunks/{chunk_id}/resume", status_code=status.HTTP_202_ACCEPTED)
+@router.post("/chunks/{chunk_id}/resume", response_model=ChunkSummary, status_code=status.HTTP_202_ACCEPTED)
 def resume_chunk(
     chunk_id: str, request: ChunkPauseRequest, services: Annotated[HubServices, Depends(get_services)]
-) -> dict[str, str]:
+) -> ChunkSummary:
     """Clear a chunk's operator pause brake — idempotent, never refused (issue #46)."""
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
@@ -608,13 +625,13 @@ def resume_chunk(
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
     services.events.publish_queue_changed()  # a resume can re-admit the chunk to the queue (issue #46)
-    return {"chunk_id": chunk_id}
+    return _summary_view(services, chunk)
 
 
-@router.post("/chunks/{chunk_id}/stop", status_code=status.HTTP_202_ACCEPTED)
+@router.post("/chunks/{chunk_id}/stop", response_model=ChunkSummary, status_code=status.HTTP_202_ACCEPTED)
 def stop_chunk(
     chunk_id: str, request: ChunkStopRequest, services: Annotated[HubServices, Depends(get_services)]
-) -> dict[str, str]:
+) -> ChunkSummary:
     """Terminally abandon CHUNK — the operator's last-resort verb (issue #118).
 
     Records the ``chunk_stopped`` fact so the chunk derives ``stopped`` and never
@@ -632,29 +649,38 @@ def stop_chunk(
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
     services.events.publish_queue_changed()  # a stopped chunk is never offered for claim again
-    return {"chunk_id": chunk_id}
+    return _summary_view(services, chunk)
 
 
-@router.post("/chunks/{chunk_id}/promote", status_code=status.HTTP_202_ACCEPTED)
-def promote_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> dict[str, str]:
+@router.post("/chunks/{chunk_id}/promote", response_model=ChunkSummary, status_code=status.HTTP_202_ACCEPTED)
+def promote_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> ChunkSummary:
     """Promote a not-ready chunk to ready so a runner may claim it.
 
     Idempotent: promoting an already-ready or already-running chunk is a harmless no-op.
     404 only when the chunk is unknown."""
-    if services.chunks.get(chunk_id) is None:
+    chunk = services.chunks.get(chunk_id)
+    if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     services.promote.promote(chunk_id)
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
     services.events.publish_queue_changed()  # a promoted chunk enters the ready queue
-    return {"chunk_id": chunk_id}
+    return _summary_view(services, chunk)
 
 
-@router.post("/chunks/{chunk_id}/graph", response_model=ChunkGraphView, status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/chunks/{chunk_id}/graph", response_model=ChunkGraphView, status_code=status.HTTP_202_ACCEPTED, deprecated=True
+)
 def set_chunk_graph(
-    chunk_id: str, request: ChunkGraphUpdateRequest, services: Annotated[HubServices, Depends(get_services)]
+    chunk_id: str,
+    request: ChunkGraphUpdateRequest,
+    response: Response,
+    services: Annotated[HubServices, Depends(get_services)],
 ) -> ChunkGraphView:
-    """Repin a not-ready or ready-and-unclaimed chunk's workflow graph (issue #27, widened by #120).
+    """Deprecated alias of ``PATCH /chunks/{id}`` (``{"graph_id": ...}``, issue #104) —
+    repins a not-ready or ready-and-unclaimed chunk's workflow graph (issue #27,
+    widened by #120). Identical request/response body and ``EditService`` delegation
+    as before; only the deprecation marker and headers are new.
 
     404 on an unknown chunk or an unknown target graph; 409 once the chunk is claimed
     or later (``running``, ``delivering``, ``waiting_on_human``, ``needs_human``,
@@ -676,14 +702,23 @@ def set_chunk_graph(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
+    mark_deprecated(response, successor=f"/api/chunks/{chunk_id}")
     return ChunkGraphView(chunk_id=chunk_id, graph_id=graph.graph_id)
 
 
-@router.post("/chunks/{chunk_id}/model", response_model=ChunkModelView, status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/chunks/{chunk_id}/model", response_model=ChunkModelView, status_code=status.HTTP_202_ACCEPTED, deprecated=True
+)
 def set_chunk_model(
-    chunk_id: str, request: ChunkModelUpdateRequest, services: Annotated[HubServices, Depends(get_services)]
+    chunk_id: str,
+    request: ChunkModelUpdateRequest,
+    response: Response,
+    services: Annotated[HubServices, Depends(get_services)],
 ) -> ChunkModelView:
-    """Repin a not-ready or ready-and-unclaimed chunk's model selection (issue #27, widened by #120).
+    """Deprecated alias of ``PATCH /chunks/{id}`` (``{"model": ...}``, issue #104) —
+    repins a not-ready or ready-and-unclaimed chunk's model selection (issue #27,
+    widened by #120). Identical request/response body and ``EditService`` delegation
+    as before; only the deprecation marker and headers are new.
 
     404 on an unknown chunk; 422 on a blank model; 409 once the chunk is claimed or
     later (``running``, ``delivering``, ``waiting_on_human``, ``needs_human``,
@@ -701,6 +736,7 @@ def set_chunk_model(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
+    mark_deprecated(response, successor=f"/api/chunks/{chunk_id}")
     return ChunkModelView(chunk_id=chunk_id, model=model)
 
 

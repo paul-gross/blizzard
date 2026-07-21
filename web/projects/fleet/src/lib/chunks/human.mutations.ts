@@ -4,8 +4,8 @@ import { QueryClient, injectMutation } from '@tanstack/angular-query-experimenta
 import {
   type AnswerResult,
   type DecisionResolutionResponse,
-  answerQuestionApiQuestionsQuestionIdAnswerPost,
-  resolveDecisionApiDecisionsDecisionIdResolutionPost,
+  answerQuestionApiQuestionsQuestionIdAnswersPost,
+  resolveDecisionApiDecisionsDecisionIdResolutionsPost,
 } from '../api/hub';
 import { hubChunkKey, hubChunksKey } from '../query-keys';
 
@@ -18,15 +18,16 @@ export interface AnswerVars {
 }
 
 /**
- * `POST /api/questions/{id}/answer` — first-write-wins CAS answer through the
- * generated client (bzh:generated-client). On success it re-reads the parked chunk's
- * detail and the fleet list (the answer flips it out of `waiting_on_human`).
+ * `POST /api/questions/{id}/answers` — first-write-wins CAS answer through the
+ * generated client (bzh:generated-client); `POST /api/questions/{id}/answer` is now
+ * a deprecated alias this board no longer calls. On success it re-reads the parked
+ * chunk's detail and the fleet list (the answer flips it out of `waiting_on_human`).
  */
 export function injectAnswerQuestionMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
     mutationFn: async (vars: AnswerVars): Promise<AnswerResult> => {
-      const { data, error } = await answerQuestionApiQuestionsQuestionIdAnswerPost({
+      const { data, error } = await answerQuestionApiQuestionsQuestionIdAnswersPost({
         path: { question_id: vars.questionId },
         body: { answer: vars.answer, answered_by: 'operator' },
         throwOnError: false,
@@ -50,15 +51,17 @@ export interface ResolveVars {
 }
 
 /**
- * `POST /api/decisions/{id}/resolution` — a person picks one choice, first-write-wins
- * CAS, through the generated client (bzh:generated-client). The holding runner
- * records the resolving transition over its pull; here we re-read the chunk and the list.
+ * `POST /api/decisions/{id}/resolutions` — a person picks one choice, first-write-wins
+ * CAS, through the generated client (bzh:generated-client); `POST
+ * /api/decisions/{id}/resolution` is now a deprecated alias this board no longer
+ * calls. The holding runner records the resolving transition over its pull; here we
+ * re-read the chunk and the list.
  */
 export function injectResolveDecisionMutation() {
   const queryClient = inject(QueryClient);
   return injectMutation(() => ({
     mutationFn: async (vars: ResolveVars): Promise<DecisionResolutionResponse> => {
-      const { data, error } = await resolveDecisionApiDecisionsDecisionIdResolutionPost({
+      const { data, error } = await resolveDecisionApiDecisionsDecisionIdResolutionsPost({
         path: { decision_id: vars.decisionId },
         body: { choice: vars.choice, resolved_by: 'operator' },
         throwOnError: false,

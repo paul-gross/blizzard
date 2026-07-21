@@ -13,8 +13,7 @@ describe('injectSetChunkGraphMutation / injectSetChunkModelMutation (issue #27)'
 
   beforeEach(() => {
     stub = stubRequestClient(hubClient, (method, path) => {
-      if (path === '/api/chunks/ch_1/graph') return { chunk_id: 'ch_1', graph_id: 'gr_alt' };
-      if (path === '/api/chunks/ch_1/model') return { chunk_id: 'ch_1', model: 'claude-sonnet-4-5' };
+      if (path === '/api/chunks/ch_1') return { chunk_id: 'ch_1', graph_id: 'gr_alt', model: 'claude-sonnet-4-5' };
       return {};
     });
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -25,12 +24,12 @@ describe('injectSetChunkGraphMutation / injectSetChunkModelMutation (issue #27)'
 
   afterEach(() => stub.restore());
 
-  it('posts the target graph id to the graph route', async () => {
+  it('patches the target graph id onto the chunk', async () => {
     const mutation = TestBed.runInInjectionContext(() => injectSetChunkGraphMutation());
 
     await mutation.mutateAsync({ chunkId: 'ch_1', graphId: 'gr_alt' });
 
-    const calls = stub.forRoute('/api/chunks/ch_1/graph', 'POST');
+    const calls = stub.forRoute('/api/chunks/ch_1', 'PATCH');
     expect(calls).toHaveLength(1);
     expect(calls[0].body).toEqual({ graph_id: 'gr_alt' });
   });
@@ -46,12 +45,12 @@ describe('injectSetChunkGraphMutation / injectSetChunkModelMutation (issue #27)'
     expect(keys).toContainEqual(['hub', 'chunk', 'ch_1']);
   });
 
-  it('posts the target model to the model route', async () => {
+  it('patches the target model onto the chunk', async () => {
     const mutation = TestBed.runInInjectionContext(() => injectSetChunkModelMutation());
 
     await mutation.mutateAsync({ chunkId: 'ch_1', model: 'claude-sonnet-4-5' });
 
-    const calls = stub.forRoute('/api/chunks/ch_1/model', 'POST');
+    const calls = stub.forRoute('/api/chunks/ch_1', 'PATCH');
     expect(calls).toHaveLength(1);
     expect(calls[0].body).toEqual({ model: 'claude-sonnet-4-5' });
   });

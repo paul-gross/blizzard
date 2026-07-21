@@ -132,7 +132,9 @@ def test_stop_returns_202_writes_a_fact_and_the_chunk_derives_stopped(tmp_path: 
     resp = hub.client.post(f"/api/chunks/{chunk_id}/stop", json={"by": "alice"})
 
     assert resp.status_code == 202, resp.text
-    assert resp.json() == {"chunk_id": chunk_id}
+    body = resp.json()
+    assert body["chunk_id"] == chunk_id
+    assert body["status"] == "stopped"
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "stopped"
     assert_all_timestamps_utc(detail)

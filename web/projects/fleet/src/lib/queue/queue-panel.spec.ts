@@ -20,8 +20,8 @@ describe('QueuePanel', () => {
 
   beforeEach(async () => {
     stub = stubRequestClient(hubClient, (method, path) => {
-      if (method === 'GET' && path === '/api/queue/peek') return QUEUE;
-      if (path === '/api/queue/reorder') return { entries: QUEUE.entries };
+      if (method === 'GET' && path === '/api/queue') return QUEUE;
+      if (method === 'PUT' && path === '/api/queue') return { entries: QUEUE.entries };
       if (path.endsWith('/group')) return { chunk_id: 'ch_mid', merged_chunk_ids: ['ch_low'] };
       return {};
     });
@@ -36,7 +36,7 @@ describe('QueuePanel', () => {
 
   afterEach(() => stub.restore());
 
-  it('fires the reorder client call with position 0 on move-to-top', async () => {
+  it('fires the whole-order queue replace with the moved chunk at the front on move-to-top', async () => {
     const fixture = TestBed.createComponent(QueuePanel);
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
@@ -49,9 +49,9 @@ describe('QueuePanel', () => {
     midRow?.querySelector<HTMLButtonElement>('[data-testid="queue-move-top"]')?.click();
     await settle(fixture);
 
-    const calls = stub.forRoute('/api/queue/reorder', 'POST');
+    const calls = stub.forRoute('/api/queue', 'PUT');
     expect(calls).toHaveLength(1);
-    expect(calls[0].body).toEqual({ chunk_id: 'ch_mid', position: 0 });
+    expect(calls[0].body).toEqual({ chunk_ids: ['ch_mid', 'ch_top', 'ch_low'] });
   });
 
   it('groups multi-selected chunks into the top-most survivor', async () => {

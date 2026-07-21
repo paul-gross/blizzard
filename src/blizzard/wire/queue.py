@@ -46,6 +46,18 @@ class QueueReorderResponse(BaseModel):
     entries: list[QueuePeekEntry] = []
 
 
+class QueueReplaceRequest(BaseModel):
+    """Idempotent whole-order replacement of the ready queue — ``PUT /api/queue``.
+
+    ``chunk_ids`` is the desired order, front to back; every id must name a
+    currently-ready chunk (``409`` otherwise) and must not repeat (``422``
+    otherwise). A ready chunk not named here keeps its current relative order,
+    appended after the named ones.
+    """
+
+    chunk_ids: list[str]
+
+
 class ChunkGroupRequest(BaseModel):
     """Merge unacquired chunks into one — the board's Group control.
 

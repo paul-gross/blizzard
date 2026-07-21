@@ -155,7 +155,7 @@ def _resolve_cross_graph_target(services: HubServices, graph: Graph, submission:
 @router.get("/queue/peek", response_model=QueuePeekResponse)
 def peek_queue(services: Annotated[HubServices, Depends(get_services)]) -> QueuePeekResponse:
     """The runner's FILL read — the same ready queue as the board's own peek."""
-    return queue_api.peek_queue(services)
+    return queue_api.get_queue(services)
 
 
 @router.get("/chunks/{chunk_id}", response_model=ChunkDetail)

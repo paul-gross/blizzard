@@ -128,7 +128,12 @@ def test_ingest_rests_not_ready_and_promote_makes_it_claimable(tmp_path: Path) -
     assert [r["chunk_id"] for r in hub.client.get("/api/chunks").json()] == [chunk_id]  # on the board
     assert hub.client.get("/api/queue/peek").json()["entries"] == []  # never claimed
 
-    assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+    promote = hub.client.post(f"/api/chunks/{chunk_id}/promote")
+    assert promote.status_code == 202, promote.text
+    # The response is the transitioned chunk's summary (issue #104), not a bare
+    # `{"chunk_id": ...}` — same derived row `GET /api/chunks` carries.
+    assert promote.json()["chunk_id"] == chunk_id
+    assert promote.json()["status"] == "ready"
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
     assert [e["chunk_id"] for e in hub.client.get("/api/queue/peek").json()["entries"]] == [chunk_id]
 

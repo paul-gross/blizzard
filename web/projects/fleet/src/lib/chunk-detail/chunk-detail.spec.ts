@@ -76,15 +76,14 @@ describe('ChunkDetail container', () => {
   let detachResponse: unknown = {};
   // The same, for the pause/resume verbs (issue #46).
   let pauseResponse: unknown = {};
-  // The same, for the graph/model edits (issue #27).
-  let editGraphResponse: unknown = {};
-  let editModelResponse: unknown = {};
+  // The same, for the graph/model edits (issue #27) — both now collapse onto the one
+  // `PATCH /api/chunks/{id}` call (issue #104), so one variable drives it.
+  let editPatchResponse: unknown = {};
 
   beforeEach(async () => {
     detachResponse = {};
     pauseResponse = {};
-    editGraphResponse = {};
-    editModelResponse = {};
+    editPatchResponse = {};
     // The generated client's transport is stubbed so we can assert the exact call the button fires.
     stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/chunks/ch_gate') return GATE_DETAIL;
@@ -94,8 +93,7 @@ describe('ChunkDetail container', () => {
       if (method === 'POST' && (path === '/api/chunks/ch_routed/pause' || path === '/api/chunks/ch_paused/resume')) {
         return pauseResponse;
       }
-      if (method === 'POST' && path === '/api/chunks/ch_ready/graph') return editGraphResponse;
-      if (method === 'POST' && path === '/api/chunks/ch_ready/model') return editModelResponse;
+      if (method === 'PATCH' && path === '/api/chunks/ch_ready') return editPatchResponse;
       if (method === 'GET' && path.endsWith('/pm-items')) {
         return {
           items: [
@@ -112,7 +110,7 @@ describe('ChunkDetail container', () => {
           ],
         };
       }
-      if (path === '/api/decisions/de_42/resolution') {
+      if (path === '/api/decisions/de_42/resolutions') {
         return { decision_id: 'de_42', choice: 'approve', resolved_at: 'x', resolved_by: 'operator' };
       }
       if (method === 'POST' && path === '/api/chunks/ch_routed/detach') return detachResponse;
@@ -152,7 +150,7 @@ describe('ChunkDetail container', () => {
     buttons[0].click();
     await settle(fixture);
 
-    const calls = stub.forRoute('/api/decisions/de_42/resolution', 'POST');
+    const calls = stub.forRoute('/api/decisions/de_42/resolutions', 'POST');
     expect(calls).toHaveLength(1);
     expect(calls[0].body).toMatchObject({ choice: 'approve' });
   });
@@ -285,7 +283,7 @@ describe('ChunkDetail container', () => {
     el.querySelector<HTMLButtonElement>('[data-testid="graph-submit"]')?.click();
     await settle(fixture);
 
-    const calls = stub.forRoute('/api/chunks/ch_ready/graph', 'POST');
+    const calls = stub.forRoute('/api/chunks/ch_ready', 'PATCH');
     expect(calls).toHaveLength(1);
     expect(calls[0].body).toEqual({ graph_id: 'gr_alt' });
   });
@@ -301,7 +299,7 @@ describe('ChunkDetail container', () => {
     el.querySelector<HTMLButtonElement>('[data-testid="model-submit"]')?.click();
     await settle(fixture);
 
-    const calls = stub.forRoute('/api/chunks/ch_ready/model', 'POST');
+    const calls = stub.forRoute('/api/chunks/ch_ready', 'PATCH');
     expect(calls).toHaveLength(1);
     expect(calls[0].body).toEqual({ model: 'claude-sonnet-4-5' });
   });
@@ -317,7 +315,7 @@ describe('ChunkDetail container', () => {
   });
 
   it('surfaces a 409 refusal from the graph edit rather than swallowing it', async () => {
-    editGraphResponse = stubError(409, { detail: 'chunk ch_ready is already ready' });
+    editPatchResponse = stubError(409, { detail: 'chunk ch_ready is already ready' });
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_ready');
     await settle(fixture);
@@ -332,7 +330,7 @@ describe('ChunkDetail container', () => {
   });
 
   it('surfaces a 422 refusal from the model edit rather than swallowing it', async () => {
-    editModelResponse = stubError(422, { detail: 'model must not be blank' });
+    editPatchResponse = stubError(422, { detail: 'model must not be blank' });
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_ready');
     await settle(fixture);

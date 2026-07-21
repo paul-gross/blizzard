@@ -129,7 +129,9 @@ def test_pause_returns_200_writes_a_fact_and_the_detail_carries_it(tmp_path: Pat
     resp = hub.client.post(f"/api/chunks/{chunk_id}/pause", json={"by": "alice"})
 
     assert resp.status_code == 202, resp.text
-    assert resp.json() == {"chunk_id": chunk_id}
+    body = resp.json()
+    assert body["chunk_id"] == chunk_id
+    assert body["status"] == "paused"
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "paused"
     # Pinned field by field against the clock the hub was built with — not compared to
@@ -283,6 +285,10 @@ def test_resume_returns_200_and_the_chunk_derives_ready_again(tmp_path: Path) ->
     resp = hub.client.post(f"/api/chunks/{chunk_id}/resume", json={"by": "bob"})
 
     assert resp.status_code == 202, resp.text
+    # The response is the transitioned chunk's summary (issue #104), not a bare
+    # `{"chunk_id": ...}`.
+    assert resp.json()["chunk_id"] == chunk_id
+    assert resp.json()["status"] == "ready"
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "ready"
     assert detail["pause"] is None

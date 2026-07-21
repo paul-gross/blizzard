@@ -87,8 +87,8 @@ The same `init` / `migrate` / `host` verbs exist under `blizzard runner`. A daem
 1. `test_acceptance_loop` — the happy path: one chunk travels ingest → acquire → mock-scripted commit → review (PASS) → deliver → landed on bare `main`;
 2. `test_review_cycle_e2e` — review fails once, the findings + prompt_addendum thread back into build, then it lands on the second pass;
 3. `test_escalation_e2e` — two verdict-less exits exhaust the retry budget, the chunk derives `needs_human`, and the surfaced takeover command resumes the parked session;
-4. `test_ask_answer_e2e` — a build worker asks and parks `waiting_on_human`; `blizzard hub answer` resumes the dormant session and it lands;
-5. `test_gate_decision_e2e` — a human `approve-gate` parks a Decision; `blizzard hub decide` approves and it delivers;
+4. `test_ask_answer_e2e` — a build worker asks and parks `waiting_on_human`; `blizzard hub question answer` resumes the dormant session and it lands;
+5. `test_gate_decision_e2e` — a human `approve-gate` parks a Decision; `blizzard hub decision resolve` approves and it delivers;
 6. `test_board_browser_e2e` — the **browser tier**: a real Chromium (Playwright) drives the served mission-control board — a live status chip that flips over SSE with no reload, the detail drawer's history + artifacts, queue grouping + reorder that the next FILL honors (the grouped plural-pointer survivor claimed first), answering a question from the board, pausing and resuming a running chunk from the board (its chip flips to `paused` over SSE with no reload, and back on resume — the claim-keeping per-chunk lever, distinct from the runner pause/resume brake covered next), and that runner-level brake itself;
 7. `test_board_cost_live_e2e` — the **cost render**: the served board renders the fleet cost figures (card badge, header spend-today, detail dock totals) and updates them live over SSE with no reload;
 8. `test_graphs_diagram_renders_in_the_browser` — the **graph-explorer diagram**: a real Chromium visits `/graphs` and asserts the static SVG DAG renders against the built bundle from real minted graph data; it needs no runner or forge.
@@ -116,7 +116,7 @@ default `uv run pytest` gate stays hermetic.
   runner** (`blizzard-mock-runner`, a levered driver) and the **mock forge** as its
   counterparts, asserting over the wire: a claim + completion advances the chunk; the
   runner's `stale_epoch` lever gets the completion **rejected**; queue **grouping +
-  reorder** are reflected in `peek`; `GET /api/events/stream` serves the
+  reorder** are reflected in the ready queue (`GET /api/queue`); `GET /api/events/stream` serves the
   **SSE contract** an `EventSource` subscribes to; and a subscriber connected before the
   act receives `queue-changed` **live** the instant a fresh cross-graph migration
   re-queues a chunk — exactly once across that migration and its duplicate-delivery

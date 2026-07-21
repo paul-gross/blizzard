@@ -1,8 +1,8 @@
 """Question routes — the anonymous **operator** half of the ask/answer rendezvous
-(issue #87).
+(issue #87, #104).
 
 ``POST /questions`` lands the durable question row a runner forwards (the chunk
-derives ``waiting_on_human``); ``POST /questions/{id}/answer`` writes the answer
+derives ``waiting_on_human``); ``POST /questions/{id}/answers`` writes the answer
 **first-write-wins** (201 for the winner, 409 carrying the winning answer for a racing
 loser) — the board's person answering it; and ``GET /questions`` lists the open ones for
 ``blizzard hub status``. Controllers stay read-only over the store and delegate the
@@ -15,17 +15,22 @@ or CLI caller ever reached it. :func:`question_view` stays here, public, so the 
 router's own poll reuses this module's rendering rather than duplicating it.
 ``dependencies=[Depends(reject_runner_principal)]`` rejects a runner's bearer token on
 this router rather than treating it as anonymous-plus-credential.
+
+``POST /questions/{id}/answer`` (singular) is kept mounted as a ``deprecated=True``
+alias that delegates to the successor handler and marks the response deprecated
+(:func:`blizzard.hub.api.deprecation.mark_deprecated`) — behavior unchanged.
 """
 
 from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.responses import JSONResponse
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
+from blizzard.hub.api.deprecation import mark_deprecated
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.work import ChunkFacts, QuestionRow, derive_chunk_status
@@ -64,7 +69,7 @@ def ask_question(fact: QuestionAsked, services: Annotated[HubServices, Depends(g
     return {"question_id": fact.question_id}
 
 
-@router.post("/questions/{question_id}/answer", response_model=AnswerResult, status_code=status.HTTP_201_CREATED)
+@router.post("/questions/{question_id}/answers", response_model=AnswerResult, status_code=status.HTTP_201_CREATED)
 def answer_question(
     question_id: str, request: AnswerRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> object:
@@ -88,6 +93,29 @@ def answer_question(
     if winner is not None:
         services.events.publish_question_answered(winner.chunk_id, question_id)
         _publish(services, winner.chunk_id)
+    return result
+
+
+@router.post(
+    "/questions/{question_id}/answer",
+    response_model=AnswerResult,
+    status_code=status.HTTP_201_CREATED,
+    deprecated=True,
+)
+def answer_question_singular(
+    question_id: str,
+    request: AnswerRequest,
+    response: Response,
+    services: Annotated[HubServices, Depends(get_services)],
+) -> object:
+    """Deprecated alias of ``POST /api/questions/{id}/answers`` — kept for
+    version-skewed clients (``blizzard hub answer``, until it migrates)."""
+    result = answer_question(question_id, request, services)
+    # The successor's 409-conflict path returns its own JSONResponse — headers set on
+    # the injected `response` are then discarded, so mark whichever object is actually
+    # returned to the client.
+    target = result if isinstance(result, Response) else response
+    mark_deprecated(target, successor=f"/api/questions/{question_id}/answers")
     return result
 
 

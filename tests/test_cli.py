@@ -25,10 +25,25 @@ def test_root_lists_hub_and_runner() -> None:
 
 
 def test_hub_lists_its_verbs() -> None:
+    # The operator verbs are grouped by noun (issue #104); the old flat spellings
+    # (`answer`, `ingest`, `promote`, `requeue`, ...) still work but are `hidden=True`,
+    # so they no longer show here — see test_hub_hides_the_deprecated_flat_verbs.
     result = CliRunner().invoke(blizzard, ["hub", "--help"])
     assert result.exit_code == 0
-    for verb in ("init", "migrate", "host", "status", "answer", "ingest", "promote", "requeue"):
+    for verb in ("init", "migrate", "host", "status", "chunk", "runner", "graph", "queue", "decision", "question"):
         assert verb in result.output
+
+
+def test_hub_hides_the_deprecated_flat_verbs() -> None:
+    """The pre-#104 flat verbs still resolve (see test_hub_cli_aliases.py) but are
+    `hidden=True`, so `--help`'s command list no longer names them as a command —
+    each line's own first token, not a substring match (a group's own summary prose
+    can legitimately mention e.g. "answer")."""
+    result = CliRunner().invoke(blizzard, ["hub", "--help"])
+    assert result.exit_code == 0
+    listed = {line.split()[0] for line in result.output.splitlines() if line.startswith("  ") and line.split()}
+    for verb in ("answer", "ingest", "promote", "requeue", "decisions", "decide", "pause-chunk", "resume-chunk"):
+        assert verb not in listed
 
 
 def test_runner_lists_its_verbs() -> None:

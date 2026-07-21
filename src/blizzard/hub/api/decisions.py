@@ -1,8 +1,8 @@
 """Decision routes — gate surfacing and resolution — the anonymous **operator**
-surface (issue #87).
+surface (issue #87, #104).
 
 The human-gate half a person drives: ``GET /decisions`` lists the open decisions the
-board and ``blizzard hub decisions`` render, and ``POST /decisions/{id}/resolution``
+board and ``blizzard hub decisions`` render, and ``POST /decisions/{id}/resolutions``
 records a person's choice first-write-wins — the same route the board's buttons and
 ``blizzard hub decide`` hit. The controller stays read-only over the
 store (``bzh:controller-read-only``): resolution delegates to
@@ -10,17 +10,22 @@ store (``bzh:controller-read-only``): resolution delegates to
 ``dependencies=[Depends(reject_runner_principal)]`` rejects a runner's bearer token
 here rather than treating it as anonymous-plus-credential — a runner's token is
 confined to the fleet router.
+
+``POST /decisions/{id}/resolution`` (singular) is kept mounted as a ``deprecated=True``
+alias that delegates to the successor handler and marks the response deprecated
+(:func:`blizzard.hub.api.deprecation.mark_deprecated`) — behavior unchanged.
 """
 
 from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.responses import JSONResponse
 
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
+from blizzard.hub.api.deprecation import mark_deprecated
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.work import DecisionRow
@@ -59,7 +64,7 @@ def list_decisions(services: Annotated[HubServices, Depends(get_services)]) -> O
     return OpenDecisionsResponse(decisions=[to_decision_view(d) for d in services.chunks.list_open_decisions()])
 
 
-@router.post("/decisions/{decision_id}/resolution", response_model=DecisionResolutionResponse)
+@router.post("/decisions/{decision_id}/resolutions", response_model=DecisionResolutionResponse)
 def resolve_decision(
     decision_id: str,
     request: DecisionResolutionRequest,
@@ -86,3 +91,21 @@ def resolve_decision(
         resolved_by=result.resolved_by,
         resolved_at=(iso_utc(decision.resolved_at) if decision is not None and decision.resolved_at else ""),
     )
+
+
+@router.post("/decisions/{decision_id}/resolution", response_model=DecisionResolutionResponse, deprecated=True)
+def resolve_decision_singular(
+    decision_id: str,
+    request: DecisionResolutionRequest,
+    response: Response,
+    services: Annotated[HubServices, Depends(get_services)],
+) -> object:
+    """Deprecated alias of ``POST /api/decisions/{id}/resolutions`` — kept for
+    version-skewed clients (``blizzard hub decide``, until it migrates)."""
+    result = resolve_decision(decision_id, request, services)
+    # The successor's 409-conflict path returns its own JSONResponse — headers set on
+    # the injected `response` are then discarded, so mark whichever object is actually
+    # returned to the client.
+    target = result if isinstance(result, Response) else response
+    mark_deprecated(target, successor=f"/api/decisions/{decision_id}/resolutions")
+    return result

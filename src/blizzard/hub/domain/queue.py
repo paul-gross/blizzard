@@ -73,6 +73,22 @@ class QueueService:
         self._chunks.record_queue_position(chunk_id, position=new_position, at=self._clock.now())
         _log.info("ready queue reordered", chunk_id=chunk_id, to_index=to_index, position=new_position)
 
+    def replace_order(self, ordered: list[Chunk]) -> None:
+        """Idempotent whole-order replacement: append one ascending explicit
+        position fact per chunk in ``ordered``, front to back.
+
+        Takes already-resolved ``Chunk`` objects, never ids (``bzh:domain-takes-objects``)
+        — the caller (``PUT /api/queue``) has already validated every named id
+        against the ready set and appended any unlisted ready chunk in its current
+        order, so this method only has to record ranks, not resolve or validate
+        anything. Ranking every chunk in ``ordered`` (not just the named ones)
+        keeps the result deterministic regardless of positions left over from
+        an earlier reorder."""
+        at = self._clock.now()
+        for position, chunk in enumerate(ordered):
+            self._chunks.record_queue_position(chunk.chunk_id, position=float(position), at=at)
+        _log.info("ready queue replaced", chunk_ids=[c.chunk_id for c in ordered])
+
     def _position_at(self, others: list[Chunk], positions: dict[str, float], to_index: int) -> float:
         if not others:
             return 0.0

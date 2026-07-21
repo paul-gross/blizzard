@@ -216,6 +216,28 @@ def test_edit_graph_refuses_once_the_chunk_is_claimed(tmp_path: Path) -> None:
     assert "running" in resp.json()["detail"]
 
 
+def test_edit_graph_is_marked_deprecated_and_still_repins(tmp_path: Path) -> None:
+    """``POST /chunks/{id}/graph`` is a deprecated alias of ``PATCH /chunks/{id}``
+    (issue #104) — it still repins (identical behavior) and additionally carries the
+    deprecation headers naming the unified successor."""
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER], promote=False)
+    alt_graph_id = _mint_alt_graph(hub)
+
+    resp = hub.client.post(f"/api/chunks/{chunk_id}/graph", json={"graph_id": alt_graph_id})
+
+    assert resp.status_code == 202, resp.text
+    assert resp.headers["Deprecation"] == "true"
+    assert resp.headers["Link"] == f'</api/chunks/{chunk_id}>; rel="successor-version"'
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["graph_id"] == alt_graph_id
+
+
+def test_edit_graph_route_carries_deprecated_marker_in_the_openapi_spec(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    schema = hub.client.app.openapi()
+    assert schema["paths"]["/api/chunks/{chunk_id}/graph"]["post"]["deprecated"] is True
+
+
 def test_edit_graph_publishes_chunk_changed(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [_POINTER], promote=False)
@@ -290,6 +312,27 @@ def test_edit_model_refuses_once_the_chunk_is_claimed(tmp_path: Path) -> None:
 
     assert resp.status_code == 409, resp.text
     assert "running" in resp.json()["detail"]
+
+
+def test_edit_model_is_marked_deprecated_and_still_repins(tmp_path: Path) -> None:
+    """``POST /chunks/{id}/model`` is a deprecated alias of ``PATCH /chunks/{id}``
+    (issue #104) — it still repins (identical behavior) and additionally carries the
+    deprecation headers naming the unified successor."""
+    hub = build_hub(tmp_path)
+    chunk_id = ingest(hub, [_POINTER], promote=False)
+
+    resp = hub.client.post(f"/api/chunks/{chunk_id}/model", json={"model": "claude-sonnet-4-5"})
+
+    assert resp.status_code == 202, resp.text
+    assert resp.headers["Deprecation"] == "true"
+    assert resp.headers["Link"] == f'</api/chunks/{chunk_id}>; rel="successor-version"'
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["model"] == "claude-sonnet-4-5"
+
+
+def test_edit_model_route_carries_deprecated_marker_in_the_openapi_spec(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    schema = hub.client.app.openapi()
+    assert schema["paths"]["/api/chunks/{chunk_id}/model"]["post"]["deprecated"] is True
 
 
 def test_edit_model_publishes_chunk_changed(tmp_path: Path) -> None:

@@ -17,6 +17,11 @@ to :class:`~blizzard.hub.domain.graph_authoring.GraphMintService`, and resolves 
 ``graph_id`` to its :class:`Graph` before delegating a retire/enable to
 :class:`~blizzard.hub.domain.graph_lifecycle.GraphLifecycleService`
 (``bzh:domain-takes-objects``).
+
+``dependencies=[Depends(reject_runner_principal)]`` rejects a runner's bearer token
+here rather than treating it as anonymous-plus-credential — a runner's token is
+confined to the fleet router (issue #104; this router was the one operator router
+still missing the check every other one already carries).
 """
 
 from __future__ import annotations
@@ -28,6 +33,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.graph import Graph, GraphParseError, Node, mark_effective, parse_graph_doc
@@ -43,7 +49,7 @@ from blizzard.wire.graph import (
     GraphView,
 )
 
-router = APIRouter(prefix="/api", tags=["graphs"])
+router = APIRouter(prefix="/api", tags=["graphs"], dependencies=[Depends(reject_runner_principal)])
 
 
 def _node_view(node: Node) -> GraphNodeView:
