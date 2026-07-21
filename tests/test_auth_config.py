@@ -76,6 +76,37 @@ def test_oauth_provider_missing_required_key_rejected(tmp_path: Path) -> None:
         HubConfig.load(root)
 
 
+def test_oauth_provider_api_base_round_trips(tmp_path: Path) -> None:
+    root = tmp_path / "hub"
+    _write(
+        root,
+        "[[auth.oauth.provider]]\n"
+        'name = "github"\n'
+        'type = "github"\n'
+        'display_name = "GitHub"\n'
+        'client_id = "abc123"\n'
+        'client_secret_env = "BZ_OAUTH_GITHUB_SECRET"\n'
+        'api_base = "http://127.0.0.1:9999"\n',
+    )
+    config = HubConfig.load(root)
+    assert config.auth.oauth_providers[0].api_base == "http://127.0.0.1:9999"
+
+
+def test_oauth_provider_api_base_defaults_to_none(tmp_path: Path) -> None:
+    root = tmp_path / "hub"
+    _write(
+        root,
+        "[[auth.oauth.provider]]\n"
+        'name = "github"\n'
+        'type = "github"\n'
+        'display_name = "GitHub"\n'
+        'client_id = "abc123"\n'
+        'client_secret_env = "BZ_OAUTH_GITHUB_SECRET"\n',
+    )
+    config = HubConfig.load(root)
+    assert config.auth.oauth_providers[0].api_base is None
+
+
 def test_duplicate_oauth_provider_name_rejected(tmp_path: Path) -> None:
     root = tmp_path / "hub"
     entry = (

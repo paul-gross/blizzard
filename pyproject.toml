@@ -30,6 +30,10 @@ dependencies = [
     # Workflow-graph definitions are authored in YAML; the hub parses the
     # POST /graphs body and the packaged default graph.
     "pyyaml>=6.0",
+    # OIDC `id_token` signature verification (issue #92) — RS256 via `cryptography`
+    # (decision D1, epic #89). The same library backs #95's hub-signed runner JWTs, so
+    # it is declared here rather than deferred to that phase.
+    "pyjwt[crypto]>=2.9.0",
 ]
 
 [build-system]

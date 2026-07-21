@@ -118,6 +118,8 @@ _AUTH_OAUTH_PROVIDER_EXAMPLE_COMMENT = """
 # client_secret_env = "BZ_OAUTH_GITHUB_SECRET"  # names an env var — the secret itself
 #                                                 # lives in this runtime's env file
 # issuer = "https://accounts.example.com"        # oidc only: the discovery issuer
+# api_base = "https://ghe.example.internal"       # optional: override the provider's
+#                                                  # default host (github type only)
 """
 
 
@@ -152,7 +154,12 @@ class OAuthProviderConfig:
     """One configured OAuth login provider — parsed-and-carried by #91, *consumed*
     (secret resolution, ``type``/``issuer`` validation) by #92. ``client_secret_env``
     names the environment variable carrying the secret — never the secret itself,
-    mirroring :class:`PmSourceConfig`'s ``token_env``."""
+    mirroring :class:`PmSourceConfig`'s ``token_env``. ``api_base`` overrides the
+    provider's default host (mirroring ``PmSourceConfig.api_base``'s own GHE-override
+    precedent) — unused by the ``oidc`` conformer (whose ``issuer`` already names its
+    own host); the ``github`` conformer uses it to point both its authorize and API
+    calls at a self-hosted/stub origin (e.g. the ``blizzard-mock`` stub IdP) instead of
+    real GitHub."""
 
     name: str
     type: str
@@ -160,6 +167,7 @@ class OAuthProviderConfig:
     client_id: str
     client_secret_env: str
     issuer: str | None = None
+    api_base: str | None = None
 
 
 @dataclass(frozen=True)
@@ -249,6 +257,8 @@ class HubConfig:
             lines.append(f'client_secret_env = "{provider.client_secret_env}"\n')
             if provider.issuer is not None:
                 lines.append(f'issuer = "{provider.issuer}"\n')
+            if provider.api_base is not None:
+                lines.append(f'api_base = "{provider.api_base}"\n')
         return "".join(lines)
 
     @classmethod
@@ -366,6 +376,7 @@ def _parse_oauth_providers(raw_providers: object) -> tuple[OAuthProviderConfig, 
             raise ConfigError(f"duplicate [[auth.oauth.provider]] name {name!r}")
         seen_names.add(name)
         issuer_raw = entry.get("issuer")
+        api_base_raw = entry.get("api_base")
         providers.append(
             OAuthProviderConfig(
                 name=name,
@@ -374,6 +385,7 @@ def _parse_oauth_providers(raw_providers: object) -> tuple[OAuthProviderConfig, 
                 client_id=str(entry["client_id"]),
                 client_secret_env=str(entry["client_secret_env"]),
                 issuer=str(issuer_raw) if issuer_raw else None,
+                api_base=str(api_base_raw) if api_base_raw else None,
             )
         )
     return tuple(providers)

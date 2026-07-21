@@ -30,6 +30,8 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub.app import create_app
 from blizzard.hub.auth.models import User
+from blizzard.hub.auth.oauth.provider import IOAuthProvider
+from blizzard.hub.auth.oauth.registry import OAuthProviderRegistry
 from blizzard.hub.composition import HubServices, build_services
 from blizzard.hub.config import (
     AUTH_MODE_NONE,
@@ -333,6 +335,7 @@ def build_hub(
     produces_mode: str = PRODUCES_WARN,
     auth_mode: str = AUTH_MODE_NONE,
     superuser: str | None = None,
+    oauth_providers: dict[str, IOAuthProvider] | None = None,
 ) -> HubHarness:
     """A migrated, fully-wired hub over ``tmp_path`` with fake external seams.
 
@@ -350,7 +353,10 @@ def build_hub(
     to ``warn``; a test exercising an ``enforce`` rejection path overrides the relevant
     one. ``auth_mode``/``superuser`` (issue #91) default to ``none`` (the epic-wide
     shipped default) so every pre-#91 test keeps building an ungated hub with no
-    changes; a test exercising ``require()`` gating passes ``auth_mode="oauth"``."""
+    changes; a test exercising ``require()`` gating passes ``auth_mode="oauth"``.
+    ``oauth_providers`` (issue #92) is ``{name: FakeOAuthProvider}`` — the no-network
+    in-repo-fake registry the provider-login route tests bind, bypassing config/secret
+    resolution entirely (mirrors ``pm``'s own dict-keyed fake injection above)."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     config = HubConfig(
         root=tmp_path,
@@ -377,6 +383,7 @@ def build_hub(
         hub_workdir_root=tmp_path / "hub_workdirs",
         hub_marker_callback_base_url="http://testserver",
         forge_owner=forge_owner,
+        oauth_registry=OAuthProviderRegistry(oauth_providers) if oauth_providers is not None else None,
     )
     app = create_app(config, services=services)
     client = TestClient(app)

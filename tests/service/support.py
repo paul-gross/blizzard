@@ -97,6 +97,34 @@ def require_winter_source() -> Path:
     return src
 
 
+def require_stub_idp() -> Path:
+    """The provisioned sibling ``blizzard-mock`` venv bin with the stub IdP (issue #92),
+    or skip — a separate check from :func:`require_mock_fleet` since most service-tier
+    scenarios need no OAuth counterpart at all."""
+    bin_dir = _mock_bin_dir()
+    if bin_dir is None or not (bin_dir / "blizzard-mock-idp").is_file():
+        pytest.skip("no provisioned sibling blizzard-mock worktree with the stub IdP (run `winter provision <env>`)")
+    return bin_dir
+
+
+@contextlib.contextmanager
+def stub_idp(bin_dir: Path, port: int) -> Iterator[httpx.Client]:
+    """Run ``blizzard-mock-idp`` as a real subprocess and yield a client to it."""
+    proc = subprocess.Popen(
+        [str(bin_dir / "blizzard-mock-idp"), "--host", "127.0.0.1", "--port", str(port)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
+    try:
+        _await_http(proc, client, "/healthz")
+        yield client
+    finally:
+        client.close()
+        _terminate(proc)
+
+
 # The scripted build node: the prompt is the program. It commits a file to the
 # toy-api worktree; the runner discovers the commit and pushes it to the bare file:// origin.
 BUILD_SCRIPT = (

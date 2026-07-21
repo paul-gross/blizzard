@@ -40,6 +40,11 @@ class IdentityRepository:
             ).all()
             return [self._identity(row) for row in rows]
 
+    def distinct_provider_names(self) -> set[str]:
+        with self._engine.connect() as conn:
+            rows = conn.execute(select(s.identities.c.provider_name).distinct()).all()
+            return {row.provider_name for row in rows}
+
     # --- writes -----------------------------------------------------------
 
     def link(self, identity: Identity) -> None:
@@ -60,6 +65,14 @@ class IdentityRepository:
                 f"failed to link identity {identity.provider_name!r}:{identity.subject!r}",
                 operation="link",
             ) from exc
+
+    def update_handle(self, provider_name: str, subject: str, *, handle: str) -> None:
+        with self._engine.begin() as conn:
+            conn.execute(
+                s.identities.update()
+                .where(s.identities.c.provider_name == provider_name, s.identities.c.subject == subject)
+                .values(handle=handle)
+            )
 
     # --- helpers ------------------------------------------------------------
 

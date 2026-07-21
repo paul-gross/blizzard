@@ -31,6 +31,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.web import mount_web_app
+from blizzard.hub.api.auth_login import router as auth_login_router
 from blizzard.hub.api.chunks import router as chunks_router
 from blizzard.hub.api.decisions import router as decisions_router
 from blizzard.hub.api.events import router as events_router
@@ -44,7 +45,7 @@ from blizzard.hub.api.readiness import router as readiness_router
 from blizzard.hub.api.runners import router as runners_router
 from blizzard.hub.api.spend import router as spend_router
 from blizzard.hub.composition import HubServices, build_services
-from blizzard.hub.config import HubConfig
+from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, HubConfig
 from blizzard.hub.domain.readiness import ReadinessService
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.pm.internal.factory import build_pm_registry
@@ -116,6 +117,7 @@ def create_app(
     app.include_router(health_router)
     app.include_router(readiness_router)
     app.include_router(me_router)
+    app.include_router(auth_login_router)
     app.include_router(events_router)
     app.include_router(graphs_router)
     app.include_router(chunks_router)
@@ -148,6 +150,11 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
     pm = build_pm_registry(config.pm_sources)
     base_branch = os.environ.get(ENV_FORGE_BASE_BRANCH, DEFAULT_FORGE_BASE_BRANCH)
 
+    # The provider-login seam (issue #92) is consumed only under `oauth` — under `none`
+    # there is no login mechanism, so no provider is built even if `[[auth.oauth.
+    # provider]]` entries are configured (mirrors #95's "no IdP surface under none").
+    oauth_providers = config.auth.oauth_providers if config.auth.mode == AUTH_MODE_OAUTH else ()
+
     services = build_services(
         engine,
         events=EventBroker(),
@@ -158,8 +165,32 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
         forge_url=os.environ.get(ENV_FORGE_URL),
         forge_token=os.environ.get(ENV_FORGE_TOKEN),
         forge_owner=owner,
+        oauth_providers=oauth_providers,
     )
+    # Only checked once the store is confirmed at the expected schema head — reusing
+    # the same readiness evaluation `/api/ready` reports rather than a raw query, so a
+    # store mid-migration (or rolled back, as `blizzard hub migrate --down` leaves it)
+    # fails *readiness*, not *boot* (`build_hosted_app` must still return a serving —
+    # if not-ready — app; see `test_ready_probe_false_on_unmigrated_store`).
+    if readiness.evaluate().ready:
+        _check_provider_name_immutability(config, services)
     return create_app(config, readiness=readiness, services=services)
+
+
+def _check_provider_name_immutability(config: HubConfig, services: HubServices) -> None:
+    """Fail boot with an actionable error when a stored identity names a provider
+    absent from ``[[auth.oauth.provider]]`` (issue #92) — a rename must not silently
+    orphan identities and re-mint duplicate users on the next login. Runs regardless of
+    ``auth.mode`` (an operator flipping back to ``none`` does not erase this guarantee)."""
+    configured = {provider.name for provider in config.auth.oauth_providers}
+    orphaned = services.identities.distinct_provider_names() - configured
+    if orphaned:
+        raise ConfigError(
+            "stored identities reference OAuth provider name(s) "
+            f"{sorted(orphaned)} absent from [[auth.oauth.provider]] — a provider name is "
+            "immutable once identities reference it; restore the entry (or its name) rather "
+            "than deleting/renaming it"
+        )
 
 
 def create_app_for_export() -> FastAPI:

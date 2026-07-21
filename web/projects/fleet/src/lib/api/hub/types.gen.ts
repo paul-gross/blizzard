@@ -1691,6 +1691,26 @@ export type PrView = {
 };
 
 /**
+ * ProviderSummary
+ *
+ * One configured provider, as ``GET /api/auth/providers`` lists it.
+ */
+export type ProviderSummary = {
+    /**
+     * Display Name
+     */
+    display_name: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Type
+     */
+    type: string;
+};
+
+/**
  * QuestionAsked
  *
  * A ``question.asked`` fact the runner forwards to the hub.
@@ -2323,6 +2343,110 @@ export type ValidationError = {
      * Error Type
      */
     type: string;
+};
+
+export type LogoutApiAuthLogoutPostData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/logout';
+};
+
+export type LogoutApiAuthLogoutPostResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type LogoutApiAuthLogoutPostResponse = LogoutApiAuthLogoutPostResponses[keyof LogoutApiAuthLogoutPostResponses];
+
+export type ListProvidersApiAuthProvidersGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/providers';
+};
+
+export type ListProvidersApiAuthProvidersGetResponses = {
+    /**
+     * Response List Providers Api Auth Providers Get
+     *
+     * Successful Response
+     */
+    200: Array<ProviderSummary>;
+};
+
+export type ListProvidersApiAuthProvidersGetResponse = ListProvidersApiAuthProvidersGetResponses[keyof ListProvidersApiAuthProvidersGetResponses];
+
+export type AuthorizeApiAuthNameAuthorizeGetData = {
+    body?: never;
+    path: {
+        /**
+         * Name
+         */
+        name: string;
+    };
+    query?: {
+        /**
+         * Return To
+         */
+        return_to?: string | null;
+    };
+    url: '/api/auth/{name}/authorize';
+};
+
+export type AuthorizeApiAuthNameAuthorizeGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AuthorizeApiAuthNameAuthorizeGetError = AuthorizeApiAuthNameAuthorizeGetErrors[keyof AuthorizeApiAuthNameAuthorizeGetErrors];
+
+export type AuthorizeApiAuthNameAuthorizeGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type CallbackApiAuthNameCallbackGetData = {
+    body?: never;
+    path: {
+        /**
+         * Name
+         */
+        name: string;
+    };
+    query?: {
+        /**
+         * Code
+         */
+        code?: string | null;
+        /**
+         * State
+         */
+        state?: string | null;
+    };
+    url: '/api/auth/{name}/callback';
+};
+
+export type CallbackApiAuthNameCallbackGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CallbackApiAuthNameCallbackGetError = CallbackApiAuthNameCallbackGetErrors[keyof CallbackApiAuthNameCallbackGetErrors];
+
+export type CallbackApiAuthNameCallbackGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
 };
 
 export type ListChunksApiChunksGetData = {

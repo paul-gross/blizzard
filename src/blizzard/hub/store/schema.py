@@ -811,3 +811,39 @@ sessions = Table(
     Column("expires_at", UtcDateTime, nullable=False),
     Column("last_seen_at", UtcDateTime, nullable=False),
 )
+
+# --- The provider-login seam: single-use state, non-chunk auth facts (issue #92) ----
+
+# A single-use ``state`` round-tripped through a provider redirect (decision D5).
+# ``authorize`` writes one; ``callback`` reads-and-deletes it in one call
+# (``AuthStateRepository.consume``), so a replayed ``state`` query parameter can never
+# resolve twice. ``kind`` distinguishes this table's callers (``"provider_login"``
+# here; the same table is reused, unmodified, by #95's hub-as-IdP authorize).
+# ``provider_name`` cross-checks the callback's own ``{name}`` path segment. No
+# separate cleanup job removes expired rows — a stale row simply never resolves
+# (``expires_at`` is checked at read, not swept).
+auth_state = Table(
+    "auth_state",
+    metadata,
+    Column("state", String, primary_key=True),
+    Column("kind", String, nullable=False),
+    Column("provider_name", String, nullable=False),
+    Column("return_to", String, nullable=False),
+    Column("code_challenge", String, nullable=True),  # reserved for #96's PKCE public client
+    Column("created_at", UtcDateTime, nullable=False),
+    Column("expires_at", UtcDateTime, nullable=False),
+)
+
+# The append-only, non-chunk auth/security event log (``bzh:facts-not-status``) —
+# `login_failed`/`sso_refused` land here in this phase; #94 adds `user_role_changed`.
+# Distinct from the chunk-scoped fact tables: these events concern no single chunk.
+auth_facts = Table(
+    "auth_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("kind", String, nullable=False),
+    Column("actor", String, nullable=False),
+    Column("subject", String, nullable=False),
+    Column("detail", Text, nullable=False),
+    Column("recorded_at", UtcDateTime, nullable=False),
+)

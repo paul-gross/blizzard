@@ -45,6 +45,10 @@ _PUBLIC: set[tuple[str, str]] = {
     ("GET", "/api/health"),
     ("GET", "/api/ready"),
     ("GET", "/api/me"),
+    ("GET", "/api/auth/providers"),
+    ("GET", "/api/auth/{name}/authorize"),
+    ("GET", "/api/auth/{name}/callback"),
+    ("POST", "/api/auth/logout"),
 }
 
 #: Human plane — ``(method, path) -> permission`` required via ``require(<permission>)``.

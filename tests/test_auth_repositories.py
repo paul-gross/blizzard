@@ -9,6 +9,7 @@ registry: each adapter is exercised over a migrated sqlite engine, with the inje
 
 from __future__ import annotations
 
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -18,10 +19,12 @@ import structlog
 from blizzard.auth_core import Role
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.auth.errors import RepoError, RepoErrorFactory
+from blizzard.hub.auth.internal.auth_facts_repository import AuthFactsRepository
+from blizzard.hub.auth.internal.auth_state_repository import AuthStateRepository
 from blizzard.hub.auth.internal.identity_repository import IdentityRepository
 from blizzard.hub.auth.internal.session_repository import SessionRepository
 from blizzard.hub.auth.internal.user_repository import UserRepository
-from blizzard.hub.auth.models import Identity, Session, User
+from blizzard.hub.auth.models import AuthFact, AuthStateEntry, Identity, Session, User
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 
@@ -125,6 +128,31 @@ def test_identity_link_rejects_a_duplicate_provider_subject_pair(engine, errors:
         )
 
 
+def test_identity_update_handle_refreshes_in_place(engine, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
+    users = UserRepository(engine, errors)
+    users.create(User(user_id="usr_1", username="a", display_name="A", email=None, role=Role.GUEST, created_at=_T0))
+    identities = IdentityRepository(engine, errors)
+    identities.link(Identity(provider_name="github", subject="123", user_id="usr_1", handle="ada", created_at=_T0))
+
+    identities.update_handle("github", "123", handle="ada-lovelace")
+
+    refreshed = identities.get("github", "123")
+    assert refreshed is not None
+    assert refreshed.handle == "ada-lovelace"
+    assert refreshed.created_at == _T0  # untouched
+
+
+def test_identity_distinct_provider_names(engine, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
+    users = UserRepository(engine, errors)
+    users.create(User(user_id="usr_1", username="a", display_name="A", email=None, role=Role.GUEST, created_at=_T0))
+    identities = IdentityRepository(engine, errors)
+    assert identities.distinct_provider_names() == set()
+
+    identities.link(Identity(provider_name="github", subject="1", user_id="usr_1", handle="a", created_at=_T0))
+    identities.link(Identity(provider_name="oidc-co", subject="2", user_id="usr_1", handle="a", created_at=_T0))
+    assert identities.distinct_provider_names() == {"github", "oidc-co"}
+
+
 # --- SessionRepository ----------------------------------------------------
 
 
@@ -158,3 +186,116 @@ def test_session_create_rejects_a_duplicate_id_hash(engine, errors: RepoErrorFac
 
     with pytest.raises(RepoError):
         sessions.create(Session(id_hash="hash1", user_id="usr_1", created_at=_T0, expires_at=_T0, last_seen_at=_T0))
+
+
+# --- AuthStateRepository (issue #92) -------------------------------------------
+
+
+def test_auth_state_create_get_consume_round_trip(engine, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
+    repo = AuthStateRepository(engine, errors)
+    entry = AuthStateEntry(
+        state="st1",
+        kind="provider_login",
+        provider_name="github",
+        return_to="/board",
+        code_challenge=None,
+        created_at=_T0,
+        expires_at=_T0,
+    )
+    repo.create(entry)
+
+    assert repo.get("st1") == entry
+    assert repo.get("missing") is None
+
+    consumed = repo.consume("st1")
+    assert consumed == entry
+    assert repo.get("st1") is None  # single-use: deleted on consume
+
+
+def test_auth_state_consume_is_idempotently_none_the_second_time(engine, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
+    repo = AuthStateRepository(engine, errors)
+    repo.create(
+        AuthStateEntry(
+            state="st1",
+            kind="provider_login",
+            provider_name="github",
+            return_to="/",
+            code_challenge=None,
+            created_at=_T0,
+            expires_at=_T0,
+        )
+    )
+    assert repo.consume("st1") is not None
+    assert repo.consume("st1") is None
+
+
+def test_auth_state_consume_is_single_use_under_concurrent_callers(engine, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
+    """Two racing ``consume`` calls on the same state must not both win (issue #92
+    pre-push fix): the DELETE is the gate, not the preceding SELECT."""
+    repo = AuthStateRepository(engine, errors)
+    repo.create(
+        AuthStateEntry(
+            state="st1",
+            kind="provider_login",
+            provider_name="github",
+            return_to="/",
+            code_challenge=None,
+            created_at=_T0,
+            expires_at=_T0,
+        )
+    )
+
+    barrier = threading.Barrier(2)
+    results: list[AuthStateEntry | None] = [None, None]
+
+    def race(index: int) -> None:
+        barrier.wait()
+        results[index] = repo.consume("st1")
+
+    threads = [threading.Thread(target=race, args=(i,)) for i in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    winners = [r for r in results if r is not None]
+    losers = [r for r in results if r is None]
+    assert len(winners) == 1
+    assert len(losers) == 1
+    assert repo.get("st1") is None
+
+
+def test_auth_state_create_rejects_a_duplicate_state(engine, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
+    repo = AuthStateRepository(engine, errors)
+    entry = AuthStateEntry(
+        state="st1",
+        kind="provider_login",
+        provider_name="github",
+        return_to="/",
+        code_challenge=None,
+        created_at=_T0,
+        expires_at=_T0,
+    )
+    repo.create(entry)
+    with pytest.raises(RepoError):
+        repo.create(entry)
+
+
+# --- AuthFactsRepository (issue #92) -------------------------------------------
+
+
+def test_auth_facts_create_and_list_recent_newest_first(engine) -> None:  # type: ignore[no-untyped-def]
+    repo = AuthFactsRepository(engine)
+    repo.create(AuthFact(kind="login_failed", actor="1.2.3.4", subject="github", detail="bad state", recorded_at=_T0))
+    later = datetime(2026, 1, 2, tzinfo=UTC)
+    repo.create(AuthFact(kind="sso_refused", actor="1.2.3.4", subject="oidc-co", detail="mismatch", recorded_at=later))
+
+    recent = repo.list_recent()
+    assert [f.kind for f in recent] == ["sso_refused", "login_failed"]
+
+
+def test_auth_facts_list_recent_respects_limit(engine) -> None:  # type: ignore[no-untyped-def]
+    repo = AuthFactsRepository(engine)
+    for i in range(3):
+        repo.create(AuthFact(kind="login_failed", actor="ip", subject=str(i), detail="", recorded_at=_T0))
+    assert len(repo.list_recent(limit=2)) == 2
