@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { ageMs, compactRef, formatAge, KitChips, type KitChipOption, type runnerApi } from 'fleet';
 
 import type { MachineChunkStatus } from './chunk-status';
@@ -74,7 +74,7 @@ import { TranscriptPanel } from './transcript-panel';
             <fleet-kit-chips
               [options]="attemptOptions()"
               [selectedValue]="activeAttemptLeaseId()"
-              (choose)="selectAttempt($event)"
+              (choose)="selectAttempt.emit($event)"
             />
           </div>
         }
@@ -242,29 +242,18 @@ export class MachineDetail {
   protected readonly newestLease = computed<runnerApi.LeaseView | null>(() => this.leases().at(-1) ?? null);
 
   /**
-   * The operator's attempt pick, scoped to the chunk it was made on. Kept keyed
-   * by `chunk_id` so it survives the leases list re-fetching (poll refresh keeps
-   * the same attempt selected) but falls back to the newest when the chunk
-   * changes or the picked attempt ages out of the recent-lease window.
+   * The attempt whose transcript the dock shows — the container's effective pick,
+   * URL-derived (issue #99). Presentational: the dock renders whichever tab this
+   * names and emits {@link selectAttempt} on a pick; the container owns which
+   * attempt applies (falling back to newest when a pick ages out or the chunk
+   * changes) and writes it to the URL. Defaults to `null` before a chunk is
+   * selected — the summary already falls back to the newest lease.
    */
-  private readonly picked = signal<{ chunkId: string; leaseId: string } | null>(null);
+  readonly activeAttemptLeaseId = input<string | null>(null);
 
-  /** The attempt whose transcript the dock shows — the operator's pick when it
-   * still applies, else the newest attempt (the default). */
-  protected readonly activeAttemptLeaseId = computed<string | null>(() => {
-    const leases = this.leases();
-    const newest = this.newestLease();
-    const pick = this.picked();
-    if (pick && pick.chunkId === newest?.chunk_id && leases.some((att) => att.lease_id === pick.leaseId)) {
-      return pick.leaseId;
-    }
-    return newest?.lease_id ?? null;
-  });
-
-  protected selectAttempt(leaseId: string): void {
-    const chunkId = this.newestLease()?.chunk_id;
-    if (chunkId) this.picked.set({ chunkId, leaseId });
-  }
+  /** Emitted with an attempt's lease id when the operator picks its tab — the
+   * container writes it to the URL as the new selection. */
+  readonly selectAttempt = output<string>();
 
   /** One selectable chip per attempt (oldest → newest), keyed by lease id and
    * labelled with the attempt ordinal + its state, for the `KitChips` tab row. */

@@ -126,8 +126,10 @@ import type { MachineChunkRow } from './local-panel';
           <div class="detail-frame">
             <local-machine-detail
               [leases]="selectedChunkLeases()"
+              [activeAttemptLeaseId]="selectedAttemptLeaseId()"
               [status]="selectedStatus()"
               [escalation]="selectedEscalation()"
+              (selectAttempt)="selectAttempt.emit($event)"
             />
           </div>
         </section>
@@ -299,6 +301,10 @@ export class LocalPanelLayout {
    * renders: summary/status off the newest, one transcript tab per attempt. */
   readonly selectedChunkLeases = input.required<readonly runnerApi.LeaseView[]>();
 
+  /** The attempt whose transcript the detail dock shows — the container's
+   * URL-derived effective pick (issue #99), fed straight to the detail dock. */
+  readonly selectedAttemptLeaseId = input.required<string | null>();
+
   readonly selectedStatus = input.required<MachineChunkStatus | null>();
 
   /** The open escalation for the selected chunk, when one exists. */
@@ -310,4 +316,8 @@ export class LocalPanelLayout {
 
   /** Emitted with a chunk id when the operator selects a chunk row. */
   readonly selectChunk = output<string>();
+
+  /** Emitted with an attempt lease id when the operator picks an attempt tab in
+   * the detail dock — the container writes it to the URL. */
+  readonly selectAttempt = output<string>();
 }
