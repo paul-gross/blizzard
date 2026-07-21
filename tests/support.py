@@ -23,12 +23,23 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 from sqlalchemy import insert as sa_insert
 
+from blizzard.auth_core import Role
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.ids import USER_PREFIX, mint
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
 from blizzard.hub.app import create_app
+from blizzard.hub.auth.models import User
 from blizzard.hub.composition import HubServices, build_services
-from blizzard.hub.config import PRODUCES_WARN, ROUTE_TOKEN_WARN, RUNNER_AUTH_WARN, HubConfig, PmSourceConfig
+from blizzard.hub.config import (
+    AUTH_MODE_NONE,
+    PRODUCES_WARN,
+    ROUTE_TOKEN_WARN,
+    RUNNER_AUTH_WARN,
+    AuthConfig,
+    HubConfig,
+    PmSourceConfig,
+)
 from blizzard.hub.delivery.command_runner import CommandResult, IHubCommandRunner
 from blizzard.hub.delivery.workdir import IHubWorkdir
 from blizzard.hub.domain.graph import Edge, Graph, Node
@@ -320,6 +331,8 @@ def build_hub(
     runner_auth_mode: str = RUNNER_AUTH_WARN,
     route_token_mode: str = ROUTE_TOKEN_WARN,
     produces_mode: str = PRODUCES_WARN,
+    auth_mode: str = AUTH_MODE_NONE,
+    superuser: str | None = None,
 ) -> HubHarness:
     """A migrated, fully-wired hub over ``tmp_path`` with fake external seams.
 
@@ -335,7 +348,9 @@ def build_hub(
     tests that never mint a ``run:`` node). ``runner_auth_mode`` (issue #86a),
     ``route_token_mode`` (issue #84b), and ``produces_mode`` (issue #113 phase 5) default
     to ``warn``; a test exercising an ``enforce`` rejection path overrides the relevant
-    one."""
+    one. ``auth_mode``/``superuser`` (issue #91) default to ``none`` (the epic-wide
+    shipped default) so every pre-#91 test keeps building an ungated hub with no
+    changes; a test exercising ``require()`` gating passes ``auth_mode="oauth"``."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     config = HubConfig(
         root=tmp_path,
@@ -343,6 +358,7 @@ def build_hub(
         runner_auth_mode=runner_auth_mode,
         route_token_mode=route_token_mode,
         produces_mode=produces_mode,
+        auth=AuthConfig(mode=auth_mode, superuser=superuser),
     )
     migration_runner(config).upgrade("head")
 
@@ -513,6 +529,45 @@ def write_chunk_pause_facts(tmp_path: Path, chunk_id: str, *facts: tuple[bool, d
                     chunk_id=chunk_id, paused=paused, set_at=set_at, set_by="operator"
                 )
             )
+
+
+def seed_user(
+    hub: HubHarness, *, username: str, role: Role, email: str | None = None, display_name: str | None = None
+) -> User:
+    """Insert one ``users`` row directly (a raw-write test helper, mirrors
+    ``write_chunk_pause_facts``) and return the domain object.
+
+    No login mechanism exists yet (issue #91's own scope guardrail: it lands the
+    identity spine, not a way to mint an account) — every test wanting a
+    ``ResolvedIdentity`` seeds the row directly rather than through a route."""
+    user = User(
+        user_id=mint(USER_PREFIX, hub.clock),
+        username=username,
+        display_name=display_name or username,
+        email=email,
+        role=role,
+        created_at=hub.clock.now(),
+    )
+    with hub.engine.begin() as conn:
+        conn.execute(
+            sa_insert(schema.users).values(
+                id=user.user_id,
+                username=user.username,
+                display_name=user.display_name,
+                email=user.email,
+                role=user.role.value,
+                created_at=user.created_at,
+            )
+        )
+    return user
+
+
+def seed_session(hub: HubHarness, user: User) -> str:
+    """Mint a real session for ``user`` via ``AuthService.mint_session`` (the same path
+    a login callback will use, #92) and return the plaintext session id — a test sets
+    this as the ``bz_session`` cookie or an ``Authorization: Bearer`` header."""
+    plaintext, _ = hub.services.auth.mint_session(user)
+    return plaintext
 
 
 def assert_utc_iso(value: object) -> None:

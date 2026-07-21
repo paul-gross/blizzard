@@ -40,6 +40,7 @@ TAKEOVER_PREFIX = "tko"
 SELFTEST_PREFIX = "self"
 HUB_EXEC_SLOT_PREFIX = "hes"
 MIGRATION_PREFIX = "mg"  # a chunk_migrations fact (issue #90)
+USER_PREFIX = "usr"  # a hub-local user (issue #91)
 
 
 def _encode(value: int, length: int) -> str:

@@ -16,11 +16,13 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
+from blizzard.auth_core import FLEET_VIEW, GATE_RESOLVE
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
+from blizzard.hub.api.auth_session import require, resolved_username
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.work import DecisionRow
@@ -53,21 +55,32 @@ def to_decision_view(row: DecisionRow) -> DecisionView:
     )
 
 
-@router.get("/decisions", response_model=OpenDecisionsResponse)
+@router.get("/decisions", response_model=OpenDecisionsResponse, dependencies=[Depends(require(FLEET_VIEW))])
 def list_decisions(services: Annotated[HubServices, Depends(get_services)]) -> OpenDecisionsResponse:
     """The fleet's open (unresolved) decisions — gate surfacing."""
     return OpenDecisionsResponse(decisions=[to_decision_view(d) for d in services.chunks.list_open_decisions()])
 
 
-@router.post("/decisions/{decision_id}/resolutions", response_model=DecisionResolutionResponse)
+@router.post(
+    "/decisions/{decision_id}/resolutions",
+    response_model=DecisionResolutionResponse,
+    dependencies=[Depends(require(GATE_RESOLVE))],
+)
 def resolve_decision(
     decision_id: str,
     request: DecisionResolutionRequest,
+    http_request: Request,
     services: Annotated[HubServices, Depends(get_services)],
 ) -> object:
-    """Resolve an open decision, first-write-wins CAS."""
+    """Resolve an open decision, first-write-wins CAS.
+
+    ``resolved_by`` is taken from the resolved session identity
+    (:func:`~blizzard.hub.api.auth_session.resolved_username`), never the request
+    body's ``resolved_by`` field — a spoofed value there is silently ignored (issue #91)."""
     try:
-        result = services.decisions.resolve(decision_id, choice=request.choice, resolved_by=request.resolved_by)
+        result = services.decisions.resolve(
+            decision_id, choice=request.choice, resolved_by=resolved_username(http_request)
+        )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     if result is None:

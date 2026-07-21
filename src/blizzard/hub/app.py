@@ -37,6 +37,7 @@ from blizzard.hub.api.events import router as events_router
 from blizzard.hub.api.fleet import router as fleet_router
 from blizzard.hub.api.graphs import router as graphs_router
 from blizzard.hub.api.health import router as health_router
+from blizzard.hub.api.me import router as me_router
 from blizzard.hub.api.questions import router as questions_router
 from blizzard.hub.api.queue import router as queue_router
 from blizzard.hub.api.readiness import router as readiness_router
@@ -114,6 +115,7 @@ def create_app(
     # API routers first, so /api/* always wins over the web mount at /.
     app.include_router(health_router)
     app.include_router(readiness_router)
+    app.include_router(me_router)
     app.include_router(events_router)
     app.include_router(graphs_router)
     app.include_router(chunks_router)

@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import os
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 CONFIG_FILENAME = "blizzard-hub.toml"
@@ -71,6 +71,20 @@ _KNOWN_PRODUCES_MODES = {PRODUCES_WARN, PRODUCES_ENFORCE}
 _KNOWN_PM_PROVIDERS = {"github"}
 _REQUIRED_PM_SOURCE_KEYS = ("name", "provider", "repo", "token_env")
 
+# The human-auth rollout knob (issue #91) — `none` (the default, and it stays the
+# shipped default until epic #89 completes) resolves every request to the implicit
+# `operator`/`superuser` identity with no store read; `oauth` activates the session/
+# permission seam. Validated exactly like `runner_auth_mode`.
+AUTH_MODE_NONE = "none"
+AUTH_MODE_OAUTH = "oauth"
+_KNOWN_AUTH_MODES = {AUTH_MODE_NONE, AUTH_MODE_OAUTH}
+
+# `[[auth.oauth.provider]]` required keys — parsed-and-carried in #91 (this issue) so
+# the config schema is stable for #92, which is the phase that actually *consumes* a
+# provider entry (resolving its secret, validating `type`/`issuer`). #91 only checks
+# structural presence.
+_REQUIRED_OAUTH_PROVIDER_KEYS = ("name", "type", "display_name", "client_id", "client_secret_env")
+
 # A fresh scaffold has no configured source, and without one `pm-items` 503s and board
 # pointer labels go null (you cannot render `{source}#{ref}` without a source name) — so
 # `to_toml()` emits this as a comment rather than leaving the block undiscoverable.
@@ -86,6 +100,24 @@ _PM_SOURCE_EXAMPLE_COMMENT = """
 #                             # runtime's env file (e.g. /etc/blizzard/hub.env), never here
 # api_base = "https://ghe.example.internal/api/v3"  # optional: override the API origin (e.g. GHE)
 # web_base = "https://ghe.example.internal"          # optional: override the web origin; derives from api_base
+"""
+
+# Mirrors `_PM_SOURCE_EXAMPLE_COMMENT` — emitted when `[auth]` carries no configured
+# login provider, so the block stays discoverable even though `mode = "none"` needs
+# none to function (issue #91 parses-and-carries this; #92 consumes it).
+_AUTH_OAUTH_PROVIDER_EXAMPLE_COMMENT = """
+# Uncomment and edit to declare an OAuth login provider — consumed once `mode =
+# "oauth"` and a login mechanism exist (issue #92); parsed-and-carried here so the
+# config schema is stable ahead of that.
+#
+# [[auth.oauth.provider]]
+# name = "github"                    # the provider's identity; identities key on it
+# type = "github"                    # "github" or "oidc"
+# display_name = "GitHub"            # the login button's label
+# client_id = "..."                  # the OAuth app's client id
+# client_secret_env = "BZ_OAUTH_GITHUB_SECRET"  # names an env var — the secret itself
+#                                                 # lives in this runtime's env file
+# issuer = "https://accounts.example.com"        # oidc only: the discovery issuer
 """
 
 
@@ -116,6 +148,35 @@ class PmSourceConfig:
 
 
 @dataclass(frozen=True)
+class OAuthProviderConfig:
+    """One configured OAuth login provider — parsed-and-carried by #91, *consumed*
+    (secret resolution, ``type``/``issuer`` validation) by #92. ``client_secret_env``
+    names the environment variable carrying the secret — never the secret itself,
+    mirroring :class:`PmSourceConfig`'s ``token_env``."""
+
+    name: str
+    type: str
+    display_name: str
+    client_id: str
+    client_secret_env: str
+    issuer: str | None = None
+
+
+@dataclass(frozen=True)
+class AuthConfig:
+    """Resolved ``[auth]`` config (issue #91) — the human-auth rollout knob.
+
+    ``mode`` defaults to :data:`AUTH_MODE_NONE` and stays the shipped default until
+    epic #89 completes. ``superuser`` (a nullable email) is parsed-and-carried here but
+    consumed only by #94's bootstrap lifecycle. ``oauth_providers`` is parsed-and-carried
+    here but consumed only by #92."""
+
+    mode: str = AUTH_MODE_NONE
+    superuser: str | None = None
+    oauth_providers: tuple[OAuthProviderConfig, ...] = ()
+
+
+@dataclass(frozen=True)
 class HubConfig:
     """Resolved hub runtime configuration."""
 
@@ -127,6 +188,7 @@ class HubConfig:
     runner_auth_mode: str = RUNNER_AUTH_WARN
     route_token_mode: str = ROUTE_TOKEN_WARN
     produces_mode: str = PRODUCES_WARN
+    auth: AuthConfig = field(default_factory=AuthConfig)
 
     @property
     def config_path(self) -> Path:
@@ -172,6 +234,21 @@ class HubConfig:
                 lines.append(f'api_base = "{source.api_base}"\n')
             if source.web_base is not None:
                 lines.append(f'web_base = "{source.web_base}"\n')
+        lines.append("\n[auth]\n")
+        lines.append(f'mode = "{self.auth.mode}"\n')
+        if self.auth.superuser is not None:
+            lines.append(f'superuser = "{self.auth.superuser}"\n')
+        if not self.auth.oauth_providers:
+            lines.append(_AUTH_OAUTH_PROVIDER_EXAMPLE_COMMENT)
+        for provider in self.auth.oauth_providers:
+            lines.append("\n[[auth.oauth.provider]]\n")
+            lines.append(f'name = "{provider.name}"\n')
+            lines.append(f'type = "{provider.type}"\n')
+            lines.append(f'display_name = "{provider.display_name}"\n')
+            lines.append(f'client_id = "{provider.client_id}"\n')
+            lines.append(f'client_secret_env = "{provider.client_secret_env}"\n')
+            if provider.issuer is not None:
+                lines.append(f'issuer = "{provider.issuer}"\n')
         return "".join(lines)
 
     @classmethod
@@ -204,6 +281,7 @@ class HubConfig:
             runner_auth_mode=runner_auth_mode,
             route_token_mode=route_token_mode,
             produces_mode=produces_mode,
+            auth=_parse_auth(raw.get("auth", {})),
         )
 
 
@@ -251,3 +329,51 @@ def _parse_pm_sources(raw_sources: object) -> tuple[PmSourceConfig, ...]:
             )
         )
     return tuple(sources)
+
+
+def _parse_auth(raw_auth: object) -> AuthConfig:
+    """Parse ``[auth]`` (issue #91) — ``mode``/``superuser`` are validated here;
+    ``[[auth.oauth.provider]]`` entries are structurally parsed-and-carried, not
+    semantically validated (that is #92's job, once a provider is actually consumed)."""
+    if not isinstance(raw_auth, dict):
+        return AuthConfig()
+    mode = str(raw_auth.get("mode", AUTH_MODE_NONE))
+    if mode not in _KNOWN_AUTH_MODES:
+        raise ConfigError(f"auth.mode must be one of {sorted(_KNOWN_AUTH_MODES)}, got {mode!r}")
+    superuser_raw = raw_auth.get("superuser")
+    superuser = str(superuser_raw) if superuser_raw else None
+    oauth = raw_auth.get("oauth", {})
+    raw_providers = oauth.get("provider", []) if isinstance(oauth, dict) else []
+    return AuthConfig(mode=mode, superuser=superuser, oauth_providers=_parse_oauth_providers(raw_providers))
+
+
+def _parse_oauth_providers(raw_providers: object) -> tuple[OAuthProviderConfig, ...]:
+    """Structurally validate and project ``[[auth.oauth.provider]]`` entries — required
+    keys only; ``type``/``issuer`` semantic validation is #92's concern once a provider
+    is actually consumed."""
+    if not isinstance(raw_providers, list):
+        return ()
+    providers: list[OAuthProviderConfig] = []
+    seen_names: set[str] = set()
+    for entry in raw_providers:
+        if not isinstance(entry, dict):
+            raise ConfigError(f"[[auth.oauth.provider]] entry must be a table, got {entry!r}")
+        missing = [key for key in _REQUIRED_OAUTH_PROVIDER_KEYS if key not in entry]
+        if missing:
+            raise ConfigError(f"[[auth.oauth.provider]] entry is missing required key(s) {missing}: {entry!r}")
+        name = str(entry["name"])
+        if name in seen_names:
+            raise ConfigError(f"duplicate [[auth.oauth.provider]] name {name!r}")
+        seen_names.add(name)
+        issuer_raw = entry.get("issuer")
+        providers.append(
+            OAuthProviderConfig(
+                name=name,
+                type=str(entry["type"]),
+                display_name=str(entry["display_name"]),
+                client_id=str(entry["client_id"]),
+                client_secret_env=str(entry["client_secret_env"]),
+                issuer=str(issuer_raw) if issuer_raw else None,
+            )
+        )
+    return tuple(providers)

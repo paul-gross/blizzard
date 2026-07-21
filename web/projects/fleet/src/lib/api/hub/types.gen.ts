@@ -1322,6 +1322,34 @@ export type LeaseMintReport = {
 };
 
 /**
+ * MeResponse
+ *
+ * The resolved identity's wire view — the board's own-identity read.
+ */
+export type MeResponse = {
+    /**
+     * Display Name
+     */
+    display_name: string;
+    /**
+     * Permissions
+     */
+    permissions: Array<string>;
+    /**
+     * Role
+     */
+    role: string;
+    /**
+     * User Id
+     */
+    user_id: string;
+    /**
+     * Username
+     */
+    username: string;
+};
+
+/**
  * MigrationMode
  *
  * How a chunk's :class:`IntendedMigration` fires at its next transition (issue #124).
@@ -3352,6 +3380,22 @@ export type HealthApiHealthGetResponses = {
 };
 
 export type HealthApiHealthGetResponse = HealthApiHealthGetResponses[keyof HealthApiHealthGetResponses];
+
+export type MeApiMeGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/me';
+};
+
+export type MeApiMeGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: MeResponse;
+};
+
+export type MeApiMeGetResponse = MeApiMeGetResponses[keyof MeApiMeGetResponses];
 
 export type ListOpenQuestionsApiQuestionsGetData = {
     body?: never;

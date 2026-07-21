@@ -241,7 +241,9 @@ def test_resolution_is_first_write_wins(tmp_path: Path) -> None:
         f"/api/decisions/{decision_id}/resolutions", json={"choice": "reject", "resolved_by": "bob"}
     )
     assert second.status_code == 409
-    assert second.json()["already_resolved_by"] == "ada"
+    # `resolved_by` in the body is a spoof attempt — issue #91 overwrites it with the
+    # resolved session identity, `"operator"` under the default `auth.mode = "none"`.
+    assert second.json()["already_resolved_by"] == "operator"
 
 
 def test_decide_unknown_choice_is_400(tmp_path: Path) -> None:

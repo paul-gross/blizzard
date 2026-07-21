@@ -35,9 +35,11 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
+from blizzard.auth_core import CHUNK_CONTROL, CHUNK_INGEST, FLEET_VIEW
 from blizzard.foundation.ids import minted_at
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
+from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.decisions import to_decision_view
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.api.questions import question_view
@@ -361,7 +363,12 @@ def _current_node(
     return node_id, node.name if node is not None else None
 
 
-@router.post("/chunks", response_model=ChunkIngestResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/chunks",
+    response_model=ChunkIngestResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require(CHUNK_INGEST))],
+)
 def ingest_chunk(request: ChunkIngestRequest, services: Annotated[HubServices, Depends(get_services)]) -> object:
     """Ingest by source-native token; 422 on a token no configured source
     claims; 409 on a pointer held by a live chunk; 503 if every graph named after the
@@ -427,7 +434,7 @@ def _summary_view(
     )
 
 
-@router.get("/chunks", response_model=list[ChunkSummary])
+@router.get("/chunks", response_model=list[ChunkSummary], dependencies=[Depends(require(FLEET_VIEW))])
 def list_chunks(services: Annotated[HubServices, Depends(get_services)]) -> list[ChunkSummary]:
     """The fleet chunk list — derived status per chunk."""
     graph_cache: dict[str, Graph | None] = {}
@@ -456,7 +463,7 @@ def fleet_summary(services: HubServices) -> FleetSummaryView:
     )
 
 
-@router.get("/chunks/{chunk_id}", response_model=ChunkDetail)
+@router.get("/chunks/{chunk_id}", response_model=ChunkDetail, dependencies=[Depends(require(FLEET_VIEW))])
 def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> ChunkDetail:
     """One chunk aggregate in full — derived status, current node, route."""
     chunk = services.chunks.get(chunk_id)
@@ -521,7 +528,9 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
     )
 
 
-@router.post("/chunks/{chunk_id}/hub-markers", response_model=HubMarkerResponse)
+@router.post(
+    "/chunks/{chunk_id}/hub-markers", response_model=HubMarkerResponse, dependencies=[Depends(require(CHUNK_CONTROL))]
+)
 def record_hub_marker(
     chunk_id: str,
     node_id: str,
@@ -556,7 +565,12 @@ def record_hub_marker(
     return HubMarkerResponse(recorded=recorded, chunk_id=chunk_id, name=request_body.name)
 
 
-@router.post("/chunks/{chunk_id}/requeues", response_model=ChunkSummary, status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/chunks/{chunk_id}/requeues",
+    response_model=ChunkSummary,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require(CHUNK_CONTROL))],
+)
 def requeue_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> ChunkSummary:
     """Close an escalation by supersession: requeue at the current node."""
     chunk = services.chunks.get(chunk_id)
@@ -572,7 +586,12 @@ def requeue_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_se
     return _summary_view(services, chunk)
 
 
-@router.post("/chunks/{chunk_id}/detach", response_model=ChunkSummary, status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/chunks/{chunk_id}/detach",
+    response_model=ChunkSummary,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require(CHUNK_CONTROL))],
+)
 def detach_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> ChunkSummary:
     """Forcibly release a chunk from its runner without touching any escalation."""
     chunk = services.chunks.get(chunk_id)
@@ -588,7 +607,12 @@ def detach_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_ser
     return _summary_view(services, chunk)
 
 
-@router.post("/chunks/{chunk_id}/pause", response_model=ChunkSummary, status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/chunks/{chunk_id}/pause",
+    response_model=ChunkSummary,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require(CHUNK_CONTROL))],
+)
 def pause_chunk(
     chunk_id: str, request: ChunkPauseRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> ChunkSummary:
@@ -606,7 +630,12 @@ def pause_chunk(
     return _summary_view(services, chunk)
 
 
-@router.post("/chunks/{chunk_id}/resume", response_model=ChunkSummary, status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/chunks/{chunk_id}/resume",
+    response_model=ChunkSummary,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require(CHUNK_CONTROL))],
+)
 def resume_chunk(
     chunk_id: str, request: ChunkPauseRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> ChunkSummary:
@@ -621,7 +650,12 @@ def resume_chunk(
     return _summary_view(services, chunk)
 
 
-@router.post("/chunks/{chunk_id}/stop", response_model=ChunkSummary, status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/chunks/{chunk_id}/stop",
+    response_model=ChunkSummary,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require(CHUNK_CONTROL))],
+)
 def stop_chunk(
     chunk_id: str, request: ChunkStopRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> ChunkSummary:
@@ -645,7 +679,12 @@ def stop_chunk(
     return _summary_view(services, chunk)
 
 
-@router.post("/chunks/{chunk_id}/promote", response_model=ChunkSummary, status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/chunks/{chunk_id}/promote",
+    response_model=ChunkSummary,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require(CHUNK_CONTROL))],
+)
 def promote_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> ChunkSummary:
     """Promote a not-ready chunk to ready so a runner may claim it.
 
@@ -661,7 +700,12 @@ def promote_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_se
     return _summary_view(services, chunk)
 
 
-@router.patch("/chunks/{chunk_id}", response_model=ChunkPatchResponse, status_code=status.HTTP_202_ACCEPTED)
+@router.patch(
+    "/chunks/{chunk_id}",
+    response_model=ChunkPatchResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require(CHUNK_CONTROL))],
+)
 def patch_chunk(
     chunk_id: str, request: ChunkPatchRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> ChunkPatchResponse:
@@ -745,7 +789,7 @@ def patch_chunk(
     )
 
 
-@router.get("/chunks/{chunk_id}/pm-items", response_model=PmItemsView)
+@router.get("/chunks/{chunk_id}/pm-items", response_model=PmItemsView, dependencies=[Depends(require(FLEET_VIEW))])
 def get_pm_items(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> PmItemsView:
     """Pass-through PM items read — one entry per pointer, contents never stored.
 

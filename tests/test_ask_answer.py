@@ -207,13 +207,15 @@ def test_answer_first_write_wins_second_gets_409_with_winner(tmp_path: Path) -> 
     chunk_id = _claim(hub)
     _ask(hub, chunk_id)
 
+    # `answered_by` in the body is a spoof attempt — issue #91 overwrites it with the
+    # resolved session identity, `"operator"` under the default `auth.mode = "none"`.
     first = hub.client.post("/api/questions/qn_1/answers", json={"answer": "rest", "answered_by": "alice"})
     assert first.status_code == 201, first.text
     assert first.json() == {
         "won": True,
         "question_id": "qn_1",
         "answer": "rest",
-        "answered_by": "alice",
+        "answered_by": "operator",
         "answered_at": first.json()["answered_at"],
     }
     assert_all_timestamps_utc(first.json())  # bzh:utc-instants — answered_at
@@ -223,7 +225,7 @@ def test_answer_first_write_wins_second_gets_409_with_winner(tmp_path: Path) -> 
     assert second.status_code == 409, second.text
     body = second.json()
     assert body["won"] is False
-    assert body["answered_by"] == "alice"
+    assert body["answered_by"] == "operator"
     assert body["answer"] == "rest"
 
     # The winning answer flips the chunk back out of waiting_on_human.

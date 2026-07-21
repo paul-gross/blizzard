@@ -32,8 +32,10 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from blizzard.auth_core import FLEET_VIEW, RUNNER_PAUSE
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
+from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.registry import RunnerLiveness
@@ -67,6 +69,7 @@ def runner_view(liveness: RunnerLiveness) -> RunnerView:
     "/runners/{runner_id}/enrollments",
     response_model=RunnerEnrollmentResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require(RUNNER_PAUSE))],
 )
 def enroll_runner(runner_id: str, services: Annotated[HubServices, Depends(get_services)]) -> RunnerEnrollmentResponse:
     """Mint (or rotate) ``runner_id``'s bearer token — the plaintext is returned once;
@@ -83,13 +86,13 @@ def enroll_runner(runner_id: str, services: Annotated[HubServices, Depends(get_s
     return RunnerEnrollmentResponse(runner_id=runner_id, token=token)
 
 
-@router.get("/runners", response_model=RunnerListResponse)
+@router.get("/runners", response_model=RunnerListResponse, dependencies=[Depends(require(FLEET_VIEW))])
 def list_runners(services: Annotated[HubServices, Depends(get_services)]) -> RunnerListResponse:
     """The fleet registry — every runner with derived liveness + paused state."""
     return RunnerListResponse(runners=[runner_view(item) for item in services.fleet.list_with_liveness()])
 
 
-@router.get("/runners/{runner_id}", response_model=RunnerView)
+@router.get("/runners/{runner_id}", response_model=RunnerView, dependencies=[Depends(require(FLEET_VIEW))])
 def get_runner(runner_id: str, services: Annotated[HubServices, Depends(get_services)]) -> RunnerView:
     """One runner's derived liveness + paused state — the operator's detail read,
     symmetric with the list. 404 on unknown."""
@@ -99,7 +102,7 @@ def get_runner(runner_id: str, services: Annotated[HubServices, Depends(get_serv
     return runner_view(liveness)
 
 
-@router.post("/runners/{runner_id}/pause", response_model=RunnerView)
+@router.post("/runners/{runner_id}/pause", response_model=RunnerView, dependencies=[Depends(require(RUNNER_PAUSE))])
 def pause_runner(
     runner_id: str, request: RunnerPauseRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> RunnerView:
@@ -107,7 +110,7 @@ def pause_runner(
     return _set_paused(runner_id, paused=True, by=request.by, services=services)
 
 
-@router.post("/runners/{runner_id}/resume", response_model=RunnerView)
+@router.post("/runners/{runner_id}/resume", response_model=RunnerView, dependencies=[Depends(require(RUNNER_PAUSE))])
 def resume_runner(
     runner_id: str, request: RunnerPauseRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> RunnerView:

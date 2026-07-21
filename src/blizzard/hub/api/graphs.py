@@ -32,8 +32,10 @@ import yaml
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
+from blizzard.auth_core import FLEET_VIEW, GRAPH_EDIT
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
+from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.graph import Graph, GraphParseError, Node, mark_effective, parse_graph_doc
@@ -92,7 +94,12 @@ def _graph_view(graph: Graph, *, retired: bool, warnings: list[str] | None = Non
     )
 
 
-@router.post("/graphs", response_model=GraphView, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/graphs",
+    response_model=GraphView,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require(GRAPH_EDIT))],
+)
 def mint_graph(request: GraphMintRequest, services: Annotated[HubServices, Depends(get_services)]) -> object:
     """Validate and mint an immutable graph; 422 on validation errors."""
     try:
@@ -114,7 +121,7 @@ def mint_graph(request: GraphMintRequest, services: Annotated[HubServices, Depen
     return _graph_view(graph, retired=False, warnings=warnings)
 
 
-@router.get("/graphs", response_model=list[GraphSummaryView])
+@router.get("/graphs", response_model=list[GraphSummaryView], dependencies=[Depends(require(FLEET_VIEW))])
 def list_graphs(services: Annotated[HubServices, Depends(get_services)]) -> list[GraphSummaryView]:
     """Every minted graph, newest first, newest non-retired per name marked ``effective``."""
     graphs = services.graphs.list_all()
@@ -133,7 +140,7 @@ def list_graphs(services: Annotated[HubServices, Depends(get_services)]) -> list
     ]
 
 
-@router.get("/graphs/{graph_id}", response_model=GraphView)
+@router.get("/graphs/{graph_id}", response_model=GraphView, dependencies=[Depends(require(FLEET_VIEW))])
 def get_graph(graph_id: str, services: Annotated[HubServices, Depends(get_services)]) -> GraphView:
     """One graph's full reified definition; 404 on unknown id."""
     graph = services.graphs.get(graph_id)
@@ -142,7 +149,12 @@ def get_graph(graph_id: str, services: Annotated[HubServices, Depends(get_servic
     return _graph_view(graph, retired=services.graphs.is_retired(graph_id))
 
 
-@router.post("/graphs/{graph_id}/retire", response_model=GraphView, status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/graphs/{graph_id}/retire",
+    response_model=GraphView,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require(GRAPH_EDIT))],
+)
 def retire_graph(
     graph_id: str, request: GraphLifecycleRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> GraphView:
@@ -155,7 +167,12 @@ def retire_graph(
     return _graph_view(graph, retired=True)
 
 
-@router.post("/graphs/{graph_id}/enable", response_model=GraphView, status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/graphs/{graph_id}/enable",
+    response_model=GraphView,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require(GRAPH_EDIT))],
+)
 def enable_graph(
     graph_id: str, request: GraphLifecycleRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> GraphView:

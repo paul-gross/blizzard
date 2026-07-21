@@ -1832,6 +1832,43 @@
         "title": "LeaseMintReport",
         "type": "object"
       },
+      "MeResponse": {
+        "description": "The resolved identity's wire view \u2014 the board's own-identity read.",
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Permissions",
+            "type": "array"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "username",
+          "display_name",
+          "role",
+          "permissions"
+        ],
+        "title": "MeResponse",
+        "type": "object"
+      },
       "MigrationMode": {
         "description": "How a chunk's :class:`IntendedMigration` fires at its next transition (issue #124).\n\n``AUTO`` fires only when the transition's own destination node name also exists on\nthe target graph (a name match); with no match the transition applies unchanged and\nthe intent stays set for the transition after. ``FORCED`` fires unconditionally,\nlanding on the intent's named ``node_name`` regardless of the transition's own\ndestination.",
         "enum": [
@@ -3876,7 +3913,7 @@
     },
     "/api/decisions/{decision_id}/resolutions": {
       "post": {
-        "description": "Resolve an open decision, first-write-wins CAS.",
+        "description": "Resolve an open decision, first-write-wins CAS.\n\n``resolved_by`` is taken from the resolved session identity\n(:func:`~blizzard.hub.api.auth_session.resolved_username`), never the request\nbody's ``resolved_by`` field \u2014 a spoofed value there is silently ignored (issue #91).",
         "operationId": "resolve_decision_api_decisions__decision_id__resolutions_post",
         "parameters": [
           {
@@ -4894,6 +4931,28 @@
         ]
       }
     },
+    "/api/me": {
+      "get": {
+        "description": "Under ``auth.mode = \"none\"`` the implicit operator/superuser; under ``oauth``\nwith a resolving session, the session's identity; under ``oauth`` with none, 401.",
+        "operationId": "me_api_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Me",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/api/questions": {
       "get": {
         "description": "Every open (unanswered) question across the fleet \u2014 the ``hub status`` surface.",
@@ -4966,7 +5025,7 @@
     },
     "/api/questions/{question_id}/answers": {
       "post": {
-        "description": "Answer a question first-write-wins; 409 carries the winning answer.",
+        "description": "Answer a question first-write-wins; 409 carries the winning answer.\n\n``answered_by`` is taken from the resolved session identity\n(:func:`~blizzard.hub.api.auth_session.resolved_username`), never the request\nbody's ``answered_by`` field \u2014 a spoofed value there is silently ignored (issue #91).",
         "operationId": "answer_question_api_questions__question_id__answers_post",
         "parameters": [
           {

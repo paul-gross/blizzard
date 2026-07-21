@@ -21,11 +21,13 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
+from blizzard.auth_core import FLEET_VIEW, QUESTION_ANSWER
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
+from blizzard.hub.api.auth_session import require, resolved_username
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.work import ChunkFacts, QuestionRow, derive_chunk_status
@@ -53,7 +55,7 @@ def question_view(row: QuestionRow) -> QuestionView:
     )
 
 
-@router.post("/questions", status_code=status.HTTP_201_CREATED)
+@router.post("/questions", status_code=status.HTTP_201_CREATED, dependencies=[Depends(require(QUESTION_ANSWER))])
 def ask_question(fact: QuestionAsked, services: Annotated[HubServices, Depends(get_services)]) -> dict[str, str]:
     """Land a ``question.asked`` row — the chunk parks ``waiting_on_human``."""
     if services.chunks.get(fact.chunk_id) is None:
@@ -64,14 +66,26 @@ def ask_question(fact: QuestionAsked, services: Annotated[HubServices, Depends(g
     return {"question_id": fact.question_id}
 
 
-@router.post("/questions/{question_id}/answers", response_model=AnswerResult, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/questions/{question_id}/answers",
+    response_model=AnswerResult,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require(QUESTION_ANSWER))],
+)
 def answer_question(
-    question_id: str, request: AnswerRequest, services: Annotated[HubServices, Depends(get_services)]
+    question_id: str,
+    request: AnswerRequest,
+    http_request: Request,
+    services: Annotated[HubServices, Depends(get_services)],
 ) -> object:
-    """Answer a question first-write-wins; 409 carries the winning answer."""
+    """Answer a question first-write-wins; 409 carries the winning answer.
+
+    ``answered_by`` is taken from the resolved session identity
+    (:func:`~blizzard.hub.api.auth_session.resolved_username`), never the request
+    body's ``answered_by`` field — a spoofed value there is silently ignored (issue #91)."""
     if services.chunks.get_question(question_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown question {question_id}")
-    outcome = services.questions.answer(question_id, answer=request.answer, answered_by=request.answered_by)
+    outcome = services.questions.answer(question_id, answer=request.answer, answered_by=resolved_username(http_request))
     result = AnswerResult(
         won=outcome.won,
         question_id=outcome.question_id,
@@ -91,7 +105,7 @@ def answer_question(
     return result
 
 
-@router.get("/questions", response_model=list[QuestionView])
+@router.get("/questions", response_model=list[QuestionView], dependencies=[Depends(require(FLEET_VIEW))])
 def list_open_questions(services: Annotated[HubServices, Depends(get_services)]) -> list[QuestionView]:
     """Every open (unanswered) question across the fleet — the ``hub status`` surface."""
     return [question_view(row) for row in services.chunks.list_open_questions()]

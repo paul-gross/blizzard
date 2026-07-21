@@ -24,6 +24,13 @@ from pathlib import Path
 from sqlalchemy import Engine
 
 from blizzard.foundation.clock import IClock, SystemClock
+from blizzard.foundation.logging import get_logger
+from blizzard.hub.auth.errors import RepoErrorFactory
+from blizzard.hub.auth.internal.identity_repository import IdentityRepository
+from blizzard.hub.auth.internal.session_repository import SessionRepository
+from blizzard.hub.auth.internal.user_repository import UserRepository
+from blizzard.hub.auth.service import AuthService
+from blizzard.hub.auth.sessions import IReadSessionRepository
 from blizzard.hub.delivery.command_runner import IHubCommandRunner
 from blizzard.hub.delivery.hub_node import HubNodeExecutor
 from blizzard.hub.delivery.internal.hub_command_runner import SubprocessHubCommandRunner
@@ -93,6 +100,14 @@ class HubServices:
     default_graph_doc: GraphDoc
     default_graph_yaml: str
     pm: IPmSourceRegistry
+    #: The session read repository (issue #91), held directly by ``HubServices``
+    #: (mirroring ``registry: IReadRunnerRegistry``) so the human-plane edge
+    #: (``hub/api/auth_session.py``'s ``resolve_identity``) can resolve a presented
+    #: session id's hash without holding a domain service (``bzh:controller-read-only``).
+    sessions: IReadSessionRepository
+    #: The identity domain service — mint/resolve/slide sessions
+    #: (``bzh:controller-read-only``: only the domain writes).
+    auth: AuthService
 
 
 def build_services(
@@ -143,6 +158,15 @@ def build_services(
     # registry facts, and two instances would be two of the same thing (issue #43).
     fleet = FleetService(registry=registry_store, clock=clock)
     enrollment = RunnerEnrollmentService(registry=registry_store, clock=clock)
+    # The identity spine (issue #91) — one error factory shared by the three
+    # SQLAlchemy adapters (mirrors chunk_store/graph_store/registry_store sharing one
+    # engine), each satisfying its Write Protocol (a superset of its Read variant, so
+    # `AuthService` below is handed the very same instances the edge reads through).
+    auth_errors = RepoErrorFactory(get_logger("blizzard.hub.auth"))
+    user_store = UserRepository(engine, auth_errors)
+    identity_store = IdentityRepository(engine, auth_errors)
+    session_store = SessionRepository(engine, auth_errors)
+    auth = AuthService(users=user_store, identities=identity_store, sessions=session_store, clock=clock)
     # Shared between ClaimService and EditService (issue #120) — the one in-process
     # lock serializing both services' check-then-act sequences over a chunk's live-route
     # state, so a claim and a graph/model edit racing the same chunk can't interleave.
@@ -180,4 +204,6 @@ def build_services(
         default_graph_doc=load_default_graph_doc(),
         default_graph_yaml=default_graph_yaml(),
         pm=pm,
+        sessions=session_store,
+        auth=auth,
     )

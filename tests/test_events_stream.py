@@ -15,6 +15,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from blizzard.hub.api.auth_session import IMPLICIT_OPERATOR
 from blizzard.hub.api.events import _stream, events_stream
 from blizzard.hub.app import create_app_for_export
 from blizzard.hub.events.broker import EventBroker
@@ -35,7 +36,10 @@ class _FakeRequest:
 
 
 async def test_stream_endpoint_returns_an_sse_response() -> None:
-    response = await events_stream(_FakeRequest(EventBroker()))  # type: ignore[arg-type]
+    # Direct call bypasses FastAPI's dependency resolution — `identity` (normally
+    # resolved by `Depends(require(FLEET_VIEW))`) is supplied directly; the handler
+    # itself never reads it beyond the gate FastAPI already enforced upstream.
+    response = await events_stream(_FakeRequest(EventBroker()), IMPLICIT_OPERATOR)  # type: ignore[arg-type]
     assert response.status_code == 200
     assert response.media_type == "text/event-stream"
     # The generator opens with the reserved comment so an EventSource connects cleanly.

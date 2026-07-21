@@ -22,7 +22,9 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
+from blizzard.auth_core import FLEET_VIEW, QUEUE_REORDER
 from blizzard.hub.api.auth import reject_runner_principal
+from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.queue import ChunkNotFound, ChunkNotReady
@@ -51,13 +53,13 @@ def _entries(ready: list[Chunk]) -> list[QueuePeekEntry]:
     ]
 
 
-@router.get("/queue", response_model=QueuePeekResponse)
+@router.get("/queue", response_model=QueuePeekResponse, dependencies=[Depends(require(FLEET_VIEW))])
 def get_queue(services: Annotated[HubServices, Depends(get_services)]) -> QueuePeekResponse:
     """The hub-ordered ready queue, read-only — honours reorder/replace + grouping."""
     return QueuePeekResponse(entries=_entries(services.queue.ordered_ready()))
 
 
-@router.put("/queue", response_model=QueuePeekResponse)
+@router.put("/queue", response_model=QueuePeekResponse, dependencies=[Depends(require(QUEUE_REORDER))])
 def replace_queue(
     request: QueueReplaceRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> QueuePeekResponse:
@@ -83,7 +85,9 @@ def replace_queue(
     return QueuePeekResponse(entries=_entries(services.queue.ordered_ready()))
 
 
-@router.post("/chunks/{chunk_id}/group", response_model=ChunkGroupResponse)
+@router.post(
+    "/chunks/{chunk_id}/group", response_model=ChunkGroupResponse, dependencies=[Depends(require(QUEUE_REORDER))]
+)
 def group_chunks(
     chunk_id: str,
     request: ChunkGroupRequest,

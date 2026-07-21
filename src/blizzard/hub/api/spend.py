@@ -19,8 +19,10 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from blizzard.auth_core import FLEET_VIEW
 from blizzard.foundation.store.utc import as_utc
 from blizzard.hub.api.auth import reject_runner_principal
+from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.work import derive_fleet_usage
@@ -29,7 +31,7 @@ from blizzard.wire.fleet import FleetSpendView
 router = APIRouter(prefix="/api", tags=["spend"], dependencies=[Depends(reject_runner_principal)])
 
 
-@router.get("/spend", response_model=FleetSpendView)
+@router.get("/spend", response_model=FleetSpendView, dependencies=[Depends(require(FLEET_VIEW))])
 def fleet_spend(since: str, services: Annotated[HubServices, Depends(get_services)]) -> FleetSpendView:
     """The fleet's total usage/cost since ``since`` (an ISO-8601 instant) — summed
     over every usage fact recorded at or after it, across every chunk."""

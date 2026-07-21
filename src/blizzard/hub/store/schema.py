@@ -27,6 +27,7 @@ from sqlalchemy import (
     Column,
     Float,
     ForeignKey,
+    Index,
     Integer,
     MetaData,
     String,
@@ -741,4 +742,72 @@ runner_local_pause_facts = Table(
     # names the ceiling + spend here) — nullable because a manual `blizzard runner pause`
     # carries none, and every pre-#61 row predates the column.
     Column("reason", Text, nullable=True),
+)
+
+# --- The identity spine: users, provider identities, sessions (issue #91) -----
+#
+# Independent of any login mechanism (that is #92) — the schema every other auth slice
+# builds on. ``users`` is the hub-local account row: ``username`` is unique (minted from
+# a provider handle with a collision suffix once #92 lands), ``role`` is the coarse
+# ``blizzard.auth_core.Role`` tag a session's ``ResolvedIdentity`` expands via the
+# static ``ROLE_PERMISSIONS`` map (never a stored permission list — `bzh:domain-core`).
+# ``email`` is nullable (a provider need not disclose one) and, when present, unique —
+# enforced by the partial index below rather than a plain column-level UNIQUE, since a
+# plain UNIQUE treats every NULL as equal-and-conflicting on some backends.
+
+users = Table(
+    "users",
+    metadata,
+    Column("id", String, primary_key=True),  # usr_<ulid>
+    Column("username", String, nullable=False, unique=True),
+    Column("display_name", String, nullable=False),
+    Column("email", String, nullable=True),
+    Column("role", String, nullable=False),  # blizzard.auth_core.Role value
+    Column("created_at", UtcDateTime, nullable=False),
+)
+
+# A partial unique index (D2): ``WHERE email IS NOT NULL`` via SQLAlchemy's
+# dialect-keyed ``sqlite_where``/``postgresql_where`` on one ``Index`` — both backends
+# honor a partial index, and setting both keeps this inside SQLAlchemy's portable DDL
+# surface (``bzh:sql-portable``), no raw ``text()``. A plain ``unique=True`` column
+# constraint cannot express "unique only when set" portably.
+Index(
+    "uq_users_email",
+    users.c.email,
+    unique=True,
+    sqlite_where=users.c.email.isnot(None),
+    postgresql_where=users.c.email.isnot(None),
+)
+
+# One row per (provider, subject) a user has linked — the first-login email-merge rule
+# (#92) attaches a second identity to an existing user; nothing in #91 writes one yet
+# (sessions are seeded directly by tests). ``handle`` is the provider's own
+# display/login name at last link, refreshed on a later login (#92) rather than
+# re-derived here.
+identities = Table(
+    "identities",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("provider_name", String, nullable=False),
+    Column("subject", String, nullable=False),  # the provider's own stable subject id
+    Column("user_id", String, ForeignKey("users.id"), nullable=False, index=True),
+    Column("handle", String, nullable=False),
+    Column("created_at", UtcDateTime, nullable=False),
+    UniqueConstraint("provider_name", "subject", name="uq_identities_provider_subject"),
+)
+
+# A hub session — the browser cookie / CLI bearer resolves to one of these by its
+# **hashed** id (sha256, `hub/auth/hashing.py`); the plaintext is minted once and never
+# stored (mirrors `runner_registrations.token_hash`, issue #86a). Sliding expiry:
+# `last_seen_at`/`expires_at` are refreshed in place on each resolve
+# (`AuthService.touch_session`), under an absolute-max cap enforced by the domain, not
+# a second column.
+sessions = Table(
+    "sessions",
+    metadata,
+    Column("id_hash", String, primary_key=True),
+    Column("user_id", String, ForeignKey("users.id"), nullable=False, index=True),
+    Column("created_at", UtcDateTime, nullable=False),
+    Column("expires_at", UtcDateTime, nullable=False),
+    Column("last_seen_at", UtcDateTime, nullable=False),
 )

@@ -14,18 +14,27 @@ id — an event caught in both the replay and the live queue is emitted once.
 
 The runner's store-and-forward fact push (``POST /events``) moved to the
 runner-authenticated fleet router (:mod:`blizzard.hub.api.fleet`, issue #87) — this
-stream is the board's own anonymous read, and stays deliberately dependency-free (no
-``get_services``) so it opens cleanly even on the store-free export/unit app.
+stream is the board's own read, human-plane gated on ``fleet:view`` (issue #91): a
+``guest`` is refused here exactly as on every other board read. Identity is resolved
+*before* streaming starts (``require(FLEET_VIEW)``), then the generator stays
+broker-first — no ``get_services`` inside :func:`_stream` itself. Under the default
+``auth.mode = "none"`` ``require()`` never touches the store (``hub/api/auth_session.py``),
+so this route stays dependency-free in effect on the store-free export/unit app, which
+always builds with that default.
 """
 
 from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
+from typing import Annotated
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
+from blizzard.auth_core import FLEET_VIEW
+from blizzard.hub.api.auth_session import require
+from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.events.broker import EventBroker
 
 router = APIRouter(prefix="/api", tags=["meta"])
@@ -98,8 +107,14 @@ async def _stream(
 
 
 @router.get("/events/stream", include_in_schema=False)
-async def events_stream(request: Request) -> StreamingResponse:
-    """Subscribe to the live event stream, resuming from ``Last-Event-ID`` if present."""
+async def events_stream(
+    request: Request, identity: Annotated[ResolvedIdentity, Depends(require(FLEET_VIEW))]
+) -> StreamingResponse:
+    """Subscribe to the live event stream, resuming from ``Last-Event-ID`` if present.
+
+    ``identity`` is unused beyond the gate itself — ``require(FLEET_VIEW)`` already
+    raised 401/403 before this body runs."""
+    del identity
     broker: EventBroker | None = getattr(request.app.state, "events", None)
     shutdown: asyncio.Event | None = getattr(request.app.state, "shutdown", None)
     last_event_id = _parse_last_event_id(request)
