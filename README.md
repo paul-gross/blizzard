@@ -74,6 +74,8 @@ mise run e2e                   # the standing e2e smoke suite — eight full-sta
 blizzard hub init ./hub-data   # scaffold config + data dir + migrated DB (idempotent)
 blizzard hub migrate           # apply pending store migrations (--down <rev> reverses schema; some revisions are lossy — see the revision's docstring)
 blizzard hub host --dir ./hub-data   # serve; bare `blizzard hub` defaults to host
+blizzard hub login             # log into the hub (human auth; PKCE loopback, or `--paste` for a headless shell)
+blizzard hub logout            # log out of the hub and revoke the locally stored session
 
 blizzard-export-openapi --out-dir openapi   # dump hub + runner OpenAPI specs
 ```

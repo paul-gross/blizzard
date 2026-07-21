@@ -256,6 +256,10 @@ sources that *are* configured. Adding a repo to the fleet means adding its
 
 ## Runner authentication
 
+This is **machine identity** — a runner authenticating itself to the hub — distinct
+from the **human login** plane ("Human authentication (OAuth login)" below), which
+authenticates an operator to the hub's own web/API surface.
+
 Two independent rollout flags gate the fleet's runner-identity and route-capability
 defenses, both scaffolded into `blizzard-hub.toml` by `blizzard hub init`, both
 defaulting to `warn`:
@@ -330,6 +334,109 @@ resolved once at `host` startup — unlike `workspace_prompt`, which also has a 
 it means restarting the runner. A `runner_prompt_file` naming a path that does not
 exist raises a `ConfigError` at startup, the same fail-fast the workspace-prompt
 file knob already gives.
+
+## Human authentication (OAuth login)
+
+Distinct from "Runner authentication" above: this plane authenticates an **operator**
+logging into the hub's own web/API surface, not a runner authenticating itself to the
+hub. The hub's `[auth]` table (scaffolded into `blizzard-hub.toml` by `blizzard hub
+init`) is the human-auth rollout knob:
+
+```toml
+[auth]
+mode = "none"                    # "none" (the shipped default) or "oauth"
+# superuser = "ada@example.com"  # the bootstrap superuser's email — see below
+
+# [[auth.oauth.provider]]
+# name = "github"                    # the provider's identity; identities key on it
+# type = "github"                    # "github" or "oidc"
+# display_name = "GitHub"            # the login button's label
+# client_id = "..."                  # the OAuth app's client id
+# client_secret_env = "BZ_OAUTH_GITHUB_SECRET"  # names an env var — the secret itself
+#                                                 # lives in this runtime's env file
+# issuer = "https://accounts.example.com"        # oidc only: the discovery issuer
+# api_base = "https://ghe.example.internal"       # optional: override the provider's
+#                                                  # default host (github type only)
+```
+
+`mode = "none"` (the shipped default) resolves every request to the implicit
+operator/superuser identity with no store read — a fresh or upgraded hub keeps working
+unauthenticated until an operator deliberately opts in. `mode = "oauth"` activates the
+session/permission seam and requires at least one `[[auth.oauth.provider]]` entry.
+`type` selects the conformer: `"github"` (an OAuth App) or `"oidc"` (a generic OIDC
+issuer, discovered via `<issuer>/.well-known/openid-configuration`). `client_secret_env`
+mirrors `[[pm_source]] token_env`'s indirection exactly — it names an environment
+variable, never the secret itself; the secret goes in the hub's runtime env file (e.g.
+`/etc/blizzard/hub.env` under the systemd layout above), a deployment credential like
+`BZ_FORGE_TOKEN`/`BZ_PM_TOKEN` above.
+
+### The superuser bootstrap
+
+`[auth].superuser` names one email as the fleet's bootstrap identity, ensured at every
+hub boot: once a verified login matches that email, the hub promotes that user to
+`superuser`; until then, the intent is pre-provisioned and unclaimed, and the boot log
+(plus an `auth_facts` entry) surfaces that on every restart rather than failing
+silently. Changing `superuser` to a different email demotes whichever user the
+previous target had claimed back to `admin` — at most one user is ever the bootstrapped
+superuser at a time, and this is the *only* way a user becomes (or stops being)
+`superuser`; the role is never assignable through the admin API.
+
+### Roles, in one paragraph
+
+A hub-local user carries one of four roles, a total order —
+`guest < contributor < admin < superuser`. A freshly-logged-in identity lands as
+`guest`: the lobby, holding no permissions at all beyond the public self routes
+(`GET /api/me`, login, logout) — no board read, no writes. An `admin` (promoted from
+the admin page, `POST /api/users/{id}/role`, gated on `user:manage`) can move a subject
+between `guest` and `contributor` freely, but only a `superuser` actor may grant or
+revoke `admin` itself, and `superuser` is never assignable through that API in either
+direction — it is bootstrap-only, per the previous section.
+
+### Operator verbs
+
+`blizzard hub login` logs an operator into the hub: by default it opens a browser to
+the hub's own authorize endpoint (PKCE, an ephemeral `127.0.0.1` loopback redirect) —
+the user completes login *at the hub*, and the resulting session token is stored
+locally. `--paste` swaps that for the paste-code fallback (the hub renders a short
+one-time code the user pastes back into the prompt), for a headless/remote shell with
+no reachable loopback listener. `blizzard hub logout` deletes the locally stored
+session and revokes it at the hub, so it stops resolving even if it leaked.
+`blizzard hub rotate-signing-key` rotates the hub's IdP signing keypair — mints a fresh
+current key, demoting the old current to previous; runners pick up the new key by
+re-fetching JWKS on an unknown `kid`, no restart needed. Under `mode = "oauth"`,
+`rotate-signing-key` is itself gated on `user:manage` and requires a logged-in session.
+
+### Runner-side federation
+
+A runner that wants its own human web surface reachable via the hub's SSO bounce
+declares `public_url` in `blizzard-runner.toml` — its own browser-reachable base URL,
+from which the runner derives the one redirect URI it presents to the hub's IdP
+authorize endpoint (`<public_url>/api/auth/callback`). Empty (the fresh-scaffold
+default) means this runner registers no federation identity, so its human web surface
+stays unreachable via SSO — and, since there is no IdP to bounce to either way, that is
+also the correct state when the hub itself runs `auth.mode = "none"`.
+
+Runner-local role resolution is a separate `[auth]` table, living only on the runner —
+never in the hub store or its admin page:
+
+```toml
+[auth]
+# superuser = "<hub-username>"   # this runner's own sovereign, config-only
+hub_role_default = "mirror"      # "mirror" (reproduce the hub's own role claim) or a
+                                  # fixed cap ("contributor"/"guest")
+
+[auth.users]
+# ada = "admin"                  # per-hub-username role overrides
+```
+
+`superuser` names a hub **username** as this runner's own sovereign — never assignable
+through a JWT claim, a config-only designation mirroring the hub's own `auth.superuser`
+bootstrap identity. `hub_role_default` is the fallback runner-local role for a hub
+identity with no `[auth.users]` override: `"mirror"` (the default) trusts the hub's own
+`role` claim verbatim, or a fixed cap (`"contributor"`/`"guest"`) floors every unmatched
+identity regardless of hub role. `[auth.users]` overrides that default per hub
+username, resolved from the JWT's `username` claim only (never `email`, which is
+mutable and may be null).
 
 ## Produces-artifact enforcement
 
