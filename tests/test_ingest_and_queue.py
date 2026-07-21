@@ -126,7 +126,7 @@ def test_ingest_rests_not_ready_and_promote_makes_it_claimable(tmp_path: Path) -
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_P1)]}).json()["chunk_id"]
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "not_ready"
     assert [r["chunk_id"] for r in hub.client.get("/api/chunks").json()] == [chunk_id]  # on the board
-    assert hub.client.get("/api/queue/peek").json()["entries"] == []  # never claimed
+    assert hub.client.get("/api/queue").json()["entries"] == []  # never claimed
 
     promote = hub.client.post(f"/api/chunks/{chunk_id}/promote")
     assert promote.status_code == 202, promote.text
@@ -135,7 +135,7 @@ def test_ingest_rests_not_ready_and_promote_makes_it_claimable(tmp_path: Path) -
     assert promote.json()["chunk_id"] == chunk_id
     assert promote.json()["status"] == "ready"
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
-    assert [e["chunk_id"] for e in hub.client.get("/api/queue/peek").json()["entries"]] == [chunk_id]
+    assert [e["chunk_id"] for e in hub.client.get("/api/queue").json()["entries"]] == [chunk_id]
 
 
 def test_promote_is_idempotent_and_404s_unknown_chunk(tmp_path: Path) -> None:
@@ -145,7 +145,7 @@ def test_promote_is_idempotent_and_404s_unknown_chunk(tmp_path: Path) -> None:
     # A second promote is a harmless no-op — still ready, still one queue entry.
     assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
-    assert len(hub.client.get("/api/queue/peek").json()["entries"]) == 1
+    assert len(hub.client.get("/api/queue").json()["entries"]) == 1
     assert hub.client.post("/api/chunks/ch_nope/promote").status_code == 404
 
 
@@ -298,7 +298,7 @@ def test_queue_peek_lists_ready_chunks_fifo_and_hides_claimed(tmp_path: Path) ->
     hub.clock.advance(timedelta(seconds=1))  # a distinct, later mint time for FIFO ordering
     second = ingest(hub, [_P2])
 
-    entries = hub.client.get("/api/queue/peek").json()["entries"]
+    entries = hub.client.get("/api/queue").json()["entries"]
     assert [e["chunk_id"] for e in entries] == [first, second]
     assert [e["position"] for e in entries] == [0, 1]
 
@@ -307,5 +307,5 @@ def test_queue_peek_lists_ready_chunks_fifo_and_hides_claimed(tmp_path: Path) ->
         "/api/fleet/routes",
         json={"chunk_id": first, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
     )
-    remaining = hub.client.get("/api/queue/peek").json()["entries"]
+    remaining = hub.client.get("/api/queue").json()["entries"]
     assert [e["chunk_id"] for e in remaining] == [second]

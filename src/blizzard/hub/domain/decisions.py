@@ -4,7 +4,7 @@ Two services carry this wave's human-loop writes; both hold the **write** chunk
 repository (``bzh:controller-read-only``) and stamp time from the injected clock:
 
 * :class:`DecisionService` — the runner-config gate (``POST /chunks/{id}/decisions``)
-  and resolution (``POST /decisions/{id}/resolution``). A runner submits a decision in
+  and resolution (``POST /decisions/{id}/resolutions``). A runner submits a decision in
   place of a transition for a node it was configured to gate: the choice set is
   the node's own (the hub owns the graph), and the step's artifacts commit atomically
   with the decision. Resolution is first-write-wins, like an answer. The

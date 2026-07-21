@@ -6,13 +6,11 @@ over the store (``bzh:controller-read-only``): ingest delegates to
 domain services that hold the write repository; the list/detail reads
 derive status and current node from facts (``bzh:facts-not-status``), never a stored
 column. The PM read is a vendor-native pass-through whose contents are never stored.
-``POST /chunks/{id}/graph`` and ``POST /chunks/{id}/model`` (issue #27) repin a
-not-ready chunk's workflow graph or model selection — read is already carried on the
-list/detail views' ``graph_id``/``model`` fields; write is refused (409) once the chunk
-has left ``not_ready``. Both are now ``deprecated=True`` aliases of the unified
-``PATCH /chunks/{id}`` (issue #104) — same request/response bodies and same
-``EditService`` delegation as before, plus the
-:func:`~blizzard.hub.api.deprecation.mark_deprecated` headers; no domain change.
+``PATCH /chunks/{id}`` (issue #104) repins a not-ready or ready-and-unclaimed chunk's
+workflow graph, model selection, or migration intent (issue #27, widened by #120) in one
+all-or-nothing edit — read is already carried on the list/detail views'
+``graph_id``/``model`` fields; write is refused (409) once the chunk has left the
+``{not_ready, ready}`` admit set.
 
 The transition verbs (``promote``/``detach``/``pause``/``resume``/``stop``/``requeues``,
 issue #104) return the transitioned chunk's :class:`~blizzard.wire.chunk.ChunkSummary`
@@ -34,14 +32,13 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
 from blizzard.foundation.ids import minted_at
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.decisions import to_decision_view
-from blizzard.hub.api.deprecation import mark_deprecated
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.api.questions import question_view
 from blizzard.hub.composition import HubServices
@@ -86,13 +83,9 @@ from blizzard.wire.chunk import (
     ArtifactView,
     BounceView,
     ChunkDetail,
-    ChunkGraphUpdateRequest,
-    ChunkGraphView,
     ChunkIngestConflict,
     ChunkIngestRequest,
     ChunkIngestResponse,
-    ChunkModelUpdateRequest,
-    ChunkModelView,
     ChunkPatchRequest,
     ChunkPatchResponse,
     ChunkPauseRequest,
@@ -666,78 +659,6 @@ def promote_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_se
     services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
     services.events.publish_queue_changed()  # a promoted chunk enters the ready queue
     return _summary_view(services, chunk)
-
-
-@router.post(
-    "/chunks/{chunk_id}/graph", response_model=ChunkGraphView, status_code=status.HTTP_202_ACCEPTED, deprecated=True
-)
-def set_chunk_graph(
-    chunk_id: str,
-    request: ChunkGraphUpdateRequest,
-    response: Response,
-    services: Annotated[HubServices, Depends(get_services)],
-) -> ChunkGraphView:
-    """Deprecated alias of ``PATCH /chunks/{id}`` (``{"graph_id": ...}``, issue #104) —
-    repins a not-ready or ready-and-unclaimed chunk's workflow graph (issue #27,
-    widened by #120). Identical request/response body and ``EditService`` delegation
-    as before; only the deprecation marker and headers are new.
-
-    404 on an unknown chunk or an unknown target graph; 409 once the chunk is claimed
-    or later (``running``, ``delivering``, ``waiting_on_human``, ``needs_human``,
-    ``paused``, ``done``, ``stopped`` — issue #120 widened the admit set to
-    ``{not_ready, ready}``, not further — checked first, so it wins over the next
-    cause even when both apply) or on a retired target graph (issue #101 — a retired
-    graph cannot receive new work)."""
-    chunk = services.chunks.get(chunk_id)
-    if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
-    graph = services.graphs.get(request.graph_id)
-    if graph is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {request.graph_id}")
-    try:
-        services.edit.set_graph(chunk, graph=graph)
-    except ChunkNotEditable as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    except TargetGraphRetired as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
-    services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
-    mark_deprecated(response, successor=f"/api/chunks/{chunk_id}")
-    return ChunkGraphView(chunk_id=chunk_id, graph_id=graph.graph_id)
-
-
-@router.post(
-    "/chunks/{chunk_id}/model", response_model=ChunkModelView, status_code=status.HTTP_202_ACCEPTED, deprecated=True
-)
-def set_chunk_model(
-    chunk_id: str,
-    request: ChunkModelUpdateRequest,
-    response: Response,
-    services: Annotated[HubServices, Depends(get_services)],
-) -> ChunkModelView:
-    """Deprecated alias of ``PATCH /chunks/{id}`` (``{"model": ...}``, issue #104) —
-    repins a not-ready or ready-and-unclaimed chunk's model selection (issue #27,
-    widened by #120). Identical request/response body and ``EditService`` delegation
-    as before; only the deprecation marker and headers are new.
-
-    404 on an unknown chunk; 422 on a blank model; 409 once the chunk is claimed or
-    later (``running``, ``delivering``, ``waiting_on_human``, ``needs_human``,
-    ``paused``, ``done``, ``stopped`` — issue #120 widened the admit set to
-    ``{not_ready, ready}``, not further)."""
-    chunk = services.chunks.get(chunk_id)
-    if chunk is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
-    model = request.model.strip()
-    if not model:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="model must not be blank")
-    try:
-        services.edit.set_model(chunk, model=model)
-    except ChunkNotEditable as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
-    services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
-    mark_deprecated(response, successor=f"/api/chunks/{chunk_id}")
-    return ChunkModelView(chunk_id=chunk_id, model=model)
 
 
 @router.patch("/chunks/{chunk_id}", response_model=ChunkPatchResponse, status_code=status.HTTP_202_ACCEPTED)

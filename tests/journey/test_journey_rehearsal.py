@@ -10,7 +10,7 @@ repos (``toy-api`` + ``toy-web``) at the mock forge and ingested *by id* — eac
 chunk. Two related ones are **grouped** into a single chunk through the same
 ``POST /chunks/{id}/group`` the board's Group control calls, and that grouped chunk — the
 riskiest, because it spans both repos — is **moved to the top** of the ready queue through
-``POST /queue/reorder`` (the board's Prioritize control). The queue peek proves both took.
+the whole-order ``PUT /queue`` (the board's Prioritize control). The queue read proves both took.
 
 **The night (journey ¶1-2).** The runner is a **real** ``blizzard runner host`` daemon
 and the hub a **real** ``blizzard hub host`` daemon (the systemd units' ``ExecStart`` — see
@@ -35,7 +35,7 @@ declare. The facts-level invariant checker is green the instant after the crash,
 fleet continues: every chunk resumes at exactly the node the hub last recorded (criterion
 4 is the exhaustive proof; here it is the journey's "it didn't matter" clause).
 
-**The morning after (journey ¶2, verbatim).** ``blizzard hub answer`` resumes the parked
+**The morning after (journey ¶2, verbatim).** ``blizzard hub question answer`` resumes the parked
 chunk with no takeover, and it lands. The failed chunk's escalation command, run
 **verbatim**, drops into and resumes the stuck agent's session. Then: the succeeded chunks
 merged to bare ``main`` via the default graph; the full history + artifacts are visible at
@@ -410,9 +410,11 @@ def test_the_acceptance_journey_end_to_end(tmp_path: Path) -> None:
             assert grouped.json()["chunk_id"] == grp_api
             assert grp_web in grouped.json()["merged_chunk_ids"]
 
-            reordered = hub.post("/api/queue/reorder", json={"chunk_id": grp_api, "position": 0})
+            current = hub.get("/api/queue").json()["entries"]
+            rest = [e["chunk_id"] for e in current if e["chunk_id"] != grp_api]
+            reordered = hub.put("/api/queue", json={"chunk_ids": [grp_api, *rest]})
             assert reordered.status_code == 200, reordered.text
-            peek = hub.get("/api/queue/peek").json()["entries"]
+            peek = hub.get("/api/queue").json()["entries"]
             assert peek[0]["chunk_id"] == grp_api, f"riskiest not at the top of the queue: {peek}"
             assert grp_web not in {e["chunk_id"] for e in peek}, "the merged-away chunk still shows in the queue"
 
@@ -480,11 +482,11 @@ def test_the_acceptance_journey_end_to_end(tmp_path: Path) -> None:
             question = hub.get(f"/api/chunks/{ask}").json()["questions"][0]
             ask_session_id = question["session_id"]
             answered = subprocess.run(
-                [_blizzard_bin("blizzard"), "hub", "answer", question["question_id"], _ANSWER_SCRIPT,
-                 "--by", "alice", "--url", hub_url],
+                [_blizzard_bin("blizzard"), "hub", "question", "answer", question["question_id"], _ANSWER_SCRIPT,
+                 "--by", "alice", "--hub-url", hub_url],
                 capture_output=True, text=True,
             )  # fmt: skip
-            assert answered.returncode == 0, f"hub answer failed:\n{answered.stderr}"
+            assert answered.returncode == 0, f"hub question answer failed:\n{answered.stderr}"
 
             # ---------------------------------------------------------- #
             # Journey ¶2 — the morning after. Every succeeded chunk lands.
@@ -635,7 +637,7 @@ def _assert_morning_after(
 def _assert_hub_status_truthful(hub_url: str, chunks: dict[str, str]) -> None:
     """``blizzard hub status`` tells the truth about every chunk — derived, not written."""
     result = subprocess.run(
-        [_blizzard_bin("blizzard"), "hub", "status", "--url", hub_url],
+        [_blizzard_bin("blizzard"), "hub", "status", "--hub-url", hub_url],
         capture_output=True, text=True,
     )  # fmt: skip
     assert result.returncode == 0, f"hub status failed:\n{result.stderr}"

@@ -6,8 +6,8 @@ import { hubQueueKey } from '../query-keys';
 /**
  * Hub `GET /api/queue` read — the ready queue in the hub's explicit reorder +
  * grouping order, through TanStack Query and the generated hub client
- * (bzh:generated-client). `GET /api/queue/peek` is now a deprecated alias this
- * board no longer calls. Each entry carries its `position`, `graph_id`, and PM
+ * (bzh:generated-client). The `GET /api/queue/peek` alias was removed in issue #105,
+ * so this is the board's only ready-queue read. Each entry carries its `position`, `graph_id`, and PM
  * pointers so the board can render and reshape the queue. The live-update
  * service re-reads this on `queue-changed`/`chunk-changed`; the poll is the floor.
  */

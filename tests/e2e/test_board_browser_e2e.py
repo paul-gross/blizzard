@@ -380,7 +380,7 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 assert len(grouped["pm_pointers"]) == 2, (
                     f"survivor lost its union of pointers: {grouped['pm_pointers']}"
                 )
-                peek = hub.get("/api/queue/peek").json()["entries"]
+                peek = hub.get("/api/queue").json()["entries"]
                 assert [e["chunk_id"] for e in peek] == [chunk_b, chunk_a], f"reorder not honored: {peek}"
 
                 # --- FILL honors both: the grouped survivor is claimed FIRST ----------

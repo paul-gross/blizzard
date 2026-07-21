@@ -207,7 +207,7 @@ def test_answer_first_write_wins_second_gets_409_with_winner(tmp_path: Path) -> 
     chunk_id = _claim(hub)
     _ask(hub, chunk_id)
 
-    first = hub.client.post("/api/questions/qn_1/answer", json={"answer": "rest", "answered_by": "alice"})
+    first = hub.client.post("/api/questions/qn_1/answers", json={"answer": "rest", "answered_by": "alice"})
     assert first.status_code == 201, first.text
     assert first.json() == {
         "won": True,
@@ -219,7 +219,7 @@ def test_answer_first_write_wins_second_gets_409_with_winner(tmp_path: Path) -> 
     assert_all_timestamps_utc(first.json())  # bzh:utc-instants — answered_at
 
     # A racing second answer loses the CAS and is told who already answered.
-    second = hub.client.post("/api/questions/qn_1/answer", json={"answer": "graphql", "answered_by": "bob"})
+    second = hub.client.post("/api/questions/qn_1/answers", json={"answer": "graphql", "answered_by": "bob"})
     assert second.status_code == 409, second.text
     body = second.json()
     assert body["won"] is False
@@ -242,7 +242,7 @@ def test_answer_delivered_fact_is_accepted(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = _claim(hub)
     _ask(hub, chunk_id)
-    hub.client.post("/api/questions/qn_1/answer", json={"answer": "rest"})
+    hub.client.post("/api/questions/qn_1/answers", json={"answer": "rest"})
     resp = hub.client.post(
         "/api/fleet/events",
         json={
@@ -257,7 +257,7 @@ def test_answer_delivered_fact_is_accepted(tmp_path: Path) -> None:
 
 def test_answer_unknown_question_is_404(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    resp = hub.client.post("/api/questions/qn_missing/answer", json={"answer": "x"})
+    resp = hub.client.post("/api/questions/qn_missing/answers", json={"answer": "x"})
     assert resp.status_code == 404
 
 

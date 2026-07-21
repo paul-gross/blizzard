@@ -12,7 +12,7 @@ resolution moves the chunk. Two shapes write one:
   transition lands on a human-judged node (see :mod:`blizzard.hub.domain.apply`).
 
 Resolution — a person picking one choice — is first-write-wins at
-``POST /decisions/{id}/resolution`` (:class:`DecisionResolutionRequest`), exactly
+``POST /decisions/{id}/resolutions`` (:class:`DecisionResolutionRequest`), exactly
 like an answer. The holding runner picks the resolution up on PULL and records the
 resolving transition referencing ``decision_id``.
 """

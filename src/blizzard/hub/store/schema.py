@@ -438,7 +438,7 @@ hub_node_poll = Table(
 # never claimed by a runner. A ``chunk.promoted`` fact — appended by ``POST
 # /chunks/{id}/promote`` — flips it to ``ready`` (facts append, status derives). An
 # un-promoted chunk with no ``chunk_promoted`` row derives ``not_ready`` and so is
-# excluded from ``list_ready``/``/queue/peek``; existing chunks predating this table
+# excluded from ``list_ready``/``GET /api/queue``; existing chunks predating this table
 # have no row and are back-filled by the migration so they stay claimable.
 
 chunk_promoted = Table(
@@ -637,7 +637,7 @@ runner_high_water = Table(
 # --- Queue shaping: ready-queue ordering ----------------------
 #
 # Ready-queue ordering is an explicit hub-side property (the board's Prioritize
-# control): the operator moves a ready chunk to a position, and GET /queue/peek
+# control): the operator moves a ready chunk to a position, and GET /api/queue
 # honours it. Facts append, order derives: each reorder appends ONE row —
 # the moved chunk's new float ``position``, computed between its target neighbours —
 # and a chunk's effective position is its newest such fact, or its ``minted_at``

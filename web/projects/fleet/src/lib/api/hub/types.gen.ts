@@ -287,34 +287,6 @@ export type ChunkDetail = {
 };
 
 /**
- * ChunkGraphUpdateRequest
- *
- * Repin a not-ready or ready-unclaimed chunk's workflow graph (issue #27, #120) — the target graph's id.
- */
-export type ChunkGraphUpdateRequest = {
-    /**
-     * Graph Id
-     */
-    graph_id: string;
-};
-
-/**
- * ChunkGraphView
- *
- * A chunk's current graph selection — the read/write shape issue #27's board editor uses.
- */
-export type ChunkGraphView = {
-    /**
-     * Chunk Id
-     */
-    chunk_id: string;
-    /**
-     * Graph Id
-     */
-    graph_id: string;
-};
-
-/**
  * ChunkGroupRequest
  *
  * Merge unacquired chunks into one — the board's Group control.
@@ -382,34 +354,6 @@ export type ChunkIngestResponse = {
 };
 
 /**
- * ChunkModelUpdateRequest
- *
- * Repin a not-ready or ready-unclaimed chunk's model selection (issue #27, #120).
- */
-export type ChunkModelUpdateRequest = {
-    /**
-     * Model
-     */
-    model: string;
-};
-
-/**
- * ChunkModelView
- *
- * A chunk's current model selection — the read/write shape issue #27's board editor uses.
- */
-export type ChunkModelView = {
-    /**
-     * Chunk Id
-     */
-    chunk_id: string;
-    /**
-     * Model
-     */
-    model: string;
-};
-
-/**
  * ChunkPatchRequest
  *
  * The multi-field ``PATCH /chunks/{id}`` body (issue #124, in #104's shape) — every
@@ -441,9 +385,8 @@ export type ChunkPatchRequest = {
  * ChunkPatchResponse
  *
  * The result of one ``PATCH /chunks/{id}`` (issue #124) — the chunk's three
- * editable build properties after the edit, mirroring
- * :class:`ChunkGraphView`/:class:`ChunkModelView`'s single-field shape but carrying
- * all three since a PATCH can apply more than one at once.
+ * editable build properties after the edit, carried together since a PATCH can apply
+ * more than one at once.
  */
 export type ChunkPatchResponse = {
     /**
@@ -1868,38 +1811,6 @@ export type QueuePeekResponse = {
 };
 
 /**
- * QueueReorderRequest
- *
- * Move a ready chunk to a queue position — the board's Prioritize control.
- *
- * ``position`` is the target index in the ready queue, ``0`` being the top; it is
- * clamped into range, so ``0`` always means "to the front". Ordering is a hub-side
- * property: the move appends one position fact and the order re-derives.
- */
-export type QueueReorderRequest = {
-    /**
-     * Chunk Id
-     */
-    chunk_id: string;
-    /**
-     * Position
-     */
-    position?: number;
-};
-
-/**
- * QueueReorderResponse
- *
- * The ready queue after a reorder, in its new order — the board re-renders from it.
- */
-export type QueueReorderResponse = {
-    /**
-     * Entries
-     */
-    entries?: Array<QueuePeekEntry>;
-};
-
-/**
  * QueueReplaceRequest
  *
  * Idempotent whole-order replacement of the ready queue — ``PUT /api/queue``.
@@ -2519,36 +2430,6 @@ export type DetachChunkApiChunksChunkIdDetachPostResponses = {
 
 export type DetachChunkApiChunksChunkIdDetachPostResponse = DetachChunkApiChunksChunkIdDetachPostResponses[keyof DetachChunkApiChunksChunkIdDetachPostResponses];
 
-export type SetChunkGraphApiChunksChunkIdGraphPostData = {
-    body: ChunkGraphUpdateRequest;
-    path: {
-        /**
-         * Chunk Id
-         */
-        chunk_id: string;
-    };
-    query?: never;
-    url: '/api/chunks/{chunk_id}/graph';
-};
-
-export type SetChunkGraphApiChunksChunkIdGraphPostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type SetChunkGraphApiChunksChunkIdGraphPostError = SetChunkGraphApiChunksChunkIdGraphPostErrors[keyof SetChunkGraphApiChunksChunkIdGraphPostErrors];
-
-export type SetChunkGraphApiChunksChunkIdGraphPostResponses = {
-    /**
-     * Successful Response
-     */
-    202: ChunkGraphView;
-};
-
-export type SetChunkGraphApiChunksChunkIdGraphPostResponse = SetChunkGraphApiChunksChunkIdGraphPostResponses[keyof SetChunkGraphApiChunksChunkIdGraphPostResponses];
-
 export type GroupChunksApiChunksChunkIdGroupPostData = {
     body: ChunkGroupRequest;
     path: {
@@ -2617,36 +2498,6 @@ export type RecordHubMarkerApiChunksChunkIdHubMarkersPostResponses = {
 };
 
 export type RecordHubMarkerApiChunksChunkIdHubMarkersPostResponse = RecordHubMarkerApiChunksChunkIdHubMarkersPostResponses[keyof RecordHubMarkerApiChunksChunkIdHubMarkersPostResponses];
-
-export type SetChunkModelApiChunksChunkIdModelPostData = {
-    body: ChunkModelUpdateRequest;
-    path: {
-        /**
-         * Chunk Id
-         */
-        chunk_id: string;
-    };
-    query?: never;
-    url: '/api/chunks/{chunk_id}/model';
-};
-
-export type SetChunkModelApiChunksChunkIdModelPostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type SetChunkModelApiChunksChunkIdModelPostError = SetChunkModelApiChunksChunkIdModelPostErrors[keyof SetChunkModelApiChunksChunkIdModelPostErrors];
-
-export type SetChunkModelApiChunksChunkIdModelPostResponses = {
-    /**
-     * Successful Response
-     */
-    202: ChunkModelView;
-};
-
-export type SetChunkModelApiChunksChunkIdModelPostResponse = SetChunkModelApiChunksChunkIdModelPostResponses[keyof SetChunkModelApiChunksChunkIdModelPostResponses];
 
 export type PauseChunkApiChunksChunkIdPausePostData = {
     body: ChunkPauseRequest;
@@ -2843,36 +2694,6 @@ export type ListDecisionsApiDecisionsGetResponses = {
 };
 
 export type ListDecisionsApiDecisionsGetResponse = ListDecisionsApiDecisionsGetResponses[keyof ListDecisionsApiDecisionsGetResponses];
-
-export type ResolveDecisionSingularApiDecisionsDecisionIdResolutionPostData = {
-    body: DecisionResolutionRequest;
-    path: {
-        /**
-         * Decision Id
-         */
-        decision_id: string;
-    };
-    query?: never;
-    url: '/api/decisions/{decision_id}/resolution';
-};
-
-export type ResolveDecisionSingularApiDecisionsDecisionIdResolutionPostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ResolveDecisionSingularApiDecisionsDecisionIdResolutionPostError = ResolveDecisionSingularApiDecisionsDecisionIdResolutionPostErrors[keyof ResolveDecisionSingularApiDecisionsDecisionIdResolutionPostErrors];
-
-export type ResolveDecisionSingularApiDecisionsDecisionIdResolutionPostResponses = {
-    /**
-     * Successful Response
-     */
-    200: DecisionResolutionResponse;
-};
-
-export type ResolveDecisionSingularApiDecisionsDecisionIdResolutionPostResponse = ResolveDecisionSingularApiDecisionsDecisionIdResolutionPostResponses[keyof ResolveDecisionSingularApiDecisionsDecisionIdResolutionPostResponses];
 
 export type ResolveDecisionApiDecisionsDecisionIdResolutionsPostData = {
     body: DecisionResolutionRequest;
@@ -3579,36 +3400,6 @@ export type AskQuestionApiQuestionsPostResponses = {
 
 export type AskQuestionApiQuestionsPostResponse = AskQuestionApiQuestionsPostResponses[keyof AskQuestionApiQuestionsPostResponses];
 
-export type AnswerQuestionSingularApiQuestionsQuestionIdAnswerPostData = {
-    body: AnswerRequest;
-    path: {
-        /**
-         * Question Id
-         */
-        question_id: string;
-    };
-    query?: never;
-    url: '/api/questions/{question_id}/answer';
-};
-
-export type AnswerQuestionSingularApiQuestionsQuestionIdAnswerPostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type AnswerQuestionSingularApiQuestionsQuestionIdAnswerPostError = AnswerQuestionSingularApiQuestionsQuestionIdAnswerPostErrors[keyof AnswerQuestionSingularApiQuestionsQuestionIdAnswerPostErrors];
-
-export type AnswerQuestionSingularApiQuestionsQuestionIdAnswerPostResponses = {
-    /**
-     * Successful Response
-     */
-    201: AnswerResult;
-};
-
-export type AnswerQuestionSingularApiQuestionsQuestionIdAnswerPostResponse = AnswerQuestionSingularApiQuestionsQuestionIdAnswerPostResponses[keyof AnswerQuestionSingularApiQuestionsQuestionIdAnswerPostResponses];
-
 export type AnswerQuestionApiQuestionsQuestionIdAnswersPostData = {
     body: AnswerRequest;
     path: {
@@ -3679,47 +3470,6 @@ export type ReplaceQueueApiQueuePutResponses = {
 };
 
 export type ReplaceQueueApiQueuePutResponse = ReplaceQueueApiQueuePutResponses[keyof ReplaceQueueApiQueuePutResponses];
-
-export type PeekQueueApiQueuePeekGetData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/queue/peek';
-};
-
-export type PeekQueueApiQueuePeekGetResponses = {
-    /**
-     * Successful Response
-     */
-    200: QueuePeekResponse;
-};
-
-export type PeekQueueApiQueuePeekGetResponse = PeekQueueApiQueuePeekGetResponses[keyof PeekQueueApiQueuePeekGetResponses];
-
-export type ReorderQueueApiQueueReorderPostData = {
-    body: QueueReorderRequest;
-    path?: never;
-    query?: never;
-    url: '/api/queue/reorder';
-};
-
-export type ReorderQueueApiQueueReorderPostErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ReorderQueueApiQueueReorderPostError = ReorderQueueApiQueueReorderPostErrors[keyof ReorderQueueApiQueueReorderPostErrors];
-
-export type ReorderQueueApiQueueReorderPostResponses = {
-    /**
-     * Successful Response
-     */
-    200: QueueReorderResponse;
-};
-
-export type ReorderQueueApiQueueReorderPostResponse = ReorderQueueApiQueueReorderPostResponses[keyof ReorderQueueApiQueueReorderPostResponses];
 
 export type ReadyApiReadyGetData = {
     body?: never;

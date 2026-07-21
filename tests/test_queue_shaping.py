@@ -1,7 +1,7 @@
-"""Queue shaping — ready-queue reorder and grouping, component tier.
+"""Queue shaping — ready-queue ordering and grouping, component tier.
 
-Drives the real hub over a tmp store: ``GET /queue/peek`` honours the explicit order,
-``POST /queue/reorder`` moves a ready chunk, and ``POST /chunks/{id}/group`` merges
+Drives the real hub over a tmp store: ``GET /api/queue`` honours the explicit order,
+``PUT /api/queue`` replaces the whole order, and ``POST /chunks/{id}/group`` merges
 unacquired chunks into one surviving chunk. Ordering and grouping are fact-derived,
 so every assertion reads the derived surface, never a stored column.
 """
@@ -33,7 +33,7 @@ def _ingest(hub: HubHarness, n: int) -> str:
 
 
 def _peek_ids(hub: HubHarness) -> list[str]:
-    resp = hub.client.get("/api/queue/peek")
+    resp = hub.client.get("/api/queue")
     assert resp.status_code == 200, resp.text
     return [e["chunk_id"] for e in resp.json()["entries"]]
 
@@ -44,22 +44,18 @@ def test_peek_is_fifo_by_mint_before_any_reorder(tmp_path: Path) -> None:
     assert _peek_ids(hub) == [a, b, c]
 
 
-def test_reorder_to_top_and_to_a_position(tmp_path: Path) -> None:
+def test_whole_order_replace_moves_a_chunk_to_top_and_to_the_bottom(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     a, b, c = _ingest(hub, 1), _ingest(hub, 2), _ingest(hub, 3)
 
-    # Move c to the top.
-    resp = hub.client.post("/api/queue/reorder", json={"chunk_id": c, "position": 0})
+    # Move c to the top — naming only c, the rest keep their relative FIFO order behind it.
+    resp = hub.client.put("/api/queue", json={"chunk_ids": [c]})
     assert resp.status_code == 200, resp.text
     assert [e["chunk_id"] for e in resp.json()["entries"]] == [c, a, b]
-    assert _peek_ids(hub) == [c, a, b]  # the peek honours it
+    assert _peek_ids(hub) == [c, a, b]  # the read honours it
 
-    # Move a to the middle (index 1 of the current [c, a, b] with a removed → [c, b]).
-    hub.client.post("/api/queue/reorder", json={"chunk_id": a, "position": 1})
-    assert _peek_ids(hub) == [c, a, b]
-
-    # Move c to the bottom.
-    hub.client.post("/api/queue/reorder", json={"chunk_id": c, "position": 99})
+    # Move c to the bottom — name the other two, c falls in behind them.
+    hub.client.put("/api/queue", json={"chunk_ids": [a, b]})
     assert _peek_ids(hub) == [a, b, c]
 
 
@@ -138,26 +134,6 @@ def test_same_instant_pause_and_resume_resolve_by_write_order(tmp_path: Path) ->
     write_chunk_pause_facts(tmp_path, a, (True, now), (False, now))
     assert hub.client.get(f"/api/chunks/{a}").json()["status"] == "ready"
     assert _peek_ids(hub) == [a, b]
-
-
-def test_reorder_unknown_chunk_is_404(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path)
-    resp = hub.client.post("/api/queue/reorder", json={"chunk_id": "ch_nope", "position": 0})
-    assert resp.status_code == 404
-
-
-def test_reorder_non_ready_chunk_is_409(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path)
-    a = _ingest(hub, 1)
-    # Claim it so it derives running, not ready.
-    claim = hub.client.post(
-        "/api/fleet/routes",
-        json={"chunk_id": a, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
-    )
-    assert claim.status_code == 201, claim.text
-    resp = hub.client.post("/api/queue/reorder", json={"chunk_id": a, "position": 0})
-    assert resp.status_code == 409
-    assert "not ready" in resp.json()["detail"]
 
 
 def test_group_merges_pointers_and_discards_the_rest(tmp_path: Path) -> None:

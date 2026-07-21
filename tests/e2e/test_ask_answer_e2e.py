@@ -8,7 +8,7 @@ question lands at the hub, the reap clock stops, and it derives **waiting_on_hum
 The park is then proven **inert**: several more ticks advance with the dormant lease
 never reaped, never re-elicited, and no retry consumed — the chunk stays
 waiting_on_human on the same single open question.
-A human answers at the hub with ``blizzard hub answer``; the runner picks the answer up
+A human answers at the hub with ``blizzard hub question answer``; the runner picks the answer up
 on its next tick and **resumes the dormant session** around it — same session — and the
 resumed worker commits the change. The chunk then walks build→review→deliver to
 **done**, and the mock's persisted session state proves the same session was resumed.
@@ -62,7 +62,7 @@ pytestmark = [
 # build turn 1: ask an undecidable question and exit (ask-and-exit). The mock's ask()
 # shells out to the real `blizzard runner ask` (BLIZZARD_RUNNER_ASK_CMD) before exiting.
 _ASK_SCRIPT = 'ask("Which API style should the endpoint use?", ["rest", "graphql"])\n'
-# The human's answer, delivered as `blizzard hub answer <qid> "<script>"`. It arrives as
+# The human's answer, delivered as `blizzard hub question answer <qid> "<script>"`. It arrives as
 # the resume message (the mock execs it): it makes the real commit the build node owes.
 _ANSWER_SCRIPT = (
     "import subprocess, pathlib\n"
@@ -274,23 +274,24 @@ def test_ask_parks_then_answer_resumes_session_to_done(tmp_path: Path) -> None:
                 f"the reap clock was not stopped — the question set changed while parked: {open_qs}"
             )
 
-            # The human answers at the hub via the real `blizzard hub answer` verb.
+            # The human answers at the hub via the real `blizzard hub question answer` verb.
             answered = subprocess.run(
                 [
                     str(Path(sys.executable).parent / "blizzard"),
                     "hub",
+                    "question",
                     "answer",
                     question_id,
                     _ANSWER_SCRIPT,
                     "--by",
                     "alice",
-                    "--url",
+                    "--hub-url",
                     f"http://127.0.0.1:{hub_port}",
                 ],
                 capture_output=True,
                 text=True,
             )
-            assert answered.returncode == 0, f"hub answer failed:\n{answered.stderr}"
+            assert answered.returncode == 0, f"hub question answer failed:\n{answered.stderr}"
 
             # Phase 2: the runner resumes the dormant session with the answer and lands.
             status = _tick_until(config, hub, chunk_id, fenced, {"done", "needs_human", "stopped"}, 120.0)

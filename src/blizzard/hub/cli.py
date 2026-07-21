@@ -8,11 +8,9 @@ for user output is fine here (``bzh:structlog-logging``); diagnostics go through
 structlog inside the runtime and app.
 
 The operator verbs are grouped by noun (``chunk``/``runner``/``graph``/``queue``/
-``decision``/``question``) rather than flat at the top level (issue #104). Every verb
-that used to live at the top level stays registered — ``hidden=True`` — as a thin alias
-that warns on stderr and delegates to its group successor via ``ctx.invoke``, so a
-script shelling the old spelling keeps working. ``status`` is the one operator verb that
-stays top-level: it is a cross-resource dashboard, not one resource's own noun."""
+``decision``/``question``) rather than flat at the top level (issue #104). ``status`` is
+the one operator verb that stays top-level: it is a cross-resource dashboard, not one
+resource's own noun."""
 
 from __future__ import annotations
 
@@ -56,20 +54,8 @@ def _hub_url(override: str | None) -> str:
     return override or os.environ.get(ENV_HUB_URL, DEFAULT_HUB_URL)
 
 
-def _resolve_hub_url(hub_url: str | None, url: str | None) -> str | None:
-    """Merge ``--hub-url``/``--url`` (issue #104): ``--url`` is the deprecated alias,
-    kept working on every verb, not just ``status``/``answer`` — it warns on stderr
-    and, when ``--hub-url`` was not also given, feeds its value through unchanged."""
-    if url is not None:
-        click.echo("warning: --url is deprecated; use --hub-url", err=True)
-        if hub_url is None:
-            return url
-    return hub_url
-
-
 def _hub_url_options(f: Callable[..., object]) -> Callable[..., object]:
-    """``--hub-url`` + the hidden ``--url`` alias, uniform across every operator verb."""
-    f = click.option("--url", "url", default=None, hidden=True, help="Deprecated alias of --hub-url.")(f)
+    """``--hub-url``, uniform across every operator verb."""
     f = click.option(
         "--hub-url", "hub_url", default=None, help=f"Hub API base URL (default ${ENV_HUB_URL} or {DEFAULT_HUB_URL})."
     )(f)
@@ -82,10 +68,6 @@ def _json_option(f: Callable[..., object]) -> Callable[..., object]:
     return click.option("--json", "as_json", is_flag=True, default=False, help="Print the raw response body as JSON.")(
         f
     )
-
-
-def _warn_deprecated(old: str, new: str) -> None:
-    click.echo(f"warning: `{old}` is deprecated; use `{new}`", err=True)
 
 
 def _api_error(operation: str, exc: Exception) -> click.ClickException:
@@ -277,13 +259,13 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
 @hub.command()
 @_json_option
 @_hub_url_options
-def status(as_json: bool, hub_url: str | None, url: str | None) -> None:
+def status(as_json: bool, hub_url: str | None) -> None:
     """The fleet view: every chunk with its derived status, the runners, and open questions.
 
     A pure client of the hub API: ``GET /chunks`` + ``GET /runners`` +
     ``GET /questions`` + ``GET /spend`` (issue #60), the same facts the board
     renders, in the terminal."""
-    base = _resolve_hub_url(hub_url, url)
+    base = hub_url
     chunks = _request("get", "/api/chunks", hub_url=base)
     _check(chunks, "GET /chunks")
     runners = _request("get", "/api/runners", hub_url=base)
@@ -394,9 +376,9 @@ def chunk_group() -> None:
 @chunk_group.command("list")
 @_json_option
 @_hub_url_options
-def chunk_list(as_json: bool, hub_url: str | None, url: str | None) -> None:
+def chunk_list(as_json: bool, hub_url: str | None) -> None:
     """The fleet chunk list — derived status per chunk."""
-    base = _resolve_hub_url(hub_url, url)
+    base = hub_url
     resp = _request("get", "/api/chunks", hub_url=base)
     _check(resp, "GET /chunks")
     rows = resp.json()
@@ -417,9 +399,9 @@ def chunk_list(as_json: bool, hub_url: str | None, url: str | None) -> None:
 @click.argument("chunk_id")
 @_json_option
 @_hub_url_options
-def chunk_show(chunk_id: str, as_json: bool, hub_url: str | None, url: str | None) -> None:
+def chunk_show(chunk_id: str, as_json: bool, hub_url: str | None) -> None:
     """One chunk's full aggregate — status, current node, route, pointers, cost."""
-    base = _resolve_hub_url(hub_url, url)
+    base = hub_url
     resp = _request("get", f"/api/chunks/{chunk_id}", hub_url=base)
     _check(resp, "GET /chunks/{id}", on_status={404: f"unknown chunk {chunk_id}"})
     detail = resp.json()
@@ -446,7 +428,7 @@ def chunk_show(chunk_id: str, as_json: bool, hub_url: str | None, url: str | Non
 @click.argument("pointers", nargs=-1, required=True)
 @_json_option
 @_hub_url_options
-def chunk_ingest(pointers: tuple[str, ...], as_json: bool, hub_url: str | None, url: str | None) -> None:
+def chunk_ingest(pointers: tuple[str, ...], as_json: bool, hub_url: str | None) -> None:
     """Ingest PM items by token, minting a chunk.
 
     Each POINTER is a source-native token — ``source:ref`` (e.g. ``blizzard:26``),
@@ -455,7 +437,7 @@ def chunk_ingest(pointers: tuple[str, ...], as_json: bool, hub_url: str | None, 
     The hub resolves each token against its configured PM sources and 422s one none
     of them claims, naming the token and what is configured; 409 when a resolved
     pointer is already held by a live chunk."""
-    base = _resolve_hub_url(hub_url, url)
+    base = hub_url
     tokens = [_parse_pointer(p) for p in pointers]
     resp = _request("post", "/api/chunks", hub_url=base, json_body={"tokens": tokens})
     if resp.status_code == httpx.codes.CONFLICT:
@@ -478,9 +460,7 @@ def chunk_ingest(pointers: tuple[str, ...], as_json: bool, hub_url: str | None, 
 @click.option("--model", "model", default=None, help="Repin CHUNK's model selection.")
 @_json_option
 @_hub_url_options
-def chunk_set(
-    chunk_id: str, graph_id: str | None, model: str | None, as_json: bool, hub_url: str | None, url: str | None
-) -> None:
+def chunk_set(chunk_id: str, graph_id: str | None, model: str | None, as_json: bool, hub_url: str | None) -> None:
     """Repin CHUNK's graph and/or model in one call (issue #104).
 
     A pure client of ``PATCH /api/chunks/{id}``, naming whichever of ``graph_id``/
@@ -490,7 +470,7 @@ def chunk_set(
     is the standing-migration-intent sibling of this verb."""
     if graph_id is None and model is None:
         raise click.UsageError("at least one of --graph/--model is required")
-    base = _resolve_hub_url(hub_url, url)
+    base = hub_url
     body: dict[str, object] = {}
     if graph_id is not None:
         body["graph_id"] = graph_id
@@ -518,12 +498,12 @@ def chunk_set(
 @click.argument("chunk_id")
 @_json_option
 @_hub_url_options
-def chunk_promote(chunk_id: str, as_json: bool, hub_url: str | None, url: str | None) -> None:
+def chunk_promote(chunk_id: str, as_json: bool, hub_url: str | None) -> None:
     """Promote a not-ready CHUNK to ready so a runner may claim it.
 
     A pure client of the hub API: ``POST /api/chunks/{id}/promote``. Idempotent — promoting
     an already-ready chunk is a harmless no-op; 404 only when the chunk is unknown."""
-    base = _resolve_hub_url(hub_url, url)
+    base = hub_url
     resp = _request("post", f"/api/chunks/{chunk_id}/promote", hub_url=base)
     _check(resp, "POST /chunks/{id}/promote", on_status={404: f"no such chunk {chunk_id}"})
     _finish(resp, as_json, f"promoted {chunk_id} — now ready for a runner to claim")
@@ -534,13 +514,13 @@ def chunk_promote(chunk_id: str, as_json: bool, hub_url: str | None, url: str | 
 @click.option("--by", "by", default="operator", help="Who is pausing (recorded on the fact).")
 @_json_option
 @_hub_url_options
-def chunk_pause(chunk_id: str, by: str, as_json: bool, hub_url: str | None, url: str | None) -> None:
+def chunk_pause(chunk_id: str, by: str, as_json: bool, hub_url: str | None) -> None:
     """Pause CHUNK — the runner kills and parks the worker but keeps the claim (issue #46).
 
     A pure client of the hub API: ``POST /api/chunks/{id}/pause``. Unlike ``detach``, no
     route is released and no retry is consumed. 409 when the chunk is done/stopped/
     delivering."""
-    base = _resolve_hub_url(hub_url, url)
+    base = hub_url
     resp = _request("post", f"/api/chunks/{chunk_id}/pause", hub_url=base, json_body={"by": by})
     _check(resp, "POST /chunks/{id}/pause", on_status={409: "chunk is not pausable", 404: f"no such chunk {chunk_id}"})
     _finish(resp, as_json, f"paused {chunk_id} — its worker will be killed and parked, keeping the claim")
@@ -551,12 +531,12 @@ def chunk_pause(chunk_id: str, by: str, as_json: bool, hub_url: str | None, url:
 @click.option("--by", "by", default="operator", help="Who is resuming (recorded on the fact).")
 @_json_option
 @_hub_url_options
-def chunk_resume(chunk_id: str, by: str, as_json: bool, hub_url: str | None, url: str | None) -> None:
+def chunk_resume(chunk_id: str, by: str, as_json: bool, hub_url: str | None) -> None:
     """Resume a paused CHUNK — the runner resumes the parked worker in place (issue #46).
 
     A pure client of the hub API: ``POST /api/chunks/{id}/resume``. Idempotent: resuming
     an unpaused chunk is a harmless no-op. 404 only when the chunk is unknown."""
-    base = _resolve_hub_url(hub_url, url)
+    base = hub_url
     resp = _request("post", f"/api/chunks/{chunk_id}/resume", hub_url=base, json_body={"by": by})
     _check(resp, "POST /chunks/{id}/resume", on_status={404: f"no such chunk {chunk_id}"})
     _finish(resp, as_json, f"resumed {chunk_id} — its worker resumes in place")
@@ -566,13 +546,13 @@ def chunk_resume(chunk_id: str, by: str, as_json: bool, hub_url: str | None, url
 @click.argument("chunk_id")
 @_json_option
 @_hub_url_options
-def chunk_detach(chunk_id: str, as_json: bool, hub_url: str | None, url: str | None) -> None:
+def chunk_detach(chunk_id: str, as_json: bool, hub_url: str | None) -> None:
     """Forcibly release CHUNK from its runner.
 
     A pure client of the hub API: ``POST /api/chunks/{id}/detach``. The chunk re-derives
     ready and is re-claimable at its current node; the holding runner releases it on its
     next tick. 409 when the chunk has no live route to release."""
-    base = _resolve_hub_url(hub_url, url)
+    base = hub_url
     resp = _request("post", f"/api/chunks/{chunk_id}/detach", hub_url=base)
     _check(
         resp, "POST /chunks/{id}/detach", on_status={409: "chunk has no live route", 404: f"no such chunk {chunk_id}"}
@@ -584,9 +564,9 @@ def chunk_detach(chunk_id: str, as_json: bool, hub_url: str | None, url: str | N
 @click.argument("chunk_id")
 @_json_option
 @_hub_url_options
-def chunk_requeue(chunk_id: str, as_json: bool, hub_url: str | None, url: str | None) -> None:
+def chunk_requeue(chunk_id: str, as_json: bool, hub_url: str | None) -> None:
     """Close an escalation by supersession: requeue CHUNK at its current node."""
-    base = _resolve_hub_url(hub_url, url)
+    base = hub_url
     resp = _request("post", f"/api/chunks/{chunk_id}/requeues", hub_url=base)
     _check(
         resp,
@@ -601,7 +581,7 @@ def chunk_requeue(chunk_id: str, as_json: bool, hub_url: str | None, url: str | 
 @click.option("--by", "by", default="operator", help="Who is stopping (recorded on the fact).")
 @_json_option
 @_hub_url_options
-def chunk_stop(chunk_id: str, by: str, as_json: bool, hub_url: str | None, url: str | None) -> None:
+def chunk_stop(chunk_id: str, by: str, as_json: bool, hub_url: str | None) -> None:
     """Terminally abandon CHUNK — the operator's last-resort verb (issue #118).
 
     A pure client of the hub API: ``POST /api/chunks/{id}/stop``. The chunk derives
@@ -610,7 +590,7 @@ def chunk_stop(chunk_id: str, by: str, as_json: bool, hub_url: str | None, url: 
     separate ``detach`` needed. 409 when the chunk is already done/stopped. There is no
     ``un-stop``. Not named in issue #104's own grammar (it predates it, #118) but kept
     as a full ``chunk`` group member rather than dropped."""
-    base = _resolve_hub_url(hub_url, url)
+    base = hub_url
     resp = _request("post", f"/api/chunks/{chunk_id}/stop", hub_url=base, json_body={"by": by})
     _check(resp, "POST /chunks/{id}/stop", on_status={409: "chunk is not stoppable", 404: f"no such chunk {chunk_id}"})
     _finish(resp, as_json, f"stopped {chunk_id} — terminally abandoned, its route (if any) released")
@@ -634,7 +614,6 @@ def chunk_migrate(
     cancel: bool,
     as_json: bool,
     hub_url: str | None,
-    url: str | None,
 ) -> None:
     """Set, overwrite, or clear CHUNK's standing migration intent (issue #124).
 
@@ -662,7 +641,7 @@ def chunk_migrate(
             intended["node"] = node
         body = {"intended_migration": intended}
 
-    base = _resolve_hub_url(hub_url, url)
+    base = hub_url
     resp = _request("patch", f"/api/chunks/{chunk_id}", hub_url=base, json_body=body)
     _check(
         resp,
@@ -698,15 +677,13 @@ def chunk_migrate(
 @click.argument("merge_ids", nargs=-1, required=True)
 @_json_option
 @_hub_url_options
-def chunk_group_cmd(
-    chunk_id: str, merge_ids: tuple[str, ...], as_json: bool, hub_url: str | None, url: str | None
-) -> None:
+def chunk_group_cmd(chunk_id: str, merge_ids: tuple[str, ...], as_json: bool, hub_url: str | None) -> None:
     """Merge MERGE_IDS into CHUNK_ID, the survivor — the board's Group control.
 
     A pure client of ``POST /api/chunks/{id}/group``: every merge id must currently be
     a ready, unacquired chunk (409 otherwise); the survivor absorbs the union of every
     merged chunk's PM pointers."""
-    base = _resolve_hub_url(hub_url, url)
+    base = hub_url
     resp = _request(
         "post", f"/api/chunks/{chunk_id}/group", hub_url=base, json_body={"merge_chunk_ids": list(merge_ids)}
     )
@@ -727,12 +704,12 @@ def chunk_group_cmd(
 @click.argument("chunk_id")
 @_json_option
 @_hub_url_options
-def chunk_pm(chunk_id: str, as_json: bool, hub_url: str | None, url: str | None) -> None:
+def chunk_pm(chunk_id: str, as_json: bool, hub_url: str | None) -> None:
     """CHUNK's PM items, pass-through — one entry per pointer, vendor-native.
 
     A pure client of ``GET /api/chunks/{id}/pm-items``; a per-pointer forge failure
     degrades to that entry's own ``error`` rather than failing the whole read."""
-    base = _resolve_hub_url(hub_url, url)
+    base = hub_url
     resp = _request("get", f"/api/chunks/{chunk_id}/pm-items", hub_url=base)
     _check(resp, "GET /chunks/{id}/pm-items", on_status={404: f"unknown chunk {chunk_id}"})
     body = resp.json()
@@ -764,9 +741,9 @@ def runner_group() -> None:
 @runner_group.command("list")
 @_json_option
 @_hub_url_options
-def runner_list(as_json: bool, hub_url: str | None, url: str | None) -> None:
+def runner_list(as_json: bool, hub_url: str | None) -> None:
     """The fleet registry — every runner with derived liveness + paused state."""
-    base = _resolve_hub_url(hub_url, url)
+    base = hub_url
     resp = _request("get", "/api/runners", hub_url=base)
     _check(resp, "GET /runners")
     body = resp.json()
@@ -793,9 +770,9 @@ def runner_list(as_json: bool, hub_url: str | None, url: str | None) -> None:
 @click.argument("runner_id")
 @_json_option
 @_hub_url_options
-def runner_show(runner_id: str, as_json: bool, hub_url: str | None, url: str | None) -> None:
+def runner_show(runner_id: str, as_json: bool, hub_url: str | None) -> None:
     """One runner's derived liveness + paused state, symmetric with ``runner list``."""
-    base = _resolve_hub_url(hub_url, url)
+    base = hub_url
     resp = _request("get", f"/api/runners/{runner_id}", hub_url=base)
     _check(resp, "GET /runners/{id}", on_status={404: f"unknown runner {runner_id}"})
     body = resp.json()
@@ -812,9 +789,9 @@ def runner_show(runner_id: str, as_json: bool, hub_url: str | None, url: str | N
 @click.option("--by", "by", default="operator", help="Who is pausing (recorded on the fact).")
 @_json_option
 @_hub_url_options
-def runner_pause(runner_id: str, by: str, as_json: bool, hub_url: str | None, url: str | None) -> None:
+def runner_pause(runner_id: str, by: str, as_json: bool, hub_url: str | None) -> None:
     """Pause a runner — it stops claiming new work; in-flight chunks run on."""
-    _set_runner_pause(runner_id, verb="pause", by=by, hub_url=_resolve_hub_url(hub_url, url), as_json=as_json)
+    _set_runner_pause(runner_id, verb="pause", by=by, hub_url=hub_url, as_json=as_json)
 
 
 @runner_group.command("resume")
@@ -822,9 +799,9 @@ def runner_pause(runner_id: str, by: str, as_json: bool, hub_url: str | None, ur
 @click.option("--by", "by", default="operator", help="Who is resuming (recorded on the fact).")
 @_json_option
 @_hub_url_options
-def runner_resume(runner_id: str, by: str, as_json: bool, hub_url: str | None, url: str | None) -> None:
+def runner_resume(runner_id: str, by: str, as_json: bool, hub_url: str | None) -> None:
     """Resume a paused runner — it claims work again on its next pull."""
-    _set_runner_pause(runner_id, verb="resume", by=by, hub_url=_resolve_hub_url(hub_url, url), as_json=as_json)
+    _set_runner_pause(runner_id, verb="resume", by=by, hub_url=hub_url, as_json=as_json)
 
 
 def _set_runner_pause(runner_id: str, *, verb: str, by: str, hub_url: str | None, as_json: bool) -> None:
@@ -845,14 +822,14 @@ def _set_runner_pause(runner_id: str, *, verb: str, by: str, hub_url: str | None
 @click.argument("runner_id")
 @_json_option
 @_hub_url_options
-def runner_enroll(runner_id: str, as_json: bool, hub_url: str | None, url: str | None) -> None:
+def runner_enroll(runner_id: str, as_json: bool, hub_url: str | None) -> None:
     """Mint (or rotate) RUNNER_ID's bearer token; prints the plaintext exactly once.
 
     A thin client of ``POST /runners/{id}/enrollments`` (issue #86a). Re-running
     rotates: the old token stops resolving immediately. RUNNER_ID must already be
     registered at the hub (404 otherwise) — enrollment is a deliberate operator act,
     not a trust-on-first-use grant."""
-    base = _resolve_hub_url(hub_url, url)
+    base = hub_url
     resp = _request("post", f"/api/runners/{runner_id}/enrollments", hub_url=base)
     _check(resp, "POST /runners/{id}/enrollments", on_status={404: f"unknown runner {runner_id}"})
     body = resp.json()
@@ -875,9 +852,9 @@ def graph_group() -> None:
 @graph_group.command("list")
 @_json_option
 @_hub_url_options
-def graph_list(as_json: bool, hub_url: str | None, url: str | None) -> None:
+def graph_list(as_json: bool, hub_url: str | None) -> None:
     """List every minted graph, newest first — name, graph_id, effective, retired."""
-    base = _resolve_hub_url(hub_url, url)
+    base = hub_url
     resp = _request("get", "/api/graphs", hub_url=base)
     _check(resp, "GET /graphs")
     rows = resp.json()
@@ -896,9 +873,9 @@ def graph_list(as_json: bool, hub_url: str | None, url: str | None) -> None:
 @click.argument("graph_id")
 @_json_option
 @_hub_url_options
-def graph_show(graph_id: str, as_json: bool, hub_url: str | None, url: str | None) -> None:
+def graph_show(graph_id: str, as_json: bool, hub_url: str | None) -> None:
     """One graph's full reified definition — nodes and edges."""
-    base = _resolve_hub_url(hub_url, url)
+    base = hub_url
     resp = _request("get", f"/api/graphs/{graph_id}", hub_url=base)
     _check(resp, "GET /graphs/{id}", on_status={404: f"unknown graph {graph_id}"})
     body = resp.json()
@@ -917,7 +894,7 @@ def graph_show(graph_id: str, as_json: bool, hub_url: str | None, url: str | Non
 @click.argument("path")
 @_json_option
 @_hub_url_options
-def graph_mint(path: str, as_json: bool, hub_url: str | None, url: str | None) -> None:
+def graph_mint(path: str, as_json: bool, hub_url: str | None) -> None:
     """Mint a graph from PATH's YAML definition; PATH may be ``-`` to read stdin.
 
     A file PATH inlines ``prompt``/``prompt_addendum`` file references relative to its
@@ -926,7 +903,7 @@ def graph_mint(path: str, as_json: bool, hub_url: str | None, url: str | None) -
     (``-``) carries no such directory, so its YAML posts verbatim — already-inlined
     prose expected. Renders the full validation report (every error and warning) on a
     422, not just the errors (issue #104; supersedes the former ``graph upload``)."""
-    base = _resolve_hub_url(hub_url, url)
+    base = hub_url
     if path == "-":
         definition_yaml = click.get_text_stream("stdin").read()
     else:
@@ -956,9 +933,9 @@ def graph_mint(path: str, as_json: bool, hub_url: str | None, url: str | None) -
 @click.option("--by", "by", default="operator", help="Who is retiring (recorded on the fact).")
 @_json_option
 @_hub_url_options
-def graph_retire(graph_id: str, by: str, as_json: bool, hub_url: str | None, url: str | None) -> None:
+def graph_retire(graph_id: str, by: str, as_json: bool, hub_url: str | None) -> None:
     """Retire GRAPH_ID — excludes it from name resolution; in-flight chunks run on."""
-    _set_graph_lifecycle(graph_id, verb="retire", by=by, hub_url=_resolve_hub_url(hub_url, url), as_json=as_json)
+    _set_graph_lifecycle(graph_id, verb="retire", by=by, hub_url=hub_url, as_json=as_json)
 
 
 @graph_group.command("enable")
@@ -966,9 +943,9 @@ def graph_retire(graph_id: str, by: str, as_json: bool, hub_url: str | None, url
 @click.option("--by", "by", default="operator", help="Who is re-enabling (recorded on the fact).")
 @_json_option
 @_hub_url_options
-def graph_enable(graph_id: str, by: str, as_json: bool, hub_url: str | None, url: str | None) -> None:
+def graph_enable(graph_id: str, by: str, as_json: bool, hub_url: str | None) -> None:
     """Re-enable a retired GRAPH_ID — restores normal newest-per-name derivation."""
-    _set_graph_lifecycle(graph_id, verb="enable", by=by, hub_url=_resolve_hub_url(hub_url, url), as_json=as_json)
+    _set_graph_lifecycle(graph_id, verb="enable", by=by, hub_url=hub_url, as_json=as_json)
 
 
 def _set_graph_lifecycle(graph_id: str, *, verb: str, by: str, hub_url: str | None, as_json: bool) -> None:
@@ -995,9 +972,9 @@ def queue_group() -> None:
 @queue_group.command("show")
 @_json_option
 @_hub_url_options
-def queue_show(as_json: bool, hub_url: str | None, url: str | None) -> None:
+def queue_show(as_json: bool, hub_url: str | None) -> None:
     """The hub-ordered ready queue, read-only — a client of ``GET /api/queue``."""
-    base = _resolve_hub_url(hub_url, url)
+    base = hub_url
     resp = _request("get", "/api/queue", hub_url=base)
     _check(resp, "GET /queue")
     body = resp.json()
@@ -1016,14 +993,14 @@ def queue_show(as_json: bool, hub_url: str | None, url: str | None) -> None:
 @click.argument("chunk_ids", nargs=-1, required=True)
 @_json_option
 @_hub_url_options
-def queue_set(chunk_ids: tuple[str, ...], as_json: bool, hub_url: str | None, url: str | None) -> None:
+def queue_set(chunk_ids: tuple[str, ...], as_json: bool, hub_url: str | None) -> None:
     """Replace the whole ready-queue order with CHUNK_IDS, front to back.
 
     A pure client of ``PUT /api/queue`` — an idempotent whole-order replacement
     (issue #104). Every id must currently be a ready chunk (409 otherwise) and must
     not repeat (422); a ready chunk not named keeps its current relative order,
     appended after the named ones."""
-    base = _resolve_hub_url(hub_url, url)
+    base = hub_url
     resp = _request("put", "/api/queue", hub_url=base, json_body={"chunk_ids": list(chunk_ids)})
     _check(
         resp,
@@ -1042,21 +1019,21 @@ def queue_set(chunk_ids: tuple[str, ...], as_json: bool, hub_url: str | None, ur
 @click.argument("position", type=int)
 @_json_option
 @_hub_url_options
-def queue_move(chunk_id: str, position: int, as_json: bool, hub_url: str | None, url: str | None) -> None:
+def queue_move(chunk_id: str, position: int, as_json: bool, hub_url: str | None) -> None:
     """Move CHUNK_ID to POSITION in the ready queue (``0`` is the front).
 
-    A thin client of the deprecated single-move ``POST /api/queue/reorder`` rather
-    than composing a whole-order ``queue set`` client-side: the server already does
-    exactly this move atomically, with no read-then-write race against a concurrent
-    reorder — reusing it is simpler and safer than reconstructing the same op from a
-    ``GET`` snapshot (issue #104's ``queue move``)."""
-    base = _resolve_hub_url(hub_url, url)
-    resp = _request("post", "/api/queue/reorder", hub_url=base, json_body={"chunk_id": chunk_id, "position": position})
-    _check(
-        resp,
-        "POST /queue/reorder",
-        on_status={404: f"unknown chunk {chunk_id}", 409: f"chunk {chunk_id} is not ready"},
-    )
+    Composes the whole-order ``PUT /api/queue`` client-side (issue #105): reads the
+    current order, splices CHUNK_ID out and reinserts it at the clamped target index —
+    every other ready chunk keeping its relative order — then replaces the order in one
+    idempotent call. 409 when CHUNK_ID is not a ready chunk."""
+    base = hub_url
+    peek = _request("get", "/api/queue", hub_url=base)
+    _check(peek, "GET /queue")
+    rest = [entry["chunk_id"] for entry in peek.json().get("entries", []) if entry["chunk_id"] != chunk_id]
+    index = min(max(position, 0), len(rest))
+    chunk_ids = [*rest[:index], chunk_id, *rest[index:]]
+    resp = _request("put", "/api/queue", hub_url=base, json_body={"chunk_ids": chunk_ids})
+    _check(resp, "PUT /queue", on_status={409: f"chunk {chunk_id} is not a ready chunk"})
     body = resp.json()
     if as_json:
         click.echo(json.dumps(body))
@@ -1077,9 +1054,9 @@ def decision_group() -> None:
 @decision_group.command("list")
 @_json_option
 @_hub_url_options
-def decision_list(as_json: bool, hub_url: str | None, url: str | None) -> None:
+def decision_list(as_json: bool, hub_url: str | None) -> None:
     """List open decisions awaiting a human (gate surfacing)."""
-    base = _resolve_hub_url(hub_url, url)
+    base = hub_url
     resp = _request("get", "/api/decisions", hub_url=base)
     _check(resp, "GET /decisions")
     body = resp.json()
@@ -1101,14 +1078,12 @@ def decision_list(as_json: bool, hub_url: str | None, url: str | None) -> None:
 @click.option("--by", "resolved_by", default="operator", help="Who is resolving (recorded on the resolution).")
 @_json_option
 @_hub_url_options
-def decision_resolve(
-    decision_id: str, choice: str, resolved_by: str, as_json: bool, hub_url: str | None, url: str | None
-) -> None:
+def decision_resolve(decision_id: str, choice: str, resolved_by: str, as_json: bool, hub_url: str | None) -> None:
     """Resolve an open decision by picking CHOICE (first-write-wins).
 
     A pure client of ``POST /api/decisions/{id}/resolutions`` (issue #104's pluralized
-    successor of the deprecated ``.../resolution``)."""
-    base = _resolve_hub_url(hub_url, url)
+    resolution route)."""
+    base = hub_url
     resp = _request(
         "post",
         f"/api/decisions/{decision_id}/resolutions",
@@ -1143,9 +1118,9 @@ def question_group() -> None:
 @question_group.command("list")
 @_json_option
 @_hub_url_options
-def question_list(as_json: bool, hub_url: str | None, url: str | None) -> None:
+def question_list(as_json: bool, hub_url: str | None) -> None:
     """Every open (unanswered) question across the fleet."""
-    base = _resolve_hub_url(hub_url, url)
+    base = hub_url
     resp = _request("get", "/api/questions", hub_url=base)
     _check(resp, "GET /questions")
     rows = resp.json()
@@ -1166,16 +1141,14 @@ def question_list(as_json: bool, hub_url: str | None, url: str | None) -> None:
 @click.option("--by", "answered_by", default="operator", help="Who is answering (recorded on the row).")
 @_json_option
 @_hub_url_options
-def question_answer(
-    question_id: str, answer_text: str, answered_by: str, as_json: bool, hub_url: str | None, url: str | None
-) -> None:
+def question_answer(question_id: str, answer_text: str, answered_by: str, as_json: bool, hub_url: str | None) -> None:
     """Answer an open question (first-write-wins CAS at the hub).
 
     Writes the answer where the question row lives; the runner picks
     it up and resumes the dormant session. A racing second answer loses and is told who
     already answered. A pure client of ``POST /api/questions/{id}/answers`` (issue
     #104's pluralized successor of the deprecated ``.../answer``)."""
-    base = _resolve_hub_url(hub_url, url)
+    base = hub_url
     resp = _request(
         "post",
         f"/api/questions/{question_id}/answers",
@@ -1187,192 +1160,3 @@ def question_answer(
         raise click.ClickException(f"already answered by {winner.get('answered_by')}: {winner.get('answer')!r}")
     _check(resp, "POST /questions/{id}/answers", on_status={404: f"unknown question {question_id}"})
     _finish(resp, as_json, f"answered {question_id}: {answer_text!r} (the runner will resume the session)")
-
-
-# --------------------------------------------------------------------------- #
-# Hidden top-level aliases (issue #104) — every verb that used to live flat at the
-# top level stays registered, warns on stderr, and delegates to its group successor
-# via ``ctx.invoke`` so a script shelling the old spelling keeps working.
-# --------------------------------------------------------------------------- #
-
-
-@hub.command("ingest", hidden=True)
-@click.argument("pointers", nargs=-1, required=True)
-@_json_option
-@_hub_url_options
-@click.pass_context
-def ingest_alias(
-    ctx: click.Context, pointers: tuple[str, ...], as_json: bool, hub_url: str | None, url: str | None
-) -> None:
-    """Deprecated: use `blizzard hub chunk ingest`."""
-    _warn_deprecated("blizzard hub ingest", "blizzard hub chunk ingest")
-    ctx.invoke(chunk_ingest, pointers=pointers, as_json=as_json, hub_url=hub_url, url=url)
-
-
-@hub.command("promote", hidden=True)
-@click.argument("chunk_id")
-@_json_option
-@_hub_url_options
-@click.pass_context
-def promote_alias(ctx: click.Context, chunk_id: str, as_json: bool, hub_url: str | None, url: str | None) -> None:
-    """Deprecated: use `blizzard hub chunk promote`."""
-    _warn_deprecated("blizzard hub promote", "blizzard hub chunk promote")
-    ctx.invoke(chunk_promote, chunk_id=chunk_id, as_json=as_json, hub_url=hub_url, url=url)
-
-
-@hub.command("requeue", hidden=True)
-@click.argument("chunk_id")
-@_json_option
-@_hub_url_options
-@click.pass_context
-def requeue_alias(ctx: click.Context, chunk_id: str, as_json: bool, hub_url: str | None, url: str | None) -> None:
-    """Deprecated: use `blizzard hub chunk requeue`."""
-    _warn_deprecated("blizzard hub requeue", "blizzard hub chunk requeue")
-    ctx.invoke(chunk_requeue, chunk_id=chunk_id, as_json=as_json, hub_url=hub_url, url=url)
-
-
-@hub.command("detach", hidden=True)
-@click.argument("chunk_id")
-@_json_option
-@_hub_url_options
-@click.pass_context
-def detach_alias(ctx: click.Context, chunk_id: str, as_json: bool, hub_url: str | None, url: str | None) -> None:
-    """Deprecated: use `blizzard hub chunk detach`."""
-    _warn_deprecated("blizzard hub detach", "blizzard hub chunk detach")
-    ctx.invoke(chunk_detach, chunk_id=chunk_id, as_json=as_json, hub_url=hub_url, url=url)
-
-
-@hub.command("stop", hidden=True)
-@click.argument("chunk_id")
-@click.option("--by", "by", default="operator", help="Who is stopping (recorded on the fact).")
-@_json_option
-@_hub_url_options
-@click.pass_context
-def stop_alias(ctx: click.Context, chunk_id: str, by: str, as_json: bool, hub_url: str | None, url: str | None) -> None:
-    """Deprecated: use `blizzard hub chunk stop`."""
-    _warn_deprecated("blizzard hub stop", "blizzard hub chunk stop")
-    ctx.invoke(chunk_stop, chunk_id=chunk_id, by=by, as_json=as_json, hub_url=hub_url, url=url)
-
-
-@hub.command("pause-chunk", hidden=True)
-@click.argument("chunk_id")
-@click.option("--by", "by", default="operator", help="Who is pausing (recorded on the fact).")
-@_json_option
-@_hub_url_options
-@click.pass_context
-def pause_chunk_alias(
-    ctx: click.Context, chunk_id: str, by: str, as_json: bool, hub_url: str | None, url: str | None
-) -> None:
-    """Deprecated: use `blizzard hub chunk pause`."""
-    _warn_deprecated("blizzard hub pause-chunk", "blizzard hub chunk pause")
-    ctx.invoke(chunk_pause, chunk_id=chunk_id, by=by, as_json=as_json, hub_url=hub_url, url=url)
-
-
-@hub.command("resume-chunk", hidden=True)
-@click.argument("chunk_id")
-@click.option("--by", "by", default="operator", help="Who is resuming (recorded on the fact).")
-@_json_option
-@_hub_url_options
-@click.pass_context
-def resume_chunk_alias(
-    ctx: click.Context, chunk_id: str, by: str, as_json: bool, hub_url: str | None, url: str | None
-) -> None:
-    """Deprecated: use `blizzard hub chunk resume`."""
-    _warn_deprecated("blizzard hub resume-chunk", "blizzard hub chunk resume")
-    ctx.invoke(chunk_resume, chunk_id=chunk_id, by=by, as_json=as_json, hub_url=hub_url, url=url)
-
-
-@hub.command("pause", hidden=True)
-@click.argument("runner_id")
-@click.option("--by", "by", default="operator", help="Who is pausing (recorded on the fact).")
-@_json_option
-@_hub_url_options
-@click.pass_context
-def pause_alias(
-    ctx: click.Context, runner_id: str, by: str, as_json: bool, hub_url: str | None, url: str | None
-) -> None:
-    """Deprecated: use `blizzard hub runner pause`."""
-    _warn_deprecated("blizzard hub pause", "blizzard hub runner pause")
-    ctx.invoke(runner_pause, runner_id=runner_id, by=by, as_json=as_json, hub_url=hub_url, url=url)
-
-
-@hub.command("resume", hidden=True)
-@click.argument("runner_id")
-@click.option("--by", "by", default="operator", help="Who is resuming (recorded on the fact).")
-@_json_option
-@_hub_url_options
-@click.pass_context
-def resume_alias(
-    ctx: click.Context, runner_id: str, by: str, as_json: bool, hub_url: str | None, url: str | None
-) -> None:
-    """Deprecated: use `blizzard hub runner resume`."""
-    _warn_deprecated("blizzard hub resume", "blizzard hub runner resume")
-    ctx.invoke(runner_resume, runner_id=runner_id, by=by, as_json=as_json, hub_url=hub_url, url=url)
-
-
-@hub.command("decisions", hidden=True)
-@_json_option
-@_hub_url_options
-@click.pass_context
-def decisions_alias(ctx: click.Context, as_json: bool, hub_url: str | None, url: str | None) -> None:
-    """Deprecated: use `blizzard hub decision list`."""
-    _warn_deprecated("blizzard hub decisions", "blizzard hub decision list")
-    ctx.invoke(decision_list, as_json=as_json, hub_url=hub_url, url=url)
-
-
-@hub.command("decide", hidden=True)
-@click.argument("decision_id")
-@click.argument("choice")
-@click.option("--by", "resolved_by", default="operator", help="Who is resolving (recorded on the resolution).")
-@_json_option
-@_hub_url_options
-@click.pass_context
-def decide_alias(
-    ctx: click.Context,
-    decision_id: str,
-    choice: str,
-    resolved_by: str,
-    as_json: bool,
-    hub_url: str | None,
-    url: str | None,
-) -> None:
-    """Deprecated: use `blizzard hub decision resolve`."""
-    _warn_deprecated("blizzard hub decide", "blizzard hub decision resolve")
-    ctx.invoke(
-        decision_resolve,
-        decision_id=decision_id,
-        choice=choice,
-        resolved_by=resolved_by,
-        as_json=as_json,
-        hub_url=hub_url,
-        url=url,
-    )
-
-
-@hub.command("answer", hidden=True)
-@click.argument("question_id")
-@click.argument("answer_text")
-@click.option("--by", "answered_by", default="operator", help="Who is answering (recorded on the row).")
-@_json_option
-@_hub_url_options
-@click.pass_context
-def answer_alias(
-    ctx: click.Context,
-    question_id: str,
-    answer_text: str,
-    answered_by: str,
-    as_json: bool,
-    hub_url: str | None,
-    url: str | None,
-) -> None:
-    """Deprecated: use `blizzard hub question answer`."""
-    _warn_deprecated("blizzard hub answer", "blizzard hub question answer")
-    ctx.invoke(
-        question_answer,
-        question_id=question_id,
-        answer_text=answer_text,
-        answered_by=answered_by,
-        as_json=as_json,
-        hub_url=hub_url,
-        url=url,
-    )

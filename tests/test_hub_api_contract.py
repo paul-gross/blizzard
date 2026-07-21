@@ -25,8 +25,7 @@ _NEW_PATHS = [
     "/api/chunks",
     "/api/chunks/{chunk_id}",
     "/api/chunks/{chunk_id}/pm-items",
-    "/api/queue/peek",
-    "/api/queue/reorder",
+    "/api/queue",
     "/api/chunks/{chunk_id}/group",
     "/api/runners",
     "/api/runners/{runner_id}/pause",
@@ -63,12 +62,25 @@ def test_events_stream_excluded_from_openapi() -> None:
     assert "/api/events/stream" not in create_app_for_export().openapi()["paths"]
 
 
+def test_openapi_schema_has_no_deprecated_operations() -> None:
+    # Issue #105 removed the last deprecated-alias routes; the schema now carries
+    # exactly one route per operation, none marked deprecated.
+    paths = create_app_for_export().openapi()["paths"]
+    deprecated = [
+        f"{method.upper()} {path}"
+        for path, operations in paths.items()
+        for method, operation in operations.items()
+        if isinstance(operation, dict) and operation.get("deprecated")
+    ]
+    assert deprecated == [], f"unexpected deprecated operations: {deprecated}"
+
+
 def test_store_free_app_reports_fleet_routes_unwired() -> None:
     # Built without a store, the fleet routes report the store is unwired (503),
     # never a 500 — the dependency guards before the handler runs.
     client = TestClient(create_app_for_export())
     assert client.get("/api/chunks").status_code == 503
-    assert client.get("/api/queue/peek").status_code == 503
+    assert client.get("/api/queue").status_code == 503
 
 
 def test_missing_body_is_422_on_a_wired_route(tmp_path: Path) -> None:

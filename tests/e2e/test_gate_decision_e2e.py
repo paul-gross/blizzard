@@ -5,8 +5,8 @@ The other half of the human loop, end to end over the real stack: a graph whose
 The build worker makes a real commit and its verdict transitions the chunk *into* the
 gate; the hub opens an **open Decision** carrying the build's artifacts and the chunk
 derives **waiting_on_human** — the runner holds its warm environments, spawning nothing.
-A human lists the gate with the real ``blizzard hub decisions`` and approves it with the
-real ``blizzard hub decide``; the holding runner picks the resolution up on its next tick,
+A human lists the gate with the real ``blizzard hub decision list`` and approves it with
+the real ``blizzard hub decision resolve``; the holding runner picks the resolution up on its next tick,
 records the resolving transition along the ``approve`` edge, and the hub's deliver node
 lands the build commit on the bare origin's ``main`` — the chunk reaches **done**.
 
@@ -146,7 +146,7 @@ def _blizzard(*args: str) -> subprocess.CompletedProcess[str]:
 
 
 def test_graph_gate_parks_a_decision_then_decide_delivers(tmp_path: Path) -> None:
-    """A human gate ahead of deliver parks a decision; `hub decide` approves and it lands."""
+    """A human gate ahead of deliver parks a decision; `hub decision resolve` approves and it lands."""
     bin_dir = _mock_bin_dir()
     if bin_dir is None:
         pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
@@ -211,14 +211,14 @@ def test_graph_gate_parks_a_decision_then_decide_delivers(tmp_path: Path) -> Non
             f"the gated decision does not carry the build artifact: {detail['artifacts']}"
         )
 
-        # The fleet surfaces the open decision — the real `blizzard hub decisions` verb.
-        listed = _blizzard("hub", "decisions", "--hub-url", hub_url)
+        # The fleet surfaces the open decision — the real `blizzard hub decision list` verb.
+        listed = _blizzard("hub", "decision", "list", "--hub-url", hub_url)
         assert listed.returncode == 0, listed.stderr
-        assert decision_id in listed.stdout, f"`hub decisions` did not list the open decision:\n{listed.stdout}"
+        assert decision_id in listed.stdout, f"`hub decision list` did not list the open decision:\n{listed.stdout}"
 
-        # A human approves at the hub — the real `blizzard hub decide` verb (first-write-wins).
-        decided = _blizzard("hub", "decide", decision_id, "approve", "--by", "alice", "--hub-url", hub_url)
-        assert decided.returncode == 0, f"hub decide failed:\n{decided.stderr}"
+        # A human approves at the hub — the real `blizzard hub decision resolve` verb (first-write-wins).
+        decided = _blizzard("hub", "decision", "resolve", decision_id, "approve", "--by", "alice", "--hub-url", hub_url)
+        assert decided.returncode == 0, f"hub decision resolve failed:\n{decided.stderr}"
 
         # Phase 2: the holding runner records the resolving transition; deliver lands the chunk.
         status = _tick_until(config, hub, chunk_id, fenced, {"done", "needs_human", "stopped"}, 90.0)

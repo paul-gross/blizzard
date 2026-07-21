@@ -454,7 +454,7 @@ def test_gate_resolution_site_consults_the_intent_and_closes_the_decision(tmp_pa
 
     # A person approves; the resolving completion's destination (`deliver`) matches the
     # target's own `deliver` node — the gate-resolution consult site fires the intent.
-    assert hub.client.post(f"/api/decisions/{decision_id}/resolution", json={"choice": "approve"}).status_code == 200
+    assert hub.client.post(f"/api/decisions/{decision_id}/resolutions", json={"choice": "approve"}).status_code == 200
     resp = hub.client.post(
         f"/api/fleet/chunks/{chunk_id}/completions",
         json={

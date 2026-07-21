@@ -107,48 +107,10 @@ def test_answers_unknown_question_is_404(tmp_path: Path) -> None:
     assert resp.status_code == 404
 
 
-# --- Deprecated singular alias: still works, carries headers ----------------
+# --- Runner principal is still rejected on the answers route ----------------
 
 
-def test_singular_alias_still_answers_and_carries_deprecation_headers(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path)
-    _asked(hub)
-
-    resp = hub.client.post("/api/questions/qn_1/answer", json={"answer": "rest", "answered_by": "alice"})
-    assert resp.status_code == 201, resp.text
-    assert resp.json()["won"] is True
-    assert resp.headers["Deprecation"] == "true"
-    assert resp.headers["Link"] == '</api/questions/qn_1/answers>; rel="successor-version"'
-
-
-def test_singular_alias_409_conflict_still_carries_deprecation_headers(tmp_path: Path) -> None:
-    """The alias's headers must land even on the successor's JSONResponse-conflict
-    path — a bare ``response: Response`` header write is discarded once the handler
-    returns its own Response instance, so the alias must target whichever object is
-    actually returned."""
-    hub = build_hub(tmp_path)
-    _asked(hub)
-    hub.client.post("/api/questions/qn_1/answers", json={"answer": "rest", "answered_by": "alice"})
-
-    resp = hub.client.post("/api/questions/qn_1/answer", json={"answer": "graphql", "answered_by": "bob"})
-    assert resp.status_code == 409, resp.text
-    assert resp.json()["answered_by"] == "alice"
-    assert resp.headers["Deprecation"] == "true"
-    assert resp.headers["Link"] == '</api/questions/qn_1/answers>; rel="successor-version"'
-
-
-def test_deprecated_route_is_marked_in_the_openapi_schema() -> None:
-    from blizzard.hub.app import create_app_for_export
-
-    schema = create_app_for_export().openapi()
-    assert schema["paths"]["/api/questions/{question_id}/answer"]["post"]["deprecated"] is True
-    assert "deprecated" not in schema["paths"]["/api/questions/{question_id}/answers"]["post"]
-
-
-# --- Runner principal is still rejected on both routes ----------------------
-
-
-def test_runner_bearer_token_is_rejected_on_answers_and_alias(tmp_path: Path) -> None:
+def test_runner_bearer_token_is_rejected_on_answers(tmp_path: Path) -> None:
     from blizzard.hub.config import RUNNER_AUTH_ENFORCE
     from tests.test_fleet_auth import _bearer, _seed_enrolled
 
@@ -159,9 +121,5 @@ def test_runner_bearer_token_is_rejected_on_answers_and_alias(tmp_path: Path) ->
     hub = build_hub(tmp_path, runner_auth_mode=RUNNER_AUTH_ENFORCE)
     assert (
         hub.client.post("/api/questions/qn_1/answers", json={"answer": "rest"}, headers=_bearer(token)).status_code
-        == 403
-    )
-    assert (
-        hub.client.post("/api/questions/qn_1/answer", json={"answer": "rest"}, headers=_bearer(token)).status_code
         == 403
     )

@@ -9,8 +9,8 @@ import { injectGroupChunksMutation, injectReorderQueueMutation } from './queue.m
  * The queue-shaping panel — the operator's two controls over the ready queue,
  * the surface that shapes work rather than executes it:
  *
- * - **Prioritize**: a move-to-top action per row drives `POST /api/queue/reorder`
- *   with `position: 0`; the next acquire honors the new order;
+ * - **Prioritize**: a move-to-top action per row drives a whole-order `PUT /api/queue`
+ *   composed client-side (issue #105 removed the single-move route); the next acquire honors the new order;
  * - **Group**: multi-select two or more ready chunks and merge them into the
  *   top-most selected survivor via `POST /api/chunks/{id}/group` — the survivor
  *   carries the union of PM pointers, the rest are discarded.

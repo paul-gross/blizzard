@@ -480,39 +480,6 @@
         "title": "ChunkDetail",
         "type": "object"
       },
-      "ChunkGraphUpdateRequest": {
-        "description": "Repin a not-ready or ready-unclaimed chunk's workflow graph (issue #27, #120) \u2014 the target graph's id.",
-        "properties": {
-          "graph_id": {
-            "title": "Graph Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "graph_id"
-        ],
-        "title": "ChunkGraphUpdateRequest",
-        "type": "object"
-      },
-      "ChunkGraphView": {
-        "description": "A chunk's current graph selection \u2014 the read/write shape issue #27's board editor uses.",
-        "properties": {
-          "chunk_id": {
-            "title": "Chunk Id",
-            "type": "string"
-          },
-          "graph_id": {
-            "title": "Graph Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "chunk_id",
-          "graph_id"
-        ],
-        "title": "ChunkGraphView",
-        "type": "object"
-      },
       "ChunkGroupRequest": {
         "description": "Merge unacquired chunks into one \u2014 the board's Group control.\n\n``merge_chunk_ids`` are the ready chunks folded into the path's survivor chunk; the\nsurvivor absorbs the union of their PM pointers and the merged chunks are discarded as\nephemeral. Self-references and duplicates are ignored; a non-ready member is\nrejected ``409``.",
         "properties": {
@@ -591,39 +558,6 @@
         "title": "ChunkIngestResponse",
         "type": "object"
       },
-      "ChunkModelUpdateRequest": {
-        "description": "Repin a not-ready or ready-unclaimed chunk's model selection (issue #27, #120).",
-        "properties": {
-          "model": {
-            "title": "Model",
-            "type": "string"
-          }
-        },
-        "required": [
-          "model"
-        ],
-        "title": "ChunkModelUpdateRequest",
-        "type": "object"
-      },
-      "ChunkModelView": {
-        "description": "A chunk's current model selection \u2014 the read/write shape issue #27's board editor uses.",
-        "properties": {
-          "chunk_id": {
-            "title": "Chunk Id",
-            "type": "string"
-          },
-          "model": {
-            "title": "Model",
-            "type": "string"
-          }
-        },
-        "required": [
-          "chunk_id",
-          "model"
-        ],
-        "title": "ChunkModelView",
-        "type": "object"
-      },
       "ChunkPatchRequest": {
         "description": "The multi-field ``PATCH /chunks/{id}`` body (issue #124, in #104's shape) \u2014 every\nfield independently optional, applied all-or-nothing by ``EditService.edit``.\n\n``graph_id``/``model`` mean \"leave unchanged\" whether omitted or sent explicit\n``null`` \u2014 neither is a nullable chunk property, so there is no \"clear\" state to\ndistinguish. ``intended_migration`` is different: it *is* nullable (clearing a\nstanding intent is a real operation, the CLI's ``--cancel``), so **omitted** (\"leave\nthe intent unchanged\") must be distinguishable from **explicit ``null``** (\"clear\nit\") \u2014 a plain ``Optional`` default cannot tell those apart, since both decode to\n``None`` on this model. The controller resolves the distinction via\n``\"intended_migration\" in request.model_fields_set`` (pydantic's own record of which\nfields the request body actually named), not this field's value alone.",
         "properties": {
@@ -664,7 +598,7 @@
         "type": "object"
       },
       "ChunkPatchResponse": {
-        "description": "The result of one ``PATCH /chunks/{id}`` (issue #124) \u2014 the chunk's three\neditable build properties after the edit, mirroring\n:class:`ChunkGraphView`/:class:`ChunkModelView`'s single-field shape but carrying\nall three since a PATCH can apply more than one at once.",
+        "description": "The result of one ``PATCH /chunks/{id}`` (issue #124) \u2014 the chunk's three\neditable build properties after the edit, carried together since a PATCH can apply\nmore than one at once.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -2641,40 +2575,6 @@
         "title": "QueuePeekResponse",
         "type": "object"
       },
-      "QueueReorderRequest": {
-        "description": "Move a ready chunk to a queue position \u2014 the board's Prioritize control.\n\n``position`` is the target index in the ready queue, ``0`` being the top; it is\nclamped into range, so ``0`` always means \"to the front\". Ordering is a hub-side\nproperty: the move appends one position fact and the order re-derives.",
-        "properties": {
-          "chunk_id": {
-            "title": "Chunk Id",
-            "type": "string"
-          },
-          "position": {
-            "default": 0,
-            "title": "Position",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "chunk_id"
-        ],
-        "title": "QueueReorderRequest",
-        "type": "object"
-      },
-      "QueueReorderResponse": {
-        "description": "The ready queue after a reorder, in its new order \u2014 the board re-renders from it.",
-        "properties": {
-          "entries": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/QueuePeekEntry"
-            },
-            "title": "Entries",
-            "type": "array"
-          }
-        },
-        "title": "QueueReorderResponse",
-        "type": "object"
-      },
       "QueueReplaceRequest": {
         "description": "Idempotent whole-order replacement of the ready queue \u2014 ``PUT /api/queue``.\n\n``chunk_ids`` is the desired order, front to back; every id must name a\ncurrently-ready chunk (``409`` otherwise) and must not repeat (``422``\notherwise). A ready chunk not named here keeps its current relative order,\nappended after the named ones.",
         "properties": {
@@ -3540,60 +3440,6 @@
         ]
       }
     },
-    "/api/chunks/{chunk_id}/graph": {
-      "post": {
-        "deprecated": true,
-        "description": "Deprecated alias of ``PATCH /chunks/{id}`` (``{\"graph_id\": ...}``, issue #104) \u2014\nrepins a not-ready or ready-and-unclaimed chunk's workflow graph (issue #27,\nwidened by #120). Identical request/response body and ``EditService`` delegation\nas before; only the deprecation marker and headers are new.\n\n404 on an unknown chunk or an unknown target graph; 409 once the chunk is claimed\nor later (``running``, ``delivering``, ``waiting_on_human``, ``needs_human``,\n``paused``, ``done``, ``stopped`` \u2014 issue #120 widened the admit set to\n``{not_ready, ready}``, not further \u2014 checked first, so it wins over the next\ncause even when both apply) or on a retired target graph (issue #101 \u2014 a retired\ngraph cannot receive new work).",
-        "operationId": "set_chunk_graph_api_chunks__chunk_id__graph_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "chunk_id",
-            "required": true,
-            "schema": {
-              "title": "Chunk Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ChunkGraphUpdateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "202": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ChunkGraphView"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Set Chunk Graph",
-        "tags": [
-          "chunks"
-        ]
-      }
-    },
     "/api/chunks/{chunk_id}/group": {
       "post": {
         "description": "Merge unacquired chunks into ``chunk_id`` \u2014 the board's Group control.",
@@ -3713,60 +3559,6 @@
           }
         },
         "summary": "Record Hub Marker",
-        "tags": [
-          "chunks"
-        ]
-      }
-    },
-    "/api/chunks/{chunk_id}/model": {
-      "post": {
-        "deprecated": true,
-        "description": "Deprecated alias of ``PATCH /chunks/{id}`` (``{\"model\": ...}``, issue #104) \u2014\nrepins a not-ready or ready-and-unclaimed chunk's model selection (issue #27,\nwidened by #120). Identical request/response body and ``EditService`` delegation\nas before; only the deprecation marker and headers are new.\n\n404 on an unknown chunk; 422 on a blank model; 409 once the chunk is claimed or\nlater (``running``, ``delivering``, ``waiting_on_human``, ``needs_human``,\n``paused``, ``done``, ``stopped`` \u2014 issue #120 widened the admit set to\n``{not_ready, ready}``, not further).",
-        "operationId": "set_chunk_model_api_chunks__chunk_id__model_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "chunk_id",
-            "required": true,
-            "schema": {
-              "title": "Chunk Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ChunkModelUpdateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "202": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ChunkModelView"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Set Chunk Model",
         "tags": [
           "chunks"
         ]
@@ -4077,60 +3869,6 @@
           }
         },
         "summary": "List Decisions",
-        "tags": [
-          "decisions"
-        ]
-      }
-    },
-    "/api/decisions/{decision_id}/resolution": {
-      "post": {
-        "deprecated": true,
-        "description": "Deprecated alias of ``POST /api/decisions/{id}/resolutions`` \u2014 kept for\nversion-skewed clients (``blizzard hub decide``, until it migrates).",
-        "operationId": "resolve_decision_singular_api_decisions__decision_id__resolution_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "decision_id",
-            "required": true,
-            "schema": {
-              "title": "Decision Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DecisionResolutionRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DecisionResolutionResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Resolve Decision Singular",
         "tags": [
           "decisions"
         ]
@@ -5226,60 +4964,6 @@
         ]
       }
     },
-    "/api/questions/{question_id}/answer": {
-      "post": {
-        "deprecated": true,
-        "description": "Deprecated alias of ``POST /api/questions/{id}/answers`` \u2014 kept for\nversion-skewed clients (``blizzard hub answer``, until it migrates).",
-        "operationId": "answer_question_singular_api_questions__question_id__answer_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "question_id",
-            "required": true,
-            "schema": {
-              "title": "Question Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AnswerRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AnswerResult"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Answer Question Singular",
-        "tags": [
-          "questions"
-        ]
-      }
-    },
     "/api/questions/{question_id}/answers": {
       "post": {
         "description": "Answer a question first-write-wins; 409 carries the winning answer.",
@@ -5390,72 +5074,6 @@
           }
         },
         "summary": "Replace Queue",
-        "tags": [
-          "queue"
-        ]
-      }
-    },
-    "/api/queue/peek": {
-      "get": {
-        "deprecated": true,
-        "description": "Deprecated alias of ``GET /api/queue`` \u2014 kept for version-skewed clients.",
-        "operationId": "peek_queue_api_queue_peek_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/QueuePeekResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Peek Queue",
-        "tags": [
-          "queue"
-        ]
-      }
-    },
-    "/api/queue/reorder": {
-      "post": {
-        "deprecated": true,
-        "description": "Move a ready chunk to a queue position \u2014 the board's Prioritize control.\n\nDeprecated alias of ``PUT /api/queue`` (single-move, unchanged behavior); the\nwhole-order successor is the only one that can express an arbitrary reshuffle in\none call, but this stays functional for the board's move-one-to-position control\nand any version-skewed client until they migrate.",
-        "operationId": "reorder_queue_api_queue_reorder_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/QueueReorderRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/QueueReorderResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Reorder Queue",
         "tags": [
           "queue"
         ]

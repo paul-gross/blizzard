@@ -368,32 +368,6 @@ class ChunkStopRequest(BaseModel):
     by: str = "operator"
 
 
-class ChunkGraphUpdateRequest(BaseModel):
-    """Repin a not-ready or ready-unclaimed chunk's workflow graph (issue #27, #120) — the target graph's id."""
-
-    graph_id: str
-
-
-class ChunkGraphView(BaseModel):
-    """A chunk's current graph selection — the read/write shape issue #27's board editor uses."""
-
-    chunk_id: str
-    graph_id: str
-
-
-class ChunkModelUpdateRequest(BaseModel):
-    """Repin a not-ready or ready-unclaimed chunk's model selection (issue #27, #120)."""
-
-    model: str
-
-
-class ChunkModelView(BaseModel):
-    """A chunk's current model selection — the read/write shape issue #27's board editor uses."""
-
-    chunk_id: str
-    model: str
-
-
 class ChunkPatchRequest(BaseModel):
     """The multi-field ``PATCH /chunks/{id}`` body (issue #124, in #104's shape) — every
     field independently optional, applied all-or-nothing by ``EditService.edit``.
@@ -415,9 +389,8 @@ class ChunkPatchRequest(BaseModel):
 
 class ChunkPatchResponse(BaseModel):
     """The result of one ``PATCH /chunks/{id}`` (issue #124) — the chunk's three
-    editable build properties after the edit, mirroring
-    :class:`ChunkGraphView`/:class:`ChunkModelView`'s single-field shape but carrying
-    all three since a PATCH can apply more than one at once."""
+    editable build properties after the edit, carried together since a PATCH can apply
+    more than one at once."""
 
     chunk_id: str
     graph_id: str

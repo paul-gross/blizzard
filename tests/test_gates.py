@@ -199,7 +199,7 @@ def test_decide_then_resolving_transition_advances_the_chunk(tmp_path: Path) -> 
     decision_id = hub.client.get(f"/api/chunks/{chunk_id}").json()["decision"]["decision_id"]
 
     # A person decides — first-write-wins.
-    resolve = hub.client.post(f"/api/decisions/{decision_id}/resolution", json={"choice": "approve"})
+    resolve = hub.client.post(f"/api/decisions/{decision_id}/resolutions", json={"choice": "approve"})
     assert resolve.status_code == 200, resolve.text
     assert_all_timestamps_utc(resolve.json())  # bzh:utc-instants — resolved_at
     # Resolved: no longer waiting_on_human (route still live -> running), decision resolved.
@@ -234,11 +234,11 @@ def test_resolution_is_first_write_wins(tmp_path: Path) -> None:
     decision_id = hub.client.get(f"/api/chunks/{chunk_id}").json()["decision"]["decision_id"]
 
     first = hub.client.post(
-        f"/api/decisions/{decision_id}/resolution", json={"choice": "approve", "resolved_by": "ada"}
+        f"/api/decisions/{decision_id}/resolutions", json={"choice": "approve", "resolved_by": "ada"}
     )
     assert first.status_code == 200
     second = hub.client.post(
-        f"/api/decisions/{decision_id}/resolution", json={"choice": "reject", "resolved_by": "bob"}
+        f"/api/decisions/{decision_id}/resolutions", json={"choice": "reject", "resolved_by": "bob"}
     )
     assert second.status_code == 409
     assert second.json()["already_resolved_by"] == "ada"
@@ -253,7 +253,7 @@ def test_decide_unknown_choice_is_400(tmp_path: Path) -> None:
         json=_completion(nodes["build"], choice="pass", artifacts=[_BUILD_ARTIFACT]),
     )
     decision_id = hub.client.get(f"/api/chunks/{chunk_id}").json()["decision"]["decision_id"]
-    resp = hub.client.post(f"/api/decisions/{decision_id}/resolution", json={"choice": "maybe"})
+    resp = hub.client.post(f"/api/decisions/{decision_id}/resolutions", json={"choice": "maybe"})
     assert resp.status_code == 400
 
 
@@ -285,7 +285,7 @@ def test_runner_config_gate_submits_a_decision_for_a_worker_node(tmp_path: Path)
 
     # Resolve pass, then the resolving transition (from the worker node, decision_id set)
     # advances build -> deliver.
-    hub.client.post(f"/api/decisions/{decision['decision_id']}/resolution", json={"choice": "pass"})
+    hub.client.post(f"/api/decisions/{decision['decision_id']}/resolutions", json={"choice": "pass"})
     resolving = hub.client.post(
         f"/api/fleet/chunks/{chunk_id}/completions",
         json=_completion(nodes["build"], choice="pass", decision_id=decision["decision_id"]),
@@ -333,7 +333,7 @@ def test_requeue_closes_an_escalation_by_supersession(tmp_path: Path) -> None:
     assert rq.json()["status"] == "ready"
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
     # It re-enters the ready queue for a fresh claim at its current node.
-    peek = hub.client.get("/api/queue/peek").json()
+    peek = hub.client.get("/api/queue").json()
     assert any(e["chunk_id"] == chunk_id for e in peek["entries"])
 
 
@@ -365,7 +365,7 @@ def test_detach_a_claimed_chunk_re_derives_ready_and_reenters_the_queue(tmp_path
     assert resp.json()["status"] == "ready"
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
     # The detached chunk re-enters the ready queue, claimable at its current node.
-    peek = hub.client.get("/api/queue/peek").json()
+    peek = hub.client.get("/api/queue").json()
     assert any(e["chunk_id"] == chunk_id for e in peek["entries"])
 
 

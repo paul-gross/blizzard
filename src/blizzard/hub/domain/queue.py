@@ -1,7 +1,7 @@
 """Queue-shaping domain — ready-queue reordering and grouping.
 
 The two operator actions that shape the ready queue rather than execute work
-: **Prioritize** (reorder a ready chunk to a position) and
+: **Prioritize** (replace the whole ready order) and
 **Group** (merge unacquired chunks into one surviving chunk). Both are pure hub-side
 properties over the fact store — order derives from appended position facts,
 and grouping folds PM pointers into the survivor and discards the rest as ephemeral.
@@ -59,20 +59,6 @@ class QueueService:
         ready = self._chunks.list_ready()
         return sorted(ready, key=lambda c: self._effective_position(c, positions))
 
-    def reorder(self, chunk_id: str, *, to_index: int) -> None:
-        """Move a ready chunk to ``to_index`` (0 = top); append its new position fact.
-
-        The new position is computed between the target neighbours in the current order
-        (excluding the moved chunk), so one appended float fact re-ranks the chunk without
-        rewriting the rest — floats leave room to insert again between any two chunks.
-        """
-        self._require_ready(chunk_id)
-        positions = self._chunks.queue_positions()
-        others = [c for c in self.ordered_ready() if c.chunk_id != chunk_id]
-        new_position = self._position_at(others, positions, to_index)
-        self._chunks.record_queue_position(chunk_id, position=new_position, at=self._clock.now())
-        _log.info("ready queue reordered", chunk_id=chunk_id, to_index=to_index, position=new_position)
-
     def replace_order(self, ordered: list[Chunk]) -> None:
         """Idempotent whole-order replacement: append one ascending explicit
         position fact per chunk in ``ordered``, front to back.
@@ -89,18 +75,6 @@ class QueueService:
             self._chunks.record_queue_position(chunk.chunk_id, position=float(position), at=at)
         _log.info("ready queue replaced", chunk_ids=[c.chunk_id for c in ordered])
 
-    def _position_at(self, others: list[Chunk], positions: dict[str, float], to_index: int) -> float:
-        if not others:
-            return 0.0
-        clamped = max(0, min(to_index, len(others)))
-        if clamped <= 0:
-            return self._effective_position(others[0], positions) - 1.0
-        if clamped >= len(others):
-            return self._effective_position(others[-1], positions) + 1.0
-        before = self._effective_position(others[clamped - 1], positions)
-        after = self._effective_position(others[clamped], positions)
-        return (before + after) / 2.0
-
     @staticmethod
     def _effective_position(chunk: Chunk, positions: dict[str, float]) -> float:
         """A chunk's sort key: its newest explicit position, else its mint instant.
@@ -111,14 +85,6 @@ class QueueService:
         """
         explicit = positions.get(chunk.chunk_id)
         return explicit if explicit is not None else chunk.minted_at.timestamp()
-
-    def _require_ready(self, chunk_id: str) -> None:
-        facts = self._chunks.load_facts(chunk_id)
-        if facts is None:
-            raise ChunkNotFound(chunk_id)
-        status = derive_chunk_status(facts)
-        if status is not ChunkStatus.READY:
-            raise ChunkNotReady(chunk_id, status)
 
 
 class GroupService:

@@ -89,7 +89,7 @@ def test_question_ask_and_answer_emit_typed_events(tmp_path: Path) -> None:
         },
     )
     assert ask.status_code == 201, ask.text
-    answer = hub.client.post("/api/questions/qn_1/answer", json={"answer": "a", "answered_by": "op"})
+    answer = hub.client.post("/api/questions/qn_1/answers", json={"answer": "a", "answered_by": "op"})
     assert answer.status_code == 201, answer.text
 
     events = emitted_events(hub)
@@ -127,7 +127,7 @@ def test_decision_open_and_resolve_emit_typed_events(tmp_path: Path) -> None:
     assert completion.json()["outcome"] == "parked_at_gate", completion.text
     decision_id = hub.client.get(f"/api/chunks/{chunk_id}").json()["decision"]["decision_id"]
 
-    resolve = hub.client.post(f"/api/decisions/{decision_id}/resolution", json={"choice": "approve"})
+    resolve = hub.client.post(f"/api/decisions/{decision_id}/resolutions", json={"choice": "approve"})
     assert resolve.status_code == 200, resolve.text
 
     events = emitted_events(hub)

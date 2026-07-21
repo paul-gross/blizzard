@@ -26,24 +26,28 @@ def test_root_lists_hub_and_runner() -> None:
 
 def test_hub_lists_its_verbs() -> None:
     # The operator verbs are grouped by noun (issue #104); the old flat spellings
-    # (`answer`, `ingest`, `promote`, `requeue`, ...) still work but are `hidden=True`,
-    # so they no longer show here — see test_hub_hides_the_deprecated_flat_verbs.
+    # (`answer`, `ingest`, `promote`, `requeue`, ...) were removed in issue #105, so
+    # they neither show nor resolve — see test_hub_removed_flat_verbs_are_unknown.
     result = CliRunner().invoke(blizzard, ["hub", "--help"])
     assert result.exit_code == 0
     for verb in ("init", "migrate", "host", "status", "chunk", "runner", "graph", "queue", "decision", "question"):
         assert verb in result.output
 
 
-def test_hub_hides_the_deprecated_flat_verbs() -> None:
-    """The pre-#104 flat verbs still resolve (see test_hub_cli_aliases.py) but are
-    `hidden=True`, so `--help`'s command list no longer names them as a command —
-    each line's own first token, not a substring match (a group's own summary prose
-    can legitimately mention e.g. "answer")."""
+def test_hub_removed_flat_verbs_are_unknown() -> None:
+    """The pre-#104 flat verbs were removed in issue #105: they no longer name a command
+    in `--help` (each line's own first token, not a substring match — a group's own
+    summary prose can legitimately mention e.g. "answer"), and invoking one fails with
+    click's usual unknown-command error rather than silently delegating."""
     result = CliRunner().invoke(blizzard, ["hub", "--help"])
     assert result.exit_code == 0
     listed = {line.split()[0] for line in result.output.splitlines() if line.startswith("  ") and line.split()}
     for verb in ("answer", "ingest", "promote", "requeue", "decisions", "decide", "pause-chunk", "resume-chunk"):
         assert verb not in listed
+
+    invoked = CliRunner().invoke(blizzard, ["hub", "promote", "ch_42"])
+    assert invoked.exit_code != 0
+    assert "No such command 'promote'" in invoked.output
 
 
 def test_runner_lists_its_verbs() -> None:

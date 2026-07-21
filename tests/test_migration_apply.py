@@ -279,7 +279,7 @@ def test_a_cross_graph_choice_migrating_onto_a_hub_node_runs_it_inline_and_retai
     )
     assert conflict.status_code == 409, conflict.text
     # Nor does the chunk appear as a claimable ready chunk in the queue.
-    assert all(e["chunk_id"] != chunk_id for e in hub.client.get("/api/queue/peek").json()["entries"])
+    assert all(e["chunk_id"] != chunk_id for e in hub.client.get("/api/queue").json()["entries"])
 
 
 def test_an_unresolvable_cross_graph_target_escalates_to_needs_human(tmp_path: Path) -> None:
@@ -431,7 +431,7 @@ def test_a_human_gate_resolved_migration_closes_its_decision(tmp_path: Path) -> 
 
     # A person approves; the holding runner submits the resolving completion, which — the
     # choice targeting graph:triage — MIGRATES rather than transitions.
-    assert hub.client.post(f"/api/decisions/{decision_id}/resolution", json={"choice": "approve"}).status_code == 200
+    assert hub.client.post(f"/api/decisions/{decision_id}/resolutions", json={"choice": "approve"}).status_code == 200
     resp = hub.client.post(
         f"/api/fleet/chunks/{chunk_id}/completions",
         json={
@@ -487,7 +487,7 @@ def test_a_human_gate_resolved_migration_to_an_unresolvable_target_closes_its_de
 
     # A person approves; the holding runner submits the resolving completion. The choice
     # targets graph:ghost, which resolves to None -> the migration ESCALATES.
-    assert hub.client.post(f"/api/decisions/{decision_id}/resolution", json={"choice": "approve"}).status_code == 200
+    assert hub.client.post(f"/api/decisions/{decision_id}/resolutions", json={"choice": "approve"}).status_code == 200
     resp = hub.client.post(
         f"/api/fleet/chunks/{chunk_id}/completions",
         json={

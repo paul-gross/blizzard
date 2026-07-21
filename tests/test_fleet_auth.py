@@ -77,11 +77,11 @@ def test_valid_runner_token_is_rejected_on_ingest(tmp_path: Path) -> None:
     assert resp.status_code == 403
 
 
-def test_valid_runner_token_is_rejected_on_queue_reorder(tmp_path: Path) -> None:
+def test_valid_runner_token_is_rejected_on_queue_replace(tmp_path: Path) -> None:
     token = _seed_enrolled(tmp_path)
     hub = build_hub(tmp_path, runner_auth_mode=RUNNER_AUTH_ENFORCE)
 
-    resp = hub.client.post("/api/queue/reorder", json={"chunk_id": "ch_missing", "position": 0}, headers=_bearer(token))
+    resp = hub.client.put("/api/queue", json={"chunk_ids": []}, headers=_bearer(token))
     assert resp.status_code == 403
 
 

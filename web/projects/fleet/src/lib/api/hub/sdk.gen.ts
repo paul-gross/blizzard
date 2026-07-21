@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { AnswerQuestionApiQuestionsQuestionIdAnswersPostData, AnswerQuestionApiQuestionsQuestionIdAnswersPostErrors, AnswerQuestionApiQuestionsQuestionIdAnswersPostResponses, AnswerQuestionSingularApiQuestionsQuestionIdAnswerPostData, AnswerQuestionSingularApiQuestionsQuestionIdAnswerPostErrors, AnswerQuestionSingularApiQuestionsQuestionIdAnswerPostResponses, AskQuestionApiQuestionsPostData, AskQuestionApiQuestionsPostErrors, AskQuestionApiQuestionsPostResponses, ClaimRouteApiFleetRoutesPostData, ClaimRouteApiFleetRoutesPostErrors, ClaimRouteApiFleetRoutesPostResponses, DetachChunkApiChunksChunkIdDetachPostData, DetachChunkApiChunksChunkIdDetachPostErrors, DetachChunkApiChunksChunkIdDetachPostResponses, EnableGraphApiGraphsGraphIdEnablePostData, EnableGraphApiGraphsGraphIdEnablePostErrors, EnableGraphApiGraphsGraphIdEnablePostResponses, EnrollRunnerApiRunnersRunnerIdEnrollmentsPostData, EnrollRunnerApiRunnersRunnerIdEnrollmentsPostErrors, EnrollRunnerApiRunnersRunnerIdEnrollmentsPostResponses, FleetSpendApiSpendGetData, FleetSpendApiSpendGetErrors, FleetSpendApiSpendGetResponses, FleetSummaryApiFleetSummaryGetData, FleetSummaryApiFleetSummaryGetResponses, GetChunkApiChunksChunkIdGetData, GetChunkApiChunksChunkIdGetErrors, GetChunkApiChunksChunkIdGetResponses, GetChunkApiFleetChunksChunkIdGetData, GetChunkApiFleetChunksChunkIdGetErrors, GetChunkApiFleetChunksChunkIdGetResponses, GetEnvelopeApiFleetChunksChunkIdEnvelopeGetData, GetEnvelopeApiFleetChunksChunkIdEnvelopeGetErrors, GetEnvelopeApiFleetChunksChunkIdEnvelopeGetResponses, GetGraphApiGraphsGraphIdGetData, GetGraphApiGraphsGraphIdGetErrors, GetGraphApiGraphsGraphIdGetResponses, GetPmItemsApiChunksChunkIdPmItemsGetData, GetPmItemsApiChunksChunkIdPmItemsGetErrors, GetPmItemsApiChunksChunkIdPmItemsGetResponses, GetPmItemsApiFleetChunksChunkIdPmItemsGetData, GetPmItemsApiFleetChunksChunkIdPmItemsGetErrors, GetPmItemsApiFleetChunksChunkIdPmItemsGetResponses, GetQuestionApiFleetQuestionsQuestionIdGetData, GetQuestionApiFleetQuestionsQuestionIdGetErrors, GetQuestionApiFleetQuestionsQuestionIdGetResponses, GetQueueApiQueueGetData, GetQueueApiQueueGetResponses, GetRunnerApiFleetRunnersRunnerIdGetData, GetRunnerApiFleetRunnersRunnerIdGetErrors, GetRunnerApiFleetRunnersRunnerIdGetResponses, GetRunnerApiRunnersRunnerIdGetData, GetRunnerApiRunnersRunnerIdGetErrors, GetRunnerApiRunnersRunnerIdGetResponses, GroupChunksApiChunksChunkIdGroupPostData, GroupChunksApiChunksChunkIdGroupPostErrors, GroupChunksApiChunksChunkIdGroupPostResponses, HealthApiHealthGetData, HealthApiHealthGetResponses, HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostData, HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostErrors, HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostResponses, HubAdvanceApiFleetChunksChunkIdHubAdvancePostData, HubAdvanceApiFleetChunksChunkIdHubAdvancePostErrors, HubAdvanceApiFleetChunksChunkIdHubAdvancePostResponses, IngestChunkApiChunksPostData, IngestChunkApiChunksPostErrors, IngestChunkApiChunksPostResponses, IngestRunnerFactsApiFleetEventsPostData, IngestRunnerFactsApiFleetEventsPostErrors, IngestRunnerFactsApiFleetEventsPostResponses, ListChunksApiChunksGetData, ListChunksApiChunksGetResponses, ListDecisionsApiDecisionsGetData, ListDecisionsApiDecisionsGetResponses, ListGraphsApiGraphsGetData, ListGraphsApiGraphsGetResponses, ListOpenQuestionsApiQuestionsGetData, ListOpenQuestionsApiQuestionsGetResponses, ListRunnersApiRunnersGetData, ListRunnersApiRunnersGetResponses, MintGraphApiGraphsPostData, MintGraphApiGraphsPostErrors, MintGraphApiGraphsPostResponses, PatchChunkApiChunksChunkIdPatchData, PatchChunkApiChunksChunkIdPatchErrors, PatchChunkApiChunksChunkIdPatchResponses, PauseChunkApiChunksChunkIdPausePostData, PauseChunkApiChunksChunkIdPausePostErrors, PauseChunkApiChunksChunkIdPausePostResponses, PauseRunnerApiRunnersRunnerIdPausePostData, PauseRunnerApiRunnersRunnerIdPausePostErrors, PauseRunnerApiRunnersRunnerIdPausePostResponses, PeekQueueApiFleetQueuePeekGetData, PeekQueueApiFleetQueuePeekGetResponses, PeekQueueApiQueuePeekGetData, PeekQueueApiQueuePeekGetResponses, PromoteChunkApiChunksChunkIdPromotePostData, PromoteChunkApiChunksChunkIdPromotePostErrors, PromoteChunkApiChunksChunkIdPromotePostResponses, ReadyApiReadyGetData, ReadyApiReadyGetResponses, RecordHubMarkerApiChunksChunkIdHubMarkersPostData, RecordHubMarkerApiChunksChunkIdHubMarkersPostErrors, RecordHubMarkerApiChunksChunkIdHubMarkersPostResponses, RegisterRunnerApiFleetRunnersPostData, RegisterRunnerApiFleetRunnersPostErrors, RegisterRunnerApiFleetRunnersPostResponses, RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostData, RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostErrors, RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostResponses, ReorderQueueApiQueueReorderPostData, ReorderQueueApiQueueReorderPostErrors, ReorderQueueApiQueueReorderPostResponses, ReplaceQueueApiQueuePutData, ReplaceQueueApiQueuePutErrors, ReplaceQueueApiQueuePutResponses, ReportEscalationApiFleetChunksChunkIdEscalationsPostData, ReportEscalationApiFleetChunksChunkIdEscalationsPostErrors, ReportEscalationApiFleetChunksChunkIdEscalationsPostResponses, ReportLeaseApiFleetChunksChunkIdLeasesPostData, ReportLeaseApiFleetChunksChunkIdLeasesPostErrors, ReportLeaseApiFleetChunksChunkIdLeasesPostResponses, RequeueChunkApiChunksChunkIdRequeuesPostData, RequeueChunkApiChunksChunkIdRequeuesPostErrors, RequeueChunkApiChunksChunkIdRequeuesPostResponses, ResolveDecisionApiDecisionsDecisionIdResolutionsPostData, ResolveDecisionApiDecisionsDecisionIdResolutionsPostErrors, ResolveDecisionApiDecisionsDecisionIdResolutionsPostResponses, ResolveDecisionSingularApiDecisionsDecisionIdResolutionPostData, ResolveDecisionSingularApiDecisionsDecisionIdResolutionPostErrors, ResolveDecisionSingularApiDecisionsDecisionIdResolutionPostResponses, ResumeChunkApiChunksChunkIdResumePostData, ResumeChunkApiChunksChunkIdResumePostErrors, ResumeChunkApiChunksChunkIdResumePostResponses, ResumeRunnerApiRunnersRunnerIdResumePostData, ResumeRunnerApiRunnersRunnerIdResumePostErrors, ResumeRunnerApiRunnersRunnerIdResumePostResponses, RetireGraphApiGraphsGraphIdRetirePostData, RetireGraphApiGraphsGraphIdRetirePostErrors, RetireGraphApiGraphsGraphIdRetirePostResponses, SetChunkGraphApiChunksChunkIdGraphPostData, SetChunkGraphApiChunksChunkIdGraphPostErrors, SetChunkGraphApiChunksChunkIdGraphPostResponses, SetChunkModelApiChunksChunkIdModelPostData, SetChunkModelApiChunksChunkIdModelPostErrors, SetChunkModelApiChunksChunkIdModelPostResponses, StopChunkApiChunksChunkIdStopPostData, StopChunkApiChunksChunkIdStopPostErrors, StopChunkApiChunksChunkIdStopPostResponses, SubmitCompletionApiFleetChunksChunkIdCompletionsPostData, SubmitCompletionApiFleetChunksChunkIdCompletionsPostErrors, SubmitCompletionApiFleetChunksChunkIdCompletionsPostResponses, SubmitDecisionApiFleetChunksChunkIdDecisionsPostData, SubmitDecisionApiFleetChunksChunkIdDecisionsPostErrors, SubmitDecisionApiFleetChunksChunkIdDecisionsPostResponses } from './types.gen';
+import type { AnswerQuestionApiQuestionsQuestionIdAnswersPostData, AnswerQuestionApiQuestionsQuestionIdAnswersPostErrors, AnswerQuestionApiQuestionsQuestionIdAnswersPostResponses, AskQuestionApiQuestionsPostData, AskQuestionApiQuestionsPostErrors, AskQuestionApiQuestionsPostResponses, ClaimRouteApiFleetRoutesPostData, ClaimRouteApiFleetRoutesPostErrors, ClaimRouteApiFleetRoutesPostResponses, DetachChunkApiChunksChunkIdDetachPostData, DetachChunkApiChunksChunkIdDetachPostErrors, DetachChunkApiChunksChunkIdDetachPostResponses, EnableGraphApiGraphsGraphIdEnablePostData, EnableGraphApiGraphsGraphIdEnablePostErrors, EnableGraphApiGraphsGraphIdEnablePostResponses, EnrollRunnerApiRunnersRunnerIdEnrollmentsPostData, EnrollRunnerApiRunnersRunnerIdEnrollmentsPostErrors, EnrollRunnerApiRunnersRunnerIdEnrollmentsPostResponses, FleetSpendApiSpendGetData, FleetSpendApiSpendGetErrors, FleetSpendApiSpendGetResponses, FleetSummaryApiFleetSummaryGetData, FleetSummaryApiFleetSummaryGetResponses, GetChunkApiChunksChunkIdGetData, GetChunkApiChunksChunkIdGetErrors, GetChunkApiChunksChunkIdGetResponses, GetChunkApiFleetChunksChunkIdGetData, GetChunkApiFleetChunksChunkIdGetErrors, GetChunkApiFleetChunksChunkIdGetResponses, GetEnvelopeApiFleetChunksChunkIdEnvelopeGetData, GetEnvelopeApiFleetChunksChunkIdEnvelopeGetErrors, GetEnvelopeApiFleetChunksChunkIdEnvelopeGetResponses, GetGraphApiGraphsGraphIdGetData, GetGraphApiGraphsGraphIdGetErrors, GetGraphApiGraphsGraphIdGetResponses, GetPmItemsApiChunksChunkIdPmItemsGetData, GetPmItemsApiChunksChunkIdPmItemsGetErrors, GetPmItemsApiChunksChunkIdPmItemsGetResponses, GetPmItemsApiFleetChunksChunkIdPmItemsGetData, GetPmItemsApiFleetChunksChunkIdPmItemsGetErrors, GetPmItemsApiFleetChunksChunkIdPmItemsGetResponses, GetQuestionApiFleetQuestionsQuestionIdGetData, GetQuestionApiFleetQuestionsQuestionIdGetErrors, GetQuestionApiFleetQuestionsQuestionIdGetResponses, GetQueueApiQueueGetData, GetQueueApiQueueGetResponses, GetRunnerApiFleetRunnersRunnerIdGetData, GetRunnerApiFleetRunnersRunnerIdGetErrors, GetRunnerApiFleetRunnersRunnerIdGetResponses, GetRunnerApiRunnersRunnerIdGetData, GetRunnerApiRunnersRunnerIdGetErrors, GetRunnerApiRunnersRunnerIdGetResponses, GroupChunksApiChunksChunkIdGroupPostData, GroupChunksApiChunksChunkIdGroupPostErrors, GroupChunksApiChunksChunkIdGroupPostResponses, HealthApiHealthGetData, HealthApiHealthGetResponses, HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostData, HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostErrors, HeartbeatRunnerApiFleetRunnersRunnerIdHeartbeatsPostResponses, HubAdvanceApiFleetChunksChunkIdHubAdvancePostData, HubAdvanceApiFleetChunksChunkIdHubAdvancePostErrors, HubAdvanceApiFleetChunksChunkIdHubAdvancePostResponses, IngestChunkApiChunksPostData, IngestChunkApiChunksPostErrors, IngestChunkApiChunksPostResponses, IngestRunnerFactsApiFleetEventsPostData, IngestRunnerFactsApiFleetEventsPostErrors, IngestRunnerFactsApiFleetEventsPostResponses, ListChunksApiChunksGetData, ListChunksApiChunksGetResponses, ListDecisionsApiDecisionsGetData, ListDecisionsApiDecisionsGetResponses, ListGraphsApiGraphsGetData, ListGraphsApiGraphsGetResponses, ListOpenQuestionsApiQuestionsGetData, ListOpenQuestionsApiQuestionsGetResponses, ListRunnersApiRunnersGetData, ListRunnersApiRunnersGetResponses, MintGraphApiGraphsPostData, MintGraphApiGraphsPostErrors, MintGraphApiGraphsPostResponses, PatchChunkApiChunksChunkIdPatchData, PatchChunkApiChunksChunkIdPatchErrors, PatchChunkApiChunksChunkIdPatchResponses, PauseChunkApiChunksChunkIdPausePostData, PauseChunkApiChunksChunkIdPausePostErrors, PauseChunkApiChunksChunkIdPausePostResponses, PauseRunnerApiRunnersRunnerIdPausePostData, PauseRunnerApiRunnersRunnerIdPausePostErrors, PauseRunnerApiRunnersRunnerIdPausePostResponses, PeekQueueApiFleetQueuePeekGetData, PeekQueueApiFleetQueuePeekGetResponses, PromoteChunkApiChunksChunkIdPromotePostData, PromoteChunkApiChunksChunkIdPromotePostErrors, PromoteChunkApiChunksChunkIdPromotePostResponses, ReadyApiReadyGetData, ReadyApiReadyGetResponses, RecordHubMarkerApiChunksChunkIdHubMarkersPostData, RecordHubMarkerApiChunksChunkIdHubMarkersPostErrors, RecordHubMarkerApiChunksChunkIdHubMarkersPostResponses, RegisterRunnerApiFleetRunnersPostData, RegisterRunnerApiFleetRunnersPostErrors, RegisterRunnerApiFleetRunnersPostResponses, RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostData, RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostErrors, RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostResponses, ReplaceQueueApiQueuePutData, ReplaceQueueApiQueuePutErrors, ReplaceQueueApiQueuePutResponses, ReportEscalationApiFleetChunksChunkIdEscalationsPostData, ReportEscalationApiFleetChunksChunkIdEscalationsPostErrors, ReportEscalationApiFleetChunksChunkIdEscalationsPostResponses, ReportLeaseApiFleetChunksChunkIdLeasesPostData, ReportLeaseApiFleetChunksChunkIdLeasesPostErrors, ReportLeaseApiFleetChunksChunkIdLeasesPostResponses, RequeueChunkApiChunksChunkIdRequeuesPostData, RequeueChunkApiChunksChunkIdRequeuesPostErrors, RequeueChunkApiChunksChunkIdRequeuesPostResponses, ResolveDecisionApiDecisionsDecisionIdResolutionsPostData, ResolveDecisionApiDecisionsDecisionIdResolutionsPostErrors, ResolveDecisionApiDecisionsDecisionIdResolutionsPostResponses, ResumeChunkApiChunksChunkIdResumePostData, ResumeChunkApiChunksChunkIdResumePostErrors, ResumeChunkApiChunksChunkIdResumePostResponses, ResumeRunnerApiRunnersRunnerIdResumePostData, ResumeRunnerApiRunnersRunnerIdResumePostErrors, ResumeRunnerApiRunnersRunnerIdResumePostResponses, RetireGraphApiGraphsGraphIdRetirePostData, RetireGraphApiGraphsGraphIdRetirePostErrors, RetireGraphApiGraphsGraphIdRetirePostResponses, StopChunkApiChunksChunkIdStopPostData, StopChunkApiChunksChunkIdStopPostErrors, StopChunkApiChunksChunkIdStopPostResponses, SubmitCompletionApiFleetChunksChunkIdCompletionsPostData, SubmitCompletionApiFleetChunksChunkIdCompletionsPostErrors, SubmitCompletionApiFleetChunksChunkIdCompletionsPostResponses, SubmitDecisionApiFleetChunksChunkIdDecisionsPostData, SubmitDecisionApiFleetChunksChunkIdDecisionsPostErrors, SubmitDecisionApiFleetChunksChunkIdDecisionsPostResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -85,32 +85,6 @@ export const patchChunkApiChunksChunkIdPatch = <ThrowOnError extends boolean = f
 export const detachChunkApiChunksChunkIdDetachPost = <ThrowOnError extends boolean = false>(options: Options<DetachChunkApiChunksChunkIdDetachPostData, ThrowOnError>): RequestResult<DetachChunkApiChunksChunkIdDetachPostResponses, DetachChunkApiChunksChunkIdDetachPostErrors, ThrowOnError> => (options.client ?? client).post<DetachChunkApiChunksChunkIdDetachPostResponses, DetachChunkApiChunksChunkIdDetachPostErrors, ThrowOnError>({ url: '/api/chunks/{chunk_id}/detach', ...options });
 
 /**
- * Set Chunk Graph
- *
- * Deprecated alias of ``PATCH /chunks/{id}`` (``{"graph_id": ...}``, issue #104) —
- * repins a not-ready or ready-and-unclaimed chunk's workflow graph (issue #27,
- * widened by #120). Identical request/response body and ``EditService`` delegation
- * as before; only the deprecation marker and headers are new.
- *
- * 404 on an unknown chunk or an unknown target graph; 409 once the chunk is claimed
- * or later (``running``, ``delivering``, ``waiting_on_human``, ``needs_human``,
- * ``paused``, ``done``, ``stopped`` — issue #120 widened the admit set to
- * ``{not_ready, ready}``, not further — checked first, so it wins over the next
- * cause even when both apply) or on a retired target graph (issue #101 — a retired
- * graph cannot receive new work).
- *
- * @deprecated
- */
-export const setChunkGraphApiChunksChunkIdGraphPost = <ThrowOnError extends boolean = false>(options: Options<SetChunkGraphApiChunksChunkIdGraphPostData, ThrowOnError>): RequestResult<SetChunkGraphApiChunksChunkIdGraphPostResponses, SetChunkGraphApiChunksChunkIdGraphPostErrors, ThrowOnError> => (options.client ?? client).post<SetChunkGraphApiChunksChunkIdGraphPostResponses, SetChunkGraphApiChunksChunkIdGraphPostErrors, ThrowOnError>({
-    url: '/api/chunks/{chunk_id}/graph',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
  * Group Chunks
  *
  * Merge unacquired chunks into ``chunk_id`` — the board's Group control.
@@ -139,30 +113,6 @@ export const groupChunksApiChunksChunkIdGroupPost = <ThrowOnError extends boolea
  */
 export const recordHubMarkerApiChunksChunkIdHubMarkersPost = <ThrowOnError extends boolean = false>(options: Options<RecordHubMarkerApiChunksChunkIdHubMarkersPostData, ThrowOnError>): RequestResult<RecordHubMarkerApiChunksChunkIdHubMarkersPostResponses, RecordHubMarkerApiChunksChunkIdHubMarkersPostErrors, ThrowOnError> => (options.client ?? client).post<RecordHubMarkerApiChunksChunkIdHubMarkersPostResponses, RecordHubMarkerApiChunksChunkIdHubMarkersPostErrors, ThrowOnError>({
     url: '/api/chunks/{chunk_id}/hub-markers',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Set Chunk Model
- *
- * Deprecated alias of ``PATCH /chunks/{id}`` (``{"model": ...}``, issue #104) —
- * repins a not-ready or ready-and-unclaimed chunk's model selection (issue #27,
- * widened by #120). Identical request/response body and ``EditService`` delegation
- * as before; only the deprecation marker and headers are new.
- *
- * 404 on an unknown chunk; 422 on a blank model; 409 once the chunk is claimed or
- * later (``running``, ``delivering``, ``waiting_on_human``, ``needs_human``,
- * ``paused``, ``done``, ``stopped`` — issue #120 widened the admit set to
- * ``{not_ready, ready}``, not further).
- *
- * @deprecated
- */
-export const setChunkModelApiChunksChunkIdModelPost = <ThrowOnError extends boolean = false>(options: Options<SetChunkModelApiChunksChunkIdModelPostData, ThrowOnError>): RequestResult<SetChunkModelApiChunksChunkIdModelPostResponses, SetChunkModelApiChunksChunkIdModelPostErrors, ThrowOnError> => (options.client ?? client).post<SetChunkModelApiChunksChunkIdModelPostResponses, SetChunkModelApiChunksChunkIdModelPostErrors, ThrowOnError>({
-    url: '/api/chunks/{chunk_id}/model',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -256,23 +206,6 @@ export const stopChunkApiChunksChunkIdStopPost = <ThrowOnError extends boolean =
  * The fleet's open (unresolved) decisions — gate surfacing.
  */
 export const listDecisionsApiDecisionsGet = <ThrowOnError extends boolean = false>(options?: Options<ListDecisionsApiDecisionsGetData, ThrowOnError>): RequestResult<ListDecisionsApiDecisionsGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListDecisionsApiDecisionsGetResponses, unknown, ThrowOnError>({ url: '/api/decisions', ...options });
-
-/**
- * Resolve Decision Singular
- *
- * Deprecated alias of ``POST /api/decisions/{id}/resolutions`` — kept for
- * version-skewed clients (``blizzard hub decide``, until it migrates).
- *
- * @deprecated
- */
-export const resolveDecisionSingularApiDecisionsDecisionIdResolutionPost = <ThrowOnError extends boolean = false>(options: Options<ResolveDecisionSingularApiDecisionsDecisionIdResolutionPostData, ThrowOnError>): RequestResult<ResolveDecisionSingularApiDecisionsDecisionIdResolutionPostResponses, ResolveDecisionSingularApiDecisionsDecisionIdResolutionPostErrors, ThrowOnError> => (options.client ?? client).post<ResolveDecisionSingularApiDecisionsDecisionIdResolutionPostResponses, ResolveDecisionSingularApiDecisionsDecisionIdResolutionPostErrors, ThrowOnError>({
-    url: '/api/decisions/{decision_id}/resolution',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
 
 /**
  * Resolve Decision
@@ -577,23 +510,6 @@ export const askQuestionApiQuestionsPost = <ThrowOnError extends boolean = false
 });
 
 /**
- * Answer Question Singular
- *
- * Deprecated alias of ``POST /api/questions/{id}/answers`` — kept for
- * version-skewed clients (``blizzard hub answer``, until it migrates).
- *
- * @deprecated
- */
-export const answerQuestionSingularApiQuestionsQuestionIdAnswerPost = <ThrowOnError extends boolean = false>(options: Options<AnswerQuestionSingularApiQuestionsQuestionIdAnswerPostData, ThrowOnError>): RequestResult<AnswerQuestionSingularApiQuestionsQuestionIdAnswerPostResponses, AnswerQuestionSingularApiQuestionsQuestionIdAnswerPostErrors, ThrowOnError> => (options.client ?? client).post<AnswerQuestionSingularApiQuestionsQuestionIdAnswerPostResponses, AnswerQuestionSingularApiQuestionsQuestionIdAnswerPostErrors, ThrowOnError>({
-    url: '/api/questions/{question_id}/answer',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
  * Answer Question
  *
  * Answer a question first-write-wins; 409 carries the winning answer.
@@ -627,36 +543,6 @@ export const getQueueApiQueueGet = <ThrowOnError extends boolean = false>(option
  */
 export const replaceQueueApiQueuePut = <ThrowOnError extends boolean = false>(options: Options<ReplaceQueueApiQueuePutData, ThrowOnError>): RequestResult<ReplaceQueueApiQueuePutResponses, ReplaceQueueApiQueuePutErrors, ThrowOnError> => (options.client ?? client).put<ReplaceQueueApiQueuePutResponses, ReplaceQueueApiQueuePutErrors, ThrowOnError>({
     url: '/api/queue',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Peek Queue
- *
- * Deprecated alias of ``GET /api/queue`` — kept for version-skewed clients.
- *
- * @deprecated
- */
-export const peekQueueApiQueuePeekGet = <ThrowOnError extends boolean = false>(options?: Options<PeekQueueApiQueuePeekGetData, ThrowOnError>): RequestResult<PeekQueueApiQueuePeekGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<PeekQueueApiQueuePeekGetResponses, unknown, ThrowOnError>({ url: '/api/queue/peek', ...options });
-
-/**
- * Reorder Queue
- *
- * Move a ready chunk to a queue position — the board's Prioritize control.
- *
- * Deprecated alias of ``PUT /api/queue`` (single-move, unchanged behavior); the
- * whole-order successor is the only one that can express an arbitrary reshuffle in
- * one call, but this stays functional for the board's move-one-to-position control
- * and any version-skewed client until they migrate.
- *
- * @deprecated
- */
-export const reorderQueueApiQueueReorderPost = <ThrowOnError extends boolean = false>(options: Options<ReorderQueueApiQueueReorderPostData, ThrowOnError>): RequestResult<ReorderQueueApiQueueReorderPostResponses, ReorderQueueApiQueueReorderPostErrors, ThrowOnError> => (options.client ?? client).post<ReorderQueueApiQueueReorderPostResponses, ReorderQueueApiQueueReorderPostErrors, ThrowOnError>({
-    url: '/api/queue/reorder',
     ...options,
     headers: {
         'Content-Type': 'application/json',

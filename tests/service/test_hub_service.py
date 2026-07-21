@@ -13,7 +13,7 @@ Every assertion is made over the wire against the running hub:
   carries a zombie fence; the hub rejects it (``failure``, "stale epoch") and does **not**
   advance.
 * **queue shaping** — grouping folds two ready chunks into one plural-pointer survivor and
-  a reorder moves it to the top; ``GET /api/queue/peek`` reflects both.
+  a whole-order replace moves it to the top; ``GET /api/queue`` reflects both.
 * **SSE contract** — ``GET /api/events/stream`` serves a valid ``text/event-stream`` an
   ``EventSource`` connects to (the reserved comment).
 * **SSE live fan-out** (issue #107) — a *connected* subscriber receives ``queue-changed``
@@ -182,9 +182,9 @@ def test_queue_shaping_group_and_reorder_reflected_in_peek(tmp_path: Path) -> No
         assert grouped.status_code == 200, grouped.text
         assert len(grouped.json()["pm_pointers"]) == 2
 
-        # Reorder the survivor to the top; peek reflects both shaping actions.
-        assert hub.post("/api/queue/reorder", json={"chunk_id": chunk_b, "position": 0}).status_code == 200
-        peek_ids = [e["chunk_id"] for e in hub.get("/api/queue/peek").json()["entries"]]
+        # Move the survivor to the top via the whole-order replace; the read reflects both actions.
+        assert hub.put("/api/queue", json={"chunk_ids": [chunk_b, chunk_a]}).status_code == 200
+        peek_ids = [e["chunk_id"] for e in hub.get("/api/queue").json()["entries"]]
         assert peek_ids == [chunk_b, chunk_a], peek_ids  # C merged away; B moved to the front
 
 

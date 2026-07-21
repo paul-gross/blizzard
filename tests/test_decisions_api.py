@@ -136,48 +136,10 @@ def test_resolutions_unknown_choice_is_400(tmp_path: Path) -> None:
     assert resp.status_code == 400
 
 
-# --- Deprecated singular alias: still works, carries headers ----------------
+# --- Runner principal is still rejected on the resolution route -------------
 
 
-def test_singular_alias_still_resolves_and_carries_deprecation_headers(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path)
-    decision_id = _open_decision(hub)
-
-    resp = hub.client.post(f"/api/decisions/{decision_id}/resolution", json={"choice": "approve", "resolved_by": "ada"})
-    assert resp.status_code == 200, resp.text
-    assert resp.json()["choice"] == "approve"
-    assert resp.headers["Deprecation"] == "true"
-    assert resp.headers["Link"] == f'</api/decisions/{decision_id}/resolutions>; rel="successor-version"'
-
-
-def test_singular_alias_409_conflict_still_carries_deprecation_headers(tmp_path: Path) -> None:
-    """The alias's headers must land even on the successor's JSONResponse-conflict
-    path — a bare ``response: Response`` header write is discarded once the handler
-    returns its own Response instance, so the alias must target whichever object is
-    actually returned."""
-    hub = build_hub(tmp_path)
-    decision_id = _open_decision(hub)
-    hub.client.post(f"/api/decisions/{decision_id}/resolutions", json={"choice": "approve", "resolved_by": "ada"})
-
-    resp = hub.client.post(f"/api/decisions/{decision_id}/resolution", json={"choice": "reject", "resolved_by": "bob"})
-    assert resp.status_code == 409, resp.text
-    assert resp.json()["already_resolved_by"] == "ada"
-    assert resp.headers["Deprecation"] == "true"
-    assert resp.headers["Link"] == f'</api/decisions/{decision_id}/resolutions>; rel="successor-version"'
-
-
-def test_deprecated_route_is_marked_in_the_openapi_schema() -> None:
-    from blizzard.hub.app import create_app_for_export
-
-    schema = create_app_for_export().openapi()
-    assert schema["paths"]["/api/decisions/{decision_id}/resolution"]["post"]["deprecated"] is True
-    assert "deprecated" not in schema["paths"]["/api/decisions/{decision_id}/resolutions"]["post"]
-
-
-# --- Runner principal is still rejected on both routes ----------------------
-
-
-def test_runner_bearer_token_is_rejected_on_resolutions_and_alias(tmp_path: Path) -> None:
+def test_runner_bearer_token_is_rejected_on_resolutions(tmp_path: Path) -> None:
     from blizzard.hub.config import RUNNER_AUTH_ENFORCE
     from tests.test_fleet_auth import _bearer, _seed_enrolled
 
@@ -189,12 +151,6 @@ def test_runner_bearer_token_is_rejected_on_resolutions_and_alias(tmp_path: Path
     assert (
         hub.client.post(
             f"/api/decisions/{decision_id}/resolutions", json={"choice": "approve"}, headers=_bearer(token)
-        ).status_code
-        == 403
-    )
-    assert (
-        hub.client.post(
-            f"/api/decisions/{decision_id}/resolution", json={"choice": "approve"}, headers=_bearer(token)
         ).status_code
         == 403
     )

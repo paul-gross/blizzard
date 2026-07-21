@@ -237,7 +237,7 @@ def test_stop_publishes_both_chunk_changed_and_queue_changed(tmp_path: Path) -> 
 
 
 def _peek_ids(hub) -> list[str]:  # type: ignore[no-untyped-def]
-    resp = hub.client.get("/api/queue/peek")
+    resp = hub.client.get("/api/queue")
     assert resp.status_code == 200, resp.text
     return [e["chunk_id"] for e in resp.json()["entries"]]
 

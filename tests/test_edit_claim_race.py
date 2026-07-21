@@ -105,9 +105,7 @@ def test_a_claim_blocks_while_an_edit_holds_the_shared_lock_mid_write(tmp_path: 
     edit_result: dict[str, int] = {}
 
     def _edit() -> None:
-        edit_result["status"] = hub.client.post(
-            f"/api/chunks/{chunk_id}/graph", json={"graph_id": alt_graph_id}
-        ).status_code
+        edit_result["status"] = hub.client.patch(f"/api/chunks/{chunk_id}", json={"graph_id": alt_graph_id}).status_code
 
     edit_thread = threading.Thread(target=_edit)
     edit_thread.start()
@@ -179,9 +177,7 @@ def test_an_edit_is_refused_while_a_claim_holds_the_shared_lock_mid_route_creati
     edit_result: dict[str, int] = {}
 
     def _edit() -> None:
-        edit_result["status"] = hub.client.post(
-            f"/api/chunks/{chunk_id}/graph", json={"graph_id": alt_graph_id}
-        ).status_code
+        edit_result["status"] = hub.client.patch(f"/api/chunks/{chunk_id}", json={"graph_id": alt_graph_id}).status_code
 
     edit_thread = threading.Thread(target=_edit)
     edit_thread.start()
@@ -217,7 +213,7 @@ def test_repeated_edit_claim_races_never_yield_a_torn_graph(tmp_path: Path) -> N
 
         def _edit(cid: str = chunk_id, barrier: threading.Barrier = start, sink: dict[str, object] = results) -> None:
             barrier.wait()
-            sink["edit"] = hub.client.post(f"/api/chunks/{cid}/graph", json={"graph_id": alt_graph_id}).status_code
+            sink["edit"] = hub.client.patch(f"/api/chunks/{cid}", json={"graph_id": alt_graph_id}).status_code
 
         def _claim(
             cid: str = chunk_id, barrier: threading.Barrier = start, sink: dict[str, object] = results, n: int = i

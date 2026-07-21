@@ -1,10 +1,11 @@
 """The client verbs that wrap the hub's ingest + the runner's own declarative pause
 (mixed tier — marked per test, not file-wide; see below).
 
-``blizzard hub ingest`` (wraps ``POST /api/chunks``) is a pure client of the hub's
+``blizzard hub chunk ingest`` (wraps ``POST /api/chunks``) is a pure client of the hub's
 API, driven here with ``httpx.post`` stubbed: the request it builds, the success line, the
-mapped error statuses — no live hub. These (plus ``promote``/``detach``/``stop``, the same
-shape) are **unit** tier: one verb driven in isolation with its only collaborator stubbed.
+mapped error statuses — no live hub. These (plus ``chunk promote``/``chunk detach``/``chunk
+stop``, the same shape) are **unit** tier: one verb driven in isolation with its only
+collaborator stubbed.
 
 ``blizzard runner pause`` / ``start`` are pure clients of the *runner's own* local API
 (``PATCH /runner``, issue #43) — a different surface and a different concept from the hub's
@@ -59,7 +60,7 @@ class _FakeResponse:
 
 
 # --------------------------------------------------------------------------- #
-# `blizzard hub ingest`
+# `blizzard hub chunk ingest`
 # --------------------------------------------------------------------------- #
 
 
@@ -76,7 +77,7 @@ def test_ingest_posts_the_tokens_verbatim_and_reports_the_chunk(monkeypatch: pyt
     monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
     result = CliRunner().invoke(
         hub_group,
-        ["ingest", "blizzard:8", "widget:1"],
+        ["chunk", "ingest", "blizzard:8", "widget:1"],
         env={"BZ_HUB_URL": "http://hub.local:8421"},
     )
 
@@ -98,7 +99,7 @@ def test_ingest_passes_a_source_hash_ref_token_through(monkeypatch: pytest.Monke
         return _FakeResponse(201, {"chunk_id": "ch_new"})
 
     monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["ingest", "blizzard#8"])
+    result = CliRunner().invoke(hub_group, ["chunk", "ingest", "blizzard#8"])
 
     assert result.exit_code == 0, result.output
     assert calls[0] == {"tokens": ["blizzard#8"]}
@@ -118,7 +119,7 @@ def test_ingest_passes_a_pasted_issue_url_through_for_the_hub_to_resolve(monkeyp
         return _FakeResponse(201, {"chunk_id": "ch_new"})
 
     monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["ingest", "https://github.com/paul-gross/blizzard/issues/26"])
+    result = CliRunner().invoke(hub_group, ["chunk", "ingest", "https://github.com/paul-gross/blizzard/issues/26"])
 
     assert result.exit_code == 0, result.output
     assert calls[0] == {"tokens": ["https://github.com/paul-gross/blizzard/issues/26"]}
@@ -138,7 +139,9 @@ def test_ingest_warns_on_the_deprecated_github_prefix_but_still_passes_the_rest_
         return _FakeResponse(201, {"chunk_id": "ch_new"})
 
     monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["ingest", "github:https://github.com/paul-gross/blizzard/issues/26"])
+    result = CliRunner().invoke(
+        hub_group, ["chunk", "ingest", "github:https://github.com/paul-gross/blizzard/issues/26"]
+    )
 
     assert result.exit_code == 0, result.output
     assert calls[0] == {"tokens": ["https://github.com/paul-gross/blizzard/issues/26"]}
@@ -153,7 +156,7 @@ def test_ingest_maps_a_pointer_conflict(monkeypatch: pytest.MonkeyPatch) -> None
         return _FakeResponse(409, {"existing_chunk_id": "ch_old", "source": "blizzard", "ref": "8"})
 
     monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["ingest", "blizzard:8"])
+    result = CliRunner().invoke(hub_group, ["chunk", "ingest", "blizzard:8"])
 
     assert result.exit_code != 0
     assert "ch_old" in result.output
@@ -173,7 +176,7 @@ def test_ingest_maps_a_422_naming_the_unclaimed_token(monkeypatch: pytest.Monkey
         )
 
     monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["ingest", "no-separator-here"])
+    result = CliRunner().invoke(hub_group, ["chunk", "ingest", "no-separator-here"])
 
     assert result.exit_code != 0
     assert "no-separator-here" in result.output
@@ -200,7 +203,7 @@ def test_ingest_passes_a_non_issue_url_through_for_the_hub_to_reject(monkeypatch
     monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
     tokens = ("https://github.com/paul-gross/blizzard/pull/5", "https://example.com/nothing/here")
     for token in tokens:
-        result = CliRunner().invoke(hub_group, ["ingest", token])
+        result = CliRunner().invoke(hub_group, ["chunk", "ingest", token])
         assert result.exit_code != 0, f"{token!r} should have been rejected by the hub: {result.output}"
         assert "not claimed by any configured PM source" in result.output, result.output
     # The scheme colon was never split on locally — each token traveled through whole.
@@ -208,7 +211,7 @@ def test_ingest_passes_a_non_issue_url_through_for_the_hub_to_reject(monkeypatch
 
 
 # --------------------------------------------------------------------------- #
-# `blizzard hub promote`
+# `blizzard hub chunk promote`
 # --------------------------------------------------------------------------- #
 
 
@@ -222,7 +225,7 @@ def test_promote_posts_to_the_chunk_and_reports_ready(monkeypatch: pytest.Monkey
         return _FakeResponse(202)
 
     monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["promote", "ch_42"], env={"BZ_HUB_URL": "http://hub.local:8421"})
+    result = CliRunner().invoke(hub_group, ["chunk", "promote", "ch_42"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
     assert result.exit_code == 0, result.output
     assert calls == ["http://hub.local:8421/api/chunks/ch_42/promote"]
@@ -237,14 +240,14 @@ def test_promote_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
         return _FakeResponse(404)
 
     monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["promote", "ch_nope"])
+    result = CliRunner().invoke(hub_group, ["chunk", "promote", "ch_nope"])
 
     assert result.exit_code != 0
     assert "ch_nope" in result.output
 
 
 # --------------------------------------------------------------------------- #
-# `blizzard hub detach`
+# `blizzard hub chunk detach`
 # --------------------------------------------------------------------------- #
 
 
@@ -258,7 +261,7 @@ def test_detach_posts_to_the_chunk_and_reports_released(monkeypatch: pytest.Monk
         return _FakeResponse(202, {"chunk_id": "ch_42"})
 
     monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["detach", "ch_42"], env={"BZ_HUB_URL": "http://hub.local:8421"})
+    result = CliRunner().invoke(hub_group, ["chunk", "detach", "ch_42"], env={"BZ_HUB_URL": "http://hub.local:8421"})
 
     assert result.exit_code == 0, result.output
     assert calls == ["http://hub.local:8421/api/chunks/ch_42/detach"]
@@ -273,7 +276,7 @@ def test_detach_maps_a_conflict_with_the_servers_detail(monkeypatch: pytest.Monk
         return _FakeResponse(409, {"detail": "chunk ch_42 has no live route"})
 
     monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["detach", "ch_42"])
+    result = CliRunner().invoke(hub_group, ["chunk", "detach", "ch_42"])
 
     assert result.exit_code != 0
     assert "chunk ch_42 has no live route" in result.output
@@ -287,14 +290,14 @@ def test_detach_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
         return _FakeResponse(404)
 
     monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["detach", "ch_nope"])
+    result = CliRunner().invoke(hub_group, ["chunk", "detach", "ch_nope"])
 
     assert result.exit_code != 0
     assert "ch_nope" in result.output
 
 
 # --------------------------------------------------------------------------- #
-# `blizzard hub stop` (issue #118)
+# `blizzard hub chunk stop` (issue #118)
 # --------------------------------------------------------------------------- #
 
 
@@ -309,7 +312,7 @@ def test_stop_posts_to_the_chunk_and_reports_stopped(monkeypatch: pytest.MonkeyP
 
     monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
     result = CliRunner().invoke(
-        hub_group, ["stop", "ch_42", "--by", "alice"], env={"BZ_HUB_URL": "http://hub.local:8421"}
+        hub_group, ["chunk", "stop", "ch_42", "--by", "alice"], env={"BZ_HUB_URL": "http://hub.local:8421"}
     )
 
     assert result.exit_code == 0, result.output
@@ -327,7 +330,7 @@ def test_stop_maps_a_conflict_with_the_servers_detail(monkeypatch: pytest.Monkey
         return _FakeResponse(409, {"detail": "chunk ch_42 is stopped, not stoppable"})
 
     monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["stop", "ch_42"])
+    result = CliRunner().invoke(hub_group, ["chunk", "stop", "ch_42"])
 
     assert result.exit_code != 0
     assert "chunk ch_42 is stopped, not stoppable" in result.output
@@ -341,7 +344,7 @@ def test_stop_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> None:
         return _FakeResponse(404)
 
     monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["stop", "ch_nope"])
+    result = CliRunner().invoke(hub_group, ["chunk", "stop", "ch_nope"])
 
     assert result.exit_code != 0
     assert "ch_nope" in result.output
@@ -356,7 +359,7 @@ def test_stop_defaults_by_to_operator(monkeypatch: pytest.MonkeyPatch) -> None:
         return _FakeResponse(202, {"chunk_id": "ch_42"})
 
     monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["stop", "ch_42"])
+    result = CliRunner().invoke(hub_group, ["chunk", "stop", "ch_42"])
 
     assert result.exit_code == 0, result.output
     _, body = calls[0]
@@ -364,7 +367,7 @@ def test_stop_defaults_by_to_operator(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# `blizzard hub pause-chunk` / `resume-chunk` (issue #46)
+# `blizzard hub chunk pause` / `chunk resume` (issue #46)
 # --------------------------------------------------------------------------- #
 
 
@@ -379,7 +382,7 @@ def test_pause_chunk_posts_to_the_chunk_and_reports_paused(monkeypatch: pytest.M
 
     monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
     result = CliRunner().invoke(
-        hub_group, ["pause-chunk", "ch_42", "--by", "alice"], env={"BZ_HUB_URL": "http://hub.local:8421"}
+        hub_group, ["chunk", "pause", "ch_42", "--by", "alice"], env={"BZ_HUB_URL": "http://hub.local:8421"}
     )
 
     assert result.exit_code == 0, result.output
@@ -397,7 +400,7 @@ def test_pause_chunk_maps_a_conflict_with_the_servers_detail(monkeypatch: pytest
         return _FakeResponse(409, {"detail": "chunk ch_42 is delivering, not pausable"})
 
     monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["pause-chunk", "ch_42"])
+    result = CliRunner().invoke(hub_group, ["chunk", "pause", "ch_42"])
 
     assert result.exit_code != 0
     assert "chunk ch_42 is delivering, not pausable" in result.output
@@ -411,7 +414,7 @@ def test_pause_chunk_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> N
         return _FakeResponse(404)
 
     monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["pause-chunk", "ch_nope"])
+    result = CliRunner().invoke(hub_group, ["chunk", "pause", "ch_nope"])
 
     assert result.exit_code != 0
     assert "ch_nope" in result.output
@@ -428,7 +431,7 @@ def test_resume_chunk_posts_to_the_chunk_and_reports_resumed(monkeypatch: pytest
 
     monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
     result = CliRunner().invoke(
-        hub_group, ["resume-chunk", "ch_42", "--by", "alice"], env={"BZ_HUB_URL": "http://hub.local:8421"}
+        hub_group, ["chunk", "resume", "ch_42", "--by", "alice"], env={"BZ_HUB_URL": "http://hub.local:8421"}
     )
 
     assert result.exit_code == 0, result.output
@@ -446,7 +449,7 @@ def test_resume_chunk_maps_an_unknown_chunk(monkeypatch: pytest.MonkeyPatch) -> 
         return _FakeResponse(404)
 
     monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
-    result = CliRunner().invoke(hub_group, ["resume-chunk", "ch_nope"])
+    result = CliRunner().invoke(hub_group, ["chunk", "resume", "ch_nope"])
 
     assert result.exit_code != 0
     assert "ch_nope" in result.output
