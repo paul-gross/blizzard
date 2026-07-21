@@ -1,6 +1,15 @@
 {
   "components": {
     "schemas": {
+      "ArtifactKind": {
+        "description": "The union discriminator.",
+        "enum": [
+          "git_commit",
+          "asset"
+        ],
+        "title": "ArtifactKind",
+        "type": "string"
+      },
       "AskListResponse": {
         "description": "Every ask still awaiting an answer.",
         "properties": {
@@ -181,6 +190,78 @@
           "free"
         ],
         "title": "CapacitiesView",
+        "type": "object"
+      },
+      "EnvelopeArtifact": {
+        "description": "One artifact carried into a node-step, resolved latest-by-epoch.",
+        "properties": {
+          "branch_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch Name"
+          },
+          "commit_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Commit Hash"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ArtifactKind"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "node_name": {
+            "title": "Node Name",
+            "type": "string"
+          },
+          "repo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repo"
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "node_name",
+          "epoch"
+        ],
+        "title": "EnvelopeArtifact",
         "type": "object"
       },
       "EnvironmentListResponse": {
@@ -1758,6 +1839,105 @@
           }
         },
         "summary": "List Leases",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/leases/{lease_id}/artifacts": {
+      "get": {
+        "description": "The worker's own node-step inputs \u2014 every artifact resolved latest-by-epoch,\nboth kinds, kind-discriminated.",
+        "operationId": "list_artifacts_api_leases__lease_id__artifacts_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "title": "Lease Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EnvelopeArtifact"
+                  },
+                  "title": "Response List Artifacts Api Leases  Lease Id  Artifacts Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Artifacts",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/leases/{lease_id}/artifacts/{name}": {
+      "get": {
+        "description": "One artifact by ``produces:`` name; ``404`` when this node-step has none by that\nname.",
+        "operationId": "get_artifact_api_leases__lease_id__artifacts__name__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "title": "Lease Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvelopeArtifact"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Artifact",
         "tags": [
           "runner"
         ]

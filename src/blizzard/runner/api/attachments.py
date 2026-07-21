@@ -22,13 +22,12 @@ from __future__ import annotations
 from fastapi import APIRouter, Request, status
 from fastapi.exceptions import HTTPException
 
+from blizzard.runner.api.lease_token import presented_lease_token
 from blizzard.runner.domain.attachments import AttachmentRejected, AttachmentService
 from blizzard.runner.store.repository import IReadRunnerStore
 from blizzard.wire.attachments import AttachmentRequest, AttachmentResponse
 
 router = APIRouter(prefix="/api", tags=["runner"])
-
-_BEARER_PREFIX = "Bearer "
 
 
 def _service(request: Request) -> AttachmentService:
@@ -39,18 +38,6 @@ def _service(request: Request) -> AttachmentService:
             detail="attachment service not wired — start via `blizzard runner host`",
         )
     return service
-
-
-def _presented_token(request: Request) -> str | None:
-    """The lease token off ``X-Blizzard-Lease-Token``, falling back to a standard
-    ``Authorization: Bearer`` header — either form is accepted."""
-    dedicated = request.headers.get("x-blizzard-lease-token")
-    if dedicated:
-        return dedicated
-    authorization = request.headers.get("authorization", "")
-    if authorization.startswith(_BEARER_PREFIX):
-        return authorization[len(_BEARER_PREFIX) :]
-    return None
 
 
 @router.post("/leases/{lease_id}/attachments", response_model=AttachmentResponse, status_code=status.HTTP_200_OK)
@@ -68,7 +55,10 @@ def record_attachment(lease_id: str, request_body: AttachmentRequest, request: R
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"no active lease {lease_id}")
     try:
         service.attach(
-            lease, presented_token=_presented_token(request), name=request_body.name, content=request_body.content
+            lease,
+            presented_token=presented_lease_token(request),
+            name=request_body.name,
+            content=request_body.content,
         )
     except AttachmentRejected as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc

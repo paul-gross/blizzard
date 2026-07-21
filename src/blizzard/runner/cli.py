@@ -24,6 +24,7 @@ import uvicorn
 from blizzard.cli.host_directory import resolve_host_directory
 from blizzard.cli.param_rank import source_rank
 from blizzard.foundation.store.migrations import RevisionMismatchError
+from blizzard.hub.domain.artifacts import ArtifactKind
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.config import ConfigError, RunnerConfig, socket_path_for
 from blizzard.runner.listeners import ListenerError, bind_listeners, unlink_socket
@@ -379,23 +380,111 @@ def ask(prompt: str, options: str | None) -> None:
     click.echo(resp.json().get("question_id", ""))
 
 
-@runner.command()
+def _worker_lease_identity(verb: str) -> tuple[str, str, str | None]:
+    """The worker's ambient lease identity for an ``artifact`` verb — ``(lease_id,
+    runner_url, lease_token)`` from the spawn environment. Raises (a hard error, not a
+    hook-style soft-fail) when the lease id or runner URL is absent, so a lost read or
+    write reaches the worker rather than passing silently. The token may be absent — the
+    runner then rejects the call with ``403``."""
+    lease_id = os.environ.get(ENV_LEASE_ID)
+    runner_url = os.environ.get(ENV_RUNNER_URL)
+    if not lease_id or not runner_url:
+        raise click.ClickException(f"{verb}: no {ENV_LEASE_ID}/{ENV_RUNNER_URL} in the environment")
+    return lease_id, runner_url, os.environ.get(ENV_LEASE_TOKEN)
+
+
+@runner.group("artifact")
+def artifact_group() -> None:
+    """Worker: read and write this node-step's own artifacts (identity from the environment).
+
+    The runner CLI's first noun group (issue #127), with worker-facing CRUD verb names — a
+    machine reading and writing its own inputs, not the hub operator CLI's human-facing
+    display verbs. Scope is ambient: every verb acts on the worker's own lease, resolved
+    from ``BLIZZARD_LEASE_ID``/``BLIZZARD_LEASE_TOKEN``/``BLIZZARD_RUNNER_URL`` (all
+    inherited at spawn) — so no verb takes a ``--lease``/``--chunk`` flag by which a worker
+    could name another chunk.
+    """
+
+
+@artifact_group.command("list")
+def artifact_list() -> None:
+    """Worker: list this node-step's artifacts as kind-discriminated JSON.
+
+    A pure client of the runner's local API: the runner resolves the lease in
+    ``BLIZZARD_LEASE_ID`` to its chunk, proxies to the hub's envelope (runner principal),
+    and returns every artifact resolved latest-by-epoch, both kinds — each entry
+    ``{name, kind, node_name, epoch, content?, repo?, branch_name?, commit_hash?}``
+    (``content`` set for the ``asset`` kind; ``repo``/``branch_name``/``commit_hash`` for
+    ``git_commit``). The worker holds no hub credential.
+    """
+    lease_id, runner_url, lease_token = _worker_lease_identity("artifact list")
+    try:
+        resp = httpx.get(
+            f"{runner_url.rstrip('/')}/api/leases/{lease_id}/artifacts",
+            headers={"X-Blizzard-Lease-Token": lease_token} if lease_token else {},
+            timeout=_PM_ITEMS_TIMEOUT,
+        )
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise click.ClickException(f"artifact list: could not read the artifacts ({exc})") from exc
+    click.echo(resp.text)
+
+
+@artifact_group.command("get")
+@click.argument("name")
+@click.option(
+    "--content",
+    "content",
+    is_flag=True,
+    default=False,
+    help="Print the raw asset text to stdout instead of JSON (errors on a git-commit artifact).",
+)
+def artifact_get(name: str, content: bool) -> None:
+    """Worker: read one artifact by NAME as kind-discriminated JSON.
+
+    The same lease-scoped, hub-proxied read as ``list``, narrowed to one ``produces:``
+    name — an unknown name is a ``404``. ``--content`` prints the raw asset text to stdout
+    instead of the JSON object, and errors when NAME is the ``git_commit`` kind: a commit
+    ref carries no content to emit (drop ``--content`` to read its ref).
+    """
+    lease_id, runner_url, lease_token = _worker_lease_identity("artifact get")
+    try:
+        resp = httpx.get(
+            f"{runner_url.rstrip('/')}/api/leases/{lease_id}/artifacts/{name}",
+            headers={"X-Blizzard-Lease-Token": lease_token} if lease_token else {},
+            timeout=_PM_ITEMS_TIMEOUT,
+        )
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise click.ClickException(f"artifact get: could not read {name!r} ({exc})") from exc
+    if not content:
+        click.echo(resp.text)
+        return
+    artifact = resp.json()
+    if artifact.get("kind") == ArtifactKind.GIT_COMMIT:
+        raise click.ClickException(
+            f"artifact get: {name!r} is a git-commit artifact — it has no content "
+            "(drop --content to read its ref)"
+        )
+    # Raw, un-decorated: the asset text as stored, no added trailing newline.
+    click.echo(artifact.get("content") or "", nl=False)
+
+
+@artifact_group.command("create")
 @click.option("--name", required=True, help="The `produces:` name this content is submitted for.")
-def attach(name: str) -> None:
-    """Worker: durably submit an explicit artifact for a ``produces:`` name (stdin).
+def artifact_create(name: str) -> None:
+    """Worker: durably submit an asset artifact for a ``produces:`` NAME (content on stdin).
 
     A pure client of the runner's local API: the worker pipes the artifact's content
     on stdin, and this posts it for the lease in ``BLIZZARD_LEASE_ID`` to
     ``BLIZZARD_RUNNER_URL``, authorized by the lease token in ``BLIZZARD_LEASE_TOKEN`` —
-    all three inherited from the spawn environment, so no identity arguments. A
-    rejection (a wrong/missing token, an unknown lease, an unreachable runner) exits
-    non-zero so the worker learns it rather than silently losing the submission.
+    all three inherited from the spawn environment, so no identity arguments. It writes the
+    ``asset`` kind only: a worker authors a git-commit artifact by committing in its
+    worktree, which the runner discovers and pushes — not through this verb. A rejection (a
+    wrong/missing token, an unknown lease, an unreachable runner) exits non-zero so the
+    worker learns it rather than silently losing the submission.
     """
-    lease_id = os.environ.get(ENV_LEASE_ID)
-    runner_url = os.environ.get(ENV_RUNNER_URL)
-    lease_token = os.environ.get(ENV_LEASE_TOKEN)
-    if not lease_id or not runner_url:
-        raise click.ClickException(f"attach: no {ENV_LEASE_ID}/{ENV_RUNNER_URL} in the environment")
+    lease_id, runner_url, lease_token = _worker_lease_identity("artifact create")
     content = click.get_text_stream("stdin").read()
     try:
         resp = httpx.post(
@@ -406,7 +495,24 @@ def attach(name: str) -> None:
         )
         resp.raise_for_status()
     except httpx.HTTPError as exc:
-        raise click.ClickException(f"attach: could not record {name!r} ({exc})") from exc
+        raise click.ClickException(f"artifact create: could not record {name!r} ({exc})") from exc
+
+
+@runner.command(hidden=True)
+@click.option("--name", required=True, help="The `produces:` name this content is submitted for.")
+@click.pass_context
+def attach(ctx: click.Context, name: str) -> None:
+    """Deprecated alias for ``blizzard runner artifact create`` (issue #127).
+
+    Kept working, hidden from ``--help``: it warns on stderr and delegates to
+    ``artifact create`` with identical behavior (same route, same stdin content, same
+    token authorization).
+    """
+    click.echo(
+        "warning: `blizzard runner attach` is deprecated — use `blizzard runner artifact create`",
+        err=True,
+    )
+    ctx.invoke(artifact_create, name=name)
 
 
 @runner.command("pm-items")

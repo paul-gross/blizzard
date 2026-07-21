@@ -20,6 +20,7 @@ from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
 from blizzard.foundation.web import mount_web_app
+from blizzard.runner.api.artifacts import router as artifacts_router
 from blizzard.runner.api.asks import router as asks_router
 from blizzard.runner.api.attachments import router as attachments_router
 from blizzard.runner.api.control import router as control_router
@@ -161,6 +162,10 @@ def create_app(
     # The worker attach channel (issue #113, Phase 2): a lease-token-authorized,
     # explicit artifact submission for a `produces:` name.
     app.include_router(attachments_router)
+    # The worker artifact read (issue #127): the same lease-token-authorized, lease-scoped
+    # shape as attach, but proxied to the hub's envelope so the worker reads its own
+    # node-step inputs (`blizzard runner artifact list|get`) without a hub credential.
+    app.include_router(artifacts_router)
     app.include_router(leases_router)
     app.include_router(transcripts_router)
     app.include_router(selftests_router)

@@ -12,6 +12,11 @@ operator verbs (`requeue`, `takeover`, `pause`, and others) that mutate fleet st
   The question is recorded durably before you exit, and the fleet resumes you once an answer arrives.
 - `blizzard runner pm-items <chunk-id>` — read the chunk's project-management item(s): its issue body and comments.
   Use it instead of guessing at the work from the node prompt alone.
+- `blizzard runner artifact list` — list your own node-step's input artifacts as kind-discriminated JSON
+  (a prior `plan`, `plan-findings`, a sibling `retrospective`, an upstream node's pushed `git_commit` ref).
+  Scope is ambient — your own lease — so it takes no chunk or lease argument.
+- `blizzard runner artifact get <name> [--content]` — read one input artifact by its `produces:` name; `--content`
+  prints the raw asset text to stdout. Use these to read what your node-step consumes rather than reaching around the seam.
 - `blizzard runner heartbeat` / `blizzard runner session-end` — fire automatically from your tool-call
   and session-exit hooks; you never need to invoke either yourself.
 
