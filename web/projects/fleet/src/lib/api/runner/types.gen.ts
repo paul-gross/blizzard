@@ -5,6 +5,13 @@ export type ClientOptions = {
 };
 
 /**
+ * ArtifactKind
+ *
+ * The union discriminator.
+ */
+export type ArtifactKind = 'git_commit' | 'asset';
+
+/**
  * AskListResponse
  *
  * Every ask still awaiting an answer.
@@ -142,6 +149,43 @@ export type CapacitiesView = {
      * Used
      */
     used: number;
+};
+
+/**
+ * EnvelopeArtifact
+ *
+ * One artifact carried into a node-step, resolved latest-by-epoch.
+ */
+export type EnvelopeArtifact = {
+    /**
+     * Branch Name
+     */
+    branch_name?: string | null;
+    /**
+     * Commit Hash
+     */
+    commit_hash?: string | null;
+    /**
+     * Content
+     */
+    content?: string | null;
+    /**
+     * Epoch
+     */
+    epoch: number;
+    kind: ArtifactKind;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Node Name
+     */
+    node_name: string;
+    /**
+     * Repo
+     */
+    repo?: string | null;
 };
 
 /**
@@ -1218,6 +1262,72 @@ export type ListLeasesApiLeasesGetResponses = {
 };
 
 export type ListLeasesApiLeasesGetResponse = ListLeasesApiLeasesGetResponses[keyof ListLeasesApiLeasesGetResponses];
+
+export type ListArtifactsApiLeasesLeaseIdArtifactsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+    };
+    query?: never;
+    url: '/api/leases/{lease_id}/artifacts';
+};
+
+export type ListArtifactsApiLeasesLeaseIdArtifactsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListArtifactsApiLeasesLeaseIdArtifactsGetError = ListArtifactsApiLeasesLeaseIdArtifactsGetErrors[keyof ListArtifactsApiLeasesLeaseIdArtifactsGetErrors];
+
+export type ListArtifactsApiLeasesLeaseIdArtifactsGetResponses = {
+    /**
+     * Response List Artifacts Api Leases  Lease Id  Artifacts Get
+     *
+     * Successful Response
+     */
+    200: Array<EnvelopeArtifact>;
+};
+
+export type ListArtifactsApiLeasesLeaseIdArtifactsGetResponse = ListArtifactsApiLeasesLeaseIdArtifactsGetResponses[keyof ListArtifactsApiLeasesLeaseIdArtifactsGetResponses];
+
+export type GetArtifactApiLeasesLeaseIdArtifactsNameGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+        /**
+         * Name
+         */
+        name: string;
+    };
+    query?: never;
+    url: '/api/leases/{lease_id}/artifacts/{name}';
+};
+
+export type GetArtifactApiLeasesLeaseIdArtifactsNameGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetArtifactApiLeasesLeaseIdArtifactsNameGetError = GetArtifactApiLeasesLeaseIdArtifactsNameGetErrors[keyof GetArtifactApiLeasesLeaseIdArtifactsNameGetErrors];
+
+export type GetArtifactApiLeasesLeaseIdArtifactsNameGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: EnvelopeArtifact;
+};
+
+export type GetArtifactApiLeasesLeaseIdArtifactsNameGetResponse = GetArtifactApiLeasesLeaseIdArtifactsNameGetResponses[keyof GetArtifactApiLeasesLeaseIdArtifactsNameGetResponses];
 
 export type RecordAskApiLeasesLeaseIdAsksPostData = {
     body: AskRequest;
