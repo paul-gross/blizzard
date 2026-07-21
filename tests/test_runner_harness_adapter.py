@@ -375,6 +375,43 @@ def test_judge_passes_the_permission_mode_flag_when_configured(tmp_path: Path) -
 
 
 @pytest.mark.component
+def test_resume_with_message_carries_the_worker_settings_hooks(tmp_path: Path) -> None:
+    # ``--resume`` does not inherit the original spawn's ``--settings``, so a resumed
+    # session would run with no ``PostToolUse`` heartbeat and no ``SessionEnd`` hook — it
+    # would stop beating (blinding REAP's stall detector) and record no session-end on exit
+    # (misleading startup crash-recovery). ``resume_with_message`` re-enters a long-lived
+    # session that later exits on its own, the same lifecycle as ``spawn``, so it must
+    # re-attach the worker hook file exactly as ``spawn`` does.
+    binary = _fake_binary(tmp_path)
+    workdir = tmp_path / "e1"
+    workdir.mkdir()
+    settings = tmp_path / "worker-settings.json"
+    adapter = ClaudeCodeAdapter(binary=binary, settings_path=str(settings))
+
+    pid = adapter.resume_with_message(str(workdir), "sess-123", "continue where you left off")
+    os.waitpid(pid, 0)
+
+    assert f"--settings {settings}" in (workdir / "argv.txt").read_text()
+
+
+@pytest.mark.component
+def test_judge_omits_the_worker_settings_hooks(tmp_path: Path) -> None:
+    # ``judge`` is a synchronous verdict elicitation the runner reads directly; its exit is
+    # not the worker declaring done. Attaching the ``SessionEnd`` hook here would record a
+    # spurious session-end for the still-live lease, so ``judge`` deliberately omits
+    # ``--settings`` even when the adapter is configured with a worker hook file.
+    binary = _fake_binary(tmp_path)
+    workdir = tmp_path / "e1"
+    workdir.mkdir()
+    settings = tmp_path / "worker-settings.json"
+    adapter = ClaudeCodeAdapter(binary=binary, settings_path=str(settings))
+
+    adapter.judge(str(workdir), "sess-123", "Assess. Reply <Choice>name</Choice>.")
+
+    assert "--settings" not in (workdir / "argv.txt").read_text()
+
+
+@pytest.mark.component
 def test_spawn_runs_at_workspace_root_and_prepends_prefix(tmp_path: Path) -> None:
     # The worker's cwd is the winter workspace root, not the env subdir (issue #17), and the
     # runner-composed preamble is prepended to the node envelope prompt.

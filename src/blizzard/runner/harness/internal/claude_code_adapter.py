@@ -17,6 +17,11 @@ Implements :class:`~blizzard.runner.harness.adapter.IHarnessAdapter` against the
   ``blizzard runner attach`` (the ``retrospective`` a node's ``judgement_prompt``
   elicits) in a headless session that has no one to approve it.
 * **resume_with_message** — the fire-and-forget resume (answer delivery / CI, P7).
+  Carries ``--settings <worker-settings>`` exactly as ``spawn`` does: it re-enters a
+  long-lived session that later exits on its own, so it needs the ``PostToolUse``
+  heartbeat and ``SessionEnd`` hooks re-attached — ``--resume`` alone does not inherit
+  them. ``judge`` deliberately omits them (its synchronous exit must not fire a
+  ``SessionEnd``).
 * **resume_command** — the literal interactive takeover command for the escalation
   record.
 * **parse_verdict** — extract the ``<Choice>{name}</Choice>`` from the harness-native
@@ -237,6 +242,16 @@ class ClaudeCodeAdapter:
 
     def resume_with_message(self, workdir: str, session_id: str, message: str, stdout_path: str = "") -> int:
         cmd = [self._binary, "-p", "--output-format", "json", "--resume", session_id]
+        # Re-attach the worker hook set, exactly as `spawn` does. `--resume` alone does
+        # not carry the original spawn's `--settings`, so a resumed session would run with
+        # no `PostToolUse` heartbeat and no `SessionEnd` hook: it would stop beating (blinding
+        # REAP's stall detector) and record no session-end on exit (misleading startup
+        # crash-recovery). This op re-enters a long-lived session that later exits on its own
+        # — the same lifecycle as `spawn` — so it needs the same hooks. `judge` deliberately
+        # does not: it is a synchronous verdict elicitation the runner reads directly, and a
+        # `SessionEnd` firing on its exit would record a spurious done-signal for the lease.
+        if self._settings_path:
+            cmd += ["--settings", self._settings_path]
         if self._permission_mode:
             cmd += ["--permission-mode", self._permission_mode]
         cmd.append(message)
