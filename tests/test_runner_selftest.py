@@ -42,7 +42,7 @@ from blizzard.foundation.clock import SystemClock
 from blizzard.runner.app import build_hosted_app, create_app
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.adapter import WorkerHandle, WorkerPreamble
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.listeners import bind_listeners, unlink_socket
@@ -273,7 +273,16 @@ class _HangingAdapter:
         threading.Event().wait()  # blocks forever
         raise AssertionError("unreachable")
 
-    def resume_with_message(self, workdir: str, session_id: str, message: str, stdout_path: str = "") -> int:
+    def resume_with_message(
+        self,
+        workdir: str,
+        session_id: str,
+        message: str,
+        stdout_path: str = "",
+        *,
+        preamble: WorkerPreamble | None = None,
+        chunk_id: str = "",
+    ) -> int:
         raise AssertionError("unreachable — spawn never returns")
 
     def resume_command(self, workdir: str, session_id: str) -> str:
@@ -329,7 +338,16 @@ class _FixedPidAdapter:
     def spawn(self, envelope: object, preamble: object, session_hint: str | None) -> WorkerHandle:
         return WorkerHandle(session_id=session_hint or "sid", pid=self.spawn_pid, process_start_time="spawn-t")
 
-    def resume_with_message(self, workdir: str, session_id: str, message: str, stdout_path: str = "") -> int:
+    def resume_with_message(
+        self,
+        workdir: str,
+        session_id: str,
+        message: str,
+        stdout_path: str = "",
+        *,
+        preamble: WorkerPreamble | None = None,
+        chunk_id: str = "",
+    ) -> int:
         return self.resume_pid
 
     def resume_command(self, workdir: str, session_id: str) -> str:

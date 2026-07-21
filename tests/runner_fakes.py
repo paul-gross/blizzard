@@ -259,7 +259,7 @@ class FakeHarness:
         self.spawns: list[tuple[NodeEnvelope, WorkerPreamble]] = []
         self.judged: list[tuple[str, str, str]] = []
         self.resumed: list[tuple[str, str, str]] = []  # (workdir, session_id, message)
-        self.resumed_identity: list[tuple[object | None, str]] = []  # (preamble, chunk_id) per resume
+        self.resumed_identity: list[tuple[WorkerPreamble | None, str]] = []  # (preamble, chunk_id) per resume
         self.resume_pid = 4321
 
     def spawn(self, envelope: NodeEnvelope, preamble: WorkerPreamble, session_hint: str | None) -> WorkerHandle:
@@ -281,7 +281,7 @@ class FakeHarness:
         message: str,
         stdout_path: str = "",
         *,
-        preamble: object | None = None,
+        preamble: WorkerPreamble | None = None,
         chunk_id: str = "",
     ) -> int:
         self.resumed.append((workdir, session_id, message))
