@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from blizzard.auth_core import Role
 from blizzard.hub.auth.models import User
 
 
@@ -21,8 +22,19 @@ class IReadUserRepository(Protocol):
     def get_by_email(self, email: str) -> User | None: ...
     def username_exists(self, username: str) -> bool: ...
 
+    def list_all(self) -> list[User]:
+        """Every user, for the admin page's own listing (issue #94) — the one caller
+        that ever needs the whole table rather than a single lookup."""
+        ...
+
 
 class IWriteUserRepository(IReadUserRepository, Protocol):
     """Read-write user access — only the domain layer depends on this variant."""
 
     def create(self, user: User) -> None: ...
+
+    def update_role(self, user_id: str, role: Role) -> None:
+        """Set ``user_id``'s stored role in place (issue #94's role-assignment API and
+        superuser-bootstrap lifecycle) — the write ``AuthService`` delegates to after
+        its own rule checks have already passed."""
+        ...

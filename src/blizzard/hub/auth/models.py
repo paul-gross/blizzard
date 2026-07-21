@@ -99,6 +99,21 @@ class AuthFact:
 
 
 @dataclass(frozen=True)
+class SuperuserBootstrap:
+    """The singleton row tracking the currently configured ``auth.superuser`` bootstrap
+    target (issue #94) — durable so a later boot (or a config change to a *different*
+    email) can find the *previous* bootstrap target to demote, and so a login can check
+    whether it has just claimed an unclaimed intent. ``claimed_user_id`` is ``None``
+    while no verified user has matched ``email`` yet; set once one has, either
+    promoted directly at boot (the user already existed) or claimed by the first
+    matching verified login (``AuthService.link_or_mint``)."""
+
+    email: str
+    claimed_user_id: str | None
+    updated_at: datetime
+
+
+@dataclass(frozen=True)
 class ResolvedIdentity:
     """The request principal a human-plane edge resolves to — ``hub/api/auth_session.py``'s
     ``resolve_identity``/``require()`` return this, never a bare ``User``, so a call

@@ -35,12 +35,14 @@ from blizzard.hub.auth.internal.auth_facts_repository import AuthFactsRepository
 from blizzard.hub.auth.internal.auth_state_repository import AuthStateRepository
 from blizzard.hub.auth.internal.identity_repository import IdentityRepository
 from blizzard.hub.auth.internal.session_repository import SessionRepository
+from blizzard.hub.auth.internal.superuser_bootstrap_repository import SuperuserBootstrapRepository
 from blizzard.hub.auth.internal.user_repository import UserRepository
 from blizzard.hub.auth.oauth.internal.factory import build_oauth_registry
 from blizzard.hub.auth.oauth.registry import IOAuthProviderRegistry
 from blizzard.hub.auth.service import AuthService
 from blizzard.hub.auth.sessions import IReadSessionRepository
 from blizzard.hub.auth.throttle import IpThrottle
+from blizzard.hub.auth.users import IReadUserRepository
 from blizzard.hub.config import OAuthProviderConfig
 from blizzard.hub.delivery.command_runner import IHubCommandRunner
 from blizzard.hub.delivery.hub_node import HubNodeExecutor
@@ -121,6 +123,11 @@ class HubServices:
     #: ``build_hosted_app``), which needs no domain service — a plain read
     #: (``bzh:controller-read-only``).
     identities: IReadIdentityRepository
+    #: The user read repository (issue #94), held directly by ``HubServices`` (mirrors
+    #: ``identities`` above) — the admin listing route (``hub/api/users.py``) and the
+    #: superuser-bootstrap boot orchestrator (``hub/auth/bootstrap.py``) both need only
+    #: reads; every write still goes through ``auth`` below.
+    users: IReadUserRepository
     #: The identity domain service — mint/resolve/slide sessions, the first-login
     #: linking rule, ``state`` issuance (``bzh:controller-read-only``: only the domain
     #: writes).
@@ -205,8 +212,20 @@ def build_services(
     identity_store = IdentityRepository(engine, auth_errors)
     session_store = SessionRepository(engine, auth_errors)
     auth_state_store: IWriteAuthStateRepository = AuthStateRepository(engine, auth_errors)
+    superuser_bootstrap_store = SuperuserBootstrapRepository(engine)
+    # Built ahead of `auth` below (issue #94) — `AuthService` records `user_role_changed`
+    # (an API-driven role change, and its own superuser-bootstrap promote/demote) through
+    # this service rather than a raw write repository (mirrors `FactIngestService(fleet=
+    # ...)`'s own domain-service-takes-service shape).
+    auth_facts_service = AuthFactsService(facts=AuthFactsRepository(engine), clock=clock)
     auth = AuthService(
-        users=user_store, identities=identity_store, sessions=session_store, auth_state=auth_state_store, clock=clock
+        users=user_store,
+        identities=identity_store,
+        sessions=session_store,
+        auth_state=auth_state_store,
+        clock=clock,
+        superuser_bootstrap=superuser_bootstrap_store,
+        auth_facts=auth_facts_service,
     )
     # The provider-login seam (issue #92) — one registry entry per configured
     # ``[[auth.oauth.provider]]``, boot-fails on a misconfigured entry (unknown type,
@@ -214,7 +233,6 @@ def build_services(
     # is every pre-#92 and every ``auth.mode = "none"`` deployment (the ``host`` root
     # passes an empty sequence in that case).
     oauth_registry = oauth_registry or build_oauth_registry(oauth_providers, http_client=oauth_http_client)
-    auth_facts_service = AuthFactsService(facts=AuthFactsRepository(engine), clock=clock)
     auth_throttle = IpThrottle(clock=clock)
     # Shared between ClaimService and EditService (issue #120) — the one in-process
     # lock serializing both services' check-then-act sequences over a chunk's live-route
@@ -255,6 +273,7 @@ def build_services(
         pm=pm,
         sessions=session_store,
         identities=identity_store,
+        users=user_store,
         auth=auth,
         oauth_providers=oauth_registry,
         auth_throttle=auth_throttle,

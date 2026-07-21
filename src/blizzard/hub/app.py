@@ -44,6 +44,8 @@ from blizzard.hub.api.queue import router as queue_router
 from blizzard.hub.api.readiness import router as readiness_router
 from blizzard.hub.api.runners import router as runners_router
 from blizzard.hub.api.spend import router as spend_router
+from blizzard.hub.api.users import router as users_router
+from blizzard.hub.auth.bootstrap import ensure_superuser_bootstrap
 from blizzard.hub.composition import HubServices, build_services
 from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, HubConfig
 from blizzard.hub.domain.readiness import ReadinessService
@@ -126,6 +128,7 @@ def create_app(
     app.include_router(questions_router)
     app.include_router(runners_router)
     app.include_router(spend_router)
+    app.include_router(users_router)
     # The runner-authenticated fleet router (issue #87): `require_runner_principal` is
     # declared once at router level (`blizzard.hub.api.fleet`), not repeated per route —
     # a fleet verb is authenticated *because of where it is mounted*.
@@ -174,6 +177,7 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
     # if not-ready — app; see `test_ready_probe_false_on_unmigrated_store`).
     if readiness.evaluate().ready:
         _check_provider_name_immutability(config, services)
+        ensure_superuser_bootstrap(email=config.auth.superuser, users=services.users, auth=services.auth)
     return create_app(config, readiness=readiness, services=services)
 
 

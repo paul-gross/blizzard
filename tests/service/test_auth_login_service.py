@@ -37,15 +37,19 @@ _SECRET = "test-secret"
 
 
 @contextlib.contextmanager
-def _oauth_hub(hub_dir: Path, port: int, *, providers: tuple[OAuthProviderConfig, ...]) -> Iterator[httpx.Client]:
+def _oauth_hub(
+    hub_dir: Path, port: int, *, providers: tuple[OAuthProviderConfig, ...], superuser: str | None = None
+) -> Iterator[httpx.Client]:
     """A real ``blizzard hub host`` subprocess, ``auth.mode = "oauth"`` with one or more
     configured providers — mirrors ``tests/e2e/test_acceptance_loop.py``'s own ``_hub``,
-    minus the PM-source wiring this scenario does not need (login/`` /api/me`` alone)."""
+    minus the PM-source wiring this scenario does not need (login/`` /api/me`` alone).
+    ``superuser`` (issue #94) sets ``auth.superuser`` so the bootstrap lifecycle runs at
+    this real boot, same as any other deployment."""
     env = {**os.environ, _SECRET_ENV: _SECRET}
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
     config = HubConfig.load(hub_dir)
-    config = dataclasses.replace(config, auth=AuthConfig(mode="oauth", oauth_providers=providers))
+    config = dataclasses.replace(config, auth=AuthConfig(mode="oauth", oauth_providers=providers, superuser=superuser))
     config.config_path.write_text(config.to_toml())
     proc = subprocess.Popen(
         [hub_bin, "host", "--dir", str(hub_dir), "--host", "127.0.0.1", "--port", str(port)],
@@ -221,3 +225,37 @@ def test_refused_callback_lever_surfaces_as_a_login_failure(tmp_path: Path) -> N
             assert resp.status_code == 400
             assert resp.json()["error"] == "login_failed"
             assert "bz_session" not in hub.cookies
+
+
+def test_named_superuser_email_lands_superuser_on_first_verified_login(tmp_path: Path) -> None:
+    """Issue #94's bootstrap-claim AC, over the real wire: a fresh store with
+    ``auth.superuser`` set to an email no user holds yet pre-provisions an unclaimed
+    intent at boot; the first verified login for that exact email claims it, landing
+    the freshly-minted user as ``superuser`` — extending the #92 login scenario this
+    reuses (the plan's own "no new matrix method" call for this phase)."""
+    bin_dir = require_stub_idp()
+    idp_port = _free_port()
+    hub_port = _free_port()
+
+    with stub_idp(bin_dir, idp_port) as idp:
+        idp.put(
+            "/_levers/profile",
+            json={"subject": "9001", "handle": "root", "email": "root@example.com", "email_verified": True},
+        )
+        provider = OAuthProviderConfig(
+            name="oidc-co",
+            type="oidc",
+            display_name="Stub SSO",
+            client_id="cid",
+            client_secret_env=_SECRET_ENV,
+            issuer=f"http://127.0.0.1:{idp_port}",
+        )
+        with _oauth_hub(tmp_path / "hub", hub_port, providers=(provider,), superuser="root@example.com") as hub:
+            hub.get("/api/auth/oidc-co/authorize", follow_redirects=True)
+            assert "bz_session" in hub.cookies
+
+            me_resp = hub.get("/api/me")
+            assert me_resp.status_code == 200
+            body = me_resp.json()
+            assert body["username"] == "root"
+            assert body["role"] == "superuser"

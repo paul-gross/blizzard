@@ -23,8 +23,9 @@ from blizzard.hub.auth.internal.auth_facts_repository import AuthFactsRepository
 from blizzard.hub.auth.internal.auth_state_repository import AuthStateRepository
 from blizzard.hub.auth.internal.identity_repository import IdentityRepository
 from blizzard.hub.auth.internal.session_repository import SessionRepository
+from blizzard.hub.auth.internal.superuser_bootstrap_repository import SuperuserBootstrapRepository
 from blizzard.hub.auth.internal.user_repository import UserRepository
-from blizzard.hub.auth.models import AuthFact, AuthStateEntry, Identity, Session, User
+from blizzard.hub.auth.models import AuthFact, AuthStateEntry, Identity, Session, SuperuserBootstrap, User
 from blizzard.hub.config import HubConfig
 from blizzard.hub.runtime import migration_runner
 
@@ -99,6 +100,26 @@ def test_user_create_allows_multiple_null_emails(engine, errors: RepoErrorFactor
     repo.create(
         User(user_id="usr_2", username="b", display_name="B", email=None, role=Role.GUEST, created_at=_T0)
     )  # no raise
+
+
+def test_user_list_all_returns_every_row_oldest_first(engine, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
+    repo = UserRepository(engine, errors)
+    later = datetime(2026, 1, 2, tzinfo=UTC)
+    repo.create(User(user_id="usr_2", username="b", display_name="B", email=None, role=Role.GUEST, created_at=later))
+    repo.create(User(user_id="usr_1", username="a", display_name="A", email=None, role=Role.GUEST, created_at=_T0))
+
+    assert [u.user_id for u in repo.list_all()] == ["usr_1", "usr_2"]
+
+
+def test_user_update_role_writes_in_place(engine, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
+    repo = UserRepository(engine, errors)
+    repo.create(User(user_id="usr_1", username="a", display_name="A", email=None, role=Role.GUEST, created_at=_T0))
+
+    repo.update_role("usr_1", Role.ADMIN)
+
+    updated = repo.get("usr_1")
+    assert updated is not None
+    assert updated.role == Role.ADMIN
 
 
 # --- IdentityRepository --------------------------------------------------------
@@ -299,3 +320,43 @@ def test_auth_facts_list_recent_respects_limit(engine) -> None:  # type: ignore[
     for i in range(3):
         repo.create(AuthFact(kind="login_failed", actor="ip", subject=str(i), detail="", recorded_at=_T0))
     assert len(repo.list_recent(limit=2)) == 2
+
+
+# --- SuperuserBootstrapRepository (issue #94) -----------------------------------
+
+
+def test_superuser_bootstrap_get_is_none_before_any_write(engine) -> None:  # type: ignore[no-untyped-def]
+    repo = SuperuserBootstrapRepository(engine)
+    assert repo.get() is None
+
+
+def test_superuser_bootstrap_upsert_then_get_round_trips(engine, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
+    users = UserRepository(engine, errors)
+    users.create(User(user_id="usr_1", username="a", display_name="A", email=None, role=Role.GUEST, created_at=_T0))
+    repo = SuperuserBootstrapRepository(engine)
+
+    repo.upsert(SuperuserBootstrap(email="alice@example.com", claimed_user_id="usr_1", updated_at=_T0))
+
+    row = repo.get()
+    assert row == SuperuserBootstrap(email="alice@example.com", claimed_user_id="usr_1", updated_at=_T0)
+
+
+def test_superuser_bootstrap_upsert_replaces_the_singleton_row(engine) -> None:  # type: ignore[no-untyped-def]
+    repo = SuperuserBootstrapRepository(engine)
+    repo.upsert(SuperuserBootstrap(email="alice@example.com", claimed_user_id=None, updated_at=_T0))
+
+    later = datetime(2026, 1, 2, tzinfo=UTC)
+    repo.upsert(SuperuserBootstrap(email="bob@example.com", claimed_user_id=None, updated_at=later))
+
+    row = repo.get()
+    assert row is not None
+    assert row.email == "bob@example.com"
+
+
+def test_superuser_bootstrap_clear_deletes_the_row(engine) -> None:  # type: ignore[no-untyped-def]
+    repo = SuperuserBootstrapRepository(engine)
+    repo.upsert(SuperuserBootstrap(email="alice@example.com", claimed_user_id=None, updated_at=_T0))
+
+    repo.clear()
+
+    assert repo.get() is None

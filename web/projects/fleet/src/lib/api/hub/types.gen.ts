@@ -1904,6 +1904,19 @@ export type ReadinessResponse = {
 };
 
 /**
+ * RoleAssignmentRequest
+ *
+ * ``POST /api/users/{id}/role`` body — the target role, by its ``auth_core.Role``
+ * value.
+ */
+export type RoleAssignmentRequest = {
+    /**
+     * Role
+     */
+    role: string;
+};
+
+/**
  * RouteClaim
  *
  * A complete route fact posted by the claiming runner.
@@ -2315,6 +2328,58 @@ export type TransitionView = {
      * To Node Name
      */
     to_node_name?: string | null;
+};
+
+/**
+ * UserIdentityView
+ *
+ * One linked provider identity, as the admin page's row renders it.
+ */
+export type UserIdentityView = {
+    /**
+     * Handle
+     */
+    handle: string;
+    /**
+     * Provider Name
+     */
+    provider_name: string;
+};
+
+/**
+ * UserView
+ *
+ * One ``users`` row — the admin page's own listing/assignment response shape.
+ */
+export type UserView = {
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Display Name
+     */
+    display_name: string;
+    /**
+     * Email
+     */
+    email: string | null;
+    /**
+     * Identities
+     */
+    identities?: Array<UserIdentityView>;
+    /**
+     * Role
+     */
+    role: string;
+    /**
+     * User Id
+     */
+    user_id: string;
+    /**
+     * Username
+     */
+    username: string;
 };
 
 /**
@@ -3820,3 +3885,51 @@ export type FleetSpendApiSpendGetResponses = {
 };
 
 export type FleetSpendApiSpendGetResponse = FleetSpendApiSpendGetResponses[keyof FleetSpendApiSpendGetResponses];
+
+export type ListUsersApiUsersGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/users';
+};
+
+export type ListUsersApiUsersGetResponses = {
+    /**
+     * Response List Users Api Users Get
+     *
+     * Successful Response
+     */
+    200: Array<UserView>;
+};
+
+export type ListUsersApiUsersGetResponse = ListUsersApiUsersGetResponses[keyof ListUsersApiUsersGetResponses];
+
+export type AssignRoleApiUsersUserIdRolePostData = {
+    body: RoleAssignmentRequest;
+    path: {
+        /**
+         * User Id
+         */
+        user_id: string;
+    };
+    query?: never;
+    url: '/api/users/{user_id}/role';
+};
+
+export type AssignRoleApiUsersUserIdRolePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AssignRoleApiUsersUserIdRolePostError = AssignRoleApiUsersUserIdRolePostErrors[keyof AssignRoleApiUsersUserIdRolePostErrors];
+
+export type AssignRoleApiUsersUserIdRolePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: UserView;
+};
+
+export type AssignRoleApiUsersUserIdRolePostResponse = AssignRoleApiUsersUserIdRolePostResponses[keyof AssignRoleApiUsersUserIdRolePostResponses];

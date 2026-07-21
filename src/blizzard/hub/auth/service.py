@@ -13,6 +13,19 @@ so the schema/service shape was stable ahead of #92, which is the first caller �
 :meth:`link_or_mint` (the provider-login callback's own linking step, ``hub/api/
 auth_login.py``) resolves a :class:`~blizzard.hub.auth.models.ProviderIdentity` to a
 :class:`User`, minting one when no identity link (or verified-email match) exists.
+
+Issue #94 adds :meth:`assign_role` (the admin API's hub-side role-change rules) and the
+superuser-bootstrap primitives ``hub/auth/bootstrap.py`` orchestrates at boot —
+:meth:`get_superuser_bootstrap`/:meth:`record_superuser_bootstrap`/
+:meth:`clear_superuser_bootstrap`/:meth:`bootstrap_apply_role`/
+:meth:`report_superuser_bootstrap_unclaimed` — plus the first-login claim check
+:meth:`link_or_mint` runs on its newly-minted-user branch (the only branch a
+pre-provisioned, still-unclaimed bootstrap target can first resolve through). Every
+role change, API-driven or bootstrap-driven, is recorded through the injected
+``auth_facts`` (``bzh:controller-read-only`` extended to a second collaborating
+service, mirroring ``FactIngestService(fleet=...)``'s own domain-service-takes-service
+shape) — never at the edge, since the bootstrap claim has no request-level caller to
+record it instead.
 """
 
 from __future__ import annotations
@@ -26,13 +39,31 @@ from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import USER_PREFIX, mint
 from blizzard.foundation.logging import get_logger
 from blizzard.hub.auth.auth_state import IWriteAuthStateRepository
+from blizzard.hub.auth.facts import AuthFactsService
 from blizzard.hub.auth.hashing import SESSION_ID_BYTES, hash_session_id
 from blizzard.hub.auth.identities import IWriteIdentityRepository
-from blizzard.hub.auth.models import AuthStateEntry, Identity, ProviderIdentity, ResolvedIdentity, Session, User
+from blizzard.hub.auth.models import (
+    AuthStateEntry,
+    Identity,
+    ProviderIdentity,
+    ResolvedIdentity,
+    Session,
+    SuperuserBootstrap,
+    User,
+)
 from blizzard.hub.auth.sessions import IWriteSessionRepository
+from blizzard.hub.auth.superuser_bootstrap import IWriteSuperuserBootstrapRepository
 from blizzard.hub.auth.users import IWriteUserRepository
 
 _log = get_logger("blizzard.hub.auth")
+
+
+class RoleAssignmentRefused(Exception):
+    """A role-change request violated a hub-side rule (issue #94) — self-change,
+    ``superuser`` grant/revoke by a non-``superuser`` actor, or ``superuser`` itself (not
+    assignable through the API, bootstrap-only). The API route (``hub/api/users.py``)
+    maps this to ``403``."""
+
 
 #: A session slides forward on every resolve by this much (idle timeout) — chosen as a
 #: generous working-day window; #92/#96 may expose this as config once a login
@@ -76,6 +107,8 @@ class AuthService:
         sessions: IWriteSessionRepository,
         auth_state: IWriteAuthStateRepository,
         clock: IClock,
+        superuser_bootstrap: IWriteSuperuserBootstrapRepository,
+        auth_facts: AuthFactsService,
         idle_ttl: timedelta = IDLE_TTL,
         absolute_max_age: timedelta = ABSOLUTE_MAX_AGE,
     ) -> None:
@@ -84,6 +117,8 @@ class AuthService:
         self._sessions = sessions
         self._auth_state = auth_state
         self._clock = clock
+        self._superuser_bootstrap = superuser_bootstrap
+        self._auth_facts = auth_facts
         self._idle_ttl = idle_ttl
         self._absolute_max_age = absolute_max_age
 
@@ -189,7 +224,7 @@ class AuthService:
                 created_at=now,
             )
         )
-        return user
+        return self._maybe_claim_superuser_bootstrap(user)
 
     def revoke(self, session: Session) -> None:
         """Delete ``session`` outright — logout (#92)."""
@@ -236,3 +271,93 @@ class AuthService:
             suffix += 1
             candidate = f"{base}-{suffix}"
         return candidate
+
+    # --- role assignment (issue #94) -----------------------------------------
+
+    def assign_role(self, *, actor: ResolvedIdentity, subject: User, to_role: Role) -> User:
+        """Enforce the admin API's hub-side role-change rules, then apply the change
+        (``hub/api/users.py``'s ``POST /api/users/{id}/role``, ``require("user:manage")``
+        already gates the route). Raises :class:`RoleAssignmentRefused` (403) on a
+        violation:
+
+        * a user cannot change their own role;
+        * ``superuser`` is not assignable through the API in either direction
+          (granting it, or moving a stored ``superuser`` subject to anything else) — it
+          is bootstrap-only;
+        * only a ``superuser`` actor may grant or revoke ``admin`` (an ``admin`` actor
+          may freely move a subject between ``guest``/``contributor``).
+
+        A no-op request (``subject.role == to_role``) returns ``subject`` unchanged and
+        records no fact — there was no change to record."""
+        if actor.user_id == subject.user_id:
+            raise RoleAssignmentRefused("cannot change your own role")
+        if subject.role is Role.SUPERUSER or to_role is Role.SUPERUSER:
+            raise RoleAssignmentRefused("superuser is not assignable through the API (bootstrap-only)")
+        touches_admin = subject.role is Role.ADMIN or to_role is Role.ADMIN
+        if touches_admin and actor.role is not Role.SUPERUSER:
+            raise RoleAssignmentRefused("only superuser may grant or revoke admin")
+        if subject.role is to_role:
+            return subject
+        return self._apply_role_change(subject, to_role, actor_username=actor.username)
+
+    def _apply_role_change(self, user: User, to_role: Role, *, actor_username: str) -> User:
+        """Write the role change and record the ``user_role_changed`` fact — the one
+        place either :meth:`assign_role` or a bootstrap promote/demote lands a role
+        write, so the durable row and the fact can never drift apart."""
+        self._users.update_role(user.user_id, to_role)
+        self._auth_facts.user_role_changed(
+            actor=actor_username, subject=user.username, from_role=user.role, to_role=to_role
+        )
+        return User(
+            user_id=user.user_id,
+            username=user.username,
+            display_name=user.display_name,
+            email=user.email,
+            role=to_role,
+            created_at=user.created_at,
+        )
+
+    # --- superuser bootstrap (issue #94) -------------------------------------
+
+    def get_superuser_bootstrap(self) -> SuperuserBootstrap | None:
+        """The singleton bootstrap row's read passthrough — ``hub/auth/bootstrap.py``'s
+        own boot-time orchestration reads through the service rather than reaching past
+        it into the repository (``bzh:controller-read-only``)."""
+        return self._superuser_bootstrap.get()
+
+    def record_superuser_bootstrap(self, *, email: str, claimed_user_id: str | None) -> None:
+        """Replace the singleton bootstrap row, stamped from the injected clock."""
+        self._superuser_bootstrap.upsert(
+            SuperuserBootstrap(email=email, claimed_user_id=claimed_user_id, updated_at=self._clock.now())
+        )
+
+    def clear_superuser_bootstrap(self) -> None:
+        """Delete the singleton bootstrap row outright — ``auth.superuser`` was unset."""
+        self._superuser_bootstrap.clear()
+
+    def bootstrap_apply_role(self, user: User, to_role: Role) -> User:
+        """A system-driven role change outside :meth:`assign_role`'s API rule engine —
+        the superuser bootstrap's own boot-time promote/demote (``hub/auth/
+        bootstrap.py``). Recorded with ``actor="system"`` in the emitted fact."""
+        return self._apply_role_change(user, to_role, actor_username="system")
+
+    def report_superuser_bootstrap_unclaimed(self, *, email: str) -> None:
+        """Surface a still-unclaimed bootstrap target — never a silent dead end."""
+        self._auth_facts.superuser_bootstrap_unclaimed(email=email)
+
+    def _maybe_claim_superuser_bootstrap(self, user: User) -> User:
+        """Called only on :meth:`link_or_mint`'s newly-minted-user branch — the one
+        branch a *pre-provisioned, still-unclaimed* bootstrap target can first resolve
+        through (a user :meth:`link_or_mint` instead *finds* already existed at the
+        last boot, when the boot-time promotion in ``hub/auth/bootstrap.py`` would
+        already have claimed it). Promotes and marks the row claimed when ``user``'s
+        (already-verified, per :meth:`link_or_mint`'s own rule) email matches an
+        unclaimed target; otherwise returns ``user`` unchanged."""
+        if user.email is None:
+            return user
+        bootstrap = self._superuser_bootstrap.get()
+        if bootstrap is None or bootstrap.claimed_user_id is not None or bootstrap.email != user.email:
+            return user
+        promoted = self.bootstrap_apply_role(user, Role.SUPERUSER)
+        self.record_superuser_bootstrap(email=bootstrap.email, claimed_user_id=user.user_id)
+        return promoted

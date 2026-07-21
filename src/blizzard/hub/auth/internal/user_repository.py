@@ -45,6 +45,11 @@ class UserRepository:
             row = conn.execute(select(s.users.c.id).where(s.users.c.username == username)).one_or_none()
             return row is not None
 
+    def list_all(self) -> list[User]:
+        with self._engine.connect() as conn:
+            rows = conn.execute(select(s.users).order_by(s.users.c.created_at)).all()
+            return [self._user(row) for row in rows]
+
     # --- writes -----------------------------------------------------------
 
     def create(self, user: User) -> None:
@@ -64,6 +69,10 @@ class UserRepository:
             raise self._errors.from_integrity_error(
                 exc, f"failed to create user {user.username!r}", operation="create"
             ) from exc
+
+    def update_role(self, user_id: str, role: Role) -> None:
+        with self._engine.begin() as conn:
+            conn.execute(s.users.update().where(s.users.c.id == user_id).values(role=role.value))
 
     # --- helpers ------------------------------------------------------------
 

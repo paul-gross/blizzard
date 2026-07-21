@@ -847,3 +847,23 @@ auth_facts = Table(
     Column("detail", Text, nullable=False),
     Column("recorded_at", UtcDateTime, nullable=False),
 )
+
+# --- The superuser bootstrap lifecycle (issue #94) ---------------------------------
+#
+# A **singleton** row tracking the currently configured ``auth.superuser`` (a nullable
+# email in ``[auth]``, ``hub/config.py``): ``AuthService``'s bootstrap methods always
+# operate on the one live row (delete-then-insert on every write, never more than one
+# row at rest) so a later boot — or a config change naming a *different* email — can
+# find the *previous* bootstrap target to demote. ``claimed_user_id`` is null while the
+# named email matches no verified user yet (a pre-provisioned, unclaimed intent,
+# surfaced at every boot per issue #94's own "never a silent dead end"); it is set the
+# moment a user holding that verified email is confirmed — either found directly at
+# boot, or claimed by the first matching verified login (``AuthService.link_or_mint``).
+superuser_bootstrap = Table(
+    "superuser_bootstrap",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("email", String, nullable=False),
+    Column("claimed_user_id", String, ForeignKey("users.id"), nullable=True),
+    Column("updated_at", UtcDateTime, nullable=False),
+)

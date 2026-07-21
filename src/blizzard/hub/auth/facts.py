@@ -2,17 +2,20 @@
 ``bzh:facts-not-status``).
 
 The hub's existing fact model is chunk-scoped; login/session/role events are not, so
-they get their own small durable table rather than being shoehorned onto a chunk. Two
-kinds land in this phase: ``LOGIN_FAILED`` (a bad/expired ``state`` or a failed
-provider code exchange) and ``SSO_REFUSED`` (a ``state`` presented to a callback for a
-provider other than the one it was minted for — a cross-provider replay/tamper
-attempt). ``USER_ROLE_CHANGED`` is #94's; not declared here.
+they get their own small durable table rather than being shoehorned onto a chunk.
+``LOGIN_FAILED`` (a bad/expired ``state`` or a failed provider code exchange) and
+``SSO_REFUSED`` (a ``state`` presented to a callback for a provider other than the one
+it was minted for — a cross-provider replay/tamper attempt) land in #92.
+``USER_ROLE_CHANGED`` (every role change — API-driven or the superuser bootstrap's own
+promote/demote) and ``SUPERUSER_BOOTSTRAP_UNCLAIMED`` (a configured ``auth.superuser``
+naming no verified user yet, reported at every boot until claimed) are #94's.
 """
 
 from __future__ import annotations
 
 from typing import Protocol
 
+from blizzard.auth_core import Role
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.hub.auth.models import AuthFact
@@ -23,6 +26,12 @@ LOGIN_FAILED = "login_failed"
 #: A ``state`` resolved but named a different provider than the callback it was
 #: presented to — refused outright rather than treated as a plain expired/missing state.
 SSO_REFUSED = "sso_refused"
+#: A user's role changed — the acting user (``"system"`` for the superuser bootstrap's
+#: own promote/demote), the subject, and the from/to roles land in ``detail`` (issue #94).
+USER_ROLE_CHANGED = "user_role_changed"
+#: A configured ``auth.superuser`` email matches no verified user yet — reported at
+#: every boot while unclaimed, never a silent dead end (issue #94).
+SUPERUSER_BOOTSTRAP_UNCLAIMED = "superuser_bootstrap_unclaimed"
 
 _log = get_logger("blizzard.hub.auth")
 
@@ -64,3 +73,14 @@ class AuthFactsService:
 
     def sso_refused(self, *, actor: str, subject: str, detail: str = "") -> None:
         self.record(SSO_REFUSED, actor=actor, subject=subject, detail=detail)
+
+    def user_role_changed(self, *, actor: str, subject: str, from_role: Role, to_role: Role) -> None:
+        self.record(USER_ROLE_CHANGED, actor=actor, subject=subject, detail=f"{from_role.value} -> {to_role.value}")
+
+    def superuser_bootstrap_unclaimed(self, *, email: str) -> None:
+        self.record(
+            SUPERUSER_BOOTSTRAP_UNCLAIMED,
+            actor="system",
+            subject=email,
+            detail="auth.superuser names no verified user yet",
+        )

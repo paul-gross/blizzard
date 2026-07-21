@@ -2701,6 +2701,20 @@
         "title": "ReadinessResponse",
         "type": "object"
       },
+      "RoleAssignmentRequest": {
+        "description": "``POST /api/users/{id}/role`` body \u2014 the target role, by its ``auth_core.Role``\nvalue.",
+        "properties": {
+          "role": {
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "title": "RoleAssignmentRequest",
+        "type": "object"
+      },
       "RouteClaim": {
         "description": "A complete route fact posted by the claiming runner.",
         "properties": {
@@ -3248,6 +3262,79 @@
           "recorded_at"
         ],
         "title": "TransitionView",
+        "type": "object"
+      },
+      "UserIdentityView": {
+        "description": "One linked provider identity, as the admin page's row renders it.",
+        "properties": {
+          "handle": {
+            "title": "Handle",
+            "type": "string"
+          },
+          "provider_name": {
+            "title": "Provider Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider_name",
+          "handle"
+        ],
+        "title": "UserIdentityView",
+        "type": "object"
+      },
+      "UserView": {
+        "description": "One ``users`` row \u2014 the admin page's own listing/assignment response shape.",
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "identities": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/UserIdentityView"
+            },
+            "title": "Identities",
+            "type": "array"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "username",
+          "display_name",
+          "email",
+          "role",
+          "created_at"
+        ],
+        "title": "UserView",
         "type": "object"
       },
       "ValidationError": {
@@ -5604,6 +5691,85 @@
         "summary": "Fleet Spend",
         "tags": [
           "spend"
+        ]
+      }
+    },
+    "/api/users": {
+      "get": {
+        "description": "Every hub-local account \u2014 the admin page's own table.",
+        "operationId": "list_users_api_users_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/UserView"
+                  },
+                  "title": "Response List Users Api Users Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Users",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/users/{user_id}/role": {
+      "post": {
+        "description": "Assign ``user_id`` a new role; ``AuthService.assign_role`` enforces every rule\n(self-change, ``superuser`` grant/revoke, ``superuser`` not assignable \u2014 see its own\ndocstring) and records the ``user_role_changed`` fact on a real change. Takes effect\non the subject's next request with no re-login (``resolve_identity`` reads\n``users.role`` live on every resolve, issue #91).",
+        "operationId": "assign_role_api_users__user_id__role_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoleAssignmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assign Role",
+        "tags": [
+          "auth"
         ]
       }
     }

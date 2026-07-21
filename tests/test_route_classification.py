@@ -32,6 +32,7 @@ from blizzard.auth_core import (
     QUESTION_ANSWER,
     QUEUE_REORDER,
     RUNNER_PAUSE,
+    USER_MANAGE,
     Permission,
 )
 from tests.support import build_hub
@@ -85,6 +86,8 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("POST", "/api/runners/{runner_id}/pause"): RUNNER_PAUSE,
     ("POST", "/api/runners/{runner_id}/resume"): RUNNER_PAUSE,
     ("GET", "/api/spend"): FLEET_VIEW,
+    ("GET", "/api/users"): USER_MANAGE,
+    ("POST", "/api/users/{user_id}/role"): USER_MANAGE,
 }
 
 #: Fleet plane — every route mounted under ``/api/fleet/*`` (issue #87's own
