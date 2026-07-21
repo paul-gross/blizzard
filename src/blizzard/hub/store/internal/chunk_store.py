@@ -740,11 +740,17 @@ class ChunkStore:
             )
             return True
 
-    def record_escalation(self, chunk_id: str, *, epoch: int, takeover_command: str, at: datetime) -> None:
+    def record_escalation(
+        self, chunk_id: str, *, epoch: int, takeover_command: str, at: datetime, decision_id: str | None = None
+    ) -> None:
         with self._engine.begin() as conn:
             conn.execute(
                 insert(s.escalations).values(
-                    chunk_id=chunk_id, epoch=epoch, takeover_command=takeover_command, recorded_at=at
+                    chunk_id=chunk_id,
+                    epoch=epoch,
+                    takeover_command=takeover_command,
+                    decision_id=decision_id,
+                    recorded_at=at,
                 )
             )
 
@@ -1421,7 +1427,9 @@ class ChunkStore:
         ).one_or_none()
         # Closed by the resolving transition that carries this decision — or, when the
         # gate's resolved choice was itself a cross-graph migration (#90, which writes no
-        # transitions row), by the migration fact stamped with the same decision_id.
+        # transitions row), by the migration fact stamped with the same decision_id — or,
+        # when that migration's target was unresolvable (#110, which writes neither a
+        # transition nor a migration), by the escalation stamped with it.
         transitioned = (
             conn.execute(
                 select(s.transitions.c.transition_id).where(s.transitions.c.decision_id == row.decision_id).limit(1)
@@ -1431,6 +1439,10 @@ class ChunkStore:
                 select(s.chunk_migrations.c.migration_id)
                 .where(s.chunk_migrations.c.decision_id == row.decision_id)
                 .limit(1)
+            ).first()
+            is not None
+            or conn.execute(
+                select(s.escalations.c.id).where(s.escalations.c.decision_id == row.decision_id).limit(1)
             ).first()
             is not None
         )

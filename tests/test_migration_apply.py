@@ -133,6 +133,13 @@ nodes:
           to: build
 """
 
+# Like ``_GATE_SRC_YAML`` but the gate's ``approve`` choice targets ``graph:ghost`` — a
+# graph never minted, so the target resolves to ``None`` and the resolving migration takes
+# the escalation branch. The gate's decision must still close (issue #110): that branch
+# writes neither a transition nor a migration row, so an un-threaded decision would stay
+# live forever, wedging REAP and driving a per-tick runner re-submit.
+_GATE_SRC_GHOST_YAML = _GATE_SRC_YAML.replace("to: graph:triage", "to: graph:ghost")
+
 
 def _setup(hub, *, target_name: str, mint_target: bool, target_yaml: str = _TARGET_YAML) -> tuple[str, str]:  # type: ignore[no-untyped-def]
     """Mint the source graph (and optionally the target), ingest + promote + claim a
@@ -443,6 +450,61 @@ def test_a_human_gate_resolved_migration_closes_its_decision(tmp_path: Path) -> 
     assert detail["status"] == "ready"  # re-queued under triage, claimable
     assert detail["current_node_name"] == "build"  # approve-gate has no match -> triage's entry
     # M1: the gate's decision is closed — nothing left to mis-render or wedge REAP.
+    assert detail["decision"] is None
+    assert hub.client.get("/api/decisions").json()["decisions"] == []
+    closed = hub.services.chunks.get_decision(decision_id)
+    assert closed is not None and closed.transitioned is True
+
+
+def test_a_human_gate_resolved_migration_to_an_unresolvable_target_closes_its_decision(tmp_path: Path) -> None:
+    """A human gate whose resolved choice migrates cross-graph to an **unresolvable**
+    target (issue #110) must still close its decision. This branch records an escalation
+    and returns ``PARKED_AT_GATE`` — writing neither a ``transitions`` row nor a
+    ``chunk_migrations`` fact — so without threading the ``decision_id`` onto the
+    escalation the resolved decision stays ``transitioned=False`` forever: the runner
+    re-submits the resolved decision every tick, and REAP holds the chunk's environments
+    (it skips any chunk whose ``decision`` is non-None as owned by ADVANCE)."""
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/graphs", json={"definition_yaml": _GATE_SRC_GHOST_YAML}).status_code == 201
+    # `graph:ghost` is never minted — the edge caller resolves the target to None.
+
+    chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
+    hub.client.post(f"/api/chunks/{chunk_id}/promote")
+    build_node = hub.client.post(
+        "/api/fleet/routes",
+        json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
+    ).json()["envelope"]["node"]["node_id"]
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+
+    # build passes -> lands on the human gate; a decision opens.
+    hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json={"choice": "pass", "epoch": 1, "runner_id": "r1", "from_node_id": build_node, "artifacts": []},
+    )
+    parked = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    decision_id = parked["decision"]["decision_id"]
+    gate_node = parked["current_node_id"]
+
+    # A person approves; the holding runner submits the resolving completion. The choice
+    # targets graph:ghost, which resolves to None -> the migration ESCALATES.
+    assert hub.client.post(f"/api/decisions/{decision_id}/resolution", json={"choice": "approve"}).status_code == 200
+    resp = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json={
+            "choice": "approve",
+            "epoch": 1,
+            "runner_id": "r1",
+            "from_node_id": gate_node,
+            "decision_id": decision_id,
+            "artifacts": [],
+        },
+    )
+    assert resp.json()["outcome"] == "parked_at_gate", resp.text
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["status"] == "needs_human"  # escalation recorded, visible on the board
+    # #110: the gate's decision is closed atomically with the escalation — no live decision
+    # for the runner to re-submit, nothing for REAP to read as ADVANCE-owned.
     assert detail["decision"] is None
     assert hub.client.get("/api/decisions").json()["decisions"] == []
     closed = hub.services.chunks.get_decision(decision_id)

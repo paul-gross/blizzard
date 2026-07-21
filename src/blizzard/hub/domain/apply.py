@@ -369,7 +369,13 @@ class ApplyService:
         ``graph:<name>`` names no enabled graph): ``record_escalation`` so the chunk
         derives ``needs_human`` (visible on the board), rather than crash or silently drop
         — and return ``PARKED_AT_GATE`` so the runner stops without re-leasing (a
-        ``FAILURE`` would requeue and *supersede* the very escalation just recorded).
+        ``FAILURE`` would requeue and *supersede* the very escalation just recorded). When
+        this unresolvable migration is a **human gate's** resolved choice
+        (``submission.decision_id`` set — reached via ``_apply_gate_resolution``), the
+        escalation carries that ``decision_id`` so the decision derives closed (issue
+        #110); this branch writes neither a transition nor a migration row, so without it
+        the gate's decision stays live forever — wedging REAP recovery and driving a
+        per-tick runner re-submit, the exact hazard #90 fixed on the resolvable branch.
         Idempotent on replay by the migration natural key (checked in ``apply``) and, on
         the escalation branch, by an existing escalation at this epoch."""
         if target_graph is None:
@@ -384,6 +390,7 @@ class ApplyService:
                         f"named `{edge.target_graph}` (or edit the choice), then requeue this chunk"
                     ),
                     at=self._clock.now(),
+                    decision_id=submission.decision_id,
                 )
             return ApplyResponse(
                 outcome=ApplyOutcome.PARKED_AT_GATE,

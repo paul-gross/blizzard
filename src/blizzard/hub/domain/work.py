@@ -1209,12 +1209,19 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         Returns True iff it wrote, False when already recorded."""
         ...
 
-    def record_escalation(self, chunk_id: str, *, epoch: int, takeover_command: str, at: datetime) -> None:
+    def record_escalation(
+        self, chunk_id: str, *, epoch: int, takeover_command: str, at: datetime, decision_id: str | None = None
+    ) -> None:
         """Record an ``escalation.recorded`` fact reported up by a runner.
 
         Retries exhausted (or a dead worker past the cap): the chunk derives
         ``needs_human`` until a later lease mint supersedes it. The runner-composed
-        takeover command rides along so the parked session is resumable."""
+        takeover command rides along so the parked session is resumable. When
+        ``decision_id`` is set — a human gate's resolved choice migrated cross-graph to an
+        unresolvable target (issue #110) — the fact carries it so that decision derives
+        closed; without it the gate's decision would stay live forever (neither a
+        transition nor a migration row exists to close it), wedging REAP recovery and
+        driving a per-tick runner re-submit. Null for the ordinary escalation."""
         ...
 
     def record_usage(

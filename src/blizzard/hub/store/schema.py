@@ -467,6 +467,13 @@ escalations = Table(
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("epoch", Integer, nullable=False),  # closed by a later lease mint, not a resolution
     Column("takeover_command", Text, nullable=False, server_default=""),  # the pasteable resume command
+    # ``decision_id`` is set only when a **human gate's** resolved choice migrated
+    # cross-graph to an unresolvable target (issue #110): the escalation stands in for the
+    # migration fact the resolvable branch writes (issue #90), so the gate's decision
+    # derives ``transitioned`` (closed) here too — neither a migration nor a transition row
+    # exists to close it, and an unclosed gate decision wedges REAP recovery and drives a
+    # per-tick runner re-submit. Null for the ordinary retries-exhausted escalation.
+    Column("decision_id", String, nullable=True),
     Column("recorded_at", UtcDateTime, nullable=False),
 )
 
