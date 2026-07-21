@@ -240,7 +240,16 @@ class ClaudeCodeAdapter:
         _log.info("judgement resume", pid_returncode=result.returncode, session_id=session_id, cwd=workdir)
         return result.stdout
 
-    def resume_with_message(self, workdir: str, session_id: str, message: str, stdout_path: str = "") -> int:
+    def resume_with_message(
+        self,
+        workdir: str,
+        session_id: str,
+        message: str,
+        stdout_path: str = "",
+        *,
+        preamble: WorkerPreamble | None = None,
+        chunk_id: str = "",
+    ) -> int:
         cmd = [self._binary, "-p", "--output-format", "json", "--resume", session_id]
         # Re-attach the worker hook set, exactly as `spawn` does. `--resume` alone does
         # not carry the original spawn's `--settings`, so a resumed session would run with
@@ -255,13 +264,20 @@ class ClaudeCodeAdapter:
         if self._permission_mode:
             cmd += ["--permission-mode", self._permission_mode]
         cmd.append(message)
-        # Injected per-lease file (epic #57), mirroring `spawn`'s `preamble.stdout_path` —
-        # this op has no preamble, so the path rides as a direct param; empty keeps
-        # today's behavior (stdout inherited).
+        # Re-supply the per-lease identity so the resumed worker can `blizzard runner attach`
+        # and its heartbeat/SessionEnd hooks can post — `--resume` inherits none of the spawn
+        # env. The caller passes a `preamble` carrying the lease id, runner URL, held envs, and
+        # a **freshly re-minted** capability token (the plaintext is never persisted, so it is
+        # re-minted rather than recovered). Absent a preamble this stays the identity-less
+        # allowlist — the selftest/CI resume, which speaks to no live lease.
+        env = (
+            self._identity_env(preamble, chunk_id, session_id)
+            if preamble is not None
+            else _allowlisted_env(self._env_passthrough)
+        )
+        # Injected per-lease file (epic #57), mirroring `spawn`'s `preamble.stdout_path`.
         with _stdout_target(stdout_path) as stdout_file:
-            proc = subprocess.Popen(
-                cmd, cwd=workdir, env=_allowlisted_env(self._env_passthrough), stdout=stdout_file
-            )
+            proc = subprocess.Popen(cmd, cwd=workdir, env=env, stdout=stdout_file)
         return proc.pid
 
     def resume_command(self, workdir: str, session_id: str) -> str:
@@ -349,12 +365,18 @@ class ClaudeCodeAdapter:
         envelope = _result_envelope(output)
         return str(envelope["result"]) if envelope is not None else output
 
-    def _spawn_env(self, envelope: NodeEnvelope, preamble: WorkerPreamble, session_id: str) -> dict[str, str]:
+    def _identity_env(self, preamble: WorkerPreamble, chunk_id: str, session_id: str) -> dict[str, str]:
+        """The child env carrying this lease's worker identity: the allowlist plus the
+        ``BLIZZARD_*`` vars a worker's CLI (``blizzard runner attach``/``ask``) and its
+        heartbeat/SessionEnd hooks read to reach the runner for this lease. Both ``spawn``
+        and ``resume_with_message`` build from this, so a resumed session is as fully
+        identified as a fresh one — a resume that omits it leaves the worker unable to
+        attach or beat, since ``--resume`` does not inherit the original spawn env."""
         env = _allowlisted_env(self._env_passthrough)
         env["BLIZZARD_ENV_IDS"] = ",".join(e.environment_id for e in preamble.environments)
         env["BLIZZARD_ENV_WORKDIRS"] = ",".join(e.workdir for e in preamble.environments)
         env["BLIZZARD_SESSION_ID"] = session_id
-        env["BLIZZARD_CHUNK_ID"] = envelope.chunk_id
+        env["BLIZZARD_CHUNK_ID"] = chunk_id
         # Runner-minted identity the PostToolUse heartbeat hook inherits (per process
         # tree, so a sibling worker cannot misattribute a beat).
         env["BLIZZARD_LEASE_ID"] = preamble.lease_id
@@ -367,6 +389,9 @@ class ClaudeCodeAdapter:
         # command here is what lets the mock exercise the true ask path (verified e2e).
         env.setdefault("BLIZZARD_RUNNER_ASK_CMD", "blizzard runner ask")
         return env
+
+    def _spawn_env(self, envelope: NodeEnvelope, preamble: WorkerPreamble, session_id: str) -> dict[str, str]:
+        return self._identity_env(preamble, envelope.chunk_id, session_id)
 
 
 def _conforms_harness_adapter(x: ClaudeCodeAdapter) -> IHarnessAdapter:

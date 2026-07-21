@@ -569,6 +569,13 @@ def test_a_suppressed_pause_resume_writes_no_fact_even_on_the_ask_park_path(tmp_
 
     assert harness.resumed == [("/ws/e1", "sess-a", "# Answer from operator. Continue.\ngo left")]
     assert store.attempt_count("ch_1", "nd_build") == 1
+    # The resume re-supplied the per-lease identity a resumed worker needs to attach/beat
+    # (`--resume` inherits none of the spawn env) and re-minted the capability token, since
+    # its plaintext is never persisted to re-inject.
+    preamble, chunk_id = harness.resumed_identity[-1]
+    assert preamble is not None and preamble.lease_id == "lease_1" and preamble.lease_token
+    assert chunk_id == "ch_1"
+    assert store.lease_token_hash("lease_1") is not None  # re-minted on resume
 
 
 # --------------------------------------------------------------------------- #

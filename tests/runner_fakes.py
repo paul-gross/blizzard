@@ -259,6 +259,7 @@ class FakeHarness:
         self.spawns: list[tuple[NodeEnvelope, WorkerPreamble]] = []
         self.judged: list[tuple[str, str, str]] = []
         self.resumed: list[tuple[str, str, str]] = []  # (workdir, session_id, message)
+        self.resumed_identity: list[tuple[object | None, str]] = []  # (preamble, chunk_id) per resume
         self.resume_pid = 4321
 
     def spawn(self, envelope: NodeEnvelope, preamble: WorkerPreamble, session_hint: str | None) -> WorkerHandle:
@@ -273,8 +274,20 @@ class FakeHarness:
         self.judged.append((workdir, session_id, judgement_prompt))
         return "<judged output>"
 
-    def resume_with_message(self, workdir: str, session_id: str, message: str, stdout_path: str = "") -> int:
+    def resume_with_message(
+        self,
+        workdir: str,
+        session_id: str,
+        message: str,
+        stdout_path: str = "",
+        *,
+        preamble: object | None = None,
+        chunk_id: str = "",
+    ) -> int:
         self.resumed.append((workdir, session_id, message))
+        # Captured separately so existing 3-tuple unpackers of `.resumed` keep working while
+        # resume-identity assertions can read the preamble/chunk_id the caller supplied.
+        self.resumed_identity.append((preamble, chunk_id))
         return self.resume_pid
 
     def resume_command(self, workdir: str, session_id: str) -> str:

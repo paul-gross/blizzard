@@ -380,6 +380,19 @@ def test_lease_token_hash_round_trips_what_was_recorded(tmp_path):  # type: igno
 
 
 @pytest.mark.unit
+def test_record_lease_token_overwrites_on_re_mint(tmp_path):  # type: ignore[no-untyped-def]
+    # A resume re-mints the lease's capability token (the plaintext is never persisted, so
+    # it cannot be recovered — only re-minted). The second write replaces the first for the
+    # same `lease_id` PK, and the prior token's hash is gone — the old token no longer
+    # authorizes attach.
+    store = _store(tmp_path)
+    _mint(store)
+    store.record_lease_token("lease_1", "old" * 16, _NOW)
+    store.record_lease_token("lease_1", "new" * 16, _NOW)
+    assert store.lease_token_hash("lease_1") == "new" * 16
+
+
+@pytest.mark.unit
 def test_attachments_for_lease_is_empty_when_nothing_attached(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _mint(store)

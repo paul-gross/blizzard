@@ -729,6 +729,26 @@ def _resume_marked_lease(ctx: LoopContext, lease: LeaseRecord) -> None:
         _abandon_reassigned(ctx, lease, via="resume")
 
 
+def _resume_preamble(ctx: LoopContext, lease: LeaseRecord, bindings: list[EnvBindingRecord]) -> WorkerPreamble:
+    """The per-lease identity a resumed worker needs to reach the runner for its lease.
+
+    ``--resume`` inherits none of the spawn env, so a resumed worker's CLI
+    (``blizzard runner attach``) and its heartbeat/SessionEnd hooks have no
+    ``BLIZZARD_*`` identity unless it is re-supplied. The capability token's plaintext is
+    never persisted (only its hash), so it is **re-minted** here — invalidating the prior
+    one — and its hash re-recorded, exactly as :func:`_spawn_attempt` does at spawn. Every
+    resume sibling (restart / answer / pause-lift) builds its resume env from this.
+    """
+    lease_token = secrets.token_urlsafe(_LEASE_TOKEN_BYTES)
+    ctx.store.record_lease_token(lease.lease_id, hash_token(lease_token), ctx.clock.now())
+    return WorkerPreamble(
+        environments=[AcquiredEnvironment(environment_id=b.environment_id, workdir=b.workdir) for b in bindings],
+        lease_id=lease.lease_id,
+        local_api_url=ctx.config.local_api_url,
+        lease_token=lease_token,
+    )
+
+
 def _resume_in_place(ctx: LoopContext, lease: LeaseRecord) -> None:
     """Kill any survivor, then resume the session under the same lease/epoch/session.
 
@@ -782,6 +802,8 @@ def _resume_in_place(ctx: LoopContext, lease: LeaseRecord) -> None:
         lease.session_id,
         _RESTART_RESUME_MESSAGE,
         stdout_path=_stdout_path(ctx, lease.lease_id, _pending_generation(ctx, lease.lease_id)),
+        preamble=_resume_preamble(ctx, lease, bindings),
+        chunk_id=lease.chunk_id,
     )
     ctx.store.record_spawn(
         lease.lease_id,
@@ -2344,6 +2366,8 @@ def _resume_if_answered(ctx: LoopContext, lease: LeaseRecord) -> None:
         lease.session_id or "",
         message,
         stdout_path=_stdout_path(ctx, lease.lease_id, _pending_generation(ctx, lease.lease_id)),
+        preamble=_resume_preamble(ctx, lease, bindings),
+        chunk_id=lease.chunk_id,
     )
     now = ctx.clock.now()
     # The resumed worker runs under the same lease and session; record its new pid so the
@@ -2435,6 +2459,8 @@ def _resume_if_unpaused(ctx: LoopContext, lease: LeaseRecord) -> None:
         lease.session_id,
         _PAUSE_RESUME_MESSAGE,
         stdout_path=_stdout_path(ctx, lease.lease_id, _pending_generation(ctx, lease.lease_id)),
+        preamble=_resume_preamble(ctx, lease, bindings),
+        chunk_id=lease.chunk_id,
     )
     ctx.store.record_spawn(
         lease.lease_id,

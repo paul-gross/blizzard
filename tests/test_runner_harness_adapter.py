@@ -136,6 +136,35 @@ def test_resume_with_message_child_env_excludes_the_hub_token_and_an_unlisted_se
     assert _SENTINEL_UNLISTED_VAR not in dumped
 
 
+@pytest.mark.component
+def test_resume_with_message_injects_the_lease_identity_when_given_a_preamble(tmp_path: Path) -> None:
+    # A resumed worker needs the same per-lease identity a fresh spawn gets, or its CLI
+    # (`blizzard runner attach`) and heartbeat/SessionEnd hooks cannot reach the runner for
+    # this lease — `--resume` inherits none of the spawn env. The caller passes a preamble
+    # with a freshly re-minted token; the resume child env must carry it, mirroring spawn.
+    dump_script = tmp_path / "dump-env"
+    dump_script.write_text(_ENV_DUMP_HARNESS)
+    dump_script.chmod(dump_script.stat().st_mode | stat.S_IEXEC | stat.S_IRUSR)
+    workdir = tmp_path / "e1"
+    workdir.mkdir()
+    adapter = ClaudeCodeAdapter(binary=str(dump_script))
+    preamble = WorkerPreamble(
+        environments=[AcquiredEnvironment(environment_id="e1", workdir=str(workdir))],
+        lease_id="lease_42",
+        local_api_url="http://127.0.0.1:8431",
+        lease_token="fresh-resume-token",
+    )
+
+    pid = adapter.resume_with_message(str(workdir), "sess-9", "continue", preamble=preamble, chunk_id="ch_9")
+    os.waitpid(pid, 0)
+
+    dumped = json.loads((workdir / "env-dump.json").read_text())
+    assert dumped["BLIZZARD_LEASE_ID"] == "lease_42"
+    assert dumped["BLIZZARD_RUNNER_URL"] == "http://127.0.0.1:8431"
+    assert dumped["BLIZZARD_LEASE_TOKEN"] == "fresh-resume-token"  # the re-minted plaintext rides the resume
+    assert dumped["BLIZZARD_CHUNK_ID"] == "ch_9"
+
+
 @pytest.mark.unit
 def test_spawn_env_forwards_a_named_passthrough_var(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MY_HARNESS_QUIRK", "needed-by-the-real-binary")

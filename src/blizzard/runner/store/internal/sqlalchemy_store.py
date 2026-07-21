@@ -718,7 +718,12 @@ class SqlAlchemyRunnerStore:
         _log.info("route token stashed", chunk_id=chunk_id)
 
     def record_lease_token(self, lease_id: str, token_hash: str, at: datetime) -> None:
+        # Overwrite-safe: a resume re-mints the lease's capability token (the plaintext is
+        # never persisted, so it cannot be re-injected — only re-minted), replacing the
+        # spawn-time row for this lease. delete-then-insert keeps the `lease_id` PK a single
+        # live row while re-minting invalidates the prior token by construction.
         with self._begin() as conn:
+            conn.execute(lease_tokens.delete().where(lease_tokens.c.lease_id == lease_id))
             conn.execute(lease_tokens.insert().values(lease_id=lease_id, token_hash=token_hash, minted_at=at))
         _log.info("lease token minted", lease_id=lease_id)
 

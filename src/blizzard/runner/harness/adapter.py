@@ -95,7 +95,16 @@ class IHarnessAdapter(Protocol):
         """Start a headless worker; return its session id, pid, and start time."""
         ...
 
-    def resume_with_message(self, workdir: str, session_id: str, message: str, stdout_path: str = "") -> int:
+    def resume_with_message(
+        self,
+        workdir: str,
+        session_id: str,
+        message: str,
+        stdout_path: str = "",
+        *,
+        preamble: WorkerPreamble | None = None,
+        chunk_id: str = "",
+    ) -> int:
         """Headless resume-with-message; returns the new pid. Kill first.
 
         The fire-and-forget resume behind answer delivery and the CI feedback loop
@@ -106,6 +115,13 @@ class IHarnessAdapter(Protocol):
         worker's stdout is redirected to, mirroring :attr:`WorkerPreamble.stdout_path`
         — this operation has no preamble to carry it on, so it rides as a direct
         param instead. Empty keeps today's behavior (stdout inherited).
+
+        ``preamble`` re-supplies the per-lease worker identity (lease id, runner URL,
+        held envs, and a freshly re-minted capability token) so the resumed worker can
+        ``blizzard runner attach`` and its heartbeat/SessionEnd hooks can post —
+        ``--resume`` inherits none of the spawn env. ``chunk_id`` names the lease's
+        chunk for ``BLIZZARD_CHUNK_ID``. Both omitted (the selftest/CI resume, which
+        speaks to no live lease) keeps the identity-less allowlist env.
         """
         ...
 
