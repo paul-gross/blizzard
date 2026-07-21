@@ -142,6 +142,44 @@ def test_bad_retries_exhausted_target_is_an_error() -> None:
     assert any("retries.exhausted" in e for e in result.errors)
 
 
+def test_bare_resume_session_is_legal() -> None:
+    doc = _min_build_deliver()
+    doc["nodes"]["build"]["session"] = "resume"  # type: ignore[index]
+    result = validate_graph(parse_graph_doc(doc))
+    assert result.ok
+
+
+def test_fresh_session_is_legal() -> None:
+    doc = _min_build_deliver()
+    doc["nodes"]["build"]["session"] = "fresh"  # type: ignore[index]
+    result = validate_graph(parse_graph_doc(doc))
+    assert result.ok
+
+
+def test_targeted_resume_naming_an_existing_node_is_legal() -> None:
+    doc = _min_build_deliver()
+    doc["nodes"]["build"]["session"] = "resume:deliver"  # type: ignore[index]
+    result = validate_graph(parse_graph_doc(doc))
+    assert result.ok
+
+
+def test_targeted_resume_naming_an_absent_node_is_an_error() -> None:
+    doc = _min_build_deliver()
+    doc["nodes"]["build"]["session"] = "resume:ghost"  # type: ignore[index]
+    result = validate_graph(parse_graph_doc(doc))
+    assert not result.ok
+    assert any("resume:ghost" in e and "names no node" in e for e in result.errors), result.errors
+
+
+@pytest.mark.parametrize("bad", ["resume:", "fresh:x", "bogus"])
+def test_malformed_session_forms_are_validation_errors(bad: str) -> None:
+    doc = _min_build_deliver()
+    doc["nodes"]["build"]["session"] = bad  # type: ignore[index]
+    result = validate_graph(parse_graph_doc(doc))
+    assert not result.ok
+    assert any("malformed session" in e for e in result.errors), result.errors
+
+
 def test_unreachable_node_is_a_warning_not_an_error() -> None:
     doc = _min_build_deliver()
     doc["nodes"]["orphan"] = {

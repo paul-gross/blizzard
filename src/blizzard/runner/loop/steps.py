@@ -32,6 +32,7 @@ from blizzard.foundation.ids import LEASE_PREFIX, mint
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.enrollment import hash_token
+from blizzard.hub.domain.graph import SessionMode
 from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.domain.leases import as_utc, is_heartbeat_stale
 from blizzard.runner.environments.provider import (
@@ -56,7 +57,7 @@ from blizzard.runner.store.repository import (
 )
 from blizzard.wire.completion import CompletionSubmission, SubmittedArtifact, satisfied_produces_names
 from blizzard.wire.decision import DecisionSubmission, DecisionView
-from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeEnvelope
+from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeConfig, NodeEnvelope
 from blizzard.wire.facts import (
     ANSWER_DELIVERED,
     ESCALATION_RECORDED,
@@ -1460,7 +1461,8 @@ def _fill_one(ctx: LoopContext) -> bool:
     # reclaim path below shares, and requeue/takeover/retries later re-read the same
     # row rather than re-claiming.
     ctx.store.set_route_token(entry.chunk_id, token=outcome.claimed.route_token, at=ctx.clock.now())
-    _spawn_attempt(ctx, entry.chunk_id, outcome.claimed.envelope, acquired, via="fill")
+    resume_from = _resolve_resume_from(ctx, entry.chunk_id, outcome.claimed.envelope.node)
+    _spawn_attempt(ctx, entry.chunk_id, outcome.claimed.envelope, acquired, via="fill", resume_from=resume_from)
     return True
 
 
@@ -1760,7 +1762,8 @@ def _apply_response(
     """Act on the apply-response: continue in place, hold at a hub node, or finish."""
     if outcome == ApplyOutcome.NEXT and next_envelope is not None:
         envs = _bindings_as_environments(bindings)
-        _spawn_attempt(ctx, chunk_id, next_envelope, envs, via="apply-response")
+        resume_from = _resolve_resume_from(ctx, chunk_id, next_envelope.node)
+        _spawn_attempt(ctx, chunk_id, next_envelope, envs, via="apply-response", resume_from=resume_from)
     elif outcome == ApplyOutcome.HUB_NODE_TAKEN:
         _log.info("hub node took over — holding envs until terminal", chunk_id=chunk_id)
     elif outcome == ApplyOutcome.MIGRATED:
@@ -1888,7 +1891,8 @@ def _spawn_into_held_node(ctx: LoopContext, chunk_id: str) -> None:
     except HubClientError:
         return  # hub unreachable — the transition is durable at the hub; retry next tick
     _log.info("hub advanced held chunk into a fresh node — spawning", chunk_id=chunk_id)
-    _spawn_attempt(ctx, chunk_id, envelope, _bindings_as_environments(bindings), via="advance")
+    resume_from = _resolve_resume_from(ctx, chunk_id, envelope.node)
+    _spawn_attempt(ctx, chunk_id, envelope, _bindings_as_environments(bindings), via="advance", resume_from=resume_from)
 
 
 def _resolve_gate(ctx: LoopContext, chunk_id: str, decision: DecisionView) -> None:
@@ -1965,8 +1969,30 @@ def _spawn_suppressed(ctx: LoopContext, *, via: str, chunk_id: str, lease_id: st
     return True
 
 
+def _resolve_resume_from(ctx: LoopContext, chunk_id: str, node: NodeConfig) -> str | None:
+    """The prior session id a node-entry spawn should resume, or ``None`` for fresh (issue #115).
+
+    Reads only ``node.session``/``node.session_source`` — never the retry budget or
+    attempt count, so a within-node retry (which never calls this) stays fresh (Q3). A
+    ``FRESH`` node is always ``None``. A ``RESUME`` node with no ``session_source``
+    resumes the chunk's most-recent session-bearing lease (any node); a targeted
+    ``resume:<node>`` resumes that node's own most-recent session. Either way, no match
+    (``ctx.store.latest_session_id`` returns ``None`` — first arrival at this node) falls
+    back to fresh (AC4) rather than erroring — a resume target is best-effort, not a hard
+    requirement."""
+    if node.session is SessionMode.FRESH:
+        return None
+    return ctx.store.latest_session_id(chunk_id, node.session_source)
+
+
 def _spawn_attempt(
-    ctx: LoopContext, chunk_id: str, envelope: NodeEnvelope, environments: list[AcquiredEnvironment], *, via: str
+    ctx: LoopContext,
+    chunk_id: str,
+    envelope: NodeEnvelope,
+    environments: list[AcquiredEnvironment],
+    *,
+    via: str,
+    resume_from: str | None = None,
 ) -> None:
     """Mint a fresh-epoch lease and spawn a headless worker for a node-step.
 
@@ -1975,7 +2001,16 @@ def _spawn_attempt(
     silent ``None`` return indistinguishable from a real spawn (issue #45): there is no
     boolean a caller could misread as "spawn failed" and burn a retry on. A future caller
     that adds post-spawn logic must re-read this contract first. ``via`` names the calling
-    site, attributing the gate's suppression log line to it."""
+    site, attributing the gate's suppression log line to it.
+
+    ``resume_from`` (issue #115) is the prior session id this spawn continues, or
+    ``None`` for a fresh session — the sole funnel into ``ctx.harness.spawn``, so a
+    node-entry resume rides the same :func:`_spawn_suppressed` gate every other spawn
+    does (AC5): a suppressed spawn resolves and mutates nothing, resume target included.
+    Only node-entry callers (:func:`_fill_one`, :func:`_apply_response`'s ``NEXT``
+    branch, :func:`_spawn_into_held_node`) compute a non-default value via
+    :func:`_resolve_resume_from`; every other caller (retry, adopt, reclaim,
+    requeue-resume) leaves it at the default ``None``, i.e. always fresh."""
     if _spawn_suppressed(ctx, via=via, chunk_id=chunk_id):
         return
     now = ctx.clock.now()
@@ -2051,7 +2086,7 @@ def _spawn_attempt(
         stdout_path=_stdout_path(ctx, lease_id, _pending_generation(ctx, lease_id)),
         lease_token=lease_token,
     )
-    handle = ctx.harness.spawn(envelope, preamble, session_hint=str(uuid.uuid4()))
+    handle = ctx.harness.spawn(envelope, preamble, session_hint=str(uuid.uuid4()), resume_from=resume_from)
     ctx.store.record_spawn(
         lease_id,
         pid=handle.pid,

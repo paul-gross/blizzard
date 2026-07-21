@@ -16,6 +16,7 @@ from sqlalchemy import MetaData
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
+from blizzard.hub.domain.graph import SessionMode
 from blizzard.hub.domain.work import DEFAULT_MODEL, ChunkStatus
 from blizzard.runner.environments.provider import (
     AcquiredEnvironment,
@@ -257,15 +258,27 @@ class FakeHarness:
         # script "no envelope, but the transcript sums to this" without the two colliding.
         self.transcript_usage = transcript_usage
         self.spawns: list[tuple[NodeEnvelope, WorkerPreamble]] = []
+        self.resume_froms: list[str | None] = []  # `resume_from` as seen by each spawn (issue #115)
         self.judged: list[tuple[str, str, str]] = []
         self.resumed: list[tuple[str, str, str]] = []  # (workdir, session_id, message)
         self.resumed_identity: list[tuple[WorkerPreamble | None, str]] = []  # (preamble, chunk_id) per resume
         self.resume_pid = 4321
 
-    def spawn(self, envelope: NodeEnvelope, preamble: WorkerPreamble, session_hint: str | None) -> WorkerHandle:
+    def spawn(
+        self,
+        envelope: NodeEnvelope,
+        preamble: WorkerPreamble,
+        session_hint: str | None,
+        resume_from: str | None = None,
+    ) -> WorkerHandle:
         self.spawns.append((envelope, preamble))
+        self.resume_froms.append(resume_from)
+        # Mirrors the real in-place adapter contract (issue #115, plan Q1): a resume
+        # continues under the SAME id it was given, never the scripted handle's; a
+        # fresh spawn (`resume_from is None`) keeps today's scripted-handle behavior.
+        session_id = resume_from if resume_from is not None else self._handle.session_id
         return WorkerHandle(
-            session_id=self._handle.session_id,
+            session_id=session_id,
             pid=self._handle.pid,
             process_start_time=self._handle.process_start_time,
         )
@@ -410,6 +423,8 @@ def make_envelope(
     choices: list[tuple[str, str]],
     produces: list[str] | None = None,
     epoch: int = 0,
+    session: SessionMode | None = None,
+    session_source: str | None = None,
 ) -> NodeEnvelope:
     """A minimal runner-node envelope for a step test.
 
@@ -417,15 +432,19 @@ def make_envelope(
     mint seeds off ``max(local, envelope.epoch)`` since #112. It defaults to 0, the value
     the hub sends for a fresh, never-leased claim (``latest_epoch(facts) or 0``); a test
     modelling a reclaim of a chunk with prior hub history (e.g. a migration) passes the
-    carried-forward floor explicitly."""
-    from blizzard.hub.domain.graph import Executor, JudgedBy, SessionMode
+    carried-forward floor explicitly.
+
+    ``session``/``session_source`` (issue #115) default to ``SessionMode.FRESH``/``None``
+    — today's unchanged behavior — unless a resume-mode test overrides them."""
+    from blizzard.hub.domain.graph import Executor, JudgedBy
     from blizzard.wire.envelope import EnvelopeChoice
 
     node = NodeConfig(
         node_id=node_id,
         node_name=node_name,
         executor=Executor.RUNNER,
-        session=SessionMode.FRESH,
+        session=session if session is not None else SessionMode.FRESH,
+        session_source=session_source,
         judged_by=JudgedBy.WORKER,
         retries_max=2,
         produces=produces or [],

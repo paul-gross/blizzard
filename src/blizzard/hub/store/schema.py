@@ -61,6 +61,9 @@ graph_nodes = Table(
     Column("prompt", Text, nullable=True),  # inlined text, never a path
     Column("judgement_prompt", Text, nullable=True),  # the verdict-elicitation prompt; null at a gate/hub node
     Column("session", String, nullable=False),  # resume | fresh
+    # The targeted-resume source node name (issue #115) — the parsed ``<name>`` of a
+    # ``session: resume:<name>`` form; null for bare ``resume``/``fresh``.
+    Column("session_source", String, nullable=True),
     Column("judged_by", String, nullable=False),  # worker | human
     Column("retries_max", Integer, nullable=True),
     Column("retries_exhausted", String, nullable=True),  # escalate

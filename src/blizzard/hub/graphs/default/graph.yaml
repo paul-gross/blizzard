@@ -43,6 +43,7 @@ nodes:
   build:
     executor: runner
     prompt: ./prompts/build.md
+    session: resume:build  # re-entered build resumes its OWN prior build session, not the reviewer's
     judgement:
       prompt: ./prompts/build.judgement.md
       choices:

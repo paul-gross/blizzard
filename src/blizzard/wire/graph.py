@@ -65,6 +65,10 @@ class GraphNodeView(BaseModel):
     name: str
     executor: str
     session: str
+    # The targeted-resume source node name (issue #115) — see
+    # ``blizzard.hub.domain.graph.Node.session_source``. ``None`` means "chunk
+    # most-recent" (bare ``resume``) or ``fresh``.
+    session_source: str | None = None
     judged_by: str
     retries_max: int | None = None
     retries_exhausted: str | None = None

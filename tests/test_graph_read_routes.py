@@ -51,6 +51,36 @@ nodes:
 """
 
 
+_GRAPH_SESSION_SOURCE = """
+name: gamma
+entry: build
+nodes:
+  build:
+    executor: runner
+    prompt: do the work
+    session: resume:build
+    judgement:
+      prompt: judge it
+      choices:
+        pass:
+          description: it works
+          to: review
+  review:
+    executor: runner
+    prompt: review it
+    session: fresh
+    judgement:
+      prompt: judge it
+      choices:
+        pass:
+          description: it works
+          to: done
+        fail:
+          description: it does not
+          to: build
+"""
+
+
 def _mint(hub, definition_yaml: str) -> str:
     resp = hub.client.post("/api/graphs", json={"definition_yaml": definition_yaml})
     assert resp.status_code == 201, resp.text
@@ -102,6 +132,7 @@ def test_get_graph_returns_full_view(tmp_path: Path) -> None:
     build = next(n for n in body["nodes"] if n["name"] == "build")
     assert build["executor"] == "runner"
     assert build["session"] == "resume"
+    assert build["session_source"] is None
     assert build["judged_by"] == "worker"
     assert build["retries_max"] == 1
     assert build["retries_exhausted"] == "escalate"
@@ -110,6 +141,25 @@ def test_get_graph_returns_full_view(tmp_path: Path) -> None:
     assert len(body["edges"]) == 2
     edge = body["edges"][0]
     assert set(edge.keys()) >= {"from_node_id", "choice_id", "to_node_name", "prompt_addendum"}
+
+
+def test_get_graph_round_trips_session_source(tmp_path: Path) -> None:
+    """A node's targeted ``session: resume:<name>`` form survives store persistence
+    and the API node view; a bare ``resume``/``fresh`` node round-trips
+    ``session_source == None`` (issue #115, Slice 2)."""
+    hub = build_hub(tmp_path)
+    graph_id = _mint(hub, _GRAPH_SESSION_SOURCE)
+
+    resp = hub.client.get(f"/api/graphs/{graph_id}")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    by_name = {n["name"]: n for n in body["nodes"]}
+
+    assert by_name["build"]["session"] == "resume"
+    assert by_name["build"]["session_source"] == "build"
+
+    assert by_name["review"]["session"] == "fresh"
+    assert by_name["review"]["session_source"] is None
 
 
 def test_get_graph_unknown_id_is_404(tmp_path: Path) -> None:

@@ -95,6 +95,7 @@ def reify_graph(doc: GraphDoc, clock: IClock) -> Graph:
                 checks=list(nd.checks),
                 produces=list(nd.produces),
                 session=nd.session,
+                session_source=nd.session_source,
                 judged_by=judged_by,
                 retries_max=nd.retries_max,
                 retries_exhausted=nd.retries_exhausted,

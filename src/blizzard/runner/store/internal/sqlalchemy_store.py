@@ -205,6 +205,14 @@ class SqlAlchemyRunnerStore:
         rows = self._all(stmt)
         return self._row_to_lease(rows[0]) if rows else None
 
+    def latest_session_id(self, chunk_id: str, node_name: str | None) -> str | None:
+        stmt = self._lease_select().where(leases.c.chunk_id == chunk_id).where(leases.c.session_id.is_not(None))
+        if node_name is not None:
+            stmt = stmt.where(lease_context.c.node_name == node_name)
+        stmt = stmt.order_by(leases.c.created_at.desc(), leases.c.lease_id.desc())
+        rows = self._all(stmt)
+        return str(rows[0].session_id) if rows else None
+
     def lease(self, lease_id: str) -> LeaseRecord | None:
         stmt = self._lease_select().where(leases.c.lease_id == lease_id)
         rows = self._all(stmt)

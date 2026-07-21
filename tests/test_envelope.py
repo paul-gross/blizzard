@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 
 import pytest
@@ -77,6 +78,20 @@ def test_envelope_carries_authored_judgement_prose_and_choice_set() -> None:
     assert "<Choice>" not in (env.judgement_prompt or "")  # the tail is the runner's to render
     assert env.pm_pointers == [{"source": "default", "ref": "1"}]
     assert [a.name for a in env.artifacts] == ["f"]
+
+
+def test_envelope_carries_session_source() -> None:
+    # Mirrors target_graph beside the raw `to`: session_source is derived once at
+    # parse and carried verbatim onto the envelope's NodeConfig (issue #115).
+    node = replace(_node(), session_source="build")
+    env = build_node_envelope(chunk=_chunk(), node=node, artifacts=[], epoch=1)
+    assert env.node.session == SessionMode.RESUME
+    assert env.node.session_source == "build"
+
+
+def test_envelope_session_source_defaults_to_none() -> None:
+    env = build_node_envelope(chunk=_chunk(), node=_node(), artifacts=[], epoch=1)
+    assert env.node.session_source is None
 
 
 def test_arrival_addendum_appends_to_the_pre_prompt() -> None:

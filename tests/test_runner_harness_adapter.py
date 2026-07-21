@@ -10,6 +10,10 @@ workdir, and the judgement resume's output is parsed into a choice. The real
 The bottom section (epic #57 phase 1) covers ``parse_usage``/``sum_transcript_usage``
 in isolation (unit) and the injected per-lease stdout-file redirect on ``spawn``/
 ``resume_with_message`` against the same real fake-harness binary (component).
+
+The node-entry-resume section (issue #115) covers ``spawn(resume_from=...)``'s
+flag branch and echoed continuation id in isolation (unit), with ``subprocess.Popen``
+faked so no real process is launched.
 """
 
 from __future__ import annotations
@@ -25,6 +29,7 @@ import pytest
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerPreamble
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
+from blizzard.wire.envelope import NodeEnvelope
 from tests.conftest import _WORKER_IDENTITY_ENV
 from tests.runner_fakes import make_envelope
 
@@ -66,6 +71,76 @@ def test_parse_assessment_is_empty_without_a_choice() -> None:
 def test_resume_command_is_the_literal_takeover() -> None:
     cmd = ClaudeCodeAdapter(binary="claude").resume_command("/ws/e1", "sess-x")
     assert cmd == "cd /ws/e1 && claude --resume sess-x"
+
+
+# --------------------------------------------------------------------------- #
+# Node-entry resume (issue #115): spawn(resume_from=...) branches the CLI flag
+# and echoes the authoritative continuation id, with no real subprocess launched
+# (``subprocess.Popen`` is faked so this stays a pure unit test of argv construction).
+# --------------------------------------------------------------------------- #
+
+
+class _FakeSpawnedProcess:
+    """A stand-in for the ``Popen`` handle ``spawn`` reads ``.pid`` off of.
+
+    An implausibly large pid so ``read_process_start_time`` (a real ``/proc`` read)
+    finds nothing and returns ``None`` gracefully, exactly as it does for any
+    already-exited/foreign pid — no real process is ever launched.
+    """
+
+    pid = 9_999_999
+
+
+def _fake_popen_capturing(captured: dict[str, list[str]]) -> object:
+    def _fake_popen(cmd: list[str], **kwargs: object) -> _FakeSpawnedProcess:
+        captured["cmd"] = cmd
+        return _FakeSpawnedProcess()
+
+    return _fake_popen
+
+
+def _spawn_fixture() -> tuple[ClaudeCodeAdapter, NodeEnvelope, WorkerPreamble]:
+    adapter = ClaudeCodeAdapter(binary="claude")
+    envelope = make_envelope("ch_1", "build", node_id="nd_build", choices=[("pass", "ok")])
+    preamble = WorkerPreamble(
+        environments=[AcquiredEnvironment(environment_id="e1", workdir="/ws/e1")],
+        lease_id="lease_1",
+        local_api_url="http://127.0.0.1:8431",
+    )
+    return adapter, envelope, preamble
+
+
+@pytest.mark.unit
+def test_spawn_with_resume_from_emits_resume_flag_and_echoes_its_continuation_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, list[str]] = {}
+    monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
+    adapter, envelope, preamble = _spawn_fixture()
+
+    handle = adapter.spawn(envelope, preamble, session_hint="fresh-hint", resume_from="prior-sid")
+
+    cmd = captured["cmd"]
+    assert "--resume" in cmd
+    assert cmd[cmd.index("--resume") + 1] == "prior-sid"
+    assert "--session-id" not in cmd
+    # In-place (Q1): the continuation stays under the resumed id, not the hint.
+    assert handle.session_id == "prior-sid"
+
+
+@pytest.mark.unit
+def test_spawn_without_resume_from_is_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, list[str]] = {}
+    monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
+    adapter, envelope, preamble = _spawn_fixture()
+
+    handle = adapter.spawn(envelope, preamble, session_hint="fresh-hint")
+
+    cmd = captured["cmd"]
+    assert "--session-id" in cmd
+    assert cmd[cmd.index("--session-id") + 1] == "fresh-hint"
+    assert "--resume" not in cmd
+    assert handle.session_id == "fresh-hint"
 
 
 # --------------------------------------------------------------------------- #

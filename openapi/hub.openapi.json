@@ -1579,6 +1579,17 @@
           "session": {
             "title": "Session",
             "type": "string"
+          },
+          "session_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Source"
           }
         },
         "required": [
@@ -2074,6 +2085,17 @@
           },
           "session": {
             "$ref": "#/components/schemas/SessionMode"
+          },
+          "session_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Source"
           }
         },
         "required": [

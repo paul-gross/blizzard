@@ -24,6 +24,7 @@ from blizzard.hub.domain.graph import (
     JudgedBy,
     NodeDoc,
     RetriesExhausted,
+    SessionMode,
     classify_choice_target,
 )
 
@@ -140,6 +141,17 @@ def _check_node(node: NodeDoc, node_names: set[str], errors: list[str]) -> None:
                     f"node `{node.name}` choice `{choice.name}`: `to: {choice.to}` resolves to no node "
                     f"(and is not the reserved terminal `{RESERVED_TERMINAL}`)"
                 )
+
+    # A node's `session:` value (issue #115). `resume:<name>` names a source node whose
+    # most-recent session to resume — the targeted analogue of a choice `to` above: a
+    # malformed form is rejected, and a well-formed `resume:<name>` must name an existing
+    # node, exactly like the dangling-edge-target check.
+    if node.session_malformed:
+        errors.append(f"node `{node.name}`: malformed session value — expected `fresh`, `resume`, or `resume:<node>`")
+    elif (
+        node.session is SessionMode.RESUME and node.session_source is not None and node.session_source not in node_names
+    ):
+        errors.append(f"node `{node.name}`: session `resume:{node.session_source}` names no node")
 
     # The retry escape hatch, when present, is the only legal exhaustion target.
     if node.retries_exhausted is not None and node.retries_exhausted != RetriesExhausted.ESCALATE.value:

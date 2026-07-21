@@ -269,7 +269,9 @@ class _HangingAdapter:
     shape a real drifted/hung CLI can produce, and the run-budget timeout exists to
     catch."""
 
-    def spawn(self, envelope: object, preamble: object, session_hint: str | None) -> WorkerHandle:
+    def spawn(
+        self, envelope: object, preamble: object, session_hint: str | None, resume_from: str | None = None
+    ) -> WorkerHandle:
         threading.Event().wait()  # blocks forever
         raise AssertionError("unreachable")
 
@@ -335,7 +337,9 @@ class _FixedPidAdapter:
         self.spawn_pid = spawn_pid
         self.resume_pid = resume_pid
 
-    def spawn(self, envelope: object, preamble: object, session_hint: str | None) -> WorkerHandle:
+    def spawn(
+        self, envelope: object, preamble: object, session_hint: str | None, resume_from: str | None = None
+    ) -> WorkerHandle:
         return WorkerHandle(session_id=session_hint or "sid", pid=self.spawn_pid, process_start_time="spawn-t")
 
     def resume_with_message(

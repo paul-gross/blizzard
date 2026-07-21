@@ -12,10 +12,33 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from blizzard.hub.domain.graph import mark_effective
+from blizzard.hub.domain.graph import SessionMode, classify_session, mark_effective
 from tests.support import make_graph
 
 pytestmark = pytest.mark.unit
+
+
+# --------------------------------------------------------------------------- #
+# classify_session (issue #115) — the pure `session:` syntax parser.
+# --------------------------------------------------------------------------- #
+
+
+def test_classify_session_bare_resume_is_resume_with_no_source() -> None:
+    assert classify_session("resume") == (SessionMode.RESUME, None, False)
+
+
+def test_classify_session_targeted_resume_carries_the_name_as_source() -> None:
+    assert classify_session("resume:build") == (SessionMode.RESUME, "build", False)
+
+
+def test_classify_session_fresh_is_fresh_with_no_source() -> None:
+    assert classify_session("fresh") == (SessionMode.FRESH, None, False)
+
+
+@pytest.mark.parametrize("raw", ["resume:", "fresh:x", "bogus", ""])
+def test_classify_session_malformed_forms_are_flagged(raw: str) -> None:
+    _mode, _source, malformed = classify_session(raw)
+    assert malformed is True
 
 
 def test_mark_effective_of_empty_list_is_empty() -> None:

@@ -10,7 +10,7 @@ description = "Run the default unit + component suite, parallelized (pytest-xdis
 run = "uv run pytest -n auto"
 
 [tasks.e2e]
-description = "Run the standing e2e smoke suite (verification.md) — eight full-stack scenarios (happy-path build→review→deliver, review-fail cycle, retries-exhausted escalation, ask/answer, human gate, the browser-driven board, the live cost render, and the browser-driven graph-explorer diagram) self-managed over forge+hub+runner + a minted blizzard-mock fixture; needs the sibling blizzard-mock worktree provisioned (winter provision <env>), and the three browser scenarios also need Chromium (uv run playwright install chromium) — they skip cleanly without it"
+description = "Run the standing e2e smoke suite — full-stack scenarios (see blizzard-harness:/verification/blizzard.md for the current scenario roster) self-managed over forge+hub+runner + a minted blizzard-mock fixture; needs the sibling blizzard-mock worktree provisioned (winter provision <env>), and the browser scenarios also need Chromium (uv run playwright install chromium) — they skip cleanly without it"
 # The browser scenario drives the *built* bundle that `blizzard hub host` serves out of
 # src/blizzard/static/, not the sources — so a stale bundle does not fail loudly, it
 # silently tests the previous UI and can go green against a layout that no longer

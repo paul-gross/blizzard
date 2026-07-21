@@ -91,8 +91,21 @@ class WorkerHandle:
 class IHarnessAdapter(Protocol):
     """The coding-harness seam. Dumb: translates, never decides."""
 
-    def spawn(self, envelope: NodeEnvelope, preamble: WorkerPreamble, session_hint: str | None) -> WorkerHandle:
-        """Start a headless worker; return its session id, pid, and start time."""
+    def spawn(
+        self,
+        envelope: NodeEnvelope,
+        preamble: WorkerPreamble,
+        session_hint: str | None,
+        resume_from: str | None = None,
+    ) -> WorkerHandle:
+        """Start a headless worker; return its session id, pid, and start time.
+
+        ``resume_from`` (issue #115) is the prior session id a node-entry resume
+        continues; ``None`` is today's fresh spawn (``session_hint`` mints/honors a
+        brand-new id). The returned :class:`WorkerHandle`'s ``session_id`` is the
+        **authoritative continuation id** the runner records — whichever id the
+        harness actually continued under, fork or in-place.
+        """
         ...
 
     def resume_with_message(

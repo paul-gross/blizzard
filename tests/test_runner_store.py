@@ -81,6 +81,75 @@ def test_lease_returns_none_for_an_unknown_id(tmp_path):  # type: ignore[no-unty
 
 
 @pytest.mark.component
+def test_latest_session_id_returns_most_recent_session_bearing_lease(tmp_path):  # type: ignore[no-untyped-def]
+    """Node-entry resume resolution (issue #115): ``node_name=None`` spans every
+    node of the chunk, newest-first by mint order."""
+    store = _store(tmp_path)
+    _mint(store, chunk="ch_1", node="nd_build", node_name="build", lease="lease_1", epoch=1)
+    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-build-1", spawned_at=_NOW)
+
+    store.record_lease(
+        NewLease(
+            lease_id="lease_2",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_review",
+            node_name="review",
+            epoch=2,
+            runner_id="r1",
+            retries_max=2,
+            created_at=_NOW + timedelta(minutes=5),
+        )
+    )
+    store.record_spawn(
+        "lease_2", pid=2, process_start_time="2", session_id="sess-review-1", spawned_at=_NOW + timedelta(minutes=5)
+    )
+
+    assert store.latest_session_id("ch_1", None) == "sess-review-1"
+    assert store.latest_session_id("ch_1", "build") == "sess-build-1"
+    assert store.latest_session_id("ch_1", "review") == "sess-review-1"
+
+
+@pytest.mark.component
+def test_latest_session_id_returns_none_when_no_session_or_no_match(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    assert store.latest_session_id("ch_none", None) is None
+
+    _mint(store, chunk="ch_1", node="nd_build", node_name="build", lease="lease_1")
+    # Lease minted but never spawned — no session_id yet.
+    assert store.latest_session_id("ch_1", None) is None
+    assert store.latest_session_id("ch_1", "build") is None
+    assert store.latest_session_id("ch_1", "review") is None
+
+
+@pytest.mark.component
+def test_latest_session_id_breaks_created_at_ties_by_lease_id(tmp_path):  # type: ignore[no-untyped-def]
+    """``created_at`` is not a total order — tied timestamps must still resolve
+    deterministically, by the monotonic ``lease_id`` (bzh:sql-portable)."""
+    store = _store(tmp_path)
+    _mint(store, chunk="ch_1", node="nd_build", node_name="build", lease="lease_1")
+    store.record_spawn("lease_1", pid=1, process_start_time="1", session_id="sess-1", spawned_at=_NOW)
+
+    store.record_lease(
+        NewLease(
+            lease_id="lease_2",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=2,
+            runner_id="r1",
+            retries_max=2,
+            created_at=_NOW,
+        )
+    )
+    store.record_spawn("lease_2", pid=2, process_start_time="2", session_id="sess-2", spawned_at=_NOW)
+
+    assert store.latest_session_id("ch_1", None) == "sess-2"
+    assert store.latest_session_id("ch_1", "build") == "sess-2"
+
+
+@pytest.mark.component
 def test_list_closed_leases_orders_newest_first_and_respects_limit(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _mint(store, chunk="ch_1", lease="lease_1")

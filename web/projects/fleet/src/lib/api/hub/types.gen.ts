@@ -1126,6 +1126,10 @@ export type GraphNodeView = {
      * Session
      */
     session: string;
+    /**
+     * Session Source
+     */
+    session_source?: string | null;
 };
 
 /**
@@ -1483,6 +1487,10 @@ export type NodeConfig = {
      */
     retries_max?: number | null;
     session: SessionMode;
+    /**
+     * Session Source
+     */
+    session_source?: string | null;
 };
 
 /**

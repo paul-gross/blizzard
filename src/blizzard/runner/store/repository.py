@@ -233,6 +233,16 @@ class IReadRunnerStore(Protocol):
         carries the session id a takeover resumes."""
         ...
 
+    def latest_session_id(self, chunk_id: str, node_name: str | None) -> str | None:
+        """The chunk's most-recent session-bearing lease's ``session_id``, or ``None``.
+
+        Node-entry resume resolution (issue #115): the newest lease (by mint order)
+        for this chunk whose ``session_id`` is non-null, optionally filtered to
+        leases minted at ``node_name`` — any node when ``node_name`` is ``None``.
+        ``None`` when no such lease exists is the fresh-fallback signal: the caller
+        spawns fresh rather than resuming."""
+        ...
+
     def lease(self, lease_id: str) -> LeaseRecord | None:
         """The lease by id, regardless of closure — the transcript read (issue #29).
 

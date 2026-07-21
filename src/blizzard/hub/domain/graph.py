@@ -88,6 +88,38 @@ class SessionMode(StrEnum):
     FRESH = "fresh"
 
 
+# The prefix for a node-entry targeted resume (issue #115): ``session: resume:<node>``
+# resumes node ``<node>``'s most-recent session instead of the chunk's most-recent
+# session overall (bare ``resume``).
+SESSION_RESUME_TARGET_PREFIX = "resume:"
+
+
+def classify_session(raw: str) -> tuple[SessionMode, str | None, bool]:
+    """Classify a node's authored ``session:`` value into ``(mode, source, malformed)``
+    (issue #115) — a pure syntax parser, mirroring :func:`classify_choice_target`.
+
+    - ``"resume"`` -> ``(RESUME, None, False)`` — resume the chunk's most-recent
+      session (any node).
+    - ``"resume:<name>"`` -> ``(RESUME, "<name>", False)`` — resume node ``<name>``'s
+      most-recent session. ``<name>`` is carried verbatim; whether it names an
+      existing node is the validator's job — structural parse only, exactly the
+      parse-never-validates split :func:`classify_choice_target` already keeps.
+    - ``"fresh"`` -> ``(FRESH, None, False)``.
+    - anything else (``"resume:"`` with an empty name, ``"fresh:x"``, or an
+      unrecognized token) -> ``malformed=True``; ``mode``/``source`` are placeholders
+      a caller must not rely on.
+    """
+    if raw == SessionMode.FRESH.value:
+        return (SessionMode.FRESH, None, False)
+    if raw == SessionMode.RESUME.value:
+        return (SessionMode.RESUME, None, False)
+    if raw.startswith(SESSION_RESUME_TARGET_PREFIX):
+        name = raw[len(SESSION_RESUME_TARGET_PREFIX) :]
+        if name:
+            return (SessionMode.RESUME, name, False)
+    return (SessionMode.RESUME, None, True)
+
+
 class RetriesExhausted(StrEnum):
     """The only exhaustion target in the MVP."""
 
@@ -197,6 +229,17 @@ class NodeDoc:
     # never reads either.
     poll_interval_seconds: int | None = None
     poll_timeout_seconds: int | None = None
+    # The targeted-resume source node name (issue #115) — the parsed ``<name>`` of a
+    # ``session: resume:<name>`` form, ``None`` for bare ``resume``/``fresh``. Set by
+    # :func:`classify_session`; whether it names an existing node is the validator's job.
+    session_source: str | None = None
+    # Whether the authored ``session:`` value was structurally malformed (issue #115) —
+    # e.g. ``resume:`` with an empty name, ``fresh:x``, or an unrecognized token. Kept
+    # separate from ``session_source`` (which is ``None`` in this case too) so the
+    # validator can distinguish "malformed syntax" from "well-formed but names no node"
+    # without re-parsing raw YAML (parse never validates, but the validator still needs
+    # the parse's own verdict carried forward — ``bzh:one-owner``).
+    session_malformed: bool = False
 
 
 @dataclass(frozen=True)
@@ -233,7 +276,7 @@ def parse_graph_doc(raw: dict[str, object]) -> GraphDoc:
 
 def _parse_node(name: str, body: dict[str, object]) -> NodeDoc:
     executor = Executor(str(body.get("executor", Executor.RUNNER.value)))
-    session = SessionMode(str(body.get("session", SessionMode.RESUME.value)))
+    session, session_source, session_malformed = classify_session(str(body.get("session", SessionMode.RESUME.value)))
     checks = [str(c) for c in _as_list(body.get("checks", []))]
     produces = [str(p) for p in _as_list(body.get("produces", []))]
     retries = body.get("retries")
@@ -268,6 +311,8 @@ def _parse_node(name: str, body: dict[str, object]) -> NodeDoc:
         run=run,
         poll_interval_seconds=poll_interval_seconds,
         poll_timeout_seconds=poll_timeout_seconds,
+        session_source=session_source,
+        session_malformed=session_malformed,
     )
 
 
@@ -408,6 +453,10 @@ class Node:
     # The pending-poll cadence (#66), in seconds — see ``NodeDoc.poll_interval_seconds``.
     poll_interval_seconds: int | None = None
     poll_timeout_seconds: int | None = None
+    # The targeted-resume source node name (issue #115) — see ``NodeDoc.session_source``.
+    # ``None`` means "chunk most-recent" (bare ``resume``) or ``fresh``; a validated graph
+    # never carries a malformed session, so there is no ``Node``-level malformed flag.
+    session_source: str | None = None
 
     @property
     def is_hub_command_node(self) -> bool:

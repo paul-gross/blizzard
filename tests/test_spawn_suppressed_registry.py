@@ -102,6 +102,27 @@ def test_every_harness_spawn_call_site_is_gated() -> None:
     )
 
 
+def test_resume_from_rides_the_gated_spawn_attempt_funnel() -> None:
+    """Node-entry resume (issue #115) threads ``resume_from`` into ``_spawn_attempt``'s
+    existing, already-gated ``ctx.harness.spawn(...)`` call — it must never grow a new,
+    separately-gated (or ungated) harness-spawn call site of its own. AST-asserts the
+    ``resume_from=`` keyword is only ever passed to a harness-spawn call from inside
+    ``_spawn_attempt``: a resume spawn is provably behind the same single
+    ``_spawn_suppressed`` gate as every other spawn (AC5), not a parallel path."""
+    tree = ast.parse(_STEPS_PATH.read_text(), filename=str(_STEPS_PATH))
+    carriers: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for call in _calls_in_own_scope(node):
+            if _is_harness_spawn_call(call) and any(kw.arg == "resume_from" for kw in call.keywords):
+                carriers.append(node.name)
+    assert carriers == ["_spawn_attempt"], (
+        "expected `resume_from` threaded into `ctx.harness.spawn` only from within "
+        f"`_spawn_attempt` (the sole gated funnel); found: {carriers}"
+    )
+
+
 def test_scan_is_not_vacuous() -> None:
     """Guard against the scan silently matching nothing (e.g. a renamed method/gate drifting
     the AST shape out from under it) and the test above passing for the wrong reason."""

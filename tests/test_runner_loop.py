@@ -18,6 +18,7 @@ import pytest
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.artifacts import ArtifactKind
 from blizzard.hub.domain.enrollment import hash_token
+from blizzard.hub.domain.graph import SessionMode
 from blizzard.hub.domain.work import DEFAULT_MODEL, ChunkStatus
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.harness.adapter import WorkerHandle
@@ -518,6 +519,187 @@ def test_flush_next_spawns_next_node_in_place(tmp_path):  # type: ignore[no-unty
         b for b in store.pending_outbound() if b.kind == LEASE_MINTED and json.loads(b.payload)["epoch"] == 2
     ]
     assert len(review_mints) == 1
+
+
+# --------------------------------------------------------------------------- #
+# NODE-ENTRY RESUME (issue #115) — session modes across a build -> review ->
+# build cycle. Component-tier: a real store, doubles only at the hub/harness/
+# provider/probe seams, exercising `_resolve_resume_from` -> `ctx.harness.spawn`
+# -> `record_spawn` end to end, so each phase's assertion reads back the
+# *previous* phase's actually-recorded session rather than a scripted double.
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.component
+def test_targeted_resume_returns_to_its_own_node_not_the_reviewers_fresh_session(tmp_path):  # type: ignore[no-untyped-def]
+    """`build` carries `resume:build` (targeted), `review` is `fresh`.
+
+    Covers three of the five session-mode assertions: (e) first arrival at a node
+    with no prior session for the chunk falls back to fresh; (c) a `fresh` node
+    always gets a brand-new sid, regardless of session history; (b) build's
+    re-entry resumes its OWN prior build session — not the reviewer's just-spawned,
+    more-recent one — which is the whole reason the targeted form exists (plan Q4:
+    plain `resume` would inherit the wrong session here)."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    provider = FakeProvider({"e1": "/ws/e1"})
+
+    build_env = make_envelope(
+        "ch_1", "build", node_id="nd_build", choices=_CHOICES, session=SessionMode.RESUME, session_source="build"
+    )
+    review_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES, session=SessionMode.FRESH)
+
+    # --- Phase 1 (FILL): first arrival at `build` — no session exists for this chunk
+    # at all yet, so the targeted `resume:build` lookup comes back empty and the spawn
+    # falls back to fresh (assertion e).
+    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.claim_outcome = claimed_outcome("ch_1", build_env)
+    harness1 = FakeHarness(
+        handle=WorkerHandle(session_id="sess-build-1", pid=100, process_start_time="start-100"), verdict="pass"
+    )
+    ctx1 = make_context(store, hub=hub, provider=provider, harness=harness1, probe=FakeProbe(), clock=FixedClock(_NOW))
+    fill(ctx1)
+
+    assert harness1.resume_froms == [None]  # (e) first arrival falls back to fresh
+    build_lease_1 = store.active_lease_for_chunk("ch_1")
+    assert build_lease_1 is not None and build_lease_1.session_id == "sess-build-1"
+
+    # --- Phase 2 (ADVANCE + PULL): build passes; apply-response NEXT hands the chunk
+    # to `review` (fresh) — always a new sid (assertion c).
+    hub.envelopes["ch_1"] = build_env  # `_advance_exited_worker`'s own idempotent re-read
+    hub.apply_responses = [
+        ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=review_env),
+        ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=build_env),
+    ]
+    harness2 = FakeHarness(
+        handle=WorkerHandle(session_id="sess-review-1", pid=200, process_start_time="start-200"), verdict="fail"
+    )
+    ctx2 = make_context(
+        store,
+        hub=hub,
+        provider=provider,
+        harness=harness2,
+        probe=FakeProbe(),
+        clock=FixedClock(_NOW + timedelta(minutes=1)),
+    )
+    advance(ctx2)  # build worker "exited" (empty alive set) -> judged pass -> buffered
+    pull(ctx2)  # flush -> apply-response NEXT -> spawn review
+
+    assert harness2.resume_froms == [None]  # (c) fresh review always gets a new sid
+    review_lease = store.active_lease_for_chunk("ch_1")
+    assert (
+        review_lease is not None and review_lease.node_name == "review" and review_lease.session_id == "sess-review-1"
+    )
+
+    # --- Phase 3 (ADVANCE + PULL): review fails; apply-response NEXT routes back into
+    # build's targeted `resume:build` — it must resume BUILD's own prior session
+    # ("sess-build-1"), not the reviewer's more-recent one ("sess-review-1").
+    hub.envelopes["ch_1"] = review_env  # `_advance_exited_worker`'s own idempotent re-read
+    harness3 = FakeHarness(
+        handle=WorkerHandle(session_id="sess-should-not-be-used", pid=300, process_start_time="start-300"),
+        verdict="pass",
+    )
+    ctx3 = make_context(
+        store,
+        hub=hub,
+        provider=provider,
+        harness=harness3,
+        probe=FakeProbe(),
+        clock=FixedClock(_NOW + timedelta(minutes=2)),
+    )
+    advance(ctx3)  # review worker "exited" -> judged fail -> buffered
+    pull(ctx3)  # flush -> apply-response NEXT -> spawn build, resuming in place
+
+    assert harness3.resume_froms == ["sess-build-1"]  # (b) resumes build's own session
+    build_lease_2 = store.active_lease_for_chunk("ch_1")
+    assert (
+        build_lease_2 is not None and build_lease_2.node_name == "build" and build_lease_2.session_id == "sess-build-1"
+    )
+
+
+@pytest.mark.component
+def test_bare_resume_uses_the_chunks_most_recent_session_not_the_nodes_own(tmp_path):  # type: ignore[no-untyped-def]
+    """The contrast case to the targeted form above (assertion a): a node entered
+    with plain `session: resume` (no target) resumes the chunk's most-recent
+    session-bearing lease overall — here, after a `fresh` review, that is the
+    reviewer's session, not build's own prior one. This is exactly the "wrong
+    inheritance" plan Q4's `resume:build` exists to avoid."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    provider = FakeProvider({"e1": "/ws/e1"})
+
+    build_env = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES, session=SessionMode.RESUME)
+    review_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES, session=SessionMode.FRESH)
+    build_reentry_env = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES, session=SessionMode.RESUME)
+
+    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.claim_outcome = claimed_outcome("ch_1", build_env)
+    harness1 = FakeHarness(
+        handle=WorkerHandle(session_id="sess-build-1", pid=100, process_start_time="start-100"), verdict="pass"
+    )
+    ctx1 = make_context(store, hub=hub, provider=provider, harness=harness1, probe=FakeProbe(), clock=FixedClock(_NOW))
+    fill(ctx1)
+
+    hub.envelopes["ch_1"] = build_env  # `_advance_exited_worker`'s own idempotent re-read
+    hub.apply_responses = [
+        ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=review_env),
+        ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=build_reentry_env),
+    ]
+    harness2 = FakeHarness(
+        handle=WorkerHandle(session_id="sess-review-1", pid=200, process_start_time="start-200"), verdict="fail"
+    )
+    ctx2 = make_context(
+        store,
+        hub=hub,
+        provider=provider,
+        harness=harness2,
+        probe=FakeProbe(),
+        clock=FixedClock(_NOW + timedelta(minutes=1)),
+    )
+    advance(ctx2)
+    pull(ctx2)
+
+    hub.envelopes["ch_1"] = review_env  # `_advance_exited_worker`'s own idempotent re-read
+    harness3 = FakeHarness(
+        handle=WorkerHandle(session_id="sess-should-not-be-used", pid=300, process_start_time="start-300"),
+        verdict="pass",
+    )
+    ctx3 = make_context(
+        store,
+        hub=hub,
+        provider=provider,
+        harness=harness3,
+        probe=FakeProbe(),
+        clock=FixedClock(_NOW + timedelta(minutes=2)),
+    )
+    advance(ctx3)
+    pull(ctx3)
+
+    assert harness3.resume_froms == ["sess-review-1"]  # (a) chunk-most-recent, not build's own
+
+
+@pytest.mark.component
+def test_within_node_retry_stays_fresh_even_when_the_node_is_resume(tmp_path):  # type: ignore[no-untyped-def]
+    """Q3: `session:` governs node ENTRY only. A within-node retry after a
+    verdict-less exit re-mints fresh, never resolving a resume target — even when
+    the node's own mode is `resume` and a prior session exists for it to (wrongly)
+    find (assertion d)."""
+    store = _store(tmp_path)
+    _seed_running_lease(store, session="sess-a")
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = make_envelope(
+        "ch_1", "build", node_id="nd_build", choices=_CHOICES, session=SessionMode.RESUME
+    )
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-b", pid=201, process_start_time="start-201"), verdict=None
+    )
+    ctx = make_context(store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe())
+
+    advance(ctx)  # no parseable <Choice> -> failure -> requeue in place, fresh
+
+    assert harness.resume_froms == [None]  # (d) a retry never resolves a resume target
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None and lease.epoch == 2 and lease.session_id == "sess-b"
 
 
 @pytest.mark.unit

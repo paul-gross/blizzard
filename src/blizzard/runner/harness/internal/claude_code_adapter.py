@@ -6,7 +6,14 @@ Implements :class:`~blizzard.runner.harness.adapter.IHarnessAdapter` against the
 * **spawn** — ``<binary> -p --output-format json --session-id <sid> --settings
   <worker-settings> <prompt>`` launched headless (fire-and-forget). Claude honors
   the pre-assigned ``--session-id``, so the returned session id is the hint; the pid
-  and its start time are stamped from the parent right after launch.
+  and its start time are stamped from the parent right after launch. A node-entry
+  resume (issue #115, ``resume_from`` set) swaps ``--session-id <sid>`` for
+  ``--resume <resume_from>`` instead — real ``claude``'s plain ``--resume`` reuses
+  the original session id in place (forking is opt-in via ``--fork-session``, never
+  passed here), so the returned session id is ``resume_from`` itself. Everything
+  else about the spawn (preamble, identity env, stdout redirect, cwd, model,
+  settings, permission mode) is unchanged — a node-entry resume gets the full spawn
+  treatment.
 * **judge** — ``<binary> -p --output-format json --resume <sid> [--permission-mode
   <mode>] <prompt>`` run synchronously, returning the raw reply for
   :meth:`parse_verdict` (the two-phase judgement elicitation). Kill-then-resume:
@@ -183,10 +190,23 @@ class ClaudeCodeAdapter:
         # resume child alongside the fixed base allowlist.
         self._env_passthrough = tuple(env_passthrough)
 
-    def spawn(self, envelope: NodeEnvelope, preamble: WorkerPreamble, session_hint: str | None) -> WorkerHandle:
+    def spawn(
+        self,
+        envelope: NodeEnvelope,
+        preamble: WorkerPreamble,
+        session_hint: str | None,
+        resume_from: str | None = None,
+    ) -> WorkerHandle:
         if not preamble.environments:
             raise HarnessSpawnError("spawn requires at least one acquired environment")
-        session_id = session_hint or ""
+        # `resume_from` (issue #115, node-entry resume) is the prior session id a
+        # graph transition continues. Real `claude`'s plain `--resume <sid>` reuses
+        # the original session id in place (forking is opt-in via `--fork-session`,
+        # never passed here — see plan Q1), so the continuation stays under
+        # `resume_from` itself; `session_hint` is irrelevant on this path.
+        # `resume_from is None` is today's unchanged fresh spawn: `session_hint`
+        # mints/honors a brand-new id via `--session-id`.
+        session_id = resume_from or session_hint or ""
         # Spawn cwd is the winter workspace root (issue #17) so the worker loads the
         # workspace's shared context (CLAUDE.md/AGENTS.md, .winter/, every repo and env)
         # like an interactive agent there; the held env(s) are named in the preamble
@@ -197,7 +217,9 @@ class ClaudeCodeAdapter:
         # type is for that second caller, whose fallback can legitimately be absent.
         workdir = resolve_spawn_cwd(preamble.workspace_root, preamble.environments[0].workdir)
         cmd = [self._binary, "-p", "--output-format", "json", "--model", self._model]
-        if session_id:
+        if resume_from:
+            cmd += ["--resume", resume_from]
+        elif session_id:
             cmd += ["--session-id", session_id]
         if self._settings_path:
             cmd += ["--settings", self._settings_path]

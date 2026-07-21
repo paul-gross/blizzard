@@ -108,6 +108,7 @@ def build_node_envelope(
         node_name=node.name,
         executor=node.executor,
         session=node.session,
+        session_source=node.session_source,
         judged_by=node.judged_by,
         checks=list(node.checks),
         produces=list(node.produces),
