@@ -27,6 +27,7 @@ from pathlib import Path
 import httpx
 import pytest
 
+from blizzard.runner.loop.internal.http_hub import HttpHubClient
 from tests.e2e.test_acceptance_loop import (
     FIXTURE_ENV,
     REPO_NAME,
@@ -185,6 +186,21 @@ def mock_runner(bin_dir: Path, port: int, hub_port: int, *, runner_id: str = "ru
     finally:
         client.close()
         _terminate(proc)
+
+
+@contextlib.contextmanager
+def http_hub_client(port: int) -> Iterator[HttpHubClient]:
+    """A real :class:`HttpHubClient` pointed at a mock-hub subprocess on ``port``.
+
+    The literal wire binding the parity guard checks (``blizzard.runner.loop.internal.
+    http_hub``), driven directly rather than through the runner loop — for a wire-parity
+    assertion that needs a specific ``IHubClient`` method's response, not a behavioral
+    reconciliation-loop outcome (see ``run_single_tick`` for that instead)."""
+    client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
+    try:
+        yield HttpHubClient(client)
+    finally:
+        client.close()
 
 
 class SseTap:
