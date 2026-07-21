@@ -91,7 +91,9 @@ def test_list_errors_without_identity(monkeypatch: pytest.MonkeyPatch) -> None:
         return _FakeResponse()
 
     monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(runner_group, ["artifact", "list"], env={"BLIZZARD_LEASE_ID": "", "BLIZZARD_RUNNER_URL": ""})
+    result = CliRunner().invoke(
+        runner_group, ["artifact", "list"], env={"BLIZZARD_LEASE_ID": "", "BLIZZARD_RUNNER_URL": ""}
+    )
 
     assert result.exit_code != 0
     assert "no BLIZZARD_LEASE_ID/BLIZZARD_RUNNER_URL" in result.output

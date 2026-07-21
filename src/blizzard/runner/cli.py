@@ -463,8 +463,7 @@ def artifact_get(name: str, content: bool) -> None:
     artifact = resp.json()
     if artifact.get("kind") == ArtifactKind.GIT_COMMIT:
         raise click.ClickException(
-            f"artifact get: {name!r} is a git-commit artifact — it has no content "
-            "(drop --content to read its ref)"
+            f"artifact get: {name!r} is a git-commit artifact — it has no content (drop --content to read its ref)"
         )
     # Raw, un-decorated: the asset text as stored, no added trailing newline.
     click.echo(artifact.get("content") or "", nl=False)

@@ -102,9 +102,7 @@ def get_artifact(lease_id: str, name: str, request: Request) -> EnvelopeArtifact
     for artifact in _envelope_artifacts(lease.chunk_id, request):
         if artifact.name == name:
             return artifact
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND, detail=f"no artifact {name!r} for this node-step"
-    )
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"no artifact {name!r} for this node-step")
 
 
 def _upstream_detail(response: httpx.Response) -> str:
