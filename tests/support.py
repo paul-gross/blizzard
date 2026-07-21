@@ -363,8 +363,22 @@ def build_hub(
         forge_owner=forge_owner,
     )
     app = create_app(config, services=services)
+    client = TestClient(app)
+    # Warm FastAPI's per-router route-resolution cache before any test drives the
+    # client. FastAPI (0.139) resolves an included router's routes lazily and caches
+    # them by clearing and repopulating an instance list on first use — thread-unsafe
+    # if two requests hit the cold cache at once: one sees the half-built (or momentarily
+    # empty) candidate list, fails to match the API route, and falls through to the SPA
+    # static mount, which 405s the non-GET. A single-threaded async server (uvicorn) can
+    # never interleave that synchronous stretch, so this is invisible in production and
+    # only surfaces in the OS-thread races the component tier uses to prove exactly-once
+    # arbitration (test_claim_exactly_once, test_edit_claim_race). One throwaway request
+    # to a non-matching /api path traverses — and so warms — every API router branch
+    # before falling to the mount, leaving only the thread-safe cache-hit path for the
+    # concurrent requests the tests then fire.
+    client.get("/api/_route_cache_warm")
     return HubHarness(
-        client=TestClient(app),
+        client=client,
         services=services,
         pm=pm_registry,
         clock=clock,
