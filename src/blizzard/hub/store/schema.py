@@ -891,3 +891,37 @@ superuser_bootstrap = Table(
     Column("claimed_user_id", String, ForeignKey("users.id"), nullable=True),
     Column("updated_at", UtcDateTime, nullable=False),
 )
+
+# --- Operational event log (event_log — issue #125) ---------------------------
+#
+# A durable, append-only, typed and severity-ranked **operational** event feed
+# (``bzh:facts-not-status``) — the hub's own "what just happened" record, read back
+# unified with open escalations at ``GET /api/events``. Distinct from every
+# chunk-scoped fact table above it: ``chunk_id`` is nullable because some events are
+# **runner-scoped** (no single chunk to name), and — like every table here — there is
+# no ``status`` column; an event, once recorded, never changes. Clock-stamped from the
+# injected clock (``bzh:injected-clock``) at ``recorded_at``, never a
+# ``server_default``. ``severity`` is one of ``info`` | ``warning`` | ``critical``,
+# checked at the domain rather than a DB ``CHECK`` constraint (``bzh:sql-portable``);
+# ``kind`` is the event's ``noun.verb`` name. ``detail`` is an opaque JSON-encoded
+# ``dict`` for event-specific payload the fixed columns don't carry — round-tripped
+# only, never queried.
+
+event_log = Table(
+    "event_log",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("recorded_at", UtcDateTime, nullable=False),
+    Column("severity", String, nullable=False),
+    Column("kind", String, nullable=False),
+    Column("runner_id", String, nullable=False),
+    Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=True),
+    Column("lease_id", String, nullable=True),
+    Column("node_name", String, nullable=True),
+    Column("message", Text, nullable=False),
+    Column("detail", Text, nullable=True),
+)
+
+# The read's own sort key (newest-first) — indexed so ``GET /api/events`` doesn't scan
+# the whole append-only table to order it.
+Index("ix_event_log_recorded_at", event_log.c.recorded_at)

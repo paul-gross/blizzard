@@ -392,6 +392,82 @@ class UsageFact:
 
 
 @dataclass(frozen=True)
+class EventRow:
+    """One ``event_log`` row — a durable, typed, severity-ranked operational fact
+    (issue #125). Distinct from every chunk-scoped ``*Fact`` above: ``chunk_id`` is
+    ``None`` for a runner-scoped event (no single chunk to name), and, like every fact
+    here, an ``EventRow`` never changes once recorded (``bzh:facts-not-status``).
+    ``detail`` is the event-specific payload the fixed columns don't carry, already
+    decoded from its JSON-on-the-wire storage. A negative ``id`` marks a row
+    :func:`derive_event_feed` **synthesized** from an open escalation rather than one
+    actually read from ``event_log`` — see that function."""
+
+    id: int
+    recorded_at: datetime
+    severity: str
+    kind: str
+    runner_id: str
+    chunk_id: str | None
+    lease_id: str | None
+    node_name: str | None
+    message: str
+    detail: dict | None
+
+
+@dataclass(frozen=True)
+class EscalationOpen:
+    """One fleet-wide **open** escalation — the input :func:`derive_event_feed` folds
+    into the unified event feed (issue #125). Unlike :class:`EscalationFact` (one
+    chunk's own escalation facts, read off :attr:`ChunkFacts.escalations`), this
+    carries its own ``chunk_id`` since :meth:`IReadChunkRepository.list_open_escalations`
+    spans every chunk at once."""
+
+    chunk_id: str
+    epoch: int
+    recorded_at: datetime
+    takeover_command: str
+
+
+#: The default cap on :meth:`IReadChunkRepository.list_events` — an unbounded read of
+#: an append-only table is an unbounded response; ``GET /api/events`` inherits this as
+#: its own default ``limit``.
+DEFAULT_EVENT_LIST_LIMIT = 200
+
+_SEVERITY_RANK = {"critical": 0, "warning": 1, "info": 2}
+
+
+def derive_event_feed(events: list[EventRow], escalations: list[EscalationOpen]) -> list[EventRow]:
+    """Unify ``event_log`` rows with every currently-open escalation (issue #125).
+
+    Each open escalation projects into a synthetic ``EventRow`` — ``severity="critical"``,
+    ``kind="needs-human"``, the escalation's own ``chunk_id``/``recorded_at``, and a
+    ``message`` naming the takeover — carrying a **negative, synthetic** ``id`` (it is
+    not an ``event_log`` row; escalations are never written there). The merged list
+    sorts **severity-then-recency**: critical before warning before info, newest
+    ``recorded_at`` first within a severity band. A pure function of already-loaded
+    rows (``bzh:domain-takes-objects``), unit-testable with zero store."""
+    projected = [
+        EventRow(
+            id=-(i + 1),
+            recorded_at=esc.recorded_at,
+            severity="critical",
+            kind="needs-human",
+            runner_id="",
+            chunk_id=esc.chunk_id,
+            lease_id=None,
+            node_name=None,
+            message=f"chunk {esc.chunk_id} needs a human — takeover: {esc.takeover_command}",
+            detail=None,
+        )
+        for i, esc in enumerate(escalations)
+    ]
+    merged = [*events, *projected]
+    return sorted(
+        merged, key=lambda e: (_SEVERITY_RANK.get(e.severity, len(_SEVERITY_RANK)), -e.recorded_at.timestamp())
+    )
+
+
+@dataclass(frozen=True)
 class DecisionChoice:
     """One selectable gate outcome — a button on the board/bot."""
 
@@ -1109,6 +1185,30 @@ class IReadChunkRepository(Protocol):
         :func:`derive_fleet_usage`."""
         ...
 
+    def list_events(
+        self,
+        *,
+        severity: str | None = None,
+        runner_id: str | None = None,
+        chunk_id: str | None = None,
+        since: datetime | None = None,
+        limit: int = DEFAULT_EVENT_LIST_LIMIT,
+    ) -> list[EventRow]:
+        """The operational event log, newest-first (``recorded_at`` desc, ``id`` desc
+        tiebreak), filtered by whichever of ``severity``/``runner_id``/``chunk_id``/
+        ``since`` is given and bounded by ``limit`` — ``GET /api/events``'s own-table
+        half (issue #125); the caller unifies it with :meth:`list_open_escalations` via
+        :func:`derive_event_feed`."""
+        ...
+
+    def list_open_escalations(self) -> list[EscalationOpen]:
+        """Every currently-open escalation, **fleet-wide** — the same
+        supersession rule :func:`open_escalation` applies per-chunk, applied across
+        every chunk's escalations at once (issue #125). Escalations are low-volume, so
+        this is a full scan of the ``escalations`` table, not an indexed read — the
+        ``GET /api/events`` unified feed's other half."""
+        ...
+
 
 class IWriteChunkRepository(IReadChunkRepository, Protocol):
     """Read-write chunk access. Only the domain layer depends on this variant."""
@@ -1247,6 +1347,26 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         Idempotency rides the caller's per-runner outbound-buffer seq high-water mark
         (:class:`FactIngestService`) — a seq already applied never reaches this method a
         second time, so no second dedup key is needed here."""
+        ...
+
+    def record_event(
+        self,
+        *,
+        severity: str,
+        kind: str,
+        runner_id: str,
+        chunk_id: str | None,
+        lease_id: str | None,
+        node_name: str | None,
+        message: str,
+        detail: dict | None,
+        at: datetime,
+    ) -> None:
+        """Append one ``event_log`` row (issue #125) — never mutated once written.
+
+        ``chunk_id`` is ``None`` for a runner-scoped event; ``detail`` is an opaque
+        event-specific payload, serialized to JSON text by the store. Clock-stamped by
+        the caller-passed ``at``, exactly like every other fact write here."""
         ...
 
     def record_question(
