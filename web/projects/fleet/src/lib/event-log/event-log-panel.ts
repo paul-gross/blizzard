@@ -35,6 +35,8 @@ function summarize(event: LoggedEvent): string {
       return 'ready queue changed';
     case 'runner-changed':
       return `runner ${compactRef(event.data.runner_id ?? '—')} changed`;
+    case 'event-logged':
+      return `${chunk || compactRef(event.data.runner_id ?? '—')} · ${event.data.severity ?? '—'} ${event.data.kind ?? '—'}`;
     default:
       return event.type;
   }

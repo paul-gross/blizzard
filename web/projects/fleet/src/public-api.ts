@@ -24,6 +24,7 @@ export * from './lib/board-header';
 export * from './lib/board-shell';
 export * from './lib/chunk-detail';
 export * from './lib/event-log';
+export * from './lib/events';
 export * from './lib/queue';
 export * from './lib/runners';
 export * from './lib/questions';

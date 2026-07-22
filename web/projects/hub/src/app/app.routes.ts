@@ -29,6 +29,7 @@ export const routes: Routes = [
   { path: 'board', loadComponent: () => import('./board/board-page').then((m) => m.BoardPage) },
   { path: 'graphs', loadComponent: () => import('./graphs/graphs-page').then((m) => m.GraphsPage) },
   { path: 'graphs/:graphId', loadComponent: () => import('./graphs/graphs-page').then((m) => m.GraphsPage) },
+  { path: 'events', loadComponent: () => import('./events/events-page').then((m) => m.EventsPage) },
   // The login surface (issue #93) — public, reached directly or via the 401
   // interceptor. Rendered outside the app shell (`App`'s own `authState` branch),
   // so it carries no header/nav chrome of its own.

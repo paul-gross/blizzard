@@ -9,15 +9,16 @@ import { injectHubQuestionsQuery, MobileTabBar as FleetMobileTabBar, type Mobile
  *
  * A thin wrapper around the shared {@link FleetMobileTabBar} (issue #92) —
  * the runner's `local-panel.ts` mounts the same fleet component with its own
- * item list. This layer only builds the hub's three {@link MobileTabItem}s:
- * Board is the only tab wired to a route today (`routerLink`/`routerLinkActive`,
- * same idiom as the desktop {@link AppNav}); Asks and Fleet are the mock's
- * other two tabs but have no screen of their own yet (the next mobile-shells
- * chunk's work per the mock's footnote) — they render dimmed and inert so
- * they read as "not yet", not as broken links. Asks still carries a live
- * open-count badge off the same {@link injectHubQuestionsQuery} read the
- * glance board's "Needs you" bucket folds in, so the number an operator sees
- * here always agrees with the board's own count.
+ * item list. This layer builds the hub's {@link MobileTabItem}s: Board and
+ * Events (blizzard#125 Phase 4) are wired to a route today
+ * (`routerLink`/`routerLinkActive`, same idiom as the desktop {@link AppNav});
+ * Asks and Fleet are the mock's other two tabs but have no screen of their own
+ * yet (the next mobile-shells chunk's work per the mock's footnote) — they
+ * render dimmed and inert so they read as "not yet", not as broken links.
+ * Asks still carries a live open-count badge off the same
+ * {@link injectHubQuestionsQuery} read the glance board's "Needs you" bucket
+ * folds in, so the number an operator sees here always agrees with the
+ * board's own count.
  */
 @Component({
   selector: 'app-mobile-tab-bar',
@@ -42,5 +43,6 @@ export class MobileTabBar {
       badgeTestid: 'tab-asks-badge',
     },
     { testid: 'tab-fleet', label: 'Fleet', inert: true },
+    { testid: 'tab-events', label: 'Events', route: '/events' },
   ]);
 }
