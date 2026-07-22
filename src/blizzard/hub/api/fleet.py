@@ -62,6 +62,7 @@ from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeEnvelope
 from blizzard.wire.facts import (
+    EVENT_RECORDED,
     QUESTION_ASKED,
     RUNNER_LOCALLY_PAUSED,
     RUNNER_LOCALLY_RESUMED,
@@ -476,6 +477,20 @@ def ingest_runner_facts(
             # claiming until something unrelated forced a refetch.
             if fact.kind in (RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED):
                 services.events.publish_runner_changed(batch.runner_id)
+                continue
+            # An operational event (issue #125) may be runner-scoped (no chunk_id), so it is
+            # broadcast here before the chunk branch below: `event-logged` refreshes the
+            # board's Events tab, and a chunk-named event also refreshes that chunk's card.
+            # It does not change the chunk's derived status, so it does not fall through to
+            # publish_chunk_changed.
+            if fact.kind == EVENT_RECORDED:
+                ev_chunk = fact.payload.get("chunk_id")
+                services.events.publish_event_logged(
+                    severity=str(fact.payload.get("severity", "")),
+                    kind=str(fact.payload.get("kind", "")),
+                    chunk_id=ev_chunk if isinstance(ev_chunk, str) else None,
+                    runner_id=batch.runner_id,
+                )
                 continue
             chunk_id = fact.payload.get("chunk_id")
             if not isinstance(chunk_id, str):

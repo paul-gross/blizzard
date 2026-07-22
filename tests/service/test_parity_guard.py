@@ -163,6 +163,7 @@ _EXPECTED_DRIVE_VERBS: dict[str, str] = {
     "poll-answer": "IHubClient.get_question — GET /api/fleet/questions/{id}",
     "pause": "IHubClient.push_facts (runner.locally_paused) — POST /api/fleet/events",
     "resume": "IHubClient.push_facts (runner.locally_resumed) — POST /api/fleet/events",
+    "report-event": "IHubClient.push_facts (event.recorded) — POST /api/fleet/events",
 }
 
 

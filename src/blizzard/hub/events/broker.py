@@ -39,6 +39,7 @@ DECISION_OPENED = "decision-opened"
 DECISION_RESOLVED = "decision-resolved"
 QUEUE_CHANGED = "queue-changed"
 RUNNER_CHANGED = "runner-changed"
+EVENT_LOGGED = "event-logged"
 
 
 @dataclass(frozen=True)
@@ -122,6 +123,15 @@ class EventBroker:
     def publish_runner_changed(self, runner_id: str) -> int:
         """A runner's registry state changed (registered / liveness / paused)."""
         return self.publish(RUNNER_CHANGED, {"runner_id": runner_id})
+
+    def publish_event_logged(self, *, severity: str, kind: str, chunk_id: str | None, runner_id: str) -> int:
+        """An operational event landed in the event log (issue #125) — the board's Events
+        tab refreshes, and a chunk-named event also refreshes that chunk's card. The frame
+        carries only the identifying fields the board's invalidation registry keys on; the
+        row itself is read back off ``GET /api/events``."""
+        return self.publish(
+            EVENT_LOGGED, {"severity": severity, "kind": kind, "chunk_id": chunk_id, "runner_id": runner_id}
+        )
 
     # --- subscription (called from the async SSE handler) -------------------
 
