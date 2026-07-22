@@ -37,6 +37,15 @@ from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.wire.envelope import NodeEnvelope
 
 
+class HarnessSpawnError(RuntimeError):
+    """The harness binary could not be launched (missing binary, bad workdir).
+
+    Part of the adapter contract (``spawn`` raises it), so it lives on the public seam
+    rather than an internal adapter: the loop catches it at the spawn site to surface a
+    ``command-failed`` operational event (issue #125, change L(iii)) before the failure
+    propagates on."""
+
+
 @dataclass(frozen=True)
 class WorkerPreamble:
     """The runner's machine-local preamble prepended to the envelope (issue #17).
@@ -68,6 +77,12 @@ class WorkerPreamble:
     LEASE_ID`` — a per-spawn identity var scoped to this worker's own lease, never
     a daemon secret (``bzh:worker-env-allowlist``). This phase mints and carries it
     only; no caller yet authorizes anything against it.
+
+    ``stderr_path`` (issue #125, change L(iii)) is the sibling per-lease file the spawned
+    worker's **stderr** is redirected to, replacing the old ``DEVNULL`` discard — so a
+    worker that launched then crashed to stderr leaves a readable tail the runner folds into
+    its ``worker-lost`` operational event. Injected exactly like ``stdout_path``; empty keeps
+    today's ``DEVNULL`` behavior.
     """
 
     environments: list[AcquiredEnvironment]
@@ -76,6 +91,7 @@ class WorkerPreamble:
     workspace_root: str = ""
     prompt_prefix: str = ""
     stdout_path: str = ""
+    stderr_path: str = ""
     lease_token: str = ""
 
 

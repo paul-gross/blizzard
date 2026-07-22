@@ -583,8 +583,24 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         """Append a heartbeat for a lease — a worker tool call fired its hook."""
         ...
 
-    def record_closure(self, *, lease_id: str, chunk_id: str, node_id: str, reason: str, closed_at: datetime) -> None:
-        """Close a lease — a clean transition or a failure/escalation."""
+    def record_closure(
+        self,
+        *,
+        lease_id: str,
+        chunk_id: str,
+        node_id: str,
+        reason: str,
+        closed_at: datetime,
+        event_kind: str | None = None,
+        event_payload: str | None = None,
+    ) -> None:
+        """Close a lease — a clean transition or a failure/escalation.
+
+        When ``event_kind``/``event_payload`` are given (issue #125), the operational
+        event they carry is enqueued to the outbound buffer **in the same transaction** as
+        the closure — the ``record_local_pause`` atomic-pairing precedent — so a
+        ``_fail_attempt`` failure event and the closure it describes land together or not
+        at all."""
         ...
 
     def record_release(self, *, chunk_id: str, environment_id: str, released_at: datetime) -> None:

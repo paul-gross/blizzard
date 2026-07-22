@@ -581,13 +581,38 @@ class SqlAlchemyRunnerStore:
             conn.execute(heartbeats.insert().values(lease_id=lease_id, beat_at=beat_at))
         _log.debug("heartbeat recorded", lease_id=lease_id)
 
-    def record_closure(self, *, lease_id: str, chunk_id: str, node_id: str, reason: str, closed_at: datetime) -> None:
+    def record_closure(
+        self,
+        *,
+        lease_id: str,
+        chunk_id: str,
+        node_id: str,
+        reason: str,
+        closed_at: datetime,
+        event_kind: str | None = None,
+        event_payload: str | None = None,
+    ) -> None:
+        # The closure and (when given) its operational event land in ONE transaction —
+        # the same atomic local+outbound pairing `record_local_pause` uses (issue #125):
+        # a `_fail_attempt` failure event and the closure it describes are crash-atomic,
+        # so a `kill -9` between them can never surface an event for a closure that never
+        # happened, nor drop the event for one that did.
         with self._begin() as conn:
             conn.execute(
                 lease_closures.insert().values(
                     lease_id=lease_id, chunk_id=chunk_id, node_id=node_id, reason=reason, closed_at=closed_at
                 )
             )
+            if event_kind is not None and event_payload is not None:
+                conn.execute(
+                    outbound_buffer.insert().values(
+                        kind=event_kind,
+                        chunk_id=chunk_id,
+                        lease_id=lease_id,
+                        payload=event_payload,
+                        created_at=closed_at,
+                    )
+                )
         _log.info("lease closed", lease_id=lease_id, chunk_id=chunk_id, reason=reason)
 
     def record_release(self, *, chunk_id: str, environment_id: str, released_at: datetime) -> None:

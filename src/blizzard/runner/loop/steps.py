@@ -40,12 +40,13 @@ from blizzard.runner.environments.provider import (
     EnvironmentPreparationError,
     WorkspaceAcquisitionError,
 )
-from blizzard.runner.harness.adapter import WorkerPreamble
+from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerPreamble
 from blizzard.runner.harness.preamble import render_worker_preamble
 from blizzard.runner.harness.spawn_cwd import resolve_spawn_cwd
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
+from blizzard.runner.loop.internal.subprocess_worktree_git import WorktreeGitError
 from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.store.repository import (
     AskRecord,
@@ -61,6 +62,7 @@ from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeConfig, Node
 from blizzard.wire.facts import (
     ANSWER_DELIVERED,
     ESCALATION_RECORDED,
+    EVENT_RECORDED,
     LEASE_MINTED,
     QUESTION_ASKED,
     RUNNER_LOCALLY_PAUSED,
@@ -274,6 +276,29 @@ def _stdout_path(ctx: LoopContext, lease_id: str, generation: int) -> str:
     if not ctx.config.worker_stdout_dir:
         return ""
     return os.path.join(ctx.config.worker_stdout_dir, f"{lease_id}.{generation}.stdout")
+
+
+def _stderr_path(ctx: LoopContext, lease_id: str, generation: int) -> str:
+    """This lease's per-generation harness-**stderr** redirect target (issue #125, change
+    L(iii)), or ``""`` for no redirect — the sibling of :func:`_stdout_path`, so a launched
+    worker that crashed to stderr leaves a readable tail for the ``worker-lost`` event
+    instead of the old ``DEVNULL`` discard."""
+    if not ctx.config.worker_stdout_dir:
+        return ""
+    return os.path.join(ctx.config.worker_stdout_dir, f"{lease_id}.{generation}.stderr")
+
+
+def _stderr_tail(ctx: LoopContext, lease: LeaseRecord, *, limit: int = 2000) -> str:
+    """The tail of this lease's most-recent captured spawn-stderr (change L(iii)), or ``""``.
+
+    Best-effort and never raises (a hung-but-live worker that never crashed to stderr, or a
+    test with no ``worker_stdout_dir``, is the ordinary empty case) — folded into a
+    `_fail_attempt` event's detail so a dead worker's last words reach the operator."""
+    generation = ctx.store.lease_generation(lease.lease_id)
+    if generation <= 0:
+        return ""
+    text = _read_stdout(_stderr_path(ctx, lease.lease_id, generation))
+    return text[-limit:] if text else ""
 
 
 def _pending_generation(ctx: LoopContext, lease_id: str) -> int:
@@ -1392,6 +1417,17 @@ def _fill_one(ctx: LoopContext) -> bool:
             step=exc.step,
             detail=str(exc),
         )
+        # Surface the captured env-prep failure (issue #125, change L(i)) — no lease exists
+        # yet (the chunk is not claimed), so it is a chunk-scoped `command-failed`. Then
+        # return False (the chunk waits for a fixed workspace) exactly as before.
+        _emit_command_failed(
+            ctx,
+            chunk_id=entry.chunk_id,
+            lease_id=None,
+            node_name=None,
+            command=f"winter env-prep step: {exc.step}",
+            stderr_tail=str(exc),
+        )
         return False
     except WorkspaceAcquisitionError:
         _log.info("acquire refused — env-bound this tick", chunk_id=entry.chunk_id)
@@ -1593,7 +1629,23 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
     #    harness spawn, and idempotent, so this runs regardless of the local brake — the
     #    branch is forge state the runner already holds, not new work being started.
     _CP_ADV_BEFORE_PUSH.reached()
-    artifacts = _push_and_collect_artifacts(ctx, bindings)
+    try:
+        artifacts = _push_and_collect_artifacts(ctx, bindings)
+    except WorktreeGitError as exc:
+        # Surface the captured push failure (issue #125, change L(ii)) then RE-RAISE — the
+        # bare push at this site propagates uncaught to the per-tick boundary (build.py, "a
+        # bad tick must not kill the daemon") and re-attempts next tick; re-raising preserves
+        # that exactly, so this is purely additive and does NOT repair the wedge (out of
+        # scope per the issue's "surface, don't repair" line).
+        _emit_command_failed(
+            ctx,
+            chunk_id=lease.chunk_id,
+            lease_id=lease.lease_id,
+            node_name=lease.node_name,
+            command="git push origin <work-branch>",
+            stderr_tail=str(exc),
+        )
+        raise
     _CP_ADV_AFTER_PUSH.reached()
 
     # 1b. Runner-config gate: this operator gates this node by name, so the
@@ -2100,16 +2152,32 @@ def _spawn_attempt(
         runner_id=ctx.config.runner_id,
         chunk_id=chunk_id,
     )
+    generation = _pending_generation(ctx, lease_id)
     preamble = WorkerPreamble(
         environments=environments,
         lease_id=lease_id,
         local_api_url=ctx.config.local_api_url,
         workspace_root=ctx.config.workspace_root,
         prompt_prefix=prompt_prefix,
-        stdout_path=_stdout_path(ctx, lease_id, _pending_generation(ctx, lease_id)),
+        stdout_path=_stdout_path(ctx, lease_id, generation),
+        stderr_path=_stderr_path(ctx, lease_id, generation),
         lease_token=lease_token,
     )
-    handle = ctx.harness.spawn(envelope, preamble, session_hint=str(uuid.uuid4()), resume_from=resume_from)
+    try:
+        handle = ctx.harness.spawn(envelope, preamble, session_hint=str(uuid.uuid4()), resume_from=resume_from)
+    except HarnessSpawnError as exc:
+        # Surface the launch-time spawn failure (issue #125, change L(iii)) then RE-RAISE to
+        # preserve today's propagation — no worker started, so the attempt has not been
+        # recorded and the chunk simply retries next tick.
+        _emit_command_failed(
+            ctx,
+            chunk_id=chunk_id,
+            lease_id=lease_id,
+            node_name=envelope.node.node_name,
+            command="spawn harness worker",
+            stderr_tail=str(exc),
+        )
+        raise
     ctx.store.record_spawn(
         lease_id,
         pid=handle.pid,
@@ -2118,6 +2186,74 @@ def _spawn_attempt(
         spawned_at=now,
     )
     _CP_SPAWN_AFTER_SPAWN.reached()
+
+
+#: The classification `_fail_attempt`'s branch chooses for its surfaced operational event
+#: (issue #125): the retry branch is a `warning` (this attempt died, another will run), the
+#: escalate branch a `critical` (retries exhausted — the worker is lost to a human), the
+#: reassign-abandon branch an `info` (the attempt was given up because the chunk moved, not
+#: a failure of the work). The locally-paused *defer* branch surfaces nothing — the failure
+#: is deliberately deferred, not a surfaced outcome.
+_ATTEMPT_FAILED = ("warning", "attempt-failed")
+_WORKER_LOST = ("critical", "worker-lost")
+_ATTEMPT_ABANDONED = ("info", "attempt-abandoned")
+
+
+def _failure_event_payload(
+    lease: LeaseRecord, *, severity: str, kind: str, message: str, reason: str, via: str, stderr_tail: str = ""
+) -> str:
+    """The ``event.recorded`` payload one `_fail_attempt` branch surfaces (issue #125).
+
+    ``detail`` carries the ``(reason, via)`` that classified it and the node it happened
+    at; a dead-worker case folds in the captured spawn-stderr tail (change L(iii)) when one
+    was written. Kept a plain JSON string so it rides the outbound buffer exactly like every
+    other fact payload."""
+    detail: dict[str, object] = {"via": via, "reason": reason, "node": lease.node_name}
+    if stderr_tail:
+        detail["stderr_tail"] = stderr_tail
+    return json.dumps(
+        {
+            "severity": severity,
+            "kind": kind,
+            "chunk_id": lease.chunk_id,
+            "lease_id": lease.lease_id,
+            "node_name": lease.node_name,
+            "message": message,
+            "detail": detail,
+        }
+    )
+
+
+def _emit_command_failed(
+    ctx: LoopContext,
+    *,
+    chunk_id: str | None,
+    lease_id: str | None,
+    node_name: str | None,
+    command: str,
+    stderr_tail: str,
+) -> None:
+    """Surface a captured spawn/push/env-prep command failure as a ``warning``
+    ``command-failed`` operational event (issue #125, change L).
+
+    Enqueued straight to the outbound buffer — it rides no closure, and it never alters the
+    caller's control flow: the git-push site re-raises after calling this, and the env-prep
+    site returns False after, exactly as before. The failing command and its stderr tail
+    (already carried on the raised exception's message per MF-2) go in ``detail``."""
+    payload = json.dumps(
+        {
+            "severity": "warning",
+            "kind": "command-failed",
+            "chunk_id": chunk_id,
+            "lease_id": lease_id,
+            "node_name": node_name,
+            "message": f"command failed: {command}",
+            "detail": {"command": command, "stderr_tail": stderr_tail[-2000:] if stderr_tail else ""},
+        }
+    )
+    ctx.store.enqueue_outbound(
+        kind=EVENT_RECORDED, chunk_id=chunk_id, lease_id=lease_id, payload=payload, created_at=ctx.clock.now()
+    )
 
 
 def _fail_attempt(ctx: LoopContext, lease: LeaseRecord, *, reason: str, via: str) -> None:
@@ -2148,19 +2284,67 @@ def _fail_attempt(ctx: LoopContext, lease: LeaseRecord, *, reason: str, via: str
     if lease.pid is not None:
         ctx.process.kill(lease.pid)  # best-effort hygiene; the epoch fence is the guarantee
 
+    # A dead worker (via ADVANCE) may have written a spawn-stderr tail (change L(iii));
+    # fold it into every branch's event detail. Best-effort — absent/empty is the ordinary
+    # case for a hung-but-live worker (REAP) that never crashed to stderr.
+    stderr_tail = _stderr_tail(ctx, lease)
+
     # attempt_count includes this lease (its context row was written at mint); the
     # first attempt is not a retry, so retries-so-far is one less.
     retried = ctx.store.attempt_count(lease.chunk_id, lease.node_id) - 1
     if retried < lease.retries_max:
+        # Retry: this attempt died, another will run — a `warning` `attempt-failed`,
+        # enqueued ATOMICALLY with the closure it describes (issue #125, change K).
+        severity, kind = _ATTEMPT_FAILED
         ctx.store.record_closure(
-            lease_id=lease.lease_id, chunk_id=lease.chunk_id, node_id=lease.node_id, reason=reason, closed_at=now
+            lease_id=lease.lease_id,
+            chunk_id=lease.chunk_id,
+            node_id=lease.node_id,
+            reason=reason,
+            closed_at=now,
+            event_kind=EVENT_RECORDED,
+            event_payload=_failure_event_payload(
+                lease,
+                severity=severity,
+                kind=kind,
+                message=f"attempt failed, retrying — {reason} (via {via})",
+                reason=reason,
+                via=via,
+                stderr_tail=stderr_tail,
+            ),
         )
         _requeue(ctx, lease)
         return
     if _reassigned_or_detached(ctx, lease):
+        # Reassign-abandon: the chunk moved on, so this attempt is given up — an `info`
+        # `attempt-abandoned`. The closure lives inside `_abandon_reassigned`, which is
+        # ALSO reached from RESUME/PULL's ordinary detach sweep (those must stay silent),
+        # and `via` alone cannot tell a funnel-reached abandon from a plain detach — so the
+        # event is emitted HERE, scoped to the `_fail_attempt` funnel, rather than inside
+        # the shared helper (plan-findings SF-6). This one branch's enqueue is therefore not
+        # co-transactional with its closure; it stays crash-safe for the same reason every
+        # event does — informational, append-only, at-most-once-per-attempt structural, so a
+        # `kill -9` between them at worst re-emits on the next attempt's failure.
+        severity, kind = _ATTEMPT_ABANDONED
+        ctx.store.enqueue_outbound(
+            kind=EVENT_RECORDED,
+            chunk_id=lease.chunk_id,
+            lease_id=lease.lease_id,
+            payload=_failure_event_payload(
+                lease,
+                severity=severity,
+                kind=kind,
+                message=f"attempt abandoned — chunk reassigned ({reason}, via {via})",
+                reason=reason,
+                via=via,
+                stderr_tail=stderr_tail,
+            ),
+            created_at=now,
+        )
         _abandon_reassigned(ctx, lease, killed=True, via=via)
         return
     if ctx.store.local_paused(ctx.config.runner_id):
+        # Deliberate deferral, not a surfaced failure — emit nothing (issue #125).
         _log.info(
             "escalation deferred — locally paused",
             runner_id=ctx.config.runner_id,
@@ -2169,8 +2353,25 @@ def _fail_attempt(ctx: LoopContext, lease: LeaseRecord, *, reason: str, via: str
             lease_id=lease.lease_id,
         )
         return
+    # Escalate: retries exhausted — the worker is lost to a human. A `critical`
+    # `worker-lost`, enqueued ATOMICALLY with the closure it describes (issue #125).
+    severity, kind = _WORKER_LOST
     ctx.store.record_closure(
-        lease_id=lease.lease_id, chunk_id=lease.chunk_id, node_id=lease.node_id, reason=_ESCALATED, closed_at=now
+        lease_id=lease.lease_id,
+        chunk_id=lease.chunk_id,
+        node_id=lease.node_id,
+        reason=_ESCALATED,
+        closed_at=now,
+        event_kind=EVENT_RECORDED,
+        event_payload=_failure_event_payload(
+            lease,
+            severity=severity,
+            kind=kind,
+            message=f"worker lost — retries exhausted ({reason}, via {via})",
+            reason=reason,
+            via=via,
+            stderr_tail=stderr_tail,
+        ),
     )
     _escalate(ctx, lease)
 

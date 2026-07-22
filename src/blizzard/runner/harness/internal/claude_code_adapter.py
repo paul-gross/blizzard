@@ -79,6 +79,7 @@ from typing import IO
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.process import read_process_start_time
 from blizzard.runner.harness.adapter import (
+    HarnessSpawnError,
     IHarnessAdapter,
     WorkerHandle,
     WorkerPreamble,
@@ -123,10 +124,6 @@ def _allowlisted_env(passthrough: Sequence[str]) -> dict[str, str]:
 # unfit for the build/review work). Opus is the fleet's standing choice; override
 # per-adapter via the ``model`` constructor argument.
 DEFAULT_WORKER_MODEL = "claude-opus-4-8"
-
-
-class HarnessSpawnError(RuntimeError):
-    """The harness binary could not be launched (missing binary, bad workdir)."""
 
 
 def _result_envelope(output: str) -> dict[str, object] | None:
@@ -239,14 +236,17 @@ class ClaudeCodeAdapter:
         # Stdout rides to the injected per-lease file (epic #57) so the result
         # envelope survives the process for `parse_usage` — never computed here
         # (`bzh:dependency-injection`); empty keeps today's DEVNULL behavior.
-        with _stdout_target(preamble.stdout_path) as stdout_file:
+        # stderr rides the same injected-per-lease-file mechanism as stdout (issue #125,
+        # change L(iii)) — reusing `_stdout_target` (SF Note 1) so the file-descriptor
+        # cleanup-on-failed-Popen guarantee holds for both; empty path keeps DEVNULL.
+        with _stdout_target(preamble.stdout_path) as stdout_file, _stdout_target(preamble.stderr_path) as stderr_file:
             try:
                 proc = subprocess.Popen(
                     cmd,
                     cwd=workdir,
                     env=env,
                     stdout=stdout_file if stdout_file is not None else subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
+                    stderr=stderr_file if stderr_file is not None else subprocess.DEVNULL,
                 )
             except OSError as exc:
                 _log.error("harness spawn failed", binary=self._binary, cwd=workdir, detail=str(exc))
