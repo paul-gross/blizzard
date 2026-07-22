@@ -138,7 +138,15 @@ class IHarnessAdapter(Protocol):
         """
         ...
 
-    def judge(self, workdir: str, session_id: str, judgement_prompt: str) -> str:
+    def judge(
+        self,
+        workdir: str,
+        session_id: str,
+        judgement_prompt: str,
+        *,
+        preamble: WorkerPreamble | None = None,
+        chunk_id: str = "",
+    ) -> str:
         """Deliver the judgement prompt into the session and return the raw reply.
 
         The synchronous half of the two-phase node judgement: resumes the session
@@ -147,6 +155,14 @@ class IHarnessAdapter(Protocol):
         loop hands to :meth:`parse_verdict`. Separated from
         :meth:`resume_with_message` because the verdict elicitation must capture the
         reply, where async message delivery only needs the new pid.
+
+        ``preamble`` re-supplies the per-lease worker identity exactly as it does on
+        :meth:`resume_with_message` — the judgement turn runs its own
+        ``blizzard runner attach`` (a node's ``judgement_prompt`` elicits the
+        ``retrospective``), and ``--resume`` inherits none of the spawn env, so
+        without it the attach cannot reach the runner. ``chunk_id`` names the
+        lease's chunk for ``BLIZZARD_CHUNK_ID``. Both omitted (the selftest, which
+        speaks to no live lease) keeps the identity-less allowlist env.
         """
         ...
 

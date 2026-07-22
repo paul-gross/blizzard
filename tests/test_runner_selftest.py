@@ -290,7 +290,15 @@ class _HangingAdapter:
     def resume_command(self, workdir: str, session_id: str) -> str:
         raise AssertionError("unreachable — spawn never returns")
 
-    def judge(self, workdir: str, session_id: str, judgement_prompt: str) -> str:
+    def judge(
+        self,
+        workdir: str,
+        session_id: str,
+        judgement_prompt: str,
+        *,
+        preamble: WorkerPreamble | None = None,
+        chunk_id: str = "",
+    ) -> str:
         raise AssertionError("unreachable — spawn never returns")
 
     def parse_verdict(self, output: str) -> str | None:
@@ -357,7 +365,15 @@ class _FixedPidAdapter:
     def resume_command(self, workdir: str, session_id: str) -> str:
         return f"cd {workdir} && fake --resume {session_id}"
 
-    def judge(self, workdir: str, session_id: str, judgement_prompt: str) -> str:
+    def judge(
+        self,
+        workdir: str,
+        session_id: str,
+        judgement_prompt: str,
+        *,
+        preamble: WorkerPreamble | None = None,
+        chunk_id: str = "",
+    ) -> str:
         return json.dumps({"result": "<Choice>pass</Choice>"})
 
     def parse_verdict(self, output: str) -> str | None:

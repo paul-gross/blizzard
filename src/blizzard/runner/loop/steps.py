@@ -1614,8 +1614,16 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
     # A dead worker whose session cannot answer a parseable <Choice> is a failure.
     prompt = (envelope.judgement_prompt or "") + _elicitation_tail(envelope)
     # The adapter works in a directory; the runner resolves the provider-returned
-    # workdir from the binding and supplies it.
-    output = ctx.harness.judge(bindings[0].workdir, lease.session_id, prompt)
+    # workdir from the binding and supplies it. The judgement turn attaches its own
+    # `retrospective`, so it carries the re-minted lease identity — the worker is
+    # already dead (kill-then-resume), so invalidating its token orphans nothing.
+    output = ctx.harness.judge(
+        bindings[0].workdir,
+        lease.session_id,
+        prompt,
+        preamble=_resume_preamble(ctx, lease, bindings),
+        chunk_id=lease.chunk_id,
+    )
 
     # 2c. Record this attempt's harness usage (issue #58) — the spawn/resume invocation
     #     that just exited and the judgement resume above, each its own fact. Recorded
@@ -1683,7 +1691,16 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
         # before this function reads on. `resume_with_message` only returns a new pid
         # (issue #113, Phase 4) — it would race the re-read against a worker still
         # composing its attach.
-        nudge_output = ctx.harness.judge(bindings[0].workdir, lease.session_id, _nudge_message(missing))
+        # This second `_resume_preamble` deliberately re-mints again, invalidating the
+        # primary judgement's token — safe only because `judge` is synchronous, so that
+        # turn's attach has already completed. Do not hoist or share the two preambles.
+        nudge_output = ctx.harness.judge(
+            bindings[0].workdir,
+            lease.session_id,
+            _nudge_message(missing),
+            preamble=_resume_preamble(ctx, lease, bindings),
+            chunk_id=lease.chunk_id,
+        )
         _CP_NUDGE_AFTER_RESUME.reached()
         # Record this invocation's own usage (issue #58) — a distinct `nudge` kind so it
         # cannot collide with (or be mistaken for) the primary judgement's own `judge`

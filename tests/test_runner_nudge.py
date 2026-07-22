@@ -17,7 +17,7 @@ import pytest
 
 from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.artifacts import ArtifactKind
-from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.adapter import WorkerHandle, WorkerPreamble
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.loop.steps import _advance_exited_worker, advance, pull
 from blizzard.runner.store.repository import NewLease
@@ -55,8 +55,16 @@ class _AttachingOnNudgeHarness(FakeHarness):
         self._name = name
         self._content = content
 
-    def judge(self, workdir: str, session_id: str, judgement_prompt: str) -> str:
-        output = super().judge(workdir, session_id, judgement_prompt)
+    def judge(
+        self,
+        workdir: str,
+        session_id: str,
+        judgement_prompt: str,
+        *,
+        preamble: WorkerPreamble | None = None,
+        chunk_id: str = "",
+    ) -> str:
+        output = super().judge(workdir, session_id, judgement_prompt, preamble=preamble, chunk_id=chunk_id)
         if len(self.judged) == 2:  # the nudge resume, not the original verdict elicitation
             self._store.record_attachment(
                 lease_id=self._lease_id,
@@ -133,6 +141,10 @@ def test_nudge_fires_once_lists_missing_name_and_picks_up_the_attach(tmp_path: P
     _, _, nudge_prompt = harness.judged[1]
     assert "review-findings" in nudge_prompt, "the nudge did not name the missing produces name"
     assert "blizzard runner attach" in nudge_prompt
+
+    # Both resumes instruct an attach, so both must carry the per-lease identity — a
+    # preamble with a re-minted token — or the attach they elicit cannot authenticate.
+    assert all(p is not None and p.lease_id == "lease_r" and p.lease_token for p in harness.judge_preambles)
 
     assert store.nudge_fired("lease_r", 1) is True
 

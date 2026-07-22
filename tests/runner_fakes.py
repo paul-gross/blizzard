@@ -272,6 +272,7 @@ class FakeHarness:
         self.spawns: list[tuple[NodeEnvelope, WorkerPreamble]] = []
         self.resume_froms: list[str | None] = []  # `resume_from` as seen by each spawn (issue #115)
         self.judged: list[tuple[str, str, str]] = []
+        self.judge_preambles: list[WorkerPreamble | None] = []  # one entry per judge call
         self.resumed: list[tuple[str, str, str]] = []  # (workdir, session_id, message)
         self.resumed_identity: list[tuple[WorkerPreamble | None, str]] = []  # (preamble, chunk_id) per resume
         self.resume_pid = 4321
@@ -295,8 +296,17 @@ class FakeHarness:
             process_start_time=self._handle.process_start_time,
         )
 
-    def judge(self, workdir: str, session_id: str, judgement_prompt: str) -> str:
+    def judge(
+        self,
+        workdir: str,
+        session_id: str,
+        judgement_prompt: str,
+        *,
+        preamble: WorkerPreamble | None = None,
+        chunk_id: str = "",
+    ) -> str:
         self.judged.append((workdir, session_id, judgement_prompt))
+        self.judge_preambles.append(preamble)
         return "<judged output>"
 
     def resume_with_message(

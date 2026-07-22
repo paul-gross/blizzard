@@ -22,7 +22,11 @@ Implements :class:`~blizzard.runner.harness.adapter.IHarnessAdapter` against the
   not session-sticky, so a resume that omits it drops the session back to the
   settings-resolved default — silently denying the judgement turn's own
   ``blizzard runner attach`` (the ``retrospective`` a node's ``judgement_prompt``
-  elicits) in a headless session that has no one to approve it.
+  elicits) in a headless session that has no one to approve it. That same attach
+  needs the per-lease identity env, so ``judge`` takes the ``preamble``/``chunk_id``
+  pair ``resume_with_message`` does (a freshly re-minted token; ``--resume``
+  inherits no spawn env) — but never ``--settings``: a ``SessionEnd`` hook firing
+  on the synchronous judge exit would record a spurious done-signal for the lease.
 * **resume_with_message** — the fire-and-forget resume (answer delivery / CI, P7).
   Carries ``--settings <worker-settings>`` exactly as ``spawn`` does: it re-enters a
   long-lived session that later exits on its own, so it needs the ``PostToolUse``
@@ -52,10 +56,11 @@ the mock fence variable (``BLIZZARD_MOCK_HARNESS_FENCE``) is supplied by the tes
 scaffolding's declared ``worker_env_passthrough``, not by this adapter.
 Confined to ``internal/`` (``bzh:dependency-inversion``).
 
-Every child env — spawn, judge, resume — is built by :func:`_allowlisted_env`
+Every child env — spawn, judge, resume — is built from :func:`_allowlisted_env`
 (``bzh:worker-env-allowlist``): a fixed base allowlist plus the operator's declared
 ``env_passthrough``, never a full ``os.environ`` copy, so a daemon secret (foremost
-``BZ_HUB_TOKEN``) is absent from a worker/judge/resume child by construction.
+``BZ_HUB_TOKEN``) is absent from a worker/judge/resume child by construction. The
+identity-carrying variants add only the ``BLIZZARD_*`` vars on top of it.
 
 The ``workdir`` first positional of ``judge`` / ``resume_with_message`` /
 ``resume_command`` is the provider-returned path the runner resolves from the
@@ -251,14 +256,32 @@ class ClaudeCodeAdapter:
         _log.info("spawned worker", binary=self._binary, pid=proc.pid, session_id=session_id, cwd=workdir)
         return WorkerHandle(session_id=session_id, pid=proc.pid, process_start_time=start_time)
 
-    def judge(self, workdir: str, session_id: str, judgement_prompt: str) -> str:
+    def judge(
+        self,
+        workdir: str,
+        session_id: str,
+        judgement_prompt: str,
+        *,
+        preamble: WorkerPreamble | None = None,
+        chunk_id: str = "",
+    ) -> str:
         cmd = [self._binary, "-p", "--output-format", "json", "--resume", session_id]
         if self._permission_mode:
             cmd += ["--permission-mode", self._permission_mode]
         cmd.append(judgement_prompt)
-        result = subprocess.run(
-            cmd, cwd=workdir, capture_output=True, text=True, env=_allowlisted_env(self._env_passthrough)
+        # The judgement turn is asked to do more than answer: a node's judgement prompt
+        # elicits its own `blizzard runner attach` (the `retrospective`), so the child
+        # needs the per-lease identity a resume gets — `--resume` inherits none of the
+        # spawn env, and the caller re-mints the token (plaintext never persisted).
+        # Identity only: `--settings` stays off, so no `SessionEnd` hook can fire on the
+        # synchronous exit and record a spurious done-signal. Absent a preamble (the
+        # selftest, which speaks to no live lease) this stays the identity-less allowlist.
+        env = (
+            self._identity_env(preamble, chunk_id, session_id)
+            if preamble is not None
+            else _allowlisted_env(self._env_passthrough)
         )
+        result = subprocess.run(cmd, cwd=workdir, capture_output=True, text=True, env=env)
         _log.info("judgement resume", pid_returncode=result.returncode, session_id=session_id, cwd=workdir)
         return result.stdout
 

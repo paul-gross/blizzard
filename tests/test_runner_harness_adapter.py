@@ -191,6 +191,33 @@ def test_judge_child_env_excludes_the_hub_token_and_an_unlisted_sentinel(
 
 
 @pytest.mark.component
+def test_judge_injects_the_lease_identity_when_given_a_preamble(tmp_path: Path) -> None:
+    # The judgement turn runs its own `blizzard runner attach` (the `retrospective` a
+    # node's judgement prompt elicits), and `--resume` inherits none of the spawn env —
+    # so a judge given a preamble must carry the same per-lease identity a resume does.
+    dump_script = tmp_path / "dump-env"
+    dump_script.write_text(_ENV_DUMP_HARNESS)
+    dump_script.chmod(dump_script.stat().st_mode | stat.S_IEXEC | stat.S_IRUSR)
+    workdir = tmp_path / "e1"
+    workdir.mkdir()
+    adapter = ClaudeCodeAdapter(binary=str(dump_script))
+    preamble = WorkerPreamble(
+        environments=[AcquiredEnvironment(environment_id="e1", workdir=str(workdir))],
+        lease_id="lease_42",
+        local_api_url="http://127.0.0.1:8431",
+        lease_token="fresh-judge-token",
+    )
+
+    adapter.judge(str(workdir), "sess-9", "assess", preamble=preamble, chunk_id="ch_9")
+
+    dumped = json.loads((workdir / "env-dump.json").read_text())
+    assert dumped["BLIZZARD_LEASE_ID"] == "lease_42"
+    assert dumped["BLIZZARD_RUNNER_URL"] == "http://127.0.0.1:8431"
+    assert dumped["BLIZZARD_LEASE_TOKEN"] == "fresh-judge-token"  # the re-minted plaintext rides the judge
+    assert dumped["BLIZZARD_CHUNK_ID"] == "ch_9"
+
+
+@pytest.mark.component
 def test_resume_with_message_child_env_excludes_the_hub_token_and_an_unlisted_sentinel(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
