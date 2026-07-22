@@ -137,6 +137,12 @@ def _api_routes(app: FastAPI) -> list[APIRoute]:
     routes: list[APIRoute] = []
     for route in app.routes:
         if isinstance(route, APIRoute):
+            # The web root is the SPA shell, not an API surface: with a built bundle
+            # it is a Starlette Mount (never an APIRoute), without one it is
+            # foundation/web.py's placeholder GET / — public by construction either
+            # way, and environment-dependent, so it stays out of the plane table.
+            if route.path == "/":
+                continue
             routes.append(route)
         elif isinstance(route, _IncludedRouter):
             routes.extend(_api_routes_of(route))

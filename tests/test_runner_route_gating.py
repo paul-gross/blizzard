@@ -106,6 +106,12 @@ def _live_routes(client: TestClient) -> list[APIRoute]:
         out: list[APIRoute] = []
         for route in routes:  # type: ignore[attr-defined]
             if isinstance(route, APIRoute):
+                # The web root is the SPA shell, not an API surface: with a built
+                # bundle it is a Mount (never an APIRoute), without one it is
+                # foundation/web.py's placeholder GET / — public by construction
+                # and environment-dependent, so it stays out of the lane table.
+                if route.path == "/":
+                    continue
                 out.append(route)
             elif isinstance(route, _IncludedRouter):
                 out.extend(collect(route.original_router.routes))
