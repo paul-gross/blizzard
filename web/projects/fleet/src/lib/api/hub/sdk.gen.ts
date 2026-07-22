@@ -297,7 +297,9 @@ export const resolveDecisionApiDecisionsDecisionIdResolutionsPost = <ThrowOnErro
  * ``runner_id`` / ``chunk_id`` / ``since`` filters apply to the ``event_log`` half; the
  * open-escalation projection is always unioned in (a ``needs_human`` chunk is a standing
  * surface, not a filterable log row). A malformed ``since`` 422s via FastAPI's own
- * datetime coercion.
+ * datetime coercion; a well-formed but tz-naive ``since`` (an offset-less ISO string) is
+ * coerced to UTC (``as_utc``) so the projection's aware ``recorded_at`` comparison below
+ * never raises against it — the store half is already protected by ``UtcDateTime``.
  */
 export const listEventsApiEventsGet = <ThrowOnError extends boolean = false>(options?: Options<ListEventsApiEventsGetData, ThrowOnError>): RequestResult<ListEventsApiEventsGetResponses, ListEventsApiEventsGetErrors, ThrowOnError> => (options?.client ?? client).get<ListEventsApiEventsGetResponses, ListEventsApiEventsGetErrors, ThrowOnError>({ url: '/api/events', ...options });
 
