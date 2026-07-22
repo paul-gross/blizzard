@@ -47,7 +47,15 @@ class SubprocessWorktreeGit:
         return artifacts
 
     def push(self, repo_workdir: str, branch_name: str) -> None:
-        self._git(Path(repo_workdir), "push", "origin", branch_name)
+        # --force-with-lease, not a plain (fast-forward-only) push: the pointer's
+        # commit hash is what gets submitted and is authoritative — the branch ref
+        # is not — so the push exists only to make the ref equal the HEAD we are
+        # about to submit. A node that rewrites a branch it already pushed (e.g.
+        # merge- then rebase-based integration in one run) leaves the remote
+        # non-fast-forward; a plain push wedges there forever, while
+        # --force-with-lease mirrors HEAD yet still refuses to clobber a ref that
+        # moved out from under us.
+        self._git(Path(repo_workdir), "push", "--force-with-lease", "origin", branch_name)
         _log.info("pushed work branch", repo_workdir=repo_workdir, branch=branch_name)
 
     # --- plumbing -----------------------------------------------------------
