@@ -20,6 +20,8 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from blizzard.foundation.forwarded import TrustedProxies
+
 CONFIG_FILENAME = "blizzard-hub.toml"
 DATA_DIRNAME = "data"
 
@@ -197,6 +199,13 @@ class HubConfig:
     route_token_mode: str = ROUTE_TOKEN_WARN
     produces_mode: str = PRODUCES_WARN
     auth: AuthConfig = field(default_factory=AuthConfig)
+    #: The reverse-proxy trust set (issue #130) — proxy addresses or CIDRs whose
+    #: ``X-Forwarded-Proto``/``X-Forwarded-For`` headers are honored (cookie ``Secure``
+    #: flag, login-throttle key, auth-fact actor IP). Empty (the default) ignores those
+    #: headers from every peer — behavior byte-identical to a direct-exposure deployment.
+    #: Stored as raw strings that round-trip to toml; parsed into
+    #: :class:`~blizzard.foundation.forwarded.TrustedProxies` at the composition root.
+    trusted_proxies: tuple[str, ...] = ()
 
     @property
     def config_path(self) -> Path:
@@ -229,6 +238,10 @@ class HubConfig:
             f'runner_auth_mode = "{self.runner_auth_mode}"\n',
             f'route_token_mode = "{self.route_token_mode}"\n',
             f'produces_mode = "{self.produces_mode}"\n',
+            "\n# Reverse-proxy trust set (issue #130): proxy IPs/CIDRs whose forwarded\n"
+            "# X-Forwarded-Proto/-For headers are honored (cookie Secure flag, login-throttle\n"
+            "# key, auth-fact actor IP). Empty = ignore those headers from every peer.\n",
+            f"trusted_proxies = [{', '.join(f'"{p}"' for p in self.trusted_proxies)}]\n",
         ]
         if not self.pm_sources:
             lines.append(_PM_SOURCE_EXAMPLE_COMMENT)
@@ -292,6 +305,7 @@ class HubConfig:
             route_token_mode=route_token_mode,
             produces_mode=produces_mode,
             auth=_parse_auth(raw.get("auth", {})),
+            trusted_proxies=_parse_trusted_proxies(raw.get("trusted_proxies", ())),
         )
 
 
@@ -339,6 +353,21 @@ def _parse_pm_sources(raw_sources: object) -> tuple[PmSourceConfig, ...]:
             )
         )
     return tuple(sources)
+
+
+def _parse_trusted_proxies(raw: object) -> tuple[str, ...]:
+    """``trusted_proxies`` (issue #130) — validate each entry parses as an IP or CIDR
+    (via :meth:`TrustedProxies.parse`) so a malformed proxy fails at config load, then
+    carry the raw strings (they round-trip to toml verbatim; parsing into networks is the
+    composition root's job)."""
+    if not isinstance(raw, (list, tuple)):
+        return ()
+    entries = tuple(str(entry).strip() for entry in raw)
+    try:
+        TrustedProxies.parse(entries)
+    except ValueError as exc:
+        raise ConfigError(f"trusted_proxies entry is not a valid IP or CIDR: {exc}") from exc
+    return entries
 
 
 def _parse_auth(raw_auth: object) -> AuthConfig:

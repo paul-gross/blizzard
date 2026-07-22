@@ -65,7 +65,14 @@ def _hub_client(*, oauth_enabled: bool, jwk: dict[str, str] | None = None) -> ht
     return httpx.Client(transport=httpx.MockTransport(handler), base_url="http://hub.example")
 
 
-def _build_app(tmp_path: Path, *, oauth_enabled: bool, jwk: dict[str, str] | None = None) -> TestClient:
+def _build_app(
+    tmp_path: Path,
+    *,
+    oauth_enabled: bool,
+    jwk: dict[str, str] | None = None,
+    trusted_proxies: tuple[str, ...] = (),
+    client_host: str | None = None,
+) -> TestClient:
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'runner.db'}")
     metadata.create_all(engine)
     config = RunnerConfig(
@@ -74,6 +81,7 @@ def _build_app(tmp_path: Path, *, oauth_enabled: bool, jwk: dict[str, str] | Non
         runner_id=_RUNNER_ID,
         hub_url="http://hub.example",
         public_url="https://runner-a.example",
+        trusted_proxies=trusted_proxies,
     )
     store = SqlAlchemyRunnerStore(engine)
     runner_status = RunnerStatusService(
@@ -93,6 +101,8 @@ def _build_app(tmp_path: Path, *, oauth_enabled: bool, jwk: dict[str, str] | Non
         hub_http_client=_hub_client(oauth_enabled=oauth_enabled, jwk=jwk),
         jti_cache=JtiCacheRepository(engine),
     )
+    if client_host is not None:
+        return TestClient(app, client=(client_host, 41000))
     return TestClient(app)
 
 
@@ -218,3 +228,52 @@ def test_a_replayed_jti_is_refused_at_the_callback(tmp_path: Path) -> None:
         headers={"content-type": "application/x-www-form-urlencoded"},
     )
     assert second.status_code == 400
+
+
+# --- forwarded-header trust behind a reverse proxy (issue #130) --------------------
+
+_PROXY_IP = "10.0.0.4"
+_DIRECT_IP = "203.0.113.9"
+
+
+def _bounce_callback(client: TestClient, private_key: object, *, headers: dict[str, str]):
+    """Run the SSO callback leg with a valid round-tripped state and token, returning
+    the response so a test can inspect the minted session cookie's attributes."""
+    client.cookies.set("bz_runner_bounce_state", "s-fwd")
+    token = _sign(private_key, jti="jti-fwd-1")
+    return client.post(
+        "/api/auth/callback",
+        content=f"token={token}&state=s-fwd",
+        headers={"content-type": "application/x-www-form-urlencoded", **headers},
+        follow_redirects=False,
+    )
+
+
+def test_callback_mints_a_secure_cookie_on_forwarded_proto_https_from_a_trusted_proxy(tmp_path: Path) -> None:
+    private_key, jwk = _keypair()
+    client = _build_app(
+        tmp_path, oauth_enabled=True, jwk=jwk, trusted_proxies=(_PROXY_IP,), client_host=_PROXY_IP
+    )
+    resp = _bounce_callback(client, private_key, headers={"x-forwarded-proto": "https"})
+    assert resp.status_code == 303
+    set_cookie = resp.headers["set-cookie"]
+    assert "bz_runner_session=" in set_cookie
+    assert "Secure" in set_cookie
+
+
+def test_callback_ignores_forwarded_proto_from_an_unlisted_peer(tmp_path: Path) -> None:
+    private_key, jwk = _keypair()
+    client = _build_app(
+        tmp_path, oauth_enabled=True, jwk=jwk, trusted_proxies=(_PROXY_IP,), client_host=_DIRECT_IP
+    )
+    resp = _bounce_callback(client, private_key, headers={"x-forwarded-proto": "https"})
+    assert resp.status_code == 303
+    assert "Secure" not in resp.headers["set-cookie"]
+
+
+def test_callback_ignores_forwarded_proto_with_no_trusted_proxies_configured(tmp_path: Path) -> None:
+    private_key, jwk = _keypair()
+    client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk, client_host=_PROXY_IP)  # empty default
+    resp = _bounce_callback(client, private_key, headers={"x-forwarded-proto": "https"})
+    assert resp.status_code == 303
+    assert "Secure" not in resp.headers["set-cookie"]

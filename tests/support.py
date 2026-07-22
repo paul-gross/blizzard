@@ -19,12 +19,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import sqlalchemy as sa
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 from sqlalchemy import insert as sa_insert
 
 from blizzard.auth_core import Role
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.ids import USER_PREFIX, mint
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import MigrationRunner
@@ -221,7 +223,6 @@ def github_double(*, conflict_branches: set[str] | None = None, issues: dict[str
     GitHub-REST-v3 surface — issue read + comments, PR create + merge. Wrapped in a
     ``TestClient`` (itself an ``httpx.Client``) so the sync adapters drive it directly.
     """
-    from fastapi import FastAPI
     from fastapi.responses import JSONResponse
 
     conflict = conflict_branches or set()
@@ -321,6 +322,10 @@ class HubHarness:
     clock: FixedClock
     engine: Engine
     events: EventBroker = field(default_factory=EventBroker)
+    #: The wired app, so a test can build a second ``TestClient`` with a different peer
+    #: address (``TestClient(hub.app, client=("203.0.113.9", 0))``) — the forwarded-header
+    #: trust tests (issue #130) need a concrete IP peer, not the default ``testclient``.
+    app: FastAPI | None = None
 
 
 def build_hub(
@@ -337,6 +342,7 @@ def build_hub(
     auth_mode: str = AUTH_MODE_NONE,
     superuser: str | None = None,
     oauth_providers: dict[str, IOAuthProvider] | None = None,
+    trusted_proxies: Sequence[str] = (),
 ) -> HubHarness:
     """A migrated, fully-wired hub over ``tmp_path`` with fake external seams.
 
@@ -366,6 +372,7 @@ def build_hub(
         route_token_mode=route_token_mode,
         produces_mode=produces_mode,
         auth=AuthConfig(mode=auth_mode, superuser=superuser),
+        trusted_proxies=tuple(trusted_proxies),
     )
     migration_runner(config).upgrade("head")
 
@@ -388,6 +395,7 @@ def build_hub(
         # The IdP signing-key lifecycle (issue #95) — wired only under `oauth`, mirroring
         # `hub/app.py`'s own `build_hosted_app` gating exactly.
         signing_keys_dir=(tmp_path / "auth" / "signing-keys") if auth_mode == AUTH_MODE_OAUTH else None,
+        trusted_proxies=TrustedProxies.parse(config.trusted_proxies),
     )
     app = create_app(config, services=services)
     client = TestClient(app)
@@ -411,6 +419,7 @@ def build_hub(
         clock=clock,
         engine=engine,
         events=events,
+        app=app,
     )
 
 

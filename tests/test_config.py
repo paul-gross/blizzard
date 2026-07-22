@@ -656,3 +656,59 @@ def test_token_env_absent_from_toml_defaults_to_bz_hub_token(tmp_path: Path) -> 
     root.mkdir()
     (root / "blizzard-runner.toml").write_text('db_url = "sqlite:///x"\n')
     assert RunnerConfig.load(root).token_env == "BZ_HUB_TOKEN"
+
+
+# --- trusted_proxies (issue #130) -------------------------------------------------
+
+
+@pytest.mark.unit
+def test_hub_trusted_proxies_default_empty(tmp_path: Path) -> None:
+    # A fresh scaffold trusts no proxy — forwarded headers ignored, today's behavior.
+    assert HubConfig.scaffold(tmp_path).trusted_proxies == ()
+
+
+@pytest.mark.unit
+def test_hub_trusted_proxies_round_trip_through_to_toml_and_load(tmp_path: Path) -> None:
+    root = tmp_path / "hub"
+    root.mkdir()
+    edited = dataclasses.replace(
+        HubConfig.scaffold(root), trusted_proxies=("10.0.0.4", "192.168.0.0/16")
+    )
+    (root / "blizzard-hub.toml").write_text(edited.to_toml())
+    assert HubConfig.load(root).trusted_proxies == ("10.0.0.4", "192.168.0.0/16")
+
+
+@pytest.mark.unit
+def test_hub_trusted_proxies_rejects_a_malformed_entry(tmp_path: Path) -> None:
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///x"\ntrusted_proxies = ["not-an-ip"]\n')
+    with pytest.raises(HubConfigError):
+        HubConfig.load(root)
+
+
+@pytest.mark.unit
+def test_runner_trusted_proxies_default_empty(tmp_path: Path) -> None:
+    assert RunnerConfig.scaffold(tmp_path).trusted_proxies == ()
+
+
+@pytest.mark.unit
+def test_runner_trusted_proxies_round_trip_through_to_toml_and_load(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    edited = RunnerConfig(
+        root=root, db_url=RunnerConfig.default_db_url(root), trusted_proxies=("10.0.0.4",)
+    )
+    (root / "blizzard-runner.toml").write_text(edited.to_toml())
+    assert RunnerConfig.load(root).trusted_proxies == ("10.0.0.4",)
+
+
+@pytest.mark.unit
+def test_runner_trusted_proxies_rejects_a_malformed_entry(tmp_path: Path) -> None:
+    from blizzard.runner.config import ConfigError
+
+    root = tmp_path / "runner"
+    root.mkdir()
+    (root / "blizzard-runner.toml").write_text('db_url = "sqlite:///x"\ntrusted_proxies = ["10.0.0.0/999"]\n')
+    with pytest.raises(ConfigError):
+        RunnerConfig.load(root)

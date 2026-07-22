@@ -26,6 +26,7 @@ import httpx
 from sqlalchemy import Engine
 
 from blizzard.foundation.clock import IClock, SystemClock
+from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
 from blizzard.hub.auth.auth_state import IWriteAuthStateRepository
 from blizzard.hub.auth.errors import RepoErrorFactory
@@ -147,6 +148,11 @@ class HubServices:
     #: keypair on disk, no JWKS, and ``hub/api/idp.py`` 404s every route rather than
     #: reaching for a service that was never wired.
     signing: SigningKeyService | None
+    #: The reverse-proxy trust set (issue #130) — parsed once here from
+    #: ``config.trusted_proxies``; the provider-login routes consult it to resolve the
+    #: effective cookie scheme and throttle/fact client IP. Empty by default (direct
+    #: exposure), so forwarded headers are ignored from every peer.
+    trusted_proxies: TrustedProxies
 
 
 def build_services(
@@ -167,6 +173,7 @@ def build_services(
     oauth_http_client: httpx.Client | None = None,
     oauth_registry: IOAuthProviderRegistry | None = None,
     signing_keys_dir: Path | None = None,
+    trusted_proxies: TrustedProxies | None = None,
 ) -> HubServices:
     """Construct and wire every fleet service over a migrated store engine.
 
@@ -291,4 +298,5 @@ def build_services(
         auth_throttle=auth_throttle,
         auth_facts=auth_facts_service,
         signing=signing,
+        trusted_proxies=trusted_proxies if trusted_proxies is not None else TrustedProxies(),
     )

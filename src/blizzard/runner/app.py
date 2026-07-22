@@ -20,6 +20,7 @@ from fastapi.responses import RedirectResponse
 from blizzard import __version__
 from blizzard.foundation.assets import frontend_dir
 from blizzard.foundation.clock import SystemClock
+from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
@@ -195,6 +196,10 @@ def create_app(
     app.state.hub_auth_mode = HubAuthModeCache(hub_http_client)
     app.state.jwks_cache = JwksCache(hub_http_client, "/api/auth/jwks.json")
     app.state.jti_cache = jti_cache
+    # The reverse-proxy trust set (issue #130) — parsed once here from
+    # `config.trusted_proxies`; the SSO callback consults it to resolve the effective
+    # cookie scheme. Empty by default, so `X-Forwarded-Proto` is ignored from every peer.
+    app.state.trusted_proxies = TrustedProxies.parse(config.trusted_proxies)
     # A per-process secret signing the runner's own session cookie (`runner/auth/
     # session.py`) — minted fresh at every daemon start, so a restart invalidates
     # every live session (see that module's docstring for why this is an accepted
