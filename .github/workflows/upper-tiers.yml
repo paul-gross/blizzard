@@ -45,11 +45,29 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: blizzard
+      # Coordinated changes can span blizzard + blizzard-mock (the mutual-mock design:
+      # a new hub wire verb needs a matching mock verb). When a same-named feature
+      # branch exists on blizzard-mock, build against it so the pair is tested
+      # branch-vs-branch; otherwise — a push to master (empty head_ref) or a
+      # blizzard-only change — fall back to master, the normal flow.
+      - name: resolve blizzard-mock ref (matching feature branch, else master)
+        id: mock_ref
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          ref=master
+          if [ -n "$HEAD_REF" ] && git ls-remote --exit-code --heads \
+              https://github.com/paul-gross/blizzard-mock "$HEAD_REF" >/dev/null 2>&1; then
+            ref="$HEAD_REF"
+          fi
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "resolved blizzard-mock ref: $ref"
       - name: checkout blizzard-mock (the mock fleet + fixture scaffold)
         uses: actions/checkout@v4
         with:
           repository: paul-gross/blizzard-mock
           path: blizzard-mock
+          ref: ${{ steps.mock_ref.outputs.ref }}
       - name: checkout blizzard-workspace (the winter source)
         uses: actions/checkout@v4
         with:
@@ -86,11 +104,29 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: blizzard
+      # Coordinated changes can span blizzard + blizzard-mock (the mutual-mock design:
+      # a new hub wire verb needs a matching mock verb). When a same-named feature
+      # branch exists on blizzard-mock, build against it so the pair is tested
+      # branch-vs-branch; otherwise — a push to master (empty head_ref) or a
+      # blizzard-only change — fall back to master, the normal flow.
+      - name: resolve blizzard-mock ref (matching feature branch, else master)
+        id: mock_ref
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          ref=master
+          if [ -n "$HEAD_REF" ] && git ls-remote --exit-code --heads \
+              https://github.com/paul-gross/blizzard-mock "$HEAD_REF" >/dev/null 2>&1; then
+            ref="$HEAD_REF"
+          fi
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "resolved blizzard-mock ref: $ref"
       - name: checkout blizzard-mock (the mock fleet + fixture scaffold)
         uses: actions/checkout@v4
         with:
           repository: paul-gross/blizzard-mock
           path: blizzard-mock
+          ref: ${{ steps.mock_ref.outputs.ref }}
       - name: checkout blizzard-workspace (the winter source)
         uses: actions/checkout@v4
         with:
