@@ -46,6 +46,7 @@ from pydantic import BaseModel
 
 from blizzard.auth_core import Role
 from blizzard.foundation.clock import IClock
+from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.auth.jti_cache import IJtiCache
 from blizzard.runner.auth.jwks_cache import JwksCache
@@ -257,7 +258,7 @@ async def callback(request: Request) -> Response:
         cookie_value,
         httponly=True,
         samesite="lax",
-        secure=request.url.scheme == "https",
+        secure=_cookie_is_secure(request),
         max_age=int(SESSION_TTL.total_seconds()),
     )
     return response
@@ -308,6 +309,20 @@ def read_session(request: Request) -> RunnerAuthSessionView:
         return RunnerAuthSessionView(auth_enabled=False, username=None)
     session = _resolve_human_session(request)
     return RunnerAuthSessionView(auth_enabled=True, username=session.username if session is not None else None)
+
+
+def _cookie_is_secure(request: Request) -> bool:
+    """Whether the runner's SSO session cookie is minted ``Secure`` — keyed on the
+    effective scheme, which honors ``X-Forwarded-Proto`` only when the direct peer is a
+    configured trusted proxy (issue #130), so a TLS-terminating reverse proxy in front
+    of this runner mints a ``Secure`` cookie while a direct client cannot forge one."""
+    trusted: TrustedProxies = request.app.state.trusted_proxies
+    scheme = trusted.effective_scheme(
+        direct_scheme=request.url.scheme,
+        peer=request.client.host if request.client is not None else None,
+        forwarded_proto=request.headers.get("x-forwarded-proto"),
+    )
+    return scheme == "https"
 
 
 def _refused_response(detail: str) -> Response:

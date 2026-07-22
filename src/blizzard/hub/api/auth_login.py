@@ -18,6 +18,7 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
+from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.hub.api.auth_session import _SESSION_COOKIE_NAME, _presented_session_id
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.facts import AuthFactsService
@@ -39,8 +40,23 @@ class ProviderSummary(BaseModel):
     type: str
 
 
-def _client_ip(request: Request) -> str:
-    return request.client.host if request.client is not None else "unknown"
+def _client_ip(request: Request, trusted: TrustedProxies) -> str:
+    """The effective client IP the throttle keys on and the auth facts record — the
+    ``X-Forwarded-For`` client when the direct peer is a trusted proxy (issue #130),
+    else the direct peer (``"unknown"`` for a peer-less connection)."""
+    direct = request.client.host if request.client is not None else "unknown"
+    return trusted.effective_client_ip(direct_peer=direct, forwarded_for=request.headers.get("x-forwarded-for"))
+
+
+def _secure_cookie(request: Request, trusted: TrustedProxies) -> bool:
+    """Whether the session cookie is minted ``Secure`` — keyed on the effective scheme,
+    which honors ``X-Forwarded-Proto`` only from a trusted proxy (issue #130)."""
+    scheme = trusted.effective_scheme(
+        direct_scheme=request.url.scheme,
+        peer=request.client.host if request.client is not None else None,
+        forwarded_proto=request.headers.get("x-forwarded-proto"),
+    )
+    return scheme == "https"
 
 
 def _safe_return_to(raw: str | None) -> str:
@@ -66,7 +82,7 @@ def authorize(name: str, request: Request, return_to: str | None = None) -> Redi
     if request.app.state.config.auth.mode == AUTH_MODE_NONE:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="login is not enabled")
     services = get_services(request)
-    if not services.auth_throttle.allow(_client_ip(request)):
+    if not services.auth_throttle.allow(_client_ip(request, services.trusted_proxies)):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=_THROTTLE_DETAIL)
     provider = services.oauth_providers.get(name)
     if provider is None:
@@ -83,20 +99,19 @@ def callback(name: str, request: Request, code: str | None = None, state: str | 
     if request.app.state.config.auth.mode == AUTH_MODE_NONE:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="login is not enabled")
     services = get_services(request)
-    if not services.auth_throttle.allow(_client_ip(request)):
+    client_ip = _client_ip(request, services.trusted_proxies)
+    if not services.auth_throttle.allow(client_ip):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=_THROTTLE_DETAIL)
 
     entry = services.auth.consume_state(state) if state else None
     if entry is None or entry.kind != PROVIDER_LOGIN_STATE_KIND:
-        return _login_failed(
-            services.auth_facts, actor=_client_ip(request), subject=name, detail="bad or expired state"
-        )
+        return _login_failed(services.auth_facts, actor=client_ip, subject=name, detail="bad or expired state")
     if entry.provider_name != name:
         # A state minted for one provider presented to another's callback — a
         # cross-provider replay/tamper attempt, refused outright rather than treated as
         # a plain expired/missing state.
         services.auth_facts.sso_refused(
-            actor=_client_ip(request),
+            actor=client_ip,
             subject=name,
             detail=f"state minted for provider {entry.provider_name!r}",
         )
@@ -104,12 +119,12 @@ def callback(name: str, request: Request, code: str | None = None, state: str | 
 
     provider = services.oauth_providers.get(name)
     if provider is None or code is None:
-        return _login_failed(services.auth_facts, actor=_client_ip(request), subject=name, detail="missing code")
+        return _login_failed(services.auth_facts, actor=client_ip, subject=name, detail="missing code")
 
     try:
         identity = provider.exchange(code=code, redirect_uri=_callback_url(request, name))
     except OAuthExchangeError as exc:
-        return _login_failed(services.auth_facts, actor=_client_ip(request), subject=name, detail=str(exc))
+        return _login_failed(services.auth_facts, actor=client_ip, subject=name, detail=str(exc))
 
     user = services.auth.link_or_mint(identity, provider_name=name)
     plaintext, _session = services.auth.mint_session(user)
@@ -120,7 +135,7 @@ def callback(name: str, request: Request, code: str | None = None, state: str | 
         plaintext,
         httponly=True,
         samesite="lax",
-        secure=request.url.scheme == "https",
+        secure=_secure_cookie(request, services.trusted_proxies),
         max_age=int(ABSOLUTE_MAX_AGE.total_seconds()),
     )
     return response

@@ -438,6 +438,44 @@ identity regardless of hub role. `[auth.users]` overrides that default per hub
 username, resolved from the JWT's `username` claim only (never `email`, which is
 mutable and may be null).
 
+### Behind a TLS-terminating reverse proxy
+
+The two decisions this plane derives from the connection — the session cookie's
+`Secure` flag (from the request scheme) and the login throttle / `auth_facts` actor IP
+(from the peer address) — are correct when a daemon is exposed **directly** (localhost,
+tailnet) and wrong behind a TLS-terminating reverse proxy (nginx, Caddy, an ALB). The
+proxy speaks HTTPS to the browser but plain HTTP to the daemon, so the daemon sees
+`http` (and mints the session cookie *without* `Secure`, even though the deployment is
+HTTPS end to end), and every request arrives from the proxy's own IP (so one noisy
+client collapses the whole fleet into a single throttle bucket).
+
+`trusted_proxies` — a top-level key in **both** `blizzard-hub.toml` and
+`blizzard-runner.toml` — lists the proxy addresses or CIDRs whose forwarded headers are
+trusted:
+
+```toml
+# hub or runner runtime config
+trusted_proxies = ["10.0.0.0/8", "192.168.1.7"]
+```
+
+When — and only when — the direct peer matches a listed proxy, `X-Forwarded-Proto`
+decides the effective scheme (the cookie `Secure` flag, on both daemons) and the
+**rightmost untrusted hop** of `X-Forwarded-For` becomes the throttle / fact client IP.
+A request from any other peer keeps its direct-connection values regardless of what
+headers it carries — so a direct client cannot forge its scheme or spoof an
+`X-Forwarded-For` to dodge the throttle. Empty (the default) ignores both headers from
+every peer, byte-identical to a direct-exposure deployment.
+
+The proxy must set both headers. nginx:
+
+```nginx
+proxy_set_header X-Forwarded-Proto $scheme;
+proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+```
+
+Caddy's `reverse_proxy` sets both automatically. Only `X-Forwarded-*` is honored —
+`Forwarded` (RFC 7239) and proxy-protocol framing are not consulted.
+
 ## Produces-artifact enforcement
 
 `produces_mode` is a third rollout flag, scaffolded into `blizzard-hub.toml` by

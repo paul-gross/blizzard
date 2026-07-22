@@ -15,6 +15,8 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+from blizzard.foundation.forwarded import TrustedProxies
+
 CONFIG_FILENAME = "blizzard-runner.toml"
 DATA_DIRNAME = "data"
 # The runner-owned worker hook file `init` scaffolds; the
@@ -207,6 +209,13 @@ class RunnerConfig:
     #: field hashable/immutable like `workspace_envs`/`gates` above). Resolution keys
     #: on the JWT's `username` claim only, never `email` (mutable, may be null).
     auth_users: tuple[tuple[str, str], ...] = ()
+    #: The reverse-proxy trust set (issue #130) — proxy addresses or CIDRs whose
+    #: `X-Forwarded-Proto` is honored when minting the runner's own SSO session cookie
+    #: (`runner/auth/federation.py`, the `Secure` flag). Empty (the default) ignores the
+    #: header from every peer — byte-identical to a direct-exposure runner. Stored as raw
+    #: strings that round-trip to toml; parsed into
+    #: :class:`~blizzard.foundation.forwarded.TrustedProxies` at the composition root.
+    trusted_proxies: tuple[str, ...] = ()
 
     @property
     def redirect_uris(self) -> tuple[str, ...]:
@@ -350,6 +359,9 @@ class RunnerConfig:
             "\n# This runner's own browser-reachable base URL (issue #95); empty = no federation\n"
             "# identity registered at the hub, so its human web surface stays unreachable via SSO.\n"
             f'public_url = "{self.public_url}"\n'
+            "\n# Reverse-proxy trust set (issue #130): proxy IPs/CIDRs whose X-Forwarded-Proto is\n"
+            "# honored when minting the SSO session cookie's Secure flag. Empty = header ignored.\n"
+            f"trusted_proxies = [{', '.join(f'"{p}"' for p in self.trusted_proxies)}]\n"
             "\n# Names the env var carrying this runner's hub bearer token (issue #86b);\n"
             "# the secret itself lives in the runtime env file, never here.\n"
             f'token_env = "{self.token_env}"\n'
@@ -456,6 +468,7 @@ class RunnerConfig:
             auth_superuser=_parse_auth_superuser(raw.get("auth", {})),
             auth_hub_role_default=_parse_auth_hub_role_default(raw.get("auth", {})),
             auth_users=_parse_auth_users(raw.get("auth", {})),
+            trusted_proxies=_parse_trusted_proxies(raw.get("trusted_proxies", ())),
         )
 
 
@@ -495,6 +508,21 @@ def _parse_worker_env_passthrough(worker: object) -> tuple[str, ...]:
     if not isinstance(worker, dict) or worker.get("env_passthrough") is None:
         return ()
     return tuple(str(v) for v in worker["env_passthrough"])
+
+
+def _parse_trusted_proxies(raw: object) -> tuple[str, ...]:
+    """``trusted_proxies`` (issue #130) — validate each entry parses as an IP or CIDR
+    (via :meth:`TrustedProxies.parse`) so a malformed proxy fails at config load, then
+    carry the raw strings (they round-trip to toml; parsing into networks is the
+    composition root's job). Mirrors the hub's own ``_parse_trusted_proxies``."""
+    if not isinstance(raw, (list, tuple)):
+        return ()
+    entries = tuple(str(entry).strip() for entry in raw)
+    try:
+        TrustedProxies.parse(entries)
+    except ValueError as exc:
+        raise ConfigError(f"trusted_proxies entry is not a valid IP or CIDR: {exc}") from exc
+    return entries
 
 
 def _parse_auth_superuser(auth: object) -> str | None:

@@ -27,6 +27,7 @@ from fastapi import FastAPI
 
 from blizzard import __version__
 from blizzard.foundation.assets import frontend_dir
+from blizzard.foundation.forwarded import TrustedProxies
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.internal.store_status_reader import SqlAlchemyStoreStatusReader
@@ -175,6 +176,7 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
         forge_owner=owner,
         oauth_providers=oauth_providers,
         signing_keys_dir=signing_keys_dir,
+        trusted_proxies=TrustedProxies.parse(config.trusted_proxies),
     )
     # Only checked once the store is confirmed at the expected schema head — reusing
     # the same readiness evaluation `/api/ready` reports rather than a raw query, so a
