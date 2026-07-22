@@ -84,4 +84,21 @@ describe('EventsPanel', () => {
     const after = stub.forRoute('/api/events', 'GET').length;
     expect(after).toBeGreaterThan(before);
   });
+
+  it('derives runner filter chips from the feed and re-queries when a runner is chosen', async () => {
+    // The fixture carries two distinct runners (rn_01/rn_02), so the runner filter row shows.
+    const fixture = await render();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="events-runner-filter"]')).not.toBeNull();
+    const before = stub.forRoute('/api/events', 'GET').length;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="events-runner-filter-rn_02"]')?.click();
+    await settle(fixture);
+
+    // The feed query (keyed on the runner filter) re-reads; the severity-only options
+    // query does not, so the runner chips stay put.
+    const after = stub.forRoute('/api/events', 'GET').length;
+    expect(after).toBeGreaterThan(before);
+    expect(el.querySelector('[data-testid="events-runner-filter-rn_02"]')).not.toBeNull();
+  });
 });

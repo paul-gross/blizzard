@@ -4,8 +4,9 @@ import { EventsPanel } from 'fleet';
 
 /**
  * The `/events` route (blizzard#125 Phase 4) — the board's Events tab: the hub's
- * persisted operational event feed (`GET /api/events`), filterable by severity, in
- * one full-page panel. Composes {@link EventsPanel} the way `graphs-page.ts`
+ * persisted operational event feed (`GET /api/events`), filterable by
+ * severity/runner/chunk, in one full-page panel. Composes {@link EventsPanel} the
+ * way `graphs-page.ts`
  * composes `GraphExplorer`/`GraphDetail`: the page owns only the route-level
  * concern (here, opening a chunk elsewhere) and leaves the query and filter state
  * to the panel itself.

@@ -107,6 +107,53 @@ describe('EventsView', () => {
     expect(chosen).toBe('critical');
   });
 
+  it("renders each row's runner id, compact-ref'd", async () => {
+    const fixture = render();
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const rows = el.querySelectorAll('[data-testid="events-row"]');
+    expect(rows[0].querySelector('[data-testid="events-runner"]')?.textContent).toContain('R-02');
+    expect(rows[1].querySelector('[data-testid="events-runner"]')?.textContent).toContain('R-01');
+  });
+
+  it('hides the runner and chunk filter rows when handed no id universe', async () => {
+    const fixture = render();
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="events-runner-filter"]')).toBeNull();
+    expect(el.querySelector('[data-testid="events-chunk-filter"]')).toBeNull();
+  });
+
+  it('renders a runner chip per id and emits runnerFilterChange when one is clicked', async () => {
+    const fixture = render({ runnerIds: ['rn_01', 'rn_02'] });
+    let chosen: string | undefined;
+    fixture.componentInstance.runnerFilterChange.subscribe((value) => (chosen = value));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="events-runner-filter"]')).not.toBeNull();
+    // An "All" reset plus one chip per id.
+    expect(el.querySelector('[data-testid="events-runner-filter-all"]')).not.toBeNull();
+    el.querySelector<HTMLButtonElement>('[data-testid="events-runner-filter-rn_02"]')?.click();
+    expect(chosen).toBe('rn_02');
+  });
+
+  it('renders a chunk chip per id and emits chunkFilterChange when one is clicked', async () => {
+    const fixture = render({ chunkIds: ['ch_01KXKVVF1J3D6H6VYZ3XYN3YAB', 'ch_01KXKVVF1J3D6H6VYZ3XYN3ZZZ'] });
+    let chosen: string | undefined;
+    fixture.componentInstance.chunkFilterChange.subscribe((value) => (chosen = value));
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="events-chunk-filter"]')).not.toBeNull();
+    el.querySelector<HTMLButtonElement>(
+      '[data-testid="events-chunk-filter-ch_01KXKVVF1J3D6H6VYZ3XYN3YAB"]',
+    )?.click();
+    expect(chosen).toBe('ch_01KXKVVF1J3D6H6VYZ3XYN3YAB');
+  });
+
   it('shows a loading state, distinct from empty', async () => {
     const fixture = render({ events: [], loading: true });
     await fixture.whenStable();

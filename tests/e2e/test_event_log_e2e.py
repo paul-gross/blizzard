@@ -7,9 +7,10 @@ back off the live ``GET /api/events`` and (b) arrives on the SSE spine as an
 ``event-logged`` frame. Every seam real (mock forge + hub + runner over a minted fixture),
 no tokens, no network. Skipped unless ``BLIZZARD_E2E=1``.
 
-The browser half — the Events tab rendering severity-then-recency, its filters, a live
-event over SSE with no reload, and a row's chunk deep-link — lives in
-``test_board_browser_e2e``'s companion scenario over the built bundle.
+The browser half — the Events tab rendering severity-then-recency, its severity and runner
+filters, a live event over SSE with no reload, and a row's chunk deep-link — is the second
+test in this module (:func:`test_the_events_tab_renders_filters_and_updates_live_in_the_browser`),
+over the built bundle.
 """
 
 from __future__ import annotations
@@ -248,8 +249,29 @@ def test_the_events_tab_renders_filters_and_updates_live_in_the_browser(
                 page.get_by_test_id("events-filter-all").click()
                 expect(page.get_by_test_id("events-row")).to_have_count(3)
 
-                # A fresh event arrives LIVE over SSE — no reload — and slots in at the top.
-                _push_event(hub, seq=4, severity="critical", kind="worker-lost", chunk_id=chunk_id, message="fresh")
+                # One runner in the feed so far — nothing to narrow by, so the runner filter
+                # row is hidden (AC#6: the runner axis exists, but only when it discriminates).
+                expect(page.get_by_test_id("events-runner-filter")).to_have_count(0)
+
+                # A fresh event from a SECOND runner arrives LIVE over SSE — no reload — so the
+                # feed grows and the runner filter row now appears (two runners to choose from).
+                _push_event(
+                    hub,
+                    seq=1,
+                    severity="critical",
+                    kind="worker-lost",
+                    chunk_id=chunk_id,
+                    message="other runner",
+                    runner_id="runner-two",
+                )
+                expect(page.get_by_test_id("events-row")).to_have_count(4)
+                expect(page.get_by_test_id("events-runner-filter")).to_be_visible()
+
+                # The runner filter narrows to just the second runner's event, then restores.
+                page.get_by_test_id("events-runner-filter-runner-two").click()
+                expect(page.get_by_test_id("events-row")).to_have_count(1)
+                expect(page.get_by_test_id("events-message").first).to_have_text("other runner")
+                page.get_by_test_id("events-runner-filter-all").click()
                 expect(page.get_by_test_id("events-row")).to_have_count(4)
 
                 # A row deep-links to its chunk (the board).
