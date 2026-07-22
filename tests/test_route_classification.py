@@ -63,6 +63,7 @@ _PUBLIC: set[tuple[str, str]] = {
 #: Human plane — ``(method, path) -> permission`` required via ``require(<permission>)``.
 _HUMAN: dict[tuple[str, str], Permission] = {
     ("GET", "/api/events/stream"): FLEET_VIEW,
+    ("GET", "/api/events"): FLEET_VIEW,
     ("POST", "/api/graphs"): GRAPH_EDIT,
     ("GET", "/api/graphs"): FLEET_VIEW,
     ("GET", "/api/graphs/{graph_id}"): FLEET_VIEW,

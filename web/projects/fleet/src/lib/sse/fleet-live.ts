@@ -1,7 +1,15 @@
 import { DestroyRef, EnvironmentInjector, Injectable, type Signal, effect, inject, signal } from '@angular/core';
 import { QueryClient } from '@tanstack/angular-query-experimental';
 
-import { hubChunkKey, hubChunksKey, hubFleetSpendKey, hubQuestionsKey, hubQueueKey, hubRunnersKey } from '../query-keys';
+import {
+  hubChunkKey,
+  hubChunksKey,
+  hubEventsKey,
+  hubFleetSpendKey,
+  hubQuestionsKey,
+  hubQueueKey,
+  hubRunnersKey,
+} from '../query-keys';
 import { type SseHandle, type SseStatus, SseService } from './sse.service';
 
 /** The hub's SSE stream endpoint (deliberately not in OpenAPI — native EventSource). */
@@ -16,6 +24,7 @@ export const HUB_EVENT_TYPES = [
   'decision-resolved',
   'queue-changed',
   'runner-changed',
+  'event-logged',
 ] as const;
 
 /** The payloads carried by each hub event frame. */
@@ -34,7 +43,16 @@ interface DecisionEvent {
 interface RunnerEvent {
   runner_id: string;
 }
-type HubEventPayload = Partial<ChunkChanged & QuestionEvent & DecisionEvent & RunnerEvent>;
+/** An `event-logged` frame's payload — an operational event landed (`GET
+ * /api/events`'s wire shape, Phase 4). `chunk_id` is `null`, not absent, for a
+ * runner-scoped event (the broker's own shape), unlike the other frames' payloads. */
+interface EventLoggedEvent {
+  severity: string;
+  kind: string;
+  chunk_id: string | null;
+  runner_id: string;
+}
+type HubEventPayload = Partial<ChunkChanged & QuestionEvent & DecisionEvent & RunnerEvent & EventLoggedEvent>;
 
 /** One of the named event types the hub broadcasts ({@link HUB_EVENT_TYPES}). */
 export type HubEventType = (typeof HUB_EVENT_TYPES)[number];
@@ -43,9 +61,18 @@ export type HubEventType = (typeof HUB_EVENT_TYPES)[number];
  * can add or remove a chunk from it), that chunk's own detail when the payload names
  * one, and the fleet spend-since read: usage rides the same fact a chunk-changed
  * reports (issue #60), so a chunk's derived cost total and the fleet-wide spend both
- * derive from it — the prefix key closes every cached window. */
+ * derive from it — the prefix key closes every cached window. It also stales the
+ * Events tab's feed: an escalation surfaces as a `chunk-changed` frame (status flips
+ * to `needs_human`), and the feed unifies open escalations with logged events, so a
+ * status flip that carries an escalation must re-read it too. */
 function chunkChangedKeys(data: HubEventPayload): readonly (readonly unknown[])[] {
-  return [hubChunksKey, hubQueueKey, ...(data.chunk_id ? [hubChunkKey(data.chunk_id)] : []), hubFleetSpendKey];
+  return [
+    hubChunksKey,
+    hubQueueKey,
+    ...(data.chunk_id ? [hubChunkKey(data.chunk_id)] : []),
+    hubFleetSpendKey,
+    hubEventsKey,
+  ];
 }
 
 /** A question-asked/-answered frame invalidates the fleet-wide ask list (the right
@@ -78,6 +105,7 @@ const EVENT_INVALIDATION_REGISTRY: Record<HubEventType, (data: HubEventPayload) 
   'decision-resolved': chunkDecisionKeys,
   'queue-changed': () => [hubQueueKey],
   'runner-changed': () => [hubRunnersKey],
+  'event-logged': (data) => [hubEventsKey, ...(data.chunk_id ? [hubChunkKey(data.chunk_id)] : [])],
 };
 
 /**

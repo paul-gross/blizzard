@@ -29,6 +29,7 @@ to_this_runner`` below), not a second general status-keyed predicate.
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 
 import pytest
@@ -39,7 +40,7 @@ from blizzard.runner.loop.steps import advance, fill, pull, reap
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.store.repository import NewLease
 from blizzard.wire.chunk import ChunkDetail, RouteView
-from blizzard.wire.facts import ESCALATION_RECORDED, LEASE_MINTED
+from blizzard.wire.facts import ESCALATION_RECORDED, EVENT_RECORDED, LEASE_MINTED
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -342,7 +343,12 @@ def test_reap_abandons_instead_of_escalating_a_detached_chunk(tmp_path):  # type
 
     reap(ctx)
 
-    assert store.pending_outbound() == []  # no escalation.recorded fact posted
+    # No escalation.recorded — the whole point. The abandon surfaces an *info*
+    # ``attempt-abandoned`` operational event (issue #125), which is not an escalation.
+    pending = store.pending_outbound()
+    assert [f.kind for f in pending] == [EVENT_RECORDED]
+    assert ESCALATION_RECORDED not in [f.kind for f in pending]
+    assert json.loads(pending[0].payload)["kind"] == "attempt-abandoned"
     assert provider.released == ["e1"]  # abandoned — envs released, same as PULL's own detach path
     assert store.active_lease("lease_1") is None  # lease closed
     assert store.latest_epoch("ch_1") == 1  # no requeue, no new lease minted
@@ -363,8 +369,13 @@ def test_reap_still_escalates_an_exhausted_lease_that_is_still_ours(tmp_path):  
 
     reap(ctx)
 
+    # The genuine escalation still posts — alongside its critical ``worker-lost``
+    # operational event, enqueued atomically with the same closure (issue #125).
     pending = store.pending_outbound()
-    assert len(pending) == 1 and pending[0].kind == ESCALATION_RECORDED
+    kinds = [f.kind for f in pending]
+    assert ESCALATION_RECORDED in kinds
+    assert EVENT_RECORDED in kinds
+    assert json.loads(next(f for f in pending if f.kind == EVENT_RECORDED).payload)["kind"] == "worker-lost"
     assert store.active_lease("lease_1") is None
 
 
@@ -510,7 +521,11 @@ def test_reap_abandons_instead_of_escalating_a_chunk_unknown_at_the_hub(tmp_path
 
     reap(ctx)
 
-    assert store.pending_outbound() == []  # no escalation.recorded fact posted
+    # No escalation — abandoned as an *info* ``attempt-abandoned`` event (issue #125).
+    pending = store.pending_outbound()
+    assert [f.kind for f in pending] == [EVENT_RECORDED]
+    assert ESCALATION_RECORDED not in [f.kind for f in pending]
+    assert json.loads(pending[0].payload)["kind"] == "attempt-abandoned"
     assert provider.released == ["e1"]  # abandoned — envs released
     assert store.active_lease("lease_1") is None
     assert store.latest_epoch("ch_1") == 1  # no requeue, no new lease minted

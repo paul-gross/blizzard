@@ -9,6 +9,10 @@ export const hubChunksKey = ['hub', 'chunks'] as const;
 export const hubQueueKey = ['hub', 'queue'] as const;
 export const hubRunnersKey = ['hub', 'runners'] as const;
 export const hubQuestionsKey = ['hub', 'questions'] as const;
+/** The operational event feed's key prefix (`GET /api/events`, Phase 4) — a query
+ * appends its filter set, so a filter change is its own cache entry and this prefix
+ * closes every one of them on an SSE invalidation (TanStack's default prefix match). */
+export const hubEventsKey = ['hub', 'events'] as const;
 /** The fleet spend-since read's key prefix (issue #60) — the actual query key appends
  * the `since` instant, so an SSE invalidation naming just this prefix closes every
  * cached window at once (TanStack's default prefix match on `invalidateQueries`). */

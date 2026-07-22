@@ -27,15 +27,22 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
+from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 
 from blizzard.auth_core import FLEET_VIEW
+from blizzard.foundation.store.utc import as_utc, iso_utc
+from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
+from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.models import ResolvedIdentity
+from blizzard.hub.composition import HubServices
+from blizzard.hub.domain.work import EventRow, derive_event_feed
 from blizzard.hub.events.broker import EventBroker
+from blizzard.wire.events import EventsResponse, EventView
 
 router = APIRouter(prefix="/api", tags=["meta"])
 
@@ -121,6 +128,68 @@ async def events_stream(
     return StreamingResponse(
         _stream(broker, request, last_event_id=last_event_id, shutdown=shutdown), media_type="text/event-stream"
     )
+
+
+def _to_event_view(row: EventRow) -> EventView:
+    """Map a domain :class:`EventRow` (an ``event_log`` row or a projected escalation) to
+    its wire view."""
+    return EventView(
+        id=row.id,
+        recorded_at=iso_utc(row.recorded_at),
+        severity=row.severity,
+        kind=row.kind,
+        runner_id=row.runner_id,
+        chunk_id=row.chunk_id,
+        lease_id=row.lease_id,
+        node_name=row.node_name,
+        message=row.message,
+        detail=row.detail,
+    )
+
+
+@router.get(
+    "/events",
+    response_model=EventsResponse,
+    dependencies=[Depends(reject_runner_principal), Depends(require(FLEET_VIEW))],
+)
+def list_events(
+    services: Annotated[HubServices, Depends(get_services)],
+    severity: Annotated[str | None, Query()] = None,
+    runner_id: Annotated[str | None, Query()] = None,
+    chunk_id: Annotated[str | None, Query()] = None,
+    since: Annotated[datetime | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 200,
+) -> EventsResponse:
+    """The operational event feed — the ``event_log`` unified with every currently-open
+    escalation (issue #125), newest-and-most-severe first, bounded.
+
+    A human-plane board read: ``reject_runner_principal`` keeps a runner's bearer out and
+    ``require(FLEET_VIEW)`` gates it exactly like ``GET /decisions``. The ``severity`` /
+    ``runner_id`` / ``chunk_id`` / ``since`` filters apply to the ``event_log`` half; the
+    open-escalation projection is always unioned in (a ``needs_human`` chunk is a standing
+    surface, not a filterable log row). A malformed ``since`` 422s via FastAPI's own
+    datetime coercion; a well-formed but tz-naive ``since`` (an offset-less ISO string) is
+    coerced to UTC (``as_utc``) so the projection's aware ``recorded_at`` comparison below
+    never raises against it — the store half is already protected by ``UtcDateTime``."""
+    since_utc = as_utc(since) if since is not None else None
+    events = services.chunks.list_events(
+        severity=severity, runner_id=runner_id, chunk_id=chunk_id, since=since_utc, limit=limit
+    )
+    # Filter the open-escalation projection by the SAME predicates so the unified feed is
+    # internally consistent: a projected escalation is always `critical`/`needs-human` and
+    # names no runner, so a `severity != critical` or any `runner_id` filter excludes them
+    # all; `chunk_id`/`since` narrow per row.
+    escalations = services.chunks.list_open_escalations()
+    if severity is not None and severity != "critical":
+        escalations = []
+    if runner_id is not None:
+        escalations = []
+    if chunk_id is not None:
+        escalations = [e for e in escalations if e.chunk_id == chunk_id]
+    if since_utc is not None:
+        escalations = [e for e in escalations if e.recorded_at >= since_utc]
+    feed = derive_event_feed(events, escalations)[:limit]
+    return EventsResponse(events=[_to_event_view(row) for row in feed])
 
 
 def _parse_last_event_id(request: Request) -> int:

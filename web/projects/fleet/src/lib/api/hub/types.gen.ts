@@ -895,6 +895,70 @@ export type EscalationView = {
 };
 
 /**
+ * EventView
+ *
+ * One operational event on the wire — an ``event_log`` row or a projected open
+ * escalation. ``chunk_id``/``lease_id``/``node_name`` are absent for a runner-scoped
+ * event; ``detail`` is the event-specific JSON payload the fixed fields don't carry.
+ */
+export type EventView = {
+    /**
+     * Chunk Id
+     */
+    chunk_id?: string | null;
+    /**
+     * Detail
+     */
+    detail?: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Kind
+     */
+    kind: string;
+    /**
+     * Lease Id
+     */
+    lease_id?: string | null;
+    /**
+     * Message
+     */
+    message: string;
+    /**
+     * Node Name
+     */
+    node_name?: string | null;
+    /**
+     * Recorded At
+     */
+    recorded_at: string;
+    /**
+     * Runner Id
+     */
+    runner_id: string;
+    /**
+     * Severity
+     */
+    severity: string;
+};
+
+/**
+ * EventsResponse
+ *
+ * The operational event feed, newest-and-most-severe first (bounded).
+ */
+export type EventsResponse = {
+    /**
+     * Events
+     */
+    events?: Array<EventView>;
+};
+
+/**
  * Executor
  *
  * Where a node's step runs.
@@ -3090,6 +3154,52 @@ export type ResolveDecisionApiDecisionsDecisionIdResolutionsPostResponses = {
 };
 
 export type ResolveDecisionApiDecisionsDecisionIdResolutionsPostResponse = ResolveDecisionApiDecisionsDecisionIdResolutionsPostResponses[keyof ResolveDecisionApiDecisionsDecisionIdResolutionsPostResponses];
+
+export type ListEventsApiEventsGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Severity
+         */
+        severity?: string | null;
+        /**
+         * Runner Id
+         */
+        runner_id?: string | null;
+        /**
+         * Chunk Id
+         */
+        chunk_id?: string | null;
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/events';
+};
+
+export type ListEventsApiEventsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListEventsApiEventsGetError = ListEventsApiEventsGetErrors[keyof ListEventsApiEventsGetErrors];
+
+export type ListEventsApiEventsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: EventsResponse;
+};
+
+export type ListEventsApiEventsGetResponse = ListEventsApiEventsGetResponses[keyof ListEventsApiEventsGetResponses];
 
 export type GetChunkApiFleetChunksChunkIdGetData = {
     body?: never;

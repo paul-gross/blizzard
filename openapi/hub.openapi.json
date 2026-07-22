@@ -1283,6 +1283,105 @@
         "title": "EscalationView",
         "type": "object"
       },
+      "EventView": {
+        "description": "One operational event on the wire \u2014 an ``event_log`` row or a projected open\nescalation. ``chunk_id``/``lease_id``/``node_name`` are absent for a runner-scoped\nevent; ``detail`` is the event-specific JSON payload the fixed fields don't carry.",
+        "properties": {
+          "chunk_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Id"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "lease_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lease Id"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "node_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Name"
+          },
+          "recorded_at": {
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "runner_id": {
+            "title": "Runner Id",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "recorded_at",
+          "severity",
+          "kind",
+          "runner_id",
+          "message"
+        ],
+        "title": "EventView",
+        "type": "object"
+      },
+      "EventsResponse": {
+        "description": "The operational event feed, newest-and-most-severe first (bounded).",
+        "properties": {
+          "events": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/EventView"
+            },
+            "title": "Events",
+            "type": "array"
+          }
+        },
+        "title": "EventsResponse",
+        "type": "object"
+      },
       "Executor": {
         "description": "Where a node's step runs.",
         "enum": [
@@ -4476,6 +4575,117 @@
         "summary": "Resolve Decision",
         "tags": [
           "decisions"
+        ]
+      }
+    },
+    "/api/events": {
+      "get": {
+        "description": "The operational event feed \u2014 the ``event_log`` unified with every currently-open\nescalation (issue #125), newest-and-most-severe first, bounded.\n\nA human-plane board read: ``reject_runner_principal`` keeps a runner's bearer out and\n``require(FLEET_VIEW)`` gates it exactly like ``GET /decisions``. The ``severity`` /\n``runner_id`` / ``chunk_id`` / ``since`` filters apply to the ``event_log`` half; the\nopen-escalation projection is always unioned in (a ``needs_human`` chunk is a standing\nsurface, not a filterable log row). A malformed ``since`` 422s via FastAPI's own\ndatetime coercion; a well-formed but tz-naive ``since`` (an offset-less ISO string) is\ncoerced to UTC (``as_utc``) so the projection's aware ``recorded_at`` comparison below\nnever raises against it \u2014 the store half is already protected by ``UtcDateTime``.",
+        "operationId": "list_events_api_events_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "severity",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Severity"
+            }
+          },
+          {
+            "in": "query",
+            "name": "runner_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Runner Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "chunk_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Chunk Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Events",
+        "tags": [
+          "meta"
         ]
       }
     },

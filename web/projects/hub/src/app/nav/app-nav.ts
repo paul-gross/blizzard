@@ -27,6 +27,7 @@ import { KitButton, KitMenu, ViewportToggle } from 'fleet';
     <nav class="nav" data-testid="app-nav">
       <a routerLink="/board" routerLinkActive="active" data-testid="nav-board">Board</a>
       <a routerLink="/graphs" routerLinkActive="active" data-testid="nav-graphs">Graphs</a>
+      <a routerLink="/events" routerLinkActive="active" data-testid="nav-events">Events</a>
       @if (showAdmin()) {
         <a routerLink="/admin" routerLinkActive="active" data-testid="nav-admin">Admin</a>
       }

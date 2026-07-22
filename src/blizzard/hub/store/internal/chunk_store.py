@@ -27,6 +27,7 @@ from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import Executor
 from blizzard.hub.domain.work import (
+    DEFAULT_EVENT_LIST_LIMIT,
     AnswerOutcome,
     BounceFact,
     Chunk,
@@ -36,6 +37,8 @@ from blizzard.hub.domain.work import (
     DecisionFact,
     DecisionRow,
     EscalationFact,
+    EscalationOpen,
+    EventRow,
     HubNodePollFact,
     IntendedMigration,
     IWriteChunkRepository,
@@ -484,6 +487,80 @@ class ChunkStore:
                 for u in conn.execute(select(s.usage_facts).where(s.usage_facts.c.recorded_at >= since)).all()
             ]
 
+    def list_events(
+        self,
+        *,
+        severity: str | None = None,
+        runner_id: str | None = None,
+        chunk_id: str | None = None,
+        since: datetime | None = None,
+        limit: int = DEFAULT_EVENT_LIST_LIMIT,
+    ) -> list[EventRow]:
+        with self._engine.connect() as conn:
+            stmt = select(s.event_log)
+            if severity is not None:
+                stmt = stmt.where(s.event_log.c.severity == severity)
+            if runner_id is not None:
+                stmt = stmt.where(s.event_log.c.runner_id == runner_id)
+            if chunk_id is not None:
+                stmt = stmt.where(s.event_log.c.chunk_id == chunk_id)
+            if since is not None:
+                stmt = stmt.where(s.event_log.c.recorded_at >= since)
+            stmt = stmt.order_by(s.event_log.c.recorded_at.desc(), s.event_log.c.id.desc()).limit(limit)
+            return [
+                EventRow(
+                    id=row.id,
+                    recorded_at=row.recorded_at,
+                    severity=row.severity,
+                    kind=row.kind,
+                    runner_id=row.runner_id,
+                    chunk_id=row.chunk_id,
+                    lease_id=row.lease_id,
+                    node_name=row.node_name,
+                    message=row.message,
+                    detail=json.loads(row.detail) if row.detail is not None else None,
+                )
+                for row in conn.execute(stmt).all()
+            ]
+
+    def list_open_escalations(self) -> list[EscalationOpen]:
+        # Escalations are low-volume (retries-exhausted / dead-worker events only), so a
+        # full table scan here — joined against every named chunk's leases/requeues in
+        # Python, mirroring the per-chunk supersession rule `open_escalation` applies —
+        # is fine; see IReadChunkRepository.list_open_escalations.
+        with self._engine.connect() as conn:
+            escalation_rows = conn.execute(select(s.escalations)).all()
+            if not escalation_rows:
+                return []
+            newest_by_chunk = {}
+            for e in escalation_rows:
+                current = newest_by_chunk.get(e.chunk_id)
+                if current is None or e.recorded_at > current.recorded_at:
+                    newest_by_chunk[e.chunk_id] = e
+            chunk_ids = list(newest_by_chunk)
+            lease_rows = conn.execute(select(s.lease_facts).where(s.lease_facts.c.chunk_id.in_(chunk_ids))).all()
+            requeue_rows = conn.execute(select(s.requeues).where(s.requeues.c.chunk_id.in_(chunk_ids))).all()
+            leases_by_chunk = {}
+            for lease in lease_rows:
+                leases_by_chunk.setdefault(lease.chunk_id, []).append(lease)
+            requeues_by_chunk = {}
+            for rq in requeue_rows:
+                requeues_by_chunk.setdefault(rq.chunk_id, []).append(rq)
+            open_escalations: list[EscalationOpen] = []
+            for chunk_id, newest in newest_by_chunk.items():
+                if any(lease.minted_at > newest.recorded_at for lease in leases_by_chunk.get(chunk_id, [])):
+                    continue
+                if any(rq.requeued_at > newest.recorded_at for rq in requeues_by_chunk.get(chunk_id, [])):
+                    continue
+                open_escalations.append(
+                    EscalationOpen(
+                        chunk_id=chunk_id,
+                        recorded_at=newest.recorded_at,
+                        takeover_command=newest.takeover_command or "",
+                    )
+                )
+            return open_escalations
+
     # --- writes -------------------------------------------------------------
 
     def mint(self, chunk: Chunk) -> None:
@@ -787,6 +864,37 @@ class ChunkStore:
                     cache_read_tokens=cache_read_tokens,
                     cache_create_tokens=cache_create_tokens,
                     cost_usd=cost_usd,
+                    recorded_at=at,
+                )
+            )
+
+    def record_event(
+        self,
+        *,
+        severity: str,
+        kind: str,
+        runner_id: str,
+        chunk_id: str | None,
+        lease_id: str | None,
+        node_name: str | None,
+        message: str,
+        detail: dict | None,
+        at: datetime,
+    ) -> None:
+        # Append-only operational fact (issue #125) — never mutated once written, no
+        # epoch fence (it is not a transition). `detail` is serialized to JSON text here;
+        # `chunk_id` is None for a runner-scoped event. See IWriteChunkRepository.record_event.
+        with self._engine.begin() as conn:
+            conn.execute(
+                insert(s.event_log).values(
+                    severity=severity,
+                    kind=kind,
+                    runner_id=runner_id,
+                    chunk_id=chunk_id,
+                    lease_id=lease_id,
+                    node_name=node_name,
+                    message=message,
+                    detail=json.dumps(detail) if detail is not None else None,
                     recorded_at=at,
                 )
             )

@@ -48,6 +48,15 @@ RUNNER_LOCALLY_RESUMED = "runner.locally_resumed"
 # `(lease_id, generation, kind)` key is a *local* write-once guard
 # (`IWriteRunnerStore.record_usage`), not part of this wire shape.
 USAGE_RECORDED = "usage.recorded"
+# One operationally-significant failure the runner surfaces for the hub's event log
+# (issue #125) — a worker non-clean exit, a captured spawn/push/attach command failure, a
+# stall. Folded into the append-only `event_log` and re-broadcast on the SSE spine as
+# `event-logged`. Payload (open, like `usage.recorded`): {severity (info|warning|critical),
+# kind, chunk_id|null (a runner-scoped event names none), lease_id|null, node_name|null,
+# message, detail (object|null)}. Idempotency rides the same per-runner outbound seq every
+# other fact here does; deliberately NOT route-token-gated — a failure event from a
+# fenced-out or dying worker is exactly what an operator must see.
+EVENT_RECORDED = "event.recorded"
 
 
 class LeaseMintReport(BaseModel):

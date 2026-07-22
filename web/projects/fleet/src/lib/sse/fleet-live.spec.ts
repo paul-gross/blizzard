@@ -58,10 +58,13 @@ describe('FleetLiveUpdates', () => {
     });
   });
 
-  it('invalidates the fleet list, the chunk detail, the queue, and the fleet spend read on a chunk-changed event', () => {
+  it('invalidates the fleet list, the chunk detail, the queue, the fleet spend read, and the events feed on a chunk-changed event', () => {
     // Usage rides the same fact a chunk-changed reports (issue #60): a chunk's derived
     // cost total and the fleet-wide spend both derive from it, so this event must
-    // re-query both, not just status-shaped reads.
+    // re-query both, not just status-shaped reads. The events feed unifies open
+    // escalations with logged events (blizzard#125 Phase 4), and an escalation
+    // surfaces as a chunk-changed frame (status -> needs_human), so this must stale
+    // the Events tab too.
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
     TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
 
@@ -74,6 +77,24 @@ describe('FleetLiveUpdates', () => {
     expect(keys).toContainEqual(['hub', 'queue']);
     expect(keys).toContainEqual(['hub', 'chunk', 'ch_live']);
     expect(keys).toContainEqual(['hub', 'fleet-spend']);
+    expect(keys).toContainEqual(['hub', 'events']);
+  });
+
+  it('invalidates the events feed, and that chunk when named, on an event-logged frame', () => {
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+
+    const source = FakeEventSource.instances[0];
+    source.open();
+    source.emitNamed(
+      'event-logged',
+      JSON.stringify({ severity: 'critical', kind: 'escalation-opened', chunk_id: 'ch_live', runner_id: 'rn_1' }),
+      '1',
+    );
+
+    const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
+    expect(keys).toContainEqual(['hub', 'events']);
+    expect(keys).toContainEqual(['hub', 'chunk', 'ch_live']);
   });
 
   it('re-reads the registry on a runner-changed event and the queue on queue-changed', () => {

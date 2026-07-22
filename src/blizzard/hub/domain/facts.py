@@ -39,6 +39,7 @@ from blizzard.hub.domain.work import ChunkFacts, IWriteChunkRepository
 from blizzard.wire.facts import (
     ANSWER_DELIVERED,
     ESCALATION_RECORDED,
+    EVENT_RECORDED,
     LEASE_MINTED,
     QUESTION_ASKED,
     RUNNER_LOCALLY_PAUSED,
@@ -188,6 +189,28 @@ class FactIngestService:
                 cache_read_tokens=int(payload["cache_read_tokens"]),  # type: ignore[arg-type]
                 cache_create_tokens=int(payload["cache_create_tokens"]),  # type: ignore[arg-type]
                 cost_usd=_opt_float(payload.get("cost_usd")),
+                at=now,
+            )
+            return True
+        if kind == EVENT_RECORDED:
+            # Fold one runner-surfaced operational event into the append-only event_log
+            # (issue #125). Deliberately NOT epoch-fenced and NOT route-token-gated (it is
+            # never added to `_ROUTE_TOKEN_GATED_KINDS` above): a failure event from a
+            # fenced-out or dying worker is precisely what an operator needs to see, so
+            # gating it out would drop the signal the feature exists to surface. Idempotency
+            # rides the per-runner outbound-seq high-water mark exactly like every other
+            # fact — a seq already applied never reaches this method twice. `chunk_id` is
+            # optional (a runner-scoped event names none); `detail` is an opaque object.
+            detail = payload.get("detail")
+            self._chunks.record_event(
+                severity=str(payload["severity"]),
+                kind=str(payload["kind"]),
+                runner_id=runner_id,
+                chunk_id=_opt(payload.get("chunk_id")),
+                lease_id=_opt(payload.get("lease_id")),
+                node_name=_opt(payload.get("node_name")),
+                message=str(payload.get("message", "")),
+                detail=detail if isinstance(detail, dict) else None,
                 at=now,
             )
             return True
