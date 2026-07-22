@@ -741,6 +741,31 @@ window_hours = 24.0
 See `blizzard hub status` for the per-chunk cost column, the fleet total, and a paused runner's
 ceiling reason; the board's chunk cards and detail dock show the same figures live.
 
+## Operational visibility — the event log
+
+The failures that cost the most are the least visible: a worker that exits without recording a
+completion and leaves its chunk sitting `running` behind a dead process, a spawn/push/attach
+command that failed on a missing environment var, a stall past the liveness window. A chunk's
+*status* says it is stuck; it does not say *why*. The hub owns a durable, append-only, typed and
+**severity-ranked** operational event log that does.
+
+- **The runner reports failure events.** When a worker exits non-clean, when a captured
+  spawn/push/environment-prep command fails, or when an attempt is reaped/abandoned/escalated, the
+  runner emits an operational event on the same durable store-and-forward path completions ride.
+  The hub folds each into the log. Severities are `info` (an attempt given up because the chunk
+  moved on), `warning` (an attempt failed and will retry, or a command failed), and `critical` (a
+  worker lost to a human, retries exhausted).
+- **`GET /api/events`** returns the log newest-and-most-severe first, filterable by
+  `severity` / `runner_id` / `chunk_id` / `since`, with a bounded default page. Existing
+  escalations appear in the *same* feed as a `needs-human` event kind — `needs_human` is one row in
+  one surface, not a place to look separately.
+- **The board's Events tab** renders the feed live: new events fan out over the existing SSE spine
+  (`/api/events/stream`), so an open board updates without polling. Each row links to its chunk.
+
+The event log makes failures **visible in-product**; it does not repair the underlying failure
+modes (a missing spawn-env var, a `SessionEnd` hook that never fired) — those are fixed at their
+source. It is append-only with no rotation policy beyond that.
+
 ## The recovery contract
 
 Two systemd mechanisms combine to deliver the journey's "came back under systemd":
