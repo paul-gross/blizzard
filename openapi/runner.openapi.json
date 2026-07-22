@@ -943,6 +943,32 @@
         "title": "RequeueResponse",
         "type": "object"
       },
+      "RunnerAuthSessionView": {
+        "description": "The local panel's own-identity read (``GET /api/auth/session``, issue #129) \u2014\nwhether the human surface is gated (the hub runs oauth mode) and, if so, the\nsigned-in hub username. ``auth_enabled`` false is a ``none``-mode hub: the surface is\nauthless, so the panel renders neither the username nor the logout control.\n``username`` is ``None`` when ``auth_enabled`` but no valid session is presented\n(openapi-ts consumes this).",
+        "properties": {
+          "auth_enabled": {
+            "title": "Auth Enabled",
+            "type": "boolean"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          }
+        },
+        "required": [
+          "auth_enabled",
+          "username"
+        ],
+        "title": "RunnerAuthSessionView",
+        "type": "object"
+      },
       "RunnerControlPatch": {
         "description": "Declarative controls on the runner singleton \u2014 ``paused`` now, routing knobs post-MVP.",
         "properties": {
@@ -1507,6 +1533,43 @@
           }
         },
         "summary": "Login",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "description": "Clear the runner's own session cookie (issue #129) \u2014 the next human-lane request\ncarries no valid session, so the served surface bounces to ``GET /api/auth/login``\nand the panel's JSON reads ``401``.\n\nPublic, like the bounce it complements (and like the hub's own ``POST\n/api/auth/logout``): logging out cannot itself require a live session, and clearing\nan already-absent cookie is a harmless no-op. The runner session is a **stateless**\nsigned cookie (``runner/auth/session.py``), so there is nothing server-side to revoke\n\u2014 deleting the cookie *is* the logout. SSO stays honest: if the hub session is still\nlive, the next visit silently re-authenticates through the bounce (that is correct \u2014\nending fleet-wide access is hub logout, which stops renewals); if it too has ended,\nthe next visit lands on the hub's login surface.",
+        "operationId": "logout_api_auth_logout_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Logout",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/session": {
+      "get": {
+        "description": "The panel's own-identity read behind its username/logout control (issue #129).\n\nPublic and self-resolving, mirroring the hub's own ``GET /api/me``: it reports the\nidentity a request *would* resolve to rather than gating on one, so it never\n``401``s. Under a ``none``-mode hub the surface is authless\n(``auth_enabled = False``); under oauth it carries the signed-in hub username, or\n``None`` when no valid session rode along (the served shell is bounce-gated, so the\npanel normally holds one by the time it reads this).",
+        "operationId": "read_session_api_auth_session_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerAuthSessionView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Read Session",
         "tags": [
           "auth"
         ]

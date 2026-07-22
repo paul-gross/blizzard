@@ -660,6 +660,27 @@ export type RequeueResponse = {
 };
 
 /**
+ * RunnerAuthSessionView
+ *
+ * The local panel's own-identity read (``GET /api/auth/session``, issue #129) —
+ * whether the human surface is gated (the hub runs oauth mode) and, if so, the
+ * signed-in hub username. ``auth_enabled`` false is a ``none``-mode hub: the surface is
+ * authless, so the panel renders neither the username nor the logout control.
+ * ``username`` is ``None`` when ``auth_enabled`` but no valid session is presented
+ * (openapi-ts consumes this).
+ */
+export type RunnerAuthSessionView = {
+    /**
+     * Auth Enabled
+     */
+    auth_enabled: boolean;
+    /**
+     * Username
+     */
+    username: string | null;
+};
+
+/**
  * RunnerControlPatch
  *
  * Declarative controls on the runner singleton — ``paused`` now, routing knobs post-MVP.
@@ -1041,6 +1062,38 @@ export type LoginApiAuthLoginGetResponses = {
      */
     200: unknown;
 };
+
+export type LogoutApiAuthLogoutPostData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/logout';
+};
+
+export type LogoutApiAuthLogoutPostResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type LogoutApiAuthLogoutPostResponse = LogoutApiAuthLogoutPostResponses[keyof LogoutApiAuthLogoutPostResponses];
+
+export type ReadSessionApiAuthSessionGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/auth/session';
+};
+
+export type ReadSessionApiAuthSessionGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: RunnerAuthSessionView;
+};
+
+export type ReadSessionApiAuthSessionGetResponse = ReadSessionApiAuthSessionGetResponses[keyof ReadSessionApiAuthSessionGetResponses];
 
 export type GetPmItemsApiChunksChunkIdPmItemsGetData = {
     body?: never;

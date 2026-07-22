@@ -62,13 +62,16 @@ _HUMAN: set[tuple[str, str]] = {
 }
 
 #: Open — the worker-hook lane (workers call over TCP via ``BLIZZARD_RUNNER_URL`` and
-#: cannot SSO-bounce) plus the public routes (health/readiness and the auth bounce
-#: itself, which *establishes* a session so cannot be session-gated). Never ``401``.
+#: cannot SSO-bounce) plus the public routes (health/readiness, the auth bounce itself
+#: — which *establishes* a session so cannot be session-gated — and logout/session,
+#: which manage that session and self-resolve rather than gate on one). Never ``401``.
 _OPEN: set[tuple[str, str]] = {
     ("GET", "/api/health"),
     ("GET", "/api/ready"),
     ("GET", "/api/auth/login"),
     ("POST", "/api/auth/callback"),
+    ("POST", "/api/auth/logout"),
+    ("GET", "/api/auth/session"),
     ("POST", "/api/heartbeat"),
     ("POST", "/api/leases/{lease_id}/session-end"),
     ("POST", "/api/leases/{lease_id}/asks"),

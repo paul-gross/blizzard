@@ -12,6 +12,10 @@ export const runnerStatusKey = ['runner', 'status'] as const;
 /** `GET /api/environments` — the held env bindings. */
 export const runnerEnvironmentsKey = ['runner', 'environments'] as const;
 
+/** `GET /api/auth/session` — whether the surface is gated, and the signed-in
+ * hub username, behind the panel's username/logout control (issue #129). */
+export const runnerSessionKey = ['runner', 'session'] as const;
+
 /** `GET /api/asks?open=true` — the open local asks. */
 export const runnerAsksKey = ['runner', 'asks'] as const;
 

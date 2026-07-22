@@ -4,6 +4,7 @@ import { KitAsyncState, type KitAsyncStateValue, KitPanel, MobileTitlebar, Viewp
 import { AgentRow } from './agent-row';
 import { ChunkCard } from './chunk-card';
 import { LocalAsks } from './local-asks';
+import { LocalIdentity } from './local-identity';
 import { LocalInfo } from './local-info';
 import type { MachineChunkRow } from './local-panel';
 import { injectRunnerStatusQuery } from './status.query';
@@ -36,10 +37,21 @@ import { injectRunnerStatusQuery } from './status.query';
 @Component({
   selector: 'local-panel-mobile',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [AgentRow, ChunkCard, KitAsyncState, KitPanel, LocalAsks, LocalInfo, MobileTitlebar, ViewportToggle],
+  imports: [
+    AgentRow,
+    ChunkCard,
+    KitAsyncState,
+    KitPanel,
+    LocalAsks,
+    LocalIdentity,
+    LocalInfo,
+    MobileTitlebar,
+    ViewportToggle,
+  ],
   template: `
     <div class="lpm" data-testid="local-panel-mobile">
       <fleet-mobile-titlebar [live]="hubReachable()" testid="local-panel-mobile-titlebar">
+        <local-identity />
         <fleet-viewport-toggle />
       </fleet-mobile-titlebar>
       <div class="lpm-sections">

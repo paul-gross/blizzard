@@ -10,6 +10,7 @@ import { ChunkRow } from './chunk-row';
 import { EnvList } from './env-list';
 import { FactLog } from './fact-log';
 import { LocalAsks } from './local-asks';
+import { LocalIdentity } from './local-identity';
 import { LocalInfo } from './local-info';
 import type { MachineChunkRow } from './local-panel';
 
@@ -53,6 +54,7 @@ import type { MachineChunkRow } from './local-panel';
     KitMenu,
     KitPanel,
     LocalAsks,
+    LocalIdentity,
     LocalInfo,
     ViewportToggle,
   ],
@@ -68,6 +70,7 @@ import type { MachineChunkRow } from './local-panel';
           <span class="conn-lbl">Runner</span>
           <span class="v">{{ connection() }}</span>
         </div>
+        <local-identity />
         <fleet-kit-menu class="menu" ariaLabel="Shell options" testid="local-panel-menu">
           <fleet-viewport-toggle />
         </fleet-kit-menu>

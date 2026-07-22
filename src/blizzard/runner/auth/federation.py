@@ -40,8 +40,9 @@ from typing import Annotated
 from urllib.parse import parse_qs, quote
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 
 from blizzard.auth_core import Role
 from blizzard.foundation.clock import IClock
@@ -113,6 +114,15 @@ class HubAuthModeCache:
         return self._enabled
 
 
+def _hub_auth_enabled(request: Request) -> bool:
+    """Whether the configured hub runs an IdP surface (``auth.mode = "oauth"``) — the one
+    switch that decides whether the human lane is gated at all. Probed once and cached
+    (:class:`HubAuthModeCache`); ``None`` on the store-free app resolves to *disabled*,
+    matching the hermetic default's authless posture."""
+    hub_auth_mode: HubAuthModeCache | None = request.app.state.hub_auth_mode
+    return hub_auth_mode is not None and hub_auth_mode.enabled()
+
+
 def _resolve_human_session(request: Request) -> RunnerSession | None:
     """Resolve this request's runner-local session, or ``None`` if the human lane
     genuinely requires one and none is validly presented.
@@ -135,8 +145,7 @@ def _resolve_human_session(request: Request) -> RunnerSession | None:
     Otherwise the presented session cookie is verified (``None`` on absent/expired/bad)."""
     if request.client is None:
         return _IMPLICIT_SESSION
-    hub_auth_mode: HubAuthModeCache | None = request.app.state.hub_auth_mode
-    if hub_auth_mode is None or not hub_auth_mode.enabled():
+    if not _hub_auth_enabled(request):
         return _IMPLICIT_SESSION
     cookie = request.cookies.get(SESSION_COOKIE_NAME)
     if cookie is None:
@@ -252,6 +261,53 @@ async def callback(request: Request) -> Response:
         max_age=int(SESSION_TTL.total_seconds()),
     )
     return response
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(response: Response) -> Response:
+    """Clear the runner's own session cookie (issue #129) — the next human-lane request
+    carries no valid session, so the served surface bounces to ``GET /api/auth/login``
+    and the panel's JSON reads ``401``.
+
+    Public, like the bounce it complements (and like the hub's own ``POST
+    /api/auth/logout``): logging out cannot itself require a live session, and clearing
+    an already-absent cookie is a harmless no-op. The runner session is a **stateless**
+    signed cookie (``runner/auth/session.py``), so there is nothing server-side to revoke
+    — deleting the cookie *is* the logout. SSO stays honest: if the hub session is still
+    live, the next visit silently re-authenticates through the bounce (that is correct —
+    ending fleet-wide access is hub logout, which stops renewals); if it too has ended,
+    the next visit lands on the hub's login surface."""
+    response.delete_cookie(SESSION_COOKIE_NAME)
+    response.status_code = status.HTTP_204_NO_CONTENT
+    return response
+
+
+class RunnerAuthSessionView(BaseModel):
+    """The local panel's own-identity read (``GET /api/auth/session``, issue #129) —
+    whether the human surface is gated (the hub runs oauth mode) and, if so, the
+    signed-in hub username. ``auth_enabled`` false is a ``none``-mode hub: the surface is
+    authless, so the panel renders neither the username nor the logout control.
+    ``username`` is ``None`` when ``auth_enabled`` but no valid session is presented
+    (openapi-ts consumes this)."""
+
+    auth_enabled: bool
+    username: str | None
+
+
+@router.get("/session", response_model=RunnerAuthSessionView)
+def read_session(request: Request) -> RunnerAuthSessionView:
+    """The panel's own-identity read behind its username/logout control (issue #129).
+
+    Public and self-resolving, mirroring the hub's own ``GET /api/me``: it reports the
+    identity a request *would* resolve to rather than gating on one, so it never
+    ``401``s. Under a ``none``-mode hub the surface is authless
+    (``auth_enabled = False``); under oauth it carries the signed-in hub username, or
+    ``None`` when no valid session rode along (the served shell is bounce-gated, so the
+    panel normally holds one by the time it reads this)."""
+    if not _hub_auth_enabled(request):
+        return RunnerAuthSessionView(auth_enabled=False, username=None)
+    session = _resolve_human_session(request)
+    return RunnerAuthSessionView(auth_enabled=True, username=session.username if session is not None else None)
 
 
 def _refused_response(detail: str) -> Response:

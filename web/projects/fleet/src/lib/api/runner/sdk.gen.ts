@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { CallbackApiAuthCallbackPostData, CallbackApiAuthCallbackPostResponses, EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchData, EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchErrors, EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchResponses, GetArtifactApiLeasesLeaseIdArtifactsNameGetData, GetArtifactApiLeasesLeaseIdArtifactsNameGetErrors, GetArtifactApiLeasesLeaseIdArtifactsNameGetResponses, GetFleetSummaryApiFleetSummaryGetData, GetFleetSummaryApiFleetSummaryGetResponses, GetPmItemsApiChunksChunkIdPmItemsGetData, GetPmItemsApiChunksChunkIdPmItemsGetErrors, GetPmItemsApiChunksChunkIdPmItemsGetResponses, GetRunnerApiRunnerGetData, GetRunnerApiRunnerGetResponses, GetSelftestApiSelftestsSelftestIdGetData, GetSelftestApiSelftestsSelftestIdGetErrors, GetSelftestApiSelftestsSelftestIdGetResponses, GetTranscriptApiLeasesLeaseIdTranscriptGetData, GetTranscriptApiLeasesLeaseIdTranscriptGetErrors, GetTranscriptApiLeasesLeaseIdTranscriptGetResponses, HealthApiHealthGetData, HealthApiHealthGetResponses, HeartbeatApiHeartbeatPostData, HeartbeatApiHeartbeatPostErrors, HeartbeatApiHeartbeatPostResponses, ListArtifactsApiLeasesLeaseIdArtifactsGetData, ListArtifactsApiLeasesLeaseIdArtifactsGetErrors, ListArtifactsApiLeasesLeaseIdArtifactsGetResponses, ListAsksApiAsksGetData, ListAsksApiAsksGetErrors, ListAsksApiAsksGetResponses, ListEnvironmentsApiEnvironmentsGetData, ListEnvironmentsApiEnvironmentsGetResponses, ListEscalationsApiEscalationsGetData, ListEscalationsApiEscalationsGetResponses, ListFactsApiFactsGetData, ListFactsApiFactsGetErrors, ListFactsApiFactsGetResponses, ListLeasesApiLeasesGetData, ListLeasesApiLeasesGetResponses, ListOpenTakeoversApiTakeoversGetData, ListOpenTakeoversApiTakeoversGetResponses, LoginApiAuthLoginGetData, LoginApiAuthLoginGetErrors, LoginApiAuthLoginGetResponses, OpenTakeoverApiChunksChunkIdTakeoversPostData, OpenTakeoverApiChunksChunkIdTakeoversPostErrors, OpenTakeoverApiChunksChunkIdTakeoversPostResponses, PatchRunnerApiRunnerPatchData, PatchRunnerApiRunnerPatchErrors, PatchRunnerApiRunnerPatchResponses, ReadWorkspacePromptApiWorkspacePromptGetData, ReadWorkspacePromptApiWorkspacePromptGetResponses, ReadyApiReadyGetData, ReadyApiReadyGetResponses, RecordAskApiLeasesLeaseIdAsksPostData, RecordAskApiLeasesLeaseIdAsksPostErrors, RecordAskApiLeasesLeaseIdAsksPostResponses, RecordAttachmentApiLeasesLeaseIdAttachmentsPostData, RecordAttachmentApiLeasesLeaseIdAttachmentsPostErrors, RecordAttachmentApiLeasesLeaseIdAttachmentsPostResponses, ReplaceWorkspacePromptApiWorkspacePromptPutData, ReplaceWorkspacePromptApiWorkspacePromptPutErrors, ReplaceWorkspacePromptApiWorkspacePromptPutResponses, RequeueChunkApiChunksChunkIdRequeuesPostData, RequeueChunkApiChunksChunkIdRequeuesPostErrors, RequeueChunkApiChunksChunkIdRequeuesPostResponses, SessionEndApiLeasesLeaseIdSessionEndPostData, SessionEndApiLeasesLeaseIdSessionEndPostErrors, SessionEndApiLeasesLeaseIdSessionEndPostResponses, StartSelftestApiSelftestsPostData, StartSelftestApiSelftestsPostErrors, StartSelftestApiSelftestsPostResponses } from './types.gen';
+import type { CallbackApiAuthCallbackPostData, CallbackApiAuthCallbackPostResponses, EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchData, EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchErrors, EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchResponses, GetArtifactApiLeasesLeaseIdArtifactsNameGetData, GetArtifactApiLeasesLeaseIdArtifactsNameGetErrors, GetArtifactApiLeasesLeaseIdArtifactsNameGetResponses, GetFleetSummaryApiFleetSummaryGetData, GetFleetSummaryApiFleetSummaryGetResponses, GetPmItemsApiChunksChunkIdPmItemsGetData, GetPmItemsApiChunksChunkIdPmItemsGetErrors, GetPmItemsApiChunksChunkIdPmItemsGetResponses, GetRunnerApiRunnerGetData, GetRunnerApiRunnerGetResponses, GetSelftestApiSelftestsSelftestIdGetData, GetSelftestApiSelftestsSelftestIdGetErrors, GetSelftestApiSelftestsSelftestIdGetResponses, GetTranscriptApiLeasesLeaseIdTranscriptGetData, GetTranscriptApiLeasesLeaseIdTranscriptGetErrors, GetTranscriptApiLeasesLeaseIdTranscriptGetResponses, HealthApiHealthGetData, HealthApiHealthGetResponses, HeartbeatApiHeartbeatPostData, HeartbeatApiHeartbeatPostErrors, HeartbeatApiHeartbeatPostResponses, ListArtifactsApiLeasesLeaseIdArtifactsGetData, ListArtifactsApiLeasesLeaseIdArtifactsGetErrors, ListArtifactsApiLeasesLeaseIdArtifactsGetResponses, ListAsksApiAsksGetData, ListAsksApiAsksGetErrors, ListAsksApiAsksGetResponses, ListEnvironmentsApiEnvironmentsGetData, ListEnvironmentsApiEnvironmentsGetResponses, ListEscalationsApiEscalationsGetData, ListEscalationsApiEscalationsGetResponses, ListFactsApiFactsGetData, ListFactsApiFactsGetErrors, ListFactsApiFactsGetResponses, ListLeasesApiLeasesGetData, ListLeasesApiLeasesGetResponses, ListOpenTakeoversApiTakeoversGetData, ListOpenTakeoversApiTakeoversGetResponses, LoginApiAuthLoginGetData, LoginApiAuthLoginGetErrors, LoginApiAuthLoginGetResponses, LogoutApiAuthLogoutPostData, LogoutApiAuthLogoutPostResponses, OpenTakeoverApiChunksChunkIdTakeoversPostData, OpenTakeoverApiChunksChunkIdTakeoversPostErrors, OpenTakeoverApiChunksChunkIdTakeoversPostResponses, PatchRunnerApiRunnerPatchData, PatchRunnerApiRunnerPatchErrors, PatchRunnerApiRunnerPatchResponses, ReadSessionApiAuthSessionGetData, ReadSessionApiAuthSessionGetResponses, ReadWorkspacePromptApiWorkspacePromptGetData, ReadWorkspacePromptApiWorkspacePromptGetResponses, ReadyApiReadyGetData, ReadyApiReadyGetResponses, RecordAskApiLeasesLeaseIdAsksPostData, RecordAskApiLeasesLeaseIdAsksPostErrors, RecordAskApiLeasesLeaseIdAsksPostResponses, RecordAttachmentApiLeasesLeaseIdAttachmentsPostData, RecordAttachmentApiLeasesLeaseIdAttachmentsPostErrors, RecordAttachmentApiLeasesLeaseIdAttachmentsPostResponses, ReplaceWorkspacePromptApiWorkspacePromptPutData, ReplaceWorkspacePromptApiWorkspacePromptPutErrors, ReplaceWorkspacePromptApiWorkspacePromptPutResponses, RequeueChunkApiChunksChunkIdRequeuesPostData, RequeueChunkApiChunksChunkIdRequeuesPostErrors, RequeueChunkApiChunksChunkIdRequeuesPostResponses, SessionEndApiLeasesLeaseIdSessionEndPostData, SessionEndApiLeasesLeaseIdSessionEndPostErrors, SessionEndApiLeasesLeaseIdSessionEndPostResponses, StartSelftestApiSelftestsPostData, StartSelftestApiSelftestsPostErrors, StartSelftestApiSelftestsPostResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -44,6 +44,38 @@ export const callbackApiAuthCallbackPost = <ThrowOnError extends boolean = false
  * Login
  */
 export const loginApiAuthLoginGet = <ThrowOnError extends boolean = false>(options?: Options<LoginApiAuthLoginGetData, ThrowOnError>): RequestResult<LoginApiAuthLoginGetResponses, LoginApiAuthLoginGetErrors, ThrowOnError> => (options?.client ?? client).get<LoginApiAuthLoginGetResponses, LoginApiAuthLoginGetErrors, ThrowOnError>({ url: '/api/auth/login', ...options });
+
+/**
+ * Logout
+ *
+ * Clear the runner's own session cookie (issue #129) — the next human-lane request
+ * carries no valid session, so the served surface bounces to ``GET /api/auth/login``
+ * and the panel's JSON reads ``401``.
+ *
+ * Public, like the bounce it complements (and like the hub's own ``POST
+ * /api/auth/logout``): logging out cannot itself require a live session, and clearing
+ * an already-absent cookie is a harmless no-op. The runner session is a **stateless**
+ * signed cookie (``runner/auth/session.py``), so there is nothing server-side to revoke
+ * — deleting the cookie *is* the logout. SSO stays honest: if the hub session is still
+ * live, the next visit silently re-authenticates through the bounce (that is correct —
+ * ending fleet-wide access is hub logout, which stops renewals); if it too has ended,
+ * the next visit lands on the hub's login surface.
+ */
+export const logoutApiAuthLogoutPost = <ThrowOnError extends boolean = false>(options?: Options<LogoutApiAuthLogoutPostData, ThrowOnError>): RequestResult<LogoutApiAuthLogoutPostResponses, unknown, ThrowOnError> => (options?.client ?? client).post<LogoutApiAuthLogoutPostResponses, unknown, ThrowOnError>({ url: '/api/auth/logout', ...options });
+
+/**
+ * Read Session
+ *
+ * The panel's own-identity read behind its username/logout control (issue #129).
+ *
+ * Public and self-resolving, mirroring the hub's own ``GET /api/me``: it reports the
+ * identity a request *would* resolve to rather than gating on one, so it never
+ * ``401``s. Under a ``none``-mode hub the surface is authless
+ * (``auth_enabled = False``); under oauth it carries the signed-in hub username, or
+ * ``None`` when no valid session rode along (the served shell is bounce-gated, so the
+ * panel normally holds one by the time it reads this).
+ */
+export const readSessionApiAuthSessionGet = <ThrowOnError extends boolean = false>(options?: Options<ReadSessionApiAuthSessionGetData, ThrowOnError>): RequestResult<ReadSessionApiAuthSessionGetResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ReadSessionApiAuthSessionGetResponses, unknown, ThrowOnError>({ url: '/api/auth/session', ...options });
 
 /**
  * Get Pm Items

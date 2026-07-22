@@ -218,3 +218,85 @@ def test_a_replayed_jti_is_refused_at_the_callback(tmp_path: Path) -> None:
         headers={"content-type": "application/x-www-form-urlencoded"},
     )
     assert second.status_code == 400
+
+
+def _bounce_in(client: TestClient, private_key: object, *, jti: str) -> None:
+    """Drive the full SSO bounce so ``client`` holds a live runner session cookie."""
+    login_resp = client.get("/api/auth/login?return_to=/", follow_redirects=False)
+    state = login_resp.cookies["bz_runner_bounce_state"]
+    client.cookies.set("bz_runner_bounce_state", state)
+    client.cookies.set("bz_runner_bounce_return", "/")
+    token = _sign(private_key, jti=jti)
+    callback_resp = client.post(
+        "/api/auth/callback",
+        content=f"token={token}&state={state}",
+        headers={"content-type": "application/x-www-form-urlencoded"},
+        follow_redirects=False,
+    )
+    assert callback_resp.status_code == 303
+    client.cookies.set("bz_runner_session", callback_resp.cookies["bz_runner_session"])
+
+
+def test_logout_clears_the_session_and_the_next_visit_bounces(tmp_path: Path) -> None:
+    """`POST /api/auth/logout` clears the runner session cookie (issue #129): the served
+    surface, reachable while the session was live, bounces to `GET /api/auth/login`
+    again on the next visit, and the panel's JSON reads `401`."""
+    private_key, jwk = _keypair()
+    client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk)
+    _bounce_in(client, private_key, jti="jti-logout-1")
+
+    # The session is live: the served shell renders and the JSON API answers.
+    assert client.get("/").status_code == 200
+    assert client.get("/api/environments").status_code != 401
+
+    logout_resp = client.post("/api/auth/logout")
+    assert logout_resp.status_code == 204
+    # The response clears the session cookie (empty value, immediate expiry) — a browser
+    # drops it, so model that on the jar before the next visit.
+    set_cookie = logout_resp.headers["set-cookie"]
+    assert "bz_runner_session=" in set_cookie and "Max-Age=0" in set_cookie
+    client.cookies.delete("bz_runner_session")
+
+    bounce = client.get("/", follow_redirects=False)
+    assert bounce.status_code in (302, 307)
+    assert bounce.headers["location"].startswith("/api/auth/login?return_to=")
+    assert client.get("/api/environments").status_code == 401
+
+
+def test_logout_is_a_harmless_no_op_without_a_session(tmp_path: Path) -> None:
+    """Logout cannot itself require a live session — clearing an absent cookie is a
+    204 no-op, mirroring the hub's own public logout."""
+    _private_key, jwk = _keypair()
+    client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk)
+    assert client.post("/api/auth/logout").status_code == 204
+
+
+def test_session_read_reports_the_signed_in_username_under_oauth(tmp_path: Path) -> None:
+    """`GET /api/auth/session` carries the hub username behind the panel's identity/
+    logout control (issue #129) once a session is established."""
+    private_key, jwk = _keypair()
+    client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk)
+    _bounce_in(client, private_key, jti="jti-session-1")
+
+    resp = client.get("/api/auth/session")
+    assert resp.status_code == 200
+    assert resp.json() == {"auth_enabled": True, "username": "alice"}
+
+
+def test_session_read_reports_no_username_without_a_session_under_oauth(tmp_path: Path) -> None:
+    """Self-resolving, never `401`: under oauth with no session the read still answers
+    200, reporting the surface is gated (`auth_enabled`) but no one is signed in."""
+    _private_key, jwk = _keypair()
+    client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk)
+    resp = client.get("/api/auth/session")
+    assert resp.status_code == 200
+    assert resp.json() == {"auth_enabled": True, "username": None}
+
+
+def test_session_read_reports_authless_under_a_none_mode_hub(tmp_path: Path) -> None:
+    """Under a `none`-mode hub the surface is authless — `auth_enabled` false — so the
+    panel renders neither the username nor the logout control."""
+    client = _build_app(tmp_path, oauth_enabled=False)
+    resp = client.get("/api/auth/session")
+    assert resp.status_code == 200
+    assert resp.json() == {"auth_enabled": False, "username": None}
