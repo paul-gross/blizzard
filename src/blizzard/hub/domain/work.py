@@ -423,7 +423,6 @@ class EscalationOpen:
     spans every chunk at once."""
 
     chunk_id: str
-    epoch: int
     recorded_at: datetime
     takeover_command: str
 

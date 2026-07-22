@@ -34,7 +34,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 
 from blizzard.auth_core import FLEET_VIEW
-from blizzard.foundation.store.utc import iso_utc
+from blizzard.foundation.store.utc import as_utc, iso_utc
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
@@ -168,9 +168,12 @@ def list_events(
     ``runner_id`` / ``chunk_id`` / ``since`` filters apply to the ``event_log`` half; the
     open-escalation projection is always unioned in (a ``needs_human`` chunk is a standing
     surface, not a filterable log row). A malformed ``since`` 422s via FastAPI's own
-    datetime coercion."""
+    datetime coercion; a well-formed but tz-naive ``since`` (an offset-less ISO string) is
+    coerced to UTC (``as_utc``) so the projection's aware ``recorded_at`` comparison below
+    never raises against it — the store half is already protected by ``UtcDateTime``."""
+    since_utc = as_utc(since) if since is not None else None
     events = services.chunks.list_events(
-        severity=severity, runner_id=runner_id, chunk_id=chunk_id, since=since, limit=limit
+        severity=severity, runner_id=runner_id, chunk_id=chunk_id, since=since_utc, limit=limit
     )
     # Filter the open-escalation projection by the SAME predicates so the unified feed is
     # internally consistent: a projected escalation is always `critical`/`needs-human` and
@@ -183,8 +186,8 @@ def list_events(
         escalations = []
     if chunk_id is not None:
         escalations = [e for e in escalations if e.chunk_id == chunk_id]
-    if since is not None:
-        escalations = [e for e in escalations if e.recorded_at >= since]
+    if since_utc is not None:
+        escalations = [e for e in escalations if e.recorded_at >= since_utc]
     feed = derive_event_feed(events, escalations)[:limit]
     return EventsResponse(events=[_to_event_view(row) for row in feed])
 

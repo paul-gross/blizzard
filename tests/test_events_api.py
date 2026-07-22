@@ -110,3 +110,22 @@ def test_malformed_since_422s(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     resp = hub.client.get("/api/events", params={"since": "not-a-date"})
     assert resp.status_code == 422, resp.text
+
+
+def test_naive_since_with_open_escalation_does_not_500(tmp_path: Path) -> None:
+    # A well-formed but tz-NAIVE `since` (an offset-less ISO string — an ordinary client /
+    # date-picker input) must not 500 when the feed projects an open escalation. The
+    # escalation's `recorded_at` is tz-aware, so an un-coerced naive `since` raised
+    # `TypeError: can't compare offset-naive and offset-aware datetimes` at the projection
+    # filter; the store half was masked by `UtcDateTime`, so this only surfaced with an
+    # escalation present. The controller now coerces `since` with `as_utc`.
+    hub = build_hub(tmp_path)
+    store = ChunkStore(hub.engine, hub.clock)
+    t0 = hub.clock.now()
+    with hub.engine.begin() as conn:
+        seed_graph(conn, "gr_1", at=t0)
+        seed_chunk(conn, "ch_c", graph_id="gr_1", at=t0)
+    store.record_escalation("ch_c", epoch=1, takeover_command="cd c && resume", at=t0)
+    # `2020-01-01T00:00:00` — valid ISO-8601, no timezone offset, well before the escalation.
+    feed = _events(hub, since="2020-01-01T00:00:00")
+    assert [e["kind"] for e in feed] == ["needs-human"]

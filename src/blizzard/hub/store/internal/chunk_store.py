@@ -555,7 +555,6 @@ class ChunkStore:
                 open_escalations.append(
                     EscalationOpen(
                         chunk_id=chunk_id,
-                        epoch=newest.epoch,
                         recorded_at=newest.recorded_at,
                         takeover_command=newest.takeover_command or "",
                     )
