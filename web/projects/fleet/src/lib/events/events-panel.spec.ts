@@ -101,4 +101,27 @@ describe('EventsPanel', () => {
     expect(after).toBeGreaterThan(before);
     expect(el.querySelector('[data-testid="events-runner-filter-rn_02"]')).not.toBeNull();
   });
+
+  it('derives chunk filter chips from the feed and re-queries when a chunk is chosen', async () => {
+    // A feed spanning two distinct chunks (plus a runner-scoped, chunk-less event to prove
+    // the null chunk_id is stripped from the universe rather than becoming an empty chip).
+    const TWO_CHUNKS = [
+      { id: 3, recorded_at: '2026-07-16T00:00:03Z', severity: 'critical', kind: 'worker-lost', runner_id: 'rn_01', chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YAB', message: 'lost a' },
+      { id: 2, recorded_at: '2026-07-16T00:00:02Z', severity: 'warning', kind: 'attempt-failed', runner_id: 'rn_01', chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3ZZZ', message: 'retried b' },
+      { id: 1, recorded_at: '2026-07-16T00:00:01Z', severity: 'info', kind: 'lease-minted', runner_id: 'rn_01', message: 'minted' },
+    ];
+    const fixture = await render(TWO_CHUNKS);
+    const el = fixture.nativeElement as HTMLElement;
+    // Two distinct chunks → the chunk filter row shows, one chip per chunk plus "All".
+    expect(el.querySelector('[data-testid="events-chunk-filter"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="events-chunk-filter-ch_01KXKVVF1J3D6H6VYZ3XYN3YAB"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="events-chunk-filter-ch_01KXKVVF1J3D6H6VYZ3XYN3ZZZ"]')).not.toBeNull();
+    const before = stub.forRoute('/api/events', 'GET').length;
+
+    el.querySelector<HTMLButtonElement>('[data-testid="events-chunk-filter-ch_01KXKVVF1J3D6H6VYZ3XYN3ZZZ"]')?.click();
+    await settle(fixture);
+
+    const after = stub.forRoute('/api/events', 'GET').length;
+    expect(after).toBeGreaterThan(before);
+  });
 });
