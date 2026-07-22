@@ -1,5 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { ActivatedRoute, convertToParamMap } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { hubClient } from 'fleet';
 import { settle } from 'fleet/testing';
@@ -13,7 +14,7 @@ describe('LoginPage', () => {
     sessionStorage.clear();
   });
 
-  async function mount(providers: unknown) {
+  async function mount(providers: unknown, queryParams: Record<string, string> = {}) {
     hubClient.setConfig({
       baseUrl: 'http://localhost',
       fetch: (async (input: Request) => {
@@ -29,6 +30,7 @@ describe('LoginPage', () => {
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: convertToParamMap(queryParams) } } },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(LoginPage);
@@ -58,6 +60,32 @@ describe('LoginPage', () => {
   it('appends the stashed return_to route to every provider link', async () => {
     sessionStorage.setItem('fleet.auth.return-to', '/graphs/gr_1');
     const fixture = await mount([{ name: 'github', display_name: 'GitHub', type: 'github' }]);
+    const el = fixture.nativeElement as HTMLElement;
+
+    const href = el.querySelector('[data-testid="login-provider-github"]')?.getAttribute('href');
+    expect(href).toBe('/api/auth/github/authorize?return_to=%2Fgraphs%2Fgr_1');
+  });
+
+  it('resumes a hub-as-IdP authorize request handed in via the return_to query param', async () => {
+    // The multi-provider bounce (issue #128) lands the browser on /login?return_to=<the
+    // pending authorize request>; each provider link must carry that request so
+    // completing the dance resumes it.
+    sessionStorage.setItem('fleet.auth.return-to', '/graphs/gr_1'); // a stale 401-path stash, must lose
+    const authorize = '/api/auth/authorize?client=runner-a&redirect_uri=https://runner-a.example/api/auth/callback&state=s';
+    const fixture = await mount([{ name: 'github', display_name: 'GitHub', type: 'github' }], { return_to: authorize });
+    const el = fixture.nativeElement as HTMLElement;
+
+    const href = el.querySelector('[data-testid="login-provider-github"]')?.getAttribute('href');
+    expect(href).toBe(`/api/auth/github/authorize?return_to=${encodeURIComponent(authorize)}`);
+  });
+
+  it('ignores a non-authorize return_to query param and falls back to the stashed route', async () => {
+    // A crafted /login?return_to=… that is not an /api/auth/authorize request is never
+    // honored (no open redirect / no arbitrary resume target, issue #128).
+    sessionStorage.setItem('fleet.auth.return-to', '/graphs/gr_1');
+    const fixture = await mount([{ name: 'github', display_name: 'GitHub', type: 'github' }], {
+      return_to: 'https://evil.example/steal',
+    });
     const el = fixture.nativeElement as HTMLElement;
 
     const href = el.querySelector('[data-testid="login-provider-github"]')?.getAttribute('href');

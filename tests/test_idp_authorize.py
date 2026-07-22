@@ -141,7 +141,7 @@ def test_authorize_with_no_session_bounces_into_the_single_configured_provider(t
     assert "%2Fapi%2Fauth%2Fauthorize" in location
 
 
-def test_authorize_with_no_session_and_multiple_providers_refuses(tmp_path: Path) -> None:
+def test_authorize_with_no_session_and_multiple_providers_bounces_to_the_login_chooser(tmp_path: Path) -> None:
     from tests.test_auth_login_api import FakeOAuthProvider
 
     hub = build_hub(
@@ -155,6 +155,27 @@ def test_authorize_with_no_session_and_multiple_providers_refuses(tmp_path: Path
         params={"client": "runner-a", "redirect_uri": "https://runner-a.example/api/auth/callback", "state": "s"},
         follow_redirects=False,
     )
+    # Two providers: no single dance to auto-run, so the browser is handed to the board's
+    # /login page carrying this pending authorize request (its client/redirect_uri/state
+    # preserved inside the encoded return_to) — never a bare 501 (issue #128).
+    assert resp.status_code in (302, 307)
+    location = resp.headers["location"]
+    assert location.startswith("/login?return_to=")
+    assert "%2Fapi%2Fauth%2Fauthorize" in location
+    assert "client%3Drunner-a" in location
+    assert "state%3Ds" in location
+
+
+def test_authorize_with_no_session_and_no_providers_refuses(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, auth_mode=AUTH_MODE_OAUTH, oauth_providers={})
+    _register_runner(hub)
+    resp = hub.client.get(
+        "/api/auth/authorize",
+        params={"client": "runner-a", "redirect_uri": "https://runner-a.example/api/auth/callback", "state": "s"},
+        follow_redirects=False,
+    )
+    # Zero configured providers: nothing to authenticate against, so the refusal stays
+    # an actionable error rather than a chooser bounce (issue #128).
     assert resp.status_code == 501
 
 

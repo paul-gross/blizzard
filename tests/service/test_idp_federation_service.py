@@ -27,6 +27,7 @@ import subprocess
 import sys
 from collections.abc import Iterator
 from pathlib import Path
+from urllib.parse import quote, unquote
 
 import httpx
 import pytest
@@ -218,3 +219,96 @@ def test_key_rotation_is_picked_up_by_a_live_runner_with_no_restart(tmp_path: Pa
                 # (`JwksCache.key_for`) must pick it up with no restart of the process
                 # already running above.
                 _bounce_once(hub, runner)
+
+
+def test_a_two_provider_bounce_resumes_through_the_login_chooser(tmp_path: Path) -> None:
+    """Issue #128 — a hub with *two* configured providers: an unauthenticated runner
+    bounce cannot auto-run a single dance, so authorize hands the browser to the board's
+    ``/login`` chooser carrying the pending authorize request. Completing *either*
+    provider's dance resumes that exact request — original ``client``, ``redirect_uri``,
+    and bounce ``state`` intact — and ends in a runner-domain session, no manual re-visit
+    of the runner. The service-tier companion to the single-provider wire leg above."""
+    bin_dir = require_stub_idp()
+    idp_a_port = _free_port()
+    idp_b_port = _free_port()
+    hub_port = _free_port()
+    runner_port = _free_port()
+
+    with stub_idp(bin_dir, idp_a_port) as idp_a, stub_idp(bin_dir, idp_b_port) as idp_b:
+        idp_a.put(
+            "/_levers/profile",
+            json={"subject": "7001", "handle": "user-a", "email": "user-a@example.com", "email_verified": True},
+        )
+        idp_b.put(
+            "/_levers/profile",
+            json={"subject": "7002", "handle": "user-b", "email": "user-b@example.com", "email_verified": True},
+        )
+        provider_a = OAuthProviderConfig(
+            name="oidc-a",
+            type="oidc",
+            display_name="Stub SSO A",
+            client_id="cid",
+            client_secret_env=_SECRET_ENV,
+            issuer=f"http://127.0.0.1:{idp_a_port}",
+        )
+        provider_b = OAuthProviderConfig(
+            name="oidc-b",
+            type="oidc",
+            display_name="Stub SSO B",
+            client_id="cid",
+            client_secret_env=_SECRET_ENV,
+            issuer=f"http://127.0.0.1:{idp_b_port}",
+        )
+        with (
+            _oauth_hub(tmp_path / "hub", hub_port, providers=(provider_a, provider_b)),
+            _federated_runner(tmp_path / "runner", hub_port=hub_port, port=runner_port) as runner,
+        ):
+            # 1. The runner mints its own bounce state and points the browser at the
+            #    hub's authorize endpoint.
+            login_resp = runner.get("/api/auth/login?return_to=/", follow_redirects=False)
+            assert login_resp.status_code in (302, 307)
+            authorize_url = login_resp.headers["location"]
+            bounce_state = login_resp.cookies["bz_runner_bounce_state"]
+
+            # 2. A fresh (session-less) browser hits authorize. Two providers → no single
+            #    dance to auto-run, so it is handed to the /login chooser carrying the
+            #    pending authorize request (with the original state) as return_to — never
+            #    a bare 501.
+            browser = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=15.0)
+            try:
+                chooser = browser.get(authorize_url, follow_redirects=False)
+                assert chooser.status_code in (302, 307), chooser.text
+                location = chooser.headers["location"]
+                assert location.startswith("/login?return_to=")
+                pending = unquote(location.split("return_to=", 1)[1])
+                assert pending.startswith("/api/auth/authorize?")
+                assert f"state={bounce_state}" in pending
+                assert "client=" in pending
+
+                # 3. The user picks provider B on the chooser: its button threads the
+                #    pending authorize request back through as return_to. Completing the
+                #    dance mints a hub session and lands the browser on the resumed
+                #    authorize, which now delivers the runner token with the original state.
+                resumed = browser.get(
+                    f"/api/auth/oidc-b/authorize?return_to={quote(pending, safe='')}",
+                    follow_redirects=True,
+                )
+                assert resumed.status_code == 200, resumed.text
+                assert "bz_session" in browser.cookies
+                token_match = re.search(r'name="token" value="([^"]+)"', resumed.text)
+                state_match = re.search(r'name="state" value="([^"]+)"', resumed.text)
+                assert token_match is not None and state_match is not None
+                assert state_match.group(1) == bounce_state  # original bounce state round-tripped
+
+                # 4. Hand the delivered token to the runner's own callback: it ends in a
+                #    runner-domain session with no manual re-visit of the runner.
+                callback_resp = runner.post(
+                    "/api/auth/callback",
+                    content=f"token={token_match.group(1)}&state={state_match.group(1)}",
+                    headers={"content-type": "application/x-www-form-urlencoded"},
+                    follow_redirects=False,
+                )
+                assert callback_resp.status_code == 303, callback_resp.text
+                assert "bz_runner_session" in callback_resp.cookies
+            finally:
+                browser.close()

@@ -1,5 +1,6 @@
-import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
-import { KitAsyncState, LoginButtons, consumeReturnUrl, injectAuthProvidersQuery } from 'fleet';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
+import { KitAsyncState, LoginButtons, consumeReturnUrl, injectAuthProvidersQuery, safeAuthorizeReturnTo } from 'fleet';
 
 /** `localStorage` key the last provider signed in with is remembered under (issue
  * #93) — `localStorage`, not `sessionStorage`: a returning operator's preference
@@ -82,12 +83,17 @@ const LAST_PROVIDER_KEY = 'fleet.auth.last-provider';
 })
 export class LoginPage {
   private readonly providersQuery = injectAuthProvidersQuery();
+  private readonly route = inject(ActivatedRoute);
 
-  /** The route stashed by the 401 interceptor before it landed here — appended to
-   * every provider link so completing the dance returns where the app was
-   * interrupted, read once (not reactively — it does not change while this page
-   * is mounted). */
-  protected readonly returnTo = consumeReturnUrl();
+  /** Where completing a provider dance returns to — appended to every provider link,
+   * read once (not reactively; it does not change while this page is mounted). A
+   * `return_to` in the URL takes precedence: that is the hub-as-IdP multi-provider
+   * bounce (issue #128) handing us a pending `/api/auth/authorize` request to resume,
+   * honored only when {@link safeAuthorizeReturnTo} confirms it is exactly that. Absent
+   * (the ordinary 401-interceptor path), it falls back to the route the interceptor
+   * stashed via {@link consumeReturnUrl}. */
+  protected readonly returnTo =
+    safeAuthorizeReturnTo(this.route.snapshot.queryParamMap.get('return_to')) ?? consumeReturnUrl();
 
   protected readonly providers = computed(() => this.providersQuery.data() ?? []);
 

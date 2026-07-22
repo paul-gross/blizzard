@@ -18,14 +18,15 @@ established. This route reuses #92's own single-use ``auth_state``/``return_to``
 mechanism unmodified (decision D5) — it redirects into
 ``GET /api/auth/{provider}/authorize?return_to=<this request's own path+query>``, and
 that route's ``callback`` already redirects to ``return_to`` once a session is minted,
-landing the browser back on this exact URL, this time with a cookie. This phase resolves
-the *single configured provider* case only (the common deployment shape, and the one the
-issue's acceptance criteria exercise) — zero or multiple configured providers has no
-automatic chooser to bounce through from a bare page load (unlike the web app's own
-``/login``, which is driven client-side and already supports a multi-provider button
-list), so authorize refuses with 501 in that case rather than guessing; an operator with
-multiple providers configured logs into the board first, and the resolved session then
-lets ``authorize`` proceed on any subsequent bounce.
+landing the browser back on this exact URL, this time with a cookie. With a *single*
+configured provider this bounce is direct (no chooser hop). With *two or more* (issue
+#128) there is no single dance to auto-run, so authorize instead redirects to the board's
+own ``/login`` page carrying this pending request as ``return_to`` — the login page
+already renders a multi-provider button list, and threads that ``return_to`` (which it
+validates to a same-origin ``/api/auth/authorize`` target only — no open redirect)
+through each provider button, so completing any provider's dance resumes *this* request
+with a session in hand. With *zero* configured providers there is nothing to
+authenticate against, so authorize refuses with 501.
 
 **``client=cli`` (issue #96).** The CLI's own public client — a built-in convention,
 not a per-user registered row like a runner's (:func:`_resolve_client` never sees it).
@@ -136,16 +137,26 @@ def authorize(
     identity = resolve_identity(request, services)
     if identity is None:
         providers = services.oauth_providers.list()
-        if len(providers) != 1:
+        if not providers:
             raise HTTPException(
                 status_code=status.HTTP_501_NOT_IMPLEMENTED,
-                detail="no hub session, and interactive provider selection is not supported from this endpoint "
-                f"with {len(providers)} configured provider(s) — log into the hub board first",
+                detail="no hub session, and no configured providers to authenticate against",
             )
         return_to = request.url.path
         if request.url.query:
             return_to = f"{return_to}?{request.url.query}"
-        return RedirectResponse(f"/api/auth/{providers[0].name}/authorize?return_to={quote(return_to, safe='')}")
+        if len(providers) == 1:
+            # Single-provider fast path (AC): no chooser hop — bounce straight into the
+            # one provider's dance, which lands the browser back on this exact URL with a
+            # session (decision D5, reused unmodified).
+            return RedirectResponse(f"/api/auth/{providers[0].name}/authorize?return_to={quote(return_to, safe='')}")
+        # Two or more providers (issue #128): no single dance to auto-run, so hand the
+        # browser to the board's own login page carrying this pending authorize request
+        # as its return target. The user picks a provider there; completing any provider's
+        # dance resumes *this* request — the login page threads return_to through each
+        # provider button, honoring only a same-origin /api/auth/authorize target (no open
+        # redirect). Replaces the former blanket 501 for the multi-provider case.
+        return RedirectResponse(f"/login?return_to={quote(return_to, safe='')}")
 
     user = services.users.get(identity.user_id)
     if is_cli:

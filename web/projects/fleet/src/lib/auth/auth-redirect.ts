@@ -31,3 +31,18 @@ export function redirectToLogin(router: Router): void {
 export function consumeReturnUrl(): string {
   return sessionStorage.getItem(RETURN_URL_KEY) ?? '/';
 }
+
+/** Validates a URL-borne `return_to` for the hub-as-IdP multi-provider bounce (issue
+ * #128): the hub's authorize endpoint redirects an unauthenticated browser here as
+ * `/login?return_to=/api/auth/authorize?…`, and the login page resumes that pending
+ * request by threading `return_to` through each provider button. Returns the value only
+ * when it is a same-origin `/api/auth/authorize` request — never a cross-origin or
+ * protocol-relative URL, and never any other path — so a crafted `/login?return_to=…`
+ * link cannot turn the chooser into an open redirect or aim the resumed dance at a
+ * non-authorize target. Anything else (including a normal SPA return route stashed for
+ * the 401 flow) yields `null`, leaving {@link consumeReturnUrl} as the fallback. */
+export function safeAuthorizeReturnTo(raw: string | null): string | null {
+  if (raw === null) return null;
+  const [path] = raw.split('?', 1);
+  return path === '/api/auth/authorize' ? raw : null;
+}

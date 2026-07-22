@@ -6,7 +6,7 @@
 export { injectMeQuery, hasPermission } from './me.query';
 export { injectAuthProvidersQuery } from './providers.query';
 export { injectLogoutMutation } from './logout.mutation';
-export { redirectToLogin, consumeReturnUrl } from './auth-redirect';
+export { redirectToLogin, consumeReturnUrl, safeAuthorizeReturnTo } from './auth-redirect';
 export { provideAuthInterceptor } from './auth.interceptor';
 export { LoginButtons } from './login-buttons';
 export { GuestLobby } from './guest-lobby';
