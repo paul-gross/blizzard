@@ -13,6 +13,12 @@ import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, input
  * (`bzh:frontend-kit`'s "match whatever menu idiom exists" — there is none
  * yet), so this stays a minimal, token-styled, absolutely-positioned panel
  * rather than reaching for a heavier dependency for one popover.
+ *
+ * The trigger's own content is a `[trigger]`-selected projection, defaulting to
+ * the classic `⋮` glyph — a caller wanting a different trigger (the shell's
+ * profile menu projects {@link KitAvatar}, issue #132) marks its projected
+ * element `trigger` rather than this component growing a variant input per
+ * trigger shape.
  */
 @Component({
   selector: 'fleet-kit-menu',
@@ -26,7 +32,7 @@ import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, input
       [attr.data-testid]="testid()"
       (click)="toggle()"
     >
-      ⋮
+      <ng-content select="[trigger]">⋮</ng-content>
     </button>
     @if (open()) {
       <div class="panel" [attr.data-testid]="panelTestid()">

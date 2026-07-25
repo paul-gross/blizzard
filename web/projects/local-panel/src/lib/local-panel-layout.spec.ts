@@ -209,4 +209,11 @@ describe('LocalPanelLayout', () => {
 
     expect(el.querySelector('[data-testid="local-panel-menu-panel"] fleet-viewport-toggle')).not.toBeNull();
   });
+
+  it('renders the shared avatar-circle trigger on the header menu (issue #132)', async () => {
+    const fixture = await render();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="local-panel-menu"] fleet-kit-avatar')).not.toBeNull();
+  });
 });

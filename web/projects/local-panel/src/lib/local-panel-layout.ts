@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import type { runnerApi, StatCell } from 'fleet';
 
-import { BoardHeader, KitAsyncState, type KitAsyncStateValue, KitMenu, KitPanel, ViewportToggle } from 'fleet';
+import { BoardHeader, KitAsyncState, type KitAsyncStateValue, KitAvatar, KitMenu, KitPanel, ViewportToggle } from 'fleet';
 
 import { AgentRow } from './agent-row';
 import { MachineDetail } from './chunk-detail';
@@ -38,7 +38,10 @@ import type { MachineChunkRow } from './local-panel';
  * The header's own {@link KitMenu} buries {@link ViewportToggle} (mobile
  * polish feedback item 5) — this is the existing header region the desktop
  * shell's override lives behind now, replacing {@link LocalPanel}'s old
- * always-visible `.viewport-strip`.
+ * always-visible `.viewport-strip`. Its trigger is the shared {@link KitAvatar}
+ * profile glyph (issue #132) rather than the menu's default `⋮`, the same
+ * trigger the hub's `AppNavMenu` projects — one shared component so both
+ * shells' profile menus render identically.
  *
  * The titlebar itself is the shared {@link BoardHeader} (issue #131) — the same
  * 48px chrome the hub board renders, rather than a bespoke local one. It carries
@@ -46,8 +49,8 @@ import type { MachineChunkRow } from './local-panel';
  * from the runner local API's status + environments reads) and a real connection
  * state, never a placeholder. `local-identity` and the shell's {@link KitMenu} ride
  * along in the header's `[header-trailing]` slot — the same composable region a
- * later avatar menu or pause control (issues #132/#133) slots into without this
- * layout or {@link BoardHeader} changing.
+ * later pause control (issue #133) slots into without this layout or
+ * {@link BoardHeader} changing.
  */
 @Component({
   selector: 'local-panel-layout',
@@ -60,6 +63,7 @@ import type { MachineChunkRow } from './local-panel';
     EnvList,
     FactLog,
     KitAsyncState,
+    KitAvatar,
     KitMenu,
     KitPanel,
     LocalAsks,
@@ -71,7 +75,8 @@ import type { MachineChunkRow } from './local-panel';
     <div class="lp" data-testid="local-panel">
       <fleet-board-header [connection]="connection()" connectionLabel="Runner" tagline="runner · machine panel" [stats]="headerStats()">
         <local-identity header-trailing />
-        <fleet-kit-menu header-trailing class="menu" ariaLabel="Shell options" testid="local-panel-menu">
+        <fleet-kit-menu header-trailing class="menu" ariaLabel="Profile menu" testid="local-panel-menu">
+          <fleet-kit-avatar trigger />
           <fleet-viewport-toggle />
         </fleet-kit-menu>
       </fleet-board-header>

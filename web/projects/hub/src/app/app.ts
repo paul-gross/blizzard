@@ -19,6 +19,7 @@ import {
 
 import { startOfLocalDayIso } from './local-day';
 import { AppNav } from './nav/app-nav';
+import { AppNavMenu } from './nav/app-nav-menu';
 import { MobileTabBar } from './nav/mobile-tab-bar';
 import { MobileTitlebar } from './nav/mobile-titlebar';
 
@@ -27,8 +28,11 @@ import { MobileTitlebar } from './nav/mobile-titlebar';
  * counterparts), and the routed content.
  *
  * The window is a full-width titlebar ({@link BoardHeader} — the brand, the live
- * fleet counts, and the hub connection) over a tab strip ({@link AppNav}), with the
- * active route rendered below via `<router-outlet>` — desktop mode. In mobile mode
+ * fleet counts, the hub connection, and the profile menu ({@link AppNavMenu},
+ * issue #132) projected into its `[header-trailing]` slot) over a tab strip
+ * ({@link AppNav} — routes only, since #132 moved `Log out` and the viewport
+ * override up into the header's menu), with the active route rendered below via
+ * `<router-outlet>` — desktop mode. In mobile mode
  * (`ViewportService.mode`) both are replaced by {@link MobileTitlebar}, and a
  * persistent {@link MobileTabBar} renders below the routed content (mock screen C,
  * `../docs/designs/mobile/core-flows.html`) — the fork happens once, here, at the
@@ -69,7 +73,7 @@ import { MobileTitlebar } from './nav/mobile-titlebar';
 @Component({
   selector: 'app-root',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BoardHeader, AppNav, MobileTitlebar, MobileTabBar, RouterOutlet, GuestLobby],
+  imports: [BoardHeader, AppNav, AppNavMenu, MobileTitlebar, MobileTabBar, RouterOutlet, GuestLobby],
   template: `
     @switch (authState()) {
       @case ('unauthenticated') {
@@ -95,8 +99,10 @@ import { MobileTitlebar } from './nav/mobile-titlebar';
               [connection]="connection()"
               [chunks]="chunks()"
               [spendToday]="spendToday.data() ?? null"
-            />
-            <app-nav [showAdmin]="canManageUsers()" (logout)="onLogout()" />
+            >
+              <app-nav-menu header-trailing (logout)="onLogout()" />
+            </fleet-board-header>
+            <app-nav [showAdmin]="canManageUsers()" />
           }
           <router-outlet />
           @if (mobile()) {

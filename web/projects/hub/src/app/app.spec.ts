@@ -298,6 +298,11 @@ describe('hub App', () => {
       const el = fixture.nativeElement as HTMLElement;
 
       expect(el.querySelector('[data-testid="nav-admin"]')).toBeNull();
+
+      // Log out lives inside the header's profile menu (issue #132) — closed by
+      // default, so it opens the trigger before the entry is reachable.
+      el.querySelector<HTMLElement>('[data-testid="app-nav-menu"]')?.click();
+      await settle(fixture);
       expect(el.querySelector('[data-testid="nav-logout"]')).toBeTruthy();
     });
   });

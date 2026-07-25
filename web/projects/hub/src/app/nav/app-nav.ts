@@ -1,6 +1,5 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
-import { KitButton, KitMenu, ViewportToggle } from 'fleet';
 
 /**
  * The top nav's tab strip — one `routerLink` per top-level route, with
@@ -9,20 +8,19 @@ import { KitButton, KitMenu, ViewportToggle } from 'fleet';
  *
  * The `Admin` tab (issue #93) is nav-*gating* only — `showAdmin` (`user:manage`,
  * computed by the app root against the resolved identity) decides whether the tab
- * renders at all; the admin page itself is #94's. `Log out` sits beside it, visible
- * whenever this nav renders at all (only ever mounted in the app root's `ready`
- * auth state — see `App`'s own docstring), so it needs no gating of its own.
+ * renders at all; the admin page itself is #94's.
  *
- * Also carries {@link ViewportToggle} — the mobile/desktop shell override
- * (`../docs/designs/mobile/README.md`) — buried behind a quiet
- * {@link KitMenu} flush right (mobile polish feedback item 5) rather than
- * left always visible: the override is chrome an operator reaches for
- * occasionally, not something that should compete with the route tabs.
+ * The tab row holds **only** the route tabs (issue #132) — `Log out` and the
+ * viewport override used to live here behind a standalone button and a quiet
+ * {@link KitMenu}; both moved into the top header's profile menu
+ * ({@link AppNavMenu}, `./app-nav-menu.ts`), projected through
+ * {@link BoardHeader}'s `[header-trailing]` slot in `App` (`../app.ts`)
+ * rather than sitting in this row.
  */
 @Component({
   selector: 'app-nav',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, RouterLinkActive, KitMenu, KitButton, ViewportToggle],
+  imports: [RouterLink, RouterLinkActive],
   template: `
     <nav class="nav" data-testid="app-nav">
       <a routerLink="/board" routerLinkActive="active" data-testid="nav-board">Board</a>
@@ -31,11 +29,6 @@ import { KitButton, KitMenu, ViewportToggle } from 'fleet';
       @if (showAdmin()) {
         <a routerLink="/admin" routerLinkActive="active" data-testid="nav-admin">Admin</a>
       }
-      <span class="spacer"></span>
-      <fleet-kit-button class="logout" testid="nav-logout" (click)="logout.emit()">Log out</fleet-kit-button>
-      <fleet-kit-menu class="menu" ariaLabel="Shell options" testid="app-nav-menu">
-        <fleet-viewport-toggle />
-      </fleet-kit-menu>
     </nav>
   `,
   styles: `
@@ -66,28 +59,9 @@ import { KitButton, KitMenu, ViewportToggle } from 'fleet';
       color: var(--amber-hi);
       background: var(--header-hi);
     }
-    .spacer {
-      flex: 1;
-    }
-    /* Same quiet-chrome reasoning as .menu below — normal-cased, flush right. */
-    .logout {
-      align-items: center;
-      margin: 0 10px;
-    }
-    /* Quiet chrome, not content: the menu sits flush right, normal-cased so
-       it never competes with the nav's own uppercase route tabs. */
-    .menu {
-      align-items: center;
-      padding: 0 10px;
-      letter-spacing: normal;
-      text-transform: none;
-    }
   `,
 })
 export class AppNav {
   /** Whether the `Admin` tab renders — `user:manage`, gated by the app root. */
   readonly showAdmin = input(false);
-
-  /** Fired when `Log out` is clicked; the app root owns the mutation. */
-  readonly logout = output<void>();
 }

@@ -15,6 +15,18 @@ import { KitMenu } from './kit-menu';
 })
 class TestHost {}
 
+@Component({
+  selector: 'fleet-test-host-custom-trigger',
+  imports: [KitMenu],
+  template: `
+    <fleet-kit-menu ariaLabel="Profile menu" testid="the-menu">
+      <span trigger data-testid="custom-trigger">avatar</span>
+      <p data-testid="menu-body">projected content</p>
+    </fleet-kit-menu>
+  `,
+})
+class TestHostCustomTrigger {}
+
 describe('KitMenu', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -87,5 +99,27 @@ describe('KitMenu', () => {
     );
     await fixture.whenStable();
     expect(el.querySelector('[data-testid="menu-body"]')).toBeNull();
+  });
+
+  it('defaults the trigger to the ⋮ glyph when no [trigger] content is projected', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector<HTMLElement>('[data-testid="the-menu"]')?.textContent?.trim()).toBe('⋮');
+  });
+
+  it('renders projected [trigger] content instead of the default glyph (issue #132)', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TestHostCustomTrigger],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(TestHostCustomTrigger);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+    const trigger = el.querySelector<HTMLElement>('[data-testid="the-menu"]');
+
+    expect(trigger?.querySelector('[data-testid="custom-trigger"]')).not.toBeNull();
+    expect(trigger?.textContent?.trim()).not.toBe('⋮');
   });
 });
