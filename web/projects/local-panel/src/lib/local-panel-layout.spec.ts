@@ -33,9 +33,11 @@ async function render(overrides: Record<string, unknown> = {}) {
     imports: [LocalPanelLayout],
     providers: [
       provideZonelessChangeDetection(),
-      // LocalPanelLayout itself injects no query — this is here only because it
-      // renders `ChunkRow`, whose own severable PM-title read (issue #28,
-      // decision 1) needs a TanStack Query context to construct at all.
+      // `LocalPanelLayout` itself is presentational, but it composes several
+      // self-fetching mini-containers that inject their own queries/mutations —
+      // `ChunkRow`'s severable PM-title read (issue #28, decision 1),
+      // `LocalPauseControl` (issue #133), and `LocalIdentity` — so a TanStack
+      // Query context has to exist for the fixture to construct at all.
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
     ],
   }).compileComponents();
@@ -67,8 +69,12 @@ describe('LocalPanelLayout', () => {
   let stub: RequestClientStub;
 
   beforeEach(() => {
-    // Same reason as the provider above: only `ChunkRow`'s own PM-title read needs
-    // an answer, so every route resolves to the empty shape.
+    // Same reason as the provider above: every mini-container's own read (`ChunkRow`'s
+    // PM-title lookup, `LocalPauseControl`'s and `LocalIdentity`'s status reads) just
+    // needs an answer, not a realistic one, so every route resolves to this one empty
+    // shape. `GET /api/runner` carries no `pause` here, so `LocalPauseControl` reads
+    // both brakes off and renders `Pause` in every spec in this file — harmless for
+    // what this file asserts, but worth knowing if a future spec here starts caring.
     stub = stubRequestClient(runnerClient, () => ({ items: [] }));
   });
 

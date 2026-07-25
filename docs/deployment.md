@@ -504,13 +504,23 @@ exactly where it left off once the brake clears — see `blizzard-runner pause -
 the full contract. Each brake is cleared only where it was set — `runner start` locally,
 `blizzard hub runner resume` at the hub.
 
+The runner's own web panel (issue #133) carries the same local brake as a second local
+door: a Pause/Resume control in its top bar issues the identical `PATCH /api/runner` the
+CLI's local verbs use, so a click there is `runner pause`/`runner start` by another name,
+not a second write path. Because the toggle can only ever move the local brake, the panel
+also renders an explicit **Paused by hub** badge whenever the hub's own brake is set — an
+operator whose local toggle reads "off" then still sees why the runner is not filling,
+rather than the toggle looking broken. Clearing the hub's own brake stays hub-only, though
+— `blizzard hub runner resume`, never something reachable from this panel.
+
 The local brake has one **non-operator** trigger too: a configured runner spend ceiling
 engages this same brake automatically when the fleet's rolling-window spend crosses it (see
 "Bounding fleet spend" below). It is the identical brake — same "start no processes on this
 machine" semantics, live workers left to finish — so a runner can come back `[paused: local]`
-with no `runner pause` ever issued. It clears the same way, and *only* that way: an explicit
-`runner start`. `blizzard hub status` names the reason on a ceiling-engaged runner so you can
-tell it apart from a hand-issued pause.
+with no `runner pause` ever issued. Clearing it is always an explicit operator action, never
+automatic — `runner start` at the CLI, or the runner panel's Resume control, the same two
+doors that clear a hand-issued pause. `blizzard hub status` names the reason on a
+ceiling-engaged runner so you can tell it apart from a hand-issued pause.
 
 With no daemon running, the verbs report that rather than reading the store behind its
 back — the store is reached only through the daemon that owns it, in every case. What you
@@ -578,9 +588,10 @@ claim: keep it (`chunk pause`), give it away (`detach`), or end it for good (`st
   state, only for ending it. See `blizzard hub chunk stop --help` for the CLI's full
   contract.
 - **`blizzard hub runner pause <runner_id>` / `runner resume <runner_id>`** (the hub brake)
-  and **`runner pause` / `runner start`** (the runner's own local brake, issue #45,
-  above) are **per-runner**, not per-chunk. Neither kills any particular chunk's
-  worker: the hub brake only stops that runner from claiming *new* work (every
+  and **`runner pause` / `runner start`**, or the runner panel's own Pause/Resume
+  control (the runner's own local brake, issue #45 and issue #133 — see "The runner's
+  two doors" above), are **per-runner**, not per-chunk. Neither kills any particular
+  chunk's worker: the hub brake only stops that runner from claiming *new* work (every
   in-flight chunk, live worker included, runs on); the local brake additionally blocks
   every other spawn site (restart-resume, an answer-resume, a requeue respawn, …) but
   still never kills a worker that is already running — pausing locally is not a drain.
@@ -726,9 +737,10 @@ window_hours = 24.0
   pause brake** engages (the same brake `runner pause` sets — every spawn site suppressed, no
   retries consumed, live workers left to finish) and an escalation records the ceiling and the
   spend. The window is a rolling last-N-hours sum; **it does not auto-unpause** when the window
-  later rolls the spend back under the ceiling. Clearing the brake is an explicit operator
-  decision — `blizzard runner start`, exactly as for a hand-issued pause. `GET /api/runners`
-  and `blizzard hub status` surface the ceiling reason on the paused runner, so it reads
+  later rolls the spend back under the ceiling. Clearing the brake is always an explicit
+  operator decision, never automatic — `blizzard runner start` at the CLI, or the runner
+  panel's Resume control, exactly as for a hand-issued pause. `GET /api/runners` and
+  `blizzard hub status` surface the ceiling reason on the paused runner, so it reads
   differently from a manual pause.
 - **Cost-absent rows are a conservative lower bound.** When a worker crashes or is `kill -9`ed
   before the harness emits its final usage envelope, blizzard records the attempt's tokens from

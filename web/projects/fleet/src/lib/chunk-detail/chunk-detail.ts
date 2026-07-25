@@ -6,6 +6,7 @@ import { injectDetachChunkMutation } from '../chunks/detach.mutations';
 import { injectSetChunkGraphMutation, injectSetChunkModelMutation } from '../chunks/edit.mutations';
 import { injectAnswerQuestionMutation, injectResolveDecisionMutation } from '../chunks/human.mutations';
 import { injectChunkPauseMutation } from '../chunks/pause.mutations';
+import { errorMessage } from '../error-message';
 import {
   type AnswerQuestionEvent,
   ChunkDetailPanel,
@@ -14,17 +15,6 @@ import {
   type PmItemsState,
   type ResolveDecisionEvent,
 } from './chunk-detail-panel';
-
-/** The hub's `{"detail": "..."}` error body, or anything close enough to read one
- * off of — 404/409 aren't in the generated error union (only 422 is documented),
- * so this reads the same shape defensively rather than trusting the response type.
- * `fallback` names the verb that failed, for the case where no body can be read. */
-function errorMessage(error: unknown, fallback: string): string {
-  if (error && typeof error === 'object' && 'detail' in error && typeof error.detail === 'string') {
-    return error.detail;
-  }
-  return fallback;
-}
 
 /**
  * The chunk detail **container** — owns the reactive detail query and the

@@ -25,6 +25,13 @@ import { injectRunnerStatusQuery } from './status.query';
  * `AgentRow`/`ChunkRow` still emit `selectLease`/`selectChunk`, this shell
  * just binds neither.
  *
+ * {@link LocalPauseControl} (issue #133) is likewise **not** mounted here —
+ * a deliberate scope decision, not an oversight: #133 shipped desktop-only,
+ * so a mobile operator sees neither the local pause toggle nor the "paused
+ * by hub" badge today. Mounting it (and wiring a home for it in this single
+ * scrolling column) is left to the next mobile chunk, alongside the
+ * transcript panel and detail docks above.
+ *
  * Mounts the shared {@link MobileTitlebar} (issue #92) in place of its old
  * bespoke header — the same fleet component the hub's app-root mounts —
  * burying {@link ViewportToggle} behind the titlebar's own overflow menu

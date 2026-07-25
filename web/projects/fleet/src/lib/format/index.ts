@@ -7,6 +7,7 @@
 
 export { compactRef, ENTITY_DISPLAY, type EntityDisplay } from '../compact-ref';
 export { formatCost, formatTokens } from '../cost-format';
+export { errorMessage } from '../error-message';
 export { LANES, STATUS_LANE, STATUS_TONE, laneFor, type Lane } from '../chunk-lanes';
 export { formatWhen, formatAge, formatHeldFor, ageMs, formatUtcClock, formatUtcYmd, SKEW_TOLERANCE_MS } from '../when';
 // formatSeenAgo (runner-view.ts) and formatClockTime (event-log-panel.ts) are

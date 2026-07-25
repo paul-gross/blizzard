@@ -12,6 +12,7 @@ import { FactLog } from './fact-log';
 import { LocalAsks } from './local-asks';
 import { LocalIdentity } from './local-identity';
 import { LocalInfo } from './local-info';
+import { LocalPauseControl } from './local-pause-control';
 import type { MachineChunkRow } from './local-panel';
 
 /**
@@ -47,10 +48,10 @@ import type { MachineChunkRow } from './local-panel';
  * 48px chrome the hub board renders, rather than a bespoke local one. It carries
  * this machine's own capacity cells ({@link headerStats}, folded by the container
  * from the runner local API's status + environments reads) and a real connection
- * state, never a placeholder. `local-identity` and the shell's {@link KitMenu} ride
- * along in the header's `[header-trailing]` slot — the same composable region a
- * later pause control (issue #133) slots into without this layout or
- * {@link BoardHeader} changing.
+ * state, never a placeholder. {@link LocalPauseControl} (issue #133), `local-identity`,
+ * and the shell's {@link KitMenu} ride along in the header's `[header-trailing]`
+ * slot — each a self-fetching mini-container of its own, composed here without
+ * this layout or {@link BoardHeader} knowing anything about pause state or identity.
  */
 @Component({
   selector: 'local-panel-layout',
@@ -69,11 +70,13 @@ import type { MachineChunkRow } from './local-panel';
     LocalAsks,
     LocalIdentity,
     LocalInfo,
+    LocalPauseControl,
     ViewportToggle,
   ],
   template: `
     <div class="lp" data-testid="local-panel">
       <fleet-board-header [connection]="connection()" connectionLabel="Runner" tagline="runner · machine panel" [stats]="headerStats()">
+        <local-pause-control header-trailing />
         <local-identity header-trailing />
         <fleet-kit-menu header-trailing class="menu" ariaLabel="Profile menu" testid="local-panel-menu">
           <fleet-kit-avatar trigger />

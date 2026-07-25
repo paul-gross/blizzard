@@ -1,4 +1,5 @@
-import { injectQuery } from '@tanstack/angular-query-experimental';
+import { inject } from '@angular/core';
+import { QueryClient, injectMutation, injectQuery } from '@tanstack/angular-query-experimental';
 import { runnerApi } from 'fleet';
 
 import {
@@ -28,6 +29,37 @@ export function injectRunnerStatusQuery() {
       return data!;
     },
     refetchInterval: 5000,
+  }));
+}
+
+/**
+ * `PATCH /api/runner` (issue #133) — the local pause brake's only mutation
+ * surface in the web UI, through the generated runner client
+ * (`bzh:generated-client`). Sets `paused` declaratively on the runner
+ * singleton; the hub's own brake (`hub_paused`) is untouched — this route
+ * neither reads nor writes it. Named `injectLocalPauseMutation` — not
+ * `injectRunnerPauseMutation` — because `fleet`'s own `runners.mutations.ts`
+ * already owns that name for the hub pausing *a* runner; this one is a
+ * runner pausing *itself* (`bzh:frontend-selector-prefix` / issue #83's
+ * collision class).
+ *
+ * On success, `onSuccess` **returns** the invalidation, not fires it
+ * fire-and-forget: `injectMutation`'s `isPending()` only clears once the
+ * returned promise settles, so the toggle stays disabled through the
+ * re-read that follows the PATCH rather than re-enabling the instant the
+ * PATCH itself resolves — closing the stale-read window where a fast second
+ * click would compute its flip off the pre-PATCH `local` value and send the
+ * opposite of what the operator just asked for.
+ */
+export function injectLocalPauseMutation() {
+  const queryClient = inject(QueryClient);
+  return injectMutation(() => ({
+    mutationFn: async (paused: boolean): Promise<runnerApi.RunnerControlView> => {
+      const { data, error } = await runnerApi.patchRunnerApiRunnerPatch({ body: { paused }, throwOnError: false });
+      if (error) throw error;
+      return data!;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: runnerStatusKey }),
   }));
 }
 

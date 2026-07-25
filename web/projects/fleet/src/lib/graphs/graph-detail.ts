@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, signal } from '@an
 
 import type { GraphEdgeView, GraphNodeView } from '../api/hub';
 import { hasPermission, injectMeQuery } from '../auth/me.query';
+import { errorMessage } from '../error-message';
 import { KitButton } from '../kit/kit-button';
 import { GraphDiagram } from './graph-diagram';
 import { injectGraphLifecycleMutation } from './graph-lifecycle.mutations';
@@ -13,16 +14,6 @@ interface ResolvedEdge {
   readonly edge: GraphEdgeView;
   readonly choiceName: string;
   readonly choiceDescription: string;
-}
-
-/** The hub's `{"detail": "..."}` error body, or anything close enough to read one
- * off of — mirrors `chunk-detail.ts`'s own local `errorMessage`; `fallback` names the
- * verb that failed, for the case where no body can be read. */
-function errorMessage(error: unknown, fallback: string): string {
-  if (error && typeof error === 'object' && 'detail' in error && typeof error.detail === 'string') {
-    return error.detail;
-  }
-  return fallback;
 }
 
 /**
