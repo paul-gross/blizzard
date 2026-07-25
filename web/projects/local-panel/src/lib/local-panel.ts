@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import {
@@ -66,8 +66,10 @@ export interface MachineChunkRow {
             [headerStats]="headerStats()"
             [activeLeases]="activeLeases()"
             [leasesTriadState]="leasesTriadState()"
-            [chunksTriadState]="chunksTriadState()"
-            [machineChunks]="machineChunks()"
+            [chunksTriadState]="visibleChunksTriadState()"
+            [chunksEmptyText]="chunksEmptyText()"
+            [machineChunks]="visibleChunks()"
+            [showAllChunks]="showAllChunks()"
             [openAskCount]="openAskCount()"
             [selectedChunkId]="selectedChunkId()"
             [selectedChunkLeases]="selectedChunkLeases()"
@@ -77,6 +79,7 @@ export interface MachineChunkRow {
             (selectLease)="selectLease($event)"
             (selectChunk)="selectChunk($event)"
             (selectAttempt)="selectAttempt($event)"
+            (toggleShowAllChunks)="showAllChunks.set($event)"
           />
         } @else {
           @defer (on immediate) {
@@ -191,12 +194,34 @@ export class LocalPanel {
     return this.activeLeases().length === 0 ? 'empty' : 'ready';
   });
 
-  /** The machine-chunks list's async triad state — shares the leases query
-   * (the same read the rows fold from), so it mirrors its loading/error state. */
+  /** The mobile chunks pane's async triad state — mobile renders the
+   * unfiltered {@link machineChunks} (issue #134 left mobile's own filter out
+   * of scope), so this reads that list's emptiness, sharing the leases
+   * query's loading/error state. */
   protected readonly chunksTriadState = computed<KitAsyncStateValue>(() => {
     if (this.leasesQuery.isPending()) return 'loading';
     if (this.leasesQuery.isError()) return 'error';
     return this.machineChunks().length === 0 ? 'empty' : 'ready';
+  });
+
+  /** The desktop chunks pane's own triad state — derived from {@link visibleChunks},
+   * the filtered list {@link LocalPanelLayout} renders, not the unfiltered
+   * {@link machineChunks} the shared {@link chunksTriadState} above reads. Keeps
+   * "ready" and "has rows to show" in sync when the filter hides everything. */
+  protected readonly visibleChunksTriadState = computed<KitAsyncStateValue>(() => {
+    if (this.leasesQuery.isPending()) return 'loading';
+    if (this.leasesQuery.isError()) return 'error';
+    return this.visibleChunks().length === 0 ? 'empty' : 'ready';
+  });
+
+  /** The desktop chunks pane's empty-state text — distinguishes "nothing on this
+   * machine" from "the filter hid everything", naming the hidden count so the
+   * operator knows to check "show all". */
+  protected readonly chunksEmptyText = computed<string>(() => {
+    const total = this.machineChunks().length;
+    if (total === 0) return 'NO CHUNKS ON THIS MACHINE';
+    const hidden = total - this.visibleChunks().length;
+    return `${hidden} CHUNK${hidden === 1 ? '' : 'S'} HIDDEN BY THE FILTER — CHECK SHOW ALL`;
   });
 
   /**
@@ -232,6 +257,24 @@ export class LocalPanel {
       });
     }
     return rows;
+  });
+
+  /** The chunks list's "show all" filter state (issue #134) — plain UI state,
+   * unchecked by default. Client-side only: narrows what {@link visibleChunks}
+   * renders, never the server-side `RECENT_LEASE_LIMIT`-bounded `/api/leases` read. */
+  protected readonly showAllChunks = signal(false);
+
+  /** The chunks list's visible rows — {@link machineChunks} itself when
+   * {@link showAllChunks} is checked, else rows whose derived
+   * {@link MachineChunkStatus.tone} isn't `done`/`idle`. Filters on the
+   * *derived* status (not raw lease state), so a closed lease with an open
+   * escalation still shows as `NEEDS HUMAN`. Selection stays keyed off the
+   * unfiltered {@link machineChunks}, so a hidden chunk is still deep-linkable.
+   * Desktop-only (issue #134) — {@link LocalPanelMobile} takes the unfiltered
+   * list directly; mobile's own filter is out of scope here. */
+  protected readonly visibleChunks = computed<MachineChunkRow[]>(() => {
+    if (this.showAllChunks()) return this.machineChunks();
+    return this.machineChunks().filter((chunk) => chunk.status.tone !== 'done' && chunk.status.tone !== 'idle');
   });
 
   /** The open-ask count for the asks panel's header note. */

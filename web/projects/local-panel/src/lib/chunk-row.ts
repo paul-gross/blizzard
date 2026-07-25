@@ -1,13 +1,18 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import { compactRef, KitBadge, type runnerApi } from 'fleet';
+import { compactRef, KitBadge, toneColor, type runnerApi } from 'fleet';
 
 import { injectChunkTitleQuery } from './chunk-title.query';
 import type { MachineChunkStatus } from './chunk-status';
 
 /**
- * One chunk on this machine — the machine-chunks list's row: compact chunk ref,
- * node name + attempt epoch, the PM-item chips (linked to the work items) and
- * title, and the derived status right-aligned in the hub board's color scheme.
+ * One chunk on this machine — the machine-chunks list's card (issue #134):
+ * a lane-colored left edge (the derived status's own {@link toneColor}, the
+ * same ladder {@link KitBadge} paints its pill with — the hub board's own
+ * card scheme, `fleet/board-shell/board-shell.ts`) over three stacked lines —
+ * compact chunk ref + node name/attempt epoch, the PM-item chips (linked to
+ * the work items) and title, then the derived status. Same fields as the
+ * row this replaces, laid out like the hub board's card instead of one
+ * cramped grid line.
  *
  * The PM enrichment is the same severable, volatile layering the old lease row
  * carried (issue #28, decision 1): one {@link injectChunkTitleQuery} per row,
@@ -22,19 +27,22 @@ import type { MachineChunkStatus } from './chunk-status';
   imports: [KitBadge],
   template: `
     <div
-      class="c-row"
+      class="c-card"
       data-testid="chunk-row"
       [attr.data-chunk-id]="chunkId()"
       [class.selected]="selected()"
+      [style.border-left-color]="laneColor()"
       role="button"
       tabindex="0"
       (click)="onSelect()"
       (keydown.enter)="onSelect($event)"
       (keydown.space)="onSelect($event)"
     >
-      <span class="cid">{{ chunkRef() }}</span>
-      <span class="node">{{ lease().node_name }} · a{{ lease().epoch }}</span>
-      <span class="ttl" data-testid="chunk-row-title">
+      <div class="tid">
+        <span class="cid">{{ chunkRef() }}</span>
+        <span class="node">{{ lease().node_name }} · a{{ lease().epoch }}</span>
+      </div>
+      <div class="ttl" data-testid="chunk-row-title">
         @for (item of linkedItems(); track item.ref) {
           @if (item.web_url) {
             <a class="chip" [href]="item.web_url" target="_blank" rel="noopener" (click)="$event.stopPropagation()">{{
@@ -45,8 +53,10 @@ import type { MachineChunkStatus } from './chunk-status';
           }
         }
         {{ titleText() }}
-      </span>
-      <fleet-kit-badge [tone]="status().tone" data-testid="chunk-row-status">{{ status().label }}</fleet-kit-badge>
+      </div>
+      <div class="st-row">
+        <fleet-kit-badge [tone]="status().tone" data-testid="chunk-row-status">{{ status().label }}</fleet-kit-badge>
+      </div>
     </div>
   `,
   styles: `
@@ -55,26 +65,43 @@ import type { MachineChunkStatus } from './chunk-status';
       font-family: var(--mono);
       font-variant-numeric: tabular-nums;
     }
-    .c-row {
-      display: grid;
-      grid-template-columns: 64px 92px 1fr auto;
-      align-items: baseline;
-      gap: 10px;
+    .c-card {
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
       padding: 5px 8px;
-      border-bottom: 1px solid var(--line);
-      border-left: 2px solid transparent;
+      border: 1px solid var(--line);
+      border-left: 3px solid transparent;
       cursor: pointer;
     }
-    .c-row:hover {
+    /* A shared 1px hairline between adjacent cards — every card keeps its own
+       bottom border, but a non-first card drops its top border so the two
+       don't stack into a 2px seam. */
+    .c-card:not(:first-child) {
+      border-top: none;
+    }
+    .c-card:hover {
       background: var(--panel-deep);
     }
-    .c-row.selected {
-      background: var(--bezel-hi);
-      border-left-color: var(--cyan);
-    }
-    .c-row:focus-visible {
+    /* An outline ring (not border-color, which would repaint the tone-colored
+       left edge) plus a faint cyan wash — the hub board card's own selected
+       treatment (fleet/board-shell/board-shell.ts), so the two read alike. */
+    .c-card.selected {
       outline: 1px solid var(--cyan);
       outline-offset: -1px;
+      background: color-mix(in srgb, var(--cyan) 8%, var(--panel-deep));
+    }
+    .c-card:focus-visible {
+      outline: 1px solid var(--cyan);
+      outline-offset: -1px;
+    }
+    .tid {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 8px;
+      min-width: 0;
     }
     .cid {
       color: var(--amber);
@@ -83,6 +110,7 @@ import type { MachineChunkStatus } from './chunk-status';
     .node {
       color: var(--label);
       font-size: var(--fs-xs);
+      white-space: nowrap;
     }
     .ttl {
       color: var(--text);
@@ -100,11 +128,9 @@ import type { MachineChunkStatus } from './chunk-status';
     a.chip:hover {
       text-decoration: underline;
     }
-    /* Grid-cell layout only — the tone→color ladder itself is the kit
-     * badge's own concern. */
-    fleet-kit-badge {
-      flex: none;
-      text-align: right;
+    .st-row {
+      display: flex;
+      justify-content: flex-end;
     }
   `,
 })
@@ -128,6 +154,10 @@ export class ChunkRow {
 
   protected readonly chunkId = computed(() => this.lease().chunk_id);
   protected readonly chunkRef = computed(() => compactRef(this.chunkId()));
+
+  /** The card's left edge — {@link toneColor} off the derived status, the
+   * same ladder the status badge paints with, so the two never disagree. */
+  protected readonly laneColor = computed(() => toneColor(this.status().tone));
 
   /** The severable PM read (issue #28, decision 1) — never branched on for pending/error. */
   protected readonly titleQuery = injectChunkTitleQuery(() => this.chunkId());

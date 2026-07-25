@@ -117,11 +117,20 @@ import type { MachineChunkRow } from './local-panel';
         </section>
         <section class="col center">
           <fleet-kit-panel class="chunks-panel" data-testid="chunks-pane" label="chunks on this machine · derived status">
+            <label class="chunk-filter-bar" data-testid="chunk-filter-bar">
+              <input
+                type="checkbox"
+                data-testid="chunk-filter-show-all"
+                [checked]="showAllChunks()"
+                (change)="toggleShowAllChunks.emit(!showAllChunks())"
+              />
+              show all
+            </label>
             <fleet-kit-async-state
               [state]="chunksTriadState()"
               loadingText="LOADING…"
               errorText="CHUNKS UNAVAILABLE — RUNNER LOCAL API UNREACHABLE"
-              emptyText="NO CHUNKS ON THIS MACHINE"
+              [emptyText]="chunksEmptyText()"
               emptyTestid="chunks-empty"
             >
               @for (chunk of machineChunks(); track chunk.lease.chunk_id) {
@@ -207,6 +216,22 @@ import type { MachineChunkRow } from './local-panel';
       font-size: var(--fs-label);
       letter-spacing: 0.1em;
     }
+    /* The chunks list's slim show-all filter bar (issue #134) — a plain
+       checkbox row above the list, not a kit component: this is the one
+       input the panel needs, not a chip/pill choice set. */
+    .chunk-filter-bar {
+      flex: none;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-bottom: 1px solid var(--line);
+      color: var(--label-dim);
+      font-size: var(--fs-label);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
     .detail-frame {
       display: flex;
       flex-direction: column;
@@ -254,8 +279,21 @@ export class LocalPanelLayout {
   /** The machine-chunks list's async triad state. */
   readonly chunksTriadState = input.required<KitAsyncStateValue>();
 
-  /** One row per chunk on this machine, pre-folded by the container. */
+  /** The chunks pane's empty-state text — the container distinguishes
+   * "nothing on this machine" from "the filter hid everything" (issue #134
+   * review fix), so this layout renders whichever text it is handed rather
+   * than a literal in the template. */
+  readonly chunksEmptyText = input.required<string>();
+
+  /** One row per chunk on this machine, pre-folded by the container **and**
+   * already filtered per {@link showAllChunks} (issue #134) — the container
+   * owns the fold, this renders exactly the rows it is handed. */
   readonly machineChunks = input.required<readonly MachineChunkRow[]>();
+
+  /** The chunks list's "show all" checkbox state (issue #134) — unchecked
+   * (the default) hides a chunk whose newest lease is closed; the container
+   * derives {@link machineChunks} from this, so this is display-only here. */
+  readonly showAllChunks = input.required<boolean>();
 
   /** The open-ask count for the asks panel's header note. */
   readonly openAskCount = input.required<number>();
@@ -282,6 +320,10 @@ export class LocalPanelLayout {
 
   /** Emitted with a chunk id when the operator selects a chunk row. */
   readonly selectChunk = output<string>();
+
+  /** Emitted with the checkbox's new checked state when the operator toggles
+   * "show all" (issue #134). */
+  readonly toggleShowAllChunks = output<boolean>();
 
   /** Emitted with an attempt lease id when the operator picks an attempt tab in
    * the detail dock — the container writes it to the URL. */

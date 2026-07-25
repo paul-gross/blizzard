@@ -249,7 +249,24 @@ describe('LocalPanel', () => {
     expect(el.querySelector('[data-testid="lease-count"]')?.textContent).toContain('1 live');
   });
 
-  it('renders one chunk-row per distinct chunk, including closed history, newest lease first', async () => {
+  it('renders one chunk-row per distinct chunk, hiding a chunk whose newest lease is closed by default (issue #134)', async () => {
+    const otherChunk = LEASE({
+      lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNCCCC',
+      chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYNDDDD',
+      state: 'closed',
+      closure_reason: 'transitioned',
+    });
+    stub = stubRequestClient(runnerClient, routes([LEASE(), otherChunk]));
+    const fixture = await render();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const rows = el.querySelectorAll('[data-testid="chunk-row"]');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].getAttribute('data-chunk-id')).toBe('ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9');
+    expect(el.querySelector<HTMLInputElement>('[data-testid="chunk-filter-show-all"]')?.checked).toBe(false);
+  });
+
+  it('checking "show all" reveals the closed tail too, newest lease first, distinct chunk folded on chunk_id', async () => {
     const older = LEASE({
       lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNBBBB',
       epoch: 1,
@@ -266,6 +283,9 @@ describe('LocalPanel', () => {
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
 
+    el.querySelector<HTMLInputElement>('[data-testid="chunk-filter-show-all"]')?.click();
+    await settle(fixture);
+
     const rows = el.querySelectorAll('[data-testid="chunk-row"]');
     // Two distinct chunks — the duplicate (older lease of the first chunk) folds away.
     expect(rows).toHaveLength(2);
@@ -274,7 +294,18 @@ describe('LocalPanel', () => {
     expect(rows[1].querySelector('[data-testid="chunk-row-status"]')?.textContent?.trim()).toBe('TRANSITIONED');
   });
 
-  it('derives NEEDS HUMAN from an open escalation, outranking the lease state', async () => {
+  it('shows a distinct filtered-empty state naming the hidden count when the filter hides every chunk, not a blank pane (issue #134)', async () => {
+    stub = stubRequestClient(runnerClient, routes([LEASE({ state: 'closed', closure_reason: 'transitioned' })]));
+    const fixture = await render();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelectorAll('[data-testid="chunk-row"]')).toHaveLength(0);
+    const emptyState = el.querySelector('[data-testid="chunks-empty"]');
+    expect(emptyState?.textContent).toContain('1 CHUNK HIDDEN BY THE FILTER');
+    expect(emptyState?.textContent).not.toContain('NO CHUNKS ON THIS MACHINE');
+  });
+
+  it('derives NEEDS HUMAN from an open escalation, outranking the lease state — visible without checking show-all', async () => {
     stub = stubRequestClient(runnerClient,
       routes([LEASE({ state: 'closed', closure_reason: 'escalated' })], (method, path) =>
         method === 'GET' && path === '/api/escalations'
@@ -388,7 +419,8 @@ describe('LocalPanel', () => {
       );
       const fixture = await render();
       const el = fixture.nativeElement as HTMLElement;
-
+      // The escalated chunk's newest lease is closed, but NEEDS HUMAN outranks
+      // it (`deriveMachineChunkStatus`) — it's visible without checking show-all.
       el.querySelector<HTMLElement>('[data-testid="chunk-row"]')?.click();
       await settle(fixture);
 

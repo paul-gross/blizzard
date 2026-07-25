@@ -51,7 +51,9 @@ async function render(overrides: Record<string, unknown> = {}) {
     activeLeases: [LEASE()],
     leasesTriadState: 'ready',
     chunksTriadState: 'ready',
+    chunksEmptyText: 'NO CHUNKS ON THIS MACHINE',
     machineChunks: [MACHINE_CHUNK],
+    showAllChunks: false,
     openAskCount: 0,
     selectedChunkId: null,
     selectedChunkLeases: [],
@@ -148,6 +150,43 @@ describe('LocalPanelLayout', () => {
 
     expect(el.querySelectorAll('[data-testid="chunk-row"]')).toHaveLength(1);
     expect(el.querySelector('[data-testid="chunk-row"]')?.classList.contains('selected')).toBe(true);
+  });
+
+  it("wires the chunk row's lease/status inputs through to ChunkRow — content itself is ChunkRow's own spec (issue #134)", async () => {
+    const fixture = await render({ machineChunks: [MACHINE_CHUNK] });
+    const el = fixture.nativeElement as HTMLElement;
+    const card = el.querySelector<HTMLElement>('[data-testid="chunk-row"]');
+
+    expect(card?.getAttribute('data-chunk-id')).toBe(MACHINE_CHUNK.lease.chunk_id);
+    // The lane-colored left edge — proof the `status` input itself (not just
+    // the chunk id) reached the child, the derived status's own tone color.
+    expect(card?.style.borderLeftColor).toBe('var(--amber)');
+  });
+
+  it('renders the "show all" checkbox bar above the chunks list, reflecting the input and emitting on toggle', async () => {
+    const fixture = await render({ showAllChunks: false });
+    let toggled: boolean | undefined;
+    fixture.componentInstance.toggleShowAllChunks.subscribe((checked) => (toggled = checked));
+    const el = fixture.nativeElement as HTMLElement;
+    const checkbox = el.querySelector<HTMLInputElement>('[data-testid="chunk-filter-show-all"]');
+
+    expect(checkbox?.checked).toBe(false);
+
+    checkbox?.click();
+    expect(toggled).toBe(true);
+  });
+
+  it('reflects a checked "show all" input and emits false on uncheck', async () => {
+    const fixture = await render({ showAllChunks: true });
+    let toggled: boolean | undefined;
+    fixture.componentInstance.toggleShowAllChunks.subscribe((checked) => (toggled = checked));
+    const el = fixture.nativeElement as HTMLElement;
+    const checkbox = el.querySelector<HTMLInputElement>('[data-testid="chunk-filter-show-all"]');
+
+    expect(checkbox?.checked).toBe(true);
+
+    checkbox?.click();
+    expect(toggled).toBe(false);
   });
 
   it('emits selectChunk when a chunk row is activated', async () => {

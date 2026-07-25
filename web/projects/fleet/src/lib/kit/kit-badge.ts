@@ -2,8 +2,10 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 
 import type { Tone } from './tone';
 
-/** The `Tone` → color ladder — the hub board's derived-status scheme,
- * duplicated today across `chunk-row.ts` and the board's own lane coloring. */
+/** The `Tone` → color ladder — the hub board's derived-status scheme. Exported
+ * as {@link toneColor} so a consumer that needs the bare color (not a badge) —
+ * the runner's chunk cards' lane-colored left edge, `local-panel/chunk-row.ts`
+ * — derives from this one ladder instead of re-typing its own (`bzh:frontend-formatters`). */
 const TONE_COLOR: Record<Tone, string> = {
   running: 'var(--amber)',
   needs: 'var(--red)',
@@ -14,6 +16,13 @@ const TONE_COLOR: Record<Tone, string> = {
   done: 'var(--green)',
   idle: 'var(--label-dim)',
 };
+
+/** The design-token color a given {@link Tone} resolves to — {@link KitBadge}'s
+ * own color ladder, exposed for chrome that colors by tone without rendering a
+ * badge (e.g. a card's lane-colored left edge). */
+export function toneColor(tone: Tone): string {
+  return TONE_COLOR[tone];
+}
 
 /** The `soft` variant's muted border companion per tone (mock screen C's pill
  * vocabulary, `../../docs/designs/mobile/core-flows.html`) — each tone reuses
@@ -96,7 +105,7 @@ export class KitBadge {
    * tinted fill instead of `'pill'`'s saturated `currentcolor` border. */
   readonly variant = input<'text' | 'pill' | 'soft'>('text');
 
-  protected readonly color = computed(() => TONE_COLOR[this.tone()]);
+  protected readonly color = computed(() => toneColor(this.tone()));
 
   /** The `'soft'` variant's dimmed border color. */
   protected readonly dim = computed(() => TONE_DIM[this.tone()]);

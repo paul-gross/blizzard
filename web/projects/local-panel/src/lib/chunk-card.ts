@@ -5,13 +5,15 @@ import { injectChunkTitleQuery } from './chunk-title.query';
 import type { MachineChunkStatus } from './chunk-status';
 
 /**
- * One chunk on this machine — the mobile stack's stacked-block counterpart to
- * {@link ChunkRow}'s single-line desktop grid (`bzh:frontend-kit`'s "adaptive
- * shells over shared guts"): the same inputs, the same per-row
+ * One chunk on this machine — the mobile stack's own card, distinct from
+ * {@link ChunkRow}'s desktop card (`bzh:frontend-kit`'s "adaptive shells over
+ * shared guts"): the same inputs, the same per-row
  * {@link injectChunkTitleQuery} PM enrichment, and the same select
- * output/keyboard affordances, laid out as three lines instead of four
- * cramped columns — a 92px node cell and an ellipsized title read as
- * illegibly cramped at a 390px viewport.
+ * output/keyboard affordances, laid out for a 390px viewport instead of a
+ * 340px desktop column — the status renders as a soft pill beside the ref
+ * rather than its own row, and the title wraps to two lines instead of
+ * ellipsizing, both trading the desktop card's density for room a touch
+ * target needs.
  *
  * Line 1 is the compact ref plus the derived status as a soft pill
  * (mock screen C's pill vocabulary,
