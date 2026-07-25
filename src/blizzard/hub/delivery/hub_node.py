@@ -57,7 +57,6 @@ from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.delivery.command_runner import IHubCommandRunner
 from blizzard.hub.delivery.workdir import IHubWorkdir
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
-from blizzard.hub.domain.envelope import latest_artifacts_by_name
 from blizzard.hub.domain.graph import (
     DEFAULT_BOUNCE_CAP,
     HUB_DEFAULT_FAILURE_CHOICE,
@@ -170,6 +169,38 @@ ENV_FORGE_OWNER = "BZ_FORGE_OWNER"  # qualifies a bare (owner-less) repo, mirror
 ENV_FEATURE_TITLE = "BZ_HUB_FEATURE_TITLE"
 
 
+def _latest_commit_per_repo(rows: list[ArtifactRow]) -> list[ArtifactRow]:
+    """Every ``git_commit`` artifact resolved to one row per **repo**, newest epoch wins.
+
+    Deliberately NOT :func:`~blizzard.hub.domain.envelope.latest_artifacts_by_name`, whose
+    ``(node_name, name)`` key is right for the envelope — a ``review-findings`` from
+    ``review`` and one from ``plan-review`` are genuinely different artifacts a worker
+    should see both of — and wrong here. Delivery's identity for a git pointer is the
+    **repo** alone: ``land_ff``/``land_default``/``land_pr_ci`` key their own
+    ``merged/<repo>`` markers on it, so two entries naming one repo are not two units of
+    work, they are one unit described twice.
+
+    That distinction is load-bearing once any node after ``build`` rewrites a branch —
+    ``pre-push`` rebasing onto a base that moved, ``resolve`` clearing a delivery blocker.
+    Keyed per node, such a chunk hands the delivery script BOTH the pre-rebase commit and
+    the rewritten tip for the same repo; the rewrite orphaned the former, so it can never
+    fast-forward, and delivery bounces on it no matter how many times the rebase re-runs
+    (the loop is not self-healing, only bounce-capped). Keyed per repo, the rewriting
+    node's declaration simply supersedes the stale one, which is what a rebase means.
+
+    Ties — one node-step declaring the same repo twice — resolve to the later row: a
+    re-declaration within a step is a correction, not a second repo.
+    """
+    latest: dict[str | None, ArtifactRow] = {}
+    for row in rows:
+        if row.kind is not ArtifactKind.GIT_COMMIT:
+            continue
+        current = latest.get(row.repo)
+        if current is None or row.epoch >= current.epoch:
+            latest[row.repo] = row
+    return list(latest.values())
+
+
 def build_hub_env(inputs: HubEnvInputs) -> dict[str, str]:
     """Assemble a hub command node's injected env — pure, no I/O.
 
@@ -182,8 +213,7 @@ def build_hub_env(inputs: HubEnvInputs) -> dict[str, str]:
     """
     commits = [
         {"repo": row.repo, "branch": row.data.partition(":")[0], "commit": row.data.partition(":")[2]}
-        for row in latest_artifacts_by_name(inputs.artifacts)
-        if row.kind is ArtifactKind.GIT_COMMIT
+        for row in _latest_commit_per_repo(inputs.artifacts)
     ]
     names = sorted({row.name for row in inputs.artifacts if row.node_id == inputs.node.node_id})
     env = {

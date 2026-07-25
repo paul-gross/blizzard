@@ -123,6 +123,10 @@ nodes:
     produces:
       - pre-push-summary
       - retrospective
+      # A rebase REWRITES the branch, so the commit `build` declared is orphaned the
+      # moment this node runs. Re-declaring here is what lets `deliver` fast-forward to
+      # the rebased tip instead of the stale one it can never fast-forward to.
+      - {name: commit, kind: git_commit}
     judgement:
       prompt: ./prompts/pre-push.judgement.md
       choices:
@@ -170,6 +174,10 @@ nodes:
     produces:
       - resolve-report
       - retrospective
+      # `resolved` routes straight back to `deliver`, and clearing a delivery blocker
+      # (a base-merge, a re-push) moves the branch — so this node re-declares its tip for
+      # the same reason `pre-push` does.
+      - {name: commit, kind: git_commit}
     judgement:
       prompt: ./prompts/resolve.judgement.md
       choices:

@@ -82,6 +82,10 @@ nodes:
     session: fresh  # cold eyes for the integration step; the default is resume
     produces:
       - pre-push-summary
+      # A rebase REWRITES the branch, so the commit `build` declared is orphaned the
+      # moment this node runs. Re-declaring here is what lets `deliver` fast-forward to
+      # the rebased tip instead of the stale one it can never fast-forward to.
+      - {name: commit, kind: git_commit}
     judgement:
       prompt: ./prompts/pre-push.judgement.md
       choices:

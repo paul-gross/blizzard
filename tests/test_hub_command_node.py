@@ -12,6 +12,7 @@ two chunks parked at a hub command node must never run commands concurrently.
 
 from __future__ import annotations
 
+import json
 import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -466,6 +467,80 @@ def test_build_hub_env_carries_no_model_credential_and_the_documented_keys() -> 
     # model/agent credential.
     forbidden = {"ANTHROPIC_API_KEY", "OPENAI_API_KEY", "BZ_MODEL", "BZ_MODEL_API_KEY"}
     assert not forbidden & env.keys()
+
+
+def _commit_row(*, node_name: str, epoch: int, commit: str, repo: str = "acme/widget") -> ArtifactRow:
+    """One repo's declared git pointer, as the node at ``epoch`` recorded it."""
+    return ArtifactRow(
+        kind=ArtifactKind.GIT_COMMIT,
+        name="widget",  # named after the repo, never the literal produces name
+        data=f"feat/x:{commit}",
+        repo=repo,
+        forge="https://github.com/acme/widget",
+        artifact_id=f"art_{node_name}_{epoch}",
+        chunk_id="ch_x",
+        node_id=f"nd_{node_name}",
+        node_name=node_name,
+        epoch=epoch,
+    )
+
+
+def _commits_in(env: dict[str, str]) -> list[dict[str, str]]:
+    return cast(list[dict[str, str]], json.loads(env["BZ_HUB_GIT_COMMITS"]))
+
+
+def _env_with(artifacts: list[ArtifactRow]) -> dict[str, str]:
+    _, merge_node = _reified_merge_node()
+    chunk = Chunk(chunk_id="ch_x", graph_id="gr_x", pm_pointers=[], minted_at=datetime(2026, 7, 17, tzinfo=UTC))
+    return build_hub_env(
+        HubEnvInputs(
+            chunk=chunk,
+            node=merge_node,
+            workdir="/tmp/ch_x",
+            epoch=9,
+            artifacts=artifacts,
+            base_branch="main",
+            marker_callback_url="http://hub/api/chunks/ch_x/hub-markers",
+        )
+    )
+
+
+def test_a_rebased_tip_supersedes_the_pre_rebase_commit_for_the_same_repo() -> None:
+    """The pre-push wedge (#130): a rebase REWRITES the branch, so `build`'s commit is
+    orphaned and can never fast-forward. Delivery must see ONLY the rebased tip.
+
+    Resolved per ``(node_name, name)`` — the envelope's key — both rows survive, the
+    delivery script tries to fast-forward to each, and the orphaned one bounces it every
+    time however often the rebase re-runs. Keyed per repo, the later declaration wins."""
+    env = _env_with(
+        [
+            _commit_row(node_name="build", epoch=2, commit="a" * 40),
+            _commit_row(node_name="pre-push", epoch=7, commit="b" * 40),
+        ]
+    )
+    assert _commits_in(env) == [{"repo": "acme/widget", "branch": "feat/x", "commit": "b" * 40}]
+
+
+def test_declaration_order_never_decides_which_commit_delivers() -> None:
+    """Epoch decides, not row order — the store's ordering must not be load-bearing."""
+    rows = [
+        _commit_row(node_name="pre-push", epoch=7, commit="b" * 40),
+        _commit_row(node_name="build", epoch=2, commit="a" * 40),
+    ]
+    assert _commits_in(_env_with(rows)) == [{"repo": "acme/widget", "branch": "feat/x", "commit": "b" * 40}]
+
+
+def test_a_multi_repo_chunk_keeps_one_commit_per_repo() -> None:
+    """Collapsing is per repo, so a chunk spanning repos still delivers all of them."""
+    env = _env_with(
+        [
+            _commit_row(node_name="build", epoch=2, commit="a" * 40, repo="acme/widget"),
+            _commit_row(node_name="build", epoch=2, commit="c" * 40, repo="acme/gadget"),
+            _commit_row(node_name="pre-push", epoch=7, commit="b" * 40, repo="acme/widget"),
+        ]
+    )
+    by_repo = {c["repo"]: c["commit"] for c in _commits_in(env)}
+    assert by_repo == {"acme/widget": "b" * 40, "acme/gadget": "c" * 40}
 
 
 def test_build_hub_env_carries_the_feature_title_when_given() -> None:
