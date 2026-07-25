@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
-import { compactRef, formatUtcClock, KitAsyncState, type KitAsyncStateValue, type runnerApi } from 'fleet';
+import { compactRef, formatLocalClockWithDay, KitAsyncState, type KitAsyncStateValue, type LocalClockWithDay, type runnerApi } from 'fleet';
 
 import { injectRunnerFactsQuery } from './status.query';
 
@@ -25,7 +25,16 @@ import { injectRunnerFactsQuery } from './status.query';
       >
         @for (fact of facts(); track fact.seq) {
           <div class="ev" data-testid="fact-row" [attr.data-seq]="fact.seq">
-            <span class="t">{{ timeLabel(fact) }}</span>
+            <span class="t">
+              @if (clockInfo(fact); as info) {
+                @if (info.day) {
+                  <span class="day">{{ info.day }}</span>
+                }
+                <span class="time">{{ info.time }}</span>
+              } @else {
+                <span class="time">—</span>
+              }
+            </span>
             <span class="flush" [class.acked]="fact.acked_at !== null" [title]="fact.acked_at ? 'flushed to hub' : 'buffered'">
               {{ fact.acked_at !== null ? '✓' : '·' }}
             </span>
@@ -55,7 +64,7 @@ import { injectRunnerFactsQuery } from './status.query';
     }
     .ev {
       display: flex;
-      align-items: baseline;
+      align-items: flex-start;
       gap: 8px;
       padding: 3px 8px;
       border-bottom: 1px solid var(--line);
@@ -63,7 +72,13 @@ import { injectRunnerFactsQuery } from './status.query';
     }
     .t {
       flex: none;
+      display: flex;
+      flex-direction: column;
       color: var(--label-dim);
+      line-height: 1.2;
+    }
+    .t .day {
+      font-size: 0.85em;
     }
     .flush {
       flex: none;
@@ -107,8 +122,9 @@ export class FactLog {
     return compactRef(id);
   }
 
-  /** `12:41:03` — the fact's UTC clock time; the ledger reads as a tail -f. */
-  protected timeLabel(fact: runnerApi.FactView): string {
-    return formatUtcClock(fact.created_at) || '—';
+  /** The fact's browser-local clock time, plus day context when it's not from
+   * today — the ledger reads as a tail -f, but an operator can be anywhere. */
+  protected clockInfo(fact: runnerApi.FactView): LocalClockWithDay | null {
+    return formatLocalClockWithDay(fact.created_at);
   }
 }

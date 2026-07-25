@@ -14,6 +14,19 @@
  * state carry the meaning.
  */
 
+/** Days between `d`'s local date and `now`'s local date, rounded so a small
+ * intra-day skew never bumps the boundary — the "how many local midnights
+ * back" shared by {@link formatWhen} and {@link formatLocalClockWithDay}, the
+ * two callers that need it (`bzh:frontend-formatters`: one derivation, not a
+ * copy per caller). */
+function localDaysAgo(d: Date, now: Date): number {
+  return Math.round(
+    (new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() -
+      new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) /
+      86_400_000,
+  );
+}
+
 /** Compact recency stamp for a board timestamp — the closer the instant, the shorter
  * the text: today reads as bare `HH:MM`, yesterday as `Yesterday HH:MM`, anything
  * older as the date alone (`2026/07/16` — a day-old judgement's minute no longer
@@ -25,14 +38,44 @@ export function formatWhen(iso: string, now: Date = new Date()): string {
   if (Number.isNaN(d.getTime())) return '';
   const pad = (n: number): string => `${n}`.padStart(2, '0');
   const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  const daysAgo = Math.round(
-    (new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() -
-      new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) /
-      86_400_000,
-  );
+  const daysAgo = localDaysAgo(d, now);
   if (daysAgo <= 0) return hm;
   if (daysAgo === 1) return `Yesterday ${hm}`;
   return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())}`;
+}
+
+/** Local `HH:MM:SS` plus day context, as returned by {@link formatLocalClockWithDay} —
+ * `day` is `null` when the instant's local date is today. */
+export interface LocalClockWithDay {
+  /** `Yesterday`, `yyyy-mm-dd`, or `null` when the instant's local date is today. */
+  day: string | null;
+  /** Zero-padded local `HH:MM:SS`. */
+  time: string;
+}
+
+/**
+ * Local `HH:MM:SS` plus day context for a log-style read — the runner fact log
+ * and transcript's shared instant shape (issue #136, `bzh:frontend-formatters`).
+ * The time is always present; when the instant's local date isn't today, `day`
+ * carries `Yesterday` or the `yyyy-mm-dd` date for the caller to render on the
+ * line above. Unlike {@link formatWhen} (which drops the time for older dates
+ * — a board stamp where only the day still matters), a log entry's time is
+ * always the primary read, so it's never dropped.
+ *
+ * `now` is injectable for tests only; callers pass the timestamp alone. Returns
+ * `null` for an absent/unparseable input — the caller supplies its own
+ * fallback text (e.g. `—`).
+ */
+export function formatLocalClockWithDay(iso: string | null | undefined, now: Date = new Date()): LocalClockWithDay | null {
+  if (iso === null || iso === undefined) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const time = formatClockTime(d.getTime());
+  const daysAgo = localDaysAgo(d, now);
+  if (daysAgo <= 0) return { day: null, time };
+  if (daysAgo === 1) return { day: 'Yesterday', time };
+  const pad = (n: number): string => `${n}`.padStart(2, '0');
+  return { day: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, time };
 }
 
 /** Bounded tolerance for benign browser-vs-server clock skew (`bzh:utc-instants`). */
@@ -92,16 +135,6 @@ export function formatSeenAgo(lastSeenAt: string, online: boolean, now: number =
   return `seen ${Math.round(minutesAgo / 60)}h ago`;
 }
 
-/** `HH:MM:SS` from an ISO instant, rendered in UTC — empty string for an
- * absent or unparseable input. Callers own their own fallback/suffix text
- * (`transcript-panel.ts` appends ` UTC`; `fact-log.ts` falls back to `—`). */
-export function formatUtcClock(iso: string | null | undefined): string {
-  if (iso === null || iso === undefined) return '';
-  const ms = Date.parse(iso);
-  if (Number.isNaN(ms)) return '';
-  return new Date(ms).toISOString().slice(11, 19);
-}
-
 /** `YYYYMMDD` from an ISO instant, rendered in UTC — empty string for an absent or
  * unparseable input. The chunk-detail graph label's creation-date suffix (issue #102,
  * `fact-graph`'s `#<name>-<YYYYMMDD>` form). */
@@ -113,7 +146,8 @@ export function formatUtcYmd(iso: string | null | undefined): string {
 }
 
 /** Zero-padded local `HH:MM:SS` for an epoch-ms instant — the event log's
- * per-row arrival clock (`event-log-panel.ts`). */
+ * per-row arrival clock (`event-log-panel.ts`), and the time half of
+ * {@link formatLocalClockWithDay} above. */
 export function formatClockTime(atMs: number): string {
   const d = new Date(atMs);
   const pad = (n: number): string => `${n}`.padStart(2, '0');

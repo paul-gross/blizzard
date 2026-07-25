@@ -1,25 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
-import { formatUtcClock, KitAsyncState, type runnerApi } from 'fleet';
+import { formatLocalClockWithDay, KitAsyncState, type LocalClockWithDay, type runnerApi } from 'fleet';
 
 import { injectTranscriptQuery } from './transcript.query';
-
-/**
- * `02:41:36 UTC` from an ISO-8601 instant, or `—` when absent/unparsable.
- *
- * This is the panel's only *absolute* time-of-day rendering (`agent-row.ts`
- * deliberately renders *relative* ages instead, to sidestep clock questions
- * entirely — `bzh:utc-instants`). Rendered in UTC rather than the viewer's
- * local zone and labeled as such: an operator can be anywhere, but the wire is
- * UTC end to end, so a fixed, explicitly-labeled zone reads the same turn the
- * same way regardless of who is looking, instead of silently matching
- * whichever browser happens to be open. The `HH:MM:SS` parse/slice itself is
- * `fleet`'s shared {@link formatUtcClock} (issue #81); this wrapper owns only
- * the panel's own `UTC`-suffixed / `—` display shape.
- */
-function formatTurnTimestamp(iso: string | null): string {
-  const clock = formatUtcClock(iso);
-  return clock ? `${clock} UTC` : '—';
-}
 
 /**
  * The right pane's content (issue #29 slice C) — one lease's parsed transcript,
@@ -101,7 +83,16 @@ function formatTurnTimestamp(iso: string | null): string {
         }
         @for (turn of transcript()?.turns ?? []; track turn.index) {
           <div class="turn" [class]="'k-' + turn.kind" data-testid="transcript-turn">
-            <span class="t">{{ formatTurnTimestamp(turn.timestamp) }}</span>
+            <span class="t">
+              @if (turnClockInfo(turn.timestamp); as info) {
+                @if (info.day) {
+                  <span class="day">{{ info.day }}</span>
+                }
+                <span class="time">{{ info.time }}</span>
+              } @else {
+                <span class="time">—</span>
+              }
+            </span>
             <span class="g"><span class="tick"></span></span>
             <span class="b">
               @switch (turn.kind) {
@@ -153,15 +144,20 @@ function formatTurnTimestamp(iso: string | null): string {
     }
     .turn {
       display: grid;
-      grid-template-columns: 56px 16px 1fr;
+      grid-template-columns: 64px 16px 1fr;
       gap: 8px;
       padding: 4px 10px 4px 8px;
       border-bottom: 1px solid var(--line);
     }
     .turn .t {
+      display: flex;
+      flex-direction: column;
       color: var(--label-dim);
       font-size: var(--fs-label);
       padding-top: 2px;
+    }
+    .turn .t .day {
+      font-size: 0.9em;
     }
     .turn .g {
       position: relative;
@@ -263,5 +259,21 @@ export class TranscriptPanel {
 
   protected readonly transcript = computed<runnerApi.TranscriptResponse | undefined>(() => this.transcriptQuery.data());
 
-  protected readonly formatTurnTimestamp = formatTurnTimestamp;
+  /**
+   * A turn's browser-local `HH:MM:SS` plus day context, or `null` when
+   * absent/unparsable — the template's time cell falls back to `—`.
+   *
+   * This is the panel's only *absolute* time-of-day rendering (`agent-row.ts`
+   * deliberately renders *relative* ages instead, to sidestep clock questions
+   * entirely — `bzh:utc-instants`). Rendered in the viewer's own local zone
+   * rather than a fixed UTC label (issue #136): the wire and the runner store
+   * stay UTC end to end (`bzh:utc-instants`), but an operator reading a
+   * transcript wants the clock on their own wall, not the server's — this is
+   * display decoration over that UTC instant, not a reinterpretation of it.
+   * The parse/day-boundary logic itself is `fleet`'s shared
+   * {@link formatLocalClockWithDay} (issue #136).
+   */
+  protected turnClockInfo(iso: string | null): LocalClockWithDay | null {
+    return formatLocalClockWithDay(iso);
+  }
 }

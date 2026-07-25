@@ -2,8 +2,8 @@ import {
   formatAge,
   formatClockTime,
   formatHeldFor,
+  formatLocalClockWithDay,
   formatSeenAgo,
-  formatUtcClock,
   formatUtcYmd,
   formatWhen,
   ageMs,
@@ -35,6 +35,51 @@ describe('formatWhen', () => {
   it('returns an empty string for an unparseable input', () => {
     expect(formatWhen('not-a-date', NOW)).toBe('');
     expect(formatWhen('', NOW)).toBe('');
+  });
+});
+
+describe('formatLocalClockWithDay', () => {
+  it('renders a same-day instant as the time alone, with no day context', () => {
+    expect(formatLocalClockWithDay(new Date(2026, 6, 18, 9, 5, 3).toISOString(), NOW)).toEqual({
+      day: null,
+      time: '09:05:03',
+    });
+    expect(formatLocalClockWithDay(new Date(2026, 6, 18, 0, 0, 0).toISOString(), NOW)).toEqual({
+      day: null,
+      time: '00:00:00',
+    });
+  });
+
+  it('renders yesterday as "Yesterday" above the time, time always present', () => {
+    expect(formatLocalClockWithDay(new Date(2026, 6, 17, 23, 59, 1).toISOString(), NOW)).toEqual({
+      day: 'Yesterday',
+      time: '23:59:01',
+    });
+  });
+
+  it('renders anything older as the yyyy-mm-dd date above the time', () => {
+    expect(formatLocalClockWithDay(new Date(2026, 6, 16, 12, 0, 30).toISOString(), NOW)).toEqual({
+      day: '2026-07-16',
+      time: '12:00:30',
+    });
+    expect(formatLocalClockWithDay(new Date(2025, 11, 31, 12, 0, 0).toISOString(), NOW)).toEqual({
+      day: '2025-12-31',
+      time: '12:00:00',
+    });
+  });
+
+  it('treats a slightly-future stamp (clock skew) as today, not a date', () => {
+    expect(formatLocalClockWithDay(new Date(2026, 6, 18, 23, 1, 0).toISOString(), NOW)).toEqual({
+      day: null,
+      time: '23:01:00',
+    });
+  });
+
+  it('returns null for an absent or unparseable input', () => {
+    expect(formatLocalClockWithDay(null, NOW)).toBeNull();
+    expect(formatLocalClockWithDay(undefined, NOW)).toBeNull();
+    expect(formatLocalClockWithDay('not-a-date', NOW)).toBeNull();
+    expect(formatLocalClockWithDay('', NOW)).toBeNull();
   });
 });
 
@@ -107,18 +152,6 @@ describe('formatSeenAgo (bzh:utc-instants)', () => {
   it('falls through to online/offline for a stamp beyond skew tolerance, never a confident 0s', () => {
     expect(formatSeenAgo('2026-07-16T17:00:00.000Z', false, REF)).toBe('offline');
     expect(formatSeenAgo('2026-07-16T17:00:00.000Z', true, REF)).toBe('online');
-  });
-});
-
-describe('formatUtcClock', () => {
-  it('renders HH:MM:SS in UTC from an ISO instant', () => {
-    expect(formatUtcClock('2026-07-16T11:00:00+00:00')).toBe('11:00:00');
-  });
-
-  it('returns empty for an absent or unparseable input', () => {
-    expect(formatUtcClock(null)).toBe('');
-    expect(formatUtcClock(undefined)).toBe('');
-    expect(formatUtcClock('not-a-date')).toBe('');
   });
 });
 

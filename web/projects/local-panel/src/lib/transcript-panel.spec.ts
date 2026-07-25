@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { runnerClient } from 'fleet';
 import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { vi } from 'vitest';
 
 import { TranscriptPanel } from './transcript-panel';
 
@@ -203,32 +204,110 @@ describe('TranscriptPanel', () => {
     expect(el.textContent).not.toContain('running…');
   });
 
-  it('renders a turn timestamp as a labeled UTC clock time, never bare or local', async () => {
-    const { el } = await render('L-903', (method, path) =>
-      method === 'GET' && path === '/api/leases/L-903/transcript'
-        ? {
-            lease_id: 'L-903',
-            session_id: 'sess-77',
-            available: true,
-            reason: null,
-            truncated: false,
-            turns: [
-              {
-                index: 0,
-                kind: 'env',
-                timestamp: '2026-07-16T11:00:00+00:00',
-                text: 'NODE ENVELOPE',
-                tool_name: null,
-                tool_input: null,
-                tool_output: null,
-                truncated: false,
-              },
-            ],
-          }
-        : {},
-    );
+  describe('turn timestamps render in browser-local time (issue #136)', () => {
+    // Pin both the zone and "now" so the local-day boundary is deterministic —
+    // a bare wall-clock read would make this flaky in CI (a different host TZ,
+    // or a run that straddles the "today" cutoff, changes the expected shape).
+    beforeEach(() => {
+      vi.stubEnv('TZ', 'America/New_York');
+      vi.setSystemTime(new Date('2026-07-16T15:00:00.000Z')); // 11:00 EDT
+    });
 
-    expect(el.textContent).toContain('11:00:00 UTC');
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.unstubAllEnvs();
+    });
+
+    it('renders today\'s turn as the local time alone, never UTC-suffixed', async () => {
+      const { el } = await render('L-903', (method, path) =>
+        method === 'GET' && path === '/api/leases/L-903/transcript'
+          ? {
+              lease_id: 'L-903',
+              session_id: 'sess-77',
+              available: true,
+              reason: null,
+              truncated: false,
+              turns: [
+                {
+                  index: 0,
+                  kind: 'env',
+                  timestamp: '2026-07-16T11:00:00+00:00', // 07:00 EDT, same local day as "now"
+                  text: 'NODE ENVELOPE',
+                  tool_name: null,
+                  tool_input: null,
+                  tool_output: null,
+                  truncated: false,
+                },
+              ],
+            }
+          : {},
+      );
+
+      const turn = el.querySelector('[data-testid="transcript-turn"]');
+      expect(turn?.querySelector('.t .day')).toBeNull();
+      expect(turn?.querySelector('.t .time')?.textContent).toBe('07:00:00');
+      expect(turn?.textContent).not.toContain('UTC');
+    });
+
+    it("renders yesterday's turn as \"Yesterday\" above the local time", async () => {
+      const { el } = await render('L-903', (method, path) =>
+        method === 'GET' && path === '/api/leases/L-903/transcript'
+          ? {
+              lease_id: 'L-903',
+              session_id: 'sess-77',
+              available: true,
+              reason: null,
+              truncated: false,
+              turns: [
+                {
+                  index: 0,
+                  kind: 'env',
+                  timestamp: '2026-07-15T23:30:00+00:00', // 19:30 EDT the day before "now"
+                  text: 'NODE ENVELOPE',
+                  tool_name: null,
+                  tool_input: null,
+                  tool_output: null,
+                  truncated: false,
+                },
+              ],
+            }
+          : {},
+      );
+
+      const turn = el.querySelector('[data-testid="transcript-turn"]');
+      expect(turn?.querySelector('.t .day')?.textContent).toBe('Yesterday');
+      expect(turn?.querySelector('.t .time')?.textContent).toBe('19:30:00');
+    });
+
+    it('renders an older turn as its yyyy-mm-dd date above the local time', async () => {
+      const { el } = await render('L-903', (method, path) =>
+        method === 'GET' && path === '/api/leases/L-903/transcript'
+          ? {
+              lease_id: 'L-903',
+              session_id: 'sess-77',
+              available: true,
+              reason: null,
+              truncated: false,
+              turns: [
+                {
+                  index: 0,
+                  kind: 'env',
+                  timestamp: '2026-07-01T11:00:00+00:00', // well before "now"
+                  text: 'NODE ENVELOPE',
+                  tool_name: null,
+                  tool_input: null,
+                  tool_output: null,
+                  truncated: false,
+                },
+              ],
+            }
+          : {},
+      );
+
+      const turn = el.querySelector('[data-testid="transcript-turn"]');
+      expect(turn?.querySelector('.t .day')?.textContent).toBe('2026-07-01');
+      expect(turn?.querySelector('.t .time')?.textContent).toBe('07:00:00');
+    });
   });
 
   it('shows the truncation banner when the server capped the read', async () => {
