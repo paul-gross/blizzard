@@ -3,27 +3,21 @@ issue #96).
 
 Pins the two acceptance-criteria-load-bearing facts directly: the file (and its
 parent directory) are created owner-only, and ``logout`` (``delete_session``) removes
-the entry so it stops being sent. ``platformdirs.user_config_dir`` is monkeypatched to
-a ``tmp_path`` so this never touches the real machine's config dir.
+the entry so it stops being sent. The real machine's config dir is never touched:
+``conftest``'s suite-wide ``_isolated_session_store`` already redirects
+``platformdirs.user_config_dir`` at a ``tmp_path`` for every test, so this module needs
+no isolation fixture of its own.
 """
 
 from __future__ import annotations
 
 import stat
-from pathlib import Path
 
 import pytest
 
 from blizzard.hub import session_store
 
 pytestmark = pytest.mark.unit
-
-
-@pytest.fixture(autouse=True)
-def _isolated_config_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    config_dir = tmp_path / "config" / "blizzard"
-    monkeypatch.setattr(session_store.platformdirs, "user_config_dir", lambda _app: str(config_dir))
-    return config_dir
 
 
 def test_load_session_is_none_when_nothing_stored() -> None:

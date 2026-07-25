@@ -11,6 +11,7 @@ Also makes the suite hermetic against blizzard's own worker identity vars — se
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from types import ModuleType
 from typing import Any
 
@@ -18,6 +19,7 @@ import pytest
 
 from blizzard.hub import app as hub_app
 from blizzard.hub import runtime as hub_runtime
+from blizzard.hub import session_store
 from blizzard.runner import app as runner_app
 from blizzard.runner import runtime as runner_runtime
 
@@ -48,6 +50,28 @@ def _strip_worker_identity_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Unset the worker identity vars so the suite is green inside a blizzard worker."""
     for name in _WORKER_IDENTITY_ENV:
         monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_session_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Point the CLI's session-token file at a per-test temp dir.
+
+    The same hazard as :func:`_strip_worker_identity_env`, one layer out: ambient *host*
+    state rather than ambient env. ``session_store`` resolves its path through
+    ``platformdirs.user_config_dir``, so an operator who has ever run ``blizzard hub
+    login`` against the CLI's DEFAULT hub url holds a real token on disk. Every unit test
+    that drives a verb WITHOUT overriding ``BZ_HUB_URL`` resolves to that same default,
+    ``_request`` finds the token and attaches a ``headers=`` kwarg, and the test's own
+    ``httpx`` fake — which declares only the kwargs the CLI used to send — dies with
+    ``TypeError: fake_get() got an unexpected keyword argument 'headers'``.
+
+    The failure is invisible in CI, where nobody has logged in, and reproduces for every
+    developer who has: exactly the split ``_strip_worker_identity_env`` exists to close.
+    Isolate it once, for every test; a test that wants a stored session saves one itself.
+    """
+    monkeypatch.setattr(
+        session_store.platformdirs, "user_config_dir", lambda _app: str(tmp_path / "config" / "blizzard")
+    )
 
 
 @dataclass(frozen=True)
