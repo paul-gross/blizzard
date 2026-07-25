@@ -6,6 +6,7 @@ import { errorMessage } from '../error-message';
 import { KitButton } from '../kit/kit-button';
 import { GraphDiagram } from './graph-diagram';
 import { injectGraphLifecycleMutation } from './graph-lifecycle.mutations';
+import { GraphNodeTable } from './graph-node-table';
 import { injectHubGraphQuery } from './graphs.query';
 
 /** One outgoing edge, resolved against the choice it fires on (the choice lives on
@@ -32,7 +33,7 @@ interface ResolvedEdge {
 @Component({
   selector: 'fleet-graph-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [GraphDiagram, KitButton],
+  imports: [GraphDiagram, GraphNodeTable, KitButton],
   template: `
     <section class="gd-panel graph-detail" aria-label="Graph detail" data-testid="graph-detail">
       @if (graphQuery.isPending()) {
@@ -76,39 +77,7 @@ interface ResolvedEdge {
 
           <fleet-graph-diagram [graph]="g" data-testid="graph-detail-diagram" />
 
-          <table class="nodes" data-testid="graph-detail-nodes">
-            <thead>
-              <tr>
-                <th>Node</th>
-                <th>Executor</th>
-                <th>Session</th>
-                <th>Judged by</th>
-                <th>Retries</th>
-                <th>Mode</th>
-                <th>Checks</th>
-                <th>Produces</th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (node of nodes(); track node.node_id) {
-                <tr data-testid="graph-detail-node-row" [attr.data-node-id]="node.node_id">
-                  <td class="nid">
-                    {{ node.name }}
-                    @if (node.node_id === g.entry_node_id) {
-                      <span class="entry-badge" data-testid="graph-detail-entry-badge">entry</span>
-                    }
-                  </td>
-                  <td>{{ node.executor }}</td>
-                  <td>{{ node.session }}</td>
-                  <td>{{ node.judged_by }}</td>
-                  <td>{{ retriesLabel(node) }}</td>
-                  <td>{{ node.mode ?? '—' }}</td>
-                  <td>{{ listOrDash(node.checks) }}</td>
-                  <td>{{ listOrDash(node.produces) }}</td>
-                </tr>
-              }
-            </tbody>
-          </table>
+          <fleet-graph-node-table [nodes]="nodes()" [entryNodeId]="g.entry_node_id" />
 
           <div class="section" data-testid="graph-detail-edges">
             <span class="gd-lbl">Edges &amp; choices</span>
@@ -226,35 +195,6 @@ interface ResolvedEdge {
     .entry strong {
       color: var(--cyan);
     }
-    table.nodes {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: var(--fs-xs);
-    }
-    table.nodes th,
-    table.nodes td {
-      border: 1px solid var(--line);
-      padding: 3px 6px;
-      text-align: left;
-      vertical-align: top;
-    }
-    table.nodes th {
-      color: var(--label);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      background: var(--overlay-25);
-    }
-    .nid {
-      color: var(--cyan);
-    }
-    .entry-badge {
-      margin-left: 6px;
-      padding: 0 4px;
-      border: 1px solid var(--amber-hi);
-      color: var(--amber-hi);
-      font-size: 0.85em;
-      text-transform: uppercase;
-    }
     .section {
       display: flex;
       flex-direction: column;
@@ -332,16 +272,6 @@ export class GraphDetail {
     if (!g) return '';
     return this.nodes().find((n) => n.node_id === g.entry_node_id)?.name ?? g.entry_node_id;
   });
-
-  protected retriesLabel(node: GraphNodeView): string {
-    if (node.retries_max === undefined || node.retries_max === null) return '—';
-    const exhausted = node.retries_exhausted ? ` → ${node.retries_exhausted}` : '';
-    return `${node.retries_max}${exhausted}`;
-  }
-
-  protected listOrDash(values: readonly string[] | undefined): string {
-    return values && values.length > 0 ? values.join(', ') : '—';
-  }
 
   /** Confirm, then fire the retire mutation (issue #101) — mirrors
    * `chunk-detail-header.ts`'s confirm-then-emit pattern for pause/detach. */

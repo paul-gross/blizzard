@@ -1,6 +1,7 @@
 import dagre from '@dagrejs/dagre';
 
 import type { GraphNodeView, GraphView } from '../api/hub';
+import { producesNames } from './graph-node';
 
 /**
  * The pure DAG-layout core for the graph diagram (`bzh:generated-client` — this
@@ -115,7 +116,10 @@ function nodeMetaText(node: GraphNodeView): string {
   if (node.judged_by === 'human') meta.push('judged: human');
   if (node.mode) meta.push(node.mode);
   if (node.retries_max !== undefined && node.retries_max !== null) meta.push(`retries ${node.retries_max}`);
-  if (node.produces && node.produces.length > 0) meta.push(`→ ${node.produces.join(', ')}`);
+  const produces = producesNames(node);
+  if (produces && produces.length > 0) {
+    meta.push(`→ ${produces.join(', ')}`);
+  }
   return meta.join(' · ');
 }
 
