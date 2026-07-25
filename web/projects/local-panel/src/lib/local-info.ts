@@ -50,7 +50,7 @@ import { injectRunnerFleetSummaryQuery, injectRunnerStatusQuery } from './status
           </dl>
           <div class="fleet-strip" [class.stale]="fleetStale()" data-testid="fleet-strip">
             <div class="fs-head">
-              <span class="fs-lbl">Fleet · read from hub API</span>
+              <span class="fs-lbl">Fleet</span>
               <span class="fs-age" data-testid="fleet-age">{{ fleetStale() ? 'last known' : 'live' }}</span>
             </div>
             <div class="fleet-nums">

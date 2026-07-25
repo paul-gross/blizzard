@@ -88,7 +88,7 @@ import type { MachineChunkRow } from './local-panel';
           <fleet-kit-panel
             class="leases-panel"
             data-testid="lease-pane"
-            label="leases · heartbeat freshness"
+            label="active leases"
           >
             <span header class="p-note" data-testid="lease-count">{{ activeLeases().length }} live</span>
             <fleet-kit-async-state
@@ -145,14 +145,14 @@ import type { MachineChunkRow } from './local-panel';
           </div>
         </section>
         <section class="col right">
-          <fleet-kit-panel class="hub-panel" label="hub · outbound only, nothing dials in">
+          <fleet-kit-panel class="hub-panel" label="hub">
             <local-info />
           </fleet-kit-panel>
-          <fleet-kit-panel class="asks-panel" label="local asks · answers live at the hub">
+          <fleet-kit-panel class="asks-panel" label="local asks">
             <span header class="p-note">{{ openAskCount() }} open</span>
             <local-asks />
           </fleet-kit-panel>
-          <fleet-kit-panel class="facts-panel" label="local fact log · runner store">
+          <fleet-kit-panel class="facts-panel" label="local fact log">
             <local-fact-log />
           </fleet-kit-panel>
         </section>

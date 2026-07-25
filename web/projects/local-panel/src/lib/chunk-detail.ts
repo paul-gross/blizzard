@@ -29,7 +29,7 @@ import { TranscriptPanel } from './transcript-panel';
     <div class="detail" data-testid="machine-detail">
       @if (newestLease(); as l) {
         <header class="d-hdr">
-          <span class="lbl">machine detail</span>
+          <span class="lbl">chunk detail</span>
           <span class="cid" data-testid="detail-chunk-ref">{{ chunkRef() }}</span>
           <span class="spacer"></span>
           <span class="st" [attr.data-tone]="status()?.tone" data-testid="machine-detail-status">

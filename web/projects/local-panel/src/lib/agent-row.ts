@@ -42,7 +42,7 @@ import { HeartbeatFreshness } from './heartbeat-freshness';
       </div>
       <div class="l2">
         node <b>{{ agent().node_name }}</b> · env <b>{{ agent().environment_id ?? '—' }}</b> · pid
-        <b>{{ agent().pid ?? '—' }}</b> · session <b>{{ agent().session_id ?? '—' }}</b>
+        <b>{{ agent().pid ?? '—' }}</b>
       </div>
       <local-heartbeat-freshness [lastHeartbeatAt]="agent().last_heartbeat_at" [stale]="isStale()" />
     </div>

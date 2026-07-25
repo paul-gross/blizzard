@@ -67,14 +67,14 @@ describe('AgentRow', () => {
     expect(row?.textContent).toContain('epoch 2');
   });
 
-  it('renders node, env, pid, and session on the second line', async () => {
+  it('renders node, env, and pid on the second line, without the session uuid', async () => {
     const el = await render(lease());
 
     const l2 = el.querySelector('.l2')?.textContent ?? '';
     expect(l2).toContain('build');
     expect(l2).toContain('beta');
     expect(l2).toContain('4821');
-    expect(l2).toContain('sess-77');
+    expect(l2).not.toContain('sess-77');
   });
 
   it('renders the server-derived state as the right-aligned chip', async () => {
