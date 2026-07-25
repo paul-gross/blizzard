@@ -123,15 +123,77 @@ describe('LocalPanel', () => {
     vi.restoreAllMocks();
   });
 
-  it('reflects the connection input in the header', async () => {
+  it('shows ok in the header once the runner local API responds (issue #131)', async () => {
     stub = stubRequestClient(runnerClient, routes([]));
-    await setUp();
-    const fixture = TestBed.createComponent(LocalPanel);
-    fixture.componentRef.setInput('connection', 'ok');
-    await settle(fixture);
+    const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="conn"]')?.textContent).toContain('ok');
+  });
+
+  it('shows offline in the header when the runner local API is unreachable (issue #131)', async () => {
+    stub = stubRequestClient(runnerClient,
+      routes([], (method, path) => (method === 'GET' && path === '/api/runner' ? stubError(503, { detail: 'down' }) : undefined)),
+    );
+    const fixture = await render();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="conn"]')?.textContent).toContain('offline');
+  });
+
+  it('folds the runner status and environments reads into the header stat cells (issue #131)', async () => {
+    stub = stubRequestClient(runnerClient,
+      routes([], (method, path) => {
+        if (method === 'GET' && path === '/api/runner') {
+          return {
+            runner_id: 'runner-local',
+            workspace_id: 'workspace-local',
+            pause: { local: false, hub: false, effective: false },
+            capacities: { max_agents: 2, used: 1, free: 1 },
+            hub: { endpoint: 'http://127.0.0.1:8421', reachable: true, last_contact_at: null, buffer_depth: 0 },
+            last_tick_at: null,
+          };
+        }
+        if (method === 'GET' && path === '/api/environments') {
+          return {
+            items: [
+              { environment_id: 'alpha', chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9', held_since: '2026-07-16T11:18:00.000Z' },
+              { environment_id: 'beta', chunk_id: null, held_since: null },
+              { environment_id: 'gamma', chunk_id: null, held_since: null },
+              { environment_id: 'delta', chunk_id: null, held_since: null },
+            ],
+          };
+        }
+        return undefined;
+      }),
+    );
+    const fixture = await render();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="stat-envs"]')?.textContent?.trim()).toBe('1/4');
+    expect(el.querySelector('[data-testid="stat-agents"]')?.textContent?.trim()).toBe('1/2');
+  });
+
+  it('withholds the header stat cells before the first read resolves, rather than a misleading 0/0', async () => {
+    stub = stubRequestClient(runnerClient, routes([]));
+    await setUp();
+    const fixture = TestBed.createComponent(LocalPanel);
+    // Right after creation neither the status nor the environments read has resolved
+    // yet — the same gap the header's own `spendToday` cell withholds itself for
+    // rather than show a misleading `$0.00` (issue #131 review).
+    fixture.detectChanges();
+    let el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="stat-envs"]')).toBeNull();
+    expect(el.querySelector('[data-testid="stat-agents"]')).toBeNull();
+
+    await settle(fixture);
+    el = fixture.nativeElement as HTMLElement;
+
+    // Once both reads land the cells appear — this is a withhold-once-on-mount, not
+    // a permanent absence.
+    expect(el.querySelector('[data-testid="stat-envs"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="stat-agents"]')).not.toBeNull();
   });
 
   it('shows a loading line before the first read resolves, not the empty state', async () => {

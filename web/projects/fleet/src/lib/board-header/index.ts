@@ -1,1 +1,1 @@
-export { BoardHeader } from './board-header';
+export { BoardHeader, type StatCell } from './board-header';

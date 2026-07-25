@@ -5,21 +5,32 @@ import { LANES, laneFor } from '../chunk-lanes';
 import { BrandMark } from '../design/brand-mark';
 import { formatCost } from '../cost-format';
 
-/** One header stat cell — a label over its live count. */
-interface StatCell {
+/** One header stat cell — a label over its live count, optionally shown as a
+ * `value/capacity` fraction (e.g. the runner's `envs 2/4`). `capacity` is
+ * omitted for the hub's plain per-lane counts. */
+export interface StatCell {
   readonly key: string;
   readonly label: string;
   readonly value: number;
+  readonly capacity?: number;
 }
 
 /**
- * The mission-control titlebar — the brand, the fleet's live counts, and
- * the hub connection state. It spans the whole window above the three columns, so
- * it lives here rather than inside {@link BoardShell}: a header nested in the board
- * column would only span that column, leaving the rails to start above it.
+ * The mission-control titlebar — the brand, a fleet's live counts, and a
+ * connection state. Shared by the hub board (its own chunk-derived lane counts,
+ * via {@link chunks}) and the runner's local panel (its own capacity cells, via
+ * {@link stats}) — one header, one 48px chrome, rather than each app rendering its
+ * own bespoke bar (issue #131). It spans the whole window above whatever it sits
+ * over, so it lives here rather than inside a routed page: a header nested in a
+ * content column would only span that column, leaving the rails to start above it.
  *
- * Presentational only: it derives its counts from the chunk list it is handed.
- * All color comes from the design-token layer, never hard-coded hex.
+ * Presentational only: every cell is derived from plain inputs, never an
+ * injected query. `stats`, given, renders in place of the chunk-derived lane
+ * cells — the runner has no chunk list, so it supplies its own. The trailing
+ * `[header-trailing]`-selected content projection is the composable slot future
+ * header controls (an avatar menu, a pause toggle) slot into without this
+ * component knowing about either. All color comes from the design-token layer,
+ * never hard-coded hex.
  */
 @Component({
   selector: 'fleet-board-header',
@@ -29,12 +40,14 @@ interface StatCell {
     <header class="mc-header" data-testid="board-header">
       <div class="brand">
         <fleet-brand-mark [size]="30" />
-        <div class="brand-text">blizzard<small>fleet hub · mission control</small></div>
+        <div class="brand-text">blizzard<small>{{ tagline() }}</small></div>
       </div>
-      @for (cell of stats(); track cell.key) {
+      @for (cell of cells(); track cell.key) {
         <div class="cell" [attr.data-stat]="cell.key">
           <span class="stat-lbl">{{ cell.label }}</span>
-          <span class="v" [attr.data-testid]="'stat-' + cell.key">{{ cell.value }}</span>
+          <span class="v" [attr.data-testid]="'stat-' + cell.key"
+            >{{ cell.value }}{{ cell.capacity === undefined ? '' : '/' + cell.capacity }}</span
+          >
         </div>
       }
       <div class="spacer"></div>
@@ -48,9 +61,10 @@ interface StatCell {
         </div>
       }
       <div class="cell conn" data-testid="conn">
-        <span class="stat-lbl">Hub</span>
+        <span class="stat-lbl">{{ connectionLabel() }}</span>
         <span class="v">{{ connection() }}</span>
       </div>
+      <ng-content select="[header-trailing]" />
     </header>
   `,
   styles: `
@@ -142,12 +156,27 @@ export class BoardHeader {
   /** A short connection/health status shown in the header (e.g. `ok`, `offline`). */
   readonly connection = input('—');
 
-  /** The fleet chunk list the counts are derived from. */
+  /** The connection cell's label — `Hub` for the hub board, `Runner` for the
+   * runner's local panel. */
+  readonly connectionLabel = input('Hub');
+
+  /** The brand block's subtitle line. */
+  readonly tagline = input('fleet hub · mission control');
+
+  /** The fleet chunk list the counts are derived from — the hub's usage; ignored
+   * once {@link stats} is given. */
   readonly chunks = input<readonly ChunkSummary[]>([]);
 
   /** The fleet-wide spend-since read (issue #60), or `null` before the first read
    * resolves — the cell withholds itself rather than show a misleading `$0.00`. */
   readonly spendToday = input<FleetSpendView | null>(null);
+
+  /** Explicit stat cells, e.g. the runner's envs/agents capacity cells (issue
+   * #131) — when given, these render in place of {@link chunkStats} below, so a
+   * caller with no chunk list supplies its own stats without this component
+   * knowing anything about its domain. `null` (the hub's usage) falls through to
+   * the chunk-derived lane cells. */
+  readonly stats = input<readonly StatCell[] | null>(null);
 
   /**
    * The live fleet counts, left → right: the whole fleet, the ready rail, then one
@@ -159,7 +188,7 @@ export class BoardHeader {
    * be a silent contradiction, whereas a new status added to the wire is a compile
    * error in `chunk-lanes`, the one place that decides where it belongs.
    */
-  protected readonly stats = computed<readonly StatCell[]>(() => {
+  protected readonly chunkStats = computed<readonly StatCell[]>(() => {
     const chunks = this.chunks();
     const perLane = new Map<string, number>(LANES.map((lane) => [lane.key, 0]));
     // A null lane means the chunk is in the ready rail rather than on the board —
@@ -180,4 +209,8 @@ export class BoardHeader {
       })),
     ];
   });
+
+  /** The cells the template renders — {@link stats} when the caller supplied one,
+   * else {@link chunkStats}. */
+  protected readonly cells = computed<readonly StatCell[]>(() => this.stats() ?? this.chunkStats());
 }

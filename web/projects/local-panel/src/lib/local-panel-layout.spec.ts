@@ -42,6 +42,10 @@ async function render(overrides: Record<string, unknown> = {}) {
   const fixture = TestBed.createComponent(LocalPanelLayout);
   const defaults = {
     connection: 'ok',
+    headerStats: [
+      { key: 'envs', label: 'Envs', value: 2, capacity: 4 },
+      { key: 'agents', label: 'Agents', value: 1, capacity: 2 },
+    ],
     activeLeases: [LEASE()],
     leasesTriadState: 'ready',
     chunksTriadState: 'ready',
@@ -75,6 +79,34 @@ describe('LocalPanelLayout', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="conn"]')?.textContent).toContain('ok');
+  });
+
+  it('shows offline in the header when the connection input says so', async () => {
+    const fixture = await render({ connection: 'offline' });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="conn"]')?.textContent).toContain('offline');
+  });
+
+  it('renders the header stat cells it is handed, off plain inputs alone (issue #131)', async () => {
+    const fixture = await render({
+      headerStats: [
+        { key: 'envs', label: 'Envs', value: 2, capacity: 4 },
+        { key: 'agents', label: 'Agents', value: 1, capacity: 2 },
+      ],
+    });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="stat-envs"]')?.textContent?.trim()).toBe('2/4');
+    expect(el.querySelector('[data-testid="stat-agents"]')?.textContent?.trim()).toBe('1/2');
+  });
+
+  it('renders the shared 48px board header, not a bespoke local one (issue #131)', async () => {
+    const fixture = await render();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="board-header"]')).not.toBeNull();
+    expect(el.querySelector('.lp-header')).toBeNull();
   });
 
   it('renders the async triad state it is handed, without a query of its own', async () => {

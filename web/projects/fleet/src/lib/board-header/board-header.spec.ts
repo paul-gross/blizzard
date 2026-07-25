@@ -111,6 +111,38 @@ describe('BoardHeader', () => {
     expect(el.querySelector('[data-testid="spend-today-value"]')?.textContent).toContain('$3.50');
   });
 
+  it('renders explicit stat cells in place of the chunk-derived ones, as a capacity fraction (issue #131)', async () => {
+    const fixture = TestBed.createComponent(BoardHeader);
+    fixture.componentRef.setInput('chunks', [chunk('ch_1', 'ready')]);
+    fixture.componentRef.setInput('stats', [
+      { key: 'envs', label: 'Envs', value: 2, capacity: 4 },
+      { key: 'agents', label: 'Agents', value: 1, capacity: 2 },
+    ]);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="stat-envs"]')?.textContent?.trim()).toBe('2/4');
+    expect(el.querySelector('[data-testid="stat-agents"]')?.textContent?.trim()).toBe('1/2');
+    // The chunk-derived lane cells (e.g. `total`) do not also render — `stats`
+    // replaces them entirely rather than appending to them.
+    expect(el.querySelector('[data-testid="stat-total"]')).toBeNull();
+  });
+
+  it('reflects connectionLabel and tagline overrides, defaulting to the hub\'s own text', async () => {
+    const defaultEl = await render([]);
+    expect(defaultEl.querySelector('[data-testid="conn"]')?.textContent).toContain('Hub');
+    expect(defaultEl.querySelector('.brand-text')?.textContent).toContain('fleet hub · mission control');
+
+    const fixture = TestBed.createComponent(BoardHeader);
+    fixture.componentRef.setInput('connectionLabel', 'Runner');
+    fixture.componentRef.setInput('tagline', 'runner · machine panel');
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="conn"]')?.textContent).toContain('Runner');
+    expect(el.querySelector('.brand-text')?.textContent).toContain('runner · machine panel');
+  });
+
   it('marks the spend-today figure with the lower-bound prefix when PARTIAL (issue #60)', async () => {
     const fixture = TestBed.createComponent(BoardHeader);
     fixture.componentRef.setInput('chunks', []);

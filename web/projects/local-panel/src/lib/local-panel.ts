@@ -1,7 +1,14 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
-import { type KitAsyncStateValue, MobileTabBar, type MobileTabItem, type runnerApi, ViewportService } from 'fleet';
+import {
+  type KitAsyncStateValue,
+  MobileTabBar,
+  type MobileTabItem,
+  type runnerApi,
+  type StatCell,
+  ViewportService,
+} from 'fleet';
 
 import { type MachineChunkStatus, deriveMachineChunkStatus } from './chunk-status';
 import { injectRunnerLeasesQuery } from './leases.query';
@@ -9,7 +16,9 @@ import { LocalPanelLayout } from './local-panel-layout';
 import { LocalPanelMobile } from './local-panel-mobile';
 import {
   injectRunnerAsksQuery,
+  injectRunnerEnvironmentsQuery,
   injectRunnerEscalationsQuery,
+  injectRunnerStatusQuery,
   injectRunnerTakeoversQuery,
 } from './status.query';
 
@@ -37,6 +46,12 @@ export interface MachineChunkRow {
  * plain inputs, so it is testable without a runner-client stub. The URL is the
  * single source of truth — the panel derives its selection from the query params
  * and every click writes them back, never the reverse.
+ *
+ * The shared header's live state is folded here too (issue #131): {@link headerStats}
+ * off `GET /api/runner`'s capacities and `GET /api/environments`'s pool (envs and
+ * agents used/capacity), and {@link connection} off the same status read's
+ * pending/error state — `ok` once it resolves, `offline` on a failed read, never
+ * the permanently-dead placeholder the header used to carry.
  */
 @Component({
   selector: 'local-panel',
@@ -48,6 +63,7 @@ export interface MachineChunkRow {
         @if (mode() === 'desktop') {
           <local-panel-layout
             [connection]="connection()"
+            [headerStats]="headerStats()"
             [activeLeases]="activeLeases()"
             [leasesTriadState]="leasesTriadState()"
             [chunksTriadState]="chunksTriadState()"
@@ -97,9 +113,6 @@ export interface MachineChunkRow {
   `,
 })
 export class LocalPanel {
-  /** A short connection/health status shown in the header (e.g. `ok`, `offline`). */
-  readonly connection = input('—');
-
   /** The page-level shell picker (`../docs/designs/mobile/README.md`'s
    * "adaptive shells over shared guts") — desktop renders the existing
    * three-column {@link LocalPanelLayout} unchanged; mobile renders
@@ -108,7 +121,7 @@ export class LocalPanel {
    * scrolling `.lp-content` (mirroring the hub app-root's own placement,
    * issue #92) so it never scrolls out of view. The viewport override itself
    * lives behind each shell's own header menu (`KitMenu`, mobile polish
-   * feedback item 5) — `LocalPanelLayout`'s `.lp-header` and
+   * feedback item 5) — the shared header's `[header-trailing]` slot and
    * `LocalPanelMobile`'s shared `MobileTitlebar` menu slot — rather than an
    * always-visible strip above both. */
   protected readonly viewport = inject(ViewportService);
@@ -119,6 +132,47 @@ export class LocalPanel {
   protected readonly asksQuery = injectRunnerAsksQuery();
   protected readonly escalationsQuery = injectRunnerEscalationsQuery();
   protected readonly takeoversQuery = injectRunnerTakeoversQuery();
+
+  /** The runner's own machine-local status — capacities (agents used/max) and
+   * connection health, off `GET /api/runner`, the same 5s-polled read
+   * {@link LocalInfo} already uses. */
+  protected readonly statusQuery = injectRunnerStatusQuery();
+
+  /** The configured environment pool — off `GET /api/environments`, the same
+   * read {@link EnvList} already uses; envs used is derived from how many
+   * carry a `chunk_id`. */
+  protected readonly environmentsQuery = injectRunnerEnvironmentsQuery();
+
+  /** The header's connection cell (issue #131) — `ok` once the runner local
+   * API's status read resolves, `offline` on a failed read, `connecting…`
+   * for the pending gap before the first read settles. Never the dead `'—'`
+   * placeholder the header used to carry: this is real health, derived from
+   * the same query every other hub-free rail on this panel already polls. */
+  protected readonly connection = computed<string>(() => {
+    if (this.statusQuery.isPending()) return 'connecting…';
+    if (this.statusQuery.isError()) return 'offline';
+    return 'ok';
+  });
+
+  /** The header's live stat cells (issue #131) — environments in use/capacity
+   * off the environments pool, active agent leases/capacity off the status
+   * read's `capacities`. Withheld (`[]`) until *both* reads have resolved at
+   * least once, the same stance the header's own `spendToday` cell takes
+   * rather than show a misleading `$0.00` — a confident `Envs 0/0` before the
+   * first read would be the same lie one cell over. `isPending()` is only
+   * `true` for that initial gap (never on a background 5s-poll refetch), so
+   * this withholds once, on mount, rather than flapping the cells on every
+   * poll. */
+  protected readonly headerStats = computed<readonly StatCell[]>(() => {
+    if (this.environmentsQuery.isPending() || this.statusQuery.isPending()) return [];
+    const envs = this.environmentsQuery.data() ?? [];
+    const envsUsed = envs.filter((env) => env.chunk_id != null).length;
+    const capacities = this.statusQuery.data()?.capacities;
+    return [
+      { key: 'envs', label: 'Envs', value: envsUsed, capacity: envs.length },
+      { key: 'agents', label: 'Agents', value: capacities?.used ?? 0, capacity: capacities?.max_agents ?? 0 },
+    ];
+  });
 
   /** The active + recently-closed leases, server-ordered; empty until the first read resolves. */
   private readonly leases = computed(() => this.leasesQuery.data() ?? []);

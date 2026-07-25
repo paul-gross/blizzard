@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import type { runnerApi } from 'fleet';
+import type { runnerApi, StatCell } from 'fleet';
 
-import { BrandMark, KitAsyncState, type KitAsyncStateValue, KitMenu, KitPanel, ViewportToggle } from 'fleet';
+import { BoardHeader, KitAsyncState, type KitAsyncStateValue, KitMenu, KitPanel, ViewportToggle } from 'fleet';
 
 import { AgentRow } from './agent-row';
 import { MachineDetail } from './chunk-detail';
@@ -39,13 +39,22 @@ import type { MachineChunkRow } from './local-panel';
  * polish feedback item 5) — this is the existing header region the desktop
  * shell's override lives behind now, replacing {@link LocalPanel}'s old
  * always-visible `.viewport-strip`.
+ *
+ * The titlebar itself is the shared {@link BoardHeader} (issue #131) — the same
+ * 48px chrome the hub board renders, rather than a bespoke local one. It carries
+ * this machine's own capacity cells ({@link headerStats}, folded by the container
+ * from the runner local API's status + environments reads) and a real connection
+ * state, never a placeholder. `local-identity` and the shell's {@link KitMenu} ride
+ * along in the header's `[header-trailing]` slot — the same composable region a
+ * later avatar menu or pause control (issues #132/#133) slots into without this
+ * layout or {@link BoardHeader} changing.
  */
 @Component({
   selector: 'local-panel-layout',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     AgentRow,
-    BrandMark,
+    BoardHeader,
     MachineDetail,
     ChunkRow,
     EnvList,
@@ -60,21 +69,12 @@ import type { MachineChunkRow } from './local-panel';
   ],
   template: `
     <div class="lp" data-testid="local-panel">
-      <header class="lp-header">
-        <div class="brand">
-          <fleet-brand-mark [size]="24" />
-          <div class="brand-text">blizzard<small>runner · machine panel</small></div>
-        </div>
-        <div class="spacer"></div>
-        <div class="conn" data-testid="conn">
-          <span class="conn-lbl">Runner</span>
-          <span class="v">{{ connection() }}</span>
-        </div>
-        <local-identity />
-        <fleet-kit-menu class="menu" ariaLabel="Shell options" testid="local-panel-menu">
+      <fleet-board-header [connection]="connection()" connectionLabel="Runner" tagline="runner · machine panel" [stats]="headerStats()">
+        <local-identity header-trailing />
+        <fleet-kit-menu header-trailing class="menu" ariaLabel="Shell options" testid="local-panel-menu">
           <fleet-viewport-toggle />
         </fleet-kit-menu>
-      </header>
+      </fleet-board-header>
       <main class="cols">
         <section class="col left">
           <fleet-kit-panel
@@ -166,56 +166,6 @@ import type { MachineChunkRow } from './local-panel';
       flex-direction: column;
       height: 100%;
     }
-    .conn-lbl {
-      font-size: var(--fs-label);
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: var(--label);
-    }
-    .lp-header {
-      flex: none;
-      display: flex;
-      align-items: stretch;
-      height: 40px;
-      border-bottom: 1px solid var(--bezel);
-      background: linear-gradient(180deg, var(--header-hi), var(--header-lo));
-    }
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 9px;
-      padding: 0 14px;
-      border-right: 1px solid var(--line);
-      white-space: nowrap;
-    }
-    .brand-text {
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      color: var(--amber-hi);
-      font-size: var(--fs-lg);
-      letter-spacing: 0.28em;
-      text-transform: uppercase;
-    }
-    .brand small {
-      color: var(--label);
-      font-size: var(--fs-label);
-      letter-spacing: 0.18em;
-    }
-    .spacer {
-      flex: 1;
-      border-right: 1px solid var(--line);
-    }
-    .conn {
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      padding: 0 14px;
-    }
-    .conn .v {
-      color: var(--cyan);
-      font-size: var(--fs-lg);
-    }
     .menu {
       display: flex;
       align-items: center;
@@ -281,6 +231,11 @@ import type { MachineChunkRow } from './local-panel';
 export class LocalPanelLayout {
   /** A short connection/health status shown in the header (e.g. `ok`, `offline`). */
   readonly connection = input('—');
+
+  /** The header's live stat cells — environments in use/capacity and active
+   * agent leases/capacity (issue #131), pre-folded by the container from the
+   * runner local API's status + environments reads. */
+  readonly headerStats = input.required<readonly StatCell[]>();
 
   /** The active leases for the liveness rail. */
   readonly activeLeases = input.required<readonly runnerApi.LeaseView[]>();
