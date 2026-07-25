@@ -6,11 +6,14 @@ target node, the chunk, its artifacts, and the executing epoch (``bzh:domain-cor
 ``bzh:domain-takes-objects``). It is a pure function: the same inputs always
 produce the same envelope, so it unit-tests with zero store.
 
-Two engine rules live here:
+Three engine rules live here:
 
 * the **pre-prompt** is the node's base prompt plus the inlined arrival addendum of
   the edge the chunk took to reach the node (the ``fail -> build`` addendum carries
-  the review findings back);
+  the review findings back), plus a generated required-artifacts table naming every
+  ``produces:`` entry and the fleet-protocol verb that declares it (issue #143, Phase
+  5 — :func:`_required_artifacts_block`), rendered ``#``-prefixed for the same
+  harness-inertness reason as the judgement tail below;
 * the **judgement prompt** is the node's authored judgement prose *only*; the
   generated elicitation tail naming the choice set — ``select exactly one and output
   <Choice>{name}</Choice>`` — is appended by the runner from the envelope's carried
@@ -28,6 +31,7 @@ from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.graph import Graph, Node
 from blizzard.hub.domain.work import Chunk, TransitionFact
 from blizzard.wire.envelope import EnvelopeArtifact, EnvelopeChoice, NodeConfig, NodeEnvelope
+from blizzard.wire.graph import ProducesEntry
 
 
 def latest_artifacts_by_name(rows: list[ArtifactRow]) -> list[ArtifactRow]:
@@ -54,6 +58,42 @@ def _to_envelope_artifact(row: ArtifactRow) -> EnvelopeArtifact:
             commit_hash=commit_hash,
         )
     return EnvelopeArtifact(name=row.name, kind=row.kind, node_name=row.node_name, epoch=row.epoch, content=row.data)
+
+
+def _required_artifacts_block(node: Node) -> str:
+    """The procedurally-generated required-artifacts table appended to the pre-prompt
+    (issue #143, Phase 5): one line per ``produces:`` entry naming its kind and the
+    fleet-protocol verb that declares it. ``""`` when the node declares nothing (a hub
+    node, or a worker node with no ``produces:``), so the empty case leaves ``prompt``
+    untouched exactly as :func:`build_node_envelope` already does for a missing
+    ``arrival_addendum``.
+
+    Generated straight off ``node.produces`` — never authored app/toolchain knowledge,
+    only blizzard's own fleet-protocol verbs (``bzh:app-agnostic-graphs``). Rendered as
+    ``#``-prefixed lines for the same reason the runner's own generated tails are
+    (``runner.loop.steps._elicitation_tail``, ``_nudge_message``): a real coding harness
+    reads them as an ordinary prose comment block, while the mock harness's
+    prompt-is-program ``exec`` sees a legal no-op rather than a ``SyntaxError``.
+    """
+    if not node.produces:
+        return ""
+    lines = ["", "", "# Required artifacts for this node-step:"]
+    for spec in node.produces:
+        if spec.kind is ArtifactKind.GIT_COMMIT:
+            lines.append(
+                f"#   - {spec.name} (git_commit): push your branch, then run "
+                f"`blizzard runner artifact commit --repo <repo> --branch <branch> "
+                f"--commit <sha>` — <repo> is that repo's own worktree DIRECTORY NAME "
+                f"(not an `owner/name` slug or URL), <sha> is the FULL commit sha "
+                f"(`git rev-parse HEAD`), not abbreviated (--forge defaults to this "
+                f"repo's own `origin`; pass it only to override)"
+            )
+        else:
+            lines.append(
+                f"#   - {spec.name} (asset): run `blizzard runner artifact create "
+                f"--name {spec.name}` (content on stdin)"
+            )
+    return "\n".join(lines)
 
 
 def _judgement_prompt(node: Node) -> str | None:
@@ -102,6 +142,9 @@ def build_node_envelope(
     prompt = node.prompt
     if arrival_addendum:
         prompt = f"{prompt}\n\n{arrival_addendum}" if prompt else arrival_addendum
+    required_artifacts = _required_artifacts_block(node)
+    if required_artifacts:
+        prompt = f"{prompt}{required_artifacts}" if prompt else required_artifacts.lstrip("\n")
 
     config = NodeConfig(
         node_id=node.node_id,
@@ -111,7 +154,7 @@ def build_node_envelope(
         session_source=node.session_source,
         judged_by=node.judged_by,
         checks=list(node.checks),
-        produces=list(node.produces),
+        produces=[ProducesEntry(name=p.name, kind=p.kind) for p in node.produces],
         retries_max=node.retries_max,
         mode=node.mode,
         choices=[EnvelopeChoice(name=c.name, description=c.description) for c in node.choices],

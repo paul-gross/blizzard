@@ -13,7 +13,7 @@ import pytest
 
 from blizzard.hub.config import PRODUCES_ENFORCE, PRODUCES_WARN
 from blizzard.hub.domain.artifacts import ArtifactKind
-from blizzard.hub.domain.graph import Executor, JudgedBy, Node, SessionMode
+from blizzard.hub.domain.graph import Executor, JudgedBy, Node, ProducesSpec, SessionMode
 from blizzard.hub.domain.produces_auth import check_produces
 from blizzard.wire.completion import SubmittedArtifact
 
@@ -28,7 +28,7 @@ def _node(*, produces: list[str]) -> Node:
         executor=Executor.RUNNER,
         prompt="do the work",
         checks=[],
-        produces=produces,
+        produces=[ProducesSpec(name=name) for name in produces],
         session=SessionMode.RESUME,
         judged_by=JudgedBy.WORKER,
         retries_max=None,

@@ -40,6 +40,7 @@ from blizzard.runner.app import build_hosted_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop.build import run_single_tick
 from tests.e2e.test_acceptance_loop import (
+    _PUSH_AND_DECLARE_SCRIPT,
     FIXTURE_ENV,
     REPO,
     REPO_NAME,
@@ -74,7 +75,7 @@ _ANSWER_SCRIPT = (
     '     "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
     '     "commit", "-m", "feat: resolve the ask and land the change"],\n'
     "    check=True,\n"
-    ")\n"
+    ")\n" + _PUSH_AND_DECLARE_SCRIPT
 )
 # build judgement (elicited on the resumed session after the commit): pass to review.
 _JUDGEMENT_SCRIPT = "verdict('pass', 'resumed with the human answer; committed and green')\n"

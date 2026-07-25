@@ -130,7 +130,7 @@ _ALL_POINTS = [p.name for p in discover_crash_points()]
 # the generic sweep drives every remaining boundary; resume points are swept by the
 # graceful-restart scenario (`test_kill9_at_resume_crash_point`) and abandon points by the
 # dedicated detach scenario (`test_kill9_at_abandon_crash_point`), further down.
-_DEDICATED_PREFIXES = ("resume.", "abandon.", "pause.", "hubnode.", "migrate.", "attach.", "nudge.")
+_DEDICATED_PREFIXES = ("resume.", "abandon.", "pause.", "hubnode.", "migrate.", "attach.", "nudge.", "declare-commit.")
 _RESUME_POINTS = [p for p in _ALL_POINTS if p.startswith("resume.")]
 _ABANDON_POINTS = [p for p in _ALL_POINTS if p.startswith("abandon.")]
 _PAUSE_POINTS = [p for p in _ALL_POINTS if p.startswith("pause.")]
@@ -183,6 +183,18 @@ _MIGRATE_POINTS = [p for p in _ALL_POINTS if p.startswith("migrate.")]
 # same store — criterion 3's kill-9 durability. It needs no hub and no forge (the attach
 # channel is loop-independent), so it stands up neither.
 _ATTACH_POINTS = [p for p in _ALL_POINTS if p.startswith("attach.")]
+# `declare-commit.*` fires inside the RUNNER's local git-commit declaration endpoint
+# (`GitCommitDeclarationService.declare`, issue #143 Phase 3), `attach.*`'s structural
+# sibling for the `git_commit` artifact kind — an out-of-band HTTP write the generic
+# `build -> deliver` sweep never drives, so it is a dedicated family swept by its own
+# scenario (`test_kill9_at_declare_commit_crash_point`), which stands up a real runner
+# daemon, seeds a lease + its capability token, and makes the real
+# `POST /api/leases/{id}/git-commits` call: the runner records the row durably, crashes
+# in the after-record window, and the declaration (with full provenance) survives
+# against the same store — criterion 3's kill-9 durability, exactly as `attach.*`'s. It
+# needs no hub and no forge (the declare channel is loop-independent, and nothing yet
+# consumes the declaration — that is Phase 4), so it stands up neither.
+_DECLARE_COMMIT_POINTS = [p for p in _ALL_POINTS if p.startswith("declare-commit.")]
 # `nudge.*` fires inside the RUNNER's own ADVANCE step (`_advance_exited_worker`,
 # issue #113 Phase 4), only when a node's `produces:` name has neither a pushed git
 # commit nor an explicit attachment — a condition the plain `build -> deliver` graph
@@ -267,6 +279,13 @@ _MIGRATE_CI_SUBSET = ("migrate.after-record.before-response",)
 # `_select` rename-guard asserts the point still exists in the registry.
 _ATTACH_CI_SUBSET = ("attach.after-record.before-response",)
 
+# The declare-commit CI subset (#143): `declare-commit.*` is a new runner-side boundary
+# family whose lone member — the after-record durability window — is its own CI
+# representative, exactly as `attach.*`'s is, so this new window ships with real CI
+# coverage (never zero); the `_select` rename-guard asserts the point still exists in
+# the registry.
+_DECLARE_COMMIT_CI_SUBSET = ("declare-commit.after-record.before-response",)
+
 # The nudge CI subset (#113): `nudge.*` is a new runner-side boundary family whose first-
 # declared member — the fired-fact-before-resume window, the one the "at most one nudge"
 # guarantee rests on — is its own CI representative, exactly as the other new families are,
@@ -296,6 +315,7 @@ _HUBNODE_PENDING_SWEEP = _select(_HUBNODE_PENDING_POINTS, _HUBNODE_PENDING_CI_SU
 _MIGRATE_SWEEP = _select(_MIGRATE_POINTS, _MIGRATE_CI_SUBSET)
 _ATTACH_SWEEP = _select(_ATTACH_POINTS, _ATTACH_CI_SUBSET)
 _NUDGE_SWEEP = _select(_NUDGE_POINTS, _NUDGE_CI_SUBSET)
+_DECLARE_COMMIT_SWEEP = _select(_DECLARE_COMMIT_POINTS, _DECLARE_COMMIT_CI_SUBSET)
 
 
 def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -327,6 +347,7 @@ def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
         | set(_select(_MIGRATE_POINTS, _MIGRATE_CI_SUBSET))
         | set(_select(_ATTACH_POINTS, _ATTACH_CI_SUBSET))
         | set(_select(_NUDGE_POINTS, _NUDGE_CI_SUBSET))
+        | set(_select(_DECLARE_COMMIT_POINTS, _DECLARE_COMMIT_CI_SUBSET))
     )
     uncovered = {family for family in families if not any(p.startswith(f"{family}.") for p in ci_selected)}
     assert not uncovered, f"registry families with zero CI-subset coverage: {sorted(uncovered)}"
@@ -836,6 +857,152 @@ def test_kill9_at_attach_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
         terminate(runner_proc)
 
 
+_DECLARE_COMMIT_TOKEN = "the-declare-commit-lease-token"
+_DECLARE_COMMIT_FORGE = "github"
+_DECLARE_COMMIT_REPO = "blizzard"
+_DECLARE_COMMIT_BRANCH = "feat/declare-commit"
+_DECLARE_COMMIT_SHA = "deadbeefcafef00d"
+_DECLARE_COMMIT_NOW = datetime(2026, 7, 22, 12, 0, 0, tzinfo=UTC)
+
+
+@pytest.mark.parametrize("point", _DECLARE_COMMIT_SWEEP)
+def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
+    """A ``kill -9`` right after the runner records a worker git-commit declaration keeps
+    it (issue #143, `attach.*`'s structural sibling for the ``git_commit`` kind).
+
+    ``declare-commit.*`` fires inside the RUNNER's local declare endpoint
+    (``GitCommitDeclarationService.declare``, behind ``POST /api/leases/{id}/git-commits``),
+    the instant ``record_git_commit_declaration``'s single committed txn returns and before
+    the ``200`` does. Unlike the generic ``build -> deliver`` sweep, the declare channel is
+    an out-of-band HTTP write no loop step drives — and nothing yet reads it back (that is
+    Phase 4) — so this dedicated scenario stands up a real runner daemon (no hub, no forge:
+    the declare path is loop-independent), seeds a lease + its Phase-1 capability token
+    directly, and makes the real declare call. The runner writes the row durably,
+    self-SIGKILLs in the after-record window, and the claim under test is that the
+    declaration — with full provenance — is still readable against the **same store**
+    after the ungraceful death: the durable fact a later collection (Phase 4) re-derives
+    via ``git_commit_declarations_for_lease``.
+
+    The seeded lease is **parked** so REAP — which ticks at startup and would otherwise
+    expire an unspawned, pid-less lease (``steps.reap``) — leaves it be; ADVANCE skips a
+    pid-less lease outright, so nothing else in the hub-less loop touches it. The park is
+    scaffolding to keep the lease alive for the out-of-band write, not part of the
+    property under test.
+    """
+    runner_dir = tmp_path / "runner"
+    # Nothing listens on ``hub_port`` — the declare path never calls the hub; the loop's
+    # hub polls just fail and are swallowed, and the local API serves regardless.
+    hub_port, runner_port = free_port(), free_port()
+    write_runner_config(
+        runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+    )
+    db_url = RunnerConfig.load(runner_dir).db_url
+
+    # Seed a lease + its capability token, then park it, through a store the daemon does not
+    # yet hold; dispose so the hosted daemon opens the sqlite file with no concurrent writer.
+    engine = create_engine_from_url(db_url)
+    store = SqlAlchemyRunnerStore(engine)
+    store.record_lease(
+        NewLease(
+            lease_id="lease_declare_commit",
+            chunk_id="ch_declare_commit",
+            graph_id="gr_declare_commit",
+            node_id="nd_build",
+            node_name="build",
+            epoch=4,
+            runner_id="runner-local",
+            retries_max=2,
+            created_at=_DECLARE_COMMIT_NOW,
+        )
+    )
+    store.record_lease_token("lease_declare_commit", hash_token(_DECLARE_COMMIT_TOKEN), _DECLARE_COMMIT_NOW)
+    store.record_ask(
+        lease_id="lease_declare_commit",
+        chunk_id="ch_declare_commit",
+        question_id="q_park",
+        question="parked so REAP leaves the seeded lease be",
+        options=[],
+        session_id=None,
+        asked_at=_DECLARE_COMMIT_NOW,
+    )
+    store.record_park(
+        lease_id="lease_declare_commit",
+        chunk_id="ch_declare_commit",
+        question_id="q_park",
+        parked_at=_DECLARE_COMMIT_NOW,
+    )
+    engine.dispose()
+
+    runner = httpx.Client(base_url=f"http://127.0.0.1:{runner_port}", timeout=30.0)
+    runner_proc = start_runner(runner_dir, crash_point=point)
+    try:
+        await_http(runner, "/api/health", proc=runner_proc)
+
+        # The runner records the declaration durably, then self-SIGKILLs before the
+        # response — the client sees the killed connection, never a 200.
+        with pytest.raises(httpx.HTTPError):
+            runner.post(
+                "/api/leases/lease_declare_commit/git-commits",
+                json={
+                    "forge": _DECLARE_COMMIT_FORGE,
+                    "repo": _DECLARE_COMMIT_REPO,
+                    "branch": _DECLARE_COMMIT_BRANCH,
+                    "commit": _DECLARE_COMMIT_SHA,
+                },
+                headers={"X-Blizzard-Lease-Token": _DECLARE_COMMIT_TOKEN},
+            )
+        code = wait_death(runner_proc)
+        assert code == -9, f"armed runner at {point} exited {code}, not SIGKILL (-9); point never reached?"
+
+        # Durable across the kill -9: reopen the same store — the declaration and its
+        # full provenance (lease/chunk/node/epoch/forge/repo/branch/commit) are exactly
+        # what the worker submitted, though the 200 never returned.
+        engine2 = create_engine_from_url(db_url)
+        try:
+            declarations = SqlAlchemyRunnerStore(engine2).git_commit_declarations_for_lease("lease_declare_commit")
+            assert set(declarations) == {_DECLARE_COMMIT_REPO}
+            declared = declarations[_DECLARE_COMMIT_REPO]
+            assert (declared.forge, declared.repo, declared.branch, declared.commit) == (
+                _DECLARE_COMMIT_FORGE,
+                _DECLARE_COMMIT_REPO,
+                _DECLARE_COMMIT_BRANCH,
+                _DECLARE_COMMIT_SHA,
+            )
+            with engine2.connect() as conn:
+                rows = conn.execute(
+                    select(runner_schema.git_commit_declarations).where(
+                        runner_schema.git_commit_declarations.c.lease_id == "lease_declare_commit"
+                    )
+                ).all()
+            assert len(rows) == 1, "the declaration was not durably recorded before the crash"
+            row = rows[0]._mapping
+            assert (row["chunk_id"], row["node_id"], row["epoch"]) == ("ch_declare_commit", "nd_build", 4), (
+                "the declaration's provenance did not survive intact"
+            )
+        finally:
+            engine2.dispose()
+
+        # The invariant checker is green over the durable runner facts right after the crash.
+        violations = check_invariants(runner_db_url=db_url)
+        assert not violations, "invariant violations after the declare-commit crash:\n" + "\n".join(
+            str(v) for v in violations
+        )
+
+        # Restart the runner UNARMED; the declaration is still readable against the same
+        # store — the fact a later collection (Phase 4) re-derives.
+        runner_proc = start_runner(runner_dir, crash_point=None)
+        await_http(runner, "/api/health", proc=runner_proc)
+        engine3 = create_engine_from_url(db_url)
+        try:
+            declarations = SqlAlchemyRunnerStore(engine3).git_commit_declarations_for_lease("lease_declare_commit")
+            assert set(declarations) == {_DECLARE_COMMIT_REPO}
+        finally:
+            engine3.dispose()
+    finally:
+        runner.close()
+        terminate(runner_proc)
+
+
 def _ingest_nudge_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str) -> str:
     """:func:`_ingest_chunk`'s twin, minting :func:`nudge_graph_yaml` instead of
     :func:`graph_yaml` — the one unattached ``produces:`` name is what opens the
@@ -1037,18 +1204,33 @@ def _open_resume_intents(runner_dir: Path) -> set[str]:
 
 
 def _await_committed(runner_dir: Path, chunk_id: str, landed_file: str, *, timeout: float = 30.0) -> None:
-    """Block until the mid-flight build worker has made its commit in the bound worktree."""
+    """Block until the mid-flight build worker has committed **and durably declared** its
+    git commit (issue #143, Phase 4).
+
+    Since Phase 4 the worker itself commits, pushes, and then declares its git-commit
+    through the runner's local channel before it hangs — and the declaration, not the bare
+    commit, is the durable in-flight fact a resume relies on to submit a ``git_commit``
+    artifact and land. Waiting on the committed file alone would race the push+declare that
+    now follows the commit and detach the chunk before the declaration is recorded, leaving
+    the resumed session with nothing to submit (the chunk would never land — the failure
+    mode this guard closes). This is the loop-resume analogue of :func:`_await_marker`,
+    which the abandon scenario uses for the same reason."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         store, engine = _runner_store(runner_dir)
         try:
-            for binding in store.bindings_for_chunk(chunk_id):
-                if (Path(binding.workdir) / REPO_NAME / landed_file).exists():
-                    return
+            committed = any(
+                (Path(binding.workdir) / REPO_NAME / landed_file).exists()
+                for binding in store.bindings_for_chunk(chunk_id)
+            )
+            lease = store.active_lease_for_chunk(chunk_id)
+            declared = bool(lease and store.git_commit_declarations_for_lease(lease.lease_id))
+            if committed and declared:
+                return
         finally:
             engine.dispose()
         time.sleep(0.2)
-    raise AssertionError(f"build worker never committed {landed_file} before the graceful stop")
+    raise AssertionError(f"build worker never committed+declared {landed_file} before the stop")
 
 
 def test_graceful_restart_resumes_in_flight_session(crash_env: CrashEnv, tmp_path: Path) -> None:
@@ -1276,6 +1458,24 @@ def _hang_once_build_script(landed_file: str, marker: Path) -> str:
         '    ["git", "-C", repo,\n'
         '     "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
         '     "commit", "-m", "feat: land a change from the crash sweep"],\n'
+        "    check=True,\n"
+        ")\n"
+        "_branch = subprocess.run(\n"
+        '    ["git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD"],\n'
+        "    check=True, capture_output=True, text=True,\n"
+        ").stdout.strip()\n"
+        "_commit = subprocess.run(\n"
+        '    ["git", "-C", repo, "rev-parse", "HEAD"],\n'
+        "    check=True, capture_output=True, text=True,\n"
+        ").stdout.strip()\n"
+        "_forge = subprocess.run(\n"
+        '    ["git", "-C", repo, "remote", "get-url", "origin"],\n'
+        "    check=True, capture_output=True, text=True,\n"
+        ").stdout.strip()\n"
+        'subprocess.run(["git", "-C", repo, "push", "--force-with-lease", "origin", _branch], check=True)\n'
+        "subprocess.run(\n"
+        '    ["blizzard", "runner", "artifact", "commit",\n'
+        '     "--forge", _forge, "--repo", repo, "--branch", _branch, "--commit", _commit],\n'
         "    check=True,\n"
         ")\n"
         "if not marker.exists():\n"
@@ -1966,11 +2166,12 @@ _LAND_STEP_COMMAND = "python3 -m blizzard.hub.graphs.scripts.land_default"
 
 
 def _two_repo_build_script(landed_file: str) -> str:
-    """A build node that commits ``landed_file`` in BOTH fixture repos' worktrees.
-
-    The runner's ADVANCE discovers a produced commit per repo and pushes each, so the
-    chunk submits a ``git_commit`` pointer for ``toy-api`` AND ``toy-web`` — a genuine
-    2-repo land for the default graph's ``land_default`` script to loop over."""
+    """A build node that commits ``landed_file`` in BOTH fixture repos' worktrees, then
+    pushes and declares each (issue #143, Phase 4) — the runner no longer discovers or
+    pushes the produced pointer, so the WORKER must, once per repo, through the real
+    `blizzard runner artifact commit` verb. So the chunk submits a ``git_commit`` pointer
+    for ``toy-api`` AND ``toy-web`` — a genuine 2-repo land for the default graph's
+    ``land_default`` script to loop over."""
     return (
         "import subprocess, pathlib\n"
         f"for repo in [{REPO_NAME!r}, {_WEB_REPO_NAME!r}]:\n"
@@ -1980,6 +2181,24 @@ def _two_repo_build_script(landed_file: str) -> str:
         '        ["git", "-C", repo,\n'
         '         "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
         '         "commit", "-m", "feat: land a change in " + repo],\n'
+        "        check=True,\n"
+        "    )\n"
+        "    _branch = subprocess.run(\n"
+        '        ["git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD"],\n'
+        "        check=True, capture_output=True, text=True,\n"
+        "    ).stdout.strip()\n"
+        "    _commit = subprocess.run(\n"
+        '        ["git", "-C", repo, "rev-parse", "HEAD"],\n'
+        "        check=True, capture_output=True, text=True,\n"
+        "    ).stdout.strip()\n"
+        "    _forge = subprocess.run(\n"
+        '        ["git", "-C", repo, "remote", "get-url", "origin"],\n'
+        "        check=True, capture_output=True, text=True,\n"
+        "    ).stdout.strip()\n"
+        '    subprocess.run(["git", "-C", repo, "push", "--force-with-lease", "origin", _branch], check=True)\n'
+        "    subprocess.run(\n"
+        '        ["blizzard", "runner", "artifact", "commit",\n'
+        '         "--forge", _forge, "--repo", repo, "--branch", _branch, "--commit", _commit],\n'
         "        check=True,\n"
         "    )\n"
     )

@@ -60,6 +60,7 @@ nodes:
     prompt: ./prompts/build.md
     produces:
       - retrospective
+      - {name: commit, kind: git_commit}  # the pushed branch(es); kind-matched, not name-matched
     judgement:
       prompt: ./prompts/build.judgement.md
       choices:

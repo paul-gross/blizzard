@@ -34,7 +34,12 @@ class Provenance:
 
 @dataclass(frozen=True)
 class GitCommitArtifact:
-    """A branch pushed to the forge before submission, pinned by commit hash."""
+    """A branch pushed to the forge before submission, pinned by commit hash.
+
+    ``forge`` is the worker's own declared origin (issue #143, Phase 4 — decision
+    R7), confirmed read-only by the runner's verify before submission; ``""`` only
+    for a pre-Phase-4 row this shape predates (a legacy null reads back as "the
+    repo's origin" — see :func:`from_row`)."""
 
     artifact_id: str
     name: str
@@ -42,6 +47,7 @@ class GitCommitArtifact:
     repo: str
     branch_name: str
     commit_hash: str
+    forge: str = ""
 
     kind: ArtifactKind = ArtifactKind.GIT_COMMIT
 
@@ -66,15 +72,18 @@ class ArtifactRow:
     """The flat storage row: variant fields compressed into one ``data`` string.
 
     ``data`` is keyed by ``kind``: ``git_commit`` -> ``<branch>:<commit>``; ``asset``
-    -> the raw content. ``repo`` is a ``git_commit``-only sibling column, not encoded
-    in ``data``. The ``{node}`` component of the store key is the node *name*
-    (``bzh:facts-not-status``); ``node_id`` here is the exact provenance.
+    -> the raw content. ``repo`` and ``forge`` are ``git_commit``-only sibling columns,
+    not encoded in ``data`` (``forge`` added issue #143, Phase 4 — a nullable column
+    mirroring ``repo``; ``None`` on a legacy pre-Phase-4 row reads back as "the repo's
+    origin", :func:`from_row`). The ``{node}`` component of the store key is the node
+    *name* (``bzh:facts-not-status``); ``node_id`` here is the exact provenance.
     """
 
     kind: ArtifactKind
     name: str
     data: str
     repo: str | None
+    forge: str | None
     artifact_id: str
     chunk_id: str
     node_id: str
@@ -97,9 +106,10 @@ def to_row(artifact: Artifact, *, node_name: str) -> ArtifactRow:
             kind=ArtifactKind.GIT_COMMIT,
             data=f"{artifact.branch_name}:{artifact.commit_hash}",
             repo=artifact.repo,
+            forge=artifact.forge or None,
             **common,
         )
-    return ArtifactRow(kind=ArtifactKind.ASSET, data=artifact.content, repo=None, **common)
+    return ArtifactRow(kind=ArtifactKind.ASSET, data=artifact.content, repo=None, forge=None, **common)
 
 
 def from_row(row: ArtifactRow) -> Artifact:
@@ -114,6 +124,7 @@ def from_row(row: ArtifactRow) -> Artifact:
             repo=row.repo or "",
             branch_name=branch_name,
             commit_hash=commit_hash,
+            forge=row.forge or "",
         )
     return AssetArtifact(
         artifact_id=row.artifact_id,

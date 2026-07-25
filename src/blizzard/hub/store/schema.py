@@ -230,6 +230,7 @@ artifacts = Table(
     Column("kind", String, nullable=False),  # git_commit | asset
     Column("data", Text, nullable=False),  # '<branch>:<commit>' | raw content
     Column("repo", String, nullable=True),  # git_commit only
+    Column("forge", String, nullable=True),  # git_commit only (issue #143, Phase 4); null = legacy row
     Column("produced_at", UtcDateTime, nullable=False),
 )
 

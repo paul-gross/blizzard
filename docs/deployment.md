@@ -443,15 +443,28 @@ mutable and may be null).
 `produces_mode` is a third rollout flag, scaffolded into `blizzard-hub.toml` by
 `blizzard hub init` alongside `runner_auth_mode`/`route_token_mode` above and defaulting
 to `warn` the same way — but it guards a different concern: not runner identity or
-route capability, a node's own `produces:` declaration. A node that lists a name in
-`produces:` should carry either a pushed git commit of that name or an explicit
-`blizzard runner attach --name <name>` for it; a name backed only by the worker's
-judgement-assessment fallback is not proof the worker produced the thing the graph
-asked for.
+route capability, a node's own `produces:` declaration. Each `produces:` entry carries a
+**kind**: a bare string (`review-findings`) is an `asset`; a `{name, kind: git_commit}`
+entry (a build node's own commit) is met by kind, not by name — any `git_commit`
+artifact the node's attempt carries covers it. A `git_commit` entry is met when the
+worker has **pushed** its branch to the forge and then **declared** that push — the
+worker pushes, never the runner, and an undeclared push does not count. A name backed
+only by the worker's judgement-assessment fallback is not proof the worker produced the
+thing the graph asked for.
 
 | Flag | Guards | `warn` (default) | `enforce` |
 |------|--------|-------------------|-----------|
-| `produces_mode` | every `produces:` name has an explicit attachment or a covering git commit | logs the missing names and lets the completion proceed on the assessment fallback | rejects the completion as a semantic failure |
+| `produces_mode` | every `produces:` entry has an explicit declaration matching its kind (an asset attachment by name, a git commit by kind) | logs the missing names and lets the completion proceed on the assessment fallback | rejects the completion as a semantic failure |
+
+The worker declares each kind through its own `blizzard runner artifact` verb: `artifact
+create --name <name>` (content on stdin) for an `asset`; `artifact commit --repo <repo>
+--branch <branch> --commit <sha>` for a `git_commit`, run after the branch is pushed
+(`--forge` defaults to that repo's own `origin` and rarely needs passing explicitly).
+Both verbs are pure clients of the runner's local API, authorized by the lease identity
+the runner injects at spawn — see
+[`openapi/runner.openapi.json`](../openapi/runner.openapi.json) for the endpoints
+(`POST /api/leases/{lease_id}/attachments` and `POST /api/leases/{lease_id}/git-commits`)
+rather than this doc hard-copying their request shape.
 
 It is independent of `runner_auth_mode`/`route_token_mode` — flipping it does not
 depend on either of them, and vice versa — so it is not part of the rollout sequence
@@ -756,7 +769,7 @@ ceiling reason; the board's chunk cards and detail dock show the same figures li
 ## Operational visibility — the event log
 
 The failures that cost the most are the least visible: a worker that exits without recording a
-completion and leaves its chunk sitting `running` behind a dead process, a spawn/push/attach
+completion and leaves its chunk sitting `running` behind a dead process, a spawn/push/declare
 command that failed on a missing environment var, a stall past the liveness window. A chunk's
 *status* says it is stuck; it does not say *why*. The hub owns a durable, append-only, typed and
 **severity-ranked** operational event log that does.

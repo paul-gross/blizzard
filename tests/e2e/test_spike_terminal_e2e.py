@@ -9,8 +9,8 @@ instead of branch pointers, and the graph still ends in a deliver node — the u
 terminal.
 
 One chunk travels a **spike** node whose worker does read-only investigation (no commit,
-so nothing is pushed and ``_push_and_collect_artifacts`` yields no git-commit artifact)
-and ``produces`` a ``spike-notes`` **asset**, whose content is the worker's judgement
+so nothing is pushed or declared and ``_verify_and_collect_git_commits`` yields no
+git-commit artifact) and ``produces`` a ``spike-notes`` **asset**, whose content is the worker's judgement
 assessment — the text after ``</Choice>``. The spike routes into the hub
 **deliver** node exactly as a code chunk does — the same packaged
 ``land_default.py`` script (#67) every other e2e scenario's delivery runs; because the

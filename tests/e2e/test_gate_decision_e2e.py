@@ -31,6 +31,7 @@ import pytest
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop.build import run_single_tick
 from tests.e2e.test_acceptance_loop import (
+    _PUSH_AND_DECLARE_SCRIPT,
     FIXTURE_ENV,
     REPO,
     REPO_NAME,
@@ -39,6 +40,7 @@ from tests.e2e.test_acceptance_loop import (
     _git_bare,
     _hub,
     _mock_bin_dir,
+    _runner_api,
     _runner_config,
     _winter_source,
 )
@@ -52,7 +54,7 @@ pytestmark = [
 ]
 
 # build: write a file and make a real commit — the work the gate stands in front of. The
-# runner discovers the commit (HEAD ahead of base), pushes it, and its verdict transitions
+# worker pushes the commit and declares it (issue #143, Phase 4); its verdict transitions
 # the chunk into the gate, carrying the commit as the decision's artifact.
 _BUILD_SCRIPT = (
     "import subprocess, pathlib\n"
@@ -64,7 +66,7 @@ _BUILD_SCRIPT = (
     '     "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
     '     "commit", "-m", "feat: land a change awaiting sign-off"],\n'
     "    check=True,\n"
-    ")\n"
+    ")\n" + _PUSH_AND_DECLARE_SCRIPT
 )
 # build judgement: pass into the gate. The gate itself is human-judged — the runner never
 # executes a worker for it; the hub opens the decision on arrival.
@@ -122,19 +124,25 @@ def _graph_yaml() -> str:
 def _tick_until(
     config: RunnerConfig, hub: httpx.Client, chunk_id: str, fenced: dict[str, str], targets: set[str], timeout: float
 ) -> str:
-    """Drive synchronous ticks until the chunk reaches one of ``targets``; return its status."""
+    """Drive synchronous ticks until the chunk reaches one of ``targets``; return its status.
+
+    Wrapped in :func:`_runner_api` (issue #143, Phase 4): the build node's scripted
+    push+declare needs a live local API to POST its ``artifact commit`` declaration to
+    — `_runner_config` binds a free `host`/`port` for exactly this.
+    """
     prior = dict(os.environ)
     os.environ.update(fenced)  # the runner spawns the fenced mock harness in-process
     try:
-        deadline = time.monotonic() + timeout
-        status = "ready"
-        while time.monotonic() < deadline:
-            run_single_tick(config)
-            status = hub.get(f"/api/chunks/{chunk_id}").json()["status"]
-            if status in targets:
-                return status
-            time.sleep(0.5)
-        return status
+        with _runner_api(config):
+            deadline = time.monotonic() + timeout
+            status = "ready"
+            while time.monotonic() < deadline:
+                run_single_tick(config)
+                status = hub.get(f"/api/chunks/{chunk_id}").json()["status"]
+                if status in targets:
+                    return status
+                time.sleep(0.5)
+            return status
     finally:
         os.environ.clear()
         os.environ.update(prior)

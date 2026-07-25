@@ -31,7 +31,7 @@ const GRAPH = {
       judged_by: 'reviewer',
       mode: 'edit',
       checks: ['lint', 'test'],
-      produces: ['branch'],
+      produces: [{ name: 'branch' }],
       retries_max: 3,
       retries_exhausted: 'escalate',
       prompt: 'Build the feature.',

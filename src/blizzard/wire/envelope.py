@@ -19,6 +19,7 @@ from pydantic import BaseModel
 
 from blizzard.hub.domain.artifacts import ArtifactKind
 from blizzard.hub.domain.graph import Executor, JudgedBy, SessionMode
+from blizzard.wire.graph import ProducesEntry
 
 
 class EnvelopeArtifact(BaseModel):
@@ -56,7 +57,7 @@ class NodeConfig(BaseModel):
     session_source: str | None = None
     judged_by: JudgedBy
     checks: list[str] = []
-    produces: list[str] = []
+    produces: list[ProducesEntry] = []
     retries_max: int | None = None
     mode: str | None = None
     choices: list[EnvelopeChoice] = []

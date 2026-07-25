@@ -44,6 +44,7 @@ from pathlib import Path
 import pytest
 
 from tests.e2e.test_acceptance_loop import (
+    _PUSH_AND_DECLARE_SCRIPT,
     FIXTURE_ENV,
     REPO,
     REPO_NAME,
@@ -82,7 +83,7 @@ _TARGET_BUILD_SCRIPT = (
     '     "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
     '     "commit", "-m", "feat: land a change after migrating graphs"],\n'
     "    check=True,\n"
-    ")\n"
+    ")\n" + _PUSH_AND_DECLARE_SCRIPT
 )
 _TARGET_JUDGEMENT = "verdict('pass', 'committed the change; checks are green')\n"
 

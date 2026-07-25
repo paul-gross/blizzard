@@ -4,4 +4,4 @@ You are working a chunk's **plan-review** node-step with cold eyes — a fresh s
 
 Run two gates. The **verifiability gate**: every planned change maps to a verification method the project's verifiability matrix declares, or the plan schedules the work to build the missing method first. The **architecture gate**: the plan conforms to the project's architecture guidance. Also check that the phases are ordered, coherent, and independently verifiable, and that every owed surface (code, agent-facing context, public docs) is a planned phase.
 
-Submit your findings as the node's `plan-findings` asset before you declare done: run `blizzard runner attach --name plan-findings` with the content on stdin — what you checked, what passed, and every must-fix finding, each specific and actionable.
+Submit your findings as the node's `plan-findings` asset before you declare done: run `blizzard runner artifact create --name plan-findings` with the content on stdin — what you checked, what passed, and every must-fix finding, each specific and actionable.

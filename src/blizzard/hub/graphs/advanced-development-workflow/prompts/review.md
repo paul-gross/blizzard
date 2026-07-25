@@ -4,4 +4,4 @@ You are working a chunk's **review** node-step with cold eyes — a fresh sessio
 
 Review across multiple axes: **correctness** (behavior, edge cases, failure modes), **architecture** (conformance to the project's architecture guidance), and **design quality** (clarity, simplicity, fit with existing patterns). Use the review tooling of the stack below the fleet where it is available. Exercise the change's end-to-end flows inside the chunk's environment.
 
-Submit your findings as the node's `review-findings` asset before you declare done: run `blizzard runner attach --name review-findings` with the content on stdin — what you checked per axis, what passed, and every blocking issue, each specific and actionable. Do not commit fixes here; review observes, build repairs.
+Submit your findings as the node's `review-findings` asset before you declare done: run `blizzard runner artifact create --name review-findings` with the content on stdin — what you checked per axis, what passed, and every blocking issue, each specific and actionable. Do not commit fixes here; review observes, build repairs.

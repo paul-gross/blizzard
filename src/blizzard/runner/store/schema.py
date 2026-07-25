@@ -597,3 +597,31 @@ jwt_jti_seen = Table(
     Column("aud", String, nullable=False),
     Column("expires_at", UtcDateTime, nullable=False),
 )
+
+# --- Git-commit declarations (a worker's explicit git-commit artifact — issue #143, Phase 3) -
+#
+# ``blizzard runner artifact commit --forge <f> --repo <r> --branch <b> --commit <sha>`` hits
+# this table via ``POST /api/leases/{id}/git-commits``, authorized by the lease's own
+# capability token (``lease_tokens``), a structural sibling of ``attachments`` above for the
+# ``git_commit`` artifact kind: append-only, latest-wins-per-``(lease_id, repo)``
+# (``bzh:facts-not-status`` — a chunk may span multiple repos, so the natural key is per repo,
+# not per lease). ``forge`` is worker-declared (decision R7) and carried verbatim; the runner
+# only cross-checks it read-only against the leased env's own ``origin`` later (Phase 4) — this
+# phase records it without judging it. ``chunk_id``/``node_id``/``epoch`` are denormalized off
+# the lease at declare time, mirroring ``attachments``. Read back by
+# ``git_commit_declarations_for_lease`` (Phase 4's ADVANCE collection) — unused this phase.
+
+git_commit_declarations = Table(
+    "git_commit_declarations",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("lease_id", String, nullable=False),
+    Column("chunk_id", String, nullable=False),
+    Column("node_id", String, nullable=False),
+    Column("epoch", Integer, nullable=False),
+    Column("forge", String, nullable=False),
+    Column("repo", String, nullable=False),
+    Column("branch", String, nullable=False),
+    Column("commit", String, nullable=False),
+    Column("declared_at", UtcDateTime, nullable=False),
+)

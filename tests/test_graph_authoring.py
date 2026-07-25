@@ -7,7 +7,15 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.graph import RESERVED_TERMINAL, Executor, JudgedBy, parse_graph_doc
+from blizzard.hub.domain.artifacts import ArtifactKind
+from blizzard.hub.domain.graph import (
+    RESERVED_TERMINAL,
+    Executor,
+    GraphParseError,
+    JudgedBy,
+    ProducesSpec,
+    parse_graph_doc,
+)
 from blizzard.hub.domain.graph_authoring import reify_graph
 from blizzard.hub.graphs import load_default_graph_doc
 
@@ -129,3 +137,53 @@ def test_edge_for_choice_resolves_by_name() -> None:
     assert edge is not None and edge.to_node_name == "review"
     assert graph.edge_for_choice(build.node_id, "nonexistent") is None
     assert RESERVED_TERMINAL not in {n.name for n in graph.nodes}
+
+
+# --------------------------------------------------------------------------- #
+# `produces:` — scalar-or-mapping normalization (D1, issue #143).
+# --------------------------------------------------------------------------- #
+
+
+def _produces_doc(produces: object) -> dict[str, object]:
+    return {
+        "name": "t",
+        "entry": "build",
+        "nodes": {"build": {"executor": "runner", "prompt": "do it", "produces": produces}},
+    }
+
+
+def test_parse_normalizes_a_bare_string_produces_entry_to_an_asset_spec() -> None:
+    doc = parse_graph_doc(_produces_doc(["review-findings"]))
+    build = doc.node("build")
+    assert build is not None
+    assert build.produces == [ProducesSpec(name="review-findings", kind=ArtifactKind.ASSET)]
+
+
+def test_parse_normalizes_a_mapping_produces_entry_to_its_declared_kind() -> None:
+    doc = parse_graph_doc(_produces_doc([{"name": "commit", "kind": "git_commit"}]))
+    build = doc.node("build")
+    assert build is not None
+    assert build.produces == [ProducesSpec(name="commit", kind=ArtifactKind.GIT_COMMIT)]
+
+
+def test_parse_normalizes_a_mapping_produces_entry_with_no_kind_to_asset() -> None:
+    doc = parse_graph_doc(_produces_doc([{"name": "notes"}]))
+    build = doc.node("build")
+    assert build is not None
+    assert build.produces == [ProducesSpec(name="notes", kind=ArtifactKind.ASSET)]
+
+
+def test_parse_produces_both_forms_together_round_trip_through_reify() -> None:
+    doc = parse_graph_doc(_produces_doc(["review-findings", {"name": "commit", "kind": "git_commit"}]))
+    graph = reify_graph(doc, _clock())
+    build = graph.node_by_name("build")
+    assert build is not None
+    assert build.produces == [
+        ProducesSpec(name="review-findings", kind=ArtifactKind.ASSET),
+        ProducesSpec(name="commit", kind=ArtifactKind.GIT_COMMIT),
+    ]
+
+
+def test_parse_rejects_an_unknown_produces_kind() -> None:
+    with pytest.raises(GraphParseError, match="unknown kind"):
+        parse_graph_doc(_produces_doc([{"name": "bad", "kind": "bogus"}]))

@@ -170,6 +170,7 @@ def _artifact_row(
         name=artifact.name,
         data=data,
         repo=artifact.repo if is_commit else None,
+        forge=artifact.forge if is_commit else None,
         artifact_id=mint(ARTIFACT_PREFIX, clock),
         chunk_id=chunk_id,
         node_id=node_id,

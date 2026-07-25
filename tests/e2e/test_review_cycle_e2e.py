@@ -34,6 +34,7 @@ from pathlib import Path
 import pytest
 
 from tests.e2e.test_acceptance_loop import (
+    _PUSH_AND_DECLARE_SCRIPT,
     FIXTURE_ENV,
     REPO,
     REPO_NAME,
@@ -68,7 +69,7 @@ _BUILD_SCRIPT = (
     '     "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
     '     "commit", "-m", "feat: a build pass"],\n'
     "    check=True,\n"
-    ")\n"
+    ")\n" + _PUSH_AND_DECLARE_SCRIPT
 )
 _BUILD_JUDGEMENT = "verdict('pass', 'checks are green')\n"
 
@@ -86,7 +87,7 @@ _REVIEW_ADDENDUM = (
     '     "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
     '     "commit", "-m", "fix: address review findings"],\n'
     "    check=True,\n"
-    ")\n"
+    ")\n" + _PUSH_AND_DECLARE_SCRIPT
 )
 
 # review base prompt: a no-op turn — the verdict is elicited on the judgement resume.

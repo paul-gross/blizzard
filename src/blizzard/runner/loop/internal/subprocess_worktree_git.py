@@ -1,11 +1,10 @@
 """Subprocess-git adapter for the worker-artifact seam (package-private).
 
-The reference :class:`~blizzard.runner.loop.worktree.IWorktreeGit` binding: it
-discovers, in a leased winter environment, the repo worktrees a build worker pushed
-its work into (HEAD ahead of the base's ``origin`` ref) and pushes those branches to
-their ``file://`` origins — the same origins the mock forge fronts (one git truth).
-All ``subprocess`` usage is confined here; a git failure is wrapped once into
-:class:`~blizzard.runner.loop.worktree` errors and logged (``bzh:structlog-logging``).
+The reference :class:`~blizzard.runner.loop.worktree.IWorktreeGit` binding: a
+read-only confirmation, via the real ``git`` CLI, of a git-commit declaration the
+worker already pushed (issue #143, Phase 4). All ``subprocess`` usage is confined
+here; a git failure is wrapped once into :class:`WorktreeGitError` and logged
+(``bzh:structlog-logging``).
 """
 
 from __future__ import annotations
@@ -14,7 +13,7 @@ import subprocess
 from pathlib import Path
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.loop.worktree import GitArtifact, IWorktreeGit
+from blizzard.runner.loop.worktree import IWorktreeGit
 
 _log = get_logger("blizzard.runner.worktree")
 
@@ -23,55 +22,51 @@ class WorktreeGitError(RuntimeError):
     """A git operation against a leased worktree failed."""
 
 
+def _normalize_origin(url: str) -> str:
+    """Collapse cosmetic origin-URL variance before comparison: a trailing ``/`` and an
+    optional trailing ``.git`` suffix. Both sides of the ``verify`` comparison run
+    through this — the declared ``forge`` and the observed ``origin`` — so
+    ``git@github.com:org/repo.git`` and ``git@github.com:org/repo`` (or either with a
+    trailing slash) verify equal. Deliberately does **not** lowercase the host: a
+    case-sensitive path segment (self-hosted forges, case-sensitive filesystems behind
+    a ``file://`` remote) can legitimately differ only by case, so blind lowercasing
+    would trade one false-negative class for a false-positive one."""
+    stripped = url.strip().rstrip("/")
+    if stripped.endswith(".git"):
+        stripped = stripped[: -len(".git")]
+    return stripped
+
+
 class SubprocessWorktreeGit:
-    """Discover produced commits and push their branches, via the real ``git`` CLI."""
+    """Read-only confirmation of a declared git commit, via the real ``git`` CLI."""
 
-    def find_produced_artifacts(self, env_workdir: str, base_branch: str) -> list[GitArtifact]:
-        root = Path(env_workdir)
-        if not root.is_dir():
-            return []
-        artifacts: list[GitArtifact] = []
-        for child in sorted(root.iterdir()):
-            if not (child / ".git").exists():
-                continue
-            if self._commits_ahead(child, base_branch) <= 0:
-                continue
-            artifacts.append(
-                GitArtifact(
-                    repo=child.name,
-                    branch_name=self._current_branch(child),
-                    commit_hash=self._head(child),
-                    repo_workdir=str(child),
-                )
+    def verify(self, repo_workdir: str, forge: str, branch: str, commit: str) -> bool:
+        origin = self._git(Path(repo_workdir), "remote", "get-url", "origin").strip()
+        if _normalize_origin(origin) != _normalize_origin(forge):
+            _log.warning(
+                "git-commit declaration forge mismatch",
+                repo_workdir=repo_workdir,
+                declared_forge=forge,
+                origin=origin,
             )
-        return artifacts
-
-    def push(self, repo_workdir: str, branch_name: str) -> None:
-        # --force-with-lease, not a plain (fast-forward-only) push: the pointer's
-        # commit hash is what gets submitted and is authoritative — the branch ref
-        # is not — so the push exists only to make the ref equal the HEAD we are
-        # about to submit. A node that rewrites a branch it already pushed (e.g.
-        # merge- then rebase-based integration in one run) leaves the remote
-        # non-fast-forward; a plain push wedges there forever, while
-        # --force-with-lease mirrors HEAD yet still refuses to clobber a ref that
-        # moved out from under us.
-        self._git(Path(repo_workdir), "push", "--force-with-lease", "origin", branch_name)
-        _log.info("pushed work branch", repo_workdir=repo_workdir, branch=branch_name)
+            return False
+        out = self._git(Path(repo_workdir), "ls-remote", "origin", branch)
+        # `git ls-remote origin <branch>` prints "<sha>\trefs/heads/<branch>" or nothing
+        # if the ref is absent — the first whitespace-delimited token is the sha.
+        line = out.strip().splitlines()[0] if out.strip() else ""
+        remote_sha = line.split()[0] if line else ""
+        if remote_sha != commit:
+            _log.warning(
+                "git-commit declaration ref mismatch",
+                repo_workdir=repo_workdir,
+                branch=branch,
+                declared_commit=commit,
+                remote_commit=remote_sha or None,
+            )
+            return False
+        return True
 
     # --- plumbing -----------------------------------------------------------
-
-    def _commits_ahead(self, repo: Path, base_branch: str) -> int:
-        out = self._git(repo, "rev-list", "--count", f"origin/{base_branch}..HEAD")
-        try:
-            return int(out.strip())
-        except ValueError:
-            return 0
-
-    def _current_branch(self, repo: Path) -> str:
-        return self._git(repo, "rev-parse", "--abbrev-ref", "HEAD").strip()
-
-    def _head(self, repo: Path) -> str:
-        return self._git(repo, "rev-parse", "HEAD").strip()
 
     def _git(self, cwd: Path, *args: str) -> str:
         result = subprocess.run(

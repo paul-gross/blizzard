@@ -34,7 +34,7 @@ const DEFAULT_LIKE: GraphView = {
       session: 'fresh',
       judged_by: 'worker',
       retries_max: 2,
-      produces: ['review-findings'],
+      produces: [{ name: 'review-findings' }],
       choices: [
         { choice_id: 'c_pass2', name: 'pass', description: '' },
         { choice_id: 'c_fail2', name: 'fail', description: '' },

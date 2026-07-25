@@ -10,7 +10,7 @@ before submitting. This check is the **hub's** backstop against a submission tha
 carries no explicit attachment, and no covering git commit, for one or more declared
 names — a worker that ignored the nudge, or a graph the nudge never reached. It shares
 its coverage predicate with the runner's own nudge check via
-:func:`~blizzard.wire.completion.satisfied_produces_names`, so the two models cannot
+:func:`~blizzard.wire.completion.produces_coverage`, so the two models cannot
 drift apart.
 
 The check is a plain function, not a service — it takes already-loaded values
@@ -26,31 +26,32 @@ from __future__ import annotations
 from blizzard.foundation.logging import get_logger
 from blizzard.hub.config import PRODUCES_ENFORCE
 from blizzard.hub.domain.graph import Node
-from blizzard.wire.completion import SubmittedArtifact, satisfied_produces_names
+from blizzard.wire.completion import SubmittedArtifact, produces_coverage
 
 _log = get_logger("blizzard.hub.produces_auth")
 
 
 def check_produces(node: Node, submission_artifacts: list[SubmittedArtifact], *, mode: str) -> str | None:
-    """Check that every name in ``node.produces`` has an **explicit** artifact in the
-    submission — one present with ``attached=True``, or a ``GIT_COMMIT`` artifact of
-    that name (the runner's own coverage model, mirrored via
-    :func:`~blizzard.wire.completion.satisfied_produces_names` — see that function's
-    docstring for why this is the one shared home). A name that is missing entirely, or
-    present only with ``attached=False`` and kind ``ASSET`` (the judgement-assessment
-    fallback, phase 3), counts as lacking an explicit artifact: the fallback is a
-    legitimate landing artifact (nothing here rejects it as content), but it is not proof
-    the worker attached (or a git commit already covered) the thing the graph asked it to
-    produce, which is exactly the gap this backstop watches for.
+    """Check that every ``node.produces`` spec is covered, per its declared kind, by the
+    submission (issue #143, D2) — evaluated by
+    :func:`~blizzard.wire.completion.produces_coverage`, the one shared predicate the
+    runner's own nudge check also calls, so the two coverage models cannot drift apart.
+    An ``asset`` spec needs an explicit ``attached=True`` artifact (or a ``GIT_COMMIT``
+    artifact) of its own name; a ``git_commit`` spec needs **any** ``GIT_COMMIT``-kind
+    artifact present — a kind match, not a name match, since a declared git-commit is
+    named per-repo, never the produces name itself.
 
-    Returns a failure detail to reject with under ``enforce``, naming every such name, or
-    ``None`` to proceed (either every ``produces:`` name has an explicit attachment or a
-    covering commit, or ``mode`` is ``warn`` and the gap was only logged).
+    The hub holds no worktree (``bzh:git-write-in-worker-seam``), so a ``git_commit`` spec is
+    checked by presence-by-kind only here — forge verification against the declared
+    branch/commit is the runner's job (a later phase), not this backstop's.
+
+    Returns a failure detail to reject with under ``enforce``, naming every uncovered
+    spec, or ``None`` to proceed (every ``produces:`` spec is covered, or ``mode`` is
+    ``warn`` and the gap was only logged).
     """
     if not node.produces:
         return None
-    covered_names = satisfied_produces_names(submission_artifacts)
-    missing = [name for name in node.produces if name not in covered_names]
+    missing = [spec.name for spec in produces_coverage(node.produces, submission_artifacts)]
     if not missing:
         return None
     if mode == PRODUCES_ENFORCE:

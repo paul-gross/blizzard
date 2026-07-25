@@ -193,6 +193,7 @@ def _artifact(chunk_id: str, node_id: str) -> ArtifactRow:
         name="triage-notes",
         data="hand off to delivery",
         repo=None,
+        forge=None,
         artifact_id="art_mig",
         chunk_id=chunk_id,
         node_id=node_id,

@@ -26,12 +26,13 @@ from blizzard.runner.harness.preamble import DEFAULT_BLIZZARD_PREAMBLE
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.steps import _collect_asset_artifacts, advance, fill, pull, reap
 from blizzard.runner.loop.tick import tick
-from blizzard.runner.loop.worktree import GitArtifact
+from blizzard.runner.loop.worktree import IWorktreeGit
 from blizzard.runner.store.repository import NewLease
 from blizzard.wire.chunk import ChunkDetail, ChunkUsageTotalView, RouteView
 from blizzard.wire.completion import SubmittedArtifact
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 from blizzard.wire.facts import ESCALATION_RECORDED, LEASE_MINTED
+from blizzard.wire.graph import ProducesEntry
 from blizzard.wire.queue import QueuePeekEntry
 from tests.runner_fakes import (
     FakeHarness,
@@ -444,20 +445,30 @@ def test_fill_respects_max_agents(tmp_path):  # type: ignore[no-untyped-def]
 def test_advance_buffers_completion_then_flush_enters_hub_node(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _seed_running_lease(store)
+    store.record_git_commit_declaration(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        forge="file:///origins/toy-api.git",
+        repo="toy-api",
+        branch="e1",
+        commit="abc123",
+        declared_at=_NOW,
+    )
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.HUB_NODE_TAKEN)]
     provider = FakeProvider({"e1": "/ws/e1"})
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
-    wt = FakeWorktreeGit(
-        [GitArtifact(repo="toy-api", branch_name="e1", commit_hash="abc123", repo_workdir="/ws/e1/toy-api")]
-    )
+    wt = FakeWorktreeGit()
     ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe(), worktree_git=wt)
 
     advance(ctx)  # probe reports the worker dead (empty alive set) -> exit-is-done
 
-    # The branch is pushed and the completion is BUFFERED — not yet submitted.
-    assert wt.pushed == [("/ws/e1/toy-api", "e1")]
+    # The declared commit was verified read-only and the completion is BUFFERED — not
+    # yet submitted.
+    assert wt.verified_calls == [("/ws/e1/toy-api", "file:///origins/toy-api.git", "e1", "abc123")]
     assert hub.completions == []
     buffered = [b for b in store.pending_outbound() if b.kind == "completion.submitted"]
     assert len(buffered) == 1 and buffered[0].lease_id == "lease_1"
@@ -471,9 +482,115 @@ def test_advance_buffers_completion_then_flush_enters_hub_node(tmp_path):  # typ
     assert submission.choice == "pass"
     assert submission.epoch == 1
     assert submission.artifacts[0].commit_hash == "abc123"
+    assert submission.artifacts[0].forge == "file:///origins/toy-api.git"
     assert store.active_lease_for_chunk("ch_1") is None  # build lease closed on flush
     assert store.held_environment_ids() == ["e1"]  # envs held for the hub node
     assert provider.released == []
+
+
+@pytest.mark.unit
+def test_advance_drops_a_declaration_whose_verify_is_false(tmp_path):  # type: ignore[no-untyped-def]
+    """A declared git commit whose read-only ``verify`` returns ``False`` (forge
+    mismatch or an absent/moved ref — issue #143, Phase 4) is treated as *not covered*:
+    the runner still calls ``verify`` and still buffers + flushes the completion, but it
+    carries **no** ``git_commit`` artifact, which is exactly what drives the Phase-2
+    kind-coverage nudge. Distinct from ``WorktreeGitError`` (a hard failure that emits a
+    ``command-failed`` event) — a clean ``False`` verdict is silent, informational only."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    store.record_git_commit_declaration(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        forge="file:///origins/toy-api.git",
+        repo="toy-api",
+        branch="e1",
+        commit="abc123",
+        declared_at=_NOW,
+    )
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = _build_envelope()
+    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.HUB_NODE_TAKEN)]
+    provider = FakeProvider({"e1": "/ws/e1"})
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    wt = FakeWorktreeGit(False)  # every declaration fails verification
+    ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe(), worktree_git=wt)
+
+    advance(ctx)
+
+    # verify WAS called on the declaration — the runner did not skip it — but the False
+    # verdict dropped it, so the buffered completion names no git-commit artifact.
+    assert wt.verified_calls == [("/ws/e1/toy-api", "file:///origins/toy-api.git", "e1", "abc123")]
+
+    pull(ctx)
+
+    assert len(hub.completions) == 1
+    _chunk_id, submission = hub.completions[0]
+    assert submission.artifacts == []  # unverified -> dropped -> uncovered
+
+
+@pytest.mark.unit
+def test_advance_drives_only_the_declared_branch_never_head_inference(tmp_path):  # type: ignore[no-untyped-def]
+    """The original bug (issue #143): with a leased repo worktree in detached HEAD,
+    the runner computed the branch to push as the literal string ``"HEAD"``
+    (``git rev-parse --abbrev-ref HEAD``) and ran ``git push --force-with-lease origin
+    HEAD``, which git refuses — wedging the tick loop forever. Phase 4 deleted that
+    inference and the push entirely: ADVANCE now drives only the read-only
+    ``verify(forge, branch, commit)`` against the worker's own DECLARED branch, read
+    from the durable declaration store — never anything derived from the worktree's own
+    ambient HEAD. A worktree the worker left detached (the exact state that used to
+    wedge) is therefore simply inert, not a wedge: this test never even models a real
+    git repo, because the runner no longer looks at one to find a branch name at all.
+
+    Pinned structurally, not just behaviorally: neither :class:`IWorktreeGit` (the
+    seam's own Protocol) nor :class:`FakeWorktreeGit` (the fake this test injects,
+    standing in for the real subprocess-git adapter) carries a ``push``,
+    ``find_produced_artifacts``, or ``_current_branch`` method any longer — a
+    re-introduction of the old push-driven inference fails to typecheck against the
+    Protocol and raises ``AttributeError`` the instant this test's fake is asked to run
+    it, rather than silently passing."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    store.record_git_commit_declaration(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        forge="file:///origins/toy-api.git",
+        repo="toy-api",
+        branch="feature/worker-declared",
+        commit="deadbeef",
+        declared_at=_NOW,
+    )
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = _build_envelope()
+    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.HUB_NODE_TAKEN)]
+    provider = FakeProvider({"e1": "/ws/e1"})
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    wt = FakeWorktreeGit()
+    ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe(), worktree_git=wt)
+
+    advance(ctx)
+
+    # Only the read-only verify ran, over the worker's own declared branch — no branch
+    # was ever inferred off any local HEAD, detached or otherwise.
+    assert wt.verified_calls == [
+        ("/ws/e1/toy-api", "file:///origins/toy-api.git", "feature/worker-declared", "deadbeef")
+    ]
+
+    pull(ctx)
+
+    _chunk_id, submission = hub.completions[0]
+    assert submission.artifacts[0].branch_name == "feature/worker-declared"
+
+    # Structural guard: none of the wedge's own machinery still exists on either the
+    # Protocol or the fake seam this test injects.
+    for missing_attr in ("push", "find_produced_artifacts", "_current_branch"):
+        assert not hasattr(IWorktreeGit, missing_attr)
+        assert not hasattr(wt, missing_attr)
+        with pytest.raises(AttributeError):
+            getattr(wt, missing_attr)
 
 
 @pytest.mark.unit
@@ -739,7 +856,7 @@ def test_advance_review_harvests_findings_asset_from_assessment(tmp_path):  # ty
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        worktree_git=FakeWorktreeGit([]),
+        worktree_git=FakeWorktreeGit(),
     )
 
     advance(ctx)  # buffers the completion (with the harvested findings asset)
@@ -751,6 +868,56 @@ def test_advance_review_harvests_findings_asset_from_assessment(tmp_path):  # ty
     assert findings[0].kind is ArtifactKind.ASSET
     assert findings[0].content == "BLOCKING: guard the empty input"
     assert findings[0].attached is False
+
+
+@pytest.mark.unit
+def test_advance_review_node_drives_no_git_commit_verify_or_artifact(tmp_path):  # type: ignore[no-untyped-def]
+    """A node whose `produces:` is `[review-findings]` (a bare string, D1's `kind=asset`
+    normalization) drives **no** git-commit declaration, verify, or push at all — issue
+    #143's declare-and-verify model is entirely opt-in per repo the worker touches, and a
+    review-only worker never runs `blizzard runner artifact commit` for any repo. With no
+    declaration in the store, :func:`_verify_and_collect_git_commits`
+    (`git_commit_declarations_for_lease`) iterates zero times: ``verify`` is never
+    invoked, no ``GIT_COMMIT`` artifact is ever produced, and the node's findings ride
+    the asset attach/fallback path (:func:`_collect_asset_artifacts`) exactly as before
+    — proving the two paths (git-commit declare-and-verify vs. asset attach/fallback)
+    stay fully independent per node."""
+    store = _store(tmp_path)
+    store.record_lease(
+        NewLease(
+            lease_id="lease_r",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_review",
+            node_name="review",
+            epoch=1,
+            runner_id="r1",
+            retries_max=2,
+            created_at=_NOW,
+        )
+    )
+    store.record_spawn("lease_r", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    # No `record_git_commit_declaration` call — a review-only worker declares nothing.
+
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = make_envelope(
+        "ch_1", "review", node_id="nd_review", choices=_CHOICES, produces=["review-findings"]
+    )
+    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=_build_envelope())]
+    harness = FakeHarness(handle=_HANDLE, verdict="fail", assessment="BLOCKING: guard the empty input")
+    wt = FakeWorktreeGit()
+    ctx = make_context(
+        store, hub=hub, provider=FakeProvider({"e1": "/ws/e1"}), harness=harness, probe=FakeProbe(), worktree_git=wt
+    )
+
+    advance(ctx)
+    pull(ctx)
+
+    assert wt.verified_calls == []  # no declaration for this lease -> verify never called
+    _chunk_id, submission = hub.completions[0]
+    assert [a.kind for a in submission.artifacts] == [ArtifactKind.ASSET]  # no GIT_COMMIT artifact
+    assert submission.artifacts[0].name == "review-findings"
 
 
 @pytest.mark.unit
@@ -811,6 +978,26 @@ def test_collect_asset_artifacts_git_commit_precedence_over_an_attachment():  # 
     ]
 
     submitted = _collect_asset_artifacts(envelope, git_artifacts, "assessment", {"toy-api": "should be ignored"})
+
+    assert submitted == []
+
+
+@pytest.mark.unit
+def test_collect_asset_artifacts_git_commit_spec_never_yields_a_phantom_asset():  # type: ignore[no-untyped-def]
+    """A `git_commit`-kind `produces` spec is skipped by kind, not name — even when no
+    git-commit artifact actually covers it (a build node whose worker declared nothing
+    yet). Before this fix, an uncovered `git_commit` spec's name fell through to the
+    `else` branch and was aliased to the judgement assessment as a bogus `commit`
+    ASSET on every build completion; this asserts the phantom cannot reappear."""
+    envelope = make_envelope(
+        "ch_1",
+        "build",
+        node_id="nd_build",
+        choices=_CHOICES,
+        produces=[ProducesEntry(name="commit", kind=ArtifactKind.GIT_COMMIT)],
+    )
+
+    submitted = _collect_asset_artifacts(envelope, [], "assessment", {})
 
     assert submitted == []
 
@@ -1486,9 +1673,7 @@ def test_full_happy_path_across_ticks(tmp_path):  # type: ignore[no-untyped-def]
     hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.HUB_NODE_TAKEN)]
     provider = FakeProvider({"e1": "/ws/e1"})
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
-    wt = FakeWorktreeGit(
-        [GitArtifact(repo="toy-api", branch_name="e1", commit_hash="abc123", repo_workdir="/ws/e1/toy-api")]
-    )
+    wt = FakeWorktreeGit()
     probe = FakeProbe(alive={_ALIVE})  # worker alive during tick 1
     clock = FixedClock(_NOW)
     ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=probe, worktree_git=wt, clock=clock)

@@ -126,7 +126,11 @@ def stub_idp(bin_dir: Path, port: int) -> Iterator[httpx.Client]:
 
 
 # The scripted build node: the prompt is the program. It commits a file to the
-# toy-api worktree; the runner discovers the commit and pushes it to the bare file:// origin.
+# toy-api worktree, then pushes the branch and declares it (issue #143, Phase 4) —
+# the runner no longer discovers or pushes the produced pointer, so the WORKER must,
+# through the real `blizzard runner artifact commit` verb (Phase 3's local
+# declaration channel), which ADVANCE's read-only verify then confirms against the
+# bare file:// origin before submitting the git_commit artifact.
 BUILD_SCRIPT = (
     "import subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
@@ -134,6 +138,24 @@ BUILD_SCRIPT = (
     'subprocess.run(["git", "-C", repo, "add", "-A"], check=True)\n'
     'subprocess.run(["git", "-C", repo, "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",'
     ' "commit", "-m", "feat: land a change from the mock harness"], check=True)\n'
+    "_branch = subprocess.run(\n"
+    '    ["git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD"],\n'
+    "    check=True, capture_output=True, text=True,\n"
+    ").stdout.strip()\n"
+    "_commit = subprocess.run(\n"
+    '    ["git", "-C", repo, "rev-parse", "HEAD"],\n'
+    "    check=True, capture_output=True, text=True,\n"
+    ").stdout.strip()\n"
+    "_forge = subprocess.run(\n"
+    '    ["git", "-C", repo, "remote", "get-url", "origin"],\n'
+    "    check=True, capture_output=True, text=True,\n"
+    ").stdout.strip()\n"
+    'subprocess.run(["git", "-C", repo, "push", "origin", _branch], check=True)\n'
+    "subprocess.run(\n"
+    '    ["blizzard", "runner", "artifact", "commit",\n'
+    '     "--forge", _forge, "--repo", repo, "--branch", _branch, "--commit", _commit],\n'
+    "    check=True,\n"
+    ")\n"
 )
 JUDGEMENT_SCRIPT = "verdict('pass', 'the mock harness committed the change; checks are green')\n"
 

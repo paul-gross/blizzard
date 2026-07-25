@@ -145,6 +145,30 @@ def _commit(repo, msg):
     )
 
 
+def _push_and_declare(repo):
+    # Push the branch and declare it (issue #143, Phase 4) — the runner no longer
+    # discovers or pushes the produced pointer, so the worker must, through the real
+    # `blizzard runner artifact commit` verb.
+    branch = subprocess.run(
+        ["git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD"],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    commit_sha = subprocess.run(
+        ["git", "-C", repo, "rev-parse", "HEAD"],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    forge = subprocess.run(
+        ["git", "-C", repo, "remote", "get-url", "origin"],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    subprocess.run(["git", "-C", repo, "push", "origin", branch], check=True)
+    subprocess.run(
+        ["blizzard", "runner", "artifact", "commit",
+         "--forge", forge, "--repo", repo, "--branch", branch, "--commit", commit_sha],
+        check=True,
+    )
+
+
 chunk_id = os.environ["BLIZZARD_CHUNK_ID"]
 # MVP criterion 1: the worker reads its issue ONLY through the hub pass-through.
 _raw = subprocess.run(
@@ -178,6 +202,7 @@ else:  # clean / review-fail: a real change in each repo (append so a re-build c
         p = pathlib.Path(repo) / fname
         p.write_text((p.read_text() if p.exists() else "") + "landed " + behavior + "\\n")
         _commit(repo, "feat: " + behavior + " land in " + repo)
+        _push_and_declare(repo)
 """
 
 # The fail-edge addendum, inlined onto build's re-entry prompt (same namespace: ``repos`` /
@@ -187,6 +212,7 @@ _REVIEW_ADDENDUM = """\
 for repo in repos:
     pathlib.Path(repo, "REVIEW_ADDRESSED.md").write_text("addressed the review findings\\n")
     _commit(repo, "fix: address review findings")
+    _push_and_declare(repo)
 """
 
 _BUILD_JUDGEMENT = """\
@@ -226,6 +252,27 @@ _ANSWER_SCRIPT = (
     '    ["git", "-C", repo,\n'
     '     "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
     '     "commit", "-m", "feat: resolve the ask and land"],\n'
+    "    check=True,\n"
+    ")\n"
+    # Push the branch and declare it (issue #143, Phase 4) — the runner no longer
+    # discovers or pushes the produced pointer, so the worker must, through the real
+    # `blizzard runner artifact commit` verb.
+    "_branch = subprocess.run(\n"
+    '    ["git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD"],\n'
+    "    check=True, capture_output=True, text=True,\n"
+    ").stdout.strip()\n"
+    "_commit_sha = subprocess.run(\n"
+    '    ["git", "-C", repo, "rev-parse", "HEAD"],\n'
+    "    check=True, capture_output=True, text=True,\n"
+    ").stdout.strip()\n"
+    "_forge = subprocess.run(\n"
+    '    ["git", "-C", repo, "remote", "get-url", "origin"],\n'
+    "    check=True, capture_output=True, text=True,\n"
+    ").stdout.strip()\n"
+    'subprocess.run(["git", "-C", repo, "push", "origin", _branch], check=True)\n'
+    "subprocess.run(\n"
+    '    ["blizzard", "runner", "artifact", "commit",\n'
+    '     "--forge", _forge, "--repo", repo, "--branch", _branch, "--commit", _commit_sha],\n'
     "    check=True,\n"
     ")\n"
 )

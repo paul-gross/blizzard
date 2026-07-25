@@ -24,6 +24,7 @@ from blizzard.runner.store.repository import (
     ClosedLeaseRecord,
     EnvBindingRecord,
     EscalationRecord,
+    GitCommitDeclarationRecord,
     IWriteRunnerStore,
     LeaseRecord,
     NewLease,
@@ -39,6 +40,7 @@ from blizzard.runner.store.schema import (
     binding_releases,
     daemon_liveness,
     env_bindings,
+    git_commit_declarations,
     heartbeats,
     hub_control,
     lease_closures,
@@ -452,6 +454,26 @@ class SqlAlchemyRunnerStore:
         stmt = select(attachments.c.name, attachments.c.content).join(newest, attachments.c.id == newest.c.id)
         return {str(r.name): str(r.content) for r in self._all(stmt)}
 
+    def git_commit_declarations_for_lease(self, lease_id: str) -> dict[str, GitCommitDeclarationRecord]:
+        newest = (
+            select(git_commit_declarations.c.repo, func.max(git_commit_declarations.c.id).label("id"))
+            .where(git_commit_declarations.c.lease_id == lease_id)
+            .group_by(git_commit_declarations.c.repo)
+            .subquery()
+        )
+        stmt = select(
+            git_commit_declarations.c.forge,
+            git_commit_declarations.c.repo,
+            git_commit_declarations.c.branch,
+            git_commit_declarations.c.commit,
+        ).join(newest, git_commit_declarations.c.id == newest.c.id)
+        return {
+            str(r.repo): GitCommitDeclarationRecord(
+                forge=str(r.forge), repo=str(r.repo), branch=str(r.branch), commit=str(r.commit)
+            )
+            for r in self._all(stmt)
+        }
+
     def nudge_fired(self, lease_id: str, epoch: int) -> bool:
         rows = self._all(
             select(nudge_facts.c.lease_id).where(and_(nudge_facts.c.lease_id == lease_id, nudge_facts.c.epoch == epoch))
@@ -787,6 +809,38 @@ class SqlAlchemyRunnerStore:
                 )
             )
         _log.info("attachment recorded", lease_id=lease_id, name=name)
+
+    def record_git_commit_declaration(
+        self,
+        *,
+        lease_id: str,
+        chunk_id: str,
+        node_id: str,
+        epoch: int,
+        forge: str,
+        repo: str,
+        branch: str,
+        commit: str,
+        declared_at: datetime,
+    ) -> None:
+        # A single committed transaction (`engine.begin()` commits on clean exit) —
+        # durable the instant this returns, so it survives a `kill -9` right after
+        # (issue #143 Phase 3's crash-sweep criterion, mirroring `record_attachment`).
+        with self._begin() as conn:
+            conn.execute(
+                git_commit_declarations.insert().values(
+                    lease_id=lease_id,
+                    chunk_id=chunk_id,
+                    node_id=node_id,
+                    epoch=epoch,
+                    forge=forge,
+                    repo=repo,
+                    branch=branch,
+                    commit=commit,
+                    declared_at=declared_at,
+                )
+            )
+        _log.info("git-commit declaration recorded", lease_id=lease_id, repo=repo)
 
     def record_nudge_fired(self, *, lease_id: str, epoch: int, at: datetime) -> None:
         # Check-then-insert in one transaction, mirroring `record_usage` — idempotent by

@@ -275,6 +275,7 @@ class ChunkStore:
                     name=a.name,
                     data=a.data,
                     repo=a.repo,
+                    forge=a.forge,
                     artifact_id=a.artifact_id,
                     chunk_id=a.chunk_id,
                     node_id=a.node_id,
@@ -700,6 +701,7 @@ class ChunkStore:
                         kind=row.kind.value,
                         data=row.data,
                         repo=row.repo,
+                        forge=row.forge,
                         produced_at=at,
                     )
                 )
@@ -1002,6 +1004,7 @@ class ChunkStore:
                         kind=row.kind.value,
                         data=row.data,
                         repo=row.repo,
+                        forge=row.forge,
                         produced_at=at,
                     )
                 )
@@ -1125,6 +1128,7 @@ class ChunkStore:
                         kind=row.kind.value,
                         data=row.data,
                         repo=row.repo,
+                        forge=row.forge,
                         produced_at=at,
                     )
                 )
@@ -1326,6 +1330,7 @@ class ChunkStore:
                     kind=ArtifactKind.ASSET.value,
                     data=content,
                     repo=None,
+                    forge=None,
                     produced_at=at,
                 )
             )
@@ -1389,6 +1394,7 @@ class ChunkStore:
                         kind=row.kind.value,
                         data=row.data,
                         repo=row.repo,
+                        forge=row.forge,
                         produced_at=at,
                     )
                 )

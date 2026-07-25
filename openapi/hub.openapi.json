@@ -1609,7 +1609,7 @@
           "produces": {
             "default": [],
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/ProducesEntry"
             },
             "title": "Produces",
             "type": "array"
@@ -2175,7 +2175,7 @@
           "produces": {
             "default": [],
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/ProducesEntry"
             },
             "title": "Produces",
             "type": "array"
@@ -2524,6 +2524,24 @@
           "url"
         ],
         "title": "PrView",
+        "type": "object"
+      },
+      "ProducesEntry": {
+        "description": "One node's ``produces:`` expectation, kind-carrying (D1, issue #143).\n\nThe wire counterpart of :class:`~blizzard.hub.domain.graph.ProducesSpec` \u2014 served\non :class:`GraphNodeView` and (imported) on\n:class:`~blizzard.wire.envelope.NodeConfig`, so both the graph-read surface and the\nrunner's per-step envelope carry the same kind-carrying shape.",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/ArtifactKind",
+            "default": "asset"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ProducesEntry",
         "type": "object"
       },
       "ProviderSummary": {
@@ -3301,6 +3319,17 @@
               }
             ],
             "title": "Content"
+          },
+          "forge": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forge"
           },
           "kind": {
             "$ref": "#/components/schemas/ArtifactKind"

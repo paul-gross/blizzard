@@ -9,7 +9,7 @@ import pytest
 
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.envelope import build_node_envelope, latest_artifacts_by_name
-from blizzard.hub.domain.graph import Choice, Executor, JudgedBy, Node, SessionMode
+from blizzard.hub.domain.graph import Choice, Executor, JudgedBy, Node, ProducesSpec, SessionMode
 from blizzard.hub.domain.work import Chunk, PmPointer
 
 pytestmark = pytest.mark.unit
@@ -21,6 +21,7 @@ def _row(name: str, epoch: int, *, node_name: str = "build") -> ArtifactRow:
         name=name,
         data=f"v{epoch}",
         repo=None,
+        forge=None,
         artifact_id=f"art_{name}{epoch}",
         chunk_id="ch_1",
         node_id="nd_build",
@@ -99,6 +100,43 @@ def test_arrival_addendum_appends_to_the_pre_prompt() -> None:
         chunk=_chunk(), node=_node(), artifacts=[], epoch=2, arrival_addendum="the review found X"
     )
     assert env.prompt == "do the work\n\nthe review found X"
+
+
+def test_required_artifacts_table_renders_name_and_kind_and_is_harness_inert() -> None:
+    """The procedurally-generated required-artifacts table (issue #143, Phase 5): one
+    `#`-prefixed line per `produces:` entry, naming its kind and the fleet-protocol
+    declaration verb — inert to the mock harness's prompt-is-program `exec` exactly like
+    the runner's own generated tails (`steps._elicitation_tail`, `_nudge_message`)."""
+    node = replace(
+        _node(),
+        produces=[
+            ProducesSpec(name="review-findings", kind=ArtifactKind.ASSET),
+            ProducesSpec(name="commit", kind=ArtifactKind.GIT_COMMIT),
+        ],
+    )
+    env = build_node_envelope(chunk=_chunk(), node=node, artifacts=[], epoch=1)
+
+    assert env.prompt is not None
+    assert env.prompt.startswith("do the work\n\n")
+    table = env.prompt[len("do the work\n\n") :]
+    # Every rendered line is a `#`-prefixed comment — a mock's `exec` of the prompt sees
+    # only legal no-op comment lines, never bare prose.
+    for line in table.splitlines():
+        if line:
+            assert line.startswith("#"), f"non-inert line in the required-artifacts table: {line!r}"
+    assert "artifact create --name review-findings" in table
+    assert "(asset)" in table
+    assert "artifact commit --repo <repo> --branch <branch> --commit <sha>" in table
+    assert "--forge defaults to this repo's own `origin`" in table
+    assert "(git_commit)" in table
+
+
+def test_required_artifacts_table_is_empty_when_node_produces_nothing() -> None:
+    # Mirrors `_node()`'s own `produces=[]` — asserted already by
+    # `test_envelope_carries_authored_judgement_prose_and_choice_set`'s exact `env.prompt`
+    # match; this test names the reason explicitly.
+    env = build_node_envelope(chunk=_chunk(), node=_node(), artifacts=[], epoch=1)
+    assert env.prompt == "do the work"
 
 
 def test_hub_node_has_no_judgement_prompt() -> None:

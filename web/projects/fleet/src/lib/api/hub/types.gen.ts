@@ -1148,7 +1148,7 @@ export type GraphNodeView = {
     /**
      * Produces
      */
-    produces?: Array<string>;
+    produces?: Array<ProducesEntry>;
     /**
      * Prompt
      */
@@ -1548,7 +1548,7 @@ export type NodeConfig = {
     /**
      * Produces
      */
-    produces?: Array<string>;
+    produces?: Array<ProducesEntry>;
     /**
      * Retries Max
      */
@@ -1784,6 +1784,24 @@ export type PrView = {
      * Url
      */
     url: string;
+};
+
+/**
+ * ProducesEntry
+ *
+ * One node's ``produces:`` expectation, kind-carrying (D1, issue #143).
+ *
+ * The wire counterpart of :class:`~blizzard.hub.domain.graph.ProducesSpec` — served
+ * on :class:`GraphNodeView` and (imported) on
+ * :class:`~blizzard.wire.envelope.NodeConfig`, so both the graph-read surface and the
+ * runner's per-step envelope carry the same kind-carrying shape.
+ */
+export type ProducesEntry = {
+    kind?: ArtifactKind;
+    /**
+     * Name
+     */
+    name: string;
 };
 
 /**
@@ -2364,6 +2382,10 @@ export type SubmittedArtifact = {
      * Content
      */
     content?: string | null;
+    /**
+     * Forge
+     */
+    forge?: string | null;
     kind: ArtifactKind;
     /**
      * Name

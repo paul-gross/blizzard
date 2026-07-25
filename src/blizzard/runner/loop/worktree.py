@@ -1,38 +1,34 @@
-"""The worker-artifact git seam — discover and push what a build produced.
+"""The worker-artifact git seam — read-only verify of what a build declared (issue
+#143, Phase 4).
 
-A build worker commits its work to a branch in a leased repo worktree; the runner
-must push that branch to the ``file://`` origin the forge fronts **before** it
-submits the completion (in ADVANCE), and it must name the
-``git_commit`` artifact (repo, branch, commit) in that submission. The worker does
-not report the pointer out-of-band, so the runner derives it by inspecting the
-leased environment: any repo worktree whose HEAD is ahead of the base branch is a
-produced artifact. This is the seam; the subprocess-git adapter under ``internal/``
-is the reference binding, and loop tests inject a fake.
+The worker (not the runner) commits its work to a branch in a leased repo worktree,
+pushes that branch to the forge, and declares the resulting ``(forge, repo, branch,
+commit)`` through the runner's local declaration channel (Phase 3). ADVANCE reads
+those durable declarations back and, for each, confirms them **read-only** against the
+leased environment's own repo worktree — never inferring a branch name off git residue
+(the ``git rev-parse --abbrev-ref HEAD`` inference this seam used to perform returned
+the literal string ``HEAD`` in a detached worktree, wedging the push it drove) and
+never mutating git itself (the push responsibility moved to the worker seam). The
+subprocess-git adapter under ``internal/`` is the reference binding, and loop tests
+inject a fake.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Protocol
 
 
-@dataclass(frozen=True)
-class GitArtifact:
-    """A produced git-commit pointer discovered in a leased environment."""
-
-    repo: str  # the project repo name (the worktree directory name)
-    branch_name: str
-    commit_hash: str
-    repo_workdir: str  # absolute path to the repo worktree, for the push
-
-
 class IWorktreeGit(Protocol):
-    """Discover produced commits in an environment and push their branches."""
+    """Read-only confirmation of a worker's git-commit declaration."""
 
-    def find_produced_artifacts(self, env_workdir: str, base_branch: str) -> list[GitArtifact]:
-        """Repo worktrees under ``env_workdir`` whose HEAD is ahead of ``base_branch``."""
-        ...
-
-    def push(self, repo_workdir: str, branch_name: str) -> None:
-        """Push ``branch_name`` from ``repo_workdir`` to its ``origin`` (the forge's git truth)."""
+    def verify(self, repo_workdir: str, forge: str, branch: str, commit: str) -> bool:
+        """``True`` iff ``forge`` matches ``repo_workdir``'s own ``origin`` remote
+        (compared cosmetically-normalized — a trailing ``/`` or ``.git`` on either side
+        does not defeat the match) AND ``branch`` resolves, at that same origin, to
+        ``commit`` — a read-only ``git remote get-url origin`` + ``git ls-remote origin
+        <branch>``, nothing mutated. ``False`` on any mismatch (wrong forge, absent ref,
+        ref pointing elsewhere); a hard failure to even reach the check (no such
+        worktree, no network) raises :class:`~blizzard.runner.loop.internal.
+        subprocess_worktree_git.WorktreeGitError` rather than returning ``False`` — the
+        caller tells "verified false" from "could not verify" apart."""
         ...

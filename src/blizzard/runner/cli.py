@@ -497,6 +497,72 @@ def artifact_create(name: str) -> None:
         raise click.ClickException(f"artifact create: could not record {name!r} ({exc})") from exc
 
 
+def _origin_url(cwd: Path) -> str:
+    """``git remote get-url origin`` run in ``cwd`` — the default ``--forge`` source for
+    ``artifact commit`` (the worker is already cd'd into the repo it is declaring). A
+    failure (no such remote, not a git worktree) reaches the worker as a
+    :class:`click.ClickException`, the same non-soft-fail contract every other
+    ``artifact`` verb rejection uses."""
+    result = subprocess.run(["git", "remote", "get-url", "origin"], cwd=cwd, capture_output=True, text=True)
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip()
+        raise click.ClickException(f"artifact commit: could not derive --forge from `origin` ({detail})")
+    return result.stdout.strip()
+
+
+@artifact_group.command("commit")
+@click.option(
+    "--forge",
+    default=None,
+    help="The forge the repo's `origin` points at. Defaults to this repo's own "
+    "`git remote get-url origin`; pass it explicitly only to override that default.",
+)
+@click.option(
+    "--repo",
+    required=True,
+    help="The leased env's repo worktree DIRECTORY NAME (not an `owner/name` slug or "
+    "URL) — the runner resolves this repo's worktree as a child of the leased env's "
+    "workdir by this exact name; a mismatch verifies against the wrong path and the "
+    "declaration silently drops.",
+)
+@click.option("--branch", required=True, help="The branch the commit was pushed to.")
+@click.option(
+    "--commit",
+    "commit_sha",
+    required=True,
+    help="The FULL commit sha (`git rev-parse HEAD`), not an abbreviated form — verify "
+    "compares it byte-exact against the forge's full sha.",
+)
+def artifact_commit(forge: str | None, repo: str, branch: str, commit_sha: str) -> None:
+    """Worker: durably declare a git-commit artifact for REPO (issue #143, Phase 3).
+
+    A pure client of the runner's local API: the worker pushes its branch first, then
+    posts this declaration for the lease in ``BLIZZARD_LEASE_ID`` to
+    ``BLIZZARD_RUNNER_URL``, authorized by the lease token in ``BLIZZARD_LEASE_TOKEN`` —
+    all three inherited from the spawn environment, so no identity arguments. Carries the
+    ``git_commit`` kind only: an asset artifact is declared through
+    ``artifact create`` instead. ``--forge`` is this declaration's own claim (decision
+    R7) — the runner later cross-checks it against the leased env's own ``origin`` rather
+    than trusting it outright; when omitted it defaults to this repo's own ``git remote
+    get-url origin`` (run in the current directory), so the common case needs no flag at
+    all. A rejection (a wrong/missing token, an unknown lease, an unreachable runner)
+    exits non-zero so the worker learns it rather than silently losing the declaration.
+    """
+    lease_id, runner_url, lease_token = _worker_lease_identity("artifact commit")
+    if forge is None:
+        forge = _origin_url(Path.cwd())
+    try:
+        resp = httpx.post(
+            f"{runner_url.rstrip('/')}/api/leases/{lease_id}/git-commits",
+            json={"forge": forge, "repo": repo, "branch": branch, "commit": commit_sha},
+            headers={"X-Blizzard-Lease-Token": lease_token} if lease_token else {},
+            timeout=_HEARTBEAT_TIMEOUT,
+        )
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise click.ClickException(f"artifact commit: could not record {repo!r} ({exc})") from exc
+
+
 @runner.command(hidden=True)
 @click.option("--name", required=True, help="The `produces:` name this content is submitted for.")
 @click.pass_context

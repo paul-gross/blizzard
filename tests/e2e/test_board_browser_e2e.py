@@ -122,7 +122,19 @@ _ANSWER_SCRIPT = (
     'subprocess.run(["git", "-C", repo, "add", "-A"], check=True); '
     'subprocess.run(["git", "-C", repo, "-c", "user.email=mock@blizzard.local", '
     '"-c", "user.name=Mock Harness", "commit", "-m", '
-    '"feat: resolve the board answer and land the change"], check=True)'
+    '"feat: resolve the board answer and land the change"], check=True); '
+    # Push the branch and declare it (issue #143, Phase 4) — the runner no longer
+    # discovers or pushes the produced pointer, so the worker must, through the real
+    # `blizzard runner artifact commit` verb.
+    '_branch = subprocess.run(["git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD"], '
+    "check=True, capture_output=True, text=True).stdout.strip(); "
+    '_commit = subprocess.run(["git", "-C", repo, "rev-parse", "HEAD"], '
+    "check=True, capture_output=True, text=True).stdout.strip(); "
+    '_forge = subprocess.run(["git", "-C", repo, "remote", "get-url", "origin"], '
+    "check=True, capture_output=True, text=True).stdout.strip(); "
+    'subprocess.run(["git", "-C", repo, "push", "origin", _branch], check=True); '
+    'subprocess.run(["blizzard", "runner", "artifact", "commit", "--forge", _forge, '
+    '"--repo", repo, "--branch", _branch, "--commit", _commit], check=True)'
 )
 # build judgement (elicited on the resumed session after the commit): pass to review.
 _JUDGEMENT_SCRIPT = "verdict('pass', 'resumed with the board answer; committed and green')\n"

@@ -349,6 +349,54 @@ export type FleetSummaryView = {
 };
 
 /**
+ * GitCommitDeclarationRequest
+ *
+ * A worker's explicit git-commit declaration for one repo it touched.
+ *
+ * ``forge`` is worker-declared (decision R7): the runner cross-checks it against the
+ * leased env's own ``origin`` during its later read-only verify (Phase 4) rather than
+ * stamping it itself.
+ */
+export type GitCommitDeclarationRequest = {
+    /**
+     * Branch
+     */
+    branch: string;
+    /**
+     * Commit
+     */
+    commit: string;
+    /**
+     * Forge
+     */
+    forge: string;
+    /**
+     * Repo
+     */
+    repo: string;
+};
+
+/**
+ * GitCommitDeclarationResponse
+ *
+ * ``POST /api/leases/{lease_id}/git-commits`` — the declaration landed durably.
+ */
+export type GitCommitDeclarationResponse = {
+    /**
+     * Lease Id
+     */
+    lease_id: string;
+    /**
+     * Recorded
+     */
+    recorded: boolean;
+    /**
+     * Repo
+     */
+    repo: string;
+};
+
+/**
  * HTTPValidationError
  */
 export type HttpValidationError = {
@@ -1483,6 +1531,36 @@ export type RecordAttachmentApiLeasesLeaseIdAttachmentsPostResponses = {
 };
 
 export type RecordAttachmentApiLeasesLeaseIdAttachmentsPostResponse = RecordAttachmentApiLeasesLeaseIdAttachmentsPostResponses[keyof RecordAttachmentApiLeasesLeaseIdAttachmentsPostResponses];
+
+export type RecordGitCommitDeclarationApiLeasesLeaseIdGitCommitsPostData = {
+    body: GitCommitDeclarationRequest;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+    };
+    query?: never;
+    url: '/api/leases/{lease_id}/git-commits';
+};
+
+export type RecordGitCommitDeclarationApiLeasesLeaseIdGitCommitsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RecordGitCommitDeclarationApiLeasesLeaseIdGitCommitsPostError = RecordGitCommitDeclarationApiLeasesLeaseIdGitCommitsPostErrors[keyof RecordGitCommitDeclarationApiLeasesLeaseIdGitCommitsPostErrors];
+
+export type RecordGitCommitDeclarationApiLeasesLeaseIdGitCommitsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: GitCommitDeclarationResponse;
+};
+
+export type RecordGitCommitDeclarationApiLeasesLeaseIdGitCommitsPostResponse = RecordGitCommitDeclarationApiLeasesLeaseIdGitCommitsPostResponses[keyof RecordGitCommitDeclarationApiLeasesLeaseIdGitCommitsPostResponses];
 
 export type SessionEndApiLeasesLeaseIdSessionEndPostData = {
     body?: never;

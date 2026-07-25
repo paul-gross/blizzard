@@ -23,6 +23,8 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
+from blizzard.hub.domain.artifacts import ArtifactKind
+
 # The reserved terminal a choice may point at instead of a node name.
 RESERVED_TERMINAL = "done"
 
@@ -202,6 +204,21 @@ class RunStepDoc:
 
 
 @dataclass(frozen=True)
+class ProducesSpec:
+    """One ``produces:`` entry, kind-carrying (D1, issue #143).
+
+    Authored as a bare string (``kind`` defaults to :attr:`ArtifactKind.ASSET` — every
+    pre-#143 graph's shape) or a mapping ``{name, kind}`` (a ``git_commit`` expectation).
+    :func:`_parse_node` normalizes both authored forms to this one type, so every
+    downstream reader (mint, store, wire, coverage) sees a single shape regardless of
+    which form the author wrote.
+    """
+
+    name: str
+    kind: ArtifactKind = ArtifactKind.ASSET
+
+
+@dataclass(frozen=True)
 class NodeDoc:
     """One node as authored."""
 
@@ -209,7 +226,7 @@ class NodeDoc:
     executor: Executor
     prompt: str | None
     checks: list[str]
-    produces: list[str]
+    produces: list[ProducesSpec]
     session: SessionMode
     retries_max: int | None
     retries_exhausted: str | None
@@ -278,7 +295,7 @@ def _parse_node(name: str, body: dict[str, object]) -> NodeDoc:
     executor = Executor(str(body.get("executor", Executor.RUNNER.value)))
     session, session_source, session_malformed = classify_session(str(body.get("session", SessionMode.RESUME.value)))
     checks = [str(c) for c in _as_list(body.get("checks", []))]
-    produces = [str(p) for p in _as_list(body.get("produces", []))]
+    produces = [_parse_produces_entry(p, name) for p in _as_list(body.get("produces", []))]
     retries = body.get("retries")
     retries_max: int | None = None
     retries_exhausted: str | None = None
@@ -314,6 +331,33 @@ def _parse_node(name: str, body: dict[str, object]) -> NodeDoc:
         session_source=session_source,
         session_malformed=session_malformed,
     )
+
+
+def _parse_produces_entry(raw: object, node_name: str) -> ProducesSpec:
+    """Normalize one authored ``produces:`` entry (D1, issue #143).
+
+    A bare string names an asset (``kind=asset`` — every pre-#143 graph's shape,
+    unchanged). A mapping ``{name, kind}`` names an explicit kind — currently ``asset``
+    or ``git_commit``. Structural coercion only, matching :func:`_parse_node`'s other
+    enum fields (``executor``, ``session``): an unrecognized ``kind`` value raises
+    :class:`GraphParseError` with a clear message rather than a bare :class:`ValueError`,
+    since ``produces:`` entries are user-authored graph YAML, not an internal enum."""
+    if isinstance(raw, str):
+        return ProducesSpec(name=raw, kind=ArtifactKind.ASSET)
+    body = _as_dict(raw, f"node {node_name!r} `produces` entry")
+    try:
+        entry_name = str(body["name"])
+    except KeyError as exc:
+        raise GraphParseError(f"node {node_name!r}: a `produces` entry must declare `name`") from exc
+    raw_kind = body.get("kind", ArtifactKind.ASSET.value)
+    try:
+        kind = ArtifactKind(str(raw_kind))
+    except ValueError as exc:
+        raise GraphParseError(
+            f"node {node_name!r} produces `{entry_name}`: unknown kind {raw_kind!r} — "
+            f"expected `{ArtifactKind.ASSET.value}` or `{ArtifactKind.GIT_COMMIT.value}`"
+        ) from exc
+    return ProducesSpec(name=entry_name, kind=kind)
 
 
 def _parse_run_step(raw: object) -> RunStepDoc:
@@ -438,7 +482,7 @@ class Node:
     executor: Executor
     prompt: str | None
     checks: list[str]
-    produces: list[str]
+    produces: list[ProducesSpec]
     session: SessionMode
     judged_by: JudgedBy
     retries_max: int | None

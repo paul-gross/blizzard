@@ -164,6 +164,13 @@ _EXPECTED_DRIVE_VERBS: dict[str, str] = {
     "pause": "IHubClient.push_facts (runner.locally_paused) — POST /api/fleet/events",
     "resume": "IHubClient.push_facts (runner.locally_resumed) — POST /api/fleet/events",
     "report-event": "IHubClient.push_facts (event.recorded) — POST /api/fleet/events",
+    "declare-git-commit": (
+        "no IHubClient operation (issue #143, Phase 3) — a local write against the mock's own "
+        "git-commit declaration store, the produces-kind analogue of CompleteBody.artifacts; "
+        "mirrors the real runner's local POST /api/leases/{id}/git-commits, also served directly "
+        "on the mock's api_router"
+    ),
+    "get-git-commits": "test-only control — reads back a lease's declared git commits, no IHubClient operation",
 }
 
 

@@ -45,6 +45,7 @@ import pytest
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 from tests.e2e.test_acceptance_loop import (
+    _PUSH_AND_DECLARE_SCRIPT,
     FIXTURE_ENV,
     REPO,
     REPO_NAME,
@@ -78,7 +79,7 @@ _BUILD_SCRIPT = (
     '     "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
     '     "commit", "-m", "feat: a build pass"],\n'
     "    check=True,\n"
-    ")\n"
+    ")\n" + _PUSH_AND_DECLARE_SCRIPT
 )
 _BUILD_JUDGEMENT = "verdict('pass', 'checks are green')\n"
 

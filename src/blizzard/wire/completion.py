@@ -15,6 +15,9 @@ runner advances a chunk past a gate once a person has decided.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from typing import Protocol
+
 from pydantic import BaseModel
 
 from blizzard.hub.domain.artifacts import ArtifactKind
@@ -25,7 +28,11 @@ class SubmittedArtifact(BaseModel):
 
     name: str
     kind: ArtifactKind
-    # git_commit variant — the branch is pushed to the forge before submission.
+    # git_commit variant — the branch is pushed to the forge before submission. `forge`
+    # is the worker's own declared origin (issue #143, Phase 4 — decision R7), carried
+    # through verbatim once the runner's read-only verify confirms it; `None` only for
+    # a pre-Phase-4 artifact this shape predates (additive field, default `None`).
+    forge: str | None = None
     repo: str | None = None
     branch_name: str | None = None
     commit_hash: str | None = None
@@ -56,6 +63,51 @@ def satisfied_produces_names(artifacts: list[SubmittedArtifact]) -> set[str]:
     architecture`` keeps hub and runner as separate top-level packages neither importing
     the other's domain)."""
     return {a.name for a in artifacts if a.attached or a.kind == ArtifactKind.GIT_COMMIT}
+
+
+class _ProducesLike(Protocol):
+    """Structural shape both ``produces:`` spec types share — the hub's
+    :class:`~blizzard.hub.domain.graph.ProducesSpec` (a frozen dataclass) and the wire's
+    :class:`~blizzard.wire.graph.ProducesEntry` (a pydantic model). :func:`produces_coverage`
+    is generic over either so it can be the one shared home the hub backstop and the
+    runner nudge both import, without either side importing the other's type."""
+
+    @property
+    def name(self) -> str: ...
+    @property
+    def kind(self) -> ArtifactKind: ...
+
+
+def produces_coverage[P: _ProducesLike](specs: Sequence[P], artifacts: list[SubmittedArtifact]) -> list[P]:
+    """The ``produces:`` specs this artifact list does **not** cover (issue #143, D2) —
+    the one shared home both the hub's backstop
+    (:func:`~blizzard.hub.domain.produces_auth.check_produces`) and the runner's nudge
+    check (:func:`~blizzard.runner.loop.steps._missing_produces`) call, so the two
+    coverage models cannot drift apart.
+
+    Evaluated per declared ``kind``:
+
+    - An ``asset`` spec is met by an artifact of **its own name** present in
+      :func:`satisfied_produces_names` — an explicit ``blizzard runner attach``, or a
+      ``GIT_COMMIT`` artifact that happens to share the name (today's asset logic,
+      unchanged).
+    - A ``git_commit`` spec is met by **any** ``GIT_COMMIT``-kind artifact being present
+      at all — a *kind* match, not a name match. The worker declares one git-commit
+      artifact per repo it touched, named after that repo (``blizzard``,
+      ``blizzard-mock``, …), never the literal produces name (``commit``) — so a
+      git_commit expectation with zero git_commit artifacts is unmet regardless of what
+      any artifact is named.
+    """
+    covered_names = satisfied_produces_names(artifacts)
+    has_git_commit = any(a.kind == ArtifactKind.GIT_COMMIT for a in artifacts)
+    unmet: list[P] = []
+    for spec in specs:
+        if spec.kind == ArtifactKind.GIT_COMMIT:
+            if not has_git_commit:
+                unmet.append(spec)
+        elif spec.name not in covered_names:
+            unmet.append(spec)
+    return unmet
 
 
 class CheckResult(BaseModel):

@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.hub.domain.artifacts import ArtifactKind
+from blizzard.hub.domain.graph import ProducesSpec
 from blizzard.hub.graphs import default_graph_yaml
 from tests.support import build_hub
 
@@ -95,6 +97,8 @@ nodes:
     session: fresh
     produces:
       - review-findings
+      - name: commit
+        kind: git_commit
     checks:
       - pytest -q
       - ruff check
@@ -114,7 +118,9 @@ nodes:
 
 
 def test_mint_round_trips_node_produces_and_checks_through_the_store(tmp_path: Path) -> None:
-    """A node's ``produces``/``checks`` survive a store reload.
+    """A node's ``produces``/``checks`` survive a store reload — both authored forms
+    (D1, issue #143): the bare-string ``review-findings`` (``kind=asset``, every
+    pre-#143 graph's shape) and the mapping ``{name: commit, kind: git_commit}``.
 
     The graph store must persist and reify these: a review node reloaded from the store
     with an empty ``produces`` never emits its ``review-findings`` asset, so the review
@@ -130,7 +136,10 @@ def test_mint_round_trips_node_produces_and_checks_through_the_store(tmp_path: P
     reloaded = hub.services.graphs.get(graph_id)
     assert reloaded is not None
     review = next(n for n in reloaded.nodes if n.name == "review")
-    assert review.produces == ["review-findings"]
+    assert review.produces == [
+        ProducesSpec(name="review-findings", kind=ArtifactKind.ASSET),
+        ProducesSpec(name="commit", kind=ArtifactKind.GIT_COMMIT),
+    ]
     assert review.checks == ["pytest -q", "ruff check"]
 
 

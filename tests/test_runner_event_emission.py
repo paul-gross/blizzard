@@ -27,7 +27,6 @@ from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerHandle
 from blizzard.runner.loop.internal.subprocess_worktree_git import WorktreeGitError
 from blizzard.runner.loop.steps import advance, fill, reap
-from blizzard.runner.loop.worktree import GitArtifact
 from blizzard.runner.store.repository import NewLease
 from blizzard.wire.chunk import ChunkDetail, RouteView
 from blizzard.wire.facts import ESCALATION_RECORDED, EVENT_RECORDED, LEASE_MINTED
@@ -238,27 +237,41 @@ def test_env_prep_failure_emits_a_command_failed(tmp_path):  # type: ignore[no-u
     assert "reset step failed" in events[0]["detail"]["stderr_tail"]
 
 
-class _PushFailsWorktreeGit(FakeWorktreeGit):
-    """A worktree git whose push always raises — L(ii)'s catch site."""
+class _VerifyFailsWorktreeGit(FakeWorktreeGit):
+    """A worktree git whose verify always raises — L(ii)'s catch site (issue #143, Phase 4)."""
 
-    def push(self, repo_workdir: str, branch_name: str) -> None:
-        raise WorktreeGitError("git push origin feat/x failed: remote rejected (no SSH_AUTH_SOCK)")
+    def verify(self, repo_workdir: str, forge: str, branch: str, commit: str) -> bool:
+        raise WorktreeGitError("git ls-remote origin feat/x failed: remote rejected (no SSH_AUTH_SOCK)")
 
 
-def test_git_push_failure_emits_a_command_failed_and_reraises(tmp_path):  # type: ignore[no-untyped-def]
+def test_git_verify_failure_emits_a_command_failed_and_continues(tmp_path):  # type: ignore[no-untyped-def]
+    """A verify failure is informational only (issue #143, Phase 4): unlike the push
+    it replaces, a read-only re-derivation opens no unsafe window, so it is never
+    re-raised — the declaration is simply dropped (uncovered) and ADVANCE proceeds
+    into its ordinary verdict-less-exit failure path."""
     store = _store(tmp_path)
     _seed_lease(store, retries_max=2)
-    wt = _PushFailsWorktreeGit(
-        artifacts=[GitArtifact(repo="app", branch_name="feat/x", commit_hash="abc", repo_workdir="/ws/e1/app")]
+    store.record_git_commit_declaration(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        forge="file:///origins/app.git",
+        repo="app",
+        branch="feat/x",
+        commit="abc",
+        declared_at=_NOW,
     )
+    wt = _VerifyFailsWorktreeGit()
     ctx = _dead_worker_ctx(store, worktree_git=wt)
 
-    with pytest.raises(WorktreeGitError):  # re-raised — today's propagation preserved
-        advance(ctx)
+    advance(ctx)  # no exception — a read-only verify failure never crash-loops the tick
 
     events = _events(store)
-    assert len(events) == 1
-    assert (events[0]["severity"], events[0]["kind"]) == ("warning", "command-failed")
+    assert [(e["severity"], e["kind"]) for e in events] == [
+        ("warning", "command-failed"),
+        ("warning", "attempt-failed"),
+    ]
     assert events[0]["chunk_id"] == "ch_1"
     assert "SSH_AUTH_SOCK" in events[0]["detail"]["stderr_tail"]
 

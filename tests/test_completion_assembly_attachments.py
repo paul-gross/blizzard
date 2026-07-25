@@ -99,7 +99,7 @@ def test_advance_prefers_a_real_attachment_and_falls_back_for_the_rest(tmp_path:
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        worktree_git=FakeWorktreeGit([]),
+        worktree_git=FakeWorktreeGit(),
     )
 
     advance(ctx)  # assembles the completion from the real durable attachment + fallback

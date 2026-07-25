@@ -29,7 +29,7 @@ from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError, IHubClient, RouteClaimOutcome
 from blizzard.runner.loop.process import IProcessProbe
-from blizzard.runner.loop.worktree import GitArtifact, IWorktreeGit
+from blizzard.runner.loop.worktree import IWorktreeGit
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 from blizzard.runner.store.repository import IWriteRunnerStore
 from blizzard.runner.store.schema import metadata as runner_metadata
@@ -39,6 +39,7 @@ from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeConfig, NodeEnvelope
 from blizzard.wire.facts import RunnerFact, RunnerFactAck, RunnerFactBatch
+from blizzard.wire.graph import ProducesEntry
 from blizzard.wire.question import QuestionView
 from blizzard.wire.queue import QueuePeekEntry, QueuePeekResponse
 from blizzard.wire.route import RouteClaim, RouteClaimResponse, RouteTokenRekeyResponse
@@ -388,17 +389,22 @@ class FakeProbe:
 
 
 class FakeWorktreeGit:
-    """A scriptable :class:`IWorktreeGit`: canned produced artifacts, records pushes."""
+    """A scriptable :class:`IWorktreeGit`: a canned verify verdict, records every call.
 
-    def __init__(self, artifacts: list[GitArtifact] | None = None) -> None:
-        self._artifacts = artifacts if artifacts is not None else []
-        self.pushed: list[tuple[str, str]] = []
+    ``verified`` is either a single bool applied to every call, or a
+    ``{repo_workdir: bool}`` mapping for a test that needs some declarations to verify
+    and others not to — an absent key defaults ``True`` (the common case: every
+    declaration verifies)."""
 
-    def find_produced_artifacts(self, env_workdir: str, base_branch: str) -> list[GitArtifact]:
-        return list(self._artifacts)
+    def __init__(self, verified: bool | dict[str, bool] = True) -> None:
+        self._verified = verified
+        self.verified_calls: list[tuple[str, str, str, str]] = []
 
-    def push(self, repo_workdir: str, branch_name: str) -> None:
-        self.pushed.append((repo_workdir, branch_name))
+    def verify(self, repo_workdir: str, forge: str, branch: str, commit: str) -> bool:
+        self.verified_calls.append((repo_workdir, forge, branch, commit))
+        if isinstance(self._verified, dict):
+            return self._verified.get(repo_workdir, True)
+        return self._verified
 
 
 def make_context(
@@ -443,7 +449,7 @@ def make_envelope(
     *,
     node_id: str,
     choices: list[tuple[str, str]],
-    produces: list[str] | None = None,
+    produces: list[str | ProducesEntry] | None = None,
     epoch: int = 0,
     session: SessionMode | None = None,
     session_source: str | None = None,
@@ -457,7 +463,11 @@ def make_envelope(
     carried-forward floor explicitly.
 
     ``session``/``session_source`` (issue #115) default to ``SessionMode.FRESH``/``None``
-    — today's unchanged behavior — unless a resume-mode test overrides them."""
+    — today's unchanged behavior — unless a resume-mode test overrides them.
+
+    ``produces`` entries are a bare name (``kind=asset``, the pre-#143 shape every
+    existing caller passes) or an explicit :class:`~blizzard.wire.graph.ProducesEntry`
+    (e.g. carrying ``kind=git_commit``) for a test that needs a kind-carrying spec."""
     from blizzard.hub.domain.graph import Executor, JudgedBy
     from blizzard.wire.envelope import EnvelopeChoice
 
@@ -469,7 +479,7 @@ def make_envelope(
         session_source=session_source,
         judged_by=JudgedBy.WORKER,
         retries_max=2,
-        produces=produces or [],
+        produces=[p if isinstance(p, ProducesEntry) else ProducesEntry(name=p) for p in produces or []],
         choices=[EnvelopeChoice(name=n, description=d) for n, d in choices],
     )
     return NodeEnvelope(

@@ -6,4 +6,4 @@ For each repo ahead of its upstream: fetch, then rebase the branch onto the late
 
 Then run the standard procedural verifications on the rebased result: the project's linter, and the unit tests covering what the change (and any conflict resolutions) touched. Scope the test run by judgement — targeted, not the entire suite; full verification depth belongs to the verify node.
 
-Submit the outcome as the node's `pre-push-summary` asset before you declare done: run `blizzard runner attach --name pre-push-summary` with the content on stdin — per-repo rebase result, every conflict and how it was resolved, what lint/tests ran and their results, and your severity triage — no conflicts worth naming, mechanical-only resolutions, or resolutions that made semantic choices.
+Submit the outcome as the node's `pre-push-summary` asset before you declare done: run `blizzard runner artifact create --name pre-push-summary` with the content on stdin — per-repo rebase result, every conflict and how it was resolved, what lint/tests ran and their results, and your severity triage — no conflicts worth naming, mechanical-only resolutions, or resolutions that made semantic choices.

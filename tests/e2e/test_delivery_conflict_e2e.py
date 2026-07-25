@@ -38,6 +38,7 @@ import pytest
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop.build import run_single_tick
 from tests.e2e.test_acceptance_loop import (
+    _PUSH_AND_DECLARE_SCRIPT,
     FIXTURE_ENV,
     REPO,
     REPO_NAME,
@@ -46,6 +47,7 @@ from tests.e2e.test_acceptance_loop import (
     _git_bare,
     _hub,
     _mock_bin_dir,
+    _runner_api,
     _runner_config,
     _winter_source,
 )
@@ -68,7 +70,7 @@ _BUILD_SCRIPT = (
     '     "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
     '     "commit", "-m", "feat: a change the armed conflict lever will reject"],\n'
     "    check=True,\n"
-    ")\n"
+    ")\n" + _PUSH_AND_DECLARE_SCRIPT
 )
 _BUILD_JUDGEMENT = "verdict('pass', 'committed the change; checks are green')\n"
 
@@ -108,24 +110,30 @@ def _drive_one_bounce(config: RunnerConfig, hub: httpx.Client, chunk_id: str, fe
     """Tick until the chunk is back at `build` (post-bounce) or reaches a terminal
     status — whichever comes first. A conflict never terminates the chunk (#64: a
     bounce is contention, not failure), so this stops on the FIRST bounce rather than
-    driving to `done`, which a repo armed to always conflict would never reach."""
+    driving to `done`, which a repo armed to always conflict would never reach.
+
+    Wrapped in :func:`_runner_api` (issue #143, Phase 4): the build node's scripted
+    push+declare needs a live local API to POST its ``artifact commit`` declaration to
+    — `_runner_config` binds a free `host`/`port` for exactly this.
+    """
     prior = dict(os.environ)
     os.environ.update(fenced_env)
     try:
-        deadline = time.monotonic() + 60.0
-        status = "ready"
-        while time.monotonic() < deadline:
-            run_single_tick(config)
-            detail = hub.get(f"/api/chunks/{chunk_id}")
-            assert detail.status_code == 200, detail.text
-            body = detail.json()
-            status = body["status"]
-            if status in {"done", "stopped", "needs_human"}:
-                return status
-            if body["bounces"]:
-                return status
-            time.sleep(0.5)
-        return status
+        with _runner_api(config):
+            deadline = time.monotonic() + 60.0
+            status = "ready"
+            while time.monotonic() < deadline:
+                run_single_tick(config)
+                detail = hub.get(f"/api/chunks/{chunk_id}")
+                assert detail.status_code == 200, detail.text
+                body = detail.json()
+                status = body["status"]
+                if status in {"done", "stopped", "needs_human"}:
+                    return status
+                if body["bounces"]:
+                    return status
+                time.sleep(0.5)
+            return status
     finally:
         os.environ.clear()
         os.environ.update(prior)

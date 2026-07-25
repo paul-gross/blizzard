@@ -31,6 +31,7 @@ from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.ids import LEASE_PREFIX, mint
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.hub.domain.artifacts import ArtifactKind
 from blizzard.hub.domain.enrollment import hash_token
 from blizzard.hub.domain.graph import SessionMode
 from blizzard.hub.domain.work import ChunkStatus
@@ -52,11 +53,12 @@ from blizzard.runner.store.repository import (
     AskRecord,
     BufferedFact,
     EnvBindingRecord,
+    GitCommitDeclarationRecord,
     IWriteRunnerStore,
     LeaseRecord,
     NewLease,
 )
-from blizzard.wire.completion import CompletionSubmission, SubmittedArtifact, satisfied_produces_names
+from blizzard.wire.completion import CompletionSubmission, SubmittedArtifact, produces_coverage
 from blizzard.wire.decision import DecisionSubmission, DecisionView
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeConfig, NodeEnvelope
 from blizzard.wire.facts import (
@@ -69,6 +71,7 @@ from blizzard.wire.facts import (
     RunnerFact,
     RunnerFactBatch,
 )
+from blizzard.wire.graph import ProducesEntry
 from blizzard.wire.route import RouteClaim
 
 #: This module's public API — the loop steps it owns. ``HEARTBEAT_STALENESS_THRESHOLD``
@@ -193,11 +196,12 @@ _CP_FILL_AFTER_CLAIM = crashpoint("fill.after-claim.before-spawn", "hub holds th
 _CP_SPAWN_AFTER_MINT = crashpoint("spawn.after-lease-mint.before-spawn", "lease minted; worker not spawned")
 _CP_SPAWN_AFTER_SPAWN = crashpoint("spawn.after-spawn", "worker spawned; pid recorded")
 
-# ADVANCE — judge an exited worker: push artifacts -> elicit verdict -> buffer completion.
-_CP_ADV_BEFORE_PUSH = crashpoint("advance.before-artifact-push", "exited worker; artifacts not pushed")
-_CP_ADV_AFTER_PUSH = crashpoint(
-    "advance.after-artifact-push.before-judgement", "artifacts pushed; verdict not elicited"
-)
+# ADVANCE — judge an exited worker: verify declared git commits -> elicit verdict ->
+# buffer completion. Verify is read-only (issue #143, Phase 4) — the push-mutation
+# window this used to open (`advance.before-artifact-push` / `.after-artifact-push.
+# before-judgement`) is gone; a read-only re-derivation needs no crash point of its own
+# (`bzh:crash-correctness` — recorded as a removed exemption in
+# `blizzard-harness:/architecture/crash-correctness.md`).
 _CP_ADV_AFTER_JUDGE = crashpoint("advance.after-judgement.before-buffer", "verdict parsed; completion not buffered")
 # Usage recording (issue #58) sits between the verdict and the completion buffer: a crash
 # here either finds this attempt's usage facts already durable (idempotent re-run, keyed
@@ -1518,7 +1522,7 @@ def advance(ctx: LoopContext) -> None:
 
     Two responsibilities: (a) a session-bearing worker whose process has exited is a
     done declaration — resume it with the judgement prompt, parse the ``<Choice>``,
-    push its artifacts, and **buffer** the epoch-fenced completion (the flusher in
+    verify its declared artifacts, and **buffer** the epoch-fenced completion (the flusher in
     PULL delivers it and drives the apply-response) — unless this operator gates
     the node by name, in which case it buffers a **decision** instead; (b) a
     chunk the runner holds with no active lease is driven by :func:`_advance_held_chunk`
@@ -1596,8 +1600,8 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
     by the local brake (issue #45) the same as the other three primitives, just placed
     later in this function: the ask-park and gate-decision branches above it end the
     attempt with no process started (a park or a human decision, not a judgement), and
-    the artifact push is idempotent forge state, not a spawn, so none of those need the
-    gate. Only the judge call does. A suppressed judgement leaves the lease exactly as it
+    the artifact verify is a read-only re-derivation, not a spawn, so none of those need
+    the gate. Only the judge call does. A suppressed judgement leaves the lease exactly as it
     was — active, session-bearing, dead pid, no completion buffered — so ADVANCE retries
     it every tick until the brake clears, the same self-driving shape every other gate in
     this module leaves behind.
@@ -1625,28 +1629,14 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
     except HubClientError:
         return  # hub unreachable — the worker's exit is durable; retry next tick
 
-    # 1. Push produced branches to their forge origins BEFORE submitting. Not a
-    #    harness spawn, and idempotent, so this runs regardless of the local brake — the
-    #    branch is forge state the runner already holds, not new work being started.
-    _CP_ADV_BEFORE_PUSH.reached()
-    try:
-        artifacts = _push_and_collect_artifacts(ctx, bindings)
-    except WorktreeGitError as exc:
-        # Surface the captured push failure (issue #125, change L(ii)) then RE-RAISE — the
-        # bare push at this site propagates uncaught to the per-tick boundary (build.py, "a
-        # bad tick must not kill the daemon") and re-attempts next tick; re-raising preserves
-        # that exactly, so this is purely additive and does NOT repair the wedge (out of
-        # scope per the issue's "surface, don't repair" line).
-        _emit_command_failed(
-            ctx,
-            chunk_id=lease.chunk_id,
-            lease_id=lease.lease_id,
-            node_name=lease.node_name,
-            command="git push origin <work-branch>",
-            stderr_tail=str(exc),
-        )
-        raise
-    _CP_ADV_AFTER_PUSH.reached()
+    # 1. Read back the worker's declared git commits and confirm each, read-only,
+    #    against the forge — no push, no residue inference (issue #143, Phase 4). Not a
+    #    harness spawn, so this runs regardless of the local brake; unlike the push it
+    #    replaces, a failed verify is never re-raised — a read-only re-derivation opens
+    #    no unsafe mutation window, so a captured failure is surfaced informationally
+    #    and the declaration is simply treated as unverified (drives the Phase-2 nudge)
+    #    rather than crash-looping the tick.
+    artifacts, declared_this_attempt = _verify_and_collect_git_commits(ctx, lease, bindings)
 
     # 1b. Runner-config gate: this operator gates this node by name, so the
     #     node-step's outcome is a human's, not the worker's. Submit a Decision carrying
@@ -1659,7 +1649,7 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
 
     # 2. Elicit the verdict via the judgement resume — the fourth spawn primitive
     #    (issue #45), gated here rather than hoisted to the top of this function so the
-    #    park/gate/push work above (none of it a spawn) still happens while paused.
+    #    park/gate/verify work above (none of it a spawn) still happens while paused.
     if _spawn_suppressed(ctx, via="advance", chunk_id=lease.chunk_id, lease_id=lease.lease_id):
         return
 
@@ -1728,7 +1718,7 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
         _log.warning(
             "nudging worker for unattached produces names",
             node=envelope.node.node_name,
-            missing=missing,
+            missing=[spec.name for spec in missing],
             lease_id=lease.lease_id,
             epoch=lease.epoch,
         )
@@ -1767,6 +1757,27 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
         # Re-read: a worker that attached during the nudge must have its content picked
         # up before assembly below, not the assessment fallback it just corrected.
         attachments = ctx.store.attachments_for_lease(lease.lease_id)
+        # Re-verify: a worker nudged for a missing `git_commit` spec may push and
+        # declare (`blizzard runner artifact commit`) during the nudge, same as it may
+        # attach an asset — symmetric with the attachments re-read just above, else
+        # that declaration lands durably in the store but this attempt's completion
+        # buffers without it (issue #143 re-review). Re-derives the lease's full
+        # declaration set fresh, so overlay by repo name rather than append: any repo
+        # whose declaration is unchanged from the pre-nudge pass (`declared_this_attempt`)
+        # is skipped entirely — it was already resolved this attempt, verified or not,
+        # so a broken `--repo` the worker never fixed surfaces exactly once rather than
+        # re-emitting a duplicate `command-failed` — and a repo the worker re-declared
+        # (amended) mid-nudge is re-verified fresh. The overlay itself is keyed by repo
+        # name: pre-nudge artifacts seed the dict, post-nudge results (only ever
+        # verified successes) overlay on top, so a transient re-verify hiccup here can
+        # never regress an artifact this attempt already has, while a genuine amendment
+        # wins.
+        post_nudge_artifacts, _ = _verify_and_collect_git_commits(
+            ctx, lease, bindings, already_declared=declared_this_attempt
+        )
+        by_repo = {a.name: a for a in artifacts}
+        by_repo.update({a.name: a for a in post_nudge_artifacts})
+        artifacts = list(by_repo.values())
 
     # 2b. Harvest the node's asset artifacts: a node that `produces` a name no
     #     pushed git commit covers (the review node's `findings`) emits an explicit
@@ -2233,13 +2244,15 @@ def _emit_command_failed(
     command: str,
     stderr_tail: str,
 ) -> None:
-    """Surface a captured spawn/push/env-prep command failure as a ``warning``
+    """Surface a captured spawn/verify/env-prep command failure as a ``warning``
     ``command-failed`` operational event (issue #125, change L).
 
     Enqueued straight to the outbound buffer — it rides no closure, and it never alters the
-    caller's control flow: the git-push site re-raises after calling this, and the env-prep
-    site returns False after, exactly as before. The failing command and its stderr tail
-    (already carried on the raised exception's message per MF-2) go in ``detail``."""
+    caller's control flow: the spawn-launch site re-raises after calling this, the env-prep
+    site returns False after, and the git-verify site (issue #143, Phase 4 — read-only, so
+    no unsafe window to protect) simply drops the declaration and continues. The failing
+    command and its stderr tail (already carried on the raised exception's message per
+    MF-2) go in ``detail``."""
     payload = json.dumps(
         {
             "severity": "warning",
@@ -2749,36 +2762,66 @@ def _resume_if_unpaused(ctx: LoopContext, lease: LeaseRecord) -> None:
 
 def _missing_produces(
     envelope: NodeEnvelope, git_artifacts: list[SubmittedArtifact], attachments: dict[str, str]
-) -> list[str]:
-    """Every `produces:` name this attempt covers with neither a pushed git commit nor
-    an explicit attachment (issue #113, Phase 4) — the nudge-worthy set
-    :func:`_advance_exited_worker` checks before submitting. Order follows the
-    envelope's own `produces:` declaration, not attachment/git order, so the nudge
-    message and a node's declared list read in the same sequence. Mirrors
+) -> list[ProducesEntry]:
+    """Every `produces:` spec this attempt does not yet cover (issue #143, D2) — the
+    nudge-worthy set :func:`_advance_exited_worker` checks before submitting. Order
+    follows the envelope's own `produces:` declaration, not attachment/git order, so the
+    nudge message and a node's declared list read in the same sequence. Mirrors
     :func:`_collect_asset_artifacts`'s own git-coverage check rather than sharing it:
     the two run at different points in the same attempt (this one before the nudge,
     that one after), over ``attachments`` snapshots that may legitimately differ.
 
-    The git-commit half of "covered" is the same predicate the hub's own backstop
-    checks (:func:`~blizzard.hub.domain.produces_auth.check_produces`) — both call
-    :func:`~blizzard.wire.completion.satisfied_produces_names` so the two coverage
-    models cannot drift apart again."""
-    covered = satisfied_produces_names(git_artifacts)
-    return [name for name in envelope.node.produces if name not in covered and name not in attachments]
+    Returns the unmet specs themselves, not just their names (issue #143, Phase 5) —
+    :func:`_nudge_message` needs each spec's `kind` to name the kind-appropriate
+    declaration verb, not just the deprecated single-verb nudge issue #113 shipped.
+
+    ``attachments`` has not yet been folded into a ``SubmittedArtifact`` list at this
+    point in the attempt (that assembly is :func:`_collect_asset_artifacts`'s job,
+    which runs after the nudge), so this synthesizes an ``attached=True`` artifact per
+    attachment purely to hand the shared predicate one artifact list to evaluate — the
+    same shape :func:`_collect_asset_artifacts` will itself submit.
+
+    Evaluated by :func:`~blizzard.wire.completion.produces_coverage`, the same shared
+    predicate the hub's own backstop checks
+    (:func:`~blizzard.hub.domain.produces_auth.check_produces`) — an ``asset`` spec by
+    name, a ``git_commit`` spec by kind (any ``GIT_COMMIT`` artifact present) — so the
+    two coverage models cannot drift apart again."""
+
+    attached = [
+        SubmittedArtifact(name=name, kind=ArtifactKind.ASSET, content=content, attached=True)
+        for name, content in attachments.items()
+    ]
+    return produces_coverage(envelope.node.produces, git_artifacts + attached)
 
 
-def _nudge_message(missing: list[str]) -> str:
-    """The nudge resume's message (issue #113, Phase 4): one `#`-prefixed comment
-    line naming every unattached `produces:` name and the CLI to answer it with —
-    mirroring :data:`_PAUSE_RESUME_MESSAGE`'s shape, so the mock harness's
-    prompt-is-program exec sees a legal no-op script while a real harness reads the
-    same text as an ordinary resume instruction."""
-    names = ", ".join(missing)
-    return (
-        f"# This node's `produces:` still needs an explicit submission for: {names}. "
-        f"Before this attempt is judged done, run `blizzard runner attach --name <name>` "
-        f"(content on stdin) for each name listed above."
-    )
+def _nudge_message(missing: list[ProducesEntry]) -> str:
+    """The nudge resume's message (issue #113, Phase 4; kind-branched issue #143, Phase
+    5): one `#`-prefixed comment line per unmet `produces:` spec, naming the
+    kind-appropriate declaration verb and its correct positionals — an `asset` spec
+    names `artifact create --name <name>` (content on stdin); a `git_commit` spec
+    names `artifact commit --repo/--branch/--commit` (the worker's own values, per
+    repo it touched — this nudge cannot supply them; `--forge` is omitted here since
+    it defaults to the repo's own `origin`). Mirrors
+    :data:`_PAUSE_RESUME_MESSAGE`'s shape, so the mock harness's prompt-is-program exec
+    sees a legal no-op script while a real harness reads the same text as an ordinary
+    resume instruction."""
+
+    lines = ["# This node's `produces:` still needs an explicit submission:"]
+    for spec in missing:
+        if spec.kind is ArtifactKind.GIT_COMMIT:
+            lines.append(
+                f"#   - {spec.name} (git_commit): push your branch, then run "
+                f"`blizzard runner artifact commit --repo <repo> --branch <branch> "
+                f"--commit <sha>` for each repo you touched (--forge defaults to "
+                f"that repo's own `origin`; pass it only to override)."
+            )
+        else:
+            lines.append(
+                f"#   - {spec.name} (asset): run `blizzard runner artifact create "
+                f"--name {spec.name}` with the content on stdin."
+            )
+    lines.append("# Do this before this attempt is judged done.")
+    return "\n".join(lines)
 
 
 def _collect_asset_artifacts(
@@ -2801,11 +2844,13 @@ def _collect_asset_artifacts(
     a build node producing repo commits yields no assets; a read-only review node yields
     its findings. Content may be empty (a clean pass) — the asset still lands, and only a
     fail routes it back into build (latest-by-epoch)."""
-    from blizzard.hub.domain.artifacts import ArtifactKind
 
     covered = {a.name for a in git_artifacts}
     submitted: list[SubmittedArtifact] = []
-    for name in envelope.node.produces:
+    for spec in envelope.node.produces:
+        if spec.kind is ArtifactKind.GIT_COMMIT:
+            continue
+        name = spec.name
         if name in covered:
             continue
         if name in attachments:
@@ -2817,24 +2862,84 @@ def _collect_asset_artifacts(
     return submitted
 
 
-def _push_and_collect_artifacts(ctx: LoopContext, bindings: list[EnvBindingRecord]) -> list[SubmittedArtifact]:
-    """Discover the produced git commits, push their branches, and name them."""
-    from blizzard.hub.domain.artifacts import ArtifactKind
+def _verify_and_collect_git_commits(
+    ctx: LoopContext,
+    lease: LeaseRecord,
+    bindings: list[EnvBindingRecord],
+    already_declared: dict[str, GitCommitDeclarationRecord] | None = None,
+) -> tuple[list[SubmittedArtifact], dict[str, GitCommitDeclarationRecord]]:
+    """Read back the worker's declared git commits for this lease and confirm each,
+    read-only, against the leased env's own repo worktree (issue #143, Phase 4) —
+    replaces the runner's former infer-and-push. The worker has already pushed its
+    branch and declared ``(forge, repo, branch, commit)`` through the local
+    declaration channel (Phase 3, `blizzard runner artifact commit`); this never
+    mutates git and never infers a branch name off residue.
 
+    A declaration whose repo worktree cannot be found in this lease's bindings, or
+    whose forge/ref does not verify, is silently dropped rather than failing the
+    attempt: it is simply "not covered", which is exactly what drives the Phase-2
+    kind-coverage nudge (:func:`_missing_produces`) — this function's job is only to
+    say what verified, not to police what did not. A verify subprocess failure
+    (no such worktree, a network hiccup) is surfaced via :func:`_emit_command_failed`
+    — informational only: a read-only re-derivation opens no unsafe mutation window,
+    so unlike the push it replaces, this never re-raises to crash-loop the tick.
+
+    ``already_declared`` names the exact ``(forge, repo, branch, commit)`` this
+    lease's attempt already resolved on an earlier call this attempt (the pre-nudge
+    pass) — a repo whose freshly re-derived declaration is unchanged is skipped
+    entirely (no re-verify, no re-emit), since re-verifying it would only repeat the
+    same outcome (a duplicate `command-failed` for a `--repo` the worker never fixed).
+    A repo whose declaration differs (the worker re-declared it mid-nudge) is a
+    genuine amendment and is re-verified fresh. Returns the collected artifacts
+    alongside this call's own full declaration set, so a caller can thread it into a
+    later call as that later call's ``already_declared``."""
+
+    # SOLO_ENV_COUNT (1) means a chunk's tenure holds exactly one leased env, whose
+    # workdir is the root the worker's repo worktrees live under as named children —
+    # `bindings[0]` is that env; the caller already guards `bindings` non-empty.
+    env_workdir = bindings[0].workdir
+    already_declared = already_declared or {}
+    declarations = ctx.store.git_commit_declarations_for_lease(lease.lease_id)
     submitted: list[SubmittedArtifact] = []
-    for binding in bindings:
-        for produced in ctx.worktree_git.find_produced_artifacts(binding.workdir, ctx.config.base_branch):
-            ctx.worktree_git.push(produced.repo_workdir, produced.branch_name)
-            submitted.append(
-                SubmittedArtifact(
-                    name=produced.repo,
-                    kind=ArtifactKind.GIT_COMMIT,
-                    repo=produced.repo,
-                    branch_name=produced.branch_name,
-                    commit_hash=produced.commit_hash,
-                )
+    for repo, declared in declarations.items():
+        if already_declared.get(repo) == declared:
+            continue
+        repo_workdir = os.path.join(env_workdir, repo)
+        try:
+            verified = ctx.worktree_git.verify(repo_workdir, declared.forge, declared.branch, declared.commit)
+        except WorktreeGitError as exc:
+            # Covers the read-only verify pair as a whole (`git remote get-url origin`
+            # then `git ls-remote origin <branch>`) rather than naming only the second
+            # call — a `WorktreeGitError` this early can just as easily come from the
+            # first, e.g. a `--repo` that does not name this env's worktree directory.
+            # Names the worktree path this declaration's `--repo` resolved to, so a
+            # wrong `--repo` (an `owner/name` slug, a path, wrong casing) is diagnosable
+            # from the event alone rather than opaque.
+            _emit_command_failed(
+                ctx,
+                chunk_id=lease.chunk_id,
+                lease_id=lease.lease_id,
+                node_name=lease.node_name,
+                command=(
+                    f"git verify (remote get-url origin / ls-remote origin {declared.branch}) "
+                    f"in expected worktree {repo_workdir!r} (--repo {repo!r})"
+                ),
+                stderr_tail=str(exc),
             )
-    return submitted
+            continue
+        if not verified:
+            continue
+        submitted.append(
+            SubmittedArtifact(
+                name=repo,
+                kind=ArtifactKind.GIT_COMMIT,
+                forge=declared.forge,
+                repo=repo,
+                branch_name=declared.branch,
+                commit_hash=declared.commit,
+            )
+        )
+    return submitted, declarations
 
 
 def _release_all(ctx: LoopContext, chunk_id: str) -> None:

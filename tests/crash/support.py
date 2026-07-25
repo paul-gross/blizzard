@@ -109,7 +109,12 @@ def winter_source() -> Path | None:
 
 
 def build_script(landed_file: str) -> str:
-    """A scripted build node that makes a real commit adding ``landed_file``."""
+    """A scripted build node that makes a real commit adding ``landed_file``, then
+    pushes its branch and declares it (issue #143, Phase 4) — the runner no longer
+    discovers or pushes the produced pointer, so the WORKER must, through the real
+    `blizzard runner artifact commit` verb (Phase 3's local declaration channel).
+    `--forge` is the worker's own observed `origin` URL, trivially confirmable by the
+    runner's later read-only verify since it reads the very same worktree's `origin`."""
     return (
         "import subprocess, pathlib\n"
         f"repo = {REPO_NAME!r}\n"
@@ -119,6 +124,24 @@ def build_script(landed_file: str) -> str:
         '    ["git", "-C", repo,\n'
         '     "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
         '     "commit", "-m", "feat: land a change from the crash sweep"],\n'
+        "    check=True,\n"
+        ")\n"
+        "_branch = subprocess.run(\n"
+        '    ["git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD"],\n'
+        "    check=True, capture_output=True, text=True,\n"
+        ").stdout.strip()\n"
+        "_commit = subprocess.run(\n"
+        '    ["git", "-C", repo, "rev-parse", "HEAD"],\n'
+        "    check=True, capture_output=True, text=True,\n"
+        ").stdout.strip()\n"
+        "_forge = subprocess.run(\n"
+        '    ["git", "-C", repo, "remote", "get-url", "origin"],\n'
+        "    check=True, capture_output=True, text=True,\n"
+        ").stdout.strip()\n"
+        'subprocess.run(["git", "-C", repo, "push", "--force-with-lease", "origin", _branch], check=True)\n'
+        "subprocess.run(\n"
+        '    ["blizzard", "runner", "artifact", "commit",\n'
+        '     "--forge", _forge, "--repo", repo, "--branch", _branch, "--commit", _commit],\n'
         "    check=True,\n"
         ")\n"
     )
@@ -135,8 +158,9 @@ _MIGRATE_JUDGEMENT_SCRIPT = "verdict('migrate', 'hand the chunk to the triage-de
 
 
 # The generic sweep's ``deliver`` node command — a real merge-to-main, not a ``true``
-# no-op. The runner pushes each build commit to a feature branch; this step opens a PR
-# per submitted branch and merges it to the base by pinned SHA against the mock forge, so
+# no-op. The worker pushes each build commit to a feature branch and declares it (issue
+# #143, Phase 4); this step opens a PR per submitted branch and merges it to the base by
+# pinned SHA against the mock forge, so
 # the change actually LANDS on bare ``main`` and the sweep's exactly-once-on-``main``
 # assertion is meaningful (before #67 the ``deliver`` node was the coordinator's own
 # ``mode: merge-to-main`` — a bare ``true`` after the retirement never merged anything and

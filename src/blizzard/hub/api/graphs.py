@@ -49,6 +49,7 @@ from blizzard.wire.graph import (
     GraphSummaryView,
     GraphValidationReport,
     GraphView,
+    ProducesEntry,
 )
 
 router = APIRouter(prefix="/api", tags=["graphs"], dependencies=[Depends(reject_runner_principal)])
@@ -67,7 +68,7 @@ def _node_view(node: Node) -> GraphNodeView:
         mode=node.mode,
         prompt=node.prompt,
         checks=list(node.checks),
-        produces=list(node.produces),
+        produces=[ProducesEntry(name=p.name, kind=p.kind) for p in node.produces],
         judgement_prompt=node.judgement_prompt,
         choices=[GraphChoiceView(choice_id=c.choice_id, name=c.name, description=c.description) for c in node.choices],
     )

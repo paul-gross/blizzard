@@ -205,12 +205,34 @@ _TRANSCRIPT_COMMIT_MESSAGE = "feat: mint a transcript-provable commit"
 #: context's ``cwd`` at the repo child directory, the same real object the engine's
 #: own ``run_prompt`` constructed, before calling the helpers.
 _TRANSCRIPT_BUILD_SCRIPT = (
-    "import pathlib\n"
+    "import pathlib, subprocess\n"
     "from blizzard_mock.harness.engine import current_context\n"
     "ctx = current_context()\n"
     f"ctx.cwd = pathlib.Path(ctx.cwd) / {REPO_NAME!r}\n"
     f"apply_diff({_TRANSCRIPT_DIFF!r})\n"
     f"commit({_TRANSCRIPT_COMMIT_MESSAGE!r})\n"
+    # Push the branch and declare it (issue #143, Phase 4) — the runner no longer
+    # discovers or pushes the produced pointer, so the worker must, through the
+    # real `blizzard runner artifact commit` verb.
+    "_repo_dir = str(ctx.cwd)\n"
+    "_branch = subprocess.run(\n"
+    '    ["git", "-C", _repo_dir, "rev-parse", "--abbrev-ref", "HEAD"],\n'
+    "    check=True, capture_output=True, text=True,\n"
+    ").stdout.strip()\n"
+    "_commit = subprocess.run(\n"
+    '    ["git", "-C", _repo_dir, "rev-parse", "HEAD"],\n'
+    "    check=True, capture_output=True, text=True,\n"
+    ").stdout.strip()\n"
+    "_forge = subprocess.run(\n"
+    '    ["git", "-C", _repo_dir, "remote", "get-url", "origin"],\n'
+    "    check=True, capture_output=True, text=True,\n"
+    ").stdout.strip()\n"
+    'subprocess.run(["git", "-C", _repo_dir, "push", "origin", _branch], check=True)\n'
+    "subprocess.run(\n"
+    '    ["blizzard", "runner", "artifact", "commit",\n'
+    f'     "--forge", _forge, "--repo", {REPO_NAME!r}, "--branch", _branch, "--commit", _commit],\n'
+    "    check=True,\n"
+    ")\n"
 )
 
 

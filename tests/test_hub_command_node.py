@@ -432,6 +432,7 @@ def test_build_hub_env_carries_no_model_credential_and_the_documented_keys() -> 
         name="work",
         data="blizzard/ch-x:abc123",
         repo="acme/widget",
+        forge="https://github.com/acme/widget",
         artifact_id="art_1",
         chunk_id="ch_x",
         node_id="nd_build",

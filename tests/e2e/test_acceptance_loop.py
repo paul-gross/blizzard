@@ -103,11 +103,42 @@ MOCK_HARNESS_ENV_PASSTHROUGH = (MOCK_HARNESS_FENCE_VAR, ENV_TRANSCRIPTS_ROOT)
 # a dummy value suffices, since the mock forge checks no token.
 PM_TOKEN_ENV = "BZ_PM_TOKEN_TOYAPI"
 
+# Appended to every scripted build-node prompt that makes a real commit meant to be
+# delivered (issue #143, Phase 4): the runner no longer discovers or pushes the
+# produced pointer — the WORKER pushes its branch and declares it through the real
+# `blizzard runner artifact commit` verb (Phase 3's local declaration channel), which
+# the runner's ADVANCE then confirms read-only (`git ls-remote`) against the forge
+# before submitting the git_commit artifact. `--forge` is the worker's own observed
+# `origin` URL — self-describing, and trivially confirmable by the runner since it
+# reads the very same worktree's `origin`. Declaring twice for the same repo within
+# one lease is harmless (latest-wins), so scripts that make more than one commit in a
+# turn (the review-cycle addendum) can safely append this after each.
+_PUSH_AND_DECLARE_SCRIPT = (
+    "_branch = subprocess.run(\n"
+    '    ["git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD"],\n'
+    "    check=True, capture_output=True, text=True,\n"
+    ").stdout.strip()\n"
+    "_commit = subprocess.run(\n"
+    '    ["git", "-C", repo, "rev-parse", "HEAD"],\n'
+    "    check=True, capture_output=True, text=True,\n"
+    ").stdout.strip()\n"
+    "_forge = subprocess.run(\n"
+    '    ["git", "-C", repo, "remote", "get-url", "origin"],\n'
+    "    check=True, capture_output=True, text=True,\n"
+    ").stdout.strip()\n"
+    'subprocess.run(["git", "-C", repo, "push", "origin", _branch], check=True)\n'
+    "subprocess.run(\n"
+    '    ["blizzard", "runner", "artifact", "commit",\n'
+    '     "--forge", _forge, "--repo", repo, "--branch", _branch, "--commit", _commit],\n'
+    "    check=True,\n"
+    ")\n"
+)
+
 # The scripted build-node prompt: *the prompt is the program*. It runs under the mock
 # harness in the acquired env dir (which holds the repo worktrees as children), so it
 # targets the ``toy-api`` worktree explicitly, writing a file and making a real commit
-# on the env's branch. The runner then discovers that commit (HEAD ahead of base) and
-# pushes it (the loop's ADVANCE step).
+# on the env's branch, then pushing it and declaring it (:data:`_PUSH_AND_DECLARE_SCRIPT`)
+# the way a real worker now must (issue #143, Phase 4).
 _BUILD_SCRIPT = (
     "import subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
@@ -118,7 +149,7 @@ _BUILD_SCRIPT = (
     '     "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
     '     "commit", "-m", "feat: land a change from the mock harness"],\n'
     "    check=True,\n"
-    ")\n"
+    ")\n" + _PUSH_AND_DECLARE_SCRIPT
 )
 # The judgement-resume prompt: also arrives as code. It emits the tagged
 # ``<Choice>pass</Choice>`` the runner's adapter parses into the completion choice.
@@ -160,7 +191,7 @@ _PM_BUILD_SCRIPT = (
     '     "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
     '     "commit", "-m", "feat: land the PM item fetched through the pass-through"],\n'
     "    check=True,\n"
-    ")\n"
+    ")\n" + _PUSH_AND_DECLARE_SCRIPT
 )
 
 
@@ -456,10 +487,22 @@ def test_acceptance_loop_one_chunk_ingest_to_landed(tmp_path: Path) -> None:
 
 
 def _runner_config(runner_dir: Path, workspace: Path, bin_dir: Path, hub_port: int) -> RunnerConfig:
-    """A migrated runner runtime pointed at the fixture workspace and the mock harness."""
+    """A migrated runner runtime pointed at the fixture workspace and the mock harness.
+
+    ``host``/``port`` are bound to a genuinely free port (issue #143, Phase 4): every
+    scripted build node now declares its git commit through the worker's own
+    ``blizzard runner artifact commit`` call, which resolves the runner's local API from
+    ``BLIZZARD_RUNNER_URL`` — itself derived from this config
+    (:func:`~blizzard.runner.loop.build.run_single_tick`). The base config's own default
+    host/port happens to collide with this machine's real dogfood runner deployment
+    (``AGENTS.local.md``), so leaving it unbound here would silently POST a worker's
+    declaration at a live, unrelated daemon instead of erroring — `_drive_until_done`
+    wraps every tick in :func:`_runner_api`, which serves this exact host/port."""
     base = init_runner_environment(runner_dir)  # scaffolds config + migrates the store
     return dataclasses.replace(
         base,
+        host="127.0.0.1",
+        port=_free_port(),
         hub_url=f"http://127.0.0.1:{hub_port}",
         workspace_root=str(workspace),
         workspace_envs=(RUNNER_ENV,),
@@ -484,22 +527,26 @@ def _drive_until_done(
 
     Each tick is one synchronous REAP->PULL->FILL->ADVANCE pass; the spawned mock
     worker runs asynchronously, so ticks are interleaved with short waits that let it
-    make its commit and exit before ADVANCE judges it.
+    make its commit and exit before ADVANCE judges it. Wrapped in :func:`_runner_api`
+    (issue #143, Phase 4): a scripted build node now declares its git commit through the
+    worker's own ``blizzard runner artifact commit`` call, which needs a live local API
+    to POST to — `_runner_config` binds a free `host`/`port` for exactly this.
     """
     prior = dict(os.environ)
     os.environ.update(fenced_env)  # the runner spawns the fenced mock harness in-process
     try:
-        deadline = time.monotonic() + timeout
-        status = "ready"
-        while time.monotonic() < deadline:
-            run_single_tick(config)
-            detail = hub.get(f"/api/chunks/{chunk_id}")
-            assert detail.status_code == 200, detail.text
-            status = detail.json()["status"]
-            if status in {"done", "stopped", "needs_human"}:
-                return status
-            time.sleep(0.5)
-        return status
+        with _runner_api(config):
+            deadline = time.monotonic() + timeout
+            status = "ready"
+            while time.monotonic() < deadline:
+                run_single_tick(config)
+                detail = hub.get(f"/api/chunks/{chunk_id}")
+                assert detail.status_code == 200, detail.text
+                status = detail.json()["status"]
+                if status in {"done", "stopped", "needs_human"}:
+                    return status
+                time.sleep(0.5)
+            return status
     finally:
         os.environ.clear()
         os.environ.update(prior)
@@ -655,14 +702,14 @@ def test_build_worker_reads_pm_item_through_the_passthrough(tmp_path: Path) -> N
         assert entry["body"] == _PM_BODY
         assert entry["comments"] == [_PM_COMMENT]
 
-        # Drive the loop with the runner's local API up so the worker's `pm-items` verb lands.
+        # Drive the loop — `_runner_config` already binds a free host/port and
+        # `_drive_until_done` wraps it in `_runner_api`, so the worker's `pm-items` verb
+        # (and, since issue #143 Phase 4, its `artifact commit` declaration) both land.
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
-        config = dataclasses.replace(config, host="127.0.0.1", port=_free_port())
         fenced = dict(os.environ)
         fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
 
-        with _runner_api(config):
-            status = _drive_until_done(config, hub, chunk_id, fenced)
+        status = _drive_until_done(config, hub, chunk_id, fenced)
 
         assert status == "done", f"chunk did not reach done (last status {status!r})"
 

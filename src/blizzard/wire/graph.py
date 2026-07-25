@@ -20,6 +20,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from blizzard.hub.domain.artifacts import ArtifactKind
+
 
 class GraphMintRequest(BaseModel):
     """A graph definition to mint — the raw YAML body."""
@@ -39,6 +41,18 @@ class GraphValidationReport(BaseModel):
     ok: bool
     errors: list[str] = []
     warnings: list[str] = []
+
+
+class ProducesEntry(BaseModel):
+    """One node's ``produces:`` expectation, kind-carrying (D1, issue #143).
+
+    The wire counterpart of :class:`~blizzard.hub.domain.graph.ProducesSpec` — served
+    on :class:`GraphNodeView` and (imported) on
+    :class:`~blizzard.wire.envelope.NodeConfig`, so both the graph-read surface and the
+    runner's per-step envelope carry the same kind-carrying shape."""
+
+    name: str
+    kind: ArtifactKind = ArtifactKind.ASSET
 
 
 class GraphChoiceView(BaseModel):
@@ -75,7 +89,7 @@ class GraphNodeView(BaseModel):
     mode: str | None = None
     prompt: str | None = None
     checks: list[str] = []
-    produces: list[str] = []
+    produces: list[ProducesEntry] = []
     judgement_prompt: str | None = None
     choices: list[GraphChoiceView] = []
 

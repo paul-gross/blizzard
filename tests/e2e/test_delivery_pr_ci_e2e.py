@@ -54,6 +54,7 @@ import pytest
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop.build import run_single_tick
 from tests.e2e.test_acceptance_loop import (
+    _PUSH_AND_DECLARE_SCRIPT,
     FIXTURE_ENV,
     REPO,
     REPO_NAME,
@@ -62,6 +63,7 @@ from tests.e2e.test_acceptance_loop import (
     _git_bare,
     _hub,
     _mock_bin_dir,
+    _runner_api,
     _runner_config,
     _winter_source,
 )
@@ -84,7 +86,7 @@ _BUILD_SCRIPT = (
     '     "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
     '     "commit", "-m", "feat: a change the PR+CI policy lands once CI goes green"],\n'
     "    check=True,\n"
-    ")\n"
+    ")\n" + _PUSH_AND_DECLARE_SCRIPT
 )
 _BUILD_JUDGEMENT = "verdict('pass', 'committed the change; checks are green')\n"
 
@@ -179,20 +181,26 @@ def _ingest_and_promote(hub: httpx.Client, forge: httpx.Client) -> str:
 
 
 def _drive_until(config: RunnerConfig, hub: httpx.Client, chunk_id: str, env: dict[str, str], predicate, timeout=60.0):
-    """Tick until `predicate(detail)` is truthy; return that detail. Raises on timeout."""
+    """Tick until `predicate(detail)` is truthy; return that detail. Raises on timeout.
+
+    Wrapped in :func:`_runner_api` (issue #143, Phase 4): the build node's scripted
+    push+declare needs a live local API to POST its ``artifact commit`` declaration to
+    — `_runner_config` binds a free `host`/`port` for exactly this.
+    """
     prior = dict(os.environ)
     os.environ.update(env)
     try:
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            run_single_tick(config)
-            detail = hub.get(f"/api/chunks/{chunk_id}")
-            assert detail.status_code == 200, detail.text
-            body = detail.json()
-            if predicate(body):
-                return body
-            time.sleep(0.4)
-        raise AssertionError("predicate never became true within the timeout")
+        with _runner_api(config):
+            deadline = time.monotonic() + timeout
+            while time.monotonic() < deadline:
+                run_single_tick(config)
+                detail = hub.get(f"/api/chunks/{chunk_id}")
+                assert detail.status_code == 200, detail.text
+                body = detail.json()
+                if predicate(body):
+                    return body
+                time.sleep(0.4)
+            raise AssertionError("predicate never became true within the timeout")
     finally:
         os.environ.clear()
         os.environ.update(prior)

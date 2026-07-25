@@ -19,9 +19,10 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.hub.domain.artifacts import ArtifactKind
 from blizzard.runner.harness.adapter import WorkerHandle, WorkerPreamble
 from blizzard.runner.harness.usage import UsageSample
-from blizzard.runner.loop.steps import _advance_exited_worker, advance, pull
+from blizzard.runner.loop.steps import _advance_exited_worker, _nudge_message, advance, pull
 from blizzard.runner.store.repository import NewLease
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
+from blizzard.wire.graph import ProducesEntry
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
@@ -78,6 +79,65 @@ class _AttachingOnNudgeHarness(FakeHarness):
         return output
 
 
+class _DeclaringGitCommitOnNudgeHarness(FakeHarness):
+    """A :class:`FakeHarness` whose SECOND ``judge`` call — the nudge resume — declares
+    a git commit on the worker's behalf, standing in for a worker that pushes its
+    branch and runs ``blizzard runner artifact commit`` in response to the nudge it was
+    resumed with (issue #143 re-review: the nudge solicited a ``git_commit`` declaration
+    that ADVANCE never harvested back into this attempt's completion)."""
+
+    def __init__(
+        self,
+        *,
+        store,
+        clock,
+        lease_id: str,
+        chunk_id: str,
+        node_id: str,
+        epoch: int,
+        repo: str,
+        forge: str,
+        branch: str,
+        commit: str,
+        **kwargs,
+    ) -> None:
+        super().__init__(**kwargs)
+        self._store = store
+        self._clock = clock
+        self._lease_id = lease_id
+        self._chunk_id = chunk_id
+        self._node_id = node_id
+        self._epoch = epoch
+        self._repo = repo
+        self._forge = forge
+        self._branch = branch
+        self._commit = commit
+
+    def judge(
+        self,
+        workdir: str,
+        session_id: str,
+        judgement_prompt: str,
+        *,
+        preamble: WorkerPreamble | None = None,
+        chunk_id: str = "",
+    ) -> str:
+        output = super().judge(workdir, session_id, judgement_prompt, preamble=preamble, chunk_id=chunk_id)
+        if len(self.judged) == 2:  # the nudge resume, not the original verdict elicitation
+            self._store.record_git_commit_declaration(
+                lease_id=self._lease_id,
+                chunk_id=self._chunk_id,
+                node_id=self._node_id,
+                epoch=self._epoch,
+                forge=self._forge,
+                repo=self._repo,
+                branch=self._branch,
+                commit=self._commit,
+                declared_at=self._clock.now(),
+            )
+        return output
+
+
 def _seed_exited_lease(store, *, lease_id: str, chunk_id: str, node_id: str, epoch: int) -> None:
     store.record_lease(
         NewLease(
@@ -129,7 +189,7 @@ def test_nudge_fires_once_lists_missing_name_and_picks_up_the_attach(tmp_path: P
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        worktree_git=FakeWorktreeGit([]),
+        worktree_git=FakeWorktreeGit(),
         clock=clock,
     )
 
@@ -140,7 +200,8 @@ def test_nudge_fires_once_lists_missing_name_and_picks_up_the_attach(tmp_path: P
     assert len(harness.judged) == 2, "expected the verdict resume plus exactly one nudge resume"
     _, _, nudge_prompt = harness.judged[1]
     assert "review-findings" in nudge_prompt, "the nudge did not name the missing produces name"
-    assert "blizzard runner attach" in nudge_prompt
+    assert "blizzard runner artifact create --name review-findings" in nudge_prompt
+    assert "blizzard runner attach" not in nudge_prompt
 
     # Both resumes instruct an attach, so both must carry the per-lease identity — a
     # preamble with a re-minted token — or the attach they elicit cannot authenticate.
@@ -153,6 +214,79 @@ def test_nudge_fires_once_lists_missing_name_and_picks_up_the_attach(tmp_path: P
     assert by_name["review-findings"].kind is ArtifactKind.ASSET
     assert by_name["review-findings"].content == "attached during the nudge"
     assert by_name["review-findings"].attached is True
+
+
+@pytest.mark.component
+def test_nudge_fires_once_and_picks_up_a_git_commit_declared_mid_nudge(tmp_path: Path) -> None:
+    """The mirror of the asset-only nudge-harvest test above, but for a `git_commit`
+    spec: a worker nudged for a missing declaration that pushes and declares
+    (``blizzard runner artifact commit``) in response must have that declaration
+    verified and folded into THIS attempt's completion — not just land durably in the
+    store for some later, uncorrelated ADVANCE pass to notice. Before the fix, only
+    ``attachments_for_lease`` was re-read after the nudge; ``_verify_and_collect_git_commits``
+    was never re-run, so a git-commit compliance was silently dropped under the shipped
+    ``warn`` mode."""
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    clock = FixedClock(_NOW)
+    _seed_exited_lease(store, lease_id="lease_r", chunk_id="ch_1", node_id="nd_build", epoch=1)
+
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = make_envelope(
+        "ch_1",
+        "build",
+        node_id="nd_build",
+        choices=_CHOICES,
+        produces=[ProducesEntry(name="commit", kind=ArtifactKind.GIT_COMMIT)],
+    )
+    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.DONE)]
+    harness = _DeclaringGitCommitOnNudgeHarness(
+        store=store,
+        clock=clock,
+        lease_id="lease_r",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        repo="toy-api",
+        forge="file:///origins/toy-api.git",
+        branch="feature/worker-declared",
+        commit="deadbeef",
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100"),
+        verdict="fail",
+        assessment="the shared assessment",
+    )
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        worktree_git=FakeWorktreeGit(),
+        clock=clock,
+    )
+
+    advance(ctx)
+    pull(ctx)
+
+    # Two harness resumes: the original verdict elicitation, then exactly one nudge.
+    assert len(harness.judged) == 2, "expected the verdict resume plus exactly one nudge resume"
+    _, _, nudge_prompt = harness.judged[1]
+    assert "commit" in nudge_prompt and "git_commit" in nudge_prompt
+    assert "blizzard runner artifact commit" in nudge_prompt
+
+    assert store.nudge_fired("lease_r", 1) is True
+
+    _, submission = hub.completions[0]
+    git_artifacts = [a for a in submission.artifacts if a.kind is ArtifactKind.GIT_COMMIT]
+    assert len(git_artifacts) == 1, "the mid-nudge git-commit declaration never reached the completion"
+    assert git_artifacts[0].repo == "toy-api"
+    assert git_artifacts[0].branch_name == "feature/worker-declared"
+    assert git_artifacts[0].commit_hash == "deadbeef"
+    # The `git_commit`-kind `commit` spec is satisfied by kind (the GIT_COMMIT artifact
+    # above, named by repo), never asset-collected by its own spec name — no phantom
+    # `commit` ASSET should ride alongside it (the re-review fix: a build node
+    # producing repo commits yields no assets).
+    assert [a for a in submission.artifacts if a.name == "commit"] == []
+    assert not any(a.kind is ArtifactKind.ASSET for a in submission.artifacts)
 
 
 @pytest.mark.component
@@ -194,7 +328,7 @@ def test_nudge_resume_records_its_own_usage_fact(tmp_path: Path) -> None:
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        worktree_git=FakeWorktreeGit([]),
+        worktree_git=FakeWorktreeGit(),
         clock=clock,
     )
 
@@ -238,7 +372,7 @@ def test_nudge_does_not_refire_on_a_second_advance_pass(tmp_path: Path) -> None:
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        worktree_git=FakeWorktreeGit([]),
+        worktree_git=FakeWorktreeGit(),
         clock=clock,
     )
 
@@ -290,7 +424,7 @@ def test_fully_attached_node_does_not_nudge(tmp_path: Path) -> None:
         provider=FakeProvider({"e1": "/ws/e1"}),
         harness=harness,
         probe=FakeProbe(),
-        worktree_git=FakeWorktreeGit([]),
+        worktree_git=FakeWorktreeGit(),
         clock=clock,
     )
 
@@ -304,3 +438,25 @@ def test_fully_attached_node_does_not_nudge(tmp_path: Path) -> None:
     by_name = {a.name: a for a in submission.artifacts}
     assert by_name["review-findings"].content == "already attached before judgement"
     assert by_name["review-findings"].attached is True
+
+
+@pytest.mark.unit
+def test_nudge_message_branches_on_kind_and_stays_harness_inert() -> None:
+    """`_nudge_message` (issue #143, Phase 5) names the kind-appropriate declaration verb
+    per unmet spec — `artifact create --name <name>` for an asset, `artifact commit` (with
+    its four flags) for a git_commit expectation — never the deprecated `attach` alias, and
+    every rendered line is `#`-prefixed so the mock harness's prompt-is-program `exec`
+    still sees a legal no-op."""
+    missing = [
+        ProducesEntry(name="review-findings", kind=ArtifactKind.ASSET),
+        ProducesEntry(name="commit", kind=ArtifactKind.GIT_COMMIT),
+    ]
+
+    message = _nudge_message(missing)
+
+    for line in message.splitlines():
+        assert line.startswith("#"), f"non-inert line in the nudge message: {line!r}"
+    assert "artifact create --name review-findings" in message
+    assert "artifact commit --repo <repo> --branch <branch> --commit <sha>" in message
+    assert "--forge defaults to that repo's own `origin`" in message
+    assert "runner attach" not in message

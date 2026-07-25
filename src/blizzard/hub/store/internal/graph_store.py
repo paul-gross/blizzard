@@ -19,6 +19,7 @@ from datetime import datetime
 
 from sqlalchemy import Engine, insert, select
 
+from blizzard.hub.domain.artifacts import ArtifactKind
 from blizzard.hub.domain.graph import (
     Choice,
     Edge,
@@ -27,6 +28,7 @@ from blizzard.hub.domain.graph import (
     IWriteGraphRepository,
     JudgedBy,
     Node,
+    ProducesSpec,
     RunStep,
     SessionMode,
     target_graph_of,
@@ -66,7 +68,7 @@ class GraphStore:
                         retries_max=node.retries_max,
                         retries_exhausted=node.retries_exhausted,
                         mode=node.mode,
-                        produces=json.dumps(list(node.produces)),
+                        produces=json.dumps([_produces_spec_to_json(p) for p in node.produces]),
                         checks=json.dumps(list(node.checks)),
                         bounce_cap=node.bounce_cap,
                         run=json.dumps([_run_step_to_json(r) for r in node.run]) if node.run else None,
@@ -170,7 +172,7 @@ class GraphStore:
                     executor=Executor(nr.executor),
                     prompt=nr.prompt,
                     checks=_json_list(nr.checks),
-                    produces=_json_list(nr.produces),
+                    produces=_produces_specs(nr.produces),
                     session=SessionMode(nr.session),
                     session_source=nr.session_source,
                     judged_by=JudgedBy(nr.judged_by),
@@ -226,12 +228,41 @@ def _run_steps(value: str | None) -> list[RunStep]:
 
 
 def _json_list(value: str | None) -> list[str]:
-    """Decode a JSON-encoded ``list[str]`` node column (``produces``/``checks``).
+    """Decode a JSON-encoded ``list[str]`` node column (``checks``).
 
     ``None`` (a row predating the graph-node-produces-checks revision, or a fresh
     column default) reads as the empty list — the same value the walking skeleton
     hardcoded before these were round-tripped."""
     return [str(x) for x in json.loads(value)] if value else []
+
+
+def _produces_spec_to_json(spec: ProducesSpec) -> dict[str, str]:
+    return {"name": spec.name, "kind": spec.kind.value}
+
+
+def _produces_specs(value: str | None) -> list[ProducesSpec]:
+    """Decode the JSON-encoded ``graph_nodes.produces`` column (D1, issue #143).
+
+    Two encodings share this ``TEXT`` column, both handled here (no migration — the
+    normalization on read is the back-compat seam, ``bzh:facts-not-status``):
+
+    * the current shape, a ``list[{name, kind}]``, written by :meth:`GraphStore.mint`
+      since #143;
+    * a **legacy** ``list[str]`` row minted before #143 — normalized to
+      ``[ProducesSpec(name, ArtifactKind.ASSET), ...]``, exactly the kind every
+      pre-#143 graph's bare-string ``produces:`` entries already meant.
+
+    ``None`` (a row predating the graph-node-produces-checks revision, or a fresh
+    column default) reads as the empty list, matching :func:`_json_list`."""
+    if not value:
+        return []
+    entries = json.loads(value)
+    return [
+        ProducesSpec(name=str(e), kind=ArtifactKind.ASSET)
+        if isinstance(e, str)
+        else ProducesSpec(name=str(e["name"]), kind=ArtifactKind(str(e["kind"])))
+        for e in entries
+    ]
 
 
 def _conforms_graph_store(x: GraphStore) -> IWriteGraphRepository:

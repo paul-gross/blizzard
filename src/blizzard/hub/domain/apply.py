@@ -606,6 +606,7 @@ class ApplyService:
             name=artifact.name,
             data=data,
             repo=artifact.repo if is_commit else None,
+            forge=artifact.forge if is_commit else None,
             artifact_id=mint(ARTIFACT_PREFIX, self._clock),
             chunk_id=chunk.chunk_id,
             node_id=from_node.node_id,

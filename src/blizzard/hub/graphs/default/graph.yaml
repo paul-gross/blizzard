@@ -44,6 +44,8 @@ nodes:
     executor: runner
     prompt: ./prompts/build.md
     session: resume:build  # re-entered build resumes its OWN prior build session, not the reviewer's
+    produces:
+      - {name: commit, kind: git_commit}  # the pushed branch(es); kind-matched, not name-matched
     judgement:
       prompt: ./prompts/build.judgement.md
       choices:

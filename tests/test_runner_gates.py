@@ -17,7 +17,6 @@ from blizzard.hub.domain.work import DEFAULT_MODEL, ChunkStatus
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.steps import advance, fill, pull
-from blizzard.runner.loop.worktree import GitArtifact
 from blizzard.runner.store.repository import NewLease
 from blizzard.wire.chunk import ChunkDetail, RouteView
 from blizzard.wire.decision import DecisionChoiceModel, DecisionView
@@ -65,12 +64,21 @@ def test_runner_config_gate_buffers_a_decision_not_a_completion(tmp_path):  # ty
     """A gated node's exited worker submits a decision (not a transition) and parks."""
     store = _store(tmp_path)
     _seed_running_lease(store)
+    store.record_git_commit_declaration(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        forge="file:///origins/toy-api.git",
+        repo="toy-api",
+        branch="e1",
+        commit="abc123",
+        declared_at=_NOW,
+    )
     hub = FakeHub()
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
     harness = FakeHarness(handle=_HANDLE, verdict="pass")
-    wt = FakeWorktreeGit(
-        [GitArtifact(repo="toy-api", branch_name="e1", commit_hash="abc123", repo_workdir="/ws/e1/toy-api")]
-    )
+    wt = FakeWorktreeGit()
     ctx = make_context(
         store,
         hub=hub,
@@ -81,9 +89,9 @@ def test_runner_config_gate_buffers_a_decision_not_a_completion(tmp_path):  # ty
         config=LoopConfig(runner_id="r1", workspace_id="ws1", gates=("build",)),
     )
 
-    advance(ctx)  # gated -> the branch is pushed, a decision is buffered, no verdict elicited
+    advance(ctx)  # gated -> the declared commit is verified, a decision is buffered, no verdict elicited
 
-    assert wt.pushed == [("/ws/e1/toy-api", "e1")]
+    assert wt.verified_calls == [("/ws/e1/toy-api", "file:///origins/toy-api.git", "e1", "abc123")]
     assert harness.judged == []  # the human judges — no verdict elicitation
     buffered = [b for b in store.pending_outbound() if b.kind == "decision.submitted"]
     assert len(buffered) == 1 and buffered[0].lease_id == "lease_1"
@@ -104,11 +112,20 @@ def test_runner_config_gate_buffers_a_decision_not_a_completion(tmp_path):  # ty
 def test_gated_node_decision_elicited_exactly_once_while_flush_pending(tmp_path):  # type: ignore[no-untyped-def]
     store = _store(tmp_path)
     _seed_running_lease(store)
+    store.record_git_commit_declaration(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        forge="file:///origins/toy-api.git",
+        repo="toy-api",
+        branch="e1",
+        commit="abc123",
+        declared_at=_NOW,
+    )
     hub = FakeHub()
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
-    wt = FakeWorktreeGit(
-        [GitArtifact(repo="toy-api", branch_name="e1", commit_hash="abc123", repo_workdir="/ws/e1/toy-api")]
-    )
+    wt = FakeWorktreeGit()
     ctx = make_context(
         store,
         hub=hub,
@@ -124,7 +141,7 @@ def test_gated_node_decision_elicited_exactly_once_while_flush_pending(tmp_path)
 
     buffered = [b for b in store.pending_outbound() if b.kind == "decision.submitted"]
     assert len(buffered) == 1
-    assert len(wt.pushed) == 1  # not re-pushed
+    assert len(wt.verified_calls) == 1  # not re-verified
 
 
 @pytest.mark.unit

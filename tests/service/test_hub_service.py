@@ -32,6 +32,11 @@ Every assertion is made over the wire against the running hub:
   (``attached=True``) artifact for every declared name; a fallback-only completion still
   applies under the default ``warn``. Driven by the mock runner's ``/_drive/complete``
   ``artifacts`` field — the produces analogue of the route-token levers above.
+* **kind-aware produces coverage** (issue #143 phase 2) — a ``{kind: git_commit}``
+  expectation is checked by **kind**, not name: any submitted ``git_commit`` artifact
+  satisfies it regardless of its own name (real ones are named per-repo, never the
+  declared produces name), and zero ``git_commit`` artifacts fences the completion out
+  under ``enforce``.
 
 sqlite only, no tokens, no network. Reproduce — from a provisioned feature env — with::
 
@@ -573,3 +578,105 @@ def test_git_commit_covered_produces_name_is_accepted_under_enforce_over_the_wir
             ).json()
             assert out["response"]["outcome"] == "next", out
             assert hub.get(f"/api/chunks/{chunk_id}").json()["current_node_id"] != entry_node
+
+
+def _git_commit_kind_graph_yaml() -> str:
+    """A ``default-delivery`` graph whose ``build`` node declares a **kind** expectation —
+    ``produces: [{name: commit, kind: git_commit}]`` (issue #143, D1/D2) — rather than the
+    name-only asset form ``_produces_graph_yaml`` above authors. The declared name
+    (``commit``) is never what a real git-commit artifact is named (per-repo, e.g.
+    ``toy-api``); coverage for this spec is by **kind**, not name."""
+    import yaml
+
+    graph = {
+        "name": "default-delivery",
+        "entry": "build",
+        "nodes": {
+            "build": {
+                "executor": "runner",
+                "prompt": "# build",
+                "produces": [{"name": "commit", "kind": "git_commit"}],
+                "judgement": {"prompt": "# judge", "choices": {"pass": {"description": "green", "to": "review"}}},
+                "retries": {"max": 1, "exhausted": "escalate"},
+            },
+            "review": {
+                "executor": "runner",
+                "prompt": "# review",
+                "session": "fresh",
+                "judgement": {"prompt": "# judge", "choices": {"pass": {"description": "clean", "to": "deliver"}}},
+                "retries": {"max": 1, "exhausted": "escalate"},
+            },
+            "deliver": {
+                "executor": "hub",
+                "run": [{"command": "true"}],
+                "judgement": {
+                    "choices": {
+                        "success": {"description": "Delivered.", "to": "done"},
+                        "failure": {"description": "Failed to deliver.", "to": "build"},
+                    }
+                },
+            },
+        },
+    }
+    return yaml.safe_dump(graph, sort_keys=False)
+
+
+#: A git-commit artifact named after the repo it came from (``toy-api``) — never the
+#: literal produces name (``commit``) — the shape a real pushed commit actually arrives
+#: in. Proves the kind-match, not a coincidental name match.
+_GIT_COMMIT_REPO_NAMED = [
+    {"name": "toy-api", "kind": "git_commit", "repo": "toy-api", "branch_name": "bz/build", "commit_hash": "cafe1234"}
+]
+
+
+def test_git_commit_kind_expectation_is_accepted_by_kind_not_name_under_enforce_over_the_wire(
+    tmp_path: Path,
+) -> None:
+    """A ``{kind: git_commit}`` expectation is met by **any** git-commit artifact present,
+    regardless of its name — the artifact here is named ``toy-api`` (its repo), never the
+    declared produces name ``commit`` — proving coverage is a kind match (issue #143, D2)."""
+    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    with (
+        _forge(bin_dir, origins, forge_port) as forge,
+        _hub(tmp_path / "hub", forge_port, hub_port, produces_mode=PRODUCES_ENFORCE) as hub,
+    ):
+        assert hub.post("/api/graphs", json={"definition_yaml": _git_commit_kind_graph_yaml()}).status_code == 201
+        chunk_id = _ingest(forge, hub, "produces enforce git-commit kind accept")
+
+        with mock_runner(bin_dir, _free_port(), hub_port) as runner:
+            runner.post("/_drive/register")
+            claim = runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()
+            assert claim["claimed"] is True
+            entry_node = claim["from_node_id"]
+
+            out = runner.post(
+                "/_drive/complete",
+                json={"chunk_id": chunk_id, "choice": "pass", "artifacts": _GIT_COMMIT_REPO_NAMED},
+            ).json()
+            assert out["response"]["outcome"] == "next", out
+            assert hub.get(f"/api/chunks/{chunk_id}").json()["current_node_id"] != entry_node
+
+
+def test_git_commit_kind_expectation_with_zero_commits_is_rejected_under_enforce_over_the_wire(
+    tmp_path: Path,
+) -> None:
+    """A ``{kind: git_commit}`` expectation with **zero** git-commit artifacts in the
+    submission is fenced out under ``enforce`` — the hub's presence-by-kind backstop
+    (issue #143, D2). No asset artifact of any name can satisfy a kind expectation."""
+    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    with (
+        _forge(bin_dir, origins, forge_port) as forge,
+        _hub(tmp_path / "hub", forge_port, hub_port, produces_mode=PRODUCES_ENFORCE) as hub,
+    ):
+        assert hub.post("/api/graphs", json={"definition_yaml": _git_commit_kind_graph_yaml()}).status_code == 201
+        chunk_id = _ingest(forge, hub, "produces enforce git-commit kind reject")
+
+        with mock_runner(bin_dir, _free_port(), hub_port) as runner:
+            runner.post("/_drive/register")
+            assert runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()["claimed"] is True
+            before = hub.get(f"/api/chunks/{chunk_id}").json()["current_node_id"]
+
+            out = runner.post("/_drive/complete", json={"chunk_id": chunk_id, "choice": "pass"}).json()
+            assert out["response"]["outcome"] == "failure", out
+            assert "commit" in (out["response"].get("detail") or "")
+            assert hub.get(f"/api/chunks/{chunk_id}").json()["current_node_id"] == before

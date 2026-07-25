@@ -32,6 +32,7 @@ from blizzard.runner.api.environments import router as environments_router
 from blizzard.runner.api.escalations import router as escalations_router
 from blizzard.runner.api.facts import router as facts_router
 from blizzard.runner.api.fleet_summary import router as fleet_summary_router
+from blizzard.runner.api.git_commits import router as git_commits_router
 from blizzard.runner.api.health import router as health_router
 from blizzard.runner.api.heartbeat import router as heartbeat_router
 from blizzard.runner.api.leases import router as leases_router
@@ -55,6 +56,7 @@ from blizzard.runner.auth.jti_cache import IJtiCache
 from blizzard.runner.auth.jwks_cache import JwksCache
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.attachments import AttachmentService
+from blizzard.runner.domain.git_commit_declaration import GitCommitDeclarationService
 from blizzard.runner.domain.leases import LocalLeaseService
 from blizzard.runner.domain.readiness import ReadinessService
 from blizzard.runner.domain.requeue import RequeueService
@@ -94,6 +96,7 @@ def create_app(
     requeue: RequeueService | None = None,
     selftests: SelfTestService | None = None,
     attachments: AttachmentService | None = None,
+    git_commit_declarations: GitCommitDeclarationService | None = None,
     hub_http_client: httpx.Client | None = None,
     jti_cache: IJtiCache | None = None,
 ) -> FastAPI:
@@ -130,6 +133,10 @@ def create_app(
 
     ``attachments`` is the store-backed worker attach channel (issue #113, Phase 2) —
     ``blizzard runner attach``'s backing service, wired the same way.
+
+    ``git_commit_declarations`` is the store-backed worker git-commit declaration
+    channel (issue #143, Phase 3) — ``blizzard runner artifact commit``'s backing
+    service, wired the same way.
     """
     log = get_logger("blizzard.runner")
 
@@ -163,6 +170,9 @@ def create_app(
     # The worker attach channel (issue #113, Phase 2) — ``blizzard runner attach``'s
     # backing service.
     app.state.attachments = attachments
+    # The worker git-commit declaration channel (issue #143, Phase 3) —
+    # ``blizzard runner artifact commit``'s backing service.
+    app.state.git_commit_declarations = git_commit_declarations
     # The adapter-drift canary (issue #54): a store-free in-memory job service, wired
     # unconditionally so `POST`/`GET /api/selftests` answer even on the store-free app.
     app.state.selftests = selftests or SelfTestService(
@@ -254,6 +264,10 @@ def create_app(
     # The worker attach channel (issue #113, Phase 2): a lease-token-authorized,
     # explicit artifact submission for a `produces:` name — worker-hook lane, ungated.
     app.include_router(attachments_router)
+    # The worker git-commit declaration channel (issue #143, Phase 3): a
+    # lease-token-authorized, explicit git-commit declaration for a repo the worker
+    # touched — worker-hook lane, ungated, the same shape as attachments above.
+    app.include_router(git_commits_router)
     # The worker artifact read (issue #127): the same lease-token-authorized, lease-scoped
     # shape as attach, but proxied to the hub's envelope so the worker reads its own
     # node-step inputs (`blizzard runner artifact list|get`) without a hub credential —
@@ -364,6 +378,10 @@ def build_hosted_app(config: RunnerConfig) -> FastAPI:
     # ``SystemClock()`` instance, like the siblings above: stateless, so a second
     # instance is equivalent to sharing one.
     attachments = AttachmentService(runner_store, SystemClock())
+    # ``blizzard runner artifact commit``'s backing service (issue #143, Phase 3). Its
+    # own ``SystemClock()`` instance, like ``attachments`` above: stateless, so a second
+    # instance is equivalent to sharing one.
+    git_commit_declarations = GitCommitDeclarationService(runner_store, SystemClock())
     # The SSO federation jti replay cache (issue #95, decision D4) — store-backed over
     # the same engine every other seam above shares.
     jti_cache = JtiCacheRepository(engine)
@@ -383,6 +401,7 @@ def build_hosted_app(config: RunnerConfig) -> FastAPI:
         takeover=takeover,
         requeue=requeue,
         attachments=attachments,
+        git_commit_declarations=git_commit_declarations,
         jti_cache=jti_cache,
         hub_http_client=hub_http_client,
     )

@@ -45,7 +45,7 @@ def test_default_graph_review_is_cold_eyes_and_loops_to_build() -> None:
     assert review is not None and review.judgement is not None
     # Cold eyes and it emits the findings asset the fail edge carries back.
     assert review.session is SessionMode.FRESH
-    assert "review-findings" in review.produces
+    assert "review-findings" in [p.name for p in review.produces]
     routes = {c.name: c.to for c in review.judgement.choices}
     assert routes == {"pass": "deliver", "fail": "build"}
     # The fail edge carries an inlined arrival addendum into build.
