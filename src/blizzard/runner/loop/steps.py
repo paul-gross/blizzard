@@ -60,7 +60,13 @@ from blizzard.runner.store.repository import (
     LeaseRecord,
     NewLease,
 )
-from blizzard.wire.completion import CheckResult, CompletionSubmission, SubmittedArtifact, produces_coverage
+from blizzard.wire.completion import (
+    CheckResult,
+    CompletionSubmission,
+    SubmittedArtifact,
+    checks_gate_violated,
+    produces_coverage,
+)
 from blizzard.wire.decision import DecisionSubmission, DecisionView
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeConfig, NodeEnvelope
 from blizzard.wire.facts import (
@@ -1696,6 +1702,14 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
     was — active, session-bearing, dead pid, no completion buffered — so ADVANCE retries
     it every tick until the brake clears, the same self-driving shape every other gate in
     this module leaves behind.
+
+    Checks (issue #114): the node's ``checks:`` run at worker exit, before the judgement is
+    elicited (so their results inject into the judge prompt), and a ``requires_checks``
+    choice selected while any check is red is treated like an unparseable verdict — a
+    retry-consuming failure that re-queues a fresh rebuild, never an accepted edge (AC #4).
+    A red check reported through a non-gated choice (``fail``) routes normally and never
+    runs the gate (AC #5); a node with no ``requires_checks`` choice injects results but
+    gates nothing (AC #6).
     """
     if lease.session_id is None:
         return  # not spawned — REAP's residue (guarded by the caller too)
@@ -1786,6 +1800,30 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
         return
     _CP_ADV_AFTER_JUDGE.reached()
     _CP_ADV_AFTER_USAGE.reached()
+
+    # 2·checks-gate (issue #114): a `requires_checks` choice may NOT be taken while any
+    # check is red. Evaluated immediately after parse_verdict and BEFORE the nudge, so it
+    # judges the exact checks the worker was shown and judged against (the pre-nudge tree) —
+    # runner-local gate and worker can never diverge on "the tree". A violation is treated
+    # like an unparseable verdict: `_fail_attempt` consumes a retry and re-queues a FRESH
+    # rebuild attempt under a NEW (lease, epoch) — the same path a verdict-less exit takes,
+    # NOT an in-place re-judge of this session. The next worker rebuilds and re-runs checks,
+    # and the red evidence reaches it through the Phase-3 injection on ITS own exit. A worker
+    # that keeps selecting the gated choice against a check it cannot get green burns its
+    # retry budget to needs_human; one that instead selects the non-gated `fail` routes to
+    # the fix path normally and never runs this gate — the intended AC #4/#5 shape. This is
+    # never an engine override of the worker's routing authority: the worker still chooses;
+    # the engine only refuses to accept a green-gated edge over red mechanical truth.
+    selected = next((c for c in envelope.node.choices if c.name == choice), None)
+    if selected is not None and checks_gate_violated(selected.requires_checks, check_records):
+        _log.warning(
+            "requires_checks choice selected with a red check — failing attempt",
+            chunk_id=lease.chunk_id,
+            lease_id=lease.lease_id,
+            choice=choice,
+        )
+        _fail_attempt(ctx, lease, reason=_FAILED, via="advance")
+        return
 
     # 2a. Nudge-once (issue #113, Phase 4): a `produces` name this attempt covers
     #     with neither a pushed git commit nor an explicit attachment gets exactly one

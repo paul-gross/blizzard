@@ -187,3 +187,103 @@ def test_completion_on_unknown_chunk_is_404(tmp_path: Path) -> None:
         json={"choice": "pass", "epoch": 1, "runner_id": "r1", "from_node_id": "nd_x"},
     )
     assert resp.status_code == 404
+
+
+# A build -> deliver graph whose `build` gates its `pass` choice on green checks (#114).
+_CHECKS_GATED_YAML = """
+name: default-delivery
+entry: build
+nodes:
+  build:
+    executor: runner
+    prompt: |
+      Build the change.
+    checks:
+      - mise run test
+    judgement:
+      prompt: |
+        Assess the build.
+      choices:
+        pass:
+          description: Complete and green.
+          to: deliver
+          requires_checks: true
+        fail:
+          description: Incomplete.
+          to: build
+  deliver:
+    executor: hub
+    run:
+      - command: "true"
+    judgement:
+      choices:
+        success:
+          description: Delivered.
+          to: done
+        failure:
+          description: Failed to deliver.
+          to: build
+"""
+
+
+def _completion_with_checks(node_id: str, *, choice: str, check_results: list[dict], epoch: int = 1) -> dict:
+    return {
+        "choice": choice,
+        "epoch": epoch,
+        "runner_id": "r1",
+        "from_node_id": node_id,
+        "check_results": check_results,
+        "artifacts": [
+            {"name": "w", "kind": "git_commit", "repo": "acme/widget", "branch_name": "b", "commit_hash": "c"}
+        ],
+    }
+
+
+def test_checks_gate_backstop_fences_a_red_gated_pass(tmp_path: Path) -> None:
+    """The hub backstop rejects a ``requires_checks`` pass whose reported checks are red —
+    the chunk never advances (AC #4, hub side)."""
+    hub = build_hub(tmp_path)
+    chunk_id, node_id = _claimed(hub, graph_yaml=_CHECKS_GATED_YAML)
+
+    resp = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json=_completion_with_checks(
+            node_id, choice="pass", check_results=[{"command": "mise run test", "passed": False}]
+        ),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["outcome"] == "failure"
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "running"
+
+
+def test_checks_gate_backstop_admits_a_green_gated_pass(tmp_path: Path) -> None:
+    """A ``requires_checks`` pass with green checks passes the backstop and delivers."""
+    hub = build_hub(tmp_path)
+    chunk_id, node_id = _claimed(hub, graph_yaml=_CHECKS_GATED_YAML)
+
+    resp = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json=_completion_with_checks(
+            node_id, choice="pass", check_results=[{"command": "mise run test", "passed": True}]
+        ),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["outcome"] != "failure"
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
+
+
+def test_checks_gate_backstop_lets_a_red_check_through_a_non_gated_fail(tmp_path: Path) -> None:
+    """A red check reported through the non-gated ``fail`` choice routes normally — back to
+    build, not a gate failure (AC #5, hub side)."""
+    hub = build_hub(tmp_path)
+    chunk_id, node_id = _claimed(hub, graph_yaml=_CHECKS_GATED_YAML)
+
+    resp = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json=_completion_with_checks(
+            node_id, choice="fail", check_results=[{"command": "mise run test", "passed": False}]
+        ),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["outcome"] != "failure"  # a normal transition back to build
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "running"

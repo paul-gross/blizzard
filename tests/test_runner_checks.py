@@ -360,3 +360,123 @@ def test_advance_injects_the_check_results_into_the_judgement_prompt(tmp_path: P
     assert "[FAIL] mise run test" in judge_prompt
     assert "2 failed" in judge_prompt
     assert judge_prompt.index("Assess the build.") < judge_prompt.index("[FAIL]") < judge_prompt.index("<Choice>")
+
+
+# --- Phase 4: the checks gate (runner-local) -----------------------------------
+
+
+@pytest.mark.unit
+def test_checks_gate_violated_predicate() -> None:
+    from blizzard.wire.completion import CheckResult, checks_gate_violated
+
+    green = [CheckResult(command="a", passed=True), CheckResult(command="b", passed=True)]
+    red = [CheckResult(command="a", passed=True), CheckResult(command="b", passed=False)]
+    # Ungated: never violated, whatever the checks say.
+    assert checks_gate_violated(False, red) is False
+    assert checks_gate_violated(False, green) is False
+    # Gated: violated iff any check is red.
+    assert checks_gate_violated(True, green) is False
+    assert checks_gate_violated(True, red) is True
+    # Gated with no results is vacuously satisfied (the validator forbids this shape anyway).
+    assert checks_gate_violated(True, []) is False
+
+
+@pytest.mark.component
+def test_advance_gates_a_requires_checks_pass_with_a_red_check_and_consumes_a_retry(tmp_path: Path) -> None:
+    """Selecting a ``requires_checks`` choice while a check is red is treated like an
+    unparseable verdict — no completion buffers, a retry is consumed (AC #4)."""
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    _seed_exited_lease(store, lease_id="lease_b", chunk_id="ch_1", node_id="nd_build", epoch=1)
+
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = make_envelope(
+        "ch_1", "build", node_id="nd_build", choices=_CHOICES, checks=["mise run test"], requires_checks={"pass"}
+    )
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100"), verdict="pass"
+    )
+    check_runner = FakeCheckRunner({"mise run test": CheckOutcome(passed=False, output_tail="boom")})
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        check_runner=check_runner,
+        clock=FixedClock(_NOW),
+    )
+
+    advance(ctx)
+    pull(ctx)
+
+    # The gated `pass` over a red check never buffers a completion — it failed the attempt.
+    assert hub.completions == []
+    # The check facts were still recorded (they inform the re-attempt's judgement).
+    assert [(r.command, r.passed) for r in store.check_results_for_lease("lease_b", 1)] == [("mise run test", False)]
+
+
+@pytest.mark.component
+def test_advance_lets_a_red_check_route_through_a_non_gated_fail(tmp_path: Path) -> None:
+    """A red check reported through a non-gated choice (`fail`) routes normally — the gate
+    never fires (AC #5)."""
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    _seed_exited_lease(store, lease_id="lease_b", chunk_id="ch_1", node_id="nd_build", epoch=1)
+
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = make_envelope(
+        "ch_1", "build", node_id="nd_build", choices=_CHOICES, checks=["mise run test"], requires_checks={"pass"}
+    )
+    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.DONE)]
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100"), verdict="fail"
+    )
+    check_runner = FakeCheckRunner({"mise run test": CheckOutcome(passed=False, output_tail="boom")})
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        check_runner=check_runner,
+        clock=FixedClock(_NOW),
+    )
+
+    advance(ctx)
+    pull(ctx)
+
+    # The non-gated `fail` buffers and applies normally, red check notwithstanding.
+    assert len(hub.completions) == 1
+    _, submission = hub.completions[0]
+    assert submission.choice == "fail"
+
+
+@pytest.mark.component
+def test_advance_accepts_a_requires_checks_pass_when_checks_are_green(tmp_path: Path) -> None:
+    """A gated ``pass`` over green checks routes normally — the gate only fences red (AC #4 accept)."""
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    _seed_exited_lease(store, lease_id="lease_b", chunk_id="ch_1", node_id="nd_build", epoch=1)
+
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = make_envelope(
+        "ch_1", "build", node_id="nd_build", choices=_CHOICES, checks=["mise run test"], requires_checks={"pass"}
+    )
+    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.DONE)]
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100"), verdict="pass"
+    )
+    check_runner = FakeCheckRunner()  # green
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        check_runner=check_runner,
+        clock=FixedClock(_NOW),
+    )
+
+    advance(ctx)
+    pull(ctx)
+
+    assert len(hub.completions) == 1
+    assert hub.completions[0][1].choice == "pass"

@@ -680,3 +680,111 @@ def test_git_commit_kind_expectation_with_zero_commits_is_rejected_under_enforce
             assert out["response"]["outcome"] == "failure", out
             assert "commit" in (out["response"].get("detail") or "")
             assert hub.get(f"/api/chunks/{chunk_id}").json()["current_node_id"] == before
+
+
+# --------------------------------------------------------------------------- #
+# Checks-gate authorization (issue #114) — the hub's `requires_checks` backstop,
+# driven by the mock-runner /_drive/complete `check_results` field. The checks
+# analogue of the produces block above; no mode flag — gating applies iff a choice
+# declares `requires_checks`.
+# --------------------------------------------------------------------------- #
+
+
+def _checks_gated_graph_yaml() -> str:
+    """A ``default-delivery`` graph whose ``build`` node declares ``checks:`` and gates its
+    ``pass`` choice on green checks; ``fail`` is ungated and routes back to build."""
+    import yaml
+
+    graph = {
+        "name": "default-delivery",
+        "entry": "build",
+        "nodes": {
+            "build": {
+                "executor": "runner",
+                "prompt": "# build",
+                "checks": ["mise run test"],
+                "judgement": {
+                    "prompt": "# judge",
+                    "choices": {
+                        "pass": {"description": "green", "to": "deliver", "requires_checks": True},
+                        "fail": {"description": "red", "to": "build"},
+                    },
+                },
+                "retries": {"max": 1, "exhausted": "escalate"},
+            },
+            "deliver": {
+                "executor": "hub",
+                "run": [{"command": "true"}],
+                "judgement": {
+                    "choices": {
+                        "success": {"description": "Delivered.", "to": "done"},
+                        "failure": {"description": "Failed to deliver.", "to": "build"},
+                    }
+                },
+            },
+        },
+    }
+    return yaml.safe_dump(graph, sort_keys=False)
+
+
+_RED_CHECK = [{"command": "mise run test", "passed": False}]
+_GREEN_CHECK = [{"command": "mise run test", "passed": True}]
+
+
+def test_checks_gate_fences_a_red_gated_pass_over_the_wire(tmp_path: Path) -> None:
+    """A ``requires_checks`` pass whose reported checks are red is fenced out by the hub
+    over the wire — the chunk never advances off build (AC #4, service tier)."""
+    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+        assert hub.post("/api/graphs", json={"definition_yaml": _checks_gated_graph_yaml()}).status_code == 201
+        chunk_id = _ingest(forge, hub, "checks gate red")
+
+        with mock_runner(bin_dir, _free_port(), hub_port) as runner:
+            runner.post("/_drive/register")
+            assert runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()["claimed"] is True
+            before = hub.get(f"/api/chunks/{chunk_id}").json()["current_node_id"]
+
+            out = runner.post(
+                "/_drive/complete",
+                json={"chunk_id": chunk_id, "choice": "pass", "check_results": _RED_CHECK},
+            ).json()
+
+            assert out["response"]["outcome"] == "failure", out
+            assert hub.get(f"/api/chunks/{chunk_id}").json()["current_node_id"] == before
+
+
+def test_a_green_gated_pass_applies_over_the_wire(tmp_path: Path) -> None:
+    """A ``requires_checks`` pass with green checks passes the backstop and advances."""
+    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+        assert hub.post("/api/graphs", json={"definition_yaml": _checks_gated_graph_yaml()}).status_code == 201
+        chunk_id = _ingest(forge, hub, "checks gate green")
+
+        with mock_runner(bin_dir, _free_port(), hub_port) as runner:
+            runner.post("/_drive/register")
+            assert runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()["claimed"] is True
+
+            out = runner.post(
+                "/_drive/complete",
+                json={"chunk_id": chunk_id, "choice": "pass", "check_results": _GREEN_CHECK},
+            ).json()
+            assert out["response"]["outcome"] != "failure", out  # advanced to deliver
+
+
+def test_a_red_check_through_a_non_gated_fail_applies_over_the_wire(tmp_path: Path) -> None:
+    """A red check reported through the non-gated ``fail`` choice routes normally over the
+    wire — a transition, not a gate rejection (AC #5, service tier)."""
+    bin_dir, origins, forge_port, hub_port = _stack(tmp_path)
+    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+        assert hub.post("/api/graphs", json={"definition_yaml": _checks_gated_graph_yaml()}).status_code == 201
+        chunk_id = _ingest(forge, hub, "checks gate non-gated fail")
+
+        with mock_runner(bin_dir, _free_port(), hub_port) as runner:
+            runner.post("/_drive/register")
+            assert runner.post("/_drive/claim", json={"chunk_id": chunk_id}).json()["claimed"] is True
+
+            out = runner.post(
+                "/_drive/complete",
+                json={"chunk_id": chunk_id, "choice": "fail", "check_results": _RED_CHECK},
+            ).json()
+            assert out["response"]["outcome"] != "failure", out  # fail -> build, a normal transition

@@ -45,7 +45,7 @@ from blizzard.hub.domain.work import (
     landing_node,
     latest_epoch,
 )
-from blizzard.wire.completion import CompletionSubmission, SubmittedArtifact
+from blizzard.wire.completion import CompletionSubmission, SubmittedArtifact, checks_gate_violated
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 
 _TERMINAL_STATUSES = frozenset({ChunkStatus.STOPPED, ChunkStatus.DONE})
@@ -237,6 +237,19 @@ class ApplyService:
         produces_rejection = check_produces(from_node, submission.artifacts, mode=produces_mode)
         if produces_rejection is not None:
             return _failure(produces_rejection)
+
+        # Checks gate backstop (issue #114) — the hub-side analogue of the runner's own
+        # checks gate, via the SAME shared predicate (`checks_gate_violated`), so the two
+        # cannot drift (`test_checks_gate_agreement.py`, mirroring the produces-coverage
+        # agreement guard). A completion whose selected choice `requires_checks` and whose
+        # reported `check_results` carry a red one is fenced out here exactly as the runner's
+        # local gate fences it — the backstop for a runner that skipped or bypassed its own.
+        # No global mode flag: gating applies iff a choice declares `requires_checks`, so
+        # every existing graph is unaffected. Ordered beside the produces backstop, for the
+        # same reason — only on a fresh transition genuinely about to be recorded.
+        selected = next((c for c in from_node.choices if c.name == submission.choice), None)
+        if selected is not None and checks_gate_violated(selected.requires_checks, submission.check_results):
+            return _failure(f"choice `{submission.choice}` requires green checks but a check is red")
 
         # The transition-time consult (issue #124) — the chunk's own standing migration
         # intent, if any, gets its one shot at THIS fresh transition: it either fires
