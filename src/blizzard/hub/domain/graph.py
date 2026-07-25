@@ -175,6 +175,12 @@ class ChoiceDoc:
     prompt_addendum: str | None = None
     target_graph: str | None = None
     model: str | None = None
+    # Whether this choice is gated on green checks (issue #114) — a worker may not route
+    # through it while any of its node's `checks:` is red; the engine treats such a
+    # selection as an unparseable verdict (a retry-consuming failure), never an accepted
+    # edge. Default `False` keeps every existing choice ungated. The validator rejects it
+    # on a choice whose node declares no `checks:`, and on hub/human-judged nodes.
+    requires_checks: bool = False
 
 
 @dataclass(frozen=True)
@@ -257,6 +263,16 @@ class NodeDoc:
     # without re-parsing raw YAML (parse never validates, but the validator still needs
     # the parse's own verdict carried forward — ``bzh:one-owner``).
     session_malformed: bool = False
+    # Where the runner runs this node's ``checks:`` (issue #114) — a path resolved
+    # *relative to the leased env's binding workdir* (``join(binding.workdir, checks_cwd)``);
+    # ``None`` runs them at the env workdir root. Meaningful only on a node with ``checks:``;
+    # the validator rejects it otherwise. Per-check cwd is a documented deferral — one
+    # node-level cwd keeps ``checks:`` a bare ``list[str]``.
+    checks_cwd: str | None = None
+    # The per-check timeout (issue #114), in seconds — ``None`` accepts the check-runner's
+    # own default (:data:`blizzard.runner.loop.checks.DEFAULT_CHECK_TIMEOUT`). A timeout is
+    # a red check. Meaningful only on a node with ``checks:``; the validator rejects it otherwise.
+    checks_timeout: int | None = None
 
 
 @dataclass(frozen=True)
@@ -312,6 +328,10 @@ def _parse_node(name: str, body: dict[str, object]) -> NodeDoc:
     poll_interval_seconds = int(str(raw_poll_interval)) if raw_poll_interval is not None else None
     raw_poll_timeout = body.get("poll_timeout")
     poll_timeout_seconds = int(str(raw_poll_timeout)) if raw_poll_timeout is not None else None
+    raw_checks_cwd = body.get("checks_cwd")
+    checks_cwd = str(raw_checks_cwd) if raw_checks_cwd is not None else None
+    raw_checks_timeout = body.get("checks_timeout")
+    checks_timeout = int(str(raw_checks_timeout)) if raw_checks_timeout is not None else None
     run = [_parse_run_step(r) for r in _as_list(body.get("run", []))]
     return NodeDoc(
         name=name,
@@ -330,6 +350,8 @@ def _parse_node(name: str, body: dict[str, object]) -> NodeDoc:
         poll_timeout_seconds=poll_timeout_seconds,
         session_source=session_source,
         session_malformed=session_malformed,
+        checks_cwd=checks_cwd,
+        checks_timeout=checks_timeout,
     )
 
 
@@ -396,6 +418,7 @@ def _parse_choice(name: str, body: dict[str, object]) -> ChoiceDoc:
     to = body.get("to")
     addendum = body.get("prompt_addendum")
     model = body.get("model")
+    requires_checks = bool(body.get("requires_checks", False))
     to_str = str(to) if to is not None else None
     # Structural coercion only — a malformed ``graph:`` form parses to ``target_graph=None``
     # and the validator rejects it against the raw ``to`` (parse never validates).
@@ -411,6 +434,7 @@ def _parse_choice(name: str, body: dict[str, object]) -> ChoiceDoc:
         prompt_addendum=str(addendum) if addendum is not None else None,
         target_graph=target_graph,
         model=str(model) if model is not None else None,
+        requires_checks=requires_checks,
     )
 
 
@@ -442,6 +466,10 @@ class Choice:
     choice_id: str
     name: str
     description: str
+    # Whether this choice is gated on green checks (issue #114) — see
+    # ``ChoiceDoc.requires_checks``. A validated graph carries this reified so the runner
+    # (its local gate) and the hub (its backstop) both read it off the node/envelope.
+    requires_checks: bool = False
 
 
 @dataclass(frozen=True)
@@ -501,6 +529,10 @@ class Node:
     # ``None`` means "chunk most-recent" (bare ``resume``) or ``fresh``; a validated graph
     # never carries a malformed session, so there is no ``Node``-level malformed flag.
     session_source: str | None = None
+    # Where the runner runs this node's ``checks:`` and the per-check timeout (issue #114) —
+    # see ``NodeDoc.checks_cwd`` / ``NodeDoc.checks_timeout``.
+    checks_cwd: str | None = None
+    checks_timeout: int | None = None
 
     @property
     def is_hub_command_node(self) -> bool:

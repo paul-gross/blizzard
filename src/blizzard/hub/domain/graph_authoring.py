@@ -74,7 +74,14 @@ def reify_graph(doc: GraphDoc, clock: IClock) -> Graph:
         choices: list[Choice] = []
         for choice_doc in nd.judgement.choices if nd.judgement is not None else []:
             choice_id = mint(CHOICE_PREFIX, clock)
-            choices.append(Choice(choice_id=choice_id, name=choice_doc.name, description=choice_doc.description or ""))
+            choices.append(
+                Choice(
+                    choice_id=choice_id,
+                    name=choice_doc.name,
+                    description=choice_doc.description or "",
+                    requires_checks=choice_doc.requires_checks,
+                )
+            )
             edges.append(
                 Edge(
                     from_node_id=node_ids[nd.name],
@@ -106,6 +113,8 @@ def reify_graph(doc: GraphDoc, clock: IClock) -> Graph:
                 run=[RunStep(command=r.command, name=r.name, produces=r.produces) for r in nd.run],
                 poll_interval_seconds=nd.poll_interval_seconds,
                 poll_timeout_seconds=nd.poll_timeout_seconds,
+                checks_cwd=nd.checks_cwd,
+                checks_timeout=nd.checks_timeout,
             )
         )
     return Graph(

@@ -187,3 +187,39 @@ def test_parse_produces_both_forms_together_round_trip_through_reify() -> None:
 def test_parse_rejects_an_unknown_produces_kind() -> None:
     with pytest.raises(GraphParseError, match="unknown kind"):
         parse_graph_doc(_produces_doc([{"name": "bad", "kind": "bogus"}]))
+
+
+def test_reify_carries_checks_gating_fields() -> None:
+    """``checks_cwd``/``checks_timeout`` on a node and ``requires_checks`` on a choice
+    (issue #114) survive reify onto the immutable ``Node``/``Choice``."""
+    doc = parse_graph_doc(
+        {
+            "name": "t",
+            "entry": "build",
+            "nodes": {
+                "build": {
+                    "executor": "runner",
+                    "prompt": "p",
+                    "checks": ["mise run lint", "mise run test"],
+                    "checks_cwd": "blizzard",
+                    "checks_timeout": 300,
+                    "judgement": {
+                        "prompt": "j",
+                        "choices": {
+                            "pass": {"description": "ok", "to": "done", "requires_checks": True},
+                            "fail": {"description": "no", "to": "build"},
+                        },
+                    },
+                }
+            },
+        }
+    )
+    graph = reify_graph(doc, _clock())
+    build = graph.node_by_name("build")
+    assert build is not None
+    assert build.checks == ["mise run lint", "mise run test"]
+    assert build.checks_cwd == "blizzard"
+    assert build.checks_timeout == 300
+    by_name = {c.name: c for c in build.choices}
+    assert by_name["pass"].requires_checks is True
+    assert by_name["fail"].requires_checks is False

@@ -159,3 +159,27 @@ def test_hub_node_has_no_judgement_prompt() -> None:
     env = build_node_envelope(chunk=_chunk(), node=hub_node, artifacts=[], epoch=1)
     assert env.judgement_prompt is None
     assert env.node.choices == []
+
+
+def test_envelope_carries_checks_gating_fields() -> None:
+    """``checks_cwd``/``checks_timeout`` and a choice's ``requires_checks`` (issue #114)
+    ride the node envelope so the runner can execute + gate on them."""
+    node = replace(
+        _node(),
+        checks_cwd="blizzard",
+        checks_timeout=300,
+        choices=[Choice("cho_1", "pass", "it works", requires_checks=True), Choice("cho_2", "fail", "it does not")],
+    )
+    env = build_node_envelope(chunk=_chunk(), node=node, artifacts=[], epoch=1)
+    assert env.node.checks_cwd == "blizzard"
+    assert env.node.checks_timeout == 300
+    by_name = {c.name: c for c in env.node.choices}
+    assert by_name["pass"].requires_checks is True
+    assert by_name["fail"].requires_checks is False
+
+
+def test_envelope_checks_gating_fields_default_off() -> None:
+    env = build_node_envelope(chunk=_chunk(), node=_node(), artifacts=[], epoch=1)
+    assert env.node.checks_cwd is None
+    assert env.node.checks_timeout is None
+    assert all(not c.requires_checks for c in env.node.choices)

@@ -240,7 +240,7 @@
         "type": "object"
       },
       "CheckResult": {
-        "description": "One deterministic check's outcome, informing the verdict.",
+        "description": "One deterministic check's **runner-executed** outcome (issue #114).\n\nSince #114 the runner runs a node's ``checks:`` at worker exit and records each\ncommand's pass/fail as a durable fact; this is the wire projection the completion\ncarries to the hub so the hub's ``requires_checks`` backstop can gate on it. It carries\nonly ``(command, passed)`` \u2014 the hub needs nothing more to gate. The ``output_tail`` the\nrunner captures stays **runner-local** (a column on the runner's ``check_results``\ntable, read by the runner's own judgement-prompt injection); it deliberately does not\nride the wire, so no mock counterpart or board surfacing is owed. Should a future change\nwant the tail hub-side, that is a *new* wire field (re-triggering ``bzh:wire-change-extends-mock``).\n\nBefore #114 this field carried the worker's own in-session self-assessment and was sent\nempty (``[]``) \u2014 the hub read it nowhere. #114 repurposes it to runner-executed facts.",
         "properties": {
           "command": {
             "title": "Command",
@@ -1231,6 +1231,11 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "requires_checks": {
+            "default": false,
+            "title": "Requires Checks",
+            "type": "boolean"
           }
         },
         "required": [
@@ -1478,6 +1483,11 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "requires_checks": {
+            "default": false,
+            "title": "Requires Checks",
+            "type": "boolean"
           }
         },
         "required": [
@@ -1559,6 +1569,28 @@
             },
             "title": "Checks",
             "type": "array"
+          },
+          "checks_cwd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checks Cwd"
+          },
+          "checks_timeout": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checks Timeout"
           },
           "choices": {
             "default": [],
@@ -2138,6 +2170,28 @@
             },
             "title": "Checks",
             "type": "array"
+          },
+          "checks_cwd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checks Cwd"
+          },
+          "checks_timeout": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checks Timeout"
           },
           "choices": {
             "default": [],

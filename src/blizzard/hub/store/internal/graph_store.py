@@ -70,6 +70,8 @@ class GraphStore:
                         mode=node.mode,
                         produces=json.dumps([_produces_spec_to_json(p) for p in node.produces]),
                         checks=json.dumps(list(node.checks)),
+                        checks_cwd=node.checks_cwd,
+                        checks_timeout=node.checks_timeout,
                         bounce_cap=node.bounce_cap,
                         run=json.dumps([_run_step_to_json(r) for r in node.run]) if node.run else None,
                         poll_interval_seconds=node.poll_interval_seconds,
@@ -83,6 +85,7 @@ class GraphStore:
                             node_id=node.node_id,
                             name=choice.name,
                             description=choice.description,
+                            requires_checks=choice.requires_checks,
                         )
                     )
             for edge in graph.edges:
@@ -172,6 +175,8 @@ class GraphStore:
                     executor=Executor(nr.executor),
                     prompt=nr.prompt,
                     checks=_json_list(nr.checks),
+                    checks_cwd=nr.checks_cwd,
+                    checks_timeout=nr.checks_timeout,
                     produces=_produces_specs(nr.produces),
                     session=SessionMode(nr.session),
                     session_source=nr.session_source,
@@ -185,7 +190,13 @@ class GraphStore:
                     poll_interval_seconds=nr.poll_interval_seconds,
                     poll_timeout_seconds=nr.poll_timeout_seconds,
                     choices=[
-                        Choice(choice_id=c.choice_id, name=c.name, description=c.description) for c in choice_rows
+                        Choice(
+                            choice_id=c.choice_id,
+                            name=c.name,
+                            description=c.description,
+                            requires_checks=bool(c.requires_checks),
+                        )
+                        for c in choice_rows
                     ],
                 )
             )

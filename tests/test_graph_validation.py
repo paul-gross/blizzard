@@ -190,3 +190,90 @@ def test_unreachable_node_is_a_warning_not_an_error() -> None:
     result = validate_graph(parse_graph_doc(doc))
     assert result.ok  # warnings do not reject
     assert any("unreachable" in w for w in result.warnings)
+
+
+# --- Checks gating (issue #114) ------------------------------------------------
+
+
+def test_requires_checks_on_a_node_with_checks_is_legal() -> None:
+    doc = _min_build_deliver()
+    doc["nodes"]["build"]["checks"] = ["mise run lint"]  # type: ignore[index]
+    doc["nodes"]["build"]["judgement"]["choices"]["pass"]["requires_checks"] = True  # type: ignore[index]
+    result = validate_graph(parse_graph_doc(doc))
+    assert result.ok, result.errors
+
+
+def test_checks_cwd_and_timeout_on_a_node_with_checks_are_legal() -> None:
+    doc = _min_build_deliver()
+    doc["nodes"]["build"]["checks"] = ["mise run lint"]  # type: ignore[index]
+    doc["nodes"]["build"]["checks_cwd"] = "blizzard"  # type: ignore[index]
+    doc["nodes"]["build"]["checks_timeout"] = 300  # type: ignore[index]
+    result = validate_graph(parse_graph_doc(doc))
+    assert result.ok, result.errors
+
+
+def test_requires_checks_on_a_node_with_no_checks_is_an_error() -> None:
+    doc = _min_build_deliver()
+    doc["nodes"]["build"]["judgement"]["choices"]["pass"]["requires_checks"] = True  # type: ignore[index]
+    result = validate_graph(parse_graph_doc(doc))
+    assert not result.ok
+    assert any(
+        "requires_checks` is only legal on a choice whose node declares `checks:`" in e for e in result.errors
+    ), result.errors
+
+
+def test_requires_checks_on_a_human_gate_is_an_error() -> None:
+    doc = _min_build_deliver()
+    doc["nodes"]["gate"] = {
+        "executor": "runner",
+        "checks": ["mise run lint"],
+        "judgement": {
+            "by": "human",
+            "choices": {"approve": {"description": "ship", "to": "deliver", "requires_checks": True}},
+        },
+    }
+    doc["nodes"]["build"]["judgement"]["choices"]["pass"]["to"] = "gate"  # type: ignore[index]
+    result = validate_graph(parse_graph_doc(doc))
+    assert not result.ok
+    assert any("not legal on a human-judged (gate) node" in e for e in result.errors), result.errors
+
+
+def test_requires_checks_on_a_hub_node_choice_is_an_error() -> None:
+    # A hub node can never declare `checks:` (rejected on its own), so a `requires_checks`
+    # choice there is doubly illegal — at minimum the no-`checks:` rule fires.
+    doc = _min_build_deliver()
+    doc["nodes"]["deliver"]["judgement"]["choices"]["landed"]["requires_checks"] = True  # type: ignore[index]
+    result = validate_graph(parse_graph_doc(doc))
+    assert not result.ok
+    assert any(
+        "requires_checks` is only legal on a choice whose node declares `checks:`" in e for e in result.errors
+    ), result.errors
+
+
+def test_checks_cwd_on_a_node_with_no_checks_is_an_error() -> None:
+    doc = _min_build_deliver()
+    doc["nodes"]["build"]["checks_cwd"] = "blizzard"  # type: ignore[index]
+    result = validate_graph(parse_graph_doc(doc))
+    assert not result.ok
+    assert any("`checks_cwd` is only legal on a node that declares `checks:`" in e for e in result.errors), (
+        result.errors
+    )
+
+
+def test_checks_timeout_on_a_node_with_no_checks_is_an_error() -> None:
+    doc = _min_build_deliver()
+    doc["nodes"]["build"]["checks_timeout"] = 300  # type: ignore[index]
+    result = validate_graph(parse_graph_doc(doc))
+    assert not result.ok
+    assert any("`checks_timeout` is only legal on a node that declares `checks:`" in e for e in result.errors), (
+        result.errors
+    )
+
+
+def test_non_positive_checks_timeout_is_an_error() -> None:
+    doc = _min_build_deliver()
+    doc["nodes"]["build"]["checks"] = ["mise run lint"]  # type: ignore[index]
+    doc["nodes"]["build"]["checks_timeout"] = 0  # type: ignore[index]
+    result = validate_graph(parse_graph_doc(doc))
+    assert not result.ok
+    assert any("`checks_timeout` must be a positive number of seconds" in e for e in result.errors), result.errors

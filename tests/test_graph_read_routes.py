@@ -167,3 +167,48 @@ def test_get_graph_unknown_id_is_404(tmp_path: Path) -> None:
     resp = hub.client.get("/api/graphs/gr_does_not_exist")
     assert resp.status_code == 404
     assert "gr_does_not_exist" in resp.json()["detail"]
+
+
+_GRAPH_CHECKS_GATING = """
+name: delta
+entry: build
+nodes:
+  build:
+    executor: runner
+    prompt: do the work
+    checks:
+      - mise run lint
+      - mise run test
+    checks_cwd: blizzard
+    checks_timeout: 300
+    judgement:
+      prompt: judge it
+      choices:
+        pass:
+          description: it works
+          to: done
+          requires_checks: true
+        fail:
+          description: it does not
+          to: build
+"""
+
+
+def test_get_graph_round_trips_checks_gating(tmp_path: Path) -> None:
+    """A node's ``checks_cwd``/``checks_timeout`` and a choice's ``requires_checks``
+    (issue #114) survive store persistence and the API node view — the mint -> store ->
+    view round trip. An ungated choice reads ``requires_checks == False``."""
+    hub = build_hub(tmp_path)
+    graph_id = _mint(hub, _GRAPH_CHECKS_GATING)
+
+    resp = hub.client.get(f"/api/graphs/{graph_id}")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    build = next(n for n in body["nodes"] if n["name"] == "build")
+
+    assert build["checks"] == ["mise run lint", "mise run test"]
+    assert build["checks_cwd"] == "blizzard"
+    assert build["checks_timeout"] == 300
+    by_name = {c["name"]: c for c in build["choices"]}
+    assert by_name["pass"]["requires_checks"] is True
+    assert by_name["fail"]["requires_checks"] is False

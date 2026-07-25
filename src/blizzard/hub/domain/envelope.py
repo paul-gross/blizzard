@@ -154,10 +154,15 @@ def build_node_envelope(
         session_source=node.session_source,
         judged_by=node.judged_by,
         checks=list(node.checks),
+        checks_cwd=node.checks_cwd,
+        checks_timeout=node.checks_timeout,
         produces=[ProducesEntry(name=p.name, kind=p.kind) for p in node.produces],
         retries_max=node.retries_max,
         mode=node.mode,
-        choices=[EnvelopeChoice(name=c.name, description=c.description) for c in node.choices],
+        choices=[
+            EnvelopeChoice(name=c.name, description=c.description, requires_checks=c.requires_checks)
+            for c in node.choices
+        ],
     )
     return NodeEnvelope(
         chunk_id=chunk.chunk_id,

@@ -70,7 +70,11 @@ graph_nodes = Table(
     Column("retries_exhausted", String, nullable=True),  # escalate
     Column("mode", String, nullable=True),  # deliver hub node: merge-to-main | open-pr
     Column("produces", Text, nullable=True),  # JSON list of artifact names; e.g. review's `review-findings`
-    Column("checks", Text, nullable=True),  # JSON list of check commands, worker-run in-session
+    Column("checks", Text, nullable=True),  # JSON list of check commands, runner-run at worker exit (#114)
+    # Where the runner runs this node's ``checks:`` and the per-check timeout (#114) — null
+    # runs at the env workdir root / accepts the check-runner's default timeout.
+    Column("checks_cwd", String, nullable=True),
+    Column("checks_timeout", Integer, nullable=True),
     # The kick-back cap (#64) — null accepts the fleet default (``graph.DEFAULT_BOUNCE_CAP``).
     Column("bounce_cap", Integer, nullable=True),
     # The generic hub command node's declared commands (#65) — JSON list of
@@ -90,6 +94,9 @@ graph_choices = Table(
     Column("node_id", String, ForeignKey("graph_nodes.node_id"), nullable=False),
     Column("name", String, nullable=False),
     Column("description", Text, nullable=False),
+    # Whether this choice is gated on green checks (#114) — null/false is ungated (every
+    # pre-#114 choice). The hub backstop and the runner-local gate both read it.
+    Column("requires_checks", Boolean, nullable=True),
 )
 
 graph_edges = Table(

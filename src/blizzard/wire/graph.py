@@ -61,6 +61,10 @@ class GraphChoiceView(BaseModel):
     choice_id: str
     name: str
     description: str
+    # Whether this choice is gated on green checks (issue #114) — see
+    # ``blizzard.hub.domain.graph.Choice.requires_checks``. Default `False` keeps the
+    # regenerated OpenAPI/TS client additive.
+    requires_checks: bool = False
 
 
 class GraphEdgeView(BaseModel):
@@ -89,6 +93,10 @@ class GraphNodeView(BaseModel):
     mode: str | None = None
     prompt: str | None = None
     checks: list[str] = []
+    # Where the runner runs this node's checks and the per-check timeout (issue #114) —
+    # see ``blizzard.hub.domain.graph.Node.checks_cwd`` / ``checks_timeout``.
+    checks_cwd: str | None = None
+    checks_timeout: int | None = None
     produces: list[ProducesEntry] = []
     judgement_prompt: str | None = None
     choices: list[GraphChoiceView] = []

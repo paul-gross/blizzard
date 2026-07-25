@@ -42,6 +42,10 @@ class EnvelopeChoice(BaseModel):
 
     name: str
     description: str
+    # Whether this choice is gated on green checks (issue #114) — see
+    # ``blizzard.hub.domain.graph.Choice.requires_checks``. The runner's local gate reads
+    # this off the selected choice; default `False` keeps every existing choice ungated.
+    requires_checks: bool = False
 
 
 class NodeConfig(BaseModel):
@@ -57,6 +61,11 @@ class NodeConfig(BaseModel):
     session_source: str | None = None
     judged_by: JudgedBy
     checks: list[str] = []
+    # Where the runner runs this node's checks and the per-check timeout (issue #114) —
+    # see ``blizzard.hub.domain.graph.Node.checks_cwd`` / ``checks_timeout``. The runner
+    # resolves ``checks_cwd`` relative to the leased env's binding workdir.
+    checks_cwd: str | None = None
+    checks_timeout: int | None = None
     produces: list[ProducesEntry] = []
     retries_max: int | None = None
     mode: str | None = None

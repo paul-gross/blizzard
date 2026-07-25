@@ -181,7 +181,19 @@ export type BounceView = {
 /**
  * CheckResult
  *
- * One deterministic check's outcome, informing the verdict.
+ * One deterministic check's **runner-executed** outcome (issue #114).
+ *
+ * Since #114 the runner runs a node's ``checks:`` at worker exit and records each
+ * command's pass/fail as a durable fact; this is the wire projection the completion
+ * carries to the hub so the hub's ``requires_checks`` backstop can gate on it. It carries
+ * only ``(command, passed)`` — the hub needs nothing more to gate. The ``output_tail`` the
+ * runner captures stays **runner-local** (a column on the runner's ``check_results``
+ * table, read by the runner's own judgement-prompt injection); it deliberately does not
+ * ride the wire, so no mock counterpart or board surfacing is owed. Should a future change
+ * want the tail hub-side, that is a *new* wire field (re-triggering ``bzh:wire-change-extends-mock``).
+ *
+ * Before #114 this field carried the worker's own in-session self-assessment and was sent
+ * empty (``[]``) — the hub read it nowhere. #114 repurposes it to runner-executed facts.
  */
 export type CheckResult = {
     /**
@@ -848,6 +860,10 @@ export type EnvelopeChoice = {
      * Name
      */
     name: string;
+    /**
+     * Requires Checks
+     */
+    requires_checks?: boolean;
 };
 
 /**
@@ -1057,6 +1073,10 @@ export type GraphChoiceView = {
      * Name
      */
     name: string;
+    /**
+     * Requires Checks
+     */
+    requires_checks?: boolean;
 };
 
 /**
@@ -1117,6 +1137,14 @@ export type GraphNodeView = {
      * Checks
      */
     checks?: Array<string>;
+    /**
+     * Checks Cwd
+     */
+    checks_cwd?: string | null;
+    /**
+     * Checks Timeout
+     */
+    checks_timeout?: number | null;
     /**
      * Choices
      */
@@ -1527,6 +1555,14 @@ export type NodeConfig = {
      * Checks
      */
     checks?: Array<string>;
+    /**
+     * Checks Cwd
+     */
+    checks_cwd?: string | null;
+    /**
+     * Checks Timeout
+     */
+    checks_timeout?: number | null;
     /**
      * Choices
      */

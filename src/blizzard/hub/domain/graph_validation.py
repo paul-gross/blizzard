@@ -120,6 +120,36 @@ def _check_node(node: NodeDoc, node_names: set[str], errors: list[str]) -> None:
                 f"(its outcome choices — at least the edges its commands route)"
             )
 
+    # Checks gating (issue #114). `checks_cwd`/`checks_timeout` configure how a node's
+    # `checks:` run, and a choice's `requires_checks` gates routing on them — all three
+    # are meaningless without a `checks:` list to run, so reject them on a node that
+    # declares none. (A hub node can never declare `checks:` — rejected just above — so
+    # this also fences `requires_checks`/`checks_cwd`/`checks_timeout` off hub nodes.)
+    if not node.checks:
+        if node.checks_cwd is not None:
+            errors.append(f"node `{node.name}`: `checks_cwd` is only legal on a node that declares `checks:`")
+        if node.checks_timeout is not None:
+            errors.append(f"node `{node.name}`: `checks_timeout` is only legal on a node that declares `checks:`")
+    if node.checks_timeout is not None and node.checks_timeout <= 0:
+        errors.append(f"node `{node.name}`: `checks_timeout` must be a positive number of seconds")
+    if judgement is not None:
+        for choice in judgement.choices:
+            if not choice.requires_checks:
+                continue
+            if not node.checks:
+                errors.append(
+                    f"node `{node.name}` choice `{choice.name}`: `requires_checks` is only legal on a "
+                    f"choice whose node declares `checks:`"
+                )
+            # A human-judged (gate) node's exit is a person's signoff, not a worker
+            # judging against mechanical checks — the runner-local checks gate never runs
+            # there, so `requires_checks` would be inert and misleading. Reject it.
+            if judgement.by is JudgedBy.HUMAN:
+                errors.append(
+                    f"node `{node.name}` choice `{choice.name}`: `requires_checks` is not legal on a "
+                    f"human-judged (gate) node"
+                )
+
     # Every choice entry has a description and a `to` that resolves. A `to` is one of:
     # a same-graph node name, the reserved terminal, or a well-formed cross-graph
     # `graph:<name>` target (issue #90) — a malformed `graph:` form is rejected here.
