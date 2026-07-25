@@ -576,6 +576,59 @@ nudge_facts = Table(
     Column("nudged_at", UtcDateTime, nullable=False),
 )
 
+# --- Check results + the checks-ran guard (issue #114) -------------------------
+#
+# The runner runs a node's ``checks:`` at worker exit, before the judgement is elicited,
+# and records each command's outcome here as a durable fact (``bzh:facts-not-status``) so
+# a runner kill between check-run and judgement resumes at the right point without
+# re-running or losing results — modeled on ``nudge_facts``/``attachments``.
+#
+# ``check_results`` holds one row per check command per ``(lease_id, epoch)``, append-only.
+# ``chunk_id``/``node_id`` are carried off the lease at run time (denormalized, not joined
+# back). ``output_tail`` is the bounded evidence — deliberately runner-local: it feeds the
+# runner's own judgement-prompt injection and never rides the wire (the hub's gate needs
+# only ``passed``; issue #114 [MF3]).
+#
+# ``checks_ran`` is the guard marker: at most one row per ``(lease_id, epoch)``, written
+# AFTER the result rows (so ``check_results`` rows are durable before the marker is), and
+# ONLY when the node declares a non-empty ``checks:`` (a node with no checks writes neither
+# rows nor marker). On recovery the marker gates re-run: unset ⇒ re-run all (latest-wins,
+# safe); set ⇒ read the recorded results back and judge. This makes execution at-least-once
+# and the recorded results exactly-once — the shape ``nudge_facts`` guarantees. The
+# invariant ``runner:checks-recorded-when-marked`` holds precisely because the marker is
+# written last and only for non-empty checks: a marker implies its result rows exist.
+#
+# The re-run key is ``(lease_id, epoch)`` and never anything stable across a node re-entry
+# (e.g. ``(chunk, node)``). The verified runner lifecycle: a verdict-less retry, a
+# ``requires_checks`` gate-fire, and a node re-entry each mint a NEW ``(lease, epoch)`` and
+# re-run (``_spawn_attempt`` increments the epoch and mints a fresh lease); the only
+# same-``(lease, epoch)`` re-drives are the hub-unreachable re-tick (tree untouched) and the
+# produces-nudge (which declares already-authored work and must not author new tree
+# content). Keying on ``(chunk, node)`` would wedge every retry on a stale red result.
+
+check_results = Table(
+    "check_results",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("lease_id", String, nullable=False),
+    Column("chunk_id", String, nullable=False),
+    Column("node_id", String, nullable=False),
+    Column("epoch", Integer, nullable=False),
+    Column("command", Text, nullable=False),
+    Column("passed", Boolean, nullable=False),
+    Column("output_tail", Text, nullable=False),
+    Column("ran_at", UtcDateTime, nullable=False),
+)
+
+checks_ran = Table(
+    "checks_ran",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("lease_id", String, nullable=False),
+    Column("epoch", Integer, nullable=False),
+    Column("ran_at", UtcDateTime, nullable=False),
+)
+
 # --- SSO federation jti replay cache (issue #95, decision D4) ---------------
 #
 # The single-use guard a hub-signed JWT's `jti` claim is checked against before the

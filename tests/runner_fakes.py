@@ -26,6 +26,7 @@ from blizzard.runner.environments.provider import (
 )
 from blizzard.runner.harness.adapter import IHarnessAdapter, WorkerHandle, WorkerPreamble
 from blizzard.runner.harness.usage import UsageKind, UsageSample
+from blizzard.runner.loop.checks import CheckOutcome, ICheckRunner
 from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError, IHubClient, RouteClaimOutcome
 from blizzard.runner.loop.process import IProcessProbe
@@ -407,6 +408,25 @@ class FakeWorktreeGit:
         return self._verified
 
 
+class FakeCheckRunner:
+    """A scriptable :class:`~blizzard.runner.loop.checks.ICheckRunner`: a canned outcome
+    per command (or a default), records every call (issue #114).
+
+    ``outcomes`` maps a check command to its :class:`CheckOutcome`; an unlisted command
+    returns ``default`` (a green, empty-tail pass unless overridden) — so the common
+    "every check green" case needs no scripting, and a red-check test names just the one
+    it wants failing."""
+
+    def __init__(self, outcomes: dict[str, CheckOutcome] | None = None, *, default: CheckOutcome | None = None) -> None:
+        self._outcomes = outcomes or {}
+        self._default = default if default is not None else CheckOutcome(passed=True, output_tail="")
+        self.calls: list[tuple[str, str, int]] = []
+
+    def run(self, command: str, cwd: str, timeout: int) -> CheckOutcome:
+        self.calls.append((command, cwd, timeout))
+        return self._outcomes.get(command, self._default)
+
+
 def make_context(
     store: IWriteRunnerStore,
     *,
@@ -415,6 +435,7 @@ def make_context(
     harness: FakeHarness,
     probe: FakeProbe,
     worktree_git: FakeWorktreeGit | None = None,
+    check_runner: FakeCheckRunner | None = None,
     clock: FixedClock | None = None,
     config: LoopConfig | None = None,
     transcripts: FakeTranscripts | None = None,
@@ -430,6 +451,7 @@ def make_context(
     _harness: IHarnessAdapter = harness
     _probe: IProcessProbe = probe
     _wt: IWorktreeGit = worktree_git if worktree_git is not None else FakeWorktreeGit()
+    _check_runner: ICheckRunner = check_runner if check_runner is not None else FakeCheckRunner()
     return LoopContext(
         store=store,
         clock=clock if clock is not None else FixedClock(datetime(2026, 7, 13, 12, 0, 0, tzinfo=UTC)),
@@ -438,6 +460,7 @@ def make_context(
         harness=_harness,
         process=_probe,
         worktree_git=_wt,
+        check_runner=_check_runner,
         config=resolved_config,
         transcripts=transcripts,
     )
@@ -453,6 +476,10 @@ def make_envelope(
     epoch: int = 0,
     session: SessionMode | None = None,
     session_source: str | None = None,
+    checks: list[str] | None = None,
+    checks_cwd: str | None = None,
+    checks_timeout: int | None = None,
+    requires_checks: set[str] | None = None,
 ) -> NodeEnvelope:
     """A minimal runner-node envelope for a step test.
 
@@ -471,6 +498,7 @@ def make_envelope(
     from blizzard.hub.domain.graph import Executor, JudgedBy
     from blizzard.wire.envelope import EnvelopeChoice
 
+    gated = requires_checks or set()
     node = NodeConfig(
         node_id=node_id,
         node_name=node_name,
@@ -479,8 +507,11 @@ def make_envelope(
         session_source=session_source,
         judged_by=JudgedBy.WORKER,
         retries_max=2,
+        checks=checks or [],
+        checks_cwd=checks_cwd,
+        checks_timeout=checks_timeout,
         produces=[p if isinstance(p, ProducesEntry) else ProducesEntry(name=p) for p in produces or []],
-        choices=[EnvelopeChoice(name=n, description=d) for n, d in choices],
+        choices=[EnvelopeChoice(name=n, description=d, requires_checks=n in gated) for n, d in choices],
     )
     return NodeEnvelope(
         chunk_id=chunk_id,

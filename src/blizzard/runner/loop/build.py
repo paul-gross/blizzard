@@ -3,7 +3,8 @@
 The single place the loop's collaborators are constructed from resolved config and
 injected into a :class:`LoopContext`: the runner store over the engine, the hub
 client over an ``httpx.Client``, the winter workspace provider, the Claude Code
-adapter, the process probe, and the worktree-git seam. ``run_single_tick`` is the
+adapter, the process probe, the worktree-git seam, and the check-runner seam (#114).
+``run_single_tick`` is the
 one-shot pass the ``blizzard runner tick`` CLI verb and the e2e drive;
 :class:`PeriodicDriver` is the background timer the hosted daemon runs. Both open
 the seam clients here and close them on exit, so no other code touches httpx or the
@@ -26,6 +27,7 @@ from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapt
 from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.hub import IHubClient
 from blizzard.runner.loop.internal.http_hub import HttpHubClient
+from blizzard.runner.loop.internal.subprocess_check_runner import SubprocessCheckRunner
 from blizzard.runner.loop.internal.subprocess_worktree_git import SubprocessWorktreeGit
 from blizzard.runner.loop.process import LinuxProcessProbe
 from blizzard.runner.loop.steps import mark_crash_resume_intents, mark_resume_intents
@@ -104,6 +106,9 @@ def build_loop_context(
         harness=harness,
         process=LinuxProcessProbe(),
         worktree_git=SubprocessWorktreeGit(),
+        # The check-runner seam (issue #114) — runs a node's `checks:` at worker exit,
+        # its child env built from the same worker-env allowlist the harness children use.
+        check_runner=SubprocessCheckRunner(env_passthrough=config.worker_env_passthrough),
         config=loop_config,
         transcripts=transcripts,
     )

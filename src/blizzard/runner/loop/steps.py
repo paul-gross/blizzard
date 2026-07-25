@@ -45,6 +45,7 @@ from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerPreamble
 from blizzard.runner.harness.preamble import render_worker_preamble
 from blizzard.runner.harness.spawn_cwd import resolve_spawn_cwd
 from blizzard.runner.harness.usage import UsageKind, UsageSample
+from blizzard.runner.loop.checks import DEFAULT_CHECK_TIMEOUT
 from blizzard.runner.loop.context import LoopContext
 from blizzard.runner.loop.hub import ChunkNotFoundError, HubClientError
 from blizzard.runner.loop.internal.subprocess_worktree_git import WorktreeGitError
@@ -52,13 +53,14 @@ from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.store.repository import (
     AskRecord,
     BufferedFact,
+    CheckResultRecord,
     EnvBindingRecord,
     GitCommitDeclarationRecord,
     IWriteRunnerStore,
     LeaseRecord,
     NewLease,
 )
-from blizzard.wire.completion import CompletionSubmission, SubmittedArtifact, produces_coverage
+from blizzard.wire.completion import CheckResult, CompletionSubmission, SubmittedArtifact, produces_coverage
 from blizzard.wire.decision import DecisionSubmission, DecisionView
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeConfig, NodeEnvelope
 from blizzard.wire.facts import (
@@ -231,6 +233,23 @@ _CP_NUDGE_AFTER_FIRED_FACT = crashpoint(
 _CP_NUDGE_AFTER_RESUME = crashpoint(
     "nudge.after-resume.before-reassemble",
     "nudge resume returned; attachments not yet re-read and the completion not yet reassembled",
+)
+
+# ADVANCE's checks-at-exit (issue #114): the runner runs a node's `checks:` at worker exit,
+# before the judgement, and records each result as a durable fact, then a marker. The
+# ordering (result rows → marker) is what makes the recorded results exactly-once across a
+# crash. `after-results.before-marker` is the recovery-critical window the exactly-once-
+# recording guarantee rests on: the rows are durable but the marker is not, so recovery
+# finds `checks_ran` unset and safely re-runs (latest-wins). `after-marker.before-judge` is
+# reached once the marker is durable and before the judgement is elicited: recovery finds
+# `checks_ran` set and reads the recorded results back rather than re-running.
+_CP_CHECKS_AFTER_RESULTS = crashpoint(
+    "checks.after-results.before-marker",
+    "check result rows durable; the checks-ran marker has not been written yet",
+)
+_CP_CHECKS_AFTER_MARKER = crashpoint(
+    "checks.after-marker.before-judge",
+    "checks-ran marker durable; the judgement has not been elicited yet",
 )
 
 _CP_ADV_AFTER_BUFFER = crashpoint("advance.after-buffer.before-flush", "completion buffered; not yet flushed")
@@ -1592,6 +1611,78 @@ def advance(ctx: LoopContext) -> None:
             _advance_held_chunk(ctx, chunk_id)
 
 
+def _run_or_read_checks(
+    ctx: LoopContext, lease: LeaseRecord, envelope: NodeEnvelope, bindings: list[EnvBindingRecord]
+) -> list[CheckResultRecord]:
+    """Run the node's ``checks:`` at worker exit and record them as durable facts, or read
+    the recorded results back on a re-drive (issue #114).
+
+    Empty for a node with no ``checks:`` (every packaged graph today). Otherwise: if
+    ``checks_ran(lease, epoch)`` is unset, run each check in
+    ``join(binding.workdir, node.checks_cwd)`` under ``node.checks_timeout``, record the
+    result rows, then the marker; else read the recorded results back. Ordering (rows →
+    marker) is what makes the recorded results exactly-once across a crash.
+
+    **The re-run key is ``(lease, epoch)`` and never anything stable across a node re-entry**
+    (e.g. ``(chunk, node)``). The verified runner lifecycle: a verdict-less retry, a
+    ``requires_checks`` gate-fire, and a node re-entry each mint a *new* ``(lease, epoch)``
+    via ``_spawn_attempt`` (a fresh lease + an incremented epoch), so ``checks_ran`` is
+    unset and checks re-run against the rebuilt tree — correct. The only
+    same-``(lease, epoch)`` re-drives are the hub-unreachable re-tick (ADVANCE returns
+    before this function is reached, tree untouched) and the produces-nudge (which runs
+    *after* the judgement, declares already-authored work, and must not author new tree
+    content — see the nudge site). Keying on ``(chunk, node)`` would wedge every retry on a
+    stale red result.
+
+    Multi-env chunks are parked (a solo chunk holds exactly one env today), so checks run in
+    the single leased binding. Were multi-env to land, checks would run per binding and a
+    check is red if it fails in any — a deferral consistent with the parked K>1 batching.
+    """
+    node = envelope.node
+    if not node.checks:
+        return []
+    if ctx.store.checks_ran(lease.lease_id, lease.epoch):
+        return ctx.store.check_results_for_lease(lease.lease_id, lease.epoch)
+    if ctx.check_runner is None:
+        # The seam is unwired but the node declares checks — a composition-root/test-wiring
+        # bug, never a production path (the daemon always wires SubprocessCheckRunner, and no
+        # packaged graph declares checks). Surface it loudly and skip rather than wedge the
+        # tick; a test that forgot to wire the fake sees its own gating assertions fail.
+        _log.error(
+            "node declares checks but no check-runner seam is wired — skipping checks",
+            node=node.node_name,
+            lease_id=lease.lease_id,
+        )
+        return []
+    cwd = os.path.join(bindings[0].workdir, node.checks_cwd) if node.checks_cwd else bindings[0].workdir
+    timeout = node.checks_timeout or DEFAULT_CHECK_TIMEOUT
+    results: list[CheckResultRecord] = []
+    for command in node.checks:
+        outcome = ctx.check_runner.run(command, cwd, timeout)
+        results.append(CheckResultRecord(command=command, passed=outcome.passed, output_tail=outcome.output_tail))
+    # Rows first, then the marker — the ordering the crash points bracket and the
+    # `runner:checks-recorded-when-marked` invariant rests on.
+    ctx.store.record_check_results(
+        lease_id=lease.lease_id,
+        chunk_id=lease.chunk_id,
+        node_id=lease.node_id,
+        epoch=lease.epoch,
+        results=results,
+        at=ctx.clock.now(),
+    )
+    _CP_CHECKS_AFTER_RESULTS.reached()
+    ctx.store.record_checks_ran(lease_id=lease.lease_id, epoch=lease.epoch, at=ctx.clock.now())
+    _CP_CHECKS_AFTER_MARKER.reached()
+    _log.info(
+        "checks executed",
+        node=node.node_name,
+        count=len(results),
+        red=sum(1 for r in results if not r.passed),
+        lease_id=lease.lease_id,
+    )
+    return results
+
+
 def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
     """Park on an open ask, else elicit the verdict and buffer the completion.
 
@@ -1653,8 +1744,20 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
     if _spawn_suppressed(ctx, via="advance", chunk_id=lease.chunk_id, lease_id=lease.lease_id):
         return
 
+    # 1c. Run the node's `checks:` at worker exit (issue #114), before the judgement is
+    #     elicited — against the tree the worker just left, the same tree its judgement
+    #     and the gate are rendered on. Durable facts keyed `(lease, epoch)`: a runner
+    #     kill between check-run and judgement resumes at the right point without
+    #     re-running or losing results. Empty for a node with no `checks:` (every packaged
+    #     graph today) — the injection and the gate below are then no-ops. Not a harness
+    #     spawn, so it runs after the local-brake gate above but is not itself gated.
+    check_records = _run_or_read_checks(ctx, lease, envelope, bindings)
+
     # A dead worker whose session cannot answer a parseable <Choice> is a failure.
-    prompt = (envelope.judgement_prompt or "") + _elicitation_tail(envelope)
+    # The check results (issue #114) ride between the authored judgement prose and the
+    # `<Choice>` elicitation tail, so the worker judges against mechanical truth. Empty for
+    # a node with no checks — then this adds nothing (AC #6 injection-only-when-present).
+    prompt = (envelope.judgement_prompt or "") + _checks_block(check_records) + _elicitation_tail(envelope)
     # The adapter works in a directory; the runner resolves the provider-returned
     # workdir from the binding and supplies it. The judgement turn attaches its own
     # `retrospective`, so it carries the re-minted lease identity — the worker is
@@ -1724,6 +1827,13 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
         )
         ctx.store.record_nudge_fired(lease_id=lease.lease_id, epoch=lease.epoch, at=ctx.clock.now())
         _CP_NUDGE_AFTER_FIRED_FACT.reached()
+        # Checks-invariant (issue #114): this nudge runs AFTER the judgement (and, in
+        # Phase 4, after the checks gate), and checks are deliberately NOT re-run on it. It
+        # is safe because a nudge declares work `checks:` already evaluated at worker exit —
+        # it must not author new tree content. The path already re-verifies only git
+        # artifacts (below), never any deeper property, so checks-staleness-across-a-nudge is
+        # bounded exactly as the `produces` backstop already is. Any future change that lets
+        # a nudge author new tree content owns re-running checks here.
         # `judge`, not `resume_with_message`, on purpose: this call's own reply is
         # discarded (the nudge elicits no verdict of its own — the original judgement
         # above already stands), but the resume must still be *synchronous* — the
@@ -1796,7 +1906,10 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
         epoch=lease.epoch,
         runner_id=ctx.config.runner_id,
         from_node_id=lease.node_id,
-        check_results=[],  # in-session check assessment is P7; the model carries them
+        # The runner-executed check facts (issue #114) — carrying `(command, passed)` only;
+        # `output_tail` stays runner-local (the store), off the wire [MF3]. The hub's
+        # `requires_checks` backstop gates on this.
+        check_results=[CheckResult(command=r.command, passed=r.passed) for r in check_records],
         artifacts=artifacts,
         route_token=ctx.store.route_token(lease.chunk_id),  # issue #84a — stamped at enqueue
     )
@@ -3005,4 +3118,27 @@ def _elicitation_tail(envelope: NodeEnvelope) -> str:
     lines = ["", "", "# Select exactly one outcome and reply with <Choice>name</Choice>:"]
     for choice in envelope.node.choices:
         lines.append(f"#   - {choice.name}: {choice.description}")
+    return "\n".join(lines)
+
+
+def _checks_block(results: list[CheckResultRecord]) -> str:
+    """The runner-executed check results injected into the judgement prompt (issue #114).
+
+    Rendered as ``#``-prefixed lines for the same harness-agnostic reason
+    :func:`_elicitation_tail` is (a mock harness ``exec``s the prompt as a script; a
+    bare-prose block would be a ``SyntaxError``). One line per check with its command and
+    ``PASS``/``FAIL``, so the worker judges against mechanical truth rather than its own
+    recollection. A failed check additionally shows its captured output tail (the durable
+    runner-local evidence, [MF3]) indented below — where the worker needs the *why*; a
+    passing check needs none. Empty for a node with no checks — then a no-op that adds
+    nothing to the prompt (the empty-checks case AC #6 rests on).
+    """
+    if not results:
+        return ""
+    lines = ["", "", "# Checks (runner-executed at your exit — judge against these, not your recollection):"]
+    for r in results:
+        lines.append(f"#   [{'PASS' if r.passed else 'FAIL'}] {r.command}")
+        if not r.passed:
+            for tail_line in r.output_tail.strip().splitlines():
+                lines.append(f"#       {tail_line}")
     return "\n".join(lines)

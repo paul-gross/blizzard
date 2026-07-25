@@ -201,6 +201,17 @@ class GitCommitDeclarationRecord:
 
 
 @dataclass(frozen=True)
+class CheckResultRecord:
+    """One check command's runner-executed outcome, read back from the durable store
+    (issue #114). ``output_tail`` is the runner-local evidence the judgement-prompt
+    injection renders; the hub's gate reads only ``command``/``passed``."""
+
+    command: str
+    passed: bool
+    output_tail: str
+
+
+@dataclass(frozen=True)
 class TakeoverRecord:
     """An open operator takeover — the human-in-session fact (issue #52).
 
@@ -573,6 +584,22 @@ class IReadRunnerStore(Protocol):
         attempted again either way."""
         ...
 
+    def checks_ran(self, lease_id: str, epoch: int) -> bool:
+        """``True`` iff this attempt's ``checks:`` have already run and their results are
+        durable (issue #114) — the guard :func:`~blizzard.runner.loop.steps.
+        _advance_exited_worker` consults before running a node's checks. Written by
+        :meth:`~IWriteRunnerStore.record_checks_ran` *after* the result rows, so this
+        reading ``True`` implies the rows exist (``runner:checks-recorded-when-marked``).
+        A crash after the rows but before the marker leaves this ``False`` on recovery,
+        which safely re-runs (latest-wins). Never set for a node with no ``checks:``."""
+        ...
+
+    def check_results_for_lease(self, lease_id: str, epoch: int) -> list[CheckResultRecord]:
+        """This attempt's recorded check results, in run order (issue #114) — read back on
+        the judge/inject/gate path and on crash recovery once :meth:`checks_ran` is set.
+        Empty for an attempt whose checks never ran (or a node with no ``checks:``)."""
+        ...
+
 
 class IWriteRunnerStore(IReadRunnerStore, Protocol):
     """Read-write runner store — held only by the domain (the loop steps)."""
@@ -835,4 +862,30 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         for why that ordering, not the matching-usual resume-then-record one, is what
         makes "at most one nudge per (lease, epoch)" hold across a crash at either
         point."""
+        ...
+
+    def record_check_results(
+        self,
+        *,
+        lease_id: str,
+        chunk_id: str,
+        node_id: str,
+        epoch: int,
+        results: list[CheckResultRecord],
+        at: datetime,
+    ) -> None:
+        """Append this attempt's check result rows (issue #114), one committed transaction
+        so they survive a ``kill -9`` between the run and the marker that follows. Written
+        BEFORE :meth:`record_checks_ran` so a marker never precedes its rows
+        (``runner:checks-recorded-when-marked``). Append-only and re-run-safe: a recovery
+        that finds :meth:`checks_ran` unset re-runs and re-appends — :meth:`check_results_for_lease`
+        reads the latest run's rows, so a re-append is a harmless latest-wins overwrite."""
+        ...
+
+    def record_checks_ran(self, *, lease_id: str, epoch: int, at: datetime) -> None:
+        """Durably mark this attempt's ``checks:`` as run (issue #114) — the guard
+        :meth:`~IReadRunnerStore.checks_ran` reads. Written AFTER :meth:`record_check_results`
+        and only for a node with a non-empty ``checks:``, so the marker implies its result
+        rows exist. Idempotent by its own check-then-insert (``bzh:sql-portable``), mirroring
+        :meth:`record_nudge_fired`."""
         ...

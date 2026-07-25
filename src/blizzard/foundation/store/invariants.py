@@ -132,6 +132,27 @@ def check_runner_store(engine: Engine) -> list[Violation]:
                     Violation("runner:nudge-at-most-once", f"lease {lease_id} epoch {epoch} has {n} nudge facts")
                 )
 
+        # runner:checks-recorded-when-marked — a `checks_ran` marker implies its check
+        # result rows exist (issue #114). The check step records the result rows BEFORE the
+        # marker and writes the marker only for a node with a non-empty `checks:`, so a
+        # marker with no rows means a kill -9 landed impossibly (marker before rows) or a
+        # recovery re-run lost the rows — the crash-correctness property the
+        # `checks.after-results.before-marker` point exists to prove holds across a kill -9.
+        marked = {
+            (row[0], row[1]) for row in conn.execute(select(runner.checks_ran.c.lease_id, runner.checks_ran.c.epoch))
+        }
+        have_rows = {
+            (row[0], row[1])
+            for row in conn.execute(select(runner.check_results.c.lease_id, runner.check_results.c.epoch))
+        }
+        for lease_id, epoch in sorted(marked - have_rows):
+            violations.append(
+                Violation(
+                    "runner:checks-recorded-when-marked",
+                    f"lease {lease_id} epoch {epoch} is marked checks-ran but has no check_results rows",
+                )
+            )
+
         # NOT checked, deliberately: "a pause-parked lease has no closure" (issue #46 plan §7).
         # It reads like the natural companion to the rule above, and it is **false on a legal
         # history**: pause a chunk, then detach it. `_reconcile_leases` abandons the lease —

@@ -253,6 +253,51 @@ def graph_yaml(landed_file: str) -> str:
     return yaml.safe_dump(graph, sort_keys=False)
 
 
+def checks_graph_yaml(landed_file: str) -> str:
+    """:func:`graph_yaml`'s ``build -> deliver`` shape, plus a real ``checks:`` on ``build``
+    (issue #114) — the condition the runner's checks-at-exit step runs before eliciting the
+    judgement, opening the `checks.*` crash windows the dedicated scenario arms.
+
+    The check is ``true`` — a shell builtin that always exits 0, so it is a green check that
+    names no toolchain and runs in any env. Its content is immaterial to the crash points:
+    they fire around the *recording* of the result and its marker, whatever the check
+    returned. Named ``default-delivery`` like :func:`graph_yaml` so ingest resolves to it."""
+    import yaml
+
+    graph = {
+        "name": "default-delivery",
+        "entry": "build",
+        "nodes": {
+            "build": {
+                "executor": "runner",
+                "prompt": build_script(landed_file),
+                "checks": ["true"],
+                "judgement": {
+                    "prompt": _JUDGEMENT_SCRIPT,
+                    "choices": {
+                        "pass": {
+                            "description": "The change is committed and the node's checks are green.",
+                            "to": "deliver",
+                        }
+                    },
+                },
+                "retries": {"max": 1, "exhausted": "escalate"},
+            },
+            "deliver": {
+                "executor": "hub",
+                "run": [{"command": LAND_STEP}],
+                "judgement": {
+                    "choices": {
+                        "success": {"description": "Delivered.", "to": "done"},
+                        "failure": {"description": "Failed to deliver.", "to": "build"},
+                    }
+                },
+            },
+        },
+    }
+    return yaml.safe_dump(graph, sort_keys=False)
+
+
 #: The nudge scenario's unattached `produces:` name (issue #113, Phase 4) — the build
 #: node declares it but the mock worker's judgement script never attaches it (real
 #: harnesses would; scripting a conditional attach-on-nudge reply is not what the

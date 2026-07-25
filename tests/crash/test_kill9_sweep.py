@@ -101,6 +101,7 @@ from tests.crash.support import (
     CrashEnv,
     await_http,
     build_script,
+    checks_graph_yaml,
     free_port,
     git_bare,
     graph_yaml,
@@ -130,7 +131,17 @@ _ALL_POINTS = [p.name for p in discover_crash_points()]
 # the generic sweep drives every remaining boundary; resume points are swept by the
 # graceful-restart scenario (`test_kill9_at_resume_crash_point`) and abandon points by the
 # dedicated detach scenario (`test_kill9_at_abandon_crash_point`), further down.
-_DEDICATED_PREFIXES = ("resume.", "abandon.", "pause.", "hubnode.", "migrate.", "attach.", "nudge.", "declare-commit.")
+_DEDICATED_PREFIXES = (
+    "resume.",
+    "abandon.",
+    "pause.",
+    "hubnode.",
+    "migrate.",
+    "attach.",
+    "nudge.",
+    "declare-commit.",
+    "checks.",
+)
 _RESUME_POINTS = [p for p in _ALL_POINTS if p.startswith("resume.")]
 _ABANDON_POINTS = [p for p in _ALL_POINTS if p.startswith("abandon.")]
 _PAUSE_POINTS = [p for p in _ALL_POINTS if p.startswith("pause.")]
@@ -211,6 +222,14 @@ _DECLARE_COMMIT_POINTS = [p for p in _ALL_POINTS if p.startswith("declare-commit
 # written before the resume runs, not after (see the call site in
 # `runner/loop/steps.py` for why that ordering is what makes the property hold).
 _NUDGE_POINTS = [p for p in _ALL_POINTS if p.startswith("nudge.")]
+# The checks-at-exit windows (#114) — `checks.*` fires inside the RUNNER's own ADVANCE step
+# (the runner runs a node's `checks:` at worker exit, records the result rows, then a
+# marker). A dedicated family swept by `test_kill9_at_checks_crash_point`, which drives
+# `checks_graph_yaml`'s `build -> deliver` graph — identical to the generic one but for one
+# green `checks:` command on `build` — and crashes the runner in one of the two windows:
+# `checks.after-results.before-marker` (rows durable, marker not — recovery re-runs) and
+# `checks.after-marker.before-judge` (marker durable — recovery reads results back).
+_CHECKS_POINTS = [p for p in _ALL_POINTS if p.startswith("checks.")]
 _GENERIC_POINTS = [p for p in _ALL_POINTS if not p.startswith(_DEDICATED_PREFIXES)]
 
 # A representative CI subset — one crash point per boundary family, biased toward the
@@ -293,6 +312,13 @@ _DECLARE_COMMIT_CI_SUBSET = ("declare-commit.after-record.before-response",)
 # asserts the point still exists in the registry.
 _NUDGE_CI_SUBSET = ("nudge.after-fired-fact.before-resume",)
 
+# The checks CI subset (#114): `checks.*` is a new runner-side boundary family whose
+# recovery-critical member — the fired-before-marker window the exactly-once-recording
+# guarantee rests on — is its own CI representative, exactly as `_NUDGE_CI_SUBSET`'s is, so
+# this new window ships with real CI coverage (never zero); the `_select` rename-guard
+# asserts the point still exists in the registry.
+_CHECKS_CI_SUBSET = ("checks.after-results.before-marker",)
+
 
 def _select(points: list[str], ci_subset: tuple[str, ...]) -> list[str]:
     """The points to parametrize: all of ``points``, or its CI subset under the CI profile."""
@@ -315,6 +341,7 @@ _HUBNODE_PENDING_SWEEP = _select(_HUBNODE_PENDING_POINTS, _HUBNODE_PENDING_CI_SU
 _MIGRATE_SWEEP = _select(_MIGRATE_POINTS, _MIGRATE_CI_SUBSET)
 _ATTACH_SWEEP = _select(_ATTACH_POINTS, _ATTACH_CI_SUBSET)
 _NUDGE_SWEEP = _select(_NUDGE_POINTS, _NUDGE_CI_SUBSET)
+_CHECKS_SWEEP = _select(_CHECKS_POINTS, _CHECKS_CI_SUBSET)
 _DECLARE_COMMIT_SWEEP = _select(_DECLARE_COMMIT_POINTS, _DECLARE_COMMIT_CI_SUBSET)
 
 
@@ -347,6 +374,7 @@ def test_ci_subset_covers_every_family(monkeypatch: pytest.MonkeyPatch) -> None:
         | set(_select(_MIGRATE_POINTS, _MIGRATE_CI_SUBSET))
         | set(_select(_ATTACH_POINTS, _ATTACH_CI_SUBSET))
         | set(_select(_NUDGE_POINTS, _NUDGE_CI_SUBSET))
+        | set(_select(_CHECKS_POINTS, _CHECKS_CI_SUBSET))
         | set(_select(_DECLARE_COMMIT_POINTS, _DECLARE_COMMIT_CI_SUBSET))
     )
     uncovered = {family for family in families if not any(p.startswith(f"{family}.") for p in ci_selected)}
@@ -1065,6 +1093,72 @@ def test_kill9_at_nudge_crash_point(crash_env: CrashEnv, tmp_path: Path, point: 
         _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}")
 
         # Exactly-once delivery, as every scenario asserts.
+        tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
+        commits = [line for line in tree.splitlines() if line.strip()]
+        assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"
+    finally:
+        hub.close()
+        terminate(runner_proc)
+        terminate(hub_proc)
+
+
+def _ingest_checks_chunk(hub: httpx.Client, forge: httpx.Client, landed_file: str) -> str:
+    """:func:`_ingest_chunk`'s twin, minting :func:`checks_graph_yaml` — the one green
+    ``checks:`` command on ``build`` is what opens the `checks.*` windows this scenario arms."""
+    minted = hub.post("/api/graphs", json={"definition_yaml": checks_graph_yaml(landed_file)})
+    assert minted.status_code == 201, minted.text
+    issue = forge.post(f"/repos/{REPO}/issues", json={"title": landed_file, "body": "a checks crash-sweep chunk"})
+    assert issue.status_code == 201, issue.text
+    number = issue.json()["number"]
+    ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{number}"]})
+    assert ingested.status_code == 201, ingested.text
+    chunk_id = ingested.json()["chunk_id"]
+    assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+    assert hub.get(f"/api/chunks/{chunk_id}").json()["status"] == "ready"
+    return chunk_id
+
+
+@pytest.mark.parametrize("point", _CHECKS_SWEEP)
+def test_kill9_at_checks_crash_point(crash_env: CrashEnv, tmp_path: Path, point: str) -> None:
+    """A ``kill -9`` at a `checks.*` window recovers with the chunk still landing exactly
+    once and ``runner:checks-recorded-when-marked`` green (issue #114).
+
+    ``checks.*`` fires inside the RUNNER's own ADVANCE step (the runner runs the node's
+    ``checks:`` at worker exit, records the result rows, then the marker), so this arms the
+    runner, never the hub. `checks.after-results.before-marker` leaves the rows durable but
+    the marker unset — recovery re-runs the checks (latest-wins) — and
+    `checks.after-marker.before-judge` leaves the marker durable, so recovery reads the
+    recorded results back rather than re-running. Either way the chunk lands exactly once
+    and the invariant checker is green.
+    """
+    landed_file = f"CHECKS-LANDED-{point.replace('.', '_')}.md"
+    hub_dir, runner_dir = tmp_path / "hub", tmp_path / "runner"
+    hub_port, runner_port = free_port(), free_port()
+
+    hub_proc = start_hub(hub_dir, forge_port=crash_env.forge_port, port=hub_port, crash_point=None)
+    runner_proc = None
+    hub = httpx.Client(base_url=f"http://127.0.0.1:{hub_port}", timeout=30.0)
+    try:
+        await_http(hub, "/api/health", proc=hub_proc)
+        chunk_id = _ingest_checks_chunk(hub, crash_env.forge, landed_file)
+
+        write_runner_config(
+            runner_dir, workspace=crash_env.workspace, bin_dir=crash_env.bin_dir, hub_port=hub_port, port=runner_port
+        )
+        runner_proc = start_runner(runner_dir, crash_point=point)
+
+        code = wait_death(runner_proc)
+        assert code == -9, f"armed runner at {point} exited {code}, not SIGKILL (-9); point never reached?"
+
+        _assert_invariants(runner_dir, hub_dir, when=f"immediately after kill at {point}")
+
+        runner_proc = start_runner(runner_dir, crash_point=None)
+
+        status = wait_status(hub, chunk_id, {"done", "stopped", "needs_human"})
+        assert status == "done", f"chunk did not converge to done after kill at {point} (last {status!r})"
+
+        _assert_invariants(runner_dir, hub_dir, when=f"after convergence past {point}")
+
         tree = git_bare(crash_env.origins / "toy-api.git", "log", "--oneline", "--", landed_file)
         commits = [line for line in tree.splitlines() if line.strip()]
         assert len(commits) == 1, f"{landed_file} landed {len(commits)} times on bare main:\n{tree}"

@@ -21,6 +21,7 @@ from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.store.repository import (
     AskRecord,
     BufferedFact,
+    CheckResultRecord,
     ClosedLeaseRecord,
     EnvBindingRecord,
     EscalationRecord,
@@ -38,6 +39,8 @@ from blizzard.runner.store.schema import (
     asks,
     attachments,
     binding_releases,
+    check_results,
+    checks_ran,
     daemon_liveness,
     env_bindings,
     git_commit_declarations,
@@ -480,6 +483,28 @@ class SqlAlchemyRunnerStore:
         )
         return bool(rows)
 
+    def checks_ran(self, lease_id: str, epoch: int) -> bool:
+        rows = self._all(
+            select(checks_ran.c.id).where(and_(checks_ran.c.lease_id == lease_id, checks_ran.c.epoch == epoch))
+        )
+        return bool(rows)
+
+    def check_results_for_lease(self, lease_id: str, epoch: int) -> list[CheckResultRecord]:
+        # Ordered by insert id so the results read back in the order the checks ran — the
+        # order the judgement-prompt injection renders them. A recovery re-run appends a
+        # fresh set (higher ids), so the newest run's rows are the ones ordering surfaces
+        # last; the caller only ever reads a single attempt's set (guarded by `checks_ran`),
+        # so in practice this is exactly the one run's rows.
+        rows = self._all(
+            select(check_results)
+            .where(and_(check_results.c.lease_id == lease_id, check_results.c.epoch == epoch))
+            .order_by(check_results.c.id)
+        )
+        return [
+            CheckResultRecord(command=str(r.command), passed=bool(r.passed), output_tail=str(r.output_tail))
+            for r in rows
+        ]
+
     def resume_intent_lease_ids(self) -> set[str]:
         stmt = select(resume_intents.c.lease_id).where(_intent_is_open()).distinct()
         return {str(r.lease_id) for r in self._all(stmt)}
@@ -856,6 +881,55 @@ class SqlAlchemyRunnerStore:
                 return
             conn.execute(nudge_facts.insert().values(lease_id=lease_id, epoch=epoch, nudged_at=at))
         _log.info("nudge fired", lease_id=lease_id, epoch=epoch)
+
+    def record_check_results(
+        self,
+        *,
+        lease_id: str,
+        chunk_id: str,
+        node_id: str,
+        epoch: int,
+        results: list[CheckResultRecord],
+        at: datetime,
+    ) -> None:
+        # Delete-then-insert in one transaction: a crash-recovery re-run (checks_ran unset)
+        # calls this again for the same `(lease, epoch)`, and replacing the prior set makes
+        # it truly latest-wins rather than accumulating duplicate rows — so
+        # `check_results_for_lease` always reads exactly one run's rows. Written BEFORE
+        # `record_checks_ran` so the marker never precedes its rows
+        # (`runner:checks-recorded-when-marked`).
+        with self._begin() as conn:
+            conn.execute(
+                check_results.delete().where(and_(check_results.c.lease_id == lease_id, check_results.c.epoch == epoch))
+            )
+            for result in results:
+                conn.execute(
+                    check_results.insert().values(
+                        lease_id=lease_id,
+                        chunk_id=chunk_id,
+                        node_id=node_id,
+                        epoch=epoch,
+                        command=result.command,
+                        passed=result.passed,
+                        output_tail=result.output_tail,
+                        ran_at=at,
+                    )
+                )
+        _log.info("check results recorded", lease_id=lease_id, epoch=epoch, count=len(results))
+
+    def record_checks_ran(self, *, lease_id: str, epoch: int, at: datetime) -> None:
+        # Check-then-insert in one transaction, mirroring `record_nudge_fired` — idempotent
+        # by construction, not a DB constraint (`bzh:sql-portable`). Written AFTER
+        # `record_check_results` and only for a node with a non-empty `checks:`, so the
+        # marker implies its result rows exist.
+        with self._begin() as conn:
+            existing = conn.execute(
+                select(checks_ran.c.id).where(and_(checks_ran.c.lease_id == lease_id, checks_ran.c.epoch == epoch))
+            ).one_or_none()
+            if existing is not None:
+                return
+            conn.execute(checks_ran.insert().values(lease_id=lease_id, epoch=epoch, ran_at=at))
+        _log.info("checks marked ran", lease_id=lease_id, epoch=epoch)
 
     def record_resume_intent(self, *, lease_id: str, marked_at: datetime) -> None:
         with self._begin() as conn:

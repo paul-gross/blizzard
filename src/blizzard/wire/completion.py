@@ -129,6 +129,33 @@ class CheckResult(BaseModel):
     passed: bool
 
 
+class _HasPassed(Protocol):
+    """The one field :func:`checks_gate_violated` reads — so it is generic over both the
+    wire :class:`CheckResult` (the hub's backstop input) and the runner's own
+    ``CheckResultRecord`` (the runner-local gate input), without either importing the
+    other's type."""
+
+    @property
+    def passed(self) -> bool: ...
+
+
+def checks_gate_violated(requires_checks: bool, check_results: Sequence[_HasPassed]) -> bool:
+    """``True`` iff a ``requires_checks`` choice is being taken while any check is red
+    (issue #114) — the one shared home both the runner-local gate
+    (:func:`~blizzard.runner.loop.steps._advance_exited_worker`) and the hub's completion
+    backstop (:mod:`blizzard.hub.domain.apply`) call, so the two sides cannot drift apart —
+    the exact anti-drift shape :func:`produces_coverage` has (and its
+    ``test_produces_coverage_agreement.py`` guards), here guarded by
+    ``test_checks_gate_agreement.py``.
+
+    Reads ``passed`` only: an ungated choice (``requires_checks=False``) is never violated,
+    and a gated choice is violated iff at least one recorded check is red. A node with no
+    checks records none, so ``check_results`` is empty and the gate is vacuously satisfied —
+    the validator already forbids ``requires_checks`` on a node with no ``checks:``, so a
+    gated-but-checkless choice cannot reach here."""
+    return requires_checks and any(not r.passed for r in check_results)
+
+
 class CompletionSubmission(BaseModel):
     """A node-step's completion — judgement choice + checks + artifacts + epoch."""
 

@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from blizzard.foundation.clock import IClock
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.harness.adapter import IHarnessAdapter
+from blizzard.runner.loop.checks import ICheckRunner
 from blizzard.runner.loop.hub import IHubClient
 from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.loop.worktree import IWorktreeGit
@@ -113,3 +114,7 @@ class LoopContext:
     #: when not wired (every test that does not exercise the fallback), so the loop's
     #: other collaborators stay untouched by this addition.
     transcripts: IReadTranscriptRepository | None = None
+    #: The check-runner seam (issue #114) — runs a node's ``checks:`` at worker exit.
+    #: ``None`` when not wired (loop tests that never exercise checks), so a node with no
+    #: ``checks:`` still ticks with the seam absent; a node that declares ``checks:`` needs it.
+    check_runner: ICheckRunner | None = None

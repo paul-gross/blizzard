@@ -71,7 +71,6 @@ from __future__ import annotations
 
 import contextlib
 import json
-import os
 import subprocess
 from collections.abc import Iterator, Sequence
 from typing import IO
@@ -84,6 +83,7 @@ from blizzard.runner.harness.adapter import (
     WorkerHandle,
     WorkerPreamble,
 )
+from blizzard.runner.harness.env_allowlist import allowlisted_env
 from blizzard.runner.harness.spawn_cwd import resolve_spawn_cwd
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.wire.envelope import NodeEnvelope
@@ -93,30 +93,11 @@ _log = get_logger("blizzard.runner.harness")
 _CHOICE_OPEN = "<Choice>"
 _CHOICE_CLOSE = "</Choice>"
 
-# The worker spawn-environment allowlist's base (`bzh:worker-env-allowlist`): what a
-# child process needs to locate/run its interpreter and behave predictably in a
-# headless shell, determined empirically against the real `claude` harness on the
-# dogfooding fleet. Deliberately conservative — an operator widens it via
-# `[worker] env_passthrough` (`RunnerConfig.worker_env_passthrough`) rather than this
-# list growing ad hoc.
-_BASE_ALLOWLIST_VARS: tuple[str, ...] = ("PATH", "HOME", "USER", "LANG", "TERM", "TMPDIR")
-# `LC_*` locale vars are a family, not a fixed set of names, so they are matched by
-# prefix rather than enumerated in `_BASE_ALLOWLIST_VARS`.
-_LOCALE_PREFIX = "LC_"
-
-
-def _allowlisted_env(passthrough: Sequence[str]) -> dict[str, str]:
-    """The child env built from the base allowlist + `LC_*` + the operator's passthrough.
-
-    Never a full `os.environ` copy (`bzh:worker-env-allowlist`): everything not named
-    here — foremost a daemon credential like `BZ_HUB_TOKEN` — is absent from a
-    worker/judge/resume child by construction. The one function all three subprocess
-    env constructions build from.
-    """
-    names = set(_BASE_ALLOWLIST_VARS) | set(passthrough)
-    env = {name: os.environ[name] for name in names if name in os.environ}
-    env.update((k, v) for k, v in os.environ.items() if k.startswith(_LOCALE_PREFIX))
-    return env
+# The worker spawn-environment allowlist (`bzh:worker-env-allowlist`) now lives in one
+# shared owner — `runner/harness/env_allowlist.py` — because the check-runner adapter
+# (issue #114) builds its child env from the same allowlist. Imported here rather than
+# re-declared so the two seams cannot drift (`bzh:one-owner`).
+_allowlisted_env = allowlisted_env
 
 
 # The model every fleet worker runs on. Pinned so a spawn never inherits the
