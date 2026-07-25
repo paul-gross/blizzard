@@ -25,7 +25,7 @@ import { injectRunnerLogoutMutation, injectRunnerSessionQuery } from './auth.que
     @if (username(); as user) {
       <div class="identity" data-testid="local-identity">
         <span class="who">
-          <span class="lbl">signed in</span>
+          <span class="who-lbl">signed in</span>
           <span class="user" data-testid="identity-username">{{ user }}</span>
         </span>
         <fleet-kit-button class="logout" testid="identity-logout" (click)="logout()">Log out</fleet-kit-button>
@@ -50,7 +50,7 @@ import { injectRunnerLogoutMutation, injectRunnerSessionQuery } from './auth.que
       flex-direction: column;
       justify-content: center;
     }
-    .lbl {
+    .who-lbl {
       font-size: var(--fs-label);
       letter-spacing: 0.18em;
       text-transform: uppercase;
