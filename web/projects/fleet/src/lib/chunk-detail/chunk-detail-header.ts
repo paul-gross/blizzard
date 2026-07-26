@@ -43,7 +43,7 @@ const NOT_PAUSABLE = new Set<ChunkStatus>(['done', 'stopped', 'delivering']);
            the work item it serves in cyan, and its state — with the node it currently
            sits at pushed to the far right, the same shape the board cards use. -->
       <div class="d-title">
-        <span class="id" data-testid="detail-id">{{ detail().chunk_id }}</span>
+        <span class="id" data-testid="detail-id" [attr.title]="detail().chunk_id">{{ detail().chunk_id }}</span>
         <span class="d-sub">
           <!-- Each pointer links out to its PM source here in the detail — the board
                cards stay plain click targets, so the anchor lives on this view only.
@@ -150,6 +150,9 @@ const NOT_PAUSABLE = new Set<ChunkStatus>(['done', 'stopped', 'delivering']);
       color: var(--amber);
       font-size: var(--fs-lg);
       letter-spacing: 0.04em;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .d-sub {
       display: flex;

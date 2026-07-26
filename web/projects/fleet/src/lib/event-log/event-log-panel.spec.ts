@@ -17,16 +17,17 @@ describe('EventLogPanel', () => {
     }).compileComponents();
   });
 
-  it('shows an empty state and a zero count before any event', () => {
+  it('shows an empty state before any event', () => {
     const fixture = TestBed.createComponent(EventLogPanel);
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="event-log-empty"]')).toBeTruthy();
-    expect(el.querySelector('[data-testid="event-log-count"]')?.textContent).toContain('0 ev');
+    // The panel header carries no running event count (issue #139).
+    expect(el.querySelector('[data-testid="event-log-count"]')).toBeNull();
   });
 
-  it('renders newest-first rows with human-readable summaries and a matching count', () => {
+  it('renders newest-first rows with human-readable summaries', () => {
     log.set([
       { seq: 1, type: 'chunk-changed', data: { chunk_id: 'ch_alpha', status: 'running' }, at: 0 },
       { seq: 2, type: 'question-asked', data: { chunk_id: 'ch_beta', question_id: 'q1' }, at: 0 },
@@ -44,6 +45,5 @@ describe('EventLogPanel', () => {
     // The chunk id renders through compactRef (issue #81), not the raw id.
     expect(messages[0]).toContain('C-beta');
     expect(messages[1]).toContain('running');
-    expect(el.querySelector('[data-testid="event-log-count"]')?.textContent).toContain('2 ev');
   });
 });

@@ -71,6 +71,9 @@ describe('ChunkDetailHeader', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="detail-id"]')?.textContent?.trim()).toBe(ISSUE_DETAIL.chunk_id);
+    // At narrow widths the id truncates with an ellipsis (styles), so the full id
+    // stays recoverable through the title attribute rather than the rendered text (issue #138).
+    expect(el.querySelector('[data-testid="detail-id"]')?.getAttribute('title')).toBe(ISSUE_DETAIL.chunk_id);
     const pointer = el.querySelector<HTMLAnchorElement>('a[data-testid="detail-pointer"]');
     expect(pointer?.textContent?.trim()).toBe('widget#42');
     expect(pointer?.getAttribute('href')).toBe('https://github.com/acme/widget/issues/42');

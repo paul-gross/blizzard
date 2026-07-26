@@ -62,8 +62,6 @@ function summarize(event: LoggedEvent): string {
       aria-label="Event log"
       data-testid="event-log-panel"
       label="Event log"
-      [count]="rows().length + ' ev'"
-      countTestid="event-log-count"
     >
       @if (rows().length === 0) {
         <p class="none" data-testid="event-log-empty">No events yet.</p>
@@ -104,8 +102,8 @@ function summarize(event: LoggedEvent): string {
     }
     .ev {
       display: grid;
-      grid-template-columns: 58px 1fr;
-      gap: 6px;
+      grid-template-columns: 64px 1fr;
+      gap: 14px;
       padding: 2px 8px;
       border-bottom: 1px solid var(--line);
       font-size: var(--fs-sm);
