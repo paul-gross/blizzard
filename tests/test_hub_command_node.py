@@ -28,6 +28,7 @@ from blizzard.hub.delivery.hub_node import (
     DEFAULT_POLL_INTERVAL,
     DEFAULT_POLL_TIMEOUT,
     HubEnvInputs,
+    UnconvergedDeliveryError,
     _printed_choice,
     build_hub_env,
     poll_interval_for,
@@ -1214,3 +1215,75 @@ def test_poll_timeout_escalates_once_the_bounce_cap_is_crossed(tmp_path: Path) -
     detail2 = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail2["status"] == "needs_human"
     assert len(detail2["bounces"]) == 2
+
+
+def _commit_artifact(*, repo: str, data: str, epoch: int, node_name: str, artifact_id: str) -> ArtifactRow:
+    return ArtifactRow(
+        kind=ArtifactKind.GIT_COMMIT,
+        name=repo,
+        data=data,
+        repo=repo,
+        forge=f"https://github.com/acme/{repo}",
+        artifact_id=artifact_id,
+        chunk_id="ch_x",
+        node_id=f"nd_{node_name}",
+        node_name=node_name,
+        epoch=epoch,
+    )
+
+
+def _env_for(artifacts: list[ArtifactRow]) -> dict[str, str]:
+    _, merge_node = _reified_merge_node()
+    chunk = Chunk(chunk_id="ch_x", graph_id="gr_x", pm_pointers=[], minted_at=datetime(2026, 7, 17, tzinfo=UTC))
+    return build_hub_env(
+        HubEnvInputs(
+            chunk=chunk,
+            node=merge_node,
+            workdir="/tmp/ch_x",
+            epoch=1,
+            artifacts=artifacts,
+            base_branch="main",
+            marker_callback_url="http://hub/api/chunks/ch_x/hub-markers",
+        )
+    )
+
+
+def test_a_later_epoch_supersedes_an_earlier_pointer_for_the_same_repo() -> None:
+    """The rebase case the per-repo key exists for: pre-push rewrites build's branch, so
+    the later declaration replaces it rather than delivery being handed both."""
+    env = _env_for(
+        [
+            _commit_artifact(repo="widget", data="feat/x:aaa", epoch=1, node_name="build", artifact_id="a1"),
+            _commit_artifact(repo="widget", data="feat/x:bbb", epoch=3, node_name="pre-push", artifact_id="a2"),
+        ]
+    )
+
+    assert json.loads(env["BZ_HUB_GIT_COMMITS"]) == [{"repo": "widget", "branch": "feat/x", "commit": "bbb"}]
+
+
+def test_an_identical_re_declaration_at_one_epoch_is_a_correction_not_a_conflict() -> None:
+    env = _env_for(
+        [
+            _commit_artifact(repo="widget", data="feat/x:aaa", epoch=2, node_name="build", artifact_id="a1"),
+            _commit_artifact(repo="widget", data="feat/x:aaa", epoch=2, node_name="build", artifact_id="a2"),
+        ]
+    )
+
+    assert json.loads(env["BZ_HUB_GIT_COMMITS"]) == [{"repo": "widget", "branch": "feat/x", "commit": "aaa"}]
+
+
+def test_two_branches_for_one_repo_at_one_epoch_refuse_to_deliver() -> None:
+    """A chunk working one repo across several environments declares a branch per env at
+    the same epoch. Keeping whichever came last would deliver a fraction of the work and
+    call it a landing — so an unconverged set is refused, not tie-broken. Convergence
+    belongs to pre-push, which rolls the envs up and re-declares at a later epoch."""
+    with pytest.raises(UnconvergedDeliveryError) as exc:
+        _env_for(
+            [
+                _commit_artifact(repo="widget", data="feat/from-e1:aaa", epoch=2, node_name="build", artifact_id="a1"),
+                _commit_artifact(repo="widget", data="feat/from-e2:bbb", epoch=2, node_name="build", artifact_id="a2"),
+            ]
+        )
+
+    assert "widget" in str(exc.value)
+    assert "rolled up" in str(exc.value)

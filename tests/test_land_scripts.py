@@ -17,7 +17,7 @@ from typing import Any
 
 import pytest
 
-from blizzard.hub.graphs.scripts import land_default, land_pr_ci
+from blizzard.hub.graphs.scripts import land_default, land_ff, land_pr_ci
 
 pytestmark = pytest.mark.unit
 
@@ -215,3 +215,59 @@ def test_clean_pr_merges_the_current_head_sha(
     assert _last_line(capsys) == "landed"
     merge = [body for m, url, body in calls if m == "PUT" and url.endswith("/merge") and body is not None]
     assert merge and merge[0]["sha"] == "headsha", "a self-heal must merge the CURRENT head, not a stale commit"
+
+
+@pytest.mark.parametrize("script", [land_default, land_pr_ci, land_ff], ids=["default", "pr-ci", "ff"])
+def test_an_empty_commit_set_fails_the_node_instead_of_reporting_landed(
+    script, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The regression that let a fully-built feature reach `done` undelivered.
+
+    Every land policy filtered `commits` through the `merged/<repo>` markers and printed
+    `landed` when nothing remained — which is right when the markers are all present, and
+    catastrophically wrong when there were no commits to begin with. The two cases are
+    indistinguishable after the filter, so the empty *input* is caught before it.
+    """
+    monkeypatch.setenv("BZ_FORGE_URL", "http://forge")
+    monkeypatch.setenv("BZ_HUB_BASE_BRANCH", "main")
+    monkeypatch.setenv("BZ_HUB_GIT_COMMITS", json.dumps([]))
+    monkeypatch.delenv("BZ_HUB_ARTIFACT_NAMES", raising=False)
+    monkeypatch.delenv("BZ_FORGE_TOKEN", raising=False)
+    monkeypatch.delenv("BZ_HUB_MARKER_CALLBACK_URL", raising=False)
+    monkeypatch.setattr(
+        script,
+        "forge_request",
+        lambda *a, **k: pytest.fail("an empty delivery must never reach the forge"),
+        raising=False,
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        script.main()
+
+    assert exc.value.code == 1  # non-zero: the hub-node protocol's `failure` signal
+    captured = capsys.readouterr()
+    assert "landed" not in captured.out
+    assert "no git commits to deliver" in captured.err
+
+
+@pytest.mark.parametrize("script", [land_default, land_pr_ci, land_ff], ids=["default", "pr-ci", "ff"])
+def test_a_fully_marked_commit_set_still_reports_landed(
+    script, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The idempotent re-run the guard must not break: commits exist and every one is
+    already marked, so there is genuinely nothing left to do and `landed` is correct."""
+    monkeypatch.setenv("BZ_FORGE_URL", "http://forge")
+    monkeypatch.setenv("BZ_HUB_BASE_BRANCH", "main")
+    monkeypatch.setenv("BZ_HUB_GIT_COMMITS", json.dumps(_COMMITS))
+    monkeypatch.setenv("BZ_HUB_ARTIFACT_NAMES", json.dumps([f"merged/{_REPO}"]))
+    monkeypatch.delenv("BZ_FORGE_TOKEN", raising=False)
+    monkeypatch.delenv("BZ_HUB_MARKER_CALLBACK_URL", raising=False)
+    monkeypatch.setattr(
+        script,
+        "forge_request",
+        lambda *a, **k: pytest.fail("an already-marked delivery must not re-contact the forge"),
+        raising=False,
+    )
+
+    assert script.main() == 0
+    assert capsys.readouterr().out.strip().splitlines()[-1] == "landed"

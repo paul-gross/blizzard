@@ -5,7 +5,10 @@ This alternative delivery policy backs the `advanced-development-workflow` graph
 policy lives in YAML. It honors the same hub-command-node authoring contract as the default land script
 (``blizzard-harness:/standards/hub-nodes.md``): pure stdlib against the forge, env
 injected by the executor, the authored choice (``landed``/``conflict``) or the reserved
-``pending`` printed as the LAST stdout line, diagnostics to stderr, exit 0 always.
+``pending`` printed as the LAST stdout line, diagnostics to stderr, exit 0 for every
+outcome the policy can express — an EMPTY commit set being the one exception, a defect
+upstream of delivery that exits non-zero so the engine routes ``failure``
+(:func:`~blizzard.hub.graphs.scripts.land_default.refuse_empty_delivery`).
 
 Unlike the default graph's strict one-shot (:mod:`blizzard.hub.graphs.scripts.land_default`,
 which bounces to ``build`` on *any* non-``clean`` state), this opens a PR per repo and
@@ -46,7 +49,12 @@ import os
 import sys
 from typing import Any
 
-from blizzard.hub.graphs.scripts.land_default import forge_request, pr_title, qualify_repo
+from blizzard.hub.graphs.scripts.land_default import (
+    forge_request,
+    pr_title,
+    qualify_repo,
+    refuse_empty_delivery,
+)
 
 _ENV_FORGE_URL = "BZ_FORGE_URL"
 _ENV_FORGE_TOKEN = "BZ_FORGE_TOKEN"
@@ -116,6 +124,7 @@ def main() -> int:
             "POST", callback_url, token=None, body={"name": f"{_MARKER_PREFIX}{repo}", "content": commit_hash}
         )
 
+    refuse_empty_delivery(commits)
     pending = [c for c in commits if f"{_MARKER_PREFIX}{c['repo']}" not in already]
     if not pending:
         print(_LANDED)

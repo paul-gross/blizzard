@@ -169,6 +169,17 @@ ENV_FORGE_OWNER = "BZ_FORGE_OWNER"  # qualifies a bare (owner-less) repo, mirror
 ENV_FEATURE_TITLE = "BZ_HUB_FEATURE_TITLE"
 
 
+class UnconvergedDeliveryError(RuntimeError):
+    """Delivery was handed several distinct branches for one repo.
+
+    Raised rather than tie-broken: multi-repo delivery is safe because N repos have N
+    independent bases, but N branches within ONE repo share a base, so merging the first
+    invalidates the mergeability every other was checked against — the check-all-then-
+    merge-all atomicity the land scripts rely on silently degrades to checked-then-hoped.
+    Converging belongs upstream, at `pre-push`, where an agent with the change's context
+    can resolve a conflict; a hub script can only bounce."""
+
+
 def _latest_commit_per_repo(rows: list[ArtifactRow]) -> list[ArtifactRow]:
     """Every ``git_commit`` artifact resolved to one row per **repo**, newest epoch wins.
 
@@ -189,15 +200,31 @@ def _latest_commit_per_repo(rows: list[ArtifactRow]) -> list[ArtifactRow]:
     node's declaration simply supersedes the stale one, which is what a rebase means.
 
     Ties — one node-step declaring the same repo twice — resolve to the later row: a
-    re-declaration within a step is a correction, not a second repo.
+    re-declaration within a step is a correction, not a second repo. That reading holds
+    only while a tie really is one unit described twice. It stops holding when a chunk
+    works one repo across several environments: those are two *different* branches
+    declared at the same epoch, and silently keeping whichever came last would deliver
+    half the work and report success. Such a tie raises
+    :class:`UnconvergedDeliveryError` — convergence is `pre-push`'s job (it rebases every
+    environment's work per repo into a single branch and re-declares at a later epoch,
+    which then supersedes cleanly), so reaching delivery unconverged is a defect, not a
+    coin to flip.
     """
     latest: dict[str | None, ArtifactRow] = {}
     for row in rows:
         if row.kind is not ArtifactKind.GIT_COMMIT:
             continue
         current = latest.get(row.repo)
-        if current is None or row.epoch >= current.epoch:
+        if current is None or row.epoch > current.epoch:
             latest[row.repo] = row
+        elif row.epoch == current.epoch and row.data != current.data:
+            raise UnconvergedDeliveryError(
+                f"repo {row.repo!r} has two different branches declared at epoch {row.epoch} "
+                f"({current.data!r} and {row.data!r}) — the environments' work was never "
+                f"rolled up into one branch per repo, so there is no single thing to deliver"
+            )
+        elif row.epoch == current.epoch:
+            latest[row.repo] = row  # identical re-declaration: a correction, not a second unit
     return list(latest.values())
 
 
@@ -368,21 +395,39 @@ class HubNodeExecutor:
             return self._route_pending_timeout(chunk, graph, node, epoch=epoch)
         workdir = self._workdir.ensure(chunk.chunk_id)
         artifacts = self._chunks.load_artifacts(chunk.chunk_id)
-        env = build_hub_env(
-            HubEnvInputs(
-                chunk=chunk,
-                node=node,
-                workdir=workdir,
-                epoch=epoch,
-                artifacts=artifacts,
-                base_branch=self._base_branch,
-                marker_callback_url=self._marker_callback_url(chunk.chunk_id, node.node_id, epoch),
-                forge_url=self._forge_url,
-                forge_token=self._forge_token,
-                forge_owner=self._forge_owner,
-                feature_title=self._resolve_feature_title(chunk),
+        try:
+            env = build_hub_env(
+                HubEnvInputs(
+                    chunk=chunk,
+                    node=node,
+                    workdir=workdir,
+                    epoch=epoch,
+                    artifacts=artifacts,
+                    base_branch=self._base_branch,
+                    marker_callback_url=self._marker_callback_url(chunk.chunk_id, node.node_id, epoch),
+                    forge_url=self._forge_url,
+                    forge_token=self._forge_token,
+                    forge_owner=self._forge_owner,
+                    feature_title=self._resolve_feature_title(chunk),
+                )
             )
-        )
+        except UnconvergedDeliveryError as exc:
+            # A defect in what reached this node, not a fault in running it — route the
+            # node's `failure` edge exactly as a non-zero step exit would, rather than
+            # letting it escape and crash-loop the tick. The detail lands in an artifact
+            # so the reason survives where an operator reads it.
+            self._chunks.record_hub_artifact(
+                chunk.chunk_id,
+                node_id=node.node_id,
+                node_name=node.name,
+                epoch=epoch,
+                name=_log_name(1, "unconverged-delivery", None),
+                content=f"[unconverged delivery]\n{exc}\n",
+                at=self._clock.now(),
+            )
+            return self._route(
+                chunk, graph, node, epoch=epoch, choice=HUB_DEFAULT_FAILURE_CHOICE, commits=[]
+            )
 
         choice_names = frozenset(c.name for c in node.choices)
         chosen: str | None = None

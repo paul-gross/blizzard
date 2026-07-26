@@ -25,9 +25,12 @@ kill lands between that push and its marker, treats the PR's own already-merged 
 as success rather than a conflict (re-pushing a landed merge is a no-op — the
 at-least-once-per-step crash contract, ``bzh:hub-node-step-idempotence``).
 
-Exit code is always 0: the node's authored choice — ``landed`` or ``conflict`` — is
-the LAST line printed to stdout (``bzh:hub-node-outcome-protocol``); every diagnostic
-goes to stderr so it never contaminates that line.
+The node's authored choice — ``landed`` or ``conflict`` — is the LAST line printed to
+stdout (``bzh:hub-node-outcome-protocol``); every diagnostic goes to stderr so it never
+contaminates that line. Exit code is 0 for every outcome the policy can express, with
+one exception: being handed an EMPTY commit set is not an outcome but a defect upstream
+of delivery, and exits non-zero so the engine routes ``failure``
+(:func:`refuse_empty_delivery`).
 """
 
 from __future__ import annotations
@@ -86,6 +89,34 @@ def qualify_repo(repo: str, owner: str) -> str:
     if "/" in repo or not owner:
         return repo
     return f"{owner}/{repo}"
+
+
+def refuse_empty_delivery(commits: list[dict[str, str]]) -> None:
+    """Exit non-zero when a delivery node is handed nothing to deliver.
+
+    "Nothing to deliver" and "everything already delivered" are not the same outcome,
+    and every land policy used to answer both with ``landed``: the marker filter below
+    yields an empty pending list either way, so a chunk whose ``git_commit`` artifacts
+    never materialized printed ``landed`` without contacting the forge at all. That is
+    how a fully-built feature reached `done` with no PR, no merge, and a delivery log
+    three lines long.
+
+    An empty ``commits`` (as opposed to an empty *pending*, which genuinely means the
+    markers are all present) is a defect upstream of delivery — no node declared a git
+    pointer — so this fails the node rather than reporting success. A non-zero exit is
+    the hub-node protocol's failure signal (``bzh:hub-node-outcome-protocol``), and the
+    stderr rides into the step's log artifact where an operator can read it.
+    """
+    if commits:
+        return
+    print(
+        "no git commits to deliver: this chunk submitted no git_commit artifact, so there "
+        "is nothing to open a PR for. A delivery node reached with an empty commit set is "
+        "a failure, not a landing — check that the nodes before this one declared their "
+        "commits (`blizzard runner artifact commit`) and that each verified.",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
 
 
 def forge_request(method: str, url: str, *, token: str | None, body: dict[str, Any] | None) -> tuple[int, Any]:
@@ -148,6 +179,7 @@ def main() -> int:
             "POST", callback_url, token=None, body={"name": f"{_MARKER_PREFIX}{repo}", "content": commit_hash}
         )
 
+    refuse_empty_delivery(commits)
     pending = [c for c in commits if f"{_MARKER_PREFIX}{c['repo']}" not in already]
     if not pending:
         print("landed")

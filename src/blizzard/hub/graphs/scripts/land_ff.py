@@ -46,9 +46,12 @@ Same env contract as :mod:`~blizzard.hub.graphs.scripts.land_default`
 ``BZ_HUB_GIT_COMMITS``/``BZ_HUB_ARTIFACT_NAMES``/``BZ_HUB_MARKER_CALLBACK_URL``) — no
 ``BZ_HUB_FEATURE_TITLE``, since no PR or merge commit is ever authored here to title.
 
-Exit code is always 0: the node's authored choice — ``landed`` or ``conflict`` — is the
-LAST line printed to stdout (``bzh:hub-node-outcome-protocol``); every diagnostic goes to
-stderr so it never contaminates that line.
+The node's authored choice — ``landed`` or ``conflict`` — is the LAST line printed to
+stdout (``bzh:hub-node-outcome-protocol``); every diagnostic goes to stderr so it never
+contaminates that line. Exit code is 0 for every outcome the policy can express, except
+an EMPTY commit set, which is a defect upstream of delivery rather than an outcome and
+exits non-zero so the engine routes ``failure``
+(:func:`~blizzard.hub.graphs.scripts.land_default.refuse_empty_delivery`).
 """
 
 from __future__ import annotations
@@ -59,7 +62,7 @@ import sys
 import time
 from typing import Any
 
-from blizzard.hub.graphs.scripts.land_default import forge_request, qualify_repo
+from blizzard.hub.graphs.scripts.land_default import forge_request, qualify_repo, refuse_empty_delivery
 
 _ENV_FORGE_URL = "BZ_FORGE_URL"
 _ENV_FORGE_TOKEN = "BZ_FORGE_TOKEN"
@@ -132,6 +135,7 @@ def main() -> int:
             "POST", callback_url, token=None, body={"name": f"{_MARKER_PREFIX}{repo}", "content": commit_hash}
         )
 
+    refuse_empty_delivery(commits)
     pending = [c for c in commits if f"{_MARKER_PREFIX}{c['repo']}" not in already]
     if not pending:
         print("landed")
