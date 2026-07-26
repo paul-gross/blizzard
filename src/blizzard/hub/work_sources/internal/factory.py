@@ -1,10 +1,10 @@
-"""Builds the hub's PM source registry from configuration.
+"""Builds the hub's work source registry from configuration.
 
-One credentialed ``httpx.Client`` per configured ``[[pm_source]]`` — never a shared
+One credentialed ``httpx.Client`` per configured ``[[work_source]]`` — never a shared
 client, never a shared token: the delivery forge keeps its own client
-(``hub/app.py``); this is the PM seam's own composition. A ``provider -> builder`` map
+(``hub/app.py``); this is the work-source seam's own composition. A ``provider -> builder`` map
 selects the adapter; confined to ``internal/`` (``bzh:dependency-inversion``), so
-``httpx`` construction for PM stays out of the composition root.
+``httpx`` construction for a work source stays out of the composition root.
 """
 
 from __future__ import annotations
@@ -14,21 +14,21 @@ from collections.abc import Callable, Sequence
 
 import httpx
 
-from blizzard.hub.config import ConfigError, PmSourceConfig
-from blizzard.hub.pm.internal.github_pm_source import GitHubPmSource
-from blizzard.hub.pm.registry import PmSourceRegistry
-from blizzard.hub.pm.source import IPmSource
+from blizzard.hub.config import ConfigError, WorkSourceConfig
+from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSource
+from blizzard.hub.work_sources.registry import WorkSourceRegistry
+from blizzard.hub.work_sources.source import IWorkSource
 
 # The provider's default API origin, used when a source omits `api_base`.
 _DEFAULT_API_BASES = {"github": "https://api.github.com"}
 
 
-def _build_github(source: PmSourceConfig, client: httpx.Client, api_base: str) -> IPmSource:
+def _build_github(source: WorkSourceConfig, client: httpx.Client, api_base: str) -> IWorkSource:
     web_base = source.web_base or _derive_web_base(api_base)
-    return GitHubPmSource(client, name=source.name, repo=source.repo, web_base=web_base)
+    return GitHubWorkSource(client, name=source.name, repo=source.repo, web_base=web_base)
 
 
-_BUILDERS: dict[str, Callable[[PmSourceConfig, httpx.Client, str], IPmSource]] = {"github": _build_github}
+_BUILDERS: dict[str, Callable[[WorkSourceConfig, httpx.Client, str], IWorkSource]] = {"github": _build_github}
 
 
 def _derive_web_base(api_base: str) -> str:
@@ -47,19 +47,19 @@ def _derive_web_base(api_base: str) -> str:
     return stripped
 
 
-def build_pm_registry(sources: Sequence[PmSourceConfig]) -> PmSourceRegistry:
+def build_work_source_registry(sources: Sequence[WorkSourceConfig]) -> WorkSourceRegistry:
     """One credentialed client + binding per configured source.
 
     A source whose ``token_env`` names an unset variable fails here, at boot, naming
-    the variable — not at first fetch. An empty ``sources`` is a legal, PM-reach-free
+    the variable — not at first fetch. An empty ``sources`` is a legal, work-source-free
     hub."""
-    built: dict[str, IPmSource] = {}
+    built: dict[str, IWorkSource] = {}
     for source in sources:
         builder = _BUILDERS.get(source.provider)
         if builder is None:
-            raise ConfigError(f"pm_source {source.name!r} has unknown provider {source.provider!r}")
+            raise ConfigError(f"work_source {source.name!r} has unknown provider {source.provider!r}")
         if source.token_env not in os.environ:
-            raise ConfigError(f"pm_source {source.name!r} names token_env {source.token_env!r}, which is unset")
+            raise ConfigError(f"work_source {source.name!r} names token_env {source.token_env!r}, which is unset")
         api_base = source.api_base or _DEFAULT_API_BASES[source.provider]
         client = httpx.Client(
             base_url=api_base,
@@ -67,4 +67,4 @@ def build_pm_registry(sources: Sequence[PmSourceConfig]) -> PmSourceRegistry:
             timeout=30.0,
         )
         built[source.name] = builder(source, client, api_base)
-    return PmSourceRegistry(built)
+    return WorkSourceRegistry(built)

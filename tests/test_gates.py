@@ -1,7 +1,7 @@
 """Human gates on the wired hub — component tier.
 
 The gate mechanics against a fully-wired hub over a tmp sqlite store (doubles only at
-the forge/PM seams — ``bzh:pluggable-seams``): a graph gate opens a decision on arrival
+the forge/work-source seams — ``bzh:pluggable-seams``): a graph gate opens a decision on arrival
 and rejects a worker transition out of it; a runner-config gate submits a decision in
 place of a transition for a worker node; resolution is first-write-wins; the resolving
 transition advances the chunk; and ``requeue`` closes an escalation by supersession.

@@ -24,7 +24,7 @@ every seam real, no tokens and no network. It proves the operator surface end to
    geometry **pixel-identical** — issue #21's criteria, and the one claim in this file
    that only a laying-out browser can prove.
 3. **Queue shaping honored by FILL.** Two ready chunks are **grouped** into one from
-   the UI — the survivor carries the union of PM pointers (plural) — and the ready
+   the UI — the survivor carries the union of work refs (plural) — and the ready
    queue is **reordered** (move-to-top) from the UI. The next FILL then honors **both**:
    the grouped survivor, with its plural pointers, is what the runner claims, and it is
    claimed **first** because it was moved to the top.
@@ -376,7 +376,7 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 page.get_by_test_id("group-selected").click()
 
                 # C is merged away (ephemeral) — it vanishes from the board live —
-                # and B survives carrying the union of PM pointers (plural, "+1").
+                # and B survives carrying the union of work refs (plural, "+1").
                 expect(page.get_by_test_id("queue-row")).to_have_count(2)
                 expect(queue_row(chunk_c)).to_have_count(0)
                 expect(queue_row(chunk_b).get_by_test_id("queue-pointer")).to_contain_text("+1")
@@ -387,9 +387,7 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
 
                 # Fleet truth corroborates both shaping actions before the runner claims.
                 grouped = hub.get(f"/api/chunks/{chunk_b}").json()
-                assert len(grouped["pm_pointers"]) == 2, (
-                    f"survivor lost its union of pointers: {grouped['pm_pointers']}"
-                )
+                assert len(grouped["work_refs"]) == 2, f"survivor lost its union of pointers: {grouped['work_refs']}"
                 peek = hub.get("/api/queue").json()["entries"]
                 assert [e["chunk_id"] for e in peek] == [chunk_b, chunk_a], f"reorder not honored: {peek}"
 
@@ -399,7 +397,7 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 # The runner-ahead-of-A guarantee: A is untouched (grouping + reorder + FILL order).
                 assert hub.get(f"/api/chunks/{chunk_a}").json()["status"] == "ready"
                 claimed = hub.get(f"/api/chunks/{chunk_b}").json()
-                assert len(claimed["pm_pointers"]) == 2, "the claimed chunk is not the grouped, plural-pointer survivor"
+                assert len(claimed["work_refs"]) == 2, "the claimed chunk is not the grouped, plural-pointer survivor"
 
                 # The runner registered on its outbound pull — the fleet strip shows it online.
                 expect(page.get_by_test_id("runner")).to_have_attribute("data-online", "true")

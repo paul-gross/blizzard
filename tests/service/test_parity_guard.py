@@ -121,8 +121,9 @@ def test_ihubclient_endpoint_table_matches_the_protocol_method_set() -> None:
 def test_mock_hub_openapi_serves_every_ihubclient_endpoint() -> None:
     """The mock hub's own ``GET /openapi.json`` must serve every ``IHubClient``
     endpoint, verb-and-path-exact (path params normalized) — mock ⊇ real, one-sided;
-    the mock's own extra control routes (``/_seed``, ``/_levers``, ``/_captured``,
-    ``pm-items``) are expected and unchecked."""
+    the mock's own extra control routes (``/_seed``, ``/_levers``, ``/_captured``) and its
+    mirror of the hub's work-items pass-through (not an ``IHubClient`` method) are expected
+    and unchecked."""
     bin_dir = require_mock_fleet()
     port = _free_port()
     with mock_hub(bin_dir, port) as hub:

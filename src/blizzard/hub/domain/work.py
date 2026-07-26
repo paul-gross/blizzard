@@ -50,9 +50,9 @@ class ChunkStatus(StrEnum):
 
 
 @dataclass(frozen=True)
-class PmPointer:
-    """One wrapped PM item — ``{source, ref}``, superseding ``{provider, url}``.
-    ``source`` names a configured ``[[pm_source]]``; ``ref`` is that
+class WorkRef:
+    """One wrapped work item — ``{source, ref}``, superseding ``{provider, url}``.
+    ``source`` names a configured ``[[work_source]]``; ``ref`` is that
     source's own item token (a GitHub issue number). Contents never stored."""
 
     source: str
@@ -118,7 +118,7 @@ class Chunk:
 
     chunk_id: str
     graph_id: str
-    pm_pointers: list[PmPointer]
+    work_refs: list[WorkRef]
     minted_at: datetime
     # The chunk's model selection — editable while ``not_ready`` (issue #27,
     # ``domain/edit.py``). Defaulted so the many fakes/tests that build a ``Chunk``
@@ -1140,7 +1140,7 @@ class IReadChunkRepository(Protocol):
         """The newest explicit ready-queue position per chunk — the order peek honours."""
         ...
 
-    def find_live_holder(self, pointer: PmPointer) -> str | None:
+    def find_live_holder(self, pointer: WorkRef) -> str | None:
         """The chunk_id of a live (non-terminal) chunk holding ``pointer``, or None."""
         ...
 
@@ -1481,8 +1481,8 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         """Append a ready chunk's new queue position; order derives."""
         ...
 
-    def add_pm_pointers(self, chunk_id: str, pointers: list[PmPointer], *, at: datetime) -> None:
-        """Fold PM pointers into a group survivor, de-duped by (source, ref)."""
+    def add_work_refs(self, chunk_id: str, pointers: list[WorkRef], *, at: datetime) -> None:
+        """Fold work refs into a group survivor, de-duped by (source, ref)."""
         ...
 
     def record_grouped(self, chunk_id: str, *, grouped_into: str, at: datetime) -> None:

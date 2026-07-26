@@ -1,9 +1,9 @@
 """Shared component-test scaffolding — a fully-wired hub over a tmp sqlite store.
 
-Builds the store-backed ``host`` composition with the PM read seam replaced by an
-in-process fake (``bzh:pluggable-seams``): a :class:`FakePmSource` that returns canned
+Builds the store-backed ``host`` composition with the work-item read seam replaced by an
+in-process fake (``bzh:pluggable-seams``): a :class:`FakeWorkSource` that returns canned
 issue text, wired into the hub through a
-:class:`~blizzard.hub.pm.registry.PmSourceRegistry` the same way the real factory
+:class:`~blizzard.hub.work_sources.registry.WorkSourceRegistry` the same way the real factory
 would. The clock is a :class:`~blizzard.foundation.clock.FixedClock` the test can
 advance, so ids order and timestamps are deterministic (``bzh:injected-clock``). A hub
 command node's own forge-facing script (#65/#67) talks HTTP directly (``urllib``), so
@@ -43,17 +43,17 @@ from blizzard.hub.config import (
     RUNNER_AUTH_WARN,
     AuthConfig,
     HubConfig,
-    PmSourceConfig,
+    WorkSourceConfig,
 )
 from blizzard.hub.delivery.command_runner import CommandResult, IHubCommandRunner
 from blizzard.hub.delivery.workdir import IHubWorkdir
 from blizzard.hub.domain.graph import Edge, Graph, Node
-from blizzard.hub.domain.work import PmPointer
+from blizzard.hub.domain.work import WorkRef
 from blizzard.hub.events.broker import EventBroker
-from blizzard.hub.pm.registry import PmSourceRegistry
-from blizzard.hub.pm.source import IPmSource, PmItem, PmSourceError
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema
+from blizzard.hub.work_sources.registry import WorkSourceRegistry
+from blizzard.hub.work_sources.source import IWorkSource, WorkItem, WorkSourceError
 
 _GRAPH_T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
@@ -136,15 +136,15 @@ def _conforms_fake_hub_workdir(x: FakeHubWorkdir) -> IHubWorkdir:
     return x
 
 
-class FakePmSource:
-    """An in-process :class:`IPmSource` — canned title + body + comments per pointer ref.
+class FakeWorkSource:
+    """An in-process :class:`IWorkSource` — canned title + body + comments per pointer ref.
 
     Keyed on ``pointer.ref`` (an opaque item token, mirroring the real GitHub adapter's
     issue number) rather than a URL — the pointer names its binding by ``source``
      so this fake, like the real adapter, never re-derives a repo from a
     URL. A default ``title``/``body``/``comments`` answers every pointer; ``by_ref``
     overrides the item for specific refs (a grouped chunk reads distinct items), and
-    ``fail_refs`` raises :class:`PmSourceError` for a ref to exercise the per-pointer
+    ``fail_refs`` raises :class:`WorkSourceError` for a ref to exercise the per-pointer
     forge-failure degradation. ``name`` is this fake's registered source name — the
     prefix its ``label`` renders under and the ``source`` a pointer it mints carries,
     mirroring a real binding's configured ``name``. ``repo`` is the
@@ -159,7 +159,7 @@ class FakePmSource:
         title: str = "issue title",
         body: str = "issue body",
         comments: list[str] | None = None,
-        by_ref: dict[str, PmItem] | None = None,
+        by_ref: dict[str, WorkItem] | None = None,
         fail_refs: set[str] | None = None,
     ) -> None:
         self.name = name
@@ -171,7 +171,7 @@ class FakePmSource:
         self.fail_refs = fail_refs or set()
         self.fetched: list[str] = []
 
-    def parse(self, token: str) -> PmPointer | None:
+    def parse(self, token: str) -> WorkRef | None:
         """``{name}:{ref}`` or ``{name}#{ref}``; ``None`` otherwise — this
         fake carries no URL grammar (the real binding's own concern) and, unlike
         the real GitHub adapter, does not require a numeric ``ref`` — tests key fakes on
@@ -179,28 +179,28 @@ class FakePmSource:
         for sep_char in (":", "#"):
             prefix, sep, ref = token.partition(sep_char)
             if sep and prefix == self.name and ref:
-                return PmPointer(source=self.name, ref=ref)
+                return WorkRef(source=self.name, ref=ref)
         return None
 
-    def fetch(self, pointer: PmPointer) -> PmItem:
+    def fetch(self, pointer: WorkRef) -> WorkItem:
         self.fetched.append(pointer.ref)
         if pointer.ref in self.fail_refs:
-            raise PmSourceError(f"forge unreachable for {pointer.ref}")
+            raise WorkSourceError(f"forge unreachable for {pointer.ref}")
         if pointer.ref in self.by_ref:
             return self.by_ref[pointer.ref]
-        return PmItem(body=self.body, title=self.title, comments=list(self.comments))
+        return WorkItem(body=self.body, title=self.title, comments=list(self.comments))
 
-    def label(self, pointer: PmPointer) -> str | None:
+    def label(self, pointer: WorkRef) -> str | None:
         return f"{self.name}#{pointer.ref}"
 
-    def web_url(self, pointer: PmPointer) -> str | None:
+    def web_url(self, pointer: WorkRef) -> str | None:
         return f"http://forge.local/{self.repo}/issues/{pointer.ref}"
 
     def branch_url(self, repo: str, branch_name: str) -> str | None:
         return f"http://forge.local/{repo}/tree/{branch_name}"
 
 
-def _conforms_fake_pm(x: FakePmSource) -> IPmSource:
+def _conforms_fake_work_source(x: FakeWorkSource) -> IWorkSource:
     return x
 
 
@@ -318,7 +318,7 @@ class HubHarness:
 
     client: TestClient
     services: HubServices
-    pm: PmSourceRegistry
+    work_sources: WorkSourceRegistry
     clock: FixedClock
     engine: Engine
     events: EventBroker = field(default_factory=EventBroker)
@@ -331,7 +331,7 @@ class HubHarness:
 def build_hub(
     tmp_path: Path,
     *,
-    pm: dict[str, FakePmSource] | None = None,
+    work_sources: dict[str, FakeWorkSource] | None = None,
     base_branch: str = "main",
     hub_command_runner: IHubCommandRunner | None = None,
     hub_workdir: IHubWorkdir | None = None,
@@ -346,10 +346,10 @@ def build_hub(
 ) -> HubHarness:
     """A migrated, fully-wired hub over ``tmp_path`` with fake external seams.
 
-    ``pm`` is ``{name: FakePmSource}`` — the same name-keyed shape the real
-    :func:`~blizzard.hub.pm.internal.factory.build_pm_registry` produces;
+    ``work_sources`` is ``{name: FakeWorkSource}`` — the same name-keyed shape the real
+    :func:`~blizzard.hub.work_sources.internal.factory.build_work_source_registry` produces;
     defaults to one entry so the common single-source case needs no test churn.
-    ``None`` defaults to one source; an explicit ``pm={}`` is a legal, deliberately
+    ``None`` defaults to one source; an explicit ``work_sources={}`` is a legal, deliberately
     **empty** registry — ``or`` would silently coerce that back to the default,
     which is what made the empty-registry path unreachable through this harness.
     ``hub_command_runner``/``hub_workdir`` are the generic hub command node's mechanism
@@ -363,7 +363,7 @@ def build_hub(
     changes; a test exercising ``require()`` gating passes ``auth_mode="oauth"``.
     ``oauth_providers`` (issue #92) is ``{name: FakeOAuthProvider}`` — the no-network
     in-repo-fake registry the provider-login route tests bind, bypassing config/secret
-    resolution entirely (mirrors ``pm``'s own dict-keyed fake injection above)."""
+    resolution entirely (mirrors ``work_sources``'s own dict-keyed fake injection above)."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     config = HubConfig(
         root=tmp_path,
@@ -376,14 +376,16 @@ def build_hub(
     )
     migration_runner(config).upgrade("head")
 
-    pm_registry = PmSourceRegistry(pm if pm is not None else {"default": FakePmSource()})
+    work_source_registry = WorkSourceRegistry(
+        work_sources if work_sources is not None else {"default": FakeWorkSource()}
+    )
     clock = FixedClock(datetime(2026, 7, 13, tzinfo=UTC))
     events = EventBroker()
     engine = create_engine_from_url(db_url)
     services = build_services(
         engine,
         events=events,
-        pm=pm_registry,
+        work_sources=work_source_registry,
         clock=clock,
         base_branch=base_branch,
         hub_command_runner=hub_command_runner,
@@ -415,7 +417,7 @@ def build_hub(
     return HubHarness(
         client=client,
         services=services,
-        pm=pm_registry,
+        work_sources=work_source_registry,
         clock=clock,
         engine=engine,
         events=events,
@@ -423,8 +425,8 @@ def build_hub(
     )
 
 
-def write_pm_sources(hub_dir: Path, sources: Sequence[PmSourceConfig]) -> HubConfig:
-    """Declare ``[[pm_source]]`` entries on an already-``init``ed hub runtime dir.
+def write_work_sources(hub_dir: Path, sources: Sequence[WorkSourceConfig]) -> HubConfig:
+    """Declare ``[[work_source]]`` entries on an already-``init``ed hub runtime dir.
 
     Every upper-tier fixture (``tests/e2e``, ``tests/crash``, ``tests/journey``,
     ``tests/service``) runs ``blizzard hub init`` from its own subprocess-driven support
@@ -435,7 +437,7 @@ def write_pm_sources(hub_dir: Path, sources: Sequence[PmSourceConfig]) -> HubCon
     shape ``tests/crash/support.py::write_runner_config`` uses for the runner config, a
     fixed point verified against a real ``hub init`` hub."""
     config = HubConfig.load(hub_dir)
-    config = replace(config, pm_sources=tuple(sources))
+    config = replace(config, work_sources=tuple(sources))
     config.config_path.write_text(config.to_toml())
     return config
 
@@ -652,7 +654,7 @@ def report_lease(
 # stay local to that test: a revision pinned in time must not import a shape that has
 # since moved on), this ladder and these two parent-row seeds are identical every time
 # a migration test needs a store at some past revision. Shared here so each migration
-# test file stops hand-rolling both (see ``test_pm_pointer_migration.py``'s ``_GRAPHS``/
+# test file stops hand-rolling both (see ``test_work_ref_migration.py``'s ``_GRAPHS``/
 # ``_CHUNKS``, byte-identical to these).
 
 _GRAPHS = sa.Table(

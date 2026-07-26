@@ -8,7 +8,7 @@ import type { MachineChunkStatus } from './chunk-status';
  * One chunk on this machine — the mobile stack's own card, distinct from
  * {@link ChunkRow}'s desktop card (`bzh:frontend-kit`'s "adaptive shells over
  * shared guts"): the same inputs, the same per-row
- * {@link injectChunkTitleQuery} PM enrichment, and the same select
+ * {@link injectChunkTitleQuery} work-item enrichment, and the same select
  * output/keyboard affordances, laid out for a 390px viewport instead of a
  * 340px desktop column — the status renders as a soft pill beside the ref
  * rather than its own row, and the title wraps to two lines instead of
@@ -18,7 +18,7 @@ import type { MachineChunkStatus } from './chunk-status';
  * Line 1 is the compact ref plus the derived status as a soft pill
  * (mock screen C's pill vocabulary,
  * `../../../docs/designs/mobile/core-flows.html`), right-aligned. Line 2 is
- * the PM-item chips inline with the title, wrapped to two lines rather than
+ * the work-item chips inline with the title, wrapped to two lines rather than
  * ellipsized — a mobile card has the vertical room a desktop row doesn't.
  * Line 3 is the node + attempt epoch, in the same quiet label tone
  * {@link ChunkRow}'s own `.node` cell uses.
@@ -154,11 +154,11 @@ export class ChunkCard {
   protected readonly chunkId = computed(() => this.lease().chunk_id);
   protected readonly chunkRef = computed(() => compactRef(this.chunkId()));
 
-  /** The severable PM read (issue #28, decision 1) — never branched on for pending/error. */
+  /** The severable work-item read (issue #28, decision 1) — never branched on for pending/error. */
   protected readonly titleQuery = injectChunkTitleQuery(() => this.chunkId());
 
   protected readonly linkedItems = computed(() => this.titleQuery.data()?.items ?? []);
 
-  /** The first pm-item's title, or empty when unresolved/failed/absent. */
+  /** The first work-item's title, or empty when unresolved/failed/absent. */
   protected readonly titleText = computed<string>(() => this.titleQuery.data()?.items?.[0]?.title ?? '');
 }

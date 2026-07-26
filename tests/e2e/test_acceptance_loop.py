@@ -57,12 +57,12 @@ import httpx
 import pytest
 import uvicorn
 
-from blizzard.hub.config import HubConfig, PmSourceConfig
+from blizzard.hub.config import HubConfig, WorkSourceConfig
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.config import ENV_TRANSCRIPTS_ROOT, RunnerConfig
 from blizzard.runner.loop.build import run_single_tick
 from blizzard.runner.runtime import init_environment as init_runner_environment
-from tests.support import write_pm_sources
+from tests.support import write_work_sources
 
 pytestmark = [
     pytest.mark.e2e,
@@ -99,9 +99,9 @@ MOCK_HARNESS_FENCE_VAR = "BLIZZARD_MOCK_HARNESS_FENCE"
 # than the base allowlist growing mock-only names.
 MOCK_HARNESS_ENV_PASSTHROUGH = (MOCK_HARNESS_FENCE_VAR, ENV_TRANSCRIPTS_ROOT)
 
-# The env var every scenario's ``[[pm_source]]`` names as its credential —
+# The env var every scenario's ``[[work_source]]`` names as its credential —
 # a dummy value suffices, since the mock forge checks no token.
-PM_TOKEN_ENV = "BZ_PM_TOKEN_TOYAPI"
+WORK_SOURCE_TOKEN_ENV = "BZ_WORK_SOURCE_TOKEN_TOYAPI"
 
 # Appended to every scripted build-node prompt that makes a real commit meant to be
 # delivered (issue #143, Phase 4): the runner no longer discovers or pushes the
@@ -159,23 +159,23 @@ _JUDGEMENT_SCRIPT = "verdict('pass', 'the mock harness committed the change; che
 _REVIEW_SCRIPT = "pass\n"
 _REVIEW_JUDGEMENT = "verdict('pass', 'cold-eyes review: the committed change is clean; ready to deliver')\n"
 
-# The pass-through scenario's distinctive PM item — a body + a comment whose exact text
+# The pass-through scenario's distinctive work item — a body + a comment whose exact text
 # is asserted on the bare origin's main, so its presence there proves it travelled the
 # whole layered pass-through (worker -> runner proxy -> hub -> forge) and back into the
 # committed, landed change (MVP criterion 1).
-_PM_BODY = "PASSTHROUGH-BODY: the widget flake reproduces under load"
-_PM_COMMENT = "PASSTHROUGH-COMMENT: attached a failing repro in the linked gist"
+_WORK_ITEM_BODY = "PASSTHROUGH-BODY: the widget flake reproduces under load"
+_WORK_ITEM_COMMENT = "PASSTHROUGH-COMMENT: attached a failing repro in the linked gist"
 
-# build turn (prompt-is-program): read the chunk's PM item through the runner's PM-item
-# proxy — the *real* ``blizzard runner pm-items`` verb against the local API, chunk id
+# build turn (prompt-is-program): read the chunk's work item through the runner's work-item
+# proxy — the *real* ``blizzard runner work-items`` verb against the local API, chunk id
 # from the spawn-injected ``BLIZZARD_CHUNK_ID`` — then commit the fetched body + comment
 # so the pass-through's output lands as git truth.
-_PM_BUILD_SCRIPT = (
+_WORK_ITEM_BUILD_SCRIPT = (
     "import os, json, subprocess, pathlib\n"
     f"repo = {REPO_NAME!r}\n"
     "chunk_id = os.environ['BLIZZARD_CHUNK_ID']\n"
     "out = subprocess.run(\n"
-    '    ["blizzard", "runner", "pm-items", chunk_id],\n'
+    '    ["blizzard", "runner", "work-items", chunk_id],\n'
     "    check=True, capture_output=True, text=True,\n"
     ").stdout\n"
     "item = json.loads(out)['items'][0]\n"
@@ -185,7 +185,7 @@ _PM_BUILD_SCRIPT = (
     "subprocess.run(\n"
     '    ["git", "-C", repo,\n'
     '     "-c", "user.email=mock@blizzard.local", "-c", "user.name=Mock Harness",\n'
-    '     "commit", "-m", "feat: land the PM item fetched through the pass-through"],\n'
+    '     "commit", "-m", "feat: land the work item fetched through the pass-through"],\n'
     "    check=True,\n"
     ")\n" + _PUSH_AND_DECLARE_SCRIPT
 )
@@ -339,20 +339,20 @@ def _hub(
         **os.environ,
         "BZ_FORGE_URL": f"http://127.0.0.1:{forge_port}",
         "BZ_FORGE_OWNER": OWNER,
-        PM_TOKEN_ENV: "e2e-fixture-token",
+        WORK_SOURCE_TOKEN_ENV: "e2e-fixture-token",
     }
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
-    # Declare the one PM source every scenario ingests against — since
+    # Declare the one work source every scenario ingests against — since
     # Phase 2, ingest 422s a pointer no configured source claims.
-    write_pm_sources(
+    write_work_sources(
         hub_dir,
         [
-            PmSourceConfig(
+            WorkSourceConfig(
                 name=REPO_NAME,
                 provider="github",
                 repo=REPO,
-                token_env=PM_TOKEN_ENV,
+                token_env=WORK_SOURCE_TOKEN_ENV,
                 api_base=f"http://127.0.0.1:{forge_port}",
             )
         ],
@@ -549,12 +549,12 @@ def _drive_until_done(
 
 
 # --------------------------------------------------------------------------- #
-# Scenario: the PM item reaches the build worker through the pass-through (criterion 1)
+# Scenario: the work item reaches the build worker through the pass-through (criterion 1)
 # --------------------------------------------------------------------------- #
 
 
-def _pm_graph_yaml() -> str:
-    """The ``default-delivery`` shape whose build node reads its PM item through the proxy."""
+def _work_item_graph_yaml() -> str:
+    """The ``default-delivery`` shape whose build node reads its work item through the proxy."""
     import yaml
 
     graph = {
@@ -563,7 +563,7 @@ def _pm_graph_yaml() -> str:
         "nodes": {
             "build": {
                 "executor": "runner",
-                "prompt": _PM_BUILD_SCRIPT,
+                "prompt": _WORK_ITEM_BUILD_SCRIPT,
                 "judgement": {
                     "prompt": _JUDGEMENT_SCRIPT,
                     "choices": {"pass": {"description": "Committed and green.", "to": "review"}},
@@ -604,8 +604,8 @@ def _runner_api(config: RunnerConfig) -> Iterator[None]:
     """Serve the runner's local API in a thread — the daemon the worker's verbs POST/GET to.
 
     The reconciliation loop is still driven synchronously by the test (``run_single_tick``);
-    this only stands up the local-API surface so the real ``blizzard runner pm-items`` verb
-    has a daemon to reach. It touches no store (the pm-item route is a pure hub proxy), so it
+    this only stands up the local-API surface so the real ``blizzard runner work-items`` verb
+    has a daemon to reach. It touches no store (the work-item route is a pure hub proxy), so it
     runs alongside the tick without contention.
     """
     app = build_hosted_app(config)
@@ -629,11 +629,11 @@ def _runner_api(config: RunnerConfig) -> Iterator[None]:
         thread.join(timeout=10.0)
 
 
-def test_build_worker_reads_pm_item_through_the_passthrough(tmp_path: Path) -> None:
+def test_build_worker_reads_work_item_through_the_passthrough(tmp_path: Path) -> None:
     """The build worker fetches its issue body + comments through the runner->hub proxy.
 
     Criterion 1's pass-through half, end to end: the chunk's issue carries a distinctive
-    body and comment; the build node reads them with the *real* ``blizzard runner pm-items``
+    body and comment; the build node reads them with the *real* ``blizzard runner work-items``
     verb (the runner's local API forwarding to the hub, which reads the forge with its own
     credentials — the worker never crosses a layer), commits the fetched text, and the chunk
     lands. The exact body and comment reachable from the bare origin's ``main`` prove the
@@ -670,13 +670,13 @@ def test_build_worker_reads_pm_item_through_the_passthrough(tmp_path: Path) -> N
 
     forge_port, hub_port = _free_port(), _free_port()
     with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
-        assert hub.post("/api/graphs", json={"definition_yaml": _pm_graph_yaml()}).status_code == 201
+        assert hub.post("/api/graphs", json={"definition_yaml": _work_item_graph_yaml()}).status_code == 201
 
         # File an issue with a distinctive body AND a distinctive comment, then ingest it.
-        issue = forge.post(f"/repos/{REPO}/issues", json={"title": "pass-through", "body": _PM_BODY})
+        issue = forge.post(f"/repos/{REPO}/issues", json={"title": "pass-through", "body": _WORK_ITEM_BODY})
         assert issue.status_code == 201, issue.text
         issue_number = issue.json()["number"]
-        commented = forge.post(f"/repos/{REPO}/issues/{issue_number}/comments", json={"body": _PM_COMMENT})
+        commented = forge.post(f"/repos/{REPO}/issues/{issue_number}/comments", json={"body": _WORK_ITEM_COMMENT})
         assert commented.status_code == 201, commented.text
 
         # Ingest by {source, ref} — the source names the configured binding, and
@@ -692,14 +692,14 @@ def test_build_worker_reads_pm_item_through_the_passthrough(tmp_path: Path) -> N
 
         # Sanity: the hub's own pass-through returns the body + comment (the runner's proxy
         # forwards to exactly this route) — one entry per pointer.
-        item = hub.get(f"/api/chunks/{chunk_id}/pm-items")
+        item = hub.get(f"/api/chunks/{chunk_id}/work-items")
         assert item.status_code == 200, item.text
         entry = item.json()["items"][0]
-        assert entry["body"] == _PM_BODY
-        assert entry["comments"] == [_PM_COMMENT]
+        assert entry["body"] == _WORK_ITEM_BODY
+        assert entry["comments"] == [_WORK_ITEM_COMMENT]
 
         # Drive the loop — `_runner_config` already binds a free host/port and
-        # `_drive_until_done` wraps it in `_runner_api`, so the worker's `pm-items` verb
+        # `_drive_until_done` wraps it in `_runner_api`, so the worker's `work-items` verb
         # (and, since issue #143 Phase 4, its `artifact commit` declaration) both land.
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
         fenced = dict(os.environ)
@@ -712,5 +712,5 @@ def test_build_worker_reads_pm_item_through_the_passthrough(tmp_path: Path) -> N
     # Git truth: the body and comment the worker fetched through the pass-through are on
     # the bare origin's main — the contents reached the worker and landed.
     landed = _git_bare(origin_bare, "show", "main:LANDED.md")
-    assert _PM_BODY in landed, f"the fetched issue body did not reach the worker:\n{landed}"
-    assert _PM_COMMENT in landed, f"the fetched issue comment did not reach the worker:\n{landed}"
+    assert _WORK_ITEM_BODY in landed, f"the fetched issue body did not reach the worker:\n{landed}"
+    assert _WORK_ITEM_COMMENT in landed, f"the fetched issue comment did not reach the worker:\n{landed}"

@@ -146,7 +146,7 @@ def test_group_merges_pointers_and_discards_the_rest(tmp_path: Path) -> None:
     assert body["chunk_id"] == survivor
     assert sorted(body["merged_chunk_ids"]) == sorted([b, c])
     # The survivor carries the union of all three pointers.
-    refs = {p["ref"] for p in body["pm_pointers"]}
+    refs = {p["ref"] for p in body["work_refs"]}
     assert refs == {"1", "2", "3"}
     # The merged-away chunks are ephemeral — gone from the queue and the fleet list.
     assert _peek_ids(hub) == [survivor]
@@ -166,7 +166,7 @@ def test_group_is_pointer_union_deduped(tmp_path: Path) -> None:
     resp = hub.client.post(f"/api/chunks/{survivor}/group", json={"merge_chunk_ids": [survivor, other]})
     assert resp.status_code == 200, resp.text
     # Self-reference in merge_chunk_ids is a no-op; the union has no duplicate.
-    refs = [p["ref"] for p in resp.json()["pm_pointers"]]
+    refs = [p["ref"] for p in resp.json()["work_refs"]]
     assert sorted(refs) == ["9", "shared"]
 
 
@@ -182,7 +182,7 @@ def test_group_rejects_a_non_ready_member(tmp_path: Path) -> None:
     # Nothing was merged — the running chunk is untouched, the survivor keeps one pointer.
     assert hub.client.get(f"/api/chunks/{running}").status_code == 200
     survivor_detail = hub.client.get(f"/api/chunks/{survivor}").json()
-    assert len(survivor_detail["pm_pointers"]) == 1
+    assert len(survivor_detail["work_refs"]) == 1
 
 
 def test_group_into_unknown_survivor_is_404(tmp_path: Path) -> None:

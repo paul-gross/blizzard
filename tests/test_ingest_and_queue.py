@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.hub.domain.work import PmPointer
-from tests.support import FakePmSource, build_hub, ingest, pointer_token, write_chunk_pause_facts
+from blizzard.hub.domain.work import WorkRef
+from tests.support import FakeWorkSource, build_hub, ingest, pointer_token, write_chunk_pause_facts
 
 pytestmark = pytest.mark.component
 
@@ -75,9 +75,7 @@ def test_ingest_mints_a_chunk_pinned_to_the_default_graph(tmp_path: Path) -> Non
 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "not_ready"  # rests not-ready until promoted
-    assert detail["pm_pointers"] == [
-        {**_P1, "label": "default#1", "web_url": "http://forge.local/acme/widget/issues/1"}
-    ]
+    assert detail["work_refs"] == [{**_P1, "label": "default#1", "web_url": "http://forge.local/acme/widget/issues/1"}]
     # The default graph was minted on first ingest and the chunk pinned to it.
     graphs = hub.services.graphs.list_all()
     assert [g.name for g in graphs] == ["default-delivery"]
@@ -89,7 +87,7 @@ def test_ingest_batches_multiple_pointers_into_one_chunk(tmp_path: Path) -> None
     resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_P1), pointer_token(_P2)]})
     assert resp.status_code == 201
     detail = hub.client.get(f"/api/chunks/{resp.json()['chunk_id']}").json()
-    assert detail["pm_pointers"] == [
+    assert detail["work_refs"] == [
         {**_P1, "label": "default#1", "web_url": "http://forge.local/acme/widget/issues/1"},
         {**_P2, "label": "default#2", "web_url": "http://forge.local/acme/widget/issues/2"},
     ]
@@ -108,15 +106,15 @@ def test_list_row_is_board_legible(tmp_path: Path) -> None:
     graph = hub.services.graph_mint.ensure_default(
         hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
     )
-    unconfigured = PmPointer(source="retired", ref="9")
+    unconfigured = WorkRef(source="retired", ref="9")
     unconfigured_id = hub.services.ingest.ingest([unconfigured], graph=graph)
 
     rows = {r["chunk_id"]: r for r in hub.client.get("/api/chunks").json()}
     assert rows[chunk_id]["current_node_name"] == "build"  # the entry node, pre-first-transition
-    assert rows[chunk_id]["pm_pointers"] == [
+    assert rows[chunk_id]["work_refs"] == [
         {**_P1, "label": "default#1", "web_url": "http://forge.local/acme/widget/issues/1"}
     ]
-    assert rows[unconfigured_id]["pm_pointers"] == [{"source": "retired", "ref": "9", "label": None, "web_url": None}]
+    assert rows[unconfigured_id]["work_refs"] == [{"source": "retired", "ref": "9", "label": None, "web_url": None}]
 
 
 def test_ingest_rests_not_ready_and_promote_makes_it_claimable(tmp_path: Path) -> None:
@@ -188,7 +186,7 @@ def test_a_paused_chunk_still_holds_its_pointer_live(tmp_path: Path) -> None:
 def test_ingest_rejects_a_token_no_configured_source_claims(tmp_path: Path) -> None:
     """A token no configured binding's ``parse`` claims is a 422, naming the token and
     what is configured."""
-    hub = build_hub(tmp_path, pm={"widget": FakePmSource(name="widget", repo="acme/widget")})
+    hub = build_hub(tmp_path, work_sources={"widget": FakeWorkSource(name="widget", repo="acme/widget")})
     other = {"source": "other", "ref": "1"}
 
     resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token(other)]})
@@ -202,7 +200,7 @@ def test_ingest_rejects_a_token_no_configured_source_claims(tmp_path: Path) -> N
 
 
 def test_ingest_succeeds_when_a_configured_source_claims_the_pointer(tmp_path: Path) -> None:
-    hub = build_hub(tmp_path, pm={"widget": FakePmSource(name="widget", repo="acme/widget")})
+    hub = build_hub(tmp_path, work_sources={"widget": FakeWorkSource(name="widget", repo="acme/widget")})
     resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token({"source": "widget", "ref": "1"})]})
     assert resp.status_code == 201, resp.text
 
@@ -211,43 +209,43 @@ def test_resolver_picks_the_matching_source_when_two_are_configured(tmp_path: Pa
     """A pointer resolves to its own named binding by ``registry.get(pointer.source)``
      — the fetch, and the label it renders, must come from ``beta``'s
     binding, not ``alpha``'s, even though ``alpha`` is registered first."""
-    alpha = FakePmSource(name="alpha", repo="acme/alpha")
-    beta = FakePmSource(name="beta", repo="acme/beta")
-    hub = build_hub(tmp_path, pm={"alpha": alpha, "beta": beta})
+    alpha = FakeWorkSource(name="alpha", repo="acme/alpha")
+    beta = FakeWorkSource(name="beta", repo="acme/beta")
+    hub = build_hub(tmp_path, work_sources={"alpha": alpha, "beta": beta})
     beta_pointer = {"source": "beta", "ref": "7"}
 
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(beta_pointer)]}).json()["chunk_id"]
 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
-    assert detail["pm_pointers"] == [
+    assert detail["work_refs"] == [
         {**beta_pointer, "label": "beta#7", "web_url": "http://forge.local/acme/beta/issues/7"}
     ]
     # The fetch went to the right binding too — not `alpha`'s.
-    items = hub.client.get(f"/api/chunks/{chunk_id}/pm-items").json()["items"]
+    items = hub.client.get(f"/api/chunks/{chunk_id}/work-items").json()["items"]
     assert items[0]["label"] == "beta#7"
     assert items[0]["error"] is None
     assert beta.fetched == ["7"]
     assert alpha.fetched == []
 
 
-def test_pm_items_503s_when_no_pm_source_is_configured_at_all(tmp_path: Path) -> None:
-    """An explicitly empty registry is a legal, PM-reach-free hub — pm-items 503s
+def test_work_items_503s_when_no_work_source_is_configured_at_all(tmp_path: Path) -> None:
+    """An explicitly empty registry is a legal, work-source-free hub — work-items 503s
     up front rather than 422ing at ingest, since an empty registry names no source at all."""
-    hub = build_hub(tmp_path, pm={})
+    hub = build_hub(tmp_path, work_sources={})
 
     resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_P1)]})
     assert resp.status_code == 422, resp.text  # no source at all also can't claim it
 
     # Mint the degenerate chunk straight through the domain service (bypassing the route's
-    # 422) to exercise the pm-items 503 the same way test_pm_items_with_no_pointers_is_an_
+    # 422) to exercise the work-items 503 the same way test_work_items_with_no_pointers_is_an_
     # empty_list mints its own degenerate fixture.
     graph = hub.services.graph_mint.ensure_default(
         hub.services.default_graph_doc, definition_yaml=hub.services.default_graph_yaml
     )
-    chunk_id = hub.services.ingest.ingest([PmPointer(source=_P1["source"], ref=_P1["ref"])], graph=graph)
-    items = hub.client.get(f"/api/chunks/{chunk_id}/pm-items")
+    chunk_id = hub.services.ingest.ingest([WorkRef(source=_P1["source"], ref=_P1["ref"])], graph=graph)
+    items = hub.client.get(f"/api/chunks/{chunk_id}/work-items")
     assert items.status_code == 503
-    assert items.json()["detail"] == "no PM work-source is configured"
+    assert items.json()["detail"] == "no work source is configured"
 
 
 def _pass(hub, chunk_id: str, node_id: str, epoch: int, *, artifacts: list[dict]) -> dict:  # type: ignore[no-untyped-def]

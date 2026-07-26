@@ -11,7 +11,7 @@ const REVIEW_FAIL_DETAIL: ChunkDetail = {
   status: 'running',
   current_node_id: 'nd_build',
   latest_epoch: 2,
-  pm_pointers: [],
+  work_refs: [],
   history: [],
   artifacts: [
     {
@@ -45,7 +45,7 @@ const NAMED_DETAIL: ChunkDetail = {
   current_node_id: 'nd_review',
   current_node_name: 'review',
   latest_epoch: 1,
-  pm_pointers: [],
+  work_refs: [],
   history: [],
   artifacts: [
     {

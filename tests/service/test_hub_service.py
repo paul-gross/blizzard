@@ -182,10 +182,10 @@ def test_queue_shaping_group_and_reorder_reflected_in_peek(tmp_path: Path) -> No
         chunk_b = _ingest(forge, hub, "B — survivor")
         chunk_c = _ingest(forge, hub, "C — merged into B")
 
-        # Group C into B: the survivor absorbs the union of PM pointers (plural).
+        # Group C into B: the survivor absorbs the union of work refs (plural).
         grouped = hub.post(f"/api/chunks/{chunk_b}/group", json={"merge_chunk_ids": [chunk_c]})
         assert grouped.status_code == 200, grouped.text
-        assert len(grouped.json()["pm_pointers"]) == 2
+        assert len(grouped.json()["work_refs"]) == 2
 
         # Move the survivor to the top via the whole-order replace; the read reflects both actions.
         assert hub.put("/api/queue", json={"chunk_ids": [chunk_b, chunk_a]}).status_code == 200

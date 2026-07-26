@@ -4,7 +4,7 @@ Client verbs are pure clients of the runner's local API; ``host`` *becomes* the
 runner daemon. Only ``init`` / ``migrate`` / ``host`` are implemented in
 the scaffold — the rest are stubs that name themselves, present in ``--help`` and
 filled in by the backend builder. Worker-hook verbs (``heartbeat``, ``session-end``,
-``ask``, ``pm-items``) take their identity from the spawn-injected environment and pass
+``ask``, ``work-items``) take their identity from the spawn-injected environment and pass
 no identity arguments.
 """
 
@@ -61,9 +61,9 @@ ENV_LEASE_TOKEN = "BLIZZARD_LEASE_TOKEN"
 # daemon whose runtime dir this shell cannot see).
 ENV_LOCAL_API_URL = "BZ_RUNNER_URL"
 _HEARTBEAT_TIMEOUT = 5.0
-# A PM-item read fans out runner -> hub -> vendor, so it is given a longer budget
+# A work-item read fans out runner -> hub -> vendor, so it is given a longer budget
 # than the millisecond-cheap hook posts.
-_PM_ITEMS_TIMEOUT = 20.0
+_WORK_ITEMS_TIMEOUT = 20.0
 # The operator's declarative pause/start verbs are pure clients of the runner's own local
 # API (issue #43) — a machine-local round trip, so they get a hook-scale budget rather
 # than the hub-client one.
@@ -422,7 +422,7 @@ def artifact_list() -> None:
         resp = httpx.get(
             f"{runner_url.rstrip('/')}/api/leases/{lease_id}/artifacts",
             headers={"X-Blizzard-Lease-Token": lease_token} if lease_token else {},
-            timeout=_PM_ITEMS_TIMEOUT,
+            timeout=_WORK_ITEMS_TIMEOUT,
         )
         resp.raise_for_status()
     except httpx.HTTPError as exc:
@@ -452,7 +452,7 @@ def artifact_get(name: str, content: bool) -> None:
         resp = httpx.get(
             f"{runner_url.rstrip('/')}/api/leases/{lease_id}/artifacts/{name}",
             headers={"X-Blizzard-Lease-Token": lease_token} if lease_token else {},
-            timeout=_PM_ITEMS_TIMEOUT,
+            timeout=_WORK_ITEMS_TIMEOUT,
         )
         resp.raise_for_status()
     except httpx.HTTPError as exc:
@@ -593,31 +593,52 @@ def attach(ctx: click.Context, name: str) -> None:
     ctx.invoke(artifact_create, name=name)
 
 
-@runner.command("pm-items")
+@runner.command("work-items")
 @click.argument("chunk_id")
-def pm_items(chunk_id: str) -> None:
-    """Worker: pass-through read of a chunk's PM items (runner -> hub -> vendor).
+def work_items(chunk_id: str) -> None:
+    """Worker: pass-through read of a chunk's work items (runner -> hub -> vendor).
 
     A pure client of the runner's local API: the build node reads its
     chunk's issue body + comment thread through the runner's proxy route
     (``graphs/default/prompts/build.md``), which forwards to the hub — the worker never talks
-    to the hub or the PM system directly. The runner URL is inherited from the spawn
+    to the hub or the work source directly. The runner URL is inherited from the spawn
     environment (``BLIZZARD_RUNNER_URL``), so no identity argument; the items print as
     JSON (``{items: [{source, ref, label, web_url, fetched_at, body, comments, error}, ...]}``)
     — one entry per pointer — for the worker to consume.
     """
     runner_url = os.environ.get(ENV_RUNNER_URL)
     if not runner_url:
-        raise click.ClickException(f"pm-items: no {ENV_RUNNER_URL} in the environment")
+        raise click.ClickException(f"work-items: no {ENV_RUNNER_URL} in the environment")
     try:
         resp = httpx.get(
-            f"{runner_url.rstrip('/')}/api/chunks/{chunk_id}/pm-items",
-            timeout=_PM_ITEMS_TIMEOUT,
+            f"{runner_url.rstrip('/')}/api/chunks/{chunk_id}/work-items",
+            timeout=_WORK_ITEMS_TIMEOUT,
         )
         resp.raise_for_status()
     except httpx.HTTPError as exc:
-        raise click.ClickException(f"pm-items: could not read the PM item ({exc})") from exc
+        raise click.ClickException(f"work-items: could not read the work item ({exc})") from exc
     click.echo(resp.text)
+
+
+@runner.command("pm-items", hidden=True)
+@click.argument("chunk_id")
+@click.pass_context
+def pm_items(ctx: click.Context, chunk_id: str) -> None:
+    """Deprecated alias for ``blizzard runner work-items`` (issue #55).
+
+    Kept working, hidden from ``--help``, on the ``attach`` precedent above — and for a
+    sharper reason than style. A node's prompt is **inlined into the store at mint and
+    immutable thereafter** (``graph_nodes.prompt``), so every graph already minted in a
+    live hub carries pre-rename prompt text naming this verb *forever*. Those workers run
+    against whatever wheel the runner has now, so without this alias a chunk on an
+    old graph fails mid-node with "no such command" — the failure that hurts most,
+    since it is neither loud at boot nor visible until a worker is already spawned.
+    """
+    click.echo(
+        "warning: `blizzard runner pm-items` is deprecated — use `blizzard runner work-items`",
+        err=True,
+    )
+    ctx.invoke(work_items, chunk_id=chunk_id)
 
 
 @runner.command()

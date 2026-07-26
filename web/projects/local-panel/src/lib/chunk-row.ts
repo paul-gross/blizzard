@@ -9,12 +9,12 @@ import type { MachineChunkStatus } from './chunk-status';
  * a lane-colored left edge (the derived status's own {@link toneColor}, the
  * same ladder {@link KitBadge} paints its pill with — the hub board's own
  * card scheme, `fleet/board-shell/board-shell.ts`) over three stacked lines —
- * compact chunk ref + node name/attempt epoch, the PM-item chips (linked to
+ * compact chunk ref + node name/attempt epoch, the work-item chips (linked to
  * the work items) and title, then the derived status. Same fields as the
  * row this replaces, laid out like the hub board's card instead of one
  * cramped grid line.
  *
- * The PM enrichment is the same severable, volatile layering the old lease row
+ * The work-item enrichment is the same severable, volatile layering the old lease row
  * carried (issue #28, decision 1): one {@link injectChunkTitleQuery} per row,
  * read optimistically — every degraded case (hub down, no source, per-pointer
  * forge failure) collapses to "render nothing extra". A pointer with a
@@ -159,11 +159,11 @@ export class ChunkRow {
    * same ladder the status badge paints with, so the two never disagree. */
   protected readonly laneColor = computed(() => toneColor(this.status().tone));
 
-  /** The severable PM read (issue #28, decision 1) — never branched on for pending/error. */
+  /** The severable work-item read (issue #28, decision 1) — never branched on for pending/error. */
   protected readonly titleQuery = injectChunkTitleQuery(() => this.chunkId());
 
   protected readonly linkedItems = computed(() => this.titleQuery.data()?.items ?? []);
 
-  /** The first pm-item's title, or empty when unresolved/failed/absent. */
+  /** The first work-item's title, or empty when unresolved/failed/absent. */
   protected readonly titleText = computed<string>(() => this.titleQuery.data()?.items?.[0]?.title ?? '');
 }

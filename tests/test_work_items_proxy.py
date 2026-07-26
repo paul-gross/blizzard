@@ -1,9 +1,9 @@
-"""The runner-local PM-item pass-through proxy — route + ``blizzard runner pm-items`` verb.
+"""The runner-local work-item pass-through proxy — route + ``blizzard runner work-items`` verb.
 
 The layered pass-through: a build worker reads its chunk's issue through the
-runner's ``GET /api/chunks/{id}/pm-items`` route, which **forwards** to the hub's
-pass-through — the worker never talks to the hub or the PM system directly. The
-hub half (forge read, contents-not-stored) is covered by ``test_pm_item``; this proves
+runner's ``GET /api/chunks/{id}/work-items`` route, which **forwards** to the hub's
+pass-through — the worker never talks to the hub or the work source directly. The
+hub half (forge read, contents-not-stored) is covered by ``test_work_item``; this proves
 the *runner's* half — that it forwards, and that the hub's own status passes through.
 
 Two tiers, no live hub:
@@ -11,7 +11,7 @@ Two tiers, no live hub:
 * **component** — the runner route over a real app (TestClient), the hub reached through
   a stubbed ``httpx.get`` so the forward, the pass-through of a hub ``404``, and the
   ``502`` on an unreachable hub are all asserted against the real controller;
-* **unit** — the ``blizzard runner pm-items`` verb's inherited-identity handling and its
+* **unit** — the ``blizzard runner work-items`` verb's inherited-identity handling and its
   GET against the local API (``httpx.get`` stubbed), the CLI half.
 """
 
@@ -24,7 +24,7 @@ import pytest
 from click.testing import CliRunner
 from fastapi.testclient import TestClient
 
-import blizzard.runner.api.pm_items as pm_items_route
+import blizzard.runner.api.work_items as work_items_route
 from blizzard.runner.app import create_app
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import RunnerConfig
@@ -74,9 +74,9 @@ def _runner_app(tmp_path: Path) -> TestClient:
 
 @pytest.mark.component
 def test_proxy_forwards_the_read_to_the_hub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The route forwards to the hub's pm-items route and returns the items verbatim.
+    """The route forwards to the hub's work-items route and returns the items verbatim.
 
-    ``title`` is carried by the shared ``PmItemsView`` wire model's pass-through
+    ``title`` is carried by the shared ``WorkItemsView`` wire model's pass-through
     point, so it rides through this proxy untouched with no proxy-side code change."""
     seen: list[str] = []
 
@@ -84,14 +84,35 @@ def test_proxy_forwards_the_read_to_the_hub(tmp_path: Path, monkeypatch: pytest.
         seen.append(url)
         return _FakeHubResponse(200, _ITEMS)
 
-    monkeypatch.setattr(pm_items_route.httpx, "get", fake_get)
-    resp = _runner_app(tmp_path).get(f"/api/chunks/{_CHUNK}/pm-items")
+    monkeypatch.setattr(work_items_route.httpx, "get", fake_get)
+    resp = _runner_app(tmp_path).get(f"/api/chunks/{_CHUNK}/work-items")
 
     assert resp.status_code == 200, resp.text
     assert resp.json() == _ITEMS
     assert resp.json()["items"][0]["title"] == "the flake is back"
     # It forwarded to the hub's own pass-through route — the worker never crosses a layer.
-    assert seen == [f"{_HUB_URL}/api/fleet/chunks/{_CHUNK}/pm-items"]
+    assert seen == [f"{_HUB_URL}/api/fleet/chunks/{_CHUNK}/work-items"]
+
+
+@pytest.mark.component
+def test_the_deprecated_pm_items_alias_serves_the_same_view(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Issue #55's runner-side alias — one handler, two routes. It answers identically to
+    the canonical path *and* forwards to the hub's canonical `/work-items`: this runner is
+    the newer half of any skew it is party to, so it never proxies the old path onward."""
+    seen: list[str] = []
+
+    def fake_get(url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
+        seen.append(url)
+        return _FakeHubResponse(200, _ITEMS)
+
+    monkeypatch.setattr(work_items_route.httpx, "get", fake_get)
+    client = _runner_app(tmp_path)
+    canonical = client.get(f"/api/chunks/{_CHUNK}/work-items")
+    alias = client.get(f"/api/chunks/{_CHUNK}/pm-items")
+
+    assert alias.status_code == 200, alias.text
+    assert alias.json() == canonical.json() == _ITEMS
+    assert seen == [f"{_HUB_URL}/api/fleet/chunks/{_CHUNK}/work-items"] * 2
 
 
 @pytest.mark.component
@@ -105,9 +126,9 @@ def test_proxy_forwards_the_authorization_header_when_a_token_is_configured(
         seen_headers.append(dict(headers))
         return _FakeHubResponse(200, _ITEMS)
 
-    monkeypatch.setattr(pm_items_route.httpx, "get", fake_get)
+    monkeypatch.setattr(work_items_route.httpx, "get", fake_get)
     config = RunnerConfig(root=tmp_path, db_url="sqlite://", hub_url=_HUB_URL, hub_token="proxy-token")
-    resp = TestClient(create_app(config)).get(f"/api/chunks/{_CHUNK}/pm-items")
+    resp = TestClient(create_app(config)).get(f"/api/chunks/{_CHUNK}/work-items")
 
     assert resp.status_code == 200, resp.text
     assert seen_headers == [{"Authorization": "Bearer proxy-token"}]
@@ -124,8 +145,8 @@ def test_proxy_sends_no_authorization_header_when_no_token_is_configured(
         seen_headers.append(dict(headers))
         return _FakeHubResponse(200, _ITEMS)
 
-    monkeypatch.setattr(pm_items_route.httpx, "get", fake_get)
-    resp = _runner_app(tmp_path).get(f"/api/chunks/{_CHUNK}/pm-items")
+    monkeypatch.setattr(work_items_route.httpx, "get", fake_get)
+    resp = _runner_app(tmp_path).get(f"/api/chunks/{_CHUNK}/work-items")
 
     assert resp.status_code == 200, resp.text
     assert seen_headers == [{}]
@@ -138,7 +159,7 @@ def test_proxy_carries_a_degraded_entry_through_rather_than_500ing(
     """A hub-degraded entry (null ``title``/``body`` + ``error``) rides through as a 200.
 
     The hub degrades a per-pointer forge failure to an ``error`` entry rather than failing the
-    whole read; the proxy re-validates that payload through ``PmItemsView``. A wire model that
+    whole read; the proxy re-validates that payload through ``WorkItemsView``. A wire model that
     rejected a null ``title`` here would turn a harmless degrade into a proxy ``502``/``500`` —
     the exact blinding the wire model forbids — so the degrade is pinned at the proxy, not just the hub."""
     degraded: dict[str, object] = {
@@ -160,8 +181,8 @@ def test_proxy_carries_a_degraded_entry_through_rather_than_500ing(
     def fake_get(url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
         return _FakeHubResponse(200, degraded)
 
-    monkeypatch.setattr(pm_items_route.httpx, "get", fake_get)
-    resp = _runner_app(tmp_path).get(f"/api/chunks/{_CHUNK}/pm-items")
+    monkeypatch.setattr(work_items_route.httpx, "get", fake_get)
+    resp = _runner_app(tmp_path).get(f"/api/chunks/{_CHUNK}/work-items")
 
     assert resp.status_code == 200, resp.text
     entry = resp.json()["items"][0]
@@ -176,8 +197,8 @@ def test_proxy_passes_through_the_hub_status(tmp_path: Path, monkeypatch: pytest
     def fake_get(url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
         return _FakeHubResponse(404, {"detail": "unknown chunk ch_pass"})
 
-    monkeypatch.setattr(pm_items_route.httpx, "get", fake_get)
-    resp = _runner_app(tmp_path).get(f"/api/chunks/{_CHUNK}/pm-items")
+    monkeypatch.setattr(work_items_route.httpx, "get", fake_get)
+    resp = _runner_app(tmp_path).get(f"/api/chunks/{_CHUNK}/work-items")
 
     assert resp.status_code == 404
     assert resp.json()["detail"] == "unknown chunk ch_pass"
@@ -190,15 +211,15 @@ def test_proxy_502_when_the_hub_is_unreachable(tmp_path: Path, monkeypatch: pyte
     def fake_get(url: str, *, headers: dict[str, str], timeout: float) -> _FakeHubResponse:
         raise httpx.ConnectError("connection refused")
 
-    monkeypatch.setattr(pm_items_route.httpx, "get", fake_get)
-    resp = _runner_app(tmp_path).get(f"/api/chunks/{_CHUNK}/pm-items")
+    monkeypatch.setattr(work_items_route.httpx, "get", fake_get)
+    resp = _runner_app(tmp_path).get(f"/api/chunks/{_CHUNK}/work-items")
 
     assert resp.status_code == 502
     assert "unreachable" in resp.json()["detail"]
 
 
 # --------------------------------------------------------------------------- #
-# The `blizzard runner pm-items` verb (unit tier)
+# The `blizzard runner work-items` verb (unit tier)
 # --------------------------------------------------------------------------- #
 
 
@@ -221,12 +242,12 @@ def test_verb_gets_the_local_proxy_with_inherited_identity(monkeypatch: pytest.M
     monkeypatch.setattr(httpx, "get", fake_get)
     result = CliRunner().invoke(
         runner_group,
-        ["pm-items", _CHUNK],
+        ["work-items", _CHUNK],
         env={"BLIZZARD_RUNNER_URL": "http://127.0.0.1:8431/"},
     )
 
     assert result.exit_code == 0, result.output
-    assert calls and calls[0][0] == f"http://127.0.0.1:8431/api/chunks/{_CHUNK}/pm-items"
+    assert calls and calls[0][0] == f"http://127.0.0.1:8431/api/chunks/{_CHUNK}/work-items"
     assert '"body": "please fix the flake"' in result.output
 
 
@@ -240,7 +261,7 @@ def test_verb_errors_without_a_runner_url(monkeypatch: pytest.MonkeyPatch) -> No
         return _FakeLocalResponse("")
 
     monkeypatch.setattr(httpx, "get", fake_get)
-    result = CliRunner().invoke(runner_group, ["pm-items", _CHUNK], env={"BLIZZARD_RUNNER_URL": ""})
+    result = CliRunner().invoke(runner_group, ["work-items", _CHUNK], env={"BLIZZARD_RUNNER_URL": ""})
 
     assert result.exit_code != 0
     assert "no BLIZZARD_RUNNER_URL" in result.output

@@ -29,7 +29,7 @@ from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.queue import ChunkNotFound, ChunkNotReady
 from blizzard.hub.domain.work import Chunk
-from blizzard.wire.chunk import PmPointerModel
+from blizzard.wire.chunk import WorkRefModel
 from blizzard.wire.queue import (
     ChunkGroupRequest,
     ChunkGroupResponse,
@@ -47,7 +47,7 @@ def _entries(ready: list[Chunk]) -> list[QueuePeekEntry]:
             chunk_id=chunk.chunk_id,
             graph_id=chunk.graph_id,
             position=position,
-            pm_pointers=[PmPointerModel(source=p.source, ref=p.ref) for p in chunk.pm_pointers],
+            work_refs=[WorkRefModel(source=p.source, ref=p.ref) for p in chunk.work_refs],
         )
         for position, chunk in enumerate(ready)
     ]
@@ -106,6 +106,6 @@ def group_chunks(
     services.events.publish_chunk_changed(survivor.chunk_id, "ready")
     return ChunkGroupResponse(
         chunk_id=survivor.chunk_id,
-        pm_pointers=[PmPointerModel(source=p.source, ref=p.ref) for p in survivor.pm_pointers],
+        work_refs=[WorkRefModel(source=p.source, ref=p.ref) for p in survivor.work_refs],
         merged_chunk_ids=[m for m in request.merge_chunk_ids if m != survivor.chunk_id],
     )

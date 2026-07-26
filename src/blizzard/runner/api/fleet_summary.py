@@ -4,8 +4,8 @@ The runner machine panel's hub rail shows a "Fleet · read from hub API" counts 
 four integers (ready / running / waiting / needs) giving the operator a fleet-level pulse
 without leaving the panel (issue #76). The panel is served by the runner and the hub API
 allows no cross-origin browser read, so the browser cannot fetch the counts from the hub
-directly: this route **forwards** the read to the hub, exactly as the PM-items proxy does
-(:mod:`blizzard.runner.api.pm_items`) — panel -> own runner -> hub, on ``config.hub_url``.
+directly: this route **forwards** the read to the hub, exactly as the work-items proxy does
+(:mod:`blizzard.runner.api.work_items`) — panel -> own runner -> hub, on ``config.hub_url``.
 
 Read-only over its wiring (``bzh:controller-read-only``): it forwards to the hub URL the
 ``host`` composition root resolved onto ``app.state.config``, carrying the same
@@ -15,7 +15,7 @@ when unenrolled. The forward targets the hub's fleet-router counterpart
 (``/api/fleet/summary``), where the runner bearer token is confined; the board has no
 anonymous counterpart because its own card list already carries every status.
 
-Severable like PM-items: a transport failure to the hub is a ``502`` and the hub's own
+Severable like work-items: a transport failure to the hub is a ``502`` and the hub's own
 status passes through verbatim, so the panel degrades its strip (dimmed / "last known")
 on a distinct error rather than showing empty counts, and the hub-free local rails stay
 unaffected. Counts are never stored on the path — a fresh fold each call.

@@ -1,10 +1,10 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 import { runnerApi } from 'fleet';
 
-import { runnerChunkPmItemsKey } from './query-keys';
+import { runnerChunkWorkItemsKey } from './query-keys';
 
 /**
- * Runner `GET /api/chunks/{chunk_id}/pm-items` read — the layered pass-through
+ * Runner `GET /api/chunks/{chunk_id}/work-items` read — the layered pass-through
  * (panel → its own runner → hub → vendor, with the hub's credentials) that
  * carries the issue title layered onto a lease row (issue #28). This is a strictly
  * **severable, volatile** read, never the panel's critical path: the leases route
@@ -32,10 +32,10 @@ export function injectChunkTitleQuery(chunkId: () => string) {
   return injectQuery(() => {
     const id = chunkId();
     return {
-      queryKey: runnerChunkPmItemsKey(id),
+      queryKey: runnerChunkWorkItemsKey(id),
       enabled: !!id,
-      queryFn: async (): Promise<runnerApi.PmItemsView> => {
-        const { data, error } = await runnerApi.getPmItemsApiChunksChunkIdPmItemsGet({
+      queryFn: async (): Promise<runnerApi.WorkItemsView> => {
+        const { data, error } = await runnerApi.getWorkItemsApiChunksChunkIdWorkItemsGet({
           path: { chunk_id: id },
           throwOnError: false,
         });

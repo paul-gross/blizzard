@@ -1,6 +1,6 @@
 export { injectHubChunksQuery } from './chunks.query';
 export { injectHubChunkDetailQuery } from './chunk-detail.query';
-export { injectHubChunkPmItemsQuery } from './chunk-pm-items.query';
+export { injectHubChunkWorkItemsQuery } from './chunk-work-items.query';
 export { injectAnswerQuestionMutation, injectResolveDecisionMutation } from './human.mutations';
 export type { AnswerVars, ResolveVars } from './human.mutations';
 export { injectDetachChunkMutation } from './detach.mutations';

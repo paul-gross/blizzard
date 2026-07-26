@@ -10,7 +10,7 @@ import { HeartbeatFreshness } from './heartbeat-freshness';
  * `state` right-aligned on the first line, `node / env / pid / session` on the
  * second, and a {@link HeartbeatFreshness} bar under both. Deliberately free of
  * issue chips/titles — the lease list is the *liveness* rail; what a chunk is
- * about lives on the machine-chunks list, which carries the PM enrichment.
+ * about lives on the machine-chunks list, which carries the work-item enrichment.
  *
  * `data-lease-id` remains a stable hook for the e2e tier to select a row by
  * (`bzh:sweep-release-only-tiers` — `data-*` is the sanctioned e2e seam). The

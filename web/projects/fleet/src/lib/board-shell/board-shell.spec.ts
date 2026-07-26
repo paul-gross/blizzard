@@ -29,8 +29,8 @@ describe('BoardShell', () => {
 
   it('renders a not-ready chunk in the backlog column with a Promote action that emits its id', async () => {
     const chunks: ChunkSummary[] = [
-      { chunk_id: 'ch_01notready00000000000000000', graph_id: 'gr_1', model: 'claude-opus-4-8', status: 'not_ready', current_node_id: 'nd_build', pm_pointers: [] },
-      { chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', model: 'claude-opus-4-8', status: 'running', current_node_id: 'nd_build', pm_pointers: [] },
+      { chunk_id: 'ch_01notready00000000000000000', graph_id: 'gr_1', model: 'claude-opus-4-8', status: 'not_ready', current_node_id: 'nd_build', work_refs: [] },
+      { chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', model: 'claude-opus-4-8', status: 'running', current_node_id: 'nd_build', work_refs: [] },
     ];
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('chunks', chunks);
@@ -52,9 +52,9 @@ describe('BoardShell', () => {
 
   it('renders one card per non-ready chunk, in its derived-status column, showing status + current node', async () => {
     const chunks: ChunkSummary[] = [
-      { chunk_id: 'ch_01ready0000000000000000000', graph_id: 'gr_1', model: 'claude-opus-4-8', status: 'ready', current_node_id: 'nd_build', pm_pointers: [] },
-      { chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', model: 'claude-opus-4-8', status: 'running', current_node_id: 'nd_build', pm_pointers: [] },
-      { chunk_id: 'ch_01done00000000000000000000', graph_id: 'gr_1', model: 'claude-opus-4-8', status: 'done', current_node_id: 'done', pm_pointers: [] },
+      { chunk_id: 'ch_01ready0000000000000000000', graph_id: 'gr_1', model: 'claude-opus-4-8', status: 'ready', current_node_id: 'nd_build', work_refs: [] },
+      { chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', model: 'claude-opus-4-8', status: 'running', current_node_id: 'nd_build', work_refs: [] },
+      { chunk_id: 'ch_01done00000000000000000000', graph_id: 'gr_1', model: 'claude-opus-4-8', status: 'done', current_node_id: 'done', work_refs: [] },
     ];
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('chunks', chunks);
@@ -79,7 +79,7 @@ describe('BoardShell', () => {
 
   it('renders a paused chunk in the WAIT/HUMAN column (issue #46)', async () => {
     const chunks: ChunkSummary[] = [
-      { chunk_id: 'ch_01paused000000000000000000', graph_id: 'gr_1', model: 'claude-opus-4-8', status: 'paused', current_node_id: 'nd_build', pm_pointers: [] },
+      { chunk_id: 'ch_01paused000000000000000000', graph_id: 'gr_1', model: 'claude-opus-4-8', status: 'paused', current_node_id: 'nd_build', work_refs: [] },
     ];
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('chunks', chunks);
@@ -93,7 +93,7 @@ describe('BoardShell', () => {
 
   it('emits the chunk id when a card is activated (fills the detail dock)', async () => {
     const chunks: ChunkSummary[] = [
-      { chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', model: 'claude-opus-4-8', status: 'running', current_node_id: 'nd_build', pm_pointers: [] },
+      { chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', model: 'claude-opus-4-8', status: 'running', current_node_id: 'nd_build', work_refs: [] },
     ];
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('chunks', chunks);
@@ -114,7 +114,7 @@ describe('BoardShell', () => {
         status: 'running',
         current_node_id: 'nd_01KXHKVCWZ1000000000000000',
         current_node_name: 'review',
-        pm_pointers: [],
+        work_refs: [],
       },
     ];
     const fixture = TestBed.createComponent(BoardShell);
@@ -127,7 +127,7 @@ describe('BoardShell', () => {
     expect(node?.getAttribute('title')).toBe('nd_01KXHKVCWZ1000000000000000');
   });
 
-  it('names the PM work item as plain text — a card carries no competing link', async () => {
+  it('names the work item as plain text — a card carries no competing link', async () => {
     const chunks: ChunkSummary[] = [
       {
         chunk_id: 'ch_01running000000000000000000',
@@ -135,7 +135,7 @@ describe('BoardShell', () => {
         status: 'running',
         current_node_id: 'nd_build',
         current_node_name: 'build',
-        pm_pointers: [
+        work_refs: [
           { source: 'blizzard', ref: '8', label: 'blizzard#8', web_url: 'https://github.com/paul-gross/blizzard/issues/8' },
           { source: 'widget', ref: '9', label: 'widget#9', web_url: 'https://github.com/paul-gross/widget/issues/9' },
         ],
@@ -149,7 +149,7 @@ describe('BoardShell', () => {
     // Both pointers read on the one work-item line; the whole card is a single click
     // target for opening the chunk, so nothing inside it is an anchor competing for
     // that click — the link out to the forge lives in the detail panel.
-    const item = el.querySelector('[data-testid="pm-chip"]');
+    const item = el.querySelector('[data-testid="work-ref-chip"]');
     expect(item?.textContent?.trim()).toBe('blizzard#8 widget#9');
     expect(el.querySelectorAll('[data-testid="chunk-card"] a')).toHaveLength(0);
     // The short chunk id stays visible as the stable handle.
@@ -161,13 +161,13 @@ describe('BoardShell', () => {
       // Zero pointers, and a pointer whose URL did not parse (null label) — no chips,
       // the short id carries the identity, and nothing errors. Both are non-ready so
       // they render on the board (ready chunks would live in the rail instead).
-      { chunk_id: 'ch_01done00000000000000000000', graph_id: 'gr_1', model: 'claude-opus-4-8', status: 'done', current_node_id: 'done', pm_pointers: [] },
+      { chunk_id: 'ch_01done00000000000000000000', graph_id: 'gr_1', model: 'claude-opus-4-8', status: 'done', current_node_id: 'done', work_refs: [] },
       {
         chunk_id: 'ch_01running000000000000000000',
         graph_id: 'gr_1', model: 'claude-opus-4-8',
         status: 'running',
         current_node_id: 'nd_build',
-        pm_pointers: [{ source: 'blizzard', ref: 'wiki', label: null, web_url: null }],
+        work_refs: [{ source: 'blizzard', ref: 'wiki', label: null, web_url: null }],
       },
     ];
     const fixture = TestBed.createComponent(BoardShell);
@@ -175,7 +175,7 @@ describe('BoardShell', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelectorAll('[data-testid="pm-chip"]')).toHaveLength(0);
+    expect(el.querySelectorAll('[data-testid="work-ref-chip"]')).toHaveLength(0);
     expect(el.querySelectorAll('[data-testid="chunk-card"]')).toHaveLength(2);
     const running = el.querySelector('[data-col="running"] [data-testid="chunk-card"]');
     expect(running?.querySelector('[data-testid="chunk-id"]')?.textContent).toContain('C-');
@@ -196,7 +196,7 @@ describe('BoardShell', () => {
         model: 'claude-opus-4-8',
         status: 'running',
         current_node_id: 'nd_build',
-        pm_pointers: [],
+        work_refs: [],
         cost: {
           input_tokens: 100,
           output_tokens: 50,
@@ -223,7 +223,7 @@ describe('BoardShell', () => {
         model: 'claude-opus-4-8',
         status: 'running',
         current_node_id: 'nd_build',
-        pm_pointers: [],
+        work_refs: [],
         cost: {
           input_tokens: 100,
           output_tokens: 50,
@@ -244,7 +244,7 @@ describe('BoardShell', () => {
 
   it('shows no cost badge for a chunk with zero, non-partial spend', async () => {
     const chunks: ChunkSummary[] = [
-      { chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', model: 'claude-opus-4-8', status: 'running', current_node_id: 'nd_build', pm_pointers: [] },
+      { chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', model: 'claude-opus-4-8', status: 'running', current_node_id: 'nd_build', work_refs: [] },
     ];
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('chunks', chunks);

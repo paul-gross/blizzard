@@ -2,7 +2,7 @@
 
 The **envelope** is what the runner works a node-step from: the pre-prompt (base
 prompt + any arrival addendum, already inlined), the node's config, the chunk's
-PM pointers, and every artifact resolved latest-by-epoch. It is
+work refs, and every artifact resolved latest-by-epoch. It is
 handed back by the claim response, by ``POST /chunks/{id}/completions`` (the next
 node), and by the idempotent ``GET /chunks/{id}/envelope`` re-read.
 
@@ -83,7 +83,7 @@ class NodeEnvelope(BaseModel):
     # hub node or a human gate, which carry no worker prompt.
     prompt: str | None
     judgement_prompt: str | None
-    pm_pointers: list[dict[str, str]] = []
+    work_refs: list[dict[str, str]] = []
     artifacts: list[EnvelopeArtifact] = []
 
 

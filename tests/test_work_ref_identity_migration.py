@@ -1,4 +1,4 @@
-"""The pm-pointer-source-ref revision's pointer-identity reshape — ``{provider, url}`` -> ``{source, ref}``.
+"""The pointer-identity revision — a work ref's ``{provider, url}`` -> ``{source, ref}`` reshape.
 
 Exercises the backfill on a store migrated to the runner-local-pause revision (the
 revision immediately before the pointer reshape), seeded with rows in the
@@ -10,10 +10,16 @@ reverse.
 Seeded with literal SQL against the pre-reshape shape rather than
 ``from blizzard.hub.store import schema as s`` (the way
 ``test_chunk_promoted_migration.py`` seeds its unaffected tables) — the same reason
-the pm-pointer-source-ref migration itself declares its own local ``sa.Table`` literals rather than
+the pointer-identity migration itself declares its own local ``sa.Table`` literals rather than
 importing ``schema.py`` (see that module's docstring): ``schema.py`` is head-of-tree
 and will keep moving, so a test pinned to a revision *before* a column reshape must not
 import a table shape that has since moved on.
+
+For the same reason the table is spelled ``chunk_pm_pointers`` throughout: this test is
+pinned to revisions that predate the issue-#55 rename, and at those revisions that is
+the table's real name. ``20260726_1200_hub_chunk_work_refs_rename`` renames it to
+``chunk_work_refs`` later in the chain, and ``test_work_ref_table_rename_migration.py``
+is what covers *that*.
 """
 
 from __future__ import annotations
@@ -31,6 +37,11 @@ from blizzard.hub.runtime import migration_runner
 pytestmark = pytest.mark.component
 
 _BEFORE = "20260716_1511_hub_runner_local_pause"  # the head just before the pointer reshape
+# This test pins its upgrades to the reshape revision itself, never to ``head``: a later
+# revision (``20260726_1200_hub_chunk_work_refs_rename``, issue #55) renames the table
+# out from under the literals above, and a revision-pinned test must stop where the
+# revision it exercises does.
+_RESHAPE = "20260716_1512_hub_pm_pointer_source_ref"
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 # Literal, revision-pinned table shapes — the pre-reshape ``chunk_pm_pointers`` plus the
@@ -99,7 +110,7 @@ def test_issue_shaped_row_backfills_to_the_repo_tail(tmp_path: Path) -> None:
     engine = create_engine_from_url(db_url)
     _seed(engine)
 
-    runner.upgrade("head")
+    runner.upgrade(_RESHAPE)
 
     with engine.connect() as conn:
         rows = {r.chunk_id: r for r in conn.execute(sa.select(_NEW_POINTERS))}
@@ -114,7 +125,7 @@ def test_non_issue_shaped_row_survives_verbatim(tmp_path: Path) -> None:
     engine = create_engine_from_url(db_url)
     _seed(engine)
 
-    runner.upgrade("head")
+    runner.upgrade(_RESHAPE)
 
     with engine.connect() as conn:
         rows = {r.chunk_id: r for r in conn.execute(sa.select(_NEW_POINTERS))}
@@ -128,7 +139,7 @@ def test_downgrade_reconstructs_a_structurally_canonical_url(tmp_path: Path) -> 
     runner.upgrade(_BEFORE)
     engine = create_engine_from_url(db_url)
     _seed(engine)
-    runner.upgrade("head")
+    runner.upgrade(_RESHAPE)
 
     runner.downgrade(_BEFORE)
 
@@ -137,7 +148,7 @@ def test_downgrade_reconstructs_a_structurally_canonical_url(tmp_path: Path) -> 
     # Canonicalizing, not byte-exact, and *not resolvable*: the owner segment is
     # unrecoverable from the repo tail alone, so the reconstructed URL carries a
     # documented placeholder owner rather than the original ``paul-gross``. Nothing is
-    # served at that address — a downgraded hub's PM reads 404 until re-ingested. It is
+    # served at that address — a downgraded hub's work-item reads 404 until re-ingested. It is
     # issue-*shaped* so that a re-upgrade re-parses it (see the round-trip test below),
     # which is the property the placeholder exists to hold.
     assert rows["ch_issue"].provider == "github"
@@ -149,7 +160,7 @@ def test_downgrade_reconstructs_a_structurally_canonical_url(tmp_path: Path) -> 
 
 
 def test_down_then_up_returns_the_identical_source_ref_rows(tmp_path: Path) -> None:
-    """The property that makes the pm-pointer-source-ref revision rehearsable despite the lossy owner.
+    """The property that makes the pointer-identity revision rehearsable despite the lossy owner.
 
     ``downgrade()`` cannot restore the original bytes, so byte-exactness is not the bar.
     The bar is that the *pointer identity* — the ``(source, ref)`` the whole system keys
@@ -165,12 +176,12 @@ def test_down_then_up_returns_the_identical_source_ref_rows(tmp_path: Path) -> N
     engine = create_engine_from_url(db_url)
     _seed(engine)
 
-    runner.upgrade("head")
+    runner.upgrade(_RESHAPE)
     with engine.connect() as conn:
         before = {r.chunk_id: (r.source, r.ref) for r in conn.execute(sa.select(_NEW_POINTERS))}
 
     runner.downgrade(_BEFORE)
-    runner.upgrade("head")
+    runner.upgrade(_RESHAPE)
     with engine.connect() as conn:
         after = {r.chunk_id: (r.source, r.ref) for r in conn.execute(sa.select(_NEW_POINTERS))}
 
@@ -190,12 +201,12 @@ def test_upgrade_is_idempotent_over_an_already_reshaped_store(tmp_path: Path) ->
     runner.upgrade(_BEFORE)
     engine = create_engine_from_url(db_url)
     _seed(engine)
-    runner.upgrade("head")
+    runner.upgrade(_RESHAPE)
 
     with engine.connect() as conn:
         first = {r.chunk_id: (r.source, r.ref) for r in conn.execute(sa.select(_NEW_POINTERS))}
 
-    runner.upgrade("head")  # a second pass over the same, already-reshaped store
+    runner.upgrade(_RESHAPE)  # a second pass over the same, already-reshaped store
 
     with engine.connect() as conn:
         second = {r.chunk_id: (r.source, r.ref) for r in conn.execute(sa.select(_NEW_POINTERS))}
@@ -208,13 +219,13 @@ def test_a_fresh_store_reaches_0013_in_the_pre_reshape_shape(tmp_path: Path) -> 
     The walking-skeleton revision creates ``chunk_pm_pointers``; it once did so by importing the live
     ``schema.py`` table object. Once ``schema.py`` gained ``{source, ref}`` that import
     would have made a *fresh* store materialize the post-reshape columns at the
-    walking-skeleton revision — and the pm-pointer-source-ref revision's
+    walking-skeleton revision — and the pointer-identity revision's
     ``if "url" not in columns: return`` guard would then fire, so its
     backfill would be dead on every fresh store (i.e. every test store) while the live
     store still needed it. A revision pinned in time must not read a moving shape, so
     the walking-skeleton revision now carries its own frozen literal. This asserts the freeze holds from both
     ends: the pre-reshape shape exists at the walking-skeleton revision, and the
-    pm-pointer-source-ref revision genuinely reshapes it away.
+    pointer-identity revision genuinely reshapes it away.
     """
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
@@ -228,12 +239,12 @@ def test_a_fresh_store_reaches_0013_in_the_pre_reshape_shape(tmp_path: Path) -> 
     assert {"provider", "url"} <= columns(), "the walking-skeleton revision must create the pre-reshape shape"
     assert not ({"source", "ref"} & columns()), "the walking-skeleton revision leaked head-of-tree schema.py's shape"
 
-    runner.upgrade("head")
-    assert {"source", "ref"} <= columns(), "the pm-pointer-source-ref revision must reshape a fresh store, not no-op"
+    runner.upgrade(_RESHAPE)
+    assert {"source", "ref"} <= columns(), "the pointer-identity revision must reshape a fresh store, not no-op"
     assert not ({"provider", "url"} & columns())
 
 
-def test_a_fresh_store_s_chunk_pm_pointers_keeps_the_chunk_id_foreign_key(tmp_path: Path) -> None:
+def test_a_fresh_store_s_work_ref_table_keeps_the_chunk_id_foreign_key(tmp_path: Path) -> None:
     """The walking-skeleton revision's frozen ``chunk_pm_pointers`` literal must still declare the FK to
     ``chunks.chunk_id`` that ``schema.py`` declares (``bzh:sql-portable`` — postgres is
     the same schema under a different URL, so a schema that only *sometimes* carries the
@@ -244,7 +255,7 @@ def test_a_fresh_store_s_chunk_pm_pointers_keeps_the_chunk_id_foreign_key(tmp_pa
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     engine = create_engine_from_url(db_url)
 
-    runner.upgrade("head")
+    runner.upgrade(_RESHAPE)
 
     with engine.connect() as conn:
         fks = sa.inspect(conn).get_foreign_keys("chunk_pm_pointers")

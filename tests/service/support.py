@@ -156,7 +156,7 @@ BUILD_SCRIPT = (
 JUDGEMENT_SCRIPT = "verdict('pass', 'the mock harness committed the change; checks are green')\n"
 
 
-def mock_hub_chunk_spec(pm_ref: str) -> dict:
+def mock_hub_chunk_spec(work_ref: str) -> dict:
     """A scripted build -> deliver chunk the mock hub serves to a real runner."""
     return {
         "graph_id": "gr_service",
@@ -182,7 +182,7 @@ def mock_hub_chunk_spec(pm_ref: str) -> dict:
                 },
             },
         },
-        "pm_pointers": [{"source": "mock", "ref": pm_ref}],
+        "work_refs": [{"source": "mock", "ref": work_ref}],
     }
 
 

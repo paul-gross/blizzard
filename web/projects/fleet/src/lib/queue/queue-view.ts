@@ -157,7 +157,7 @@ export class QueuePanelView {
   }
 
   protected pointerLabel(entry: QueuePeekEntry): string {
-    const pointers = entry.pm_pointers ?? [];
+    const pointers = entry.work_refs ?? [];
     if (pointers.length === 0) return '—';
     const [first] = pointers;
     const suffix = pointers.length > 1 ? ` +${pointers.length - 1}` : '';

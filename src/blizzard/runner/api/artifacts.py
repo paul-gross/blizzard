@@ -7,7 +7,7 @@ resolved latest-by-epoch, both kinds) and ``GET /api/leases/{lease_id}/artifacts
 ``POST /api/leases/{lease_id}/attachments`` (``attachments.py``) — the same lease-scoped,
 token-authorized shape.
 
-The read is layered exactly like the PM-item proxy (``pm_items.py``): the worker never
+The read is layered exactly like the work-item proxy (``work_items.py``): the worker never
 holds hub credentials. This route authorizes the lease token minted at the worker's own
 spawn (the same ``X-Blizzard-Lease-Token`` / ``Authorization: Bearer`` the attach edge
 takes, via :func:`~blizzard.runner.api.lease_token.presented_lease_token` +

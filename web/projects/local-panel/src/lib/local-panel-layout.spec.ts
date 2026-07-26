@@ -35,7 +35,7 @@ async function render(overrides: Record<string, unknown> = {}) {
       provideZonelessChangeDetection(),
       // `LocalPanelLayout` itself is presentational, but it composes several
       // self-fetching mini-containers that inject their own queries/mutations —
-      // `ChunkRow`'s severable PM-title read (issue #28, decision 1),
+      // `ChunkRow`'s severable work-item-title read (issue #28, decision 1),
       // `LocalPauseControl` (issue #133), and `LocalIdentity` — so a TanStack
       // Query context has to exist for the fixture to construct at all.
       provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
@@ -72,7 +72,7 @@ describe('LocalPanelLayout', () => {
 
   beforeEach(() => {
     // Same reason as the provider above: every mini-container's own read (`ChunkRow`'s
-    // PM-title lookup, `LocalPauseControl`'s and `LocalIdentity`'s status reads) just
+    // work-item-title lookup, `LocalPauseControl`'s and `LocalIdentity`'s status reads) just
     // needs an answer, not a realistic one, so every route resolves to this one empty
     // shape. `GET /api/runner` carries no `pause` here, so `LocalPauseControl` reads
     // both brakes off and renders `Pause` in every spec in this file — harmless for

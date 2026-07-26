@@ -9,7 +9,7 @@ import {
 } from './chunk-awaiting-human';
 import { ChunkDetailHeader } from './chunk-detail-header';
 import { ChunkFacts, type EditGraphEvent, type EditModelEvent } from './chunk-facts';
-import { ChunkIssuePane, type PmItemsState } from './chunk-issue-pane';
+import { ChunkIssuePane, type WorkItemsState } from './chunk-issue-pane';
 import { ChunkTimeline } from './chunk-timeline';
 import { ChunkTokenBreakdown } from './chunk-token-breakdown';
 
@@ -17,7 +17,7 @@ export type { AnswerQuestionEvent, ResolveDecisionEvent } from './chunk-awaiting
 // The container (`chunk-detail.ts`) imports these three from here too — re-exported
 // so it needs no edit for the split (issue #79's container-unchanged invariant).
 export type { EditGraphEvent, EditModelEvent } from './chunk-facts';
-export type { PmItemsState } from './chunk-issue-pane';
+export type { WorkItemsState } from './chunk-issue-pane';
 
 /**
  * The chunk detail dock (MVP criterion 9/11) — everything known about the
@@ -29,7 +29,7 @@ export type { PmItemsState } from './chunk-issue-pane';
  * work-item column ({@link ChunkFacts} + {@link ChunkTokenBreakdown} +
  * {@link ChunkIssuePane}), the node-history {@link ChunkTimeline}, and the
  * artifacts-and-asks column ({@link ChunkAwaitingHuman} + {@link ChunkArtifacts}).
- * This panel forwards `detail`/`pmItems`/`actionError` down to whichever
+ * This panel forwards `detail`/`workItems`/`actionError` down to whichever
  * siblings need them and re-emits their outputs up unchanged, so
  * `chunk-detail.ts`'s (the container's) template binding set is identical to
  * before the split.
@@ -72,7 +72,7 @@ export type { PmItemsState } from './chunk-issue-pane';
           >
             <fleet-chunk-detail-token-breakdown token-breakdown [detail]="detail()" />
           </fleet-chunk-detail-facts>
-          <fleet-chunk-detail-issue-pane [pmItems]="pmItems()" />
+          <fleet-chunk-detail-issue-pane [workItems]="workItems()" />
         </section>
         <section class="d-sec" aria-label="Node history">
           <fleet-chunk-detail-timeline [detail]="detail()" />
@@ -159,9 +159,9 @@ export class ChunkDetailPanel {
   /** The chunk aggregate to render (status, current node, history, artifacts). */
   readonly detail = input.required<ChunkDetail>();
 
-  /** The chunk's related PM items + fetch state, rendered by the Issue tab (issue #24).
+  /** The chunk's related work items + fetch state, rendered by the Issue tab (issue #24).
    * Defaults to `loading` so the panel constructs without the container wiring it. */
-  readonly pmItems = input<PmItemsState>({ status: 'loading', items: [] });
+  readonly workItems = input<WorkItemsState>({ status: 'loading', items: [] });
 
   /** The container's last **operator-action** failure for this chunk (the 409/404
    * surfaced, not swallowed — issue #42), or `null` when there is nothing to report.
@@ -196,7 +196,7 @@ export class ChunkDetailPanel {
    * (issue #27). */
   readonly editModel = output<EditModelEvent>();
 
-  /** The chunk's PM pointer count — legible before the forge read lands, for the
+  /** The chunk's work ref count — legible before the forge read lands, for the
    * work-item column's own heading. */
-  protected readonly pointerCount = computed<number>(() => this.detail().pm_pointers?.length ?? 0);
+  protected readonly pointerCount = computed<number>(() => this.detail().work_refs?.length ?? 0);
 }

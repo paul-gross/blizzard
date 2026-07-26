@@ -2,7 +2,7 @@
 
 Phase 1 (#86a) landed the hub-side check, warn-only, at registration. This phase makes
 the **runner** the presenting side: every outbound ``httpx.Client`` construction
-(``build.py``) and the pm-items proxy fold in the same ``Authorization: Bearer`` header
+(``build.py``) and the work-items proxy fold in the same ``Authorization: Bearer`` header
 built from :meth:`~blizzard.runner.config.RunnerConfig.auth_headers`. The header-inspection
 lever (``blizzard-mock`` ``GET /_captured``, issue #86b) makes that assertable against a
 **real** mock-hub subprocess rather than a stub: every fleet-facing ``/api/*`` request it
@@ -11,7 +11,7 @@ receives is logged with its headers, in arrival order.
 Two scenarios:
 
 * a runner configured with a token carries it on every call — registration, queue peek,
-  the claim/completion path that lands a chunk, and the pm-items proxy forward — asserted
+  the claim/completion path that lands a chunk, and the work-items proxy forward — asserted
   against the mock hub's captured log;
 * a runner configured with **no** token (unenrolled — the still-supported warn-mode
   default) sends no ``Authorization`` header at all, and the hub (which stays ``warn``
@@ -47,7 +47,7 @@ from tests.service.support import (
     require_winter_source,
     service_gate,
 )
-from tests.service.test_runner_service import _drive, _seed, _tick_env
+from tests.service.test_runner_service import _WORK_REF_URL, _drive, _seed, _tick_env
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -95,21 +95,34 @@ def test_runner_presents_the_bearer_token_on_every_hub_call(tmp_path: Path) -> N
         assert "/api/fleet/runners" in paths
         assert f"/api/fleet/chunks/{chunk_id}/completions" in paths
 
-        # The pm-items proxy path — a separately-constructed httpx call in
-        # `runner/api/pm_items.py` — carries the same credential, not a patched one.
+        # The work-items proxy path — a separately-constructed httpx call in
+        # `runner/api/work_items.py` — carries the same credential, not a patched one.
         api_config = dataclasses.replace(config, host="127.0.0.1", port=_free_port())
         with _runner_api(api_config):
             runner_client = httpx.Client(base_url=f"http://{api_config.host}:{api_config.port}", timeout=10.0)
             try:
-                runner_client.get(f"/api/chunks/{chunk_id}/pm-items")
+                proxied = runner_client.get(f"/api/chunks/{chunk_id}/work-items")
             finally:
                 runner_client.close()
+        # Assert the status *and* the payload, not just that a call was captured. Without
+        # this the test passes on a mock hub that 404s the forward — which is exactly what
+        # happened when the real runner moved to `/work-items` ahead of the mock (issue
+        # #55): the capture below still matched, so the tier reported green over a broken
+        # path. The payload assertion is the other half: `work_refs` is a defaulted field
+        # on both sides, so a seed the mock silently ignores yields an empty list rather
+        # than an error, and only reading a seeded ref back proves the field name agrees
+        # end to end (`mock_hub_chunk_spec` seeds exactly one).
+        assert proxied.status_code == 200, f"the proxy forward failed upstream: {proxied.status_code} {proxied.text}"
+        proxied_items = proxied.json()["items"]
+        assert [i["ref"] for i in proxied_items] == [_WORK_REF_URL], (
+            f"the seeded work ref did not survive seed -> mock hub -> proxy: {proxied_items}"
+        )
 
-        pm_items_calls = [
-            e for e in _captured_from_the_runner(hub) if e["path"] == f"/api/fleet/chunks/{chunk_id}/pm-items"
+        work_items_calls = [
+            e for e in _captured_from_the_runner(hub) if e["path"] == f"/api/fleet/chunks/{chunk_id}/work-items"
         ]
-        assert pm_items_calls, "the pm-items proxy never reached the mock hub"
-        assert pm_items_calls[-1]["headers"].get("authorization") == f"Bearer {_TOKEN}"
+        assert work_items_calls, "the work-items proxy never reached the mock hub"
+        assert work_items_calls[-1]["headers"].get("authorization") == f"Bearer {_TOKEN}"
 
 
 def test_runner_with_no_token_sends_no_authorization_header(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

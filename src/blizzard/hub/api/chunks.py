@@ -1,11 +1,11 @@
-"""Chunk routes — ingest, list, detail, PM pass-through — the anonymous **operator**
+"""Chunk routes — ingest, list, detail, work-item pass-through — the anonymous **operator**
 surface (issue #87).
 
 The chunk-facing surface of the hub API. Controllers stay read-only
 over the store (``bzh:controller-read-only``): ingest delegates to
 domain services that hold the write repository; the list/detail reads
 derive status and current node from facts (``bzh:facts-not-status``), never a stored
-column. The PM read is a vendor-native pass-through whose contents are never stored.
+column. The work-item read is a vendor-native pass-through whose contents are never stored.
 ``PATCH /chunks/{id}`` (issue #104) repins a not-ready or ready-and-unclaimed chunk's
 workflow graph, model selection, or migration intent (issue #27, widened by #120) in one
 all-or-nothing edit — read is already carried on the list/detail views'
@@ -21,7 +21,7 @@ codes are unchanged; only the body is enriched.
 The envelope read, the completion/decision/lease/escalation writes, and ``hub-advance``
 (#65/#66, driven by the runner's own ADVANCE poll) moved to the runner-authenticated
 fleet router (:mod:`blizzard.hub.api.fleet`, issue #87) — no board or CLI caller ever
-reached any of them. ``get_chunk`` and ``get_pm_items`` stay here (the board's own
+reached any of them. ``get_chunk`` and ``get_work_items`` stay here (the board's own
 reads) *and* gain fleet-side counterparts, since the runner reads both too;
 ``dependencies=[Depends(reject_runner_principal)]`` on this router rejects a runner's
 bearer token here rather than treating it as anonymous-plus-credential — a runner's
@@ -67,7 +67,7 @@ from blizzard.hub.domain.work import (
     ChunkStatus,
     IntendedMigration,
     MigrationMode,
-    PmPointer,
+    WorkRef,
     awaiting_external_merge,
     current_node_id,
     derive_chunk_status,
@@ -80,7 +80,7 @@ from blizzard.hub.domain.work import (
     open_pause,
     transition_history,
 )
-from blizzard.hub.pm.source import IPmSource, IPmSourceRegistry, PmSourceError
+from blizzard.hub.work_sources.source import IWorkSource, IWorkSourceRegistry, WorkSourceError
 from blizzard.wire.chunk import (
     ArtifactView,
     BounceView,
@@ -102,29 +102,29 @@ from blizzard.wire.chunk import (
     MigrationView,
     PauseView,
     PendingView,
-    PmItemEntry,
-    PmItemsView,
-    PmPointerView,
     PrView,
     RouteView,
     TransitionView,
+    WorkItemEntry,
+    WorkItemsView,
+    WorkRefView,
 )
 from blizzard.wire.fleet import FleetSummaryView
 
 router = APIRouter(prefix="/api", tags=["chunks"], dependencies=[Depends(reject_runner_principal)])
 
 
-def _pointer_views(chunk: Chunk, pm: IPmSourceRegistry) -> list[PmPointerView]:
+def _pointer_views(chunk: Chunk, work_sources: IWorkSourceRegistry) -> list[WorkRefView]:
     """Each pointer with its board-legible label and browser URL —
     both null when no configured source names ``pointer.source``.
 
-    Each pointer is resolved to its own binding by name (``pm.get(p.source)``) — a
+    Each pointer is resolved to its own binding by name (``work_sources.get(p.source)``) — a
     chunk's pointers need not all share one source."""
-    views: list[PmPointerView] = []
-    for p in chunk.pm_pointers:
-        source = pm.get(p.source)
+    views: list[WorkRefView] = []
+    for p in chunk.work_refs:
+        source = work_sources.get(p.source)
         views.append(
-            PmPointerView(
+            WorkRefView(
                 source=p.source,
                 ref=p.ref,
                 label=source.label(p) if source is not None else None,
@@ -297,22 +297,22 @@ def _usage_history_views(facts: ChunkFacts) -> list[ChunkUsageView]:
     ]
 
 
-def _branch_url_source(chunk: Chunk, pm: IPmSourceRegistry) -> IPmSource | None:
+def _branch_url_source(chunk: Chunk, work_sources: IWorkSourceRegistry) -> IWorkSource | None:
     """The binding a chunk's artifact branch links resolve through.
 
     The one-forge-per-chunk assumption is no longer *inferred* by sniffing
     whichever pointer URL happened to parse first — it is *declared*: the chunk's
     first pointer whose ``source`` names a configured binding lends its
-    :meth:`~blizzard.hub.pm.source.IPmSource.branch_url`. ``None`` when no pointer's
+    :meth:`~blizzard.hub.work_sources.source.IWorkSource.branch_url`. ``None`` when no pointer's
     source is configured — the degradation ``_artifact_views`` already preserves."""
-    for p in chunk.pm_pointers:
-        source = pm.get(p.source)
+    for p in chunk.work_refs:
+        source = work_sources.get(p.source)
         if source is not None:
             return source
     return None
 
 
-def _artifact_views(rows: list[ArtifactRow], web_base: IPmSource | None) -> list[ArtifactView]:
+def _artifact_views(rows: list[ArtifactRow], web_base: IWorkSource | None) -> list[ArtifactView]:
     """The chunk's inline artifact store — every entry, with an asset's content and a
     git-commit's pinned reference surfaced; ordered by ``{node}.{name}.{epoch}``
     so a re-run's later-epoch entry follows its predecessors (append-only history)."""
@@ -380,14 +380,14 @@ def ingest_chunk(request: ChunkIngestRequest, services: Annotated[HubServices, D
     # token should not consult the store, and the whole request rejects together
     # rather than partially ingesting. The route resolves; the domain stays
     # registry-free (bzh:domain-takes-objects) — it never sees the registry at all.
-    pointers: list[PmPointer] = []
+    pointers: list[WorkRef] = []
     for token in request.tokens:
-        pointer = services.pm.resolve(token)
+        pointer = services.work_sources.resolve(token)
         if pointer is None:
-            configured = ", ".join(sorted(services.pm.names())) or "none"
+            configured = ", ".join(sorted(services.work_sources.names())) or "none"
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=(f"token {token!r} is not claimed by any configured PM source (configured: {configured})"),
+                detail=(f"token {token!r} is not claimed by any configured work source (configured: {configured})"),
             )
         pointers.append(pointer)
     try:
@@ -426,7 +426,7 @@ def _summary_view(
         status=derive_chunk_status(facts),
         current_node_id=node_id,
         current_node_name=node_name,
-        pm_pointers=_pointer_views(chunk, services.pm),
+        work_refs=_pointer_views(chunk, services.work_sources),
         model=chunk.model,
         runner_id=route.runner_id if route is not None else None,
         environment_count=len(route.environment_ids) if route is not None else 0,
@@ -477,7 +477,7 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
     graph = services.graphs.get(chunk.graph_id)
     node_id = current_node_id(facts) or (graph.entry_node_id if graph is not None else None)
     node_name = _node_name(graph, node_id)
-    web_base = _branch_url_source(chunk, services.pm)
+    web_base = _branch_url_source(chunk, services.work_sources)
     history_graphs = _history_graphs(services, chunk, facts)
     artifacts = services.chunks.load_artifacts(chunk_id)
     pending = hub_node_pending(facts)
@@ -496,7 +496,7 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
         current_node_id=node_id,
         current_node_name=node_name,
         latest_epoch=latest_epoch(facts),
-        pm_pointers=_pointer_views(chunk, services.pm),
+        work_refs=_pointer_views(chunk, services.work_sources),
         model=chunk.model,
         intended_migration=_intended_migration_view(services, chunk),
         route=RouteView(
@@ -789,35 +789,35 @@ def patch_chunk(
     )
 
 
-@router.get("/chunks/{chunk_id}/pm-items", response_model=PmItemsView, dependencies=[Depends(require(FLEET_VIEW))])
-def get_pm_items(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> PmItemsView:
-    """Pass-through PM items read — one entry per pointer, contents never stored.
+@router.get("/chunks/{chunk_id}/work-items", response_model=WorkItemsView, dependencies=[Depends(require(FLEET_VIEW))])
+def get_work_items(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> WorkItemsView:
+    """Pass-through work items read — one entry per pointer, contents never stored.
 
-    Each pointer is resolved to its own binding by name (``pm.get(pointer.source)``), then
+    Each pointer is resolved to its own binding by name (``work_sources.get(pointer.source)``), then
     fetched fresh from the forge; a per-pointer resolution or forge failure degrades to an
     ``error`` on that entry rather than failing the whole read, so a grouped chunk
     still surfaces the pointers it reached beside a notice for the ones it did not. A chunk
     with no pointers is an empty list — the board's empty state — not a 404. No configured
-    PM source at all is a 503 up front — the request-wide degradation preserved unchanged
+    work source at all is a 503 up front — the request-wide degradation preserved unchanged
     from before per-pointer resolution existed."""
-    if not services.pm.names():
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="no PM work-source is configured")
+    if not services.work_sources.names():
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="no work source is configured")
     chunk = services.chunks.get(chunk_id)
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     fetched_at = iso_utc(services.clock.now())
-    entries: list[PmItemEntry] = []
-    for pointer in chunk.pm_pointers:
-        source = services.pm.get(pointer.source)
+    entries: list[WorkItemEntry] = []
+    for pointer in chunk.work_refs:
+        source = services.work_sources.get(pointer.source)
         if source is None:
             entries.append(
-                PmItemEntry(
+                WorkItemEntry(
                     source=pointer.source,
                     ref=pointer.ref,
                     label=None,
                     web_url=None,
                     fetched_at=fetched_at,
-                    error=f"no configured PM source named {pointer.source!r}",
+                    error=f"no configured work source named {pointer.source!r}",
                 )
             )
             continue
@@ -825,9 +825,9 @@ def get_pm_items(chunk_id: str, services: Annotated[HubServices, Depends(get_ser
         web_url = source.web_url(pointer)
         try:
             item = source.fetch(pointer)
-        except PmSourceError as exc:
+        except WorkSourceError as exc:
             entries.append(
-                PmItemEntry(
+                WorkItemEntry(
                     source=pointer.source,
                     ref=pointer.ref,
                     label=label,
@@ -838,7 +838,7 @@ def get_pm_items(chunk_id: str, services: Annotated[HubServices, Depends(get_ser
             )
         else:
             entries.append(
-                PmItemEntry(
+                WorkItemEntry(
                     source=pointer.source,
                     ref=pointer.ref,
                     label=label,
@@ -849,4 +849,36 @@ def get_pm_items(chunk_id: str, services: Annotated[HubServices, Depends(get_ser
                     comments=item.comments,
                 )
             )
-    return PmItemsView(items=entries)
+    return WorkItemsView(items=entries)
+
+
+# `/pm-items` was this route's name before the work-source rename (issue #55). Unlike the
+# `[[pm_source]]` config key — operator-owned, versionless, and so renamed fail-fast — an
+# HTTP path is reachable by clients we do not ship and cannot redeploy, so the old path
+# stays as a deprecated alias onto the *same handler*: one implementation, two routes, no
+# second view to drift.
+#
+# The client this serves is **out-of-tree tooling** — a script, a dashboard, someone's
+# curl. It is deliberately *not* justified by hub/runner version skew: `docs/deployment.md`
+# has both daemons as two personalities of one wheel on one machine, so within a
+# deployment they cannot skew, and the response body's own renamed fields
+# (`work_refs`) carry no alias for exactly that reason. The intra-fleet exposure the
+# rename really does have is a *stored graph prompt* naming the old CLI verb, and that is
+# covered where it lives: `blizzard runner pm-items` (`runner/cli.py`).
+#
+# Every first-party caller (the web SDK, the board, both CLIs, the runner proxy) is on
+# `/work-items`.
+router.add_api_route(
+    "/chunks/{chunk_id}/pm-items",
+    get_work_items,
+    methods=["GET"],
+    response_model=WorkItemsView,
+    dependencies=[Depends(require(FLEET_VIEW))],
+    deprecated=True,
+    name="get_pm_items_deprecated_alias",
+    summary="Deprecated alias for GET /chunks/{chunk_id}/work-items",
+    description=(
+        "Deprecated since issue #55 — use `GET /chunks/{chunk_id}/work-items`, which this "
+        "path aliases onto the identical handler and returns the identical view."
+    ),
+)

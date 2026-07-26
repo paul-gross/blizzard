@@ -20,7 +20,7 @@ ExecStartPre=/opt/blizzard/venv/bin/blizzard-runner migrate --dir /var/lib/blizz
 ExecStart=/opt/blizzard/venv/bin/blizzard-runner host --dir /var/lib/blizzard/runner
 # Optional overrides (workspace root, hub URL, harness binary) — the durable ones
 # live in the runner's own config.toml, seeded by `blizzard runner init`. No forge
-# or PM credentials belong here: a runner never holds them.
+# or work-source credentials belong here: a runner never holds them.
 EnvironmentFile=-/etc/blizzard/runner.env
 User=blizzard
 Group=blizzard

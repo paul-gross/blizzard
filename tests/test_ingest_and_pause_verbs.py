@@ -108,7 +108,7 @@ def test_ingest_passes_a_source_hash_ref_token_through(monkeypatch: pytest.Monke
 
 @pytest.mark.unit
 def test_ingest_passes_a_pasted_issue_url_through_for_the_hub_to_resolve(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A pasted PM item URL travels through byte-for-byte — the ergonomic path,
+    """A pasted work item URL travels through byte-for-byte — the ergonomic path,
     copied straight from the browser — with no local resolution or repo-tail guess.
     Only the hub, which holds the source configuration, can say which source it names
     (the whole point of this phase: the CLI can no longer assume a source is named
@@ -173,7 +173,7 @@ def test_ingest_maps_a_422_naming_the_unclaimed_token(monkeypatch: pytest.Monkey
     def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
         return _FakeResponse(
             422,
-            {"detail": "token 'no-separator-here' is not claimed by any configured PM source (configured: blizzard)"},
+            {"detail": "token 'no-separator-here' is not claimed by any configured work source (configured: blizzard)"},
         )
 
     monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
@@ -198,7 +198,7 @@ def test_ingest_passes_a_non_issue_url_through_for_the_hub_to_reject(monkeypatch
         calls.append(json)
         return _FakeResponse(
             422,
-            {"detail": "token '...' is not claimed by any configured PM source (configured: blizzard)"},
+            {"detail": "token '...' is not claimed by any configured work source (configured: blizzard)"},
         )
 
     monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
@@ -206,7 +206,7 @@ def test_ingest_passes_a_non_issue_url_through_for_the_hub_to_reject(monkeypatch
     for token in tokens:
         result = CliRunner().invoke(hub_group, ["chunk", "ingest", token])
         assert result.exit_code != 0, f"{token!r} should have been rejected by the hub: {result.output}"
-        assert "not claimed by any configured PM source" in result.output, result.output
+        assert "not claimed by any configured work source" in result.output, result.output
     # The scheme colon was never split on locally — each token traveled through whole.
     assert calls == [{"tokens": [t]} for t in tokens]
 

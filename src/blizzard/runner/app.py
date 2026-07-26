@@ -37,13 +37,13 @@ from blizzard.runner.api.git_commits import router as git_commits_router
 from blizzard.runner.api.health import router as health_router
 from blizzard.runner.api.heartbeat import router as heartbeat_router
 from blizzard.runner.api.leases import router as leases_router
-from blizzard.runner.api.pm_items import router as pm_items_router
 from blizzard.runner.api.readiness import router as readiness_router
 from blizzard.runner.api.requeues import router as requeues_router
 from blizzard.runner.api.selftests import router as selftests_router
 from blizzard.runner.api.session_end import router as session_end_router
 from blizzard.runner.api.takeovers import router as takeovers_router
 from blizzard.runner.api.transcripts import router as transcripts_router
+from blizzard.runner.api.work_items import router as work_items_router
 from blizzard.runner.api.workspace_prompt import router as workspace_prompt_router
 from blizzard.runner.auth.federation import (
     HubAuthModeCache,
@@ -224,7 +224,7 @@ def create_app(
     # lanes, and only the **human web lane** is session-gated when the hub runs an IdP
     # surface (`auth.mode = "oauth"`):
     #   - **worker-hook lane** (ungated) — asks-POST/heartbeat/session-end/attachments/
-    #     pm-items: workers call these over TCP via `BLIZZARD_RUNNER_URL` and *cannot*
+    #     work-items: workers call these over TCP via `BLIZZARD_RUNNER_URL` and *cannot*
     #     SSO-bounce, so they keep their existing lanes (lease-token auth where present).
     #   - **CLI unix-socket lane** (ungated) — the CLI's local verbs dial the human-lane
     #     routes over the socket, whose access control is the socket file's filesystem
@@ -278,17 +278,17 @@ def create_app(
     # node-step inputs (`blizzard runner artifact list|get`) without a hub credential —
     # worker-hook lane, ungated.
     app.include_router(artifacts_router)
-    # The PM-item pass-through proxy: a build worker reads its issue through this route
-    # (`blizzard runner pm-items` over `BLIZZARD_RUNNER_URL`), which forwards to the hub —
+    # The work-item pass-through proxy: a build worker reads its issue through this route
+    # (`blizzard runner work-items` over `BLIZZARD_RUNNER_URL`), which forwards to the hub —
     # worker-hook lane, ungated (the worker never crosses a layer).
-    app.include_router(pm_items_router)
+    app.include_router(work_items_router)
     # Human web lane (gated under an oauth-mode hub): the panel's own reads/writes.
     app.include_router(leases_router, dependencies=human_api)
     app.include_router(transcripts_router, dependencies=human_api)
     app.include_router(selftests_router, dependencies=human_api)
     # The fleet-summary pass-through (issue #76): the machine panel's counts strip reads
     # the fleet's four bucket counts through this route, forwarded to the hub — the same
-    # layered pass-through as PM-items, keeping the hub-free local rails hub-free.
+    # layered pass-through as work-items, keeping the hub-free local rails hub-free.
     app.include_router(fleet_summary_router, dependencies=human_api)
     # The runtime workspace-prompt control (issue #17): read the effective spawn preamble
     # prompt, or replace the override so the next spawn picks it up with no restart.

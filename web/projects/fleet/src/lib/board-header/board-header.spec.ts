@@ -11,7 +11,7 @@ const chunk = (id: string, status: ChunkSummary['status']): ChunkSummary => ({
   model: 'claude-opus-4-8',
   status,
   current_node_id: 'nd_build',
-  pm_pointers: [],
+  work_refs: [],
 });
 
 describe('BoardHeader', () => {

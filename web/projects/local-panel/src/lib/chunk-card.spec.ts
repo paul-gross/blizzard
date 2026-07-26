@@ -7,8 +7,8 @@ import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fl
 import { ChunkCard } from './chunk-card';
 import type { MachineChunkStatus } from './chunk-status';
 
-/** Matches `GET /api/chunks/{chunk_id}/pm-items` for any chunk id. */
-const PM_ITEMS_ROUTE = /^\/api\/chunks\/[^/]+\/pm-items$/;
+/** Matches `GET /api/chunks/{chunk_id}/work-items` for any chunk id. */
+const WORK_ITEMS_ROUTE = /^\/api\/chunks\/[^/]+\/work-items$/;
 
 const LEASE = (overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseView => ({
   lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
@@ -31,9 +31,9 @@ const LEASE = (overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseVie
 
 const STATUS: MachineChunkStatus = { label: 'RUNNING', tone: 'running' };
 
-async function render(pmItemsResponse: (method: string, path: string) => unknown) {
+async function render(workItemsResponse: (method: string, path: string) => unknown) {
   const stub = stubRequestClient(runnerClient, (method, path) => {
-    if (method === 'GET' && PM_ITEMS_ROUTE.test(path)) return pmItemsResponse(method, path);
+    if (method === 'GET' && WORK_ITEMS_ROUTE.test(path)) return workItemsResponse(method, path);
     return {};
   });
   await TestBed.configureTestingModule({
@@ -65,7 +65,7 @@ describe('ChunkCard', () => {
     expect(el.querySelector('[data-testid="local-chunk-card-status"]')?.textContent).toContain('RUNNING');
   });
 
-  it('renders on chunk_id alone when the pm-items read 502s — never depends on the hub', async () => {
+  it('renders on chunk_id alone when the work-items read 502s — never depends on the hub', async () => {
     const result = await render(() => stubError(502, { detail: 'stubbed route error (502)' }));
     stub = result.stub;
     const el = result.fixture.nativeElement as HTMLElement;
@@ -74,7 +74,7 @@ describe('ChunkCard', () => {
     expect(el.querySelector('[data-testid="local-chunk-card-title"]')?.textContent?.trim()).toBe('');
   });
 
-  it('renders the pm-item chip inline with the title, wrapped to two lines', async () => {
+  it('renders the work-item chip inline with the title, wrapped to two lines', async () => {
     const result = await render(() => ({
       items: [
         {

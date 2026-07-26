@@ -11,7 +11,7 @@ const COST_DETAIL: ChunkDetail = {
   status: 'running',
   current_node_id: 'nd_review',
   latest_epoch: 2,
-  pm_pointers: [],
+  work_refs: [],
   history: [],
   artifacts: [],
   cost: {

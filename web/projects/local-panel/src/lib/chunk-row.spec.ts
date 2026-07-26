@@ -7,8 +7,8 @@ import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fl
 import { ChunkRow } from './chunk-row';
 import type { MachineChunkStatus } from './chunk-status';
 
-/** Matches `GET /api/chunks/{chunk_id}/pm-items` for any chunk id. */
-const PM_ITEMS_ROUTE = /^\/api\/chunks\/[^/]+\/pm-items$/;
+/** Matches `GET /api/chunks/{chunk_id}/work-items` for any chunk id. */
+const WORK_ITEMS_ROUTE = /^\/api\/chunks\/[^/]+\/work-items$/;
 
 const LEASE = (overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseView => ({
   lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
@@ -35,9 +35,9 @@ let stub: RequestClientStub | undefined;
 
 afterEach(() => stub?.restore());
 
-async function render(pmItemsResponse: () => unknown, status: MachineChunkStatus = STATUS) {
+async function render(workItemsResponse: () => unknown, status: MachineChunkStatus = STATUS) {
   stub = stubRequestClient(runnerClient, (method, path) => {
-    if (method === 'GET' && PM_ITEMS_ROUTE.test(path)) return pmItemsResponse();
+    if (method === 'GET' && WORK_ITEMS_ROUTE.test(path)) return workItemsResponse();
     return {};
   });
   await TestBed.configureTestingModule({
@@ -73,7 +73,7 @@ describe('ChunkRow', () => {
     expect(card?.style.borderLeftColor).toBe('var(--red)');
   });
 
-  it('renders on chunk_id alone when the pm-items read 502s — never depends on the hub', async () => {
+  it('renders on chunk_id alone when the work-items read 502s — never depends on the hub', async () => {
     const result = await render(() => stubError(502, { detail: 'stubbed route error (502)' }));
     const el = result.fixture.nativeElement as HTMLElement;
 
@@ -81,7 +81,7 @@ describe('ChunkRow', () => {
     expect(el.querySelector('[data-testid="chunk-row-title"]')?.textContent?.trim()).toBe('');
   });
 
-  it('renders the pm-item chip inline with the title', async () => {
+  it('renders the work-item chip inline with the title', async () => {
     const result = await render(() => ({
       items: [
         {

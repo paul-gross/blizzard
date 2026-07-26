@@ -1,7 +1,7 @@
 """The chunk detail carries the whole aggregate the board renders — component tier.
 
 ``GET /chunks/{id}`` is the board's chunk view and the envelope feed: it must carry the
-derived status, the route, the PM pointers, the full transition history (with the
+derived status, the route, the work refs, the full transition history (with the
 judgement choice on each edge), the inline artifact store (git-commit refs and asset
 content), the open gate decision, and any escalation. This test drives a build→gate
 scenario and asserts every piece is present — the additive completeness deliverable 4
@@ -100,16 +100,16 @@ def test_detail_carries_the_full_aggregate(tmp_path: Path) -> None:
     assert detail["status"] == "waiting_on_human"
     assert detail["latest_epoch"] == 1
 
-    # Route (runner/workspace/envs) and PM pointers.
+    # Route (runner/workspace/envs) and work refs.
     assert detail["route"]["runner_id"] == "r1"
     assert detail["route"]["environment_ids"] == ["e1", "e2"]
-    assert [p["ref"] for p in detail["pm_pointers"]] == [_POINTER["ref"]]
+    assert [p["ref"] for p in detail["work_refs"]] == [_POINTER["ref"]]
 
     # Board-legible identity: the current node's human name and the
     # pointer's `{source}#{number}` label are resolved server-side onto the detail.
     assert detail["current_node_id"] == nodes["approve-gate"]
     assert detail["current_node_name"] == "approve-gate"
-    assert detail["pm_pointers"][0]["label"] == "default#7"
+    assert detail["work_refs"][0]["label"] == "default#7"
 
     # Full transition history with the judgement choice on the edge, and the
     # nodes' human graph names resolved onto each edge so the timeline reads build -> gate.

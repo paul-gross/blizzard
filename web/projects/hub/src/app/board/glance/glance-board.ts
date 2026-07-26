@@ -142,7 +142,7 @@ export class GlanceBoard {
         chunkId: chunk.chunk_id,
         shortId: compactRef(chunk.chunk_id),
         // Only labeled pointers show, same rule as the desktop board's card (board-shell.ts).
-        pointerLabel: (chunk.pm_pointers ?? []).flatMap((p) => (p.label ? [p.label] : [])).join(' '),
+        pointerLabel: (chunk.work_refs ?? []).flatMap((p) => (p.label ? [p.label] : [])).join(' '),
       })),
   );
 

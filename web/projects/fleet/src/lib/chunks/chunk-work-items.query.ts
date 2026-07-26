@@ -1,10 +1,10 @@
 import { injectQuery } from '@tanstack/angular-query-experimental';
 
-import { getPmItemsApiChunksChunkIdPmItemsGet, type PmItemsView } from '../api/hub';
-import { hubChunkPmItemsKey } from '../query-keys';
+import { getWorkItemsApiChunksChunkIdWorkItemsGet, type WorkItemsView } from '../api/hub';
+import { hubChunkWorkItemsKey } from '../query-keys';
 
 /**
- * Hub `GET /api/chunks/{chunk_id}/pm-items` read — the chunk's related PM items
+ * Hub `GET /api/chunks/{chunk_id}/work-items` read — the chunk's related work items
  * : each pointer's issue **body and comment thread**, fetched fresh from
  * the forge and never stored. One entry per pointer, so a grouped chunk surfaces each;
  * a per-pointer forge failure carries an `error` the board renders as a notice rather
@@ -18,14 +18,14 @@ import { hubChunkPmItemsKey } from '../query-keys';
  * once on selection and caches. The request is the generated openapi-ts SDK call
  * (bzh:generated-client), hitting the daemon the app is served from.
  */
-export function injectHubChunkPmItemsQuery(chunkId: () => string | null) {
+export function injectHubChunkWorkItemsQuery(chunkId: () => string | null) {
   return injectQuery(() => {
     const id = chunkId();
     return {
-      queryKey: hubChunkPmItemsKey(id),
+      queryKey: hubChunkWorkItemsKey(id),
       enabled: id !== null,
-      queryFn: async (): Promise<PmItemsView> => {
-        const { data, error } = await getPmItemsApiChunksChunkIdPmItemsGet({
+      queryFn: async (): Promise<WorkItemsView> => {
+        const { data, error } = await getWorkItemsApiChunksChunkIdWorkItemsGet({
           path: { chunk_id: id! },
           throwOnError: false,
         });

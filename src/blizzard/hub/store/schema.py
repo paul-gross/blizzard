@@ -132,7 +132,7 @@ graph_lifecycle_facts = Table(
     Column("set_by", String, nullable=False),  # who flipped it — recorded on the fact
 )
 
-# --- Chunks and their PM pointers (chunk.minted) ------------------------------
+# --- Chunks and their work refs (chunk.minted) ------------------------------
 
 chunks = Table(
     "chunks",
@@ -154,8 +154,8 @@ chunks = Table(
     Column("intended_migration", Text, nullable=True),
 )
 
-chunk_pm_pointers = Table(
-    "chunk_pm_pointers",
+chunk_work_refs = Table(
+    "chunk_work_refs",
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
@@ -665,10 +665,10 @@ queue_positions = Table(
 # --- Queue shaping: grouping (chunk.grouped) -----------------------------------
 #
 # Group N unacquired (ready) chunks into one surviving chunk: the survivor absorbs the
-# union of their PM pointers (pointers become plural, appended to chunk_pm_pointers),
+# union of their work refs (pointers become plural, appended to chunk_work_refs),
 # and each merged-away chunk records a ``chunk.grouped`` fact naming the survivor. A
 # grouped chunk is EPHEMERAL: it is removed from every listing rather than
-# deriving a status, exactly like a discard — the PM item lives on
+# deriving a status, exactly like a discard — the work item lives on
 # as a pointer on the survivor.
 
 chunk_grouped = Table(

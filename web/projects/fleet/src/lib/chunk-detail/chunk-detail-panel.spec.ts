@@ -4,7 +4,7 @@ import { vi } from 'vitest';
 
 import type { ChunkDetail } from '../api/hub';
 import { ChunkDetailPanel } from './chunk-detail-panel';
-import type { PmItemsState } from './chunk-issue-pane';
+import type { WorkItemsState } from './chunk-issue-pane';
 
 const ISSUE_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01issue00000000000000000000',
@@ -13,7 +13,7 @@ const ISSUE_DETAIL: ChunkDetail = {
   status: 'running',
   current_node_id: 'nd_build',
   latest_epoch: 1,
-  pm_pointers: [
+  work_refs: [
     { source: 'widget', ref: '42', label: 'widget#42', web_url: 'https://github.com/acme/widget/issues/42' },
   ],
   history: [],
@@ -27,7 +27,7 @@ const ROUTED_DETAIL: ChunkDetail = {
   status: 'running',
   current_node_id: 'nd_build',
   latest_epoch: 1,
-  pm_pointers: [],
+  work_refs: [],
   history: [],
   artifacts: [],
   route: { runner_id: 'rn_01', workspace_id: 'ws_01', environment_ids: ['env_01'] },
@@ -40,7 +40,7 @@ const WAITING_QUESTION_DETAIL: ChunkDetail = {
   status: 'waiting_on_human',
   current_node_id: 'nd_build',
   latest_epoch: 1,
-  pm_pointers: [],
+  work_refs: [],
   history: [],
   artifacts: [],
   questions: [
@@ -81,7 +81,7 @@ describe('ChunkDetailPanel', () => {
     expect(el.querySelector('[aria-label="Artifacts and asks"]')).not.toBeNull();
 
     // Each column's sibling components rendered — the composition wired `detail`
-    // (and, below, `pmItems`) down to every one of them.
+    // (and, below, `workItems`) down to every one of them.
     expect(el.querySelector('[data-testid="detail-id"]')?.textContent?.trim()).toBe(ISSUE_DETAIL.chunk_id);
     expect(el.querySelector('[data-testid="chunk-facts"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="issue-pane"]')).not.toBeNull();
@@ -89,8 +89,8 @@ describe('ChunkDetailPanel', () => {
     expect(el.querySelector('[data-testid="artifacts-empty"]')).not.toBeNull();
   });
 
-  it('forwards pmItems down to the issue pane', async () => {
-    const pmItems: PmItemsState = {
+  it('forwards workItems down to the issue pane', async () => {
+    const workItems: WorkItemsState = {
       status: 'success',
       items: [
         { source: 'widget', ref: '42', label: 'widget#42', web_url: 'https://github.com/acme/widget/issues/42', fetched_at: 't', body: 'reproduces under load', comments: [] },
@@ -98,7 +98,7 @@ describe('ChunkDetailPanel', () => {
     };
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
-    fixture.componentRef.setInput('pmItems', pmItems);
+    fixture.componentRef.setInput('workItems', workItems);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 

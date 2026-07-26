@@ -33,9 +33,9 @@ export function hubChunkKey(chunkId: string | null): readonly unknown[] {
   return ['hub', 'chunk', chunkId];
 }
 
-/** One chunk's related PM items (issue body + comments), keyed by id. */
-export function hubChunkPmItemsKey(chunkId: string | null): readonly unknown[] {
-  return ['hub', 'chunk', chunkId, 'pm-items'];
+/** One chunk's related work items (issue body + comments), keyed by id. */
+export function hubChunkWorkItemsKey(chunkId: string | null): readonly unknown[] {
+  return ['hub', 'chunk', chunkId, 'work-items'];
 }
 
 /** One minted graph's full structure, keyed by id. */

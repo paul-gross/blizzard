@@ -21,7 +21,7 @@ Two shapes of route live here:
   board or CLI, so it belongs here on the same "runner-only write" grounds as the rest of
   this list.
 * **Fleet-side counterparts** — a read both the board and the runner need
-  (``GET /chunks/{id}``, ``GET /chunks/{id}/pm-items``, ``GET /queue/peek``,
+  (``GET /chunks/{id}``, ``GET /chunks/{id}/work-items``, ``GET /queue/peek``,
   ``GET /questions/{id}``) keeps its anonymous operator route right where it was
   (:mod:`blizzard.hub.api.chunks`, :mod:`blizzard.hub.api.queue`,
   :mod:`blizzard.hub.api.questions`) and gains a second, fleet-mounted route here that
@@ -57,7 +57,7 @@ from blizzard.hub.domain.work import (
     latest_epoch,
     newest_transition,
 )
-from blizzard.wire.chunk import ChunkDetail, HubAdvanceResponse, PmItemsView
+from blizzard.wire.chunk import ChunkDetail, HubAdvanceResponse, WorkItemsView
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeEnvelope
@@ -165,19 +165,38 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
     return chunks_api.get_chunk(chunk_id, services)
 
 
-@router.get("/chunks/{chunk_id}/pm-items", response_model=PmItemsView)
-def get_pm_items(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> PmItemsView:
-    """The build worker's PM-items proxy target (via the runner-local pass-through,
-    ``blizzard.runner.api.pm_items``), forwarded here with the runner's own bearer
+@router.get("/chunks/{chunk_id}/work-items", response_model=WorkItemsView)
+def get_work_items(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> WorkItemsView:
+    """The build worker's work-items proxy target (via the runner-local pass-through,
+    ``blizzard.runner.api.work_items``), forwarded here with the runner's own bearer
     token — the same pass-through the board reads anonymously."""
-    return chunks_api.get_pm_items(chunk_id, services)
+    return chunks_api.get_work_items(chunk_id, services)
+
+
+# The fleet-side half of the issue-#55 alias (see the operator-router registration in
+# :mod:`blizzard.hub.api.chunks` for the rationale). Runner-authenticated rather than
+# anonymous, so its external caller is narrower — tooling holding a runner's bearer
+# token — but the same reasoning applies: the path is reachable by clients we do not ship.
+router.add_api_route(
+    "/chunks/{chunk_id}/pm-items",
+    get_work_items,
+    methods=["GET"],
+    response_model=WorkItemsView,
+    deprecated=True,
+    name="fleet_get_pm_items_deprecated_alias",
+    summary="Deprecated alias for GET /fleet/chunks/{chunk_id}/work-items",
+    description=(
+        "Deprecated since issue #55 — use `GET /fleet/chunks/{chunk_id}/work-items`, which "
+        "this path aliases onto the identical handler and returns the identical view."
+    ),
+)
 
 
 @router.get("/summary", response_model=FleetSummaryView)
 def fleet_summary(services: Annotated[HubServices, Depends(get_services)]) -> FleetSummaryView:
     """The runner machine panel's fleet-pulse counts (issue #76), forwarded here with the
     runner's own bearer token from the runner-local pass-through
-    (:mod:`blizzard.runner.api.fleet_summary`). Fleet-router-only: unlike PM-items, the
+    (:mod:`blizzard.runner.api.fleet_summary`). Fleet-router-only: unlike work-items, the
     board has no anonymous counterpart — its card list already carries every status."""
     return chunks_api.fleet_summary(services)
 

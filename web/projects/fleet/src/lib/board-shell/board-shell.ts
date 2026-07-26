@@ -16,7 +16,7 @@ export interface BoardCard {
   readonly node: string;
   /** The raw `nd_` ULID, kept reachable as the node label's tooltip. */
   readonly nodeId: string;
-  /** The chunk's PM work item — the server-derived `{source}#{ref}` label,
+  /** The chunk's work item — the server-derived `{source}#{ref}` label,
    * empty when no pointer names a configured source. Plural pointers join with a space. */
   readonly pointerLabel: string;
   /** The chunk's derived spend total (issue #60), from `ChunkSummary.cost`. */
@@ -86,9 +86,9 @@ export interface BoardCard {
                       </span>
                       <!-- The pointer label is plain text here, not a link: a card is a
                            target for opening the chunk, and an anchor inside it competes
-                           for the same click. The detail panel owns the link out to the PM. -->
+                           for the same click. The detail panel owns the link out to the work source. -->
                       @if (card.pointerLabel) {
-                        <span class="iss" data-testid="pm-chip" [title]="card.pointerLabel">{{
+                        <span class="iss" data-testid="work-ref-chip" [title]="card.pointerLabel">{{
                           card.pointerLabel
                         }}</span>
                       }
@@ -405,7 +405,7 @@ export class BoardShell {
         nodeId: chunk.current_node_id ?? '',
         // Only labeled pointers show — a pointer naming no configured source has a
         // null label and the card leans on the short id instead.
-        pointerLabel: (chunk.pm_pointers ?? [])
+        pointerLabel: (chunk.work_refs ?? [])
           .flatMap((p) => (p.label ? [p.label] : []))
           .join(' '),
         costUsd: chunk.cost?.cost_usd ?? 0,

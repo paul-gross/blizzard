@@ -4,7 +4,7 @@ The two operator actions that shape the ready queue rather than execute work
 : **Prioritize** (replace the whole ready order) and
 **Group** (merge unacquired chunks into one surviving chunk). Both are pure hub-side
 properties over the fact store — order derives from appended position facts,
-and grouping folds PM pointers into the survivor and discards the rest as ephemeral.
+and grouping folds work refs into the survivor and discards the rest as ephemeral.
 Neither touches an acquired chunk: reordering and grouping are legal
 only in ``ready`` (the fill/peek surface), so a running chunk is never reshaped under a
 runner's feet.
@@ -99,7 +99,7 @@ class GroupService:
 
         The survivor and every merged chunk must be ``ready`` (unacquired) — grouping is
         not batching and never reshapes running work. The merged
-        chunks' PM pointers are appended to the survivor (union), and each merged
+        chunks' work refs are appended to the survivor (union), and each merged
         chunk records a ``chunk.grouped`` fact, becoming ephemeral.
         """
         survivor = self._require_ready_chunk(survivor_id)
@@ -107,7 +107,7 @@ class GroupService:
 
         now = self._clock.now()
         for target in targets:
-            self._chunks.add_pm_pointers(survivor_id, target.pm_pointers, at=now)
+            self._chunks.add_work_refs(survivor_id, target.work_refs, at=now)
             self._chunks.record_grouped(target.chunk_id, grouped_into=survivor_id, at=now)
         _log.info("chunks grouped", survivor=survivor_id, merged=[t.chunk_id for t in targets], count=len(targets))
         merged = self._chunks.get(survivor_id)

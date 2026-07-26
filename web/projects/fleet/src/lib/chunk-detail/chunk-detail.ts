@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
 
 import { injectHubChunkDetailQuery } from '../chunks/chunk-detail.query';
-import { injectHubChunkPmItemsQuery } from '../chunks/chunk-pm-items.query';
+import { injectHubChunkWorkItemsQuery } from '../chunks/chunk-work-items.query';
 import { injectDetachChunkMutation } from '../chunks/detach.mutations';
 import { injectSetChunkGraphMutation, injectSetChunkModelMutation } from '../chunks/edit.mutations';
 import { injectAnswerQuestionMutation, injectResolveDecisionMutation } from '../chunks/human.mutations';
@@ -12,7 +12,7 @@ import {
   ChunkDetailPanel,
   type EditGraphEvent,
   type EditModelEvent,
-  type PmItemsState,
+  type WorkItemsState,
   type ResolveDecisionEvent,
 } from './chunk-detail-panel';
 
@@ -42,7 +42,7 @@ import {
     @if (detail(); as d) {
       <fleet-chunk-detail-panel
         [detail]="d"
-        [pmItems]="pmItems()"
+        [workItems]="workItems()"
         [actionError]="actionError()"
         (dismiss)="dismiss.emit()"
         (answerQuestion)="onAnswer($event)"
@@ -88,7 +88,7 @@ export class ChunkDetail {
   readonly dismiss = output<void>();
 
   private readonly detailQuery = injectHubChunkDetailQuery(() => this.chunkId());
-  private readonly pmItemsQuery = injectHubChunkPmItemsQuery(() => this.chunkId());
+  private readonly workItemsQuery = injectHubChunkWorkItemsQuery(() => this.chunkId());
   private readonly answerMutation = injectAnswerQuestionMutation();
   private readonly resolveMutation = injectResolveDecisionMutation();
   private readonly detachMutation = injectDetachChunkMutation();
@@ -111,13 +111,13 @@ export class ChunkDetail {
   /** The open chunk's aggregate, or `undefined` while closed / still loading. */
   protected readonly detail = computed(() => (this.chunkId() === null ? undefined : this.detailQuery.data()));
 
-  /** The open chunk's related PM items + fetch state for the Issue tab (issue #24). A failed
+  /** The open chunk's related work items + fetch state for the Issue tab (issue #24). A failed
    * read (unreachable hub / no work-source) becomes `error` so the tab shows a visible notice. */
-  protected readonly pmItems = computed<PmItemsState>(() => {
+  protected readonly workItems = computed<WorkItemsState>(() => {
     if (this.chunkId() === null) return { status: 'loading', items: [] };
-    if (this.pmItemsQuery.isError()) return { status: 'error', items: [] };
-    if (this.pmItemsQuery.isPending()) return { status: 'loading', items: [] };
-    return { status: 'success', items: this.pmItemsQuery.data()?.items ?? [] };
+    if (this.workItemsQuery.isError()) return { status: 'error', items: [] };
+    if (this.workItemsQuery.isPending()) return { status: 'loading', items: [] };
+    return { status: 'success', items: this.workItemsQuery.data()?.items ?? [] };
   });
 
   protected onAnswer(event: AnswerQuestionEvent): void {

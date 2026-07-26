@@ -1,6 +1,6 @@
 """``blizzard runner artifact list|get|create`` + the deprecated ``attach`` alias
 (unit tier, issue #127), mirroring ``tests/test_runner_attach_cli.py`` and
-``tests/test_pm_items_proxy.py``'s CLI halves: ``httpx`` stubbed, no live socket. The
+``tests/test_work_items_proxy.py``'s CLI halves: ``httpx`` stubbed, no live socket. The
 routes themselves (store round-trip, hub forward, 403/404/503) are the component tier's
 ``tests/test_runner_artifacts_api.py``.
 

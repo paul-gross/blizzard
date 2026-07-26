@@ -1,8 +1,8 @@
-"""The PM source registry — configured sources looked up by name.
+"""The work source registry — configured sources looked up by name.
 
 A plain, dependency-free ``dict`` wrapper (``bzh:domain-core``, no I/O): the
 credentialed clients live behind each entry's adapter, built at the composition root
-(:mod:`blizzard.hub.pm.internal.factory`). An empty registry is a legal hub with no PM
+(:mod:`blizzard.hub.work_sources.internal.factory`). An empty registry is a legal hub with no work-source
 reach — the pass-through routes degrade per-chunk/per-pointer rather than refusing to
 start.
 
@@ -13,7 +13,7 @@ resolver is retired with it.
 
 :meth:`resolve` is the intake-side counterpart: an ingest **token** (as
 opposed to an already-resolved pointer's ``source`` name) is tried against every
-configured binding's own :meth:`~blizzard.hub.pm.source.IPmSource.parse` in turn, first
+configured binding's own :meth:`~blizzard.hub.work_sources.source.IWorkSource.parse` in turn, first
 claim wins. Config guarantees at most one claim (a unique ``name``, and no two sources
 sharing a ``(provider, repo)``), so registration order never matters in practice.
 """
@@ -22,23 +22,23 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from blizzard.hub.domain.work import PmPointer
-from blizzard.hub.pm.source import IPmSource, IPmSourceRegistry
+from blizzard.hub.domain.work import WorkRef
+from blizzard.hub.work_sources.source import IWorkSource, IWorkSourceRegistry
 
 
-class PmSourceRegistry:
-    """The hub's configured PM sources, keyed by their declared ``name``."""
+class WorkSourceRegistry:
+    """The hub's configured work sources, keyed by their declared ``name``."""
 
-    def __init__(self, sources: Mapping[str, IPmSource] | None = None) -> None:
+    def __init__(self, sources: Mapping[str, IWorkSource] | None = None) -> None:
         self._sources = dict(sources or {})
 
-    def get(self, name: str) -> IPmSource | None:
+    def get(self, name: str) -> IWorkSource | None:
         return self._sources.get(name)
 
     def names(self) -> list[str]:
         return list(self._sources.keys())
 
-    def resolve(self, token: str) -> PmPointer | None:
+    def resolve(self, token: str) -> WorkRef | None:
         """The first configured binding's ``parse`` of ``token`` that claims it, or
         ``None`` when none do."""
         for source in self._sources.values():
@@ -48,5 +48,5 @@ class PmSourceRegistry:
         return None
 
 
-def _conforms_pm_source_registry(x: PmSourceRegistry) -> IPmSourceRegistry:
+def _conforms_work_source_registry(x: WorkSourceRegistry) -> IWorkSourceRegistry:
     return x

@@ -50,7 +50,7 @@ from blizzard.hub.domain.work import (
 from tests.support import (
     FakeHubCommandRunner,
     FakeHubWorkdir,
-    FakePmSource,
+    FakeWorkSource,
     HubHarness,
     build_hub,
     pointer_token,
@@ -429,7 +429,7 @@ def _yaml_nodes() -> dict:
 
 def test_build_hub_env_carries_no_model_credential_and_the_documented_keys() -> None:
     _, merge_node = _reified_merge_node()
-    chunk = Chunk(chunk_id="ch_x", graph_id="gr_x", pm_pointers=[], minted_at=datetime(2026, 7, 17, tzinfo=UTC))
+    chunk = Chunk(chunk_id="ch_x", graph_id="gr_x", work_refs=[], minted_at=datetime(2026, 7, 17, tzinfo=UTC))
     artifact = ArtifactRow(
         kind=ArtifactKind.GIT_COMMIT,
         name="work",
@@ -505,7 +505,7 @@ def _commits_in(env: dict[str, str]) -> list[dict[str, str]]:
 
 def _env_with(artifacts: list[ArtifactRow]) -> dict[str, str]:
     _, merge_node = _reified_merge_node()
-    chunk = Chunk(chunk_id="ch_x", graph_id="gr_x", pm_pointers=[], minted_at=datetime(2026, 7, 17, tzinfo=UTC))
+    chunk = Chunk(chunk_id="ch_x", graph_id="gr_x", work_refs=[], minted_at=datetime(2026, 7, 17, tzinfo=UTC))
     return build_hub_env(
         HubEnvInputs(
             chunk=chunk,
@@ -559,7 +559,7 @@ def test_a_multi_repo_chunk_keeps_one_commit_per_repo() -> None:
 
 def test_build_hub_env_carries_the_feature_title_when_given() -> None:
     _, merge_node = _reified_merge_node()
-    chunk = Chunk(chunk_id="ch_x", graph_id="gr_x", pm_pointers=[], minted_at=datetime(2026, 7, 17, tzinfo=UTC))
+    chunk = Chunk(chunk_id="ch_x", graph_id="gr_x", work_refs=[], minted_at=datetime(2026, 7, 17, tzinfo=UTC))
     env = build_hub_env(
         HubEnvInputs(
             chunk=chunk,
@@ -661,7 +661,7 @@ def test_full_run_maps_success_to_the_authored_edge(tmp_path: Path) -> None:
     command, _cwd, env = runner.calls[0]
     assert command == "land-the-repo"
     assert env["BZ_HUB_CHUNK_ID"] == chunk_id
-    # The chunk's PM pointer resolves through the default FakePmSource — its title
+    # The chunk's work ref resolves through the default FakeWorkSource — its title
     # flows into the hub node's env for the land script to use as the PR/merge title.
     assert env["BZ_HUB_FEATURE_TITLE"] == "issue title"
     assert workdir.ensured == [chunk_id]
@@ -675,7 +675,7 @@ def test_full_run_maps_success_to_the_authored_edge(tmp_path: Path) -> None:
 
 
 @pytest.mark.component
-def test_a_failed_pm_fetch_degrades_the_feature_title_to_absent(tmp_path: Path) -> None:
+def test_a_failed_work_item_fetch_degrades_the_feature_title_to_absent(tmp_path: Path) -> None:
     """A forge read failing while resolving the feature title must never break
     delivery (best-effort, #bzh design note above :meth:`HubNodeExecutor._resolve_feature_title`):
     the hub node still runs its ``run:`` step, just with no ``BZ_HUB_FEATURE_TITLE``."""
@@ -685,7 +685,7 @@ def test_a_failed_pm_fetch_degrades_the_feature_title_to_absent(tmp_path: Path) 
         tmp_path,
         hub_command_runner=runner,
         hub_workdir=workdir,
-        pm={"default": FakePmSource(fail_refs={"42"})},
+        work_sources={"default": FakeWorkSource(fail_refs={"42"})},
     )
     chunk_id, build_node_id, _graph = _to_merge_node(hub)
 
@@ -1322,7 +1322,7 @@ def test_the_env_carries_the_graphs_git_commit_expectation() -> None:
 
 def _env_for_expectation(*, expects: bool) -> dict[str, str]:
     _, merge_node = _reified_merge_node()
-    chunk = Chunk(chunk_id="ch_x", graph_id="gr_x", pm_pointers=[], minted_at=datetime(2026, 7, 17, tzinfo=UTC))
+    chunk = Chunk(chunk_id="ch_x", graph_id="gr_x", work_refs=[], minted_at=datetime(2026, 7, 17, tzinfo=UTC))
     return build_hub_env(
         HubEnvInputs(
             chunk=chunk,

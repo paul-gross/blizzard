@@ -16,7 +16,7 @@ the whole-order ``PUT /queue`` (the board's Prioritize control). The queue read 
 and the hub a **real** ``blizzard hub host`` daemon (the systemd units' ``ExecStart`` — see
 ``packaging/systemd/``); the fleet works the four chunks autonomously. Behaviour is *the
 prompt is the program*: one shared ``build → review → deliver`` graph whose nodes read each
-chunk's own PM item **through the hub pass-through** (``blizzard runner pm-items`` — MVP
+chunk's own work item **through the hub pass-through** (``blizzard runner work-items`` — MVP
 criterion 1) and act on a directive in the issue body. So the fleet exhibits, unattended:
 
 * the **grouped** chunk builds a real change in *both* repos, passes review, and lands on
@@ -66,11 +66,11 @@ import httpx
 import pytest
 
 from blizzard.foundation.store.invariants import check_invariants
-from blizzard.hub.config import HubConfig, PmSourceConfig
+from blizzard.hub.config import HubConfig, WorkSourceConfig
 from blizzard.runner.config import RunnerConfig
 from tests.crash.support import (
     OWNER,
-    PM_TOKEN_ENV,
+    WORK_SOURCE_TOKEN_ENV,
     await_http,
     forge_daemon,
     free_port,
@@ -104,19 +104,27 @@ API_REPO = "toy-api"
 WEB_REPO = "toy-web"
 
 
-def _pm_sources(forge_port: int) -> tuple[PmSourceConfig, ...]:
-    """Two ``[[pm_source]]`` bindings — one per fixture repo — since the
+def _work_sources(forge_port: int) -> tuple[WorkSourceConfig, ...]:
+    """Two ``[[work_source]]`` bindings — one per fixture repo — since the
     journey files issues across both. This is the case that proves the
     repo-matching resolver: a first-entry shim would fetch half these issues from the
     wrong repo the moment two sources are configured (the Phase 1 finale's ``alpha#7``
     lying-label bug)."""
     api_base = f"http://127.0.0.1:{forge_port}"
     return (
-        PmSourceConfig(
-            name=API_REPO, provider="github", repo=f"{OWNER}/{API_REPO}", token_env=PM_TOKEN_ENV, api_base=api_base
+        WorkSourceConfig(
+            name=API_REPO,
+            provider="github",
+            repo=f"{OWNER}/{API_REPO}",
+            token_env=WORK_SOURCE_TOKEN_ENV,
+            api_base=api_base,
         ),
-        PmSourceConfig(
-            name=WEB_REPO, provider="github", repo=f"{OWNER}/{WEB_REPO}", token_env=PM_TOKEN_ENV, api_base=api_base
+        WorkSourceConfig(
+            name=WEB_REPO,
+            provider="github",
+            repo=f"{OWNER}/{WEB_REPO}",
+            token_env=WORK_SOURCE_TOKEN_ENV,
+            api_base=api_base,
         ),
     )
 
@@ -124,7 +132,7 @@ def _pm_sources(forge_port: int) -> tuple[PmSourceConfig, ...]:
 # --------------------------------------------------------------------------- #
 # The shared build → review → deliver graph — the prompt is the program.
 #
-# Every node reads the chunk's own PM item through the runner→hub pass-through and
+# Every node reads the chunk's own work item through the runner→hub pass-through and
 # branches on a ``KEY=value`` directive in the issue body, so a single graph drives four
 # different journeys. ``.behavior`` is written by the build spawn into the env workdir
 # (which persists across the chunk's node-steps) so the judgement / review turns — and the
@@ -168,7 +176,7 @@ def _push_and_declare(repo):
 chunk_id = os.environ["BLIZZARD_CHUNK_ID"]
 # MVP criterion 1: the worker reads its issue ONLY through the hub pass-through.
 _raw = subprocess.run(
-    ["blizzard", "runner", "pm-items", chunk_id], check=True, capture_output=True, text=True
+    ["blizzard", "runner", "work-items", chunk_id], check=True, capture_output=True, text=True
 ).stdout
 _item = json.loads(_raw)["items"][0]
 _body = _item["body"]
@@ -343,7 +351,7 @@ def _blizzard_bin(name: str) -> str:
 
 def _file_hub(forge: httpx.Client, repo: str, title: str, body: str) -> tuple[str, str]:
     """File an issue and return its ``{source, ref}`` pointer — ``repo`` is the
-    configured source's own name (``_pm_sources``), ``ref`` its issue number."""
+    configured source's own name (``_work_sources``), ``ref`` its issue number."""
     issue = forge.post(f"/repos/{OWNER}/{repo}/issues", json={"title": title, "body": body})
     assert issue.status_code == 201, issue.text
     return repo, str(issue.json()["number"])
@@ -363,7 +371,7 @@ def _restart_daemons(*, hub_dir: Path, forge_port: int, hub_port: int, hub: http
     """Bring the hub back through the systemd units' migrate-then-host path (the runner is
     restarted by the caller). Returns the fresh, healthy hub process."""
     hub_proc = start_hub(
-        hub_dir, forge_port=forge_port, port=hub_port, crash_point=None, pm_sources=_pm_sources(forge_port)
+        hub_dir, forge_port=forge_port, port=hub_port, crash_point=None, work_sources=_work_sources(forge_port)
     )
     await_http(hub, "/api/health", proc=hub_proc)
     return hub_proc
@@ -412,7 +420,7 @@ def test_the_acceptance_journey_end_to_end(tmp_path: Path) -> None:
     with forge_daemon(bin_dir, origins, forge_port) as forge:
         try:
             hub_proc = start_hub(
-                hub_dir, forge_port=forge_port, port=hub_port, crash_point=None, pm_sources=_pm_sources(forge_port)
+                hub_dir, forge_port=forge_port, port=hub_port, crash_point=None, work_sources=_work_sources(forge_port)
             )
             await_http(hub, "/api/health", proc=hub_proc)
             assert hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()}).status_code == 201

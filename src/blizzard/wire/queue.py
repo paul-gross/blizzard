@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from blizzard.wire.chunk import PmPointerModel
+from blizzard.wire.chunk import WorkRefModel
 
 
 class QueuePeekEntry(BaseModel):
@@ -19,7 +19,7 @@ class QueuePeekEntry(BaseModel):
     chunk_id: str
     graph_id: str
     position: int
-    pm_pointers: list[PmPointerModel] = []
+    work_refs: list[WorkRefModel] = []
 
 
 class QueuePeekResponse(BaseModel):
@@ -44,7 +44,7 @@ class ChunkGroupRequest(BaseModel):
     """Merge unacquired chunks into one — the board's Group control.
 
     ``merge_chunk_ids`` are the ready chunks folded into the path's survivor chunk; the
-    survivor absorbs the union of their PM pointers and the merged chunks are discarded as
+    survivor absorbs the union of their work refs and the merged chunks are discarded as
     ephemeral. Self-references and duplicates are ignored; a non-ready member is
     rejected ``409``.
     """
@@ -53,8 +53,8 @@ class ChunkGroupRequest(BaseModel):
 
 
 class ChunkGroupResponse(BaseModel):
-    """The survivor chunk after a group — its id and the union of PM pointers it carries."""
+    """The survivor chunk after a group — its id and the union of work refs it carries."""
 
     chunk_id: str
-    pm_pointers: list[PmPointerModel] = []
+    work_refs: list[WorkRefModel] = []
     merged_chunk_ids: list[str] = []

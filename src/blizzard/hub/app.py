@@ -7,7 +7,7 @@ guard (``blizzard hub host``) and the offline ``migrate`` verb own that. Keeping
 without a migrated database; the fleet routes then report the store is unwired.
 
 ``build_hosted_app`` is the ``host`` composition root: it opens the store, wires the
-readiness seam, and the PM source registry over the configured ``[[pm_source]]``
+readiness seam, and the work source registry over the configured ``[[work_source]]``
 entries — each with its own credentialed client — and assembles the fleet services
 (:func:`blizzard.hub.composition.build_services`). The forge a hub command node's
 ``run:`` script talks to (#65/#67) is injected as plain env (``BZ_FORGE_URL`` /
@@ -52,8 +52,8 @@ from blizzard.hub.composition import HubServices, build_services
 from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, HubConfig
 from blizzard.hub.domain.readiness import ReadinessService
 from blizzard.hub.events.broker import EventBroker
-from blizzard.hub.pm.internal.factory import build_pm_registry
 from blizzard.hub.runtime import migration_runner
+from blizzard.hub.work_sources.internal.factory import build_work_source_registry
 
 ENV_FORGE_URL = "BZ_FORGE_URL"
 ENV_FORGE_TOKEN = "BZ_FORGE_TOKEN"
@@ -152,8 +152,8 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
     readiness = ReadinessService(reader=reader, expected_revision=expected)
 
     owner = os.environ.get(ENV_FORGE_OWNER, DEFAULT_FORGE_OWNER)
-    # The PM registry builds its own credentialed client per configured source.
-    pm = build_pm_registry(config.pm_sources)
+    # The work-source registry builds its own credentialed client per configured source.
+    work_source_registry = build_work_source_registry(config.work_sources)
     base_branch = os.environ.get(ENV_FORGE_BASE_BRANCH, DEFAULT_FORGE_BASE_BRANCH)
 
     # The provider-login seam (issue #92) is consumed only under `oauth` — under `none`
@@ -167,7 +167,7 @@ def build_hosted_app(config: HubConfig) -> FastAPI:
     services = build_services(
         engine,
         events=EventBroker(),
-        pm=pm,
+        work_sources=work_source_registry,
         base_branch=base_branch,
         hub_workdir_root=config.data_dir / "hub_workdirs",
         hub_marker_callback_base_url=f"http://{config.host}:{config.port}",

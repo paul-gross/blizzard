@@ -11,7 +11,7 @@ const ROUTED_DETAIL: ChunkDetail = {
   status: 'running',
   current_node_id: 'nd_build',
   latest_epoch: 1,
-  pm_pointers: [],
+  work_refs: [],
   history: [],
   artifacts: [],
   route: { runner_id: 'rn_01', workspace_id: 'ws_01', environment_ids: ['env_01'] },
@@ -25,7 +25,7 @@ const NOT_READY_DETAIL: ChunkDetail = {
   status: 'not_ready',
   current_node_id: null,
   latest_epoch: null,
-  pm_pointers: [],
+  work_refs: [],
   history: [],
   artifacts: [],
 };

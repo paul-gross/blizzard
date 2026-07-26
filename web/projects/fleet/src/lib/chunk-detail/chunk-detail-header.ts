@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import type { ChunkDetail, ChunkStatus, PauseView, PmPointerView, RouteView } from '../api/hub';
+import type { ChunkDetail, ChunkStatus, PauseView, WorkRefView, RouteView } from '../api/hub';
 import { KitButton } from '../kit/kit-button';
 
 /** Statuses the hub's `PauseService` refuses to pause (`ChunkNotPausable`), mirrored
@@ -45,7 +45,7 @@ const NOT_PAUSABLE = new Set<ChunkStatus>(['done', 'stopped', 'delivering']);
       <div class="d-title">
         <span class="id" data-testid="detail-id" [attr.title]="detail().chunk_id">{{ detail().chunk_id }}</span>
         <span class="d-sub">
-          <!-- Each pointer links out to its PM source here in the detail — the board
+          <!-- Each pointer links out to its work source here in the detail — the board
                cards stay plain click targets, so the anchor lives on this view only.
                No web_url (unconfigured source) degrades to plain text, no broken link. -->
           @for (p of pointers(); track p.source + ':' + p.ref) {
@@ -244,10 +244,10 @@ export class ChunkDetailHeader {
   /** Emitted with the chunk id when the operator confirms Resume (issue #46). */
   readonly resumeChunk = output<string>();
 
-  /** The chunk's PM pointers, for the header — each linked out to its source's web
+  /** The chunk's work refs, for the header — each linked out to its source's web
    * address when the configured binding rendered one (a null `web_url` degrades to
    * plain text, no broken link). */
-  protected readonly pointers = computed<readonly PmPointerView[]>(() => this.detail().pm_pointers ?? []);
+  protected readonly pointers = computed<readonly WorkRefView[]>(() => this.detail().work_refs ?? []);
 
   /** The chunk's open operator pause, if any — who set it (issue #46). Read off the
    * detail's `pause` fact, not `status`: a chunk both paused and parked on a question

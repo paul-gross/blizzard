@@ -6,8 +6,8 @@ URL is the single portability knob (``bzh:sql-portable``): the sqlite default
 lives under the data dir, and postgres is the same config with a different URL.
 The bind port falls back to the winter service band's ``BZ_HUB_PORT`` (band +2).
 
-``[[pm_source]]`` is the zero-or-more configured PM work sources: each a
-named, credentialed forge binding the composition root (``hub/pm/internal/factory.py``)
+``[[work_source]]`` is the zero-or-more configured work sources: each a
+named, credentialed forge binding the composition root (``hub/work_sources/internal/factory.py``)
 turns into one ``httpx.Client`` + adapter instance. ``tomllib`` parses the array of
 tables for free; there is no stdlib TOML writer, so :meth:`HubConfig.to_toml` hand-rolls
 the emit in the same string-concat style as the rest of this file.
@@ -68,10 +68,18 @@ PRODUCES_WARN = "warn"
 PRODUCES_ENFORCE = "enforce"
 _KNOWN_PRODUCES_MODES = {PRODUCES_WARN, PRODUCES_ENFORCE}
 
-# The only PM provider grammar a source may declare; an unknown provider fails
+# The only work-source provider grammar a source may declare; an unknown provider fails
 # at config load, not at first use.
-_KNOWN_PM_PROVIDERS = {"github"}
-_REQUIRED_PM_SOURCE_KEYS = ("name", "provider", "repo", "token_env")
+_KNOWN_WORK_SOURCE_PROVIDERS = {"github"}
+_REQUIRED_WORK_SOURCE_KEYS = ("name", "provider", "repo", "token_env")
+
+# `[[work_source]]`'s pre-rename name (issue #55). Deliberately *not* aliased: a hub
+# whose config still says `[[pm_source]]` parses as zero configured sources, which is a
+# legal-looking hub whose every work-item read 503s and whose every board label renders
+# null. Config is operator-owned and versionless, so the rename fails the daemon fast
+# with a message naming the new key — the opposite call from the HTTP `/pm-items` alias,
+# which stays because its clients can skew across deploys.
+RENAMED_WORK_SOURCE_KEY = "pm_source"
 
 # The human-auth rollout knob (issue #91) — `none` (the default, and it stays the
 # shipped default until epic #89 completes) resolves every request to the implicit
@@ -87,24 +95,24 @@ _KNOWN_AUTH_MODES = {AUTH_MODE_NONE, AUTH_MODE_OAUTH}
 # structural presence.
 _REQUIRED_OAUTH_PROVIDER_KEYS = ("name", "type", "display_name", "client_id", "client_secret_env")
 
-# A fresh scaffold has no configured source, and without one `pm-items` 503s and board
+# A fresh scaffold has no configured source, and without one `work-items` 503s and board
 # pointer labels go null (you cannot render `{source}#{ref}` without a source name) — so
 # `to_toml()` emits this as a comment rather than leaving the block undiscoverable.
-_PM_SOURCE_EXAMPLE_COMMENT = """
-# Uncomment and edit to configure a PM work source — without at least one
-# [[pm_source]], `pm-items` 503s and board pointer labels render null.
+_WORK_SOURCE_EXAMPLE_COMMENT = """
+# Uncomment and edit to configure a work source — without at least one
+# [[work_source]], `work-items` 503s and board pointer labels render null.
 #
-# [[pm_source]]
+# [[work_source]]
 # name = "blizzard"          # names this source; ingest tokens and board labels key on it
 # provider = "github"        # the only adapter grammar that exists today
 # repo = "owner/name"        # the "owner/repo" this source is pinned to
-# token_env = "BZ_PM_TOKEN"  # names an env var — the secret itself lives in this
-#                             # runtime's env file (e.g. /etc/blizzard/hub.env), never here
+# token_env = "BZ_WORK_SOURCE_TOKEN"  # names an env var — the secret itself lives in this
+#                                      # runtime's env file (e.g. /etc/blizzard/hub.env), never here
 # api_base = "https://ghe.example.internal/api/v3"  # optional: override the API origin (e.g. GHE)
 # web_base = "https://ghe.example.internal"          # optional: override the web origin; derives from api_base
 """
 
-# Mirrors `_PM_SOURCE_EXAMPLE_COMMENT` — emitted when `[auth]` carries no configured
+# Mirrors `_WORK_SOURCE_EXAMPLE_COMMENT` — emitted when `[auth]` carries no configured
 # login provider, so the block stays discoverable even though `mode = "none"` needs
 # none to function (issue #91 parses-and-carries this; #92 consumes it).
 _AUTH_OAUTH_PROVIDER_EXAMPLE_COMMENT = """
@@ -130,8 +138,8 @@ class ConfigError(RuntimeError):
 
 
 @dataclass(frozen=True)
-class PmSourceConfig:
-    """One configured PM work source — a named, credentialed forge binding.
+class WorkSourceConfig:
+    """One configured work source — a named, credentialed forge binding.
 
     ``name`` is the operator-chosen identity ingest tokens and board labels key on
     (conventionally the repo tail, e.g. ``blizzard`` for ``paul-gross/blizzard``);
@@ -156,8 +164,8 @@ class OAuthProviderConfig:
     """One configured OAuth login provider — parsed-and-carried by #91, *consumed*
     (secret resolution, ``type``/``issuer`` validation) by #92. ``client_secret_env``
     names the environment variable carrying the secret — never the secret itself,
-    mirroring :class:`PmSourceConfig`'s ``token_env``. ``api_base`` overrides the
-    provider's default host (mirroring ``PmSourceConfig.api_base``'s own GHE-override
+    mirroring :class:`WorkSourceConfig`'s ``token_env``. ``api_base`` overrides the
+    provider's default host (mirroring ``WorkSourceConfig.api_base``'s own GHE-override
     precedent) — unused by the ``oidc`` conformer (whose ``issuer`` already names its
     own host); the ``github`` conformer uses it to point both its authorize and API
     calls at a self-hosted/stub origin (e.g. the ``blizzard-mock`` stub IdP) instead of
@@ -194,7 +202,7 @@ class HubConfig:
     db_url: str
     host: str = DEFAULT_HOST
     port: int = DEFAULT_PORT
-    pm_sources: tuple[PmSourceConfig, ...] = ()
+    work_sources: tuple[WorkSourceConfig, ...] = ()
     runner_auth_mode: str = RUNNER_AUTH_WARN
     route_token_mode: str = ROUTE_TOKEN_WARN
     produces_mode: str = PRODUCES_WARN
@@ -243,10 +251,10 @@ class HubConfig:
             "# key, auth-fact actor IP). Empty = ignore those headers from every peer.\n",
             f"trusted_proxies = [{', '.join(f'"{p}"' for p in self.trusted_proxies)}]\n",
         ]
-        if not self.pm_sources:
-            lines.append(_PM_SOURCE_EXAMPLE_COMMENT)
-        for source in self.pm_sources:
-            lines.append("\n[[pm_source]]\n")
+        if not self.work_sources:
+            lines.append(_WORK_SOURCE_EXAMPLE_COMMENT)
+        for source in self.work_sources:
+            lines.append("\n[[work_source]]\n")
             lines.append(f'name = "{source.name}"\n')
             lines.append(f'provider = "{source.provider}"\n')
             lines.append(f'repo = "{source.repo}"\n')
@@ -295,12 +303,18 @@ class HubConfig:
         produces_mode = str(raw.get("produces_mode", PRODUCES_WARN))
         if produces_mode not in _KNOWN_PRODUCES_MODES:
             raise ConfigError(f"produces_mode must be one of {sorted(_KNOWN_PRODUCES_MODES)}, got {produces_mode!r}")
+        if RENAMED_WORK_SOURCE_KEY in raw:
+            raise ConfigError(
+                f"[[{RENAMED_WORK_SOURCE_KEY}]] is now [[work_source]] — rename the block(s) in "
+                f"{path}. Leaving the old key would configure zero work sources: "
+                "`work-items` would 503 and every board label would render null."
+            )
         return cls(
             root=root,
             db_url=str(raw["db_url"]),
             host=host or str(raw.get("host", DEFAULT_HOST)),
             port=port if port is not None else int(raw.get("port", DEFAULT_PORT)),
-            pm_sources=_parse_pm_sources(raw.get("pm_source", [])),
+            work_sources=_parse_work_sources(raw.get("work_source", [])),
             runner_auth_mode=runner_auth_mode,
             route_token_mode=route_token_mode,
             produces_mode=produces_mode,
@@ -309,20 +323,20 @@ class HubConfig:
         )
 
 
-def _parse_pm_sources(raw_sources: object) -> tuple[PmSourceConfig, ...]:
-    """Validate and project ``[[pm_source]]`` entries; each rejection names
+def _parse_work_sources(raw_sources: object) -> tuple[WorkSourceConfig, ...]:
+    """Validate and project ``[[work_source]]`` entries; each rejection names
     the offending entry rather than failing generically."""
     if not isinstance(raw_sources, list):
         return ()
-    sources: list[PmSourceConfig] = []
+    sources: list[WorkSourceConfig] = []
     seen_names: set[str] = set()
     seen_provider_repo: set[tuple[str, str]] = set()
     for entry in raw_sources:
         if not isinstance(entry, dict):
-            raise ConfigError(f"[[pm_source]] entry must be a table, got {entry!r}")
-        missing = [key for key in _REQUIRED_PM_SOURCE_KEYS if key not in entry]
+            raise ConfigError(f"[[work_source]] entry must be a table, got {entry!r}")
+        missing = [key for key in _REQUIRED_WORK_SOURCE_KEYS if key not in entry]
         if missing:
-            raise ConfigError(f"[[pm_source]] entry is missing required key(s) {missing}: {entry!r}")
+            raise ConfigError(f"[[work_source]] entry is missing required key(s) {missing}: {entry!r}")
         name = str(entry["name"])
         provider = str(entry["provider"])
         repo = str(entry["repo"])
@@ -330,25 +344,26 @@ def _parse_pm_sources(raw_sources: object) -> tuple[PmSourceConfig, ...]:
         if ":" in name:
             # hub/cli.py's ingest-token grammar partitions on the first colon —
             # a colon in a source name breaks that split.
-            raise ConfigError(f"[[pm_source]] name {name!r} must not contain ':'")
+            raise ConfigError(f"[[work_source]] name {name!r} must not contain ':'")
         if name in seen_names:
-            raise ConfigError(f"duplicate [[pm_source]] name {name!r}")
+            raise ConfigError(f"duplicate [[work_source]] name {name!r}")
         seen_names.add(name)
         provider_repo = (provider, repo)
         if provider_repo in seen_provider_repo:
             # Two names for one (provider, repo) would let the same item be ingested
             # twice under two identities — this is what holds pointer identity uniqueness
             # up, not a nicety.
-            raise ConfigError(f"duplicate [[pm_source]] (provider, repo) {provider_repo!r} across two names")
+            raise ConfigError(f"duplicate [[work_source]] (provider, repo) {provider_repo!r} across two names")
         seen_provider_repo.add(provider_repo)
-        if provider not in _KNOWN_PM_PROVIDERS:
+        if provider not in _KNOWN_WORK_SOURCE_PROVIDERS:
             raise ConfigError(
-                f"[[pm_source]] {name!r} has unknown provider {provider!r} (known: {sorted(_KNOWN_PM_PROVIDERS)})"
+                f"[[work_source]] {name!r} has unknown provider {provider!r} "
+                f"(known: {sorted(_KNOWN_WORK_SOURCE_PROVIDERS)})"
             )
         api_base = str(entry["api_base"]) if entry.get("api_base") else None
         web_base = str(entry["web_base"]) if entry.get("web_base") else None
         sources.append(
-            PmSourceConfig(
+            WorkSourceConfig(
                 name=name, provider=provider, repo=repo, token_env=token_env, api_base=api_base, web_base=web_base
             )
         )

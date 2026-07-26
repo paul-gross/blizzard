@@ -110,7 +110,7 @@ def test_graphs_diagram_renders_in_the_browser(tmp_path: Path, chromium_availabl
 
     forge_port, hub_port = _free_port(), _free_port()
     # No forge is started: a diagram is a pure read of an immutable graph, so the hub's
-    # PM-source api_base (pointed at this unused port) is never contacted here.
+    # work-source api_base (pointed at this unused port) is never contacted here.
     with _hub(tmp_path / "hub", forge_port, hub_port) as hub:
         created = hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()})
         assert created.status_code == 201, created.text

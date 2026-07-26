@@ -28,10 +28,10 @@ from typing import IO
 
 import httpx
 
-from blizzard.hub.config import PmSourceConfig
+from blizzard.hub.config import WorkSourceConfig
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.runtime import init_environment as init_runner_environment
-from tests.support import write_pm_sources
+from tests.support import write_work_sources
 
 OWNER = "blizzard"
 REPO_NAME = "toy-api"
@@ -42,20 +42,20 @@ RUNNER_ENV = "e1"
 # A brisk tick so a scenario converges in seconds, not the daemon's 30s production cadence.
 TICK_SECONDS = "0.3"
 
-# The env var every scenario's ``[[pm_source]]`` names as its credential —
+# The env var every scenario's ``[[work_source]]`` names as its credential —
 # shared across every source this support module declares, since the mock forge checks
 # no token: one env var suffices regardless of how many sources are configured.
-PM_TOKEN_ENV = "BZ_PM_TOKEN_CRASH"
+WORK_SOURCE_TOKEN_ENV = "BZ_WORK_SOURCE_TOKEN_CRASH"
 
 
-def default_pm_sources(forge_port: int) -> tuple[PmSourceConfig, ...]:
+def default_work_sources(forge_port: int) -> tuple[WorkSourceConfig, ...]:
     """The one source the crash sweep's ``build -> deliver`` scenarios ingest against."""
     return (
-        PmSourceConfig(
+        WorkSourceConfig(
             name=REPO_NAME,
             provider="github",
             repo=REPO,
-            token_env=PM_TOKEN_ENV,
+            token_env=WORK_SOURCE_TOKEN_ENV,
             api_base=f"http://127.0.0.1:{forge_port}",
         ),
     )
@@ -566,16 +566,16 @@ def start_hub(
     forge_port: int,
     port: int,
     crash_point: str | None,
-    pm_sources: Sequence[PmSourceConfig] | None = None,
+    work_sources: Sequence[WorkSourceConfig] | None = None,
     new_session: bool = False,
     extra_env: dict[str, str] | None = None,
 ) -> subprocess.Popen[str]:
     """Start (or restart) the hub daemon; arm ``crash_point`` when it is a deliver point.
 
-    ``pm_sources`` is declared only on the first call for ``hub_dir`` — the
+    ``work_sources`` is declared only on the first call for ``hub_dir`` — the
     one that also runs ``hub init`` — since a restart reuses the config file already on
-    disk; defaults to :func:`default_pm_sources`, the crash sweep's single source. Every
-    restart still carries ``PM_TOKEN_ENV`` regardless, since the config always names it.
+    disk; defaults to :func:`default_work_sources`, the crash sweep's single source. Every
+    restart still carries ``WORK_SOURCE_TOKEN_ENV`` regardless, since the config always names it.
 
     ``new_session`` starts the hub as a session/process-group leader so a caller can
     ``os.killpg`` the WHOLE tree — the hub plus any ``run:`` subprocess it has spawned —
@@ -587,12 +587,12 @@ def start_hub(
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     if not (hub_dir / "blizzard-hub.toml").exists():
         subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
-        write_pm_sources(hub_dir, pm_sources if pm_sources is not None else default_pm_sources(forge_port))
+        write_work_sources(hub_dir, work_sources if work_sources is not None else default_work_sources(forge_port))
     env = {
         **os.environ,
         "BZ_FORGE_URL": f"http://127.0.0.1:{forge_port}",
         "BZ_FORGE_OWNER": OWNER,
-        PM_TOKEN_ENV: "crash-fixture-token",
+        WORK_SOURCE_TOKEN_ENV: "crash-fixture-token",
     }
     _apply_crash_env(env, crash_point)
     if extra_env:

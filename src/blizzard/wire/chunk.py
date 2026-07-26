@@ -1,12 +1,12 @@
-"""Chunk ingest, views, and the PM pass-through.
+"""Chunk ingest, views, and the work-item pass-through.
 
 Ingest wraps one or more source-native **tokens** into chunks (``POST /chunks``)
 — ``{name}:{ref}``, ``{name}#{ref}``, or the item's own URL; the hub resolves
-each against its configured PM sources (``IPmSourceRegistry.resolve``) and 422s a
+each against its configured work sources (``IWorkSourceRegistry.resolve``) and 422s a
 token none of them claims, naming the token and the configured sources. A
 resolved pointer already held by a live chunk is rejected **409** with the existing
 chunk id. The list/detail views carry the **derived** status — never
-a stored column — and the current node. ``GET /chunks/{id}/pm-items`` is the
+a stored column — and the current node. ``GET /chunks/{id}/work-items`` is the
 vendor-native pass-through read — one entry per pointer, contents never
 stored.
 """
@@ -20,15 +20,15 @@ from blizzard.wire.decision import DecisionView
 from blizzard.wire.question import QuestionView
 
 
-class PmPointerModel(BaseModel):
-    """One ``{source, ref}`` PM pointer — ``source`` names a configured
-    ``[[pm_source]]``; ``ref`` is that source's own item token."""
+class WorkRefModel(BaseModel):
+    """One ``{source, ref}`` work ref — ``source`` names a configured
+    ``[[work_source]]``; ``ref`` is that source's own item token."""
 
     source: str
     ref: str
 
 
-class PmPointerView(BaseModel):
+class WorkRefView(BaseModel):
     """A pointer as the views render it — the raw pair plus its legible
     label and browser URL, both rendered by the pointer's configured source binding.
 
@@ -45,8 +45,8 @@ class PmPointerView(BaseModel):
 class ChunkIngestRequest(BaseModel):
     """Ingest by source-native token — specific items always, batch fine.
 
-    Each token is resolved against the configured PM sources' own grammar
-    (``IPmSource.parse``): ``{name}:{ref}``, ``{name}#{ref}``, or the item's own URL.
+    Each token is resolved against the configured work sources' own grammar
+    (``IWorkSource.parse``): ``{name}:{ref}``, ``{name}#{ref}``, or the item's own URL.
     Tokens only — no pre-resolved ``{source, ref}`` shape travels alongside them; a
     second intake shape would reintroduce exactly the config-blind guess that
     resolving against the configured sources removes."""
@@ -139,7 +139,7 @@ class ChunkSummary(BaseModel):
     status: ChunkStatus
     current_node_id: str | None
     current_node_name: str | None = None
-    pm_pointers: list[PmPointerView] = []
+    work_refs: list[WorkRefView] = []
     # The chunk's model selection (issue #27) — editable while `not_ready` or
     # `ready`-and-unclaimed (issue #120). Required:
     # the store column is non-nullable and every mint sets DEFAULT_MODEL.
@@ -269,7 +269,7 @@ class ArtifactView(BaseModel):
     code).
 
     ``branch_url`` is the forge ``tree`` URL for the produced branch, resolved server-side
-    from the chunk's issue-shaped PM pointer so the board can link a ``git_commit``
+    from the chunk's issue-shaped work ref so the board can link a ``git_commit``
     to the branch on the forge; null when no forge web base is derivable — the row then
     shows the branch name without a link (no broken link).
 
@@ -430,7 +430,7 @@ class ChunkDetail(BaseModel):
     current_node_id: str | None
     current_node_name: str | None = None
     latest_epoch: int | None
-    pm_pointers: list[PmPointerView] = []
+    work_refs: list[WorkRefView] = []
     # The chunk's model selection (issue #27) — editable while `not_ready` or
     # `ready`-and-unclaimed (issue #120). Required:
     # the store column is non-nullable and every mint sets DEFAULT_MODEL.
@@ -486,8 +486,8 @@ class ChunkDetail(BaseModel):
     bounces: list[BounceView] = []
 
 
-class PmItemEntry(BaseModel):
-    """One pointer's pass-through PM item — title, body + comment
+class WorkItemEntry(BaseModel):
+    """One pointer's pass-through work item — title, body + comment
     thread, vendor-native.
 
     ``label``/``web_url`` are the board-legible pointer label (``blizzard#8``) and its
@@ -507,10 +507,10 @@ class PmItemEntry(BaseModel):
     error: str | None = None
 
 
-class PmItemsView(BaseModel):
-    """A chunk's pass-through PM items — one entry per pointer, order preserved.
+class WorkItemsView(BaseModel):
+    """A chunk's pass-through work items — one entry per pointer, order preserved.
 
     Empty when the chunk holds no pointers — the board's empty state; a grouped chunk carrying
     many pointers yields one entry per pointer, each fetched fresh and never stored."""
 
-    items: list[PmItemEntry] = []
+    items: list[WorkItemEntry] = []

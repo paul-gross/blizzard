@@ -33,7 +33,7 @@ export interface MotionRow {
 export interface DoneRow {
   readonly chunkId: string;
   readonly shortId: string;
-  /** The chunk's PM work item label, empty when no pointer names a configured source. */
+  /** The chunk's work item label, empty when no pointer names a configured source. */
   readonly pointerLabel: string;
 }
 

@@ -1,4 +1,4 @@
-"""Chunk ingest — wrap PM pointers into a chunk.
+"""Chunk ingest — wrap work refs into a chunk.
 
 The ``POST /chunks`` domain rule: a caller submits one or more ``{source, ref}``
  pointers and the hub mints a chunk pinned to the configured default graph and the
@@ -22,26 +22,26 @@ from __future__ import annotations
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.ids import CHUNK_PREFIX, mint
 from blizzard.hub.domain.graph import Graph
-from blizzard.hub.domain.work import DEFAULT_MODEL, Chunk, IWriteChunkRepository, PmPointer
+from blizzard.hub.domain.work import DEFAULT_MODEL, Chunk, IWriteChunkRepository, WorkRef
 
 
 class IngestConflict(Exception):
     """A submitted pointer is already held by a live chunk — the 409 carrier."""
 
-    def __init__(self, *, existing_chunk_id: str, pointer: PmPointer) -> None:
+    def __init__(self, *, existing_chunk_id: str, pointer: WorkRef) -> None:
         super().__init__(f"pointer {pointer.source}#{pointer.ref} already held by live chunk {existing_chunk_id}")
         self.existing_chunk_id = existing_chunk_id
         self.pointer = pointer
 
 
 class IngestService:
-    """Mint a chunk from PM pointers, pinned to the default graph."""
+    """Mint a chunk from work refs, pinned to the default graph."""
 
     def __init__(self, *, chunks: IWriteChunkRepository, clock: IClock) -> None:
         self._chunks = chunks
         self._clock = clock
 
-    def ingest(self, pointers: list[PmPointer], *, graph: Graph) -> str:
+    def ingest(self, pointers: list[WorkRef], *, graph: Graph) -> str:
         for pointer in pointers:
             holder = self._chunks.find_live_holder(pointer)
             if holder is not None:
@@ -49,7 +49,7 @@ class IngestService:
         chunk = Chunk(
             chunk_id=mint(CHUNK_PREFIX, self._clock),
             graph_id=graph.graph_id,
-            pm_pointers=list(pointers),
+            work_refs=list(pointers),
             minted_at=self._clock.now(),
             model=DEFAULT_MODEL,
         )

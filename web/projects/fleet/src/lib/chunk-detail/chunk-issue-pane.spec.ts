@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import { ChunkIssuePane, type PmItemsState } from './chunk-issue-pane';
+import { ChunkIssuePane, type WorkItemsState } from './chunk-issue-pane';
 
 describe('ChunkIssuePane', () => {
   beforeEach(async () => {
@@ -11,20 +11,20 @@ describe('ChunkIssuePane', () => {
     }).compileComponents();
   });
 
-  async function renderWithPmItems(pmItems: PmItemsState) {
+  async function renderWithWorkItems(workItems: WorkItemsState) {
     const fixture = TestBed.createComponent(ChunkIssuePane);
-    fixture.componentRef.setInput('pmItems', pmItems);
+    fixture.componentRef.setInput('workItems', workItems);
     await fixture.whenStable();
     return fixture.nativeElement as HTMLElement;
   }
 
   it('shows a loading notice while the forge read is in flight', async () => {
-    const el = await renderWithPmItems({ status: 'loading', items: [] });
+    const el = await renderWithWorkItems({ status: 'loading', items: [] });
     expect(el.querySelector('[data-testid="issue-loading"]')).not.toBeNull();
   });
 
   it('renders the issue description and messages in the work-item column (AC2)', async () => {
-    const el = await renderWithPmItems({
+    const el = await renderWithWorkItems({
       status: 'success',
       items: [
         {
@@ -50,7 +50,7 @@ describe('ChunkIssuePane', () => {
   });
 
   it('shows one entry per pointer for a grouped chunk (AC4)', async () => {
-    const el = await renderWithPmItems({
+    const el = await renderWithWorkItems({
       status: 'success',
       items: [
         { source: 'widget', ref: '42', label: 'widget#42', web_url: 'https://github.com/acme/widget/issues/42', fetched_at: 't', body: 'first', comments: [] },
@@ -64,13 +64,13 @@ describe('ChunkIssuePane', () => {
   });
 
   it('shows an empty state when the chunk has no linked issue (AC4)', async () => {
-    const el = await renderWithPmItems({ status: 'success', items: [] });
+    const el = await renderWithWorkItems({ status: 'success', items: [] });
     expect(el.querySelector('[data-testid="issue-empty"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="issue-item"]')).toBeNull();
   });
 
   it('degrades a single unreachable pointer to an inline notice (AC5)', async () => {
-    const el = await renderWithPmItems({
+    const el = await renderWithWorkItems({
       status: 'success',
       items: [
         { source: 'widget', ref: '42', label: 'widget#42', web_url: 'https://github.com/acme/widget/issues/42', fetched_at: 't', body: 'reachable', comments: [] },
@@ -82,13 +82,13 @@ describe('ChunkIssuePane', () => {
   });
 
   it('shows a visible notice when the whole forge read fails (AC5)', async () => {
-    const el = await renderWithPmItems({ status: 'error', items: [] });
+    const el = await renderWithWorkItems({ status: 'error', items: [] });
     expect(el.querySelector('[data-testid="issue-error"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="issue-body"]')).toBeNull();
   });
 
   it('shows a no-messages notice for an issue with none', async () => {
-    const el = await renderWithPmItems({
+    const el = await renderWithWorkItems({
       status: 'success',
       items: [
         { source: 'widget', ref: '42', label: 'widget#42', web_url: 'https://github.com/acme/widget/issues/42', fetched_at: 't', body: 'no comments here', comments: [] },

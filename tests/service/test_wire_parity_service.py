@@ -47,11 +47,11 @@ from tests.service.support import (
 
 pytestmark = [pytest.mark.service, service_gate]
 
-_PM_URL = f"{REPO}/issues/1"
+_WORK_REF_URL = f"{REPO}/issues/1"
 
 
 def _seed(hub) -> str:
-    resp = hub.post("/_seed/chunk", json=mock_hub_chunk_spec(_PM_URL))
+    resp = hub.post("/_seed/chunk", json=mock_hub_chunk_spec(_WORK_REF_URL))
     assert resp.status_code == 201, resp.text
     return resp.json()["chunk_id"]
 

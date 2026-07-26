@@ -172,7 +172,7 @@ def require_human_api(request: Request) -> RunnerSession:
     reaches over TCP (the runner's status/lease/environment/escalation/fact reads, the
     takeover/requeue/workspace-prompt operator verbs). Declared at ``dependencies=[]`` on
     exactly those routers (``runner/app.py``); the worker-hook lane
-    (asks-POST/heartbeat/session-end/attachments/pm-items — workers call these over TCP
+    (asks-POST/heartbeat/session-end/attachments/work-items — workers call these over TCP
     and *cannot* SSO-bounce) and the public routes never carry it.
 
     A missing/expired session is a ``401``, **not** the web app's ``302``: an XHR/fetch

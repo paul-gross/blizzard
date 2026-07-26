@@ -2,7 +2,7 @@
 
 Exercised over a real store via TestClient, mirroring
 ``tests/test_runner_attachments_api.py`` (the token/lease auth half) and
-``tests/test_pm_items_proxy.py`` (the hub is reached through a stubbed ``httpx.get``,
+``tests/test_work_items_proxy.py`` (the hub is reached through a stubbed ``httpx.get``,
 so the forward, its status pass-through, and the ``502`` on an unreachable hub are all
 asserted against the real controller). The read is layered exactly like the attach
 write: lease-scoped, token-authorized, then proxied to the hub's envelope route — the
@@ -45,7 +45,7 @@ _ENVELOPE: dict[str, object] = {
     },
     "prompt": "build it",
     "judgement_prompt": None,
-    "pm_pointers": [],
+    "work_refs": [],
     "artifacts": [
         {
             "name": "plan",

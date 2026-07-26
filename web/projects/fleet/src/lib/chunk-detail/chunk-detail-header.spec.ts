@@ -12,7 +12,7 @@ const ISSUE_DETAIL: ChunkDetail = {
   status: 'running',
   current_node_id: 'nd_build',
   latest_epoch: 1,
-  pm_pointers: [
+  work_refs: [
     { source: 'widget', ref: '42', label: 'widget#42', web_url: 'https://github.com/acme/widget/issues/42' },
   ],
   history: [],
@@ -26,7 +26,7 @@ const ROUTED_DETAIL: ChunkDetail = {
   status: 'running',
   current_node_id: 'nd_build',
   latest_epoch: 1,
-  pm_pointers: [],
+  work_refs: [],
   history: [],
   artifacts: [],
   route: { runner_id: 'rn_01', workspace_id: 'ws_01', environment_ids: ['env_01'] },
@@ -39,7 +39,7 @@ const ESCALATED_ROUTED_DETAIL: ChunkDetail = {
   status: 'needs_human',
   current_node_id: 'nd_build',
   latest_epoch: 3,
-  pm_pointers: [],
+  work_refs: [],
   history: [],
   artifacts: [],
   escalation: { epoch: 3, takeover_command: 'blizzard runner takeover ch_01esc00000000000000000000000' },

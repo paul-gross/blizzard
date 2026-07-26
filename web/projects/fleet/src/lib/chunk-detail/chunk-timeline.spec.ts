@@ -11,7 +11,7 @@ const REVIEW_FAIL_DETAIL: ChunkDetail = {
   status: 'running',
   current_node_id: 'nd_build',
   latest_epoch: 2,
-  pm_pointers: [],
+  work_refs: [],
   history: [
     { from_node_id: 'nd_build', to_node_id: 'nd_review', choice_name: 'pass', epoch: 1, recorded_at: '2026-07-13T00:00:01Z' },
     { from_node_id: 'nd_review', to_node_id: 'nd_build', choice_name: 'fail', epoch: 2, recorded_at: '2026-07-13T00:00:02Z' },
@@ -26,7 +26,7 @@ const COST_DETAIL: ChunkDetail = {
   status: 'running',
   current_node_id: 'nd_review',
   latest_epoch: 2,
-  pm_pointers: [],
+  work_refs: [],
   history: [
     { from_node_id: 'nd_build', to_node_id: 'nd_review', choice_name: 'pass', epoch: 1, recorded_at: '2026-07-13T00:00:01Z' },
     { from_node_id: 'nd_review', to_node_id: 'nd_build', choice_name: 'fail', epoch: 2, recorded_at: '2026-07-13T00:00:02Z' },
@@ -83,7 +83,7 @@ const NAMED_DETAIL: ChunkDetail = {
   current_node_id: 'nd_review',
   current_node_name: 'review',
   latest_epoch: 1,
-  pm_pointers: [],
+  work_refs: [],
   history: [
     {
       from_node_id: 'nd_build',
@@ -109,7 +109,7 @@ const TWO_GRAPH_DETAIL: ChunkDetail = {
   current_node_id: 'nd_t_build',
   current_node_name: 'build',
   latest_epoch: 1,
-  pm_pointers: [],
+  work_refs: [],
   history: [
     {
       from_node_id: 'nd_s_build',

@@ -45,8 +45,8 @@ function makeRouterStub(initial: Record<string, string> = {}): {
   return { activatedRoute, router: { navigate }, navigate };
 }
 
-/** Matches `GET /api/chunks/{chunk_id}/pm-items` for any chunk id. */
-const PM_ITEMS_ROUTE = /^\/api\/chunks\/[^/]+\/pm-items$/;
+/** Matches `GET /api/chunks/{chunk_id}/work-items` for any chunk id. */
+const WORK_ITEMS_ROUTE = /^\/api\/chunks\/[^/]+\/work-items$/;
 
 const REF = Date.parse('2026-07-16T12:00:00.000Z');
 
@@ -554,11 +554,11 @@ describe('LocalPanel', () => {
     });
   });
 
-  describe('the PM enrichment stays severable (issue #28)', () => {
-    it('renders chunk rows on chunk_id alone when every pm-items read 502s — the panel must not depend on the hub', async () => {
+  describe('the work-item enrichment stays severable (issue #28)', () => {
+    it('renders chunk rows on chunk_id alone when every work-items read 502s — the panel must not depend on the hub', async () => {
       stub = stubRequestClient(runnerClient,
         routes([LEASE()], (method, path) => {
-          if (method === 'GET' && PM_ITEMS_ROUTE.test(path)) return stubError(502, { detail: 'stubbed route error (502)' });
+          if (method === 'GET' && WORK_ITEMS_ROUTE.test(path)) return stubError(502, { detail: 'stubbed route error (502)' });
           return undefined;
         }),
       );
@@ -572,7 +572,7 @@ describe('LocalPanel', () => {
     it('renders the pointer label as a link to the work item when web_url arrived', async () => {
       stub = stubRequestClient(runnerClient,
         routes([LEASE()], (method, path) =>
-          method === 'GET' && PM_ITEMS_ROUTE.test(path)
+          method === 'GET' && WORK_ITEMS_ROUTE.test(path)
             ? {
                 items: [
                   {
@@ -597,13 +597,13 @@ describe('LocalPanel', () => {
       expect(el.querySelector('[data-testid="chunk-row-title"]')?.textContent).toContain('runner machine panel');
     });
 
-    it('issues one pm-items request per distinct chunk even with several leases for it', async () => {
+    it('issues one work-items request per distinct chunk even with several leases for it', async () => {
       const older = LEASE({ lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNBBBB', epoch: 1, state: 'closed' });
       stub = stubRequestClient(runnerClient, routes([LEASE(), older]));
       const fixture = await render();
       await settle(fixture);
 
-      const pmRequests = stub.requests.filter((r) => PM_ITEMS_ROUTE.test(r.path));
+      const pmRequests = stub.requests.filter((r) => WORK_ITEMS_ROUTE.test(r.path));
       expect(pmRequests).toHaveLength(1);
     });
   });

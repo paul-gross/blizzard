@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from blizzard.hub.config import ENV_PORT as HUB_ENV_PORT
-from blizzard.hub.config import PRODUCES_ENFORCE, HubConfig, PmSourceConfig
+from blizzard.hub.config import PRODUCES_ENFORCE, HubConfig, WorkSourceConfig
 from blizzard.hub.config import ConfigError as HubConfigError
 from blizzard.runner.config import DEFAULT_RUNNER_CEILING_WINDOW_HOURS, RunnerConfig
 from blizzard.runner.config import ENV_PORT as RUNNER_ENV_PORT
@@ -347,7 +347,7 @@ def test_missing_workspace_prompt_file_raises(tmp_path: Path) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# `[[pm_source]]` — the hub's configured PM work sources.
+# `[[work_source]]` — the hub's configured work sources.
 # --------------------------------------------------------------------------- #
 
 
@@ -358,13 +358,13 @@ def _hub_config(tmp_path: Path) -> HubConfig:
 
 
 @pytest.mark.unit
-def test_pm_sources_default_to_empty(tmp_path: Path) -> None:
+def test_work_sources_default_to_empty(tmp_path: Path) -> None:
     config = _hub_config(tmp_path)
-    assert config.pm_sources == ()
+    assert config.work_sources == ()
 
 
 @pytest.mark.unit
-def test_pm_sources_round_trip_through_to_toml_and_load(tmp_path: Path) -> None:
+def test_work_sources_round_trip_through_to_toml_and_load(tmp_path: Path) -> None:
     # `HubConfig.load` -> `dataclasses.replace` -> `to_toml` -> `HubConfig.load` (the
     # idiom `tests/crash/support.py::write_runner_config` establishes for the runner).
     config = _hub_config(tmp_path)
@@ -372,8 +372,10 @@ def test_pm_sources_round_trip_through_to_toml_and_load(tmp_path: Path) -> None:
     loaded = HubConfig.load(config.root)
 
     sources = (
-        PmSourceConfig(name="blizzard", provider="github", repo="paul-gross/blizzard", token_env="BZ_PM_TOKEN"),
-        PmSourceConfig(
+        WorkSourceConfig(
+            name="blizzard", provider="github", repo="paul-gross/blizzard", token_env="BZ_WORK_SOURCE_TOKEN"
+        ),
+        WorkSourceConfig(
             name="internal",
             provider="github",
             repo="acme/internal-tool",
@@ -382,72 +384,103 @@ def test_pm_sources_round_trip_through_to_toml_and_load(tmp_path: Path) -> None:
             web_base="https://git.corp.internal",
         ),
     )
-    edited = dataclasses.replace(loaded, pm_sources=sources)
+    edited = dataclasses.replace(loaded, work_sources=sources)
     edited.config_path.write_text(edited.to_toml())
 
     reloaded = HubConfig.load(edited.root)
-    assert reloaded.pm_sources == sources
+    assert reloaded.work_sources == sources
 
 
 @pytest.mark.unit
-def test_pm_source_missing_required_key_raises(tmp_path: Path) -> None:
+def test_work_source_missing_required_key_raises(tmp_path: Path) -> None:
     root = tmp_path / "hub"
     root.mkdir()
     (root / "blizzard-hub.toml").write_text(
-        'db_url = "sqlite:///x"\n\n[[pm_source]]\nname = "blizzard"\nprovider = "github"\nrepo = "o/r"\n'
+        'db_url = "sqlite:///x"\n\n[[work_source]]\nname = "blizzard"\nprovider = "github"\nrepo = "o/r"\n'
     )
     with pytest.raises(HubConfigError, match="token_env"):
         HubConfig.load(root)
 
 
 @pytest.mark.unit
-def test_pm_source_duplicate_name_raises(tmp_path: Path) -> None:
+def test_work_source_duplicate_name_raises(tmp_path: Path) -> None:
     root = tmp_path / "hub"
     root.mkdir()
     (root / "blizzard-hub.toml").write_text(
         'db_url = "sqlite:///x"\n'
-        '\n[[pm_source]]\nname = "blizzard"\nprovider = "github"\nrepo = "o/r"\ntoken_env = "T1"\n'
-        '\n[[pm_source]]\nname = "blizzard"\nprovider = "github"\nrepo = "o/r2"\ntoken_env = "T2"\n'
+        '\n[[work_source]]\nname = "blizzard"\nprovider = "github"\nrepo = "o/r"\ntoken_env = "T1"\n'
+        '\n[[work_source]]\nname = "blizzard"\nprovider = "github"\nrepo = "o/r2"\ntoken_env = "T2"\n'
     )
     with pytest.raises(HubConfigError, match="duplicate"):
         HubConfig.load(root)
 
 
 @pytest.mark.unit
-def test_pm_source_duplicate_provider_and_repo_raises(tmp_path: Path) -> None:
+def test_work_source_duplicate_provider_and_repo_raises(tmp_path: Path) -> None:
     # Two names for one (provider, repo) would let the same item be ingested twice
     # under two identities — this is what holds pointer identity uniqueness up.
     root = tmp_path / "hub"
     root.mkdir()
     (root / "blizzard-hub.toml").write_text(
         'db_url = "sqlite:///x"\n'
-        '\n[[pm_source]]\nname = "a"\nprovider = "github"\nrepo = "o/r"\ntoken_env = "T1"\n'
-        '\n[[pm_source]]\nname = "b"\nprovider = "github"\nrepo = "o/r"\ntoken_env = "T2"\n'
+        '\n[[work_source]]\nname = "a"\nprovider = "github"\nrepo = "o/r"\ntoken_env = "T1"\n'
+        '\n[[work_source]]\nname = "b"\nprovider = "github"\nrepo = "o/r"\ntoken_env = "T2"\n'
     )
     with pytest.raises(HubConfigError, match="duplicate"):
         HubConfig.load(root)
 
 
 @pytest.mark.unit
-def test_pm_source_name_with_a_colon_raises(tmp_path: Path) -> None:
+def test_work_source_name_with_a_colon_raises(tmp_path: Path) -> None:
     # hub/cli.py's ingest token partitions on the first colon.
     root = tmp_path / "hub"
     root.mkdir()
     (root / "blizzard-hub.toml").write_text(
-        'db_url = "sqlite:///x"\n\n[[pm_source]]\nname = "acme:blizzard"\nprovider = "github"\nrepo = "o/r"\ntoken_env = "T"\n'
+        'db_url = "sqlite:///x"\n\n[[work_source]]\nname = "acme:blizzard"\nprovider = "github"\nrepo = "o/r"\ntoken_env = "T"\n'
     )
     with pytest.raises(HubConfigError, match=":"):
         HubConfig.load(root)
 
 
 @pytest.mark.unit
-def test_pm_source_unknown_provider_raises(tmp_path: Path) -> None:
+def test_work_source_unknown_provider_raises(tmp_path: Path) -> None:
     root = tmp_path / "hub"
     root.mkdir()
     (root / "blizzard-hub.toml").write_text(
-        'db_url = "sqlite:///x"\n\n[[pm_source]]\nname = "blizzard"\nprovider = "jira"\nrepo = "o/r"\ntoken_env = "T"\n'
+        'db_url = "sqlite:///x"\n\n[[work_source]]\nname = "blizzard"\nprovider = "jira"\nrepo = "o/r"\ntoken_env = "T"\n'
     )
     with pytest.raises(HubConfigError, match="jira"):
+        HubConfig.load(root)
+
+
+@pytest.mark.unit
+def test_a_leftover_pm_source_block_fails_the_load_naming_the_new_key(tmp_path: Path) -> None:
+    """Issue #55's deliberate no-alias: `[[pm_source]]` was the pre-rename key, and a hub
+    whose config still carries it would otherwise parse as zero configured sources — a
+    hub that looks configured, 503s every work-item read, and nulls every board label.
+    Config is operator-owned and skew-free, so this fails fast and names the new key."""
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text(
+        'db_url = "sqlite:///x"\n\n[[pm_source]]\nname = "blizzard"\nprovider = "github"\nrepo = "o/r"\ntoken_env = "T"\n'
+    )
+    with pytest.raises(HubConfigError, match=r"\[\[work_source\]\]"):
+        HubConfig.load(root)
+
+
+@pytest.mark.unit
+def test_a_leftover_pm_source_block_fails_even_beside_a_valid_work_source(tmp_path: Path) -> None:
+    """The check is not "did we end up with any sources" — a config carrying both keys
+    would silently drop the old block's source, which is exactly the quiet
+    half-configuration the fail-fast exists to prevent."""
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text(
+        'db_url = "sqlite:///x"\n'
+        '\n[[work_source]]\nname = "a"\nprovider = "github"\nrepo = "o/r"\ntoken_env = "T1"\n'
+        '\n[[pm_source]]\nname = "b"\nprovider = "github"\nrepo = "o/r2"\ntoken_env = "T2"\n'
+    )
+    with pytest.raises(HubConfigError, match=r"\[\[work_source\]\]"):
         HubConfig.load(root)
 
 

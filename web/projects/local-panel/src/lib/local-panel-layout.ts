@@ -24,7 +24,7 @@ import type { MachineChunkRow } from './local-panel';
  *   not liveness — they live on the chunks list), each with a heartbeat
  *   freshness bar, over the held-environments rail, split 60/40.
  * - **Center (1fr)** — work: the chunks on this machine (one row per chunk,
- *   PM-enriched, derived status in the hub board's colors) over the machine
+ *   work-item-enriched, derived status in the hub board's colors) over the machine
  *   detail dock for the selected chunk, transcript inline.
  * - **Right (330px)** — the machine's account of itself: the hub link
  *   (endpoint, reachability, last flush, buffer), the open local asks, and

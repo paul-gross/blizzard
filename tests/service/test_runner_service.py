@@ -57,7 +57,7 @@ from tests.service.support import (
 
 pytestmark = [pytest.mark.service, service_gate]
 
-_PM_URL = f"{REPO}/issues/1"
+_WORK_REF_URL = f"{REPO}/issues/1"
 
 
 def _tick_env() -> dict[str, str]:
@@ -95,7 +95,7 @@ def _pending_outbound(config: RunnerConfig) -> int:
 
 
 def _seed(hub: httpx.Client) -> str:
-    resp = hub.post("/_seed/chunk", json=mock_hub_chunk_spec(_PM_URL))
+    resp = hub.post("/_seed/chunk", json=mock_hub_chunk_spec(_WORK_REF_URL))
     assert resp.status_code == 201, resp.text
     return resp.json()["chunk_id"]
 
@@ -232,7 +232,7 @@ _TRANSCRIPT_BUILD_SCRIPT = (
 )
 
 
-def _transcript_chunk_spec(pm_url: str) -> dict:
+def _transcript_chunk_spec(work_ref_url: str) -> dict:
     """A scripted build -> deliver chunk whose build node mints tool turns (issue #29)."""
     return {
         "graph_id": "gr_transcript",
@@ -258,7 +258,7 @@ def _transcript_chunk_spec(pm_url: str) -> dict:
                 },
             },
         },
-        "pm_pointers": [{"source": "mock", "ref": pm_url}],
+        "work_refs": [{"source": "mock", "ref": work_ref_url}],
     }
 
 
@@ -288,7 +288,7 @@ def test_transcript_is_read_back_through_the_runner_http_api(tmp_path: Path) -> 
 
     hub_port = _free_port()
     with mock_hub(bin_dir, hub_port) as hub:
-        seeded = hub.post("/_seed/chunk", json=_transcript_chunk_spec(_PM_URL))
+        seeded = hub.post("/_seed/chunk", json=_transcript_chunk_spec(_WORK_REF_URL))
         assert seeded.status_code == 201, seeded.text
         chunk_id = seeded.json()["chunk_id"]
 

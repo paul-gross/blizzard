@@ -106,7 +106,7 @@ def test_both_colocated_units_ship_and_the_runner_orders_after_the_hub() -> None
     assert "blizzard-hub.service" in after, "the runner unit should order After the colocated hub"
 
 
-def test_no_forge_or_pm_credentials_are_configured_on_the_runner_unit() -> None:
+def test_no_forge_or_work_source_credentials_are_configured_on_the_runner_unit() -> None:
     """Credentials live only at the hub — the runner unit must not carry them."""
     runner_text = (_SYSTEMD_DIR / "blizzard-runner.service").read_text()
     for env_file_line in [ln for ln in runner_text.splitlines() if ln.startswith("EnvironmentFile")]:

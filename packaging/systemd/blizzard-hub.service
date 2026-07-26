@@ -17,7 +17,7 @@ Type=exec
 # crash loop. A no-op when the store is already at head.
 ExecStartPre=/opt/blizzard/venv/bin/blizzard-hub migrate --dir /var/lib/blizzard/hub
 ExecStart=/opt/blizzard/venv/bin/blizzard-hub host --dir /var/lib/blizzard/hub
-# The forge base URL/token and PM credentials live ONLY at the hub —
+# The forge base URL/token and work-source credentials live ONLY at the hub —
 # never on a runner. `-` makes the file optional so an unconfigured
 # host still boots and names the gap.
 EnvironmentFile=-/etc/blizzard/hub.env

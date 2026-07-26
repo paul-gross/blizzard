@@ -22,7 +22,7 @@ personalities of the one `blizzard` wheel, so there is no version skew
 between them and no Node at install or runtime:
 
 - **hub** — `blizzard-hub host`: the fleet's HTTP API, SSE, and the embedded
-  mission-control board. Holds the forge base URL and PM credentials
+  mission-control board. Holds the forge base URL and work-source credentials
   — those live only here, never on the runner.
 - **supervisor (runner)** — `blizzard-runner host`: the stateless
   `REAP → PULL → FILL → ADVANCE` loop behind a machine-local API. Reaches the hub
@@ -52,8 +52,8 @@ sudo -u blizzard /opt/blizzard/venv/bin/blizzard-runner init /var/lib/blizzard/r
 
 # 4. Point the hub at the forge and the runner at its workspace. The hub's
 #    delivery credentials go in /etc/blizzard/hub.env (BZ_FORGE_URL, BZ_FORGE_TOKEN, …);
-#    its PM work sources are declared in blizzard-hub.toml's [[pm_source]] blocks
-#    (init scaffolds a commented-out example — see "Configuring PM work sources"
+#    its work sources are declared in blizzard-hub.toml's [[work_source]] blocks
+#    (init scaffolds a commented-out example — see "Configuring work sources"
 #    below); the runner's workspace/harness bindings live in its own config.toml,
 #    written by `init` and edited in place (no credentials).
 
@@ -78,7 +78,46 @@ restart` also preserves in-flight work across the upgrade — see the recovery c
 below. That loud-failure guarantee is the whole safety story for a revision whose
 `upgrade()` only adds or backfills; it is not for a **destructive** one, whose
 `upgrade()` deletes rows outright — see "The pr-opened-idempotent upgrade note" below for the one
-revision so far that does.
+revision so far that does. It also does not cover a **config** change the new wheel
+requires: `migrate` reads `blizzard-hub.toml` before it touches the store, so a config
+the new wheel rejects fails `ExecStartPre` and the unit never starts. One such rename
+ships today — see "The work-source key rename" immediately below, and make that edit
+*before* the restart.
+
+### The work-source key rename
+
+**A hub whose `blizzard-hub.toml` still declares `[[pm_source]]` will not start on this
+wheel.** The key is now `[[work_source]]`; the block's contents are unchanged. Rename
+every occurrence:
+
+```toml
+# before                # after
+[[pm_source]]           [[work_source]]
+```
+
+The failure is deliberate rather than a silent alias: a `[[pm_source]]` block on a wheel
+that no longer knows the key would parse as *zero* configured work sources — a hub that
+boots clean while every `work-items` read 503s and every board label renders null. So
+`HubConfig.load` raises instead, naming the new key.
+
+Two consequences worth planning around:
+
+- **It fails at `migrate`, not at first use.** `blizzard hub migrate` and `blizzard hub
+  host` both load the config, so under the systemd layout above the unit's
+  `ExecStartPre=… migrate` is what fails and the daemon never comes up. Edit the toml in
+  the same maintenance window as the wheel, before `systemctl restart`.
+- **`token_env` is yours and needs no change.** It names an environment variable you
+  chose; only the *table key* was renamed. A `token_env = "BZ_PM_TOKEN"` that works today
+  keeps working — the scaffold's example value changed, your value need not.
+
+**If you script against the API**, two related changes ride along:
+
+- `GET /chunks/{id}/pm-items` still works on both daemons as a **deprecated alias** for
+  `/work-items` (marked deprecated in the OpenAPI spec). Move to `/work-items`; the alias
+  is a courtesy for out-of-tree callers, not a supported path forever.
+- **Response bodies carry no alias.** The field `pm_pointers` is now `work_refs` on every
+  chunk, queue, and envelope view. A client reading the old name gets an empty list, not
+  an error — so this is the part that needs a code change, whichever path you call.
 
 ### The pr-opened-idempotent upgrade note
 
@@ -124,13 +163,13 @@ shared runtime dir during an exclusive handoff.
 > risks lock contention and corruption — this variable chooses a root, it does not make
 > one safe to share.
 
-## Configuring PM work sources
+## Configuring work sources
 
-The hub's PM pass-through reads every chunk's PM item through a
-**configured PM work source** — a named, credentialed binding to one forge repo, declared
-as an `[[pm_source]]` table in `blizzard-hub.toml`. This is a separate seam from the
+The hub's work-item pass-through reads every chunk's work item through a
+**configured work source** — a named, credentialed binding to one forge repo, declared
+as an `[[work_source]]` table in `blizzard-hub.toml`. This is a separate seam from the
 delivery forge above: `BZ_FORGE_URL`/`BZ_FORGE_TOKEN` in the hub's env file control where
-a chunk's PR is opened and landed; `[[pm_source]]` controls where its PM item is *read
+a chunk's PR is opened and landed; `[[work_source]]` controls where its work item is *read
 from*, and each source carries its own credential rather than sharing the
 delivery forge's.
 
@@ -138,11 +177,11 @@ delivery forge's.
 your own repo to configure a source:
 
 ```toml
-[[pm_source]]
+[[work_source]]
 name = "blizzard"                                  # source id — ingest tokens and board labels key on it
 provider = "github"                                # the only adapter grammar today
 repo = "paul-gross/blizzard"                       # the "owner/repo" this source is pinned to
-token_env = "BZ_PM_TOKEN"                          # names an env var — see credentials below
+token_env = "BZ_WORK_SOURCE_TOKEN"                          # names an env var — see credentials below
 # api_base = "https://ghe.example.internal/api/v3" # optional: override the provider's API origin
 # web_base = "https://ghe.example.internal"         # optional: override the web origin
 ```
@@ -151,7 +190,7 @@ Every field:
 
 | Field | Required | Meaning |
 |-------|----------|---------|
-| `name` | yes | The source's identity. Ingest tokens (`name:ref`, `name#ref`) and board pointer labels (`{source}#{ref}`) key on it. Must not contain `:` (the ingest token grammar splits on the first one). Must be unique across all `[[pm_source]]` blocks. |
+| `name` | yes | The source's identity. Ingest tokens (`name:ref`, `name#ref`) and board pointer labels (`{source}#{ref}`) key on it. Must not contain `:` (the ingest token grammar splits on the first one). Must be unique across all `[[work_source]]` blocks. |
 | `provider` | yes | The adapter grammar this source speaks. Only `"github"` exists today; an unknown provider fails at config load, not at first use. |
 | `repo` | yes | The `owner/name` coordinate this source is pinned to. Each `(provider, repo)` pair may appear under only one `name` — two names for the same repo would let one item be ingested twice under two identities. |
 | `token_env` | yes | Names an environment variable — **not the secret itself**. See "Credential indirection" below. |
@@ -162,7 +201,7 @@ Every field:
 instance, alongside the public `blizzard` source:
 
 ```toml
-[[pm_source]]
+[[work_source]]
 name = "internal"
 provider = "github"
 repo = "acme/internal-tool"
@@ -189,41 +228,43 @@ variable rather than silently ingesting unauthenticated.
 
 ### The upgrade note
 
-**An existing hub must add at least one `[[pm_source]]` block, or two things break
+**An existing hub must add at least one `[[work_source]]` block, or two things break
 on the next deploy:**
 
-- `GET /chunks/{id}/pm-items` 503s outright — "no PM work-source is configured" —
+- `GET /chunks/{id}/work-items` 503s outright — "no work source is configured" —
   until at least one source exists.
 - Every chunk's board pointer label goes null: rendering `{source}#{ref}` needs a
   source name, and there is none to render until a source is configured.
 
-This is not optional for a hub that already ingests PM items; there is no
-backward-compatible default, because the PM source list also bounds which repos
-the hub is willing to ingest from (see below). Add the `[[pm_source]]` block to
+This is not optional for a hub that already ingests work items; there is no
+backward-compatible default, because the work source list also bounds which repos
+the hub is willing to ingest from (see below). Add the `[[work_source]]` block to
 `blizzard-hub.toml` as part of the same maintenance window as the wheel upgrade,
 before running `migrate`/restarting the daemon (see the install/upgrade steps above).
 
 **For a repo that already has chunks in this hub, `name` is not a free choice — it
 must be the repo's own tail** (the part after the last `/`; e.g. `blizzard` for
-`paul-gross/blizzard`). The migration that introduced `[[pm_source]]` backfilled every
+`paul-gross/blizzard`). An earlier release's migration
+(`20260716_1512_hub_pm_pointer_source_ref`, which predates the `[[work_source]]` key and
+ran under its old name) backfilled every
 existing pointer's `source` to its repo tail, so a `name` that does not match strands
 those pointers: nothing 503s (the hub sees a non-empty source list and boots clean),
 but every pre-existing chunk for that repo silently degrades — `label` goes `null` and
-its `pm-items` entry carries `error="no configured PM source named '<repo-tail>'"`,
+its `work-items` entry carries `error="no configured work source named '<repo-tail>'"`,
 because the pointer's `source` and the configured `name` no longer agree. A repo with
 no chunks minted against it yet has no such constraint — any `name` is safe (the GHE
 example above is exactly that case, not an illustration of the repo-tail rule).
 
 **Verify you got it right** after the upgrade: for any chunk that existed before this
-release, read its PM items and confirm no entry carries an `error`:
+release, read its work items and confirm no entry carries an `error`:
 
 ```
-curl -s http://<hub>/api/chunks/<chunk_id>/pm-items | jq '.items[].error'
+curl -s http://<hub>/api/chunks/<chunk_id>/work-items | jq '.items[].error'
 ```
 
-Every value printed should be `null`. A non-null `error` naming a PM source means the
+Every value printed should be `null`. A non-null `error` naming a work source means the
 configured `name` does not match the backfilled repo tail for that chunk's pointer —
-fix the `name` (or add a second `[[pm_source]]` under the correct tail) and restart.
+fix the `name` (or add a second `[[work_source]]` under the correct tail) and restart.
 
 ### Ingest tokens
 
@@ -232,12 +273,12 @@ token is one of:
 
 - `<source>:<ref>` — e.g. `blizzard:26`
 - `<source>#<ref>` — e.g. `blizzard#26`
-- a pasted PM item URL (e.g. the GitHub issue's own URL)
+- a pasted work item URL (e.g. the GitHub issue's own URL)
 
 For the `github` provider, `<ref>` must be numeric (the issue number) — a `<source>:<ref>`
 or `<source>#<ref>` token with a non-numeric `ref` (e.g. `blizzard:v2`) matches no
 configured source's `parse` and surfaces as the same 422 an unconfigured repo gets ("not
-claimed by any configured PM source"), which misdiagnoses as a missing `[[pm_source]]`
+claimed by any configured work source"), which misdiagnoses as a missing `[[work_source]]`
 rather than a malformed ref.
 
 The CLI carries no parsing of its own: it hands the token to the hub, which resolves
@@ -249,10 +290,10 @@ resolves against whichever configured source claims it.
 ### Unconfigured repos are a 422 at the front door
 
 The configured source list is also the hub's allowlist of ingestable repos: a token
-that names a repo (via URL or an unresolvable source name) that no `[[pm_source]]`
+that names a repo (via URL or an unresolvable source name) that no `[[work_source]]`
 covers gets rejected with `422 Unprocessable Entity`, naming the token and the
 sources that *are* configured. Adding a repo to the fleet means adding its
-`[[pm_source]]` block first — there is no separate allowlist to keep in sync.
+`[[work_source]]` block first — there is no separate allowlist to keep in sync.
 
 ## Runner authentication
 
@@ -299,10 +340,10 @@ The rollout sequence, in order:
 
 `blizzard-runner.toml`'s `token_env` (default `BZ_HUB_TOKEN`) names the environment
 variable carrying the runner's enrolled bearer token — never the secret itself,
-mirroring the `[[pm_source]] token_env` indirection above. The secret goes in the
+mirroring the `[[work_source]] token_env` indirection above. The secret goes in the
 runner's runtime env file (e.g. `/etc/blizzard/runner.env` under the systemd layout,
 declared as that unit's `EnvironmentFile`), read once at config load. Every outbound
-runner→hub call — the reconciliation loop's `httpx.Client` and the pm-items proxy
+runner→hub call — the reconciliation loop's `httpx.Client` and the work-items proxy
 alike — attaches it as `Authorization: Bearer <token>`; an unenrolled runner (or one
 whose env file has not been updated yet) attaches nothing, and `runner_auth_mode`
 above decides whether the hub tolerates that.
@@ -321,7 +362,7 @@ it is absent from a worker child by construction unless deliberately named here.
 Every worker's spawn prompt is three ordered layers ahead of the node's own envelope
 prompt: (1) a baked-in blizzard preamble — always present, framing the worker as
 operating inside the fleet and naming its worker-facing `blizzard runner` verbs
-(`ask`, `pm-items`) — (2) the operator's own `workspace_prompt` prose, layered on top
+(`ask`, `work-items`) — (2) the operator's own `workspace_prompt` prose, layered on top
 when set, and (3) a machine-local facts table (runner/chunk/lease identity, held
 environment(s)).
 
@@ -365,10 +406,10 @@ unauthenticated until an operator deliberately opts in. `mode = "oauth"` activat
 session/permission seam and requires at least one `[[auth.oauth.provider]]` entry.
 `type` selects the conformer: `"github"` (an OAuth App) or `"oidc"` (a generic OIDC
 issuer, discovered via `<issuer>/.well-known/openid-configuration`). `client_secret_env`
-mirrors `[[pm_source]] token_env`'s indirection exactly — it names an environment
+mirrors `[[work_source]] token_env`'s indirection exactly — it names an environment
 variable, never the secret itself; the secret goes in the hub's runtime env file (e.g.
 `/etc/blizzard/hub.env` under the systemd layout above), a deployment credential like
-`BZ_FORGE_TOKEN`/`BZ_PM_TOKEN` above.
+`BZ_FORGE_TOKEN`/`BZ_WORK_SOURCE_TOKEN` above.
 
 ### The superuser bootstrap
 

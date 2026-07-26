@@ -42,7 +42,7 @@ def _oauth_hub(
 ) -> Iterator[httpx.Client]:
     """A real ``blizzard hub host`` subprocess, ``auth.mode = "oauth"`` with one or more
     configured providers — mirrors ``tests/e2e/test_acceptance_loop.py``'s own ``_hub``,
-    minus the PM-source wiring this scenario does not need (login/`` /api/me`` alone).
+    minus the work-source wiring this scenario does not need (login/`` /api/me`` alone).
     ``superuser`` (issue #94) sets ``auth.superuser`` so the bootstrap lifecycle runs at
     this real boot, same as any other deployment."""
     env = {**os.environ, _SECRET_ENV: _SECRET}

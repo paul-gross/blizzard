@@ -10,7 +10,7 @@ operator verbs (`requeue`, `takeover`, `pause`, and others) that mutate fleet st
 
 - `blizzard runner ask "<question>"` — escalate an undecidable choice to a human and end your turn.
   The question is recorded durably before you exit, and the fleet resumes you once an answer arrives.
-- `blizzard runner pm-items <chunk-id>` — read the chunk's project-management item(s): its issue body and comments.
+- `blizzard runner work-items <chunk-id>` — read the chunk's work item(s): each work ref's issue body and comments.
   Use it instead of guessing at the work from the node prompt alone.
 - `blizzard runner artifact list` — list your own node-step's input artifacts as kind-discriminated JSON
   (a prior `plan`, `plan-findings`, a sibling `retrospective`, an upstream node's pushed `git_commit` ref).

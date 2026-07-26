@@ -80,6 +80,9 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("POST", "/api/chunks/{chunk_id}/stop"): CHUNK_CONTROL,
     ("POST", "/api/chunks/{chunk_id}/promote"): CHUNK_CONTROL,
     ("PATCH", "/api/chunks/{chunk_id}"): CHUNK_CONTROL,
+    ("GET", "/api/chunks/{chunk_id}/work-items"): FLEET_VIEW,
+    # The issue-#55 deprecated alias onto the same handler — classified identically,
+    # because an alias that fell into a different plane would be an authz hole.
     ("GET", "/api/chunks/{chunk_id}/pm-items"): FLEET_VIEW,
     ("GET", "/api/decisions"): FLEET_VIEW,
     ("POST", "/api/decisions/{decision_id}/resolutions"): GATE_RESOLVE,
@@ -107,7 +110,8 @@ _HUMAN: dict[tuple[str, str], Permission] = {
 _FLEET: set[tuple[str, str]] = {
     ("GET", "/api/fleet/queue/peek"),
     ("GET", "/api/fleet/chunks/{chunk_id}"),
-    ("GET", "/api/fleet/chunks/{chunk_id}/pm-items"),
+    ("GET", "/api/fleet/chunks/{chunk_id}/work-items"),
+    ("GET", "/api/fleet/chunks/{chunk_id}/pm-items"),  # the issue-#55 deprecated alias
     ("GET", "/api/fleet/summary"),
     ("GET", "/api/fleet/questions/{question_id}"),
     ("GET", "/api/fleet/chunks/{chunk_id}/envelope"),

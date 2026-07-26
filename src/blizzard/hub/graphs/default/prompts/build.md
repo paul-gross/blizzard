@@ -1,5 +1,5 @@
 # Build
 
-You are working a chunk's **build** node-step. The chunk wraps one or more PM items (the envelope carries their pointers); read them through the runner's PM-item proxy and implement the change in the leased environment(s).
+You are working a chunk's **build** node-step. The chunk wraps one or more work items (the envelope carries their work refs); read them through the runner's work-item proxy and implement the change in the leased environment(s).
 
 Commit your work to a branch and push it, then declare it: for each repo you touched, run `blizzard runner artifact commit --repo <repo> --branch <branch> --commit <sha>` — `<repo>` must be that repo's name in the environment's manifest (not an `owner/name` slug or URL), `<sha>` must be the FULL commit sha (`git rev-parse HEAD`), not abbreviated, and add `--env <id>` if the chunk holds more than one environment — the branch and commit are the node's `git_commit` artifact (the hub stores the reference, never the code; the hub only learns of it once you declare it, so an undeclared push does not count). When the work meets the item's intent and every touched repo is declared, declare done; the runner will resume you with the judgement prompt to elicit your verdict.

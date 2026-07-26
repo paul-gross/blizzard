@@ -47,12 +47,12 @@ def test_winning_claim_carries_the_first_node_envelope(tmp_path: Path) -> None:
     assert env["node"]["executor"] == "runner"
     # The envelope carries the pre-prompt, the authored judgement prose (the runner
     # appends the elicitation tail from the choice set), the choice set, and the
-    # chunk's PM pointers.
+    # chunk's work refs.
     assert env["prompt"]
     assert env["judgement_prompt"]
     assert "<Choice>" not in env["judgement_prompt"]  # the tail is the runner's to render
     assert {c["name"] for c in env["node"]["choices"]} == {"pass", "fail"}
-    assert env["pm_pointers"] == [_POINTER]
+    assert env["work_refs"] == [_POINTER]
 
 
 def test_summary_environment_count_counts_the_routes_environments(tmp_path: Path) -> None:

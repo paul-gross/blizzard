@@ -95,7 +95,7 @@ export type ArtifactKind = 'git_commit' | 'asset';
  * code).
  *
  * ``branch_url`` is the forge ``tree`` URL for the produced branch, resolved server-side
- * from the chunk's issue-shaped PM pointer so the board can link a ``git_commit``
+ * from the chunk's issue-shaped work ref so the board can link a ``git_commit``
  * to the branch on the forge; null when no forge web base is derivable — the row then
  * shows the branch name without a link (no broken link).
  *
@@ -283,10 +283,6 @@ export type ChunkDetail = {
     pause?: PauseView | null;
     pending?: PendingView | null;
     /**
-     * Pm Pointers
-     */
-    pm_pointers?: Array<PmPointerView>;
-    /**
      * Questions
      */
     questions?: Array<QuestionView>;
@@ -296,6 +292,10 @@ export type ChunkDetail = {
      * Usage
      */
     usage?: Array<ChunkUsageView>;
+    /**
+     * Work Refs
+     */
+    work_refs?: Array<WorkRefView>;
 };
 
 /**
@@ -304,7 +304,7 @@ export type ChunkDetail = {
  * Merge unacquired chunks into one — the board's Group control.
  *
  * ``merge_chunk_ids`` are the ready chunks folded into the path's survivor chunk; the
- * survivor absorbs the union of their PM pointers and the merged chunks are discarded as
+ * survivor absorbs the union of their work refs and the merged chunks are discarded as
  * ephemeral. Self-references and duplicates are ignored; a non-ready member is
  * rejected ``409``.
  */
@@ -318,7 +318,7 @@ export type ChunkGroupRequest = {
 /**
  * ChunkGroupResponse
  *
- * The survivor chunk after a group — its id and the union of PM pointers it carries.
+ * The survivor chunk after a group — its id and the union of work refs it carries.
  */
 export type ChunkGroupResponse = {
     /**
@@ -330,9 +330,9 @@ export type ChunkGroupResponse = {
      */
     merged_chunk_ids?: Array<string>;
     /**
-     * Pm Pointers
+     * Work Refs
      */
-    pm_pointers?: Array<PmPointerModel>;
+    work_refs?: Array<WorkRefModel>;
 };
 
 /**
@@ -340,8 +340,8 @@ export type ChunkGroupResponse = {
  *
  * Ingest by source-native token — specific items always, batch fine.
  *
- * Each token is resolved against the configured PM sources' own grammar
- * (``IPmSource.parse``): ``{name}:{ref}``, ``{name}#{ref}``, or the item's own URL.
+ * Each token is resolved against the configured work sources' own grammar
+ * (``IWorkSource.parse``): ``{name}:{ref}``, ``{name}#{ref}``, or the item's own URL.
  * Tokens only — no pre-resolved ``{source, ref}`` shape travels alongside them; a
  * second intake shape would reintroduce exactly the config-blind guess that
  * resolving against the configured sources removes.
@@ -497,14 +497,14 @@ export type ChunkSummary = {
      */
     model: string;
     /**
-     * Pm Pointers
-     */
-    pm_pointers?: Array<PmPointerView>;
-    /**
      * Runner Id
      */
     runner_id?: string | null;
     status: ChunkStatus;
+    /**
+     * Work Refs
+     */
+    work_refs?: Array<WorkRefView>;
 };
 
 /**
@@ -1624,15 +1624,15 @@ export type NodeEnvelope = {
     judgement_prompt: string | null;
     node: NodeConfig;
     /**
-     * Pm Pointers
-     */
-    pm_pointers?: Array<{
-        [key: string]: string;
-    }>;
-    /**
      * Prompt
      */
     prompt: string | null;
+    /**
+     * Work Refs
+     */
+    work_refs?: Array<{
+        [key: string]: string;
+    }>;
 };
 
 /**
@@ -1688,118 +1688,6 @@ export type PendingView = {
      * Node Name
      */
     node_name: string;
-};
-
-/**
- * PmItemEntry
- *
- * One pointer's pass-through PM item — title, body + comment
- * thread, vendor-native.
- *
- * ``label``/``web_url`` are the board-legible pointer label (``blizzard#8``) and its
- * browser address — both null when no configured source names ``source``. A
- * per-pointer forge failure degrades here rather than failing the whole read:
- * ``error`` carries the reason and ``title``/``body`` are null, so one unreachable
- * pointer never blinds the reader to the pointers it did reach.
- */
-export type PmItemEntry = {
-    /**
-     * Body
-     */
-    body?: string | null;
-    /**
-     * Comments
-     */
-    comments?: Array<string>;
-    /**
-     * Error
-     */
-    error?: string | null;
-    /**
-     * Fetched At
-     */
-    fetched_at: string;
-    /**
-     * Label
-     */
-    label?: string | null;
-    /**
-     * Ref
-     */
-    ref: string;
-    /**
-     * Source
-     */
-    source: string;
-    /**
-     * Title
-     */
-    title?: string | null;
-    /**
-     * Web Url
-     */
-    web_url?: string | null;
-};
-
-/**
- * PmItemsView
- *
- * A chunk's pass-through PM items — one entry per pointer, order preserved.
- *
- * Empty when the chunk holds no pointers — the board's empty state; a grouped chunk carrying
- * many pointers yields one entry per pointer, each fetched fresh and never stored.
- */
-export type PmItemsView = {
-    /**
-     * Items
-     */
-    items?: Array<PmItemEntry>;
-};
-
-/**
- * PmPointerModel
- *
- * One ``{source, ref}`` PM pointer — ``source`` names a configured
- * ``[[pm_source]]``; ``ref`` is that source's own item token.
- */
-export type PmPointerModel = {
-    /**
-     * Ref
-     */
-    ref: string;
-    /**
-     * Source
-     */
-    source: string;
-};
-
-/**
- * PmPointerView
- *
- * A pointer as the views render it — the raw pair plus its legible
- * label and browser URL, both rendered by the pointer's configured source binding.
- *
- * ``label`` is the board-legible ``{name}#{ref}`` (e.g. ``blizzard#8``); ``web_url``
- * is its browser-openable address. Both null when no configured source names
- * ``source`` — the board then leans on the chunk's stable short id instead.
- */
-export type PmPointerView = {
-    /**
-     * Label
-     */
-    label?: string | null;
-    /**
-     * Ref
-     */
-    ref: string;
-    /**
-     * Source
-     */
-    source: string;
-    /**
-     * Web Url
-     */
-    web_url?: string | null;
 };
 
 /**
@@ -1987,13 +1875,13 @@ export type QueuePeekEntry = {
      */
     graph_id: string;
     /**
-     * Pm Pointers
-     */
-    pm_pointers?: Array<PmPointerModel>;
-    /**
      * Position
      */
     position: number;
+    /**
+     * Work Refs
+     */
+    work_refs?: Array<WorkRefModel>;
 };
 
 /**
@@ -2572,6 +2460,118 @@ export type ValidationError = {
     type: string;
 };
 
+/**
+ * WorkItemEntry
+ *
+ * One pointer's pass-through work item — title, body + comment
+ * thread, vendor-native.
+ *
+ * ``label``/``web_url`` are the board-legible pointer label (``blizzard#8``) and its
+ * browser address — both null when no configured source names ``source``. A
+ * per-pointer forge failure degrades here rather than failing the whole read:
+ * ``error`` carries the reason and ``title``/``body`` are null, so one unreachable
+ * pointer never blinds the reader to the pointers it did reach.
+ */
+export type WorkItemEntry = {
+    /**
+     * Body
+     */
+    body?: string | null;
+    /**
+     * Comments
+     */
+    comments?: Array<string>;
+    /**
+     * Error
+     */
+    error?: string | null;
+    /**
+     * Fetched At
+     */
+    fetched_at: string;
+    /**
+     * Label
+     */
+    label?: string | null;
+    /**
+     * Ref
+     */
+    ref: string;
+    /**
+     * Source
+     */
+    source: string;
+    /**
+     * Title
+     */
+    title?: string | null;
+    /**
+     * Web Url
+     */
+    web_url?: string | null;
+};
+
+/**
+ * WorkItemsView
+ *
+ * A chunk's pass-through work items — one entry per pointer, order preserved.
+ *
+ * Empty when the chunk holds no pointers — the board's empty state; a grouped chunk carrying
+ * many pointers yields one entry per pointer, each fetched fresh and never stored.
+ */
+export type WorkItemsView = {
+    /**
+     * Items
+     */
+    items?: Array<WorkItemEntry>;
+};
+
+/**
+ * WorkRefModel
+ *
+ * One ``{source, ref}`` work ref — ``source`` names a configured
+ * ``[[work_source]]``; ``ref`` is that source's own item token.
+ */
+export type WorkRefModel = {
+    /**
+     * Ref
+     */
+    ref: string;
+    /**
+     * Source
+     */
+    source: string;
+};
+
+/**
+ * WorkRefView
+ *
+ * A pointer as the views render it — the raw pair plus its legible
+ * label and browser URL, both rendered by the pointer's configured source binding.
+ *
+ * ``label`` is the board-legible ``{name}#{ref}`` (e.g. ``blizzard#8``); ``web_url``
+ * is its browser-openable address. Both null when no configured source names
+ * ``source`` — the board then leans on the chunk's stable short id instead.
+ */
+export type WorkRefView = {
+    /**
+     * Label
+     */
+    label?: string | null;
+    /**
+     * Ref
+     */
+    ref: string;
+    /**
+     * Source
+     */
+    source: string;
+    /**
+     * Web Url
+     */
+    web_url?: string | null;
+};
+
 export type AuthorizeApiAuthAuthorizeGetData = {
     body?: never;
     path?: never;
@@ -3017,7 +3017,7 @@ export type PauseChunkApiChunksChunkIdPausePostResponses = {
 
 export type PauseChunkApiChunksChunkIdPausePostResponse = PauseChunkApiChunksChunkIdPausePostResponses[keyof PauseChunkApiChunksChunkIdPausePostResponses];
 
-export type GetPmItemsApiChunksChunkIdPmItemsGetData = {
+export type GetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetData = {
     body?: never;
     path: {
         /**
@@ -3029,23 +3029,23 @@ export type GetPmItemsApiChunksChunkIdPmItemsGetData = {
     url: '/api/chunks/{chunk_id}/pm-items';
 };
 
-export type GetPmItemsApiChunksChunkIdPmItemsGetErrors = {
+export type GetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type GetPmItemsApiChunksChunkIdPmItemsGetError = GetPmItemsApiChunksChunkIdPmItemsGetErrors[keyof GetPmItemsApiChunksChunkIdPmItemsGetErrors];
+export type GetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetError = GetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetErrors[keyof GetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetErrors];
 
-export type GetPmItemsApiChunksChunkIdPmItemsGetResponses = {
+export type GetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetResponses = {
     /**
      * Successful Response
      */
-    200: PmItemsView;
+    200: WorkItemsView;
 };
 
-export type GetPmItemsApiChunksChunkIdPmItemsGetResponse = GetPmItemsApiChunksChunkIdPmItemsGetResponses[keyof GetPmItemsApiChunksChunkIdPmItemsGetResponses];
+export type GetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetResponse = GetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetResponses[keyof GetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetResponses];
 
 export type PromoteChunkApiChunksChunkIdPromotePostData = {
     body?: never;
@@ -3166,6 +3166,36 @@ export type StopChunkApiChunksChunkIdStopPostResponses = {
 };
 
 export type StopChunkApiChunksChunkIdStopPostResponse = StopChunkApiChunksChunkIdStopPostResponses[keyof StopChunkApiChunksChunkIdStopPostResponses];
+
+export type GetWorkItemsApiChunksChunkIdWorkItemsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/work-items';
+};
+
+export type GetWorkItemsApiChunksChunkIdWorkItemsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetWorkItemsApiChunksChunkIdWorkItemsGetError = GetWorkItemsApiChunksChunkIdWorkItemsGetErrors[keyof GetWorkItemsApiChunksChunkIdWorkItemsGetErrors];
+
+export type GetWorkItemsApiChunksChunkIdWorkItemsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: WorkItemsView;
+};
+
+export type GetWorkItemsApiChunksChunkIdWorkItemsGetResponse = GetWorkItemsApiChunksChunkIdWorkItemsGetResponses[keyof GetWorkItemsApiChunksChunkIdWorkItemsGetResponses];
 
 export type ListDecisionsApiDecisionsGetData = {
     body?: never;
@@ -3477,7 +3507,7 @@ export type ReportLeaseApiFleetChunksChunkIdLeasesPostResponses = {
 
 export type ReportLeaseApiFleetChunksChunkIdLeasesPostResponse = ReportLeaseApiFleetChunksChunkIdLeasesPostResponses[keyof ReportLeaseApiFleetChunksChunkIdLeasesPostResponses];
 
-export type GetPmItemsApiFleetChunksChunkIdPmItemsGetData = {
+export type FleetGetPmItemsDeprecatedAliasApiFleetChunksChunkIdPmItemsGetData = {
     body?: never;
     path: {
         /**
@@ -3489,23 +3519,23 @@ export type GetPmItemsApiFleetChunksChunkIdPmItemsGetData = {
     url: '/api/fleet/chunks/{chunk_id}/pm-items';
 };
 
-export type GetPmItemsApiFleetChunksChunkIdPmItemsGetErrors = {
+export type FleetGetPmItemsDeprecatedAliasApiFleetChunksChunkIdPmItemsGetErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type GetPmItemsApiFleetChunksChunkIdPmItemsGetError = GetPmItemsApiFleetChunksChunkIdPmItemsGetErrors[keyof GetPmItemsApiFleetChunksChunkIdPmItemsGetErrors];
+export type FleetGetPmItemsDeprecatedAliasApiFleetChunksChunkIdPmItemsGetError = FleetGetPmItemsDeprecatedAliasApiFleetChunksChunkIdPmItemsGetErrors[keyof FleetGetPmItemsDeprecatedAliasApiFleetChunksChunkIdPmItemsGetErrors];
 
-export type GetPmItemsApiFleetChunksChunkIdPmItemsGetResponses = {
+export type FleetGetPmItemsDeprecatedAliasApiFleetChunksChunkIdPmItemsGetResponses = {
     /**
      * Successful Response
      */
-    200: PmItemsView;
+    200: WorkItemsView;
 };
 
-export type GetPmItemsApiFleetChunksChunkIdPmItemsGetResponse = GetPmItemsApiFleetChunksChunkIdPmItemsGetResponses[keyof GetPmItemsApiFleetChunksChunkIdPmItemsGetResponses];
+export type FleetGetPmItemsDeprecatedAliasApiFleetChunksChunkIdPmItemsGetResponse = FleetGetPmItemsDeprecatedAliasApiFleetChunksChunkIdPmItemsGetResponses[keyof FleetGetPmItemsDeprecatedAliasApiFleetChunksChunkIdPmItemsGetResponses];
 
 export type RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostData = {
     body?: never;
@@ -3536,6 +3566,36 @@ export type RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostResponses = {
 };
 
 export type RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostResponse = RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostResponses[keyof RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostResponses];
+
+export type GetWorkItemsApiFleetChunksChunkIdWorkItemsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/fleet/chunks/{chunk_id}/work-items';
+};
+
+export type GetWorkItemsApiFleetChunksChunkIdWorkItemsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetWorkItemsApiFleetChunksChunkIdWorkItemsGetError = GetWorkItemsApiFleetChunksChunkIdWorkItemsGetErrors[keyof GetWorkItemsApiFleetChunksChunkIdWorkItemsGetErrors];
+
+export type GetWorkItemsApiFleetChunksChunkIdWorkItemsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: WorkItemsView;
+};
+
+export type GetWorkItemsApiFleetChunksChunkIdWorkItemsGetResponse = GetWorkItemsApiFleetChunksChunkIdWorkItemsGetResponses[keyof GetWorkItemsApiFleetChunksChunkIdWorkItemsGetResponses];
 
 export type IngestRunnerFactsApiFleetEventsPostData = {
     body: RunnerFactBatch;

@@ -1,21 +1,21 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import type { PmItemEntry } from '../api/hub';
+import type { WorkItemEntry } from '../api/hub';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
 
-/** The chunk's related PM items and the state of the pass-through fetch, for the work-item column.
+/** The chunk's related work items and the state of the pass-through fetch, for the work-item column.
  *
  * `loading` while the forge read is in flight, `error` when the whole read failed (an
  * unreachable hub or no work-source configured — the pane shows a visible notice, AC5), and
  * `success` with `items` (possibly empty for a chunk with no pointers — the empty state, AC4;
  * a per-item `error` carries a single pointer's forge failure the pane notices in place). */
-export interface PmItemsState {
+export interface WorkItemsState {
   readonly status: 'loading' | 'error' | 'success';
-  readonly items: readonly PmItemEntry[];
+  readonly items: readonly WorkItemEntry[];
 }
 
 /**
- * The work item's PM issue pass-through (issue #24, issue #79) — the chunk's
+ * The work item's issue pass-through (issue #24, issue #79) — the chunk's
  * linked forge issue(s): title, body, and messages. Owns its own
  * loading/error/empty triad through the shared kit's async-state component
  * (issue #78) rather than a re-typed `<p class="status">`. Presentational
@@ -36,9 +36,9 @@ export interface PmItemsState {
         emptyText="This chunk has no linked issue."
         emptyTestid="issue-empty"
       >
-        @for (item of pmItems().items; track item.source + ':' + item.ref) {
+        @for (item of workItems().items; track item.source + ':' + item.ref) {
           <article class="issue" data-testid="issue-item">
-            <!-- The link out to the PM lives here and only here: the board cards
+            <!-- The link out to the work source lives here and only here: the board cards
                  are click targets for opening a chunk, so an anchor on them
                  competes with that. This is where the operator leaves for the forge. -->
             <div class="i-head">
@@ -170,14 +170,14 @@ export interface PmItemsState {
   `,
 })
 export class ChunkIssuePane {
-  /** The chunk's related PM items + fetch state, from the container (issue #24).
+  /** The chunk's related work items + fetch state, from the container (issue #24).
    * Defaults to `loading` so the pane constructs without the container wiring it. */
-  readonly pmItems = input<PmItemsState>({ status: 'loading', items: [] });
+  readonly workItems = input<WorkItemsState>({ status: 'loading', items: [] });
 
   /** The async triad's resolved state — loading/error take precedence, then no
    * linked issue, else the issue items render. */
   protected readonly triadState = computed<KitAsyncStateValue>(() => {
-    const state = this.pmItems();
+    const state = this.workItems();
     if (state.status === 'loading') return 'loading';
     if (state.status === 'error') return 'error';
     return state.items.length === 0 ? 'empty' : 'ready';

@@ -66,7 +66,7 @@ DEFAULT_HARNESS_PERMISSION_MODE = "bypassPermissions"
 DEFAULT_MAX_AGENTS = 1
 DEFAULT_BASE_BRANCH = "main"
 # The env var naming this runner's hub bearer token (issue #86b) — mirrors
-# `PmSourceConfig.token_env` (`src/blizzard/hub/config.py`): the toml round-trips only the
+# `WorkSourceConfig.token_env` (`src/blizzard/hub/config.py`): the toml round-trips only the
 # variable NAME, never the secret, which lives in the runtime env file (systemd
 # `EnvironmentFile`, the orchestrator env in dev).
 DEFAULT_TOKEN_ENV = "BZ_HUB_TOKEN"
@@ -104,7 +104,7 @@ class RunnerConfig:
     runner_id: str = DEFAULT_RUNNER_ID
     workspace_id: str = DEFAULT_WORKSPACE_ID
     #: Names the env var carrying this runner's hub bearer token (issue #86b) — never the
-    #: secret itself: round-trips through toml (mirrors ``PmSourceConfig.token_env``,
+    #: secret itself: round-trips through toml (mirrors ``WorkSourceConfig.token_env``,
     #: ``src/blizzard/hub/config.py``). :attr:`hub_token` is the *resolved* secret, read
     #: from ``os.environ[token_env]`` at ``scaffold``/``load`` and never written back to
     #: toml. Empty (``hub_token == ""``) is a valid, warn-mode-only state — the outbound
@@ -286,7 +286,7 @@ class RunnerConfig:
         """The outbound ``Authorization`` header every runner->hub call carries (issue #86b).
 
         One credential path for the reconciliation loop's ``httpx.Client`` and the
-        pm-items proxy alike, rather than each building its own header. Empty when
+        work-items proxy alike, rather than each building its own header. Empty when
         :attr:`hub_token` is unset — an unenrolled runner (or a fleet that has not
         installed tokens yet) attaches nothing, and the hub's own ``runner_auth_mode``
         (``warn`` by default) decides whether that is tolerated.

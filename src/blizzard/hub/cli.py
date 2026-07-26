@@ -275,7 +275,7 @@ def host(directory: str | None, dir_option: str, host_: str | None, port: int | 
         ensure_current_revision(config)
     except RevisionMismatchError as exc:
         raise click.ClickException(str(exc)) from exc
-    # Composition can still reject the config (an ``[[pm_source]]`` naming an unset
+    # Composition can still reject the config (an ``[[work_source]]`` naming an unset
     # ``token_env`` fails here, at boot, by design). Surface it as the same
     # clean CLI error the config-load and migration guards above raise, not a
     # traceback; and build before announcing, so we never claim to serve and then die.
@@ -359,7 +359,7 @@ def _parse_pointer(token: str) -> str:
     """The ingest token the CLI hands the hub.
 
     The CLI carries no grammar of its own any more: the hub resolves every token
-    against its configured PM sources' own ``parse`` (``{name}:{ref}``,
+    against its configured work sources' own ``parse`` (``{name}:{ref}``,
     ``{name}#{ref}``, or the item's own URL), so a token travels
     through verbatim. The one thing that survives here is the deprecated
     ``github:<rest>`` prefix: it warns on stderr and passes ``rest`` on its own
@@ -510,7 +510,7 @@ def chunk_show(chunk_id: str, as_json: bool, hub_url: str | None) -> None:
     )
     node = detail.get("current_node_name") or detail.get("current_node_id") or "-"
     click.echo(f"  node: {node}   model: {detail.get('model')}")
-    pointers = detail.get("pm_pointers") or []
+    pointers = detail.get("work_refs") or []
     if pointers:
         labels = ", ".join(p.get("label") or f"{p['source']}#{p['ref']}" for p in pointers)
         click.echo(f"  pointers: {labels}")
@@ -526,12 +526,12 @@ def chunk_show(chunk_id: str, as_json: bool, hub_url: str | None) -> None:
 @_json_option
 @_hub_url_options
 def chunk_ingest(pointers: tuple[str, ...], as_json: bool, hub_url: str | None) -> None:
-    """Ingest PM items by token, minting a chunk.
+    """Ingest work items by token, minting a chunk.
 
     Each POINTER is a source-native token — ``source:ref`` (e.g. ``blizzard:26``),
-    ``source#ref``, or a pasted PM item URL; pass one or more — a batch mints one
+    ``source#ref``, or a pasted work item URL; pass one or more — a batch mints one
     chunk carrying every pointer. A pure client of the hub API: ``POST /api/chunks``.
-    The hub resolves each token against its configured PM sources and 422s one none
+    The hub resolves each token against its configured work sources and 422s one none
     of them claims, naming the token and what is configured; 409 when a resolved
     pointer is already held by a live chunk."""
     base = hub_url
@@ -779,7 +779,7 @@ def chunk_group_cmd(chunk_id: str, merge_ids: tuple[str, ...], as_json: bool, hu
 
     A pure client of ``POST /api/chunks/{id}/group``: every merge id must currently be
     a ready, unacquired chunk (409 otherwise); the survivor absorbs the union of every
-    merged chunk's PM pointers."""
+    merged chunk's work refs."""
     base = hub_url
     resp = _request(
         "post", f"/api/chunks/{chunk_id}/group", hub_url=base, json_body={"merge_chunk_ids": list(merge_ids)}
@@ -797,25 +797,25 @@ def chunk_group_cmd(chunk_id: str, merge_ids: tuple[str, ...], as_json: bool, hu
     click.echo(f"grouped into {body['chunk_id']} (merged: {merged})")
 
 
-@chunk_group.command("pm")
+@chunk_group.command("work-items")
 @click.argument("chunk_id")
 @_json_option
 @_hub_url_options
-def chunk_pm(chunk_id: str, as_json: bool, hub_url: str | None) -> None:
-    """CHUNK's PM items, pass-through — one entry per pointer, vendor-native.
+def chunk_work_items(chunk_id: str, as_json: bool, hub_url: str | None) -> None:
+    """CHUNK's work items, pass-through — one entry per work ref, vendor-native.
 
-    A pure client of ``GET /api/chunks/{id}/pm-items``; a per-pointer forge failure
+    A pure client of ``GET /api/chunks/{id}/work-items``; a per-pointer forge failure
     degrades to that entry's own ``error`` rather than failing the whole read."""
     base = hub_url
-    resp = _request("get", f"/api/chunks/{chunk_id}/pm-items", hub_url=base)
-    _check(resp, "GET /chunks/{id}/pm-items", on_status={404: f"unknown chunk {chunk_id}"})
+    resp = _request("get", f"/api/chunks/{chunk_id}/work-items", hub_url=base)
+    _check(resp, "GET /chunks/{id}/work-items", on_status={404: f"unknown chunk {chunk_id}"})
     body = resp.json()
     if as_json:
         click.echo(json.dumps(body))
         return
     items = body.get("items", [])
     if not items:
-        click.echo("no PM items")
+        click.echo("no work items")
         return
     for item in items:
         label = item.get("label") or f"{item['source']}#{item['ref']}"
@@ -823,6 +823,25 @@ def chunk_pm(chunk_id: str, as_json: bool, hub_url: str | None) -> None:
             click.echo(f"{label}: error — {item['error']}")
             continue
         click.echo(f"{label}: {item.get('title') or '(no title)'}")
+
+
+@chunk_group.command("pm", hidden=True)
+@click.argument("chunk_id")
+@_json_option
+@_hub_url_options
+@click.pass_context
+def chunk_pm(ctx: click.Context, chunk_id: str, as_json: bool, hub_url: str | None) -> None:
+    """Deprecated alias for ``blizzard hub chunk work-items`` (issue #55).
+
+    Operator-typed rather than prompt-embedded, so the stored-prompt exposure that
+    justifies the runner's own ``pm-items`` alias does not apply here — this is kept
+    purely so a rename does not break an operator's muscle memory or a shell script.
+    """
+    click.echo(
+        "warning: `blizzard hub chunk pm` is deprecated — use `blizzard hub chunk work-items`",
+        err=True,
+    )
+    ctx.invoke(chunk_work_items, chunk_id=chunk_id, as_json=as_json, hub_url=hub_url)
 
 
 # --------------------------------------------------------------------------- #

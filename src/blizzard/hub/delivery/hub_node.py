@@ -76,7 +76,7 @@ from blizzard.hub.domain.work import (
     hub_node_poll_history,
     landed_repos_from_markers,
 )
-from blizzard.hub.pm.source import IPmSourceRegistry
+from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
 _HUB_RUNNER_ID = "hub"
 
@@ -166,7 +166,7 @@ ENV_MARKER_CALLBACK_URL = "BZ_HUB_MARKER_CALLBACK_URL"  # POST {name, content} r
 ENV_FORGE_URL = "BZ_FORGE_URL"
 ENV_FORGE_TOKEN = "BZ_FORGE_TOKEN"
 ENV_FORGE_OWNER = "BZ_FORGE_OWNER"  # qualifies a bare (owner-less) repo, mirroring land_default.qualify_repo
-# the prose PR/merge title resolved from the chunk's primary PM item, absent when
+# the prose PR/merge title resolved from the chunk's primary work item, absent when
 # it can't be resolved
 ENV_FEATURE_TITLE = "BZ_HUB_FEATURE_TITLE"
 # "1" when some node in this chunk's graph declares a `git_commit`-kind `produces:`, "0"
@@ -365,7 +365,7 @@ class HubNodeExecutor:
         forge_url: str | None = None,
         forge_token: str | None = None,
         forge_owner: str | None = None,
-        pm: IPmSourceRegistry | None = None,
+        work_sources: IWorkSourceRegistry | None = None,
         slot_stale_after: timedelta = DEFAULT_SLOT_STALE_AFTER,
     ) -> None:
         self._chunks = chunks
@@ -377,7 +377,7 @@ class HubNodeExecutor:
         self._forge_url = forge_url
         self._forge_token = forge_token
         self._forge_owner = forge_owner
-        self._pm = pm
+        self._work_sources = work_sources
         self._slot_stale_after = slot_stale_after
 
     def record_marker(
@@ -675,15 +675,15 @@ class HubNodeExecutor:
 
     def _resolve_feature_title(self, chunk: Chunk) -> str | None:
         """The chunk's prose feature title (:data:`ENV_FEATURE_TITLE`) — the FIRST
-        ``pm_pointer``'s PM item title, best-effort. Never lets a forge-read failure
-        (:class:`~blizzard.hub.pm.source.PmSourceError` or otherwise) or a missing
+        ``work_ref``'s work item title, best-effort. Never lets a forge-read failure
+        (:class:`~blizzard.hub.work_sources.source.WorkSourceError` or otherwise) or a missing
         registry/pointer/title break delivery: any of those degrades to ``None``, which
         :func:`build_hub_env` simply omits — a graph author's ``run:`` script falls
         back to its own ``blizzard: land ...`` default."""
-        if not chunk.pm_pointers or self._pm is None:
+        if not chunk.work_refs or self._work_sources is None:
             return None
-        pointer = chunk.pm_pointers[0]
-        source = self._pm.get(pointer.source)
+        pointer = chunk.work_refs[0]
+        source = self._work_sources.get(pointer.source)
         if source is None:
             return None
         try:

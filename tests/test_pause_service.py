@@ -33,7 +33,7 @@ from blizzard.hub.domain.work import (
 pytestmark = pytest.mark.unit
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
-_CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_1", pm_pointers=[], minted_at=_T0)
+_CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0)
 
 
 @dataclass

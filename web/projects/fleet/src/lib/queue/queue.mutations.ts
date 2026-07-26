@@ -57,7 +57,7 @@ export interface GroupVars {
 
 /**
  * `POST /api/chunks/{chunk_id}/group` — merge the named unacquired chunks into the
- * survivor (path param), whose PM pointers become the union; the merged-away chunks
+ * survivor (path param), whose work refs become the union; the merged-away chunks
  * are discarded. Re-peeks the queue and re-reads the list on success.
  */
 export function injectGroupChunksMutation() {

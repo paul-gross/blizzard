@@ -2,9 +2,9 @@
 
 One place the store-backed collaborators are constructed and injected: the chunk and
 graph stores, the four domain services (ingest, claim, apply, graph-mint) and the
-generic hub command node executor, the PM read seam, and the event broker. :func:`build_services`
+generic hub command node executor, the work-item read seam, and the event broker. :func:`build_services`
 is called by the ``host`` composition root (:func:`blizzard.hub.app.build_hosted_app`)
-and by tests, which swap the PM seam for fakes by type. The store-free export/unit app
+and by tests, which swap the work-source seam for fakes by type. The store-free export/unit app
 builds no services — the fleet routes report the store is unwired rather than serving
 on a missing database.
 
@@ -71,10 +71,10 @@ from blizzard.hub.domain.stop import StopService
 from blizzard.hub.domain.work import IReadChunkRepository
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.graphs import default_graph_yaml, load_default_graph_doc
-from blizzard.hub.pm.source import IPmSourceRegistry
 from blizzard.hub.store.internal.chunk_store import ChunkStore
 from blizzard.hub.store.internal.graph_store import GraphStore
 from blizzard.hub.store.internal.runner_registry_store import RunnerRegistryStore
+from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
 
 @dataclass(frozen=True)
@@ -114,7 +114,7 @@ class HubServices:
     clock: IClock
     default_graph_doc: GraphDoc
     default_graph_yaml: str
-    pm: IPmSourceRegistry
+    work_sources: IWorkSourceRegistry
     #: The session read repository (issue #91), held directly by ``HubServices``
     #: (mirroring ``registry: IReadRunnerRegistry``) so the human-plane edge
     #: (``hub/api/auth_session.py``'s ``resolve_identity``) can resolve a presented
@@ -159,7 +159,7 @@ def build_services(
     engine: Engine,
     *,
     events: EventBroker,
-    pm: IPmSourceRegistry,
+    work_sources: IWorkSourceRegistry,
     clock: IClock | None = None,
     base_branch: str = "main",
     hub_command_runner: IHubCommandRunner | None = None,
@@ -186,14 +186,14 @@ def build_services(
     is injected into a hub command node's env (``BZ_FORGE_OWNER``) so its own
     ``run:`` script can qualify a bare (owner-less) repo the same way its own
     ``qualify_repo`` does (e.g. ``hub/graphs/scripts/land_default.py``). ``oauth_providers``
-    (issue #92) mirrors ``pm`` above: the ``host`` composition root passes
+    (issue #92) mirrors ``work_sources`` above: the ``host`` composition root passes
     ``config.auth.oauth_providers`` only under ``auth.mode = "oauth"`` (mirroring #95's
     "no IdP surface under none"); tests inject ``oauth_http_client`` (an
     ``httpx.MockTransport``-backed client) to drive the real conformers with no network,
     or bypass config/secret resolution entirely with an explicit ``oauth_registry`` (a
     fake :class:`~blizzard.hub.auth.oauth.provider.IOAuthProvider`-keyed registry — the
-    unit/component tier's own no-network double, mirroring ``pm``'s ``dict[str,
-    FakePmSource]`` injection in ``tests/support.py``), which wins over ``oauth_providers``
+    unit/component tier's own no-network double, mirroring ``work_sources``'s ``dict[str,
+    FakeWorkSource]`` injection in ``tests/support.py``), which wins over ``oauth_providers``
     when both are given.
     """
     clock = clock or SystemClock()
@@ -211,7 +211,7 @@ def build_services(
         forge_url=forge_url,
         forge_token=forge_token,
         forge_owner=forge_owner,
-        pm=pm,
+        work_sources=work_sources,
     )
     # One fleet service, shared: the API's pause routes and the fact ingest both land
     # registry facts, and two instances would be two of the same thing (issue #43).
@@ -289,7 +289,7 @@ def build_services(
         clock=clock,
         default_graph_doc=load_default_graph_doc(),
         default_graph_yaml=default_graph_yaml(),
-        pm=pm,
+        work_sources=work_sources,
         sessions=session_store,
         identities=identity_store,
         users=user_store,

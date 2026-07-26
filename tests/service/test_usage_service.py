@@ -52,7 +52,7 @@ from tests.service.support import (
 
 pytestmark = [pytest.mark.service, service_gate]
 
-_PM_URL = f"{REPO}/issues/1"
+_WORK_REF_URL = f"{REPO}/issues/1"
 
 
 # --------------------------------------------------------------------------- #
@@ -121,7 +121,7 @@ def test_runner_buffers_usage_facts_through_a_hub_outage_and_flushes_once(tmp_pa
 
     hub_port = _free_port()
     with mock_hub(bin_dir, hub_port) as hub:
-        resp = hub.post("/_seed/chunk", json=mock_hub_chunk_spec(_PM_URL))
+        resp = hub.post("/_seed/chunk", json=mock_hub_chunk_spec(_WORK_REF_URL))
         assert resp.status_code == 201, resp.text
         chunk_id = resp.json()["chunk_id"]
         config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)

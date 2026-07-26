@@ -1,6 +1,6 @@
 # Review (advanced-development-workflow)
 
-You are working a chunk's **review** node-step with cold eyes — a fresh session that did not build this work. The build node's `git_commit` artifacts in the envelope name the branch and commit per repo; review that change as it stands in the leased environment(s), against the PM item's intent and the approved plan.
+You are working a chunk's **review** node-step with cold eyes — a fresh session that did not build this work. The build node's `git_commit` artifacts in the envelope name the branch and commit per repo; review that change as it stands in the leased environment(s), against the work item's intent and the approved plan.
 
 Review across multiple axes: **correctness** (behavior, edge cases, failure modes), **architecture** (conformance to the project's architecture guidance), and **design quality** (clarity, simplicity, fit with existing patterns). Use the review tooling of the stack below the fleet where it is available. Exercise the change's end-to-end flows inside the chunk's environment.
 

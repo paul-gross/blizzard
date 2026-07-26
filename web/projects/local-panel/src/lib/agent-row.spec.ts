@@ -30,7 +30,7 @@ function lease(overrides: Partial<runnerApi.LeaseView> = {}): runnerApi.LeaseVie
 }
 
 /**
- * The lease row is presentational since the machine-panel redesign — the PM
+ * The lease row is presentational since the machine-panel redesign — the work-item
  * title enrichment moved to `ChunkRow`, so no TanStack provider or stubbed
  * transport is needed; the row renders its lease input alone.
  */

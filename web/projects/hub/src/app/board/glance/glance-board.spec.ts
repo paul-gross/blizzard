@@ -47,7 +47,7 @@ const CHUNKS = [
     current_node_id: null,
     model: 'claude-opus-4-8',
     runner_id: null,
-    pm_pointers: [{ label: 'blizzard#79' }],
+    work_refs: [{ label: 'blizzard#79' }],
   },
   {
     chunk_id: 'ch_01notready00000000000000000',
@@ -141,7 +141,7 @@ describe('GlanceBoard — attention bucketing and vitals', () => {
     expect(row?.querySelector('[data-testid="in-motion-cost"]')?.textContent).toContain('$2.03');
   });
 
-  it('lands a completed chunk in "Done today" with its PM pointer', async () => {
+  it('lands a completed chunk in "Done today" with its work ref', async () => {
     const fixture = TestBed.createComponent(GlanceBoard);
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;

@@ -79,6 +79,9 @@ _OPEN: set[tuple[str, str]] = {
     ("POST", "/api/leases/{lease_id}/git-commits"),
     ("GET", "/api/leases/{lease_id}/artifacts"),
     ("GET", "/api/leases/{lease_id}/artifacts/{name}"),
+    ("GET", "/api/chunks/{chunk_id}/work-items"),
+    # The issue-#55 deprecated alias onto the same handler — classified into the same
+    # lane, because an alias that landed in a different one would be a gating hole.
     ("GET", "/api/chunks/{chunk_id}/pm-items"),
 }
 

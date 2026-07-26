@@ -1,10 +1,10 @@
 """The route-seq-tiebreak revision's route-event ``seq`` backfill (issue #41).
 
-Exercises the backfill on a store migrated to the pm-pointer-source-ref revision (the
+Exercises the backfill on a store migrated to the work-ref-source-ref revision (the
 revision immediately before route-seq-tiebreak), seeded with pre-existing
 ``route_created``/``route_released`` rows in the pre-``seq``
 shape. Seeded with a local frozen literal rather than ``from blizzard.hub.store import
-schema as s`` (the same reason ``test_pm_pointer_migration.py`` does: a revision pinned
+schema as s`` (the same reason ``test_work_ref_migration.py`` does: a revision pinned
 in time must not read a moving shape — see the walking-skeleton and route-seq-tiebreak revisions' module docstrings).
 """
 
@@ -164,8 +164,8 @@ def test_downgrade_drops_the_seq_column(tmp_path: Path) -> None:
 
 def test_a_fresh_store_reaches_0013_in_the_pre_seq_shape(tmp_path: Path) -> None:
     """The walking-skeleton revision must materialize route_created/route_released without ``seq``, not
-    head-of-tree ``schema.py``'s shape — the same freeze the pm-pointer-source-ref revision established for
-    ``chunk_pm_pointers`` (see the walking-skeleton and route-seq-tiebreak revisions' module docstrings)."""
+    head-of-tree ``schema.py``'s shape — the same freeze the work-ref-source-ref revision established for
+    ``chunk_work_refs`` (see the walking-skeleton and route-seq-tiebreak revisions' module docstrings)."""
     db_url = f"sqlite:///{tmp_path / 'hub.db'}"
     runner = migration_runner(HubConfig(root=tmp_path, db_url=db_url))
     engine = create_engine_from_url(db_url)

@@ -11,7 +11,7 @@ const REVIEW_FAIL_DETAIL: ChunkDetail = {
   status: 'running',
   current_node_id: 'nd_build',
   latest_epoch: 2,
-  pm_pointers: [],
+  work_refs: [],
   history: [],
   artifacts: [],
 };
@@ -23,7 +23,7 @@ const WAITING_QUESTION_DETAIL: ChunkDetail = {
   status: 'waiting_on_human',
   current_node_id: 'nd_build',
   latest_epoch: 1,
-  pm_pointers: [],
+  work_refs: [],
   history: [],
   artifacts: [],
   questions: [
@@ -48,7 +48,7 @@ const WAITING_DECISION_DETAIL: ChunkDetail = {
   status: 'waiting_on_human',
   current_node_id: 'nd_gate',
   latest_epoch: 1,
-  pm_pointers: [],
+  work_refs: [],
   history: [],
   artifacts: [],
   decision: {
@@ -73,7 +73,7 @@ const ESCALATED_DETAIL: ChunkDetail = {
   status: 'needs_human',
   current_node_id: 'nd_build',
   latest_epoch: 3,
-  pm_pointers: [],
+  work_refs: [],
   history: [],
   artifacts: [],
   escalation: {

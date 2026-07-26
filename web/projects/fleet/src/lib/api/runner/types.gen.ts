@@ -607,72 +607,6 @@ export type PauseStateView = {
 };
 
 /**
- * PmItemEntry
- *
- * One pointer's pass-through PM item — title, body + comment
- * thread, vendor-native.
- *
- * ``label``/``web_url`` are the board-legible pointer label (``blizzard#8``) and its
- * browser address — both null when no configured source names ``source``. A
- * per-pointer forge failure degrades here rather than failing the whole read:
- * ``error`` carries the reason and ``title``/``body`` are null, so one unreachable
- * pointer never blinds the reader to the pointers it did reach.
- */
-export type PmItemEntry = {
-    /**
-     * Body
-     */
-    body?: string | null;
-    /**
-     * Comments
-     */
-    comments?: Array<string>;
-    /**
-     * Error
-     */
-    error?: string | null;
-    /**
-     * Fetched At
-     */
-    fetched_at: string;
-    /**
-     * Label
-     */
-    label?: string | null;
-    /**
-     * Ref
-     */
-    ref: string;
-    /**
-     * Source
-     */
-    source: string;
-    /**
-     * Title
-     */
-    title?: string | null;
-    /**
-     * Web Url
-     */
-    web_url?: string | null;
-};
-
-/**
- * PmItemsView
- *
- * A chunk's pass-through PM items — one entry per pointer, order preserved.
- *
- * Empty when the chunk holds no pointers — the board's empty state; a grouped chunk carrying
- * many pointers yields one entry per pointer, each fetched fresh and never stored.
- */
-export type PmItemsView = {
-    /**
-     * Items
-     */
-    items?: Array<PmItemEntry>;
-};
-
-/**
  * ReadinessResponse
  *
  * The wire shape of a readiness reading (openapi-ts consumes this).
@@ -1026,6 +960,72 @@ export type ValidationError = {
 };
 
 /**
+ * WorkItemEntry
+ *
+ * One pointer's pass-through work item — title, body + comment
+ * thread, vendor-native.
+ *
+ * ``label``/``web_url`` are the board-legible pointer label (``blizzard#8``) and its
+ * browser address — both null when no configured source names ``source``. A
+ * per-pointer forge failure degrades here rather than failing the whole read:
+ * ``error`` carries the reason and ``title``/``body`` are null, so one unreachable
+ * pointer never blinds the reader to the pointers it did reach.
+ */
+export type WorkItemEntry = {
+    /**
+     * Body
+     */
+    body?: string | null;
+    /**
+     * Comments
+     */
+    comments?: Array<string>;
+    /**
+     * Error
+     */
+    error?: string | null;
+    /**
+     * Fetched At
+     */
+    fetched_at: string;
+    /**
+     * Label
+     */
+    label?: string | null;
+    /**
+     * Ref
+     */
+    ref: string;
+    /**
+     * Source
+     */
+    source: string;
+    /**
+     * Title
+     */
+    title?: string | null;
+    /**
+     * Web Url
+     */
+    web_url?: string | null;
+};
+
+/**
+ * WorkItemsView
+ *
+ * A chunk's pass-through work items — one entry per pointer, order preserved.
+ *
+ * Empty when the chunk holds no pointers — the board's empty state; a grouped chunk carrying
+ * many pointers yields one entry per pointer, each fetched fresh and never stored.
+ */
+export type WorkItemsView = {
+    /**
+     * Items
+     */
+    items?: Array<WorkItemEntry>;
+};
+
+/**
  * WorkspacePromptReplacement
  *
  * A replacement workspace prompt — applies to subsequent spawns with no restart.
@@ -1153,7 +1153,7 @@ export type ReadSessionApiAuthSessionGetResponses = {
 
 export type ReadSessionApiAuthSessionGetResponse = ReadSessionApiAuthSessionGetResponses[keyof ReadSessionApiAuthSessionGetResponses];
 
-export type GetPmItemsApiChunksChunkIdPmItemsGetData = {
+export type RunnerGetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetData = {
     body?: never;
     path: {
         /**
@@ -1165,23 +1165,23 @@ export type GetPmItemsApiChunksChunkIdPmItemsGetData = {
     url: '/api/chunks/{chunk_id}/pm-items';
 };
 
-export type GetPmItemsApiChunksChunkIdPmItemsGetErrors = {
+export type RunnerGetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type GetPmItemsApiChunksChunkIdPmItemsGetError = GetPmItemsApiChunksChunkIdPmItemsGetErrors[keyof GetPmItemsApiChunksChunkIdPmItemsGetErrors];
+export type RunnerGetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetError = RunnerGetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetErrors[keyof RunnerGetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetErrors];
 
-export type GetPmItemsApiChunksChunkIdPmItemsGetResponses = {
+export type RunnerGetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetResponses = {
     /**
      * Successful Response
      */
-    200: PmItemsView;
+    200: WorkItemsView;
 };
 
-export type GetPmItemsApiChunksChunkIdPmItemsGetResponse = GetPmItemsApiChunksChunkIdPmItemsGetResponses[keyof GetPmItemsApiChunksChunkIdPmItemsGetResponses];
+export type RunnerGetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetResponse = RunnerGetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetResponses[keyof RunnerGetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetResponses];
 
 export type RequeueChunkApiChunksChunkIdRequeuesPostData = {
     body?: never;
@@ -1276,6 +1276,36 @@ export type EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchResponses = {
 };
 
 export type EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchResponse = EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchResponses[keyof EndTakeoverApiChunksChunkIdTakeoversTakeoverIdPatchResponses];
+
+export type GetWorkItemsApiChunksChunkIdWorkItemsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/work-items';
+};
+
+export type GetWorkItemsApiChunksChunkIdWorkItemsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetWorkItemsApiChunksChunkIdWorkItemsGetError = GetWorkItemsApiChunksChunkIdWorkItemsGetErrors[keyof GetWorkItemsApiChunksChunkIdWorkItemsGetErrors];
+
+export type GetWorkItemsApiChunksChunkIdWorkItemsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: WorkItemsView;
+};
+
+export type GetWorkItemsApiChunksChunkIdWorkItemsGetResponse = GetWorkItemsApiChunksChunkIdWorkItemsGetResponses[keyof GetWorkItemsApiChunksChunkIdWorkItemsGetResponses];
 
 export type ListEnvironmentsApiEnvironmentsGetData = {
     body?: never;

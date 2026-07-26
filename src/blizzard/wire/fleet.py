@@ -12,7 +12,7 @@ never a stored column, same as a chunk's own derived total
 chunk's derived status folded to the four buckets the counts strip shows
 (:func:`~blizzard.hub.domain.work.derive_fleet_summary`). The runner reaches it through
 its own local pass-through (:mod:`blizzard.runner.api.fleet_summary`), which forwards to
-the fleet router's ``GET /api/fleet/summary`` — the same layered read as the PM-items
+the fleet router's ``GET /api/fleet/summary`` — the same layered read as the work-items
 proxy, four integers on the wire rather than the chunk list.
 """
 

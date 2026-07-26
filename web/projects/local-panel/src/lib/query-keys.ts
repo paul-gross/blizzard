@@ -38,13 +38,13 @@ export const runnerFactsKey = ['runner', 'facts'] as const;
 export const runnerFleetSummaryKey = ['runner', 'fleet-summary'] as const;
 
 /**
- * One chunk's pass-through PM items (issue title + labels), keyed by chunk id.
+ * One chunk's pass-through work items (issue title + labels), keyed by chunk id.
  * Deliberately its own key — never invalidated or refetched by the leases poll
  * (issue #28's severable title enrichment) — so a distinct `chunk_id` here can
- * never collide with `hub`-namespaced `chunk-pm-items` reads in `fleet`.
+ * never collide with `hub`-namespaced `chunk-work-items` reads in `fleet`.
  */
-export function runnerChunkPmItemsKey(chunkId: string): readonly unknown[] {
-  return ['runner', 'chunk', chunkId, 'pm-items'];
+export function runnerChunkWorkItemsKey(chunkId: string): readonly unknown[] {
+  return ['runner', 'chunk', chunkId, 'work-items'];
 }
 
 /**

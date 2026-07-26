@@ -1,30 +1,30 @@
-"""The PM work-source seam — a vendor-native pass-through read.
+"""The work-source seam — a vendor-native pass-through read.
 
-The hub reads a chunk's PM item (issue body + comment thread) straight from the
+The hub reads a chunk's work item (issue body + comment thread) straight from the
 forge on demand and **never stores its contents**: the pointer is the
 durable referent, the item is fetched fresh. The domain owns this Protocol
 (``bzh:dependency-inversion``); a vendor-shaped adapter under ``internal/`` implements
 it against a real forge — the ``blizzard-mock`` forge in tests, GitHub in production —
-one instance per configured ``[[pm_source]]``, pinned to its own repo and
+one instance per configured ``[[work_source]]``, pinned to its own repo and
 carrying its own credentialed client.
 
 The seam reaches beyond ``fetch``: a binding also owns parsing its own ingest-token
 form, rendering the board-legible label, and deriving the pointer's/a branch's browser
 address — grammar that used to live in the domain-layer ``pm/label.py`` module (a
 ``bzh:domain-core`` violation once there was more than one provider). The
-:class:`IPmSourceRegistry` replaces the single ``pm_source: IPmSource | None``
+:class:`IWorkSourceRegistry` replaces the single ``work_source: IWorkSource | None``
 seam slot: the hub builds one binding per declared source, and an empty registry is a
-legal hub with no PM reach.
+legal hub with no work-source reach.
 
 ``parse``'s production caller is ``POST /chunks``: it takes source-native
-tokens, and :meth:`IPmSourceRegistry.resolve` walks the configured bindings, returning
+tokens, and :meth:`IWorkSourceRegistry.resolve` walks the configured bindings, returning
 the first pointer one claims. Exactly one binding can ever claim a token — config
 rejects a duplicate ``name`` and a duplicate ``(provider, repo)`` — so ``parse``
 returns ``None`` for "not my token" rather than raising: the registry loops cleanly over
 every binding, and the route is what raises/reports when nothing claims it (422).
 
-``fetch`` returns a small domain :class:`PmItem`; the edge maps it onto a wire
-:class:`~blizzard.wire.chunk.PmItemEntry` with the pointer, its label, and a ``fetched_at``.
+``fetch`` returns a small domain :class:`WorkItem`; the edge maps it onto a wire
+:class:`~blizzard.wire.chunk.WorkItemEntry` with the pointer, its label, and a ``fetched_at``.
 
 The pointer carries its own ``source`` name, so finding a pointer's binding is a
 plain registry lookup (``registry.get(pointer.source)``) — the older repo-matching
@@ -36,41 +36,41 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from blizzard.hub.domain.work import PmPointer
+from blizzard.hub.domain.work import WorkRef
 
 
 @dataclass(frozen=True)
-class PmItem:
-    """A pass-through PM item — title, body, and comment bodies, vendor-native."""
+class WorkItem:
+    """A pass-through work item — title, body, and comment bodies, vendor-native."""
 
     body: str
     title: str = ""
     comments: list[str] = field(default_factory=list)
 
 
-class PmSourceError(Exception):
+class WorkSourceError(Exception):
     """The forge read failed — an unreachable forge or an unresolvable pointer."""
 
 
-class IPmSource(Protocol):
-    """One configured, credentialed PM binding."""
+class IWorkSource(Protocol):
+    """One configured, credentialed work-source binding."""
 
-    def parse(self, token: str) -> PmPointer | None:
+    def parse(self, token: str) -> WorkRef | None:
         """This source's own ingest-token form into a pointer, or ``None`` when
         ``token`` is not shaped for this source — the registry's :meth:`resolve`
          tries each configured source in turn and 422s when none claims it."""
         ...
 
-    def fetch(self, pointer: PmPointer) -> PmItem:
+    def fetch(self, pointer: WorkRef) -> WorkItem:
         """Fetch a pointer's body + comments from the forge, never storing them."""
         ...
 
-    def label(self, pointer: PmPointer) -> str | None:
+    def label(self, pointer: WorkRef) -> str | None:
         """The board-legible label for ``pointer`` — ``None`` when it can't be rendered
         (e.g. a URL that isn't shaped like this source's items)."""
         ...
 
-    def web_url(self, pointer: PmPointer) -> str | None:
+    def web_url(self, pointer: WorkRef) -> str | None:
         """The pointer's browser-openable address, or ``None`` when it can't be derived."""
         ...
 
@@ -80,10 +80,10 @@ class IPmSource(Protocol):
         ...
 
 
-class IPmSourceRegistry(Protocol):
-    """The hub's configured PM sources, looked up by their declared ``name``."""
+class IWorkSourceRegistry(Protocol):
+    """The hub's configured work sources, looked up by their declared ``name``."""
 
-    def get(self, name: str) -> IPmSource | None:
+    def get(self, name: str) -> IWorkSource | None:
         """The binding declared under ``name``, or ``None`` when none is configured."""
         ...
 
@@ -91,8 +91,8 @@ class IPmSourceRegistry(Protocol):
         """Every configured source's name."""
         ...
 
-    def resolve(self, token: str) -> PmPointer | None:
-        """The first configured binding's :meth:`IPmSource.parse` of ``token`` that
+    def resolve(self, token: str) -> WorkRef | None:
+        """The first configured binding's :meth:`IWorkSource.parse` of ``token`` that
         claims it, or ``None`` when none do. Exactly one binding can ever
         claim a token — config rejects a duplicate ``name`` (unambiguous
         ``name:ref``/``name#ref``) and a duplicate ``(provider, repo)`` (a URL maps to

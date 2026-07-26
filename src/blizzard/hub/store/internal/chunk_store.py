@@ -46,7 +46,6 @@ from blizzard.hub.domain.work import (
     MigrationFact,
     MigrationMode,
     PauseFact,
-    PmPointer,
     PrOpenedFact,
     QuestionFact,
     QuestionRow,
@@ -56,6 +55,7 @@ from blizzard.hub.domain.work import (
     RouteTokenMintedFact,
     TransitionFact,
     UsageFact,
+    WorkRef,
     derive_chunk_status,
     newest_live_route,
 )
@@ -358,14 +358,14 @@ class ChunkStore:
         # id is monotonic per insert, so the last row seen for a chunk is its newest fact.
         return {r.chunk_id: float(r.position) for r in rows}
 
-    def find_live_holder(self, pointer: PmPointer) -> str | None:
+    def find_live_holder(self, pointer: WorkRef) -> str | None:
         with self._engine.connect() as conn:
             grouped = self._grouped_ids(conn)
             chunk_ids = [
                 p.chunk_id
                 for p in conn.execute(
-                    select(s.chunk_pm_pointers.c.chunk_id).where(
-                        (s.chunk_pm_pointers.c.source == pointer.source) & (s.chunk_pm_pointers.c.ref == pointer.ref)
+                    select(s.chunk_work_refs.c.chunk_id).where(
+                        (s.chunk_work_refs.c.source == pointer.source) & (s.chunk_work_refs.c.ref == pointer.ref)
                     )
                 ).all()
             ]
@@ -574,9 +574,9 @@ class ChunkStore:
                     model=chunk.model,
                 )
             )
-            for pointer in chunk.pm_pointers:
+            for pointer in chunk.work_refs:
                 conn.execute(
-                    insert(s.chunk_pm_pointers).values(chunk_id=chunk.chunk_id, source=pointer.source, ref=pointer.ref)
+                    insert(s.chunk_work_refs).values(chunk_id=chunk.chunk_id, source=pointer.source, ref=pointer.ref)
                 )
 
     def record_promote(self, chunk_id: str, *, at: datetime) -> None:
@@ -1152,14 +1152,14 @@ class ChunkStore:
         with self._engine.begin() as conn:
             conn.execute(insert(s.queue_positions).values(chunk_id=chunk_id, position=position, set_at=at))
 
-    def add_pm_pointers(self, chunk_id: str, pointers: list[PmPointer], *, at: datetime) -> None:
+    def add_work_refs(self, chunk_id: str, pointers: list[WorkRef], *, at: datetime) -> None:
         """Fold pointers into the survivor of a group, de-duped by (source, ref)."""
         with self._engine.begin() as conn:
             existing = {
                 (p.source, p.ref)
                 for p in conn.execute(
-                    select(s.chunk_pm_pointers.c.source, s.chunk_pm_pointers.c.ref).where(
-                        s.chunk_pm_pointers.c.chunk_id == chunk_id
+                    select(s.chunk_work_refs.c.source, s.chunk_work_refs.c.ref).where(
+                        s.chunk_work_refs.c.chunk_id == chunk_id
                     )
                 ).all()
             }
@@ -1167,7 +1167,7 @@ class ChunkStore:
                 if (pointer.source, pointer.ref) in existing:
                     continue
                 conn.execute(
-                    insert(s.chunk_pm_pointers).values(chunk_id=chunk_id, source=pointer.source, ref=pointer.ref)
+                    insert(s.chunk_work_refs).values(chunk_id=chunk_id, source=pointer.source, ref=pointer.ref)
                 )
                 existing.add((pointer.source, pointer.ref))
 
@@ -1504,15 +1504,13 @@ class ChunkStore:
 
     def _chunk(self, conn, row) -> Chunk:  # type: ignore[no-untyped-def]
         pointers = [
-            PmPointer(source=p.source, ref=p.ref)
-            for p in conn.execute(
-                select(s.chunk_pm_pointers).where(s.chunk_pm_pointers.c.chunk_id == row.chunk_id)
-            ).all()
+            WorkRef(source=p.source, ref=p.ref)
+            for p in conn.execute(select(s.chunk_work_refs).where(s.chunk_work_refs.c.chunk_id == row.chunk_id)).all()
         ]
         return Chunk(
             chunk_id=row.chunk_id,
             graph_id=row.graph_id,
-            pm_pointers=pointers,
+            work_refs=pointers,
             minted_at=row.minted_at,
             model=row.model,
             intended_migration=_deserialize_intended_migration(row.intended_migration),

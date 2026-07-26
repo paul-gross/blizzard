@@ -111,7 +111,7 @@
         "type": "string"
       },
       "ArtifactView": {
-        "description": "One entry of a chunk's inline artifact store.\n\n``key`` is the store key ``{node}.{artifact-name}.{epoch}`` \u2014 append-only, so\nevery re-run's entry is retained and latest-by-epoch resolution is the reader's.\n``content`` carries an **asset's** text verbatim (a review's findings\ndocument); the ``repo``/``branch_name``/``commit_hash`` trio carries a\n``git_commit`` artifact's pinned reference (the hub stores the reference, never the\ncode).\n\n``branch_url`` is the forge ``tree`` URL for the produced branch, resolved server-side\nfrom the chunk's issue-shaped PM pointer so the board can link a ``git_commit``\nto the branch on the forge; null when no forge web base is derivable \u2014 the row then\nshows the branch name without a link (no broken link).\n\n``recorded_at`` is the instant the artifact was attached, decoded from its id's\nULID timestamp (the store keeps no separate column); null for a malformed id.",
+        "description": "One entry of a chunk's inline artifact store.\n\n``key`` is the store key ``{node}.{artifact-name}.{epoch}`` \u2014 append-only, so\nevery re-run's entry is retained and latest-by-epoch resolution is the reader's.\n``content`` carries an **asset's** text verbatim (a review's findings\ndocument); the ``repo``/``branch_name``/``commit_hash`` trio carries a\n``git_commit`` artifact's pinned reference (the hub stores the reference, never the\ncode).\n\n``branch_url`` is the forge ``tree`` URL for the produced branch, resolved server-side\nfrom the chunk's issue-shaped work ref so the board can link a ``git_commit``\nto the branch on the forge; null when no forge web base is derivable \u2014 the row then\nshows the branch name without a link (no broken link).\n\n``recorded_at`` is the instant the artifact was attached, decoded from its id's\nULID timestamp (the store keeps no separate column); null for a malformed id.",
         "properties": {
           "branch_name": {
             "anyOf": [
@@ -431,14 +431,6 @@
               }
             ]
           },
-          "pm_pointers": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/PmPointerView"
-            },
-            "title": "Pm Pointers",
-            "type": "array"
-          },
           "questions": {
             "default": [],
             "items": {
@@ -467,6 +459,14 @@
             },
             "title": "Usage",
             "type": "array"
+          },
+          "work_refs": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/WorkRefView"
+            },
+            "title": "Work Refs",
+            "type": "array"
           }
         },
         "required": [
@@ -481,7 +481,7 @@
         "type": "object"
       },
       "ChunkGroupRequest": {
-        "description": "Merge unacquired chunks into one \u2014 the board's Group control.\n\n``merge_chunk_ids`` are the ready chunks folded into the path's survivor chunk; the\nsurvivor absorbs the union of their PM pointers and the merged chunks are discarded as\nephemeral. Self-references and duplicates are ignored; a non-ready member is\nrejected ``409``.",
+        "description": "Merge unacquired chunks into one \u2014 the board's Group control.\n\n``merge_chunk_ids`` are the ready chunks folded into the path's survivor chunk; the\nsurvivor absorbs the union of their work refs and the merged chunks are discarded as\nephemeral. Self-references and duplicates are ignored; a non-ready member is\nrejected ``409``.",
         "properties": {
           "merge_chunk_ids": {
             "items": {
@@ -498,7 +498,7 @@
         "type": "object"
       },
       "ChunkGroupResponse": {
-        "description": "The survivor chunk after a group \u2014 its id and the union of PM pointers it carries.",
+        "description": "The survivor chunk after a group \u2014 its id and the union of work refs it carries.",
         "properties": {
           "chunk_id": {
             "title": "Chunk Id",
@@ -512,12 +512,12 @@
             "title": "Merged Chunk Ids",
             "type": "array"
           },
-          "pm_pointers": {
+          "work_refs": {
             "default": [],
             "items": {
-              "$ref": "#/components/schemas/PmPointerModel"
+              "$ref": "#/components/schemas/WorkRefModel"
             },
-            "title": "Pm Pointers",
+            "title": "Work Refs",
             "type": "array"
           }
         },
@@ -528,7 +528,7 @@
         "type": "object"
       },
       "ChunkIngestRequest": {
-        "description": "Ingest by source-native token \u2014 specific items always, batch fine.\n\nEach token is resolved against the configured PM sources' own grammar\n(``IPmSource.parse``): ``{name}:{ref}``, ``{name}#{ref}``, or the item's own URL.\nTokens only \u2014 no pre-resolved ``{source, ref}`` shape travels alongside them; a\nsecond intake shape would reintroduce exactly the config-blind guess that\nresolving against the configured sources removes.",
+        "description": "Ingest by source-native token \u2014 specific items always, batch fine.\n\nEach token is resolved against the configured work sources' own grammar\n(``IWorkSource.parse``): ``{name}:{ref}``, ``{name}#{ref}``, or the item's own URL.\nTokens only \u2014 no pre-resolved ``{source, ref}`` shape travels alongside them; a\nsecond intake shape would reintroduce exactly the config-blind guess that\nresolving against the configured sources removes.",
         "properties": {
           "tokens": {
             "items": {
@@ -716,14 +716,6 @@
             "title": "Model",
             "type": "string"
           },
-          "pm_pointers": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/PmPointerView"
-            },
-            "title": "Pm Pointers",
-            "type": "array"
-          },
           "runner_id": {
             "anyOf": [
               {
@@ -737,6 +729,14 @@
           },
           "status": {
             "$ref": "#/components/schemas/ChunkStatus"
+          },
+          "work_refs": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/WorkRefView"
+            },
+            "title": "Work Refs",
+            "type": "array"
           }
         },
         "required": [
@@ -2307,17 +2307,6 @@
           "node": {
             "$ref": "#/components/schemas/NodeConfig"
           },
-          "pm_pointers": {
-            "default": [],
-            "items": {
-              "additionalProperties": {
-                "type": "string"
-              },
-              "type": "object"
-            },
-            "title": "Pm Pointers",
-            "type": "array"
-          },
           "prompt": {
             "anyOf": [
               {
@@ -2328,6 +2317,17 @@
               }
             ],
             "title": "Prompt"
+          },
+          "work_refs": {
+            "default": [],
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Work Refs",
+            "type": "array"
           }
         },
         "required": [
@@ -2392,168 +2392,6 @@
           "next_poll_at"
         ],
         "title": "PendingView",
-        "type": "object"
-      },
-      "PmItemEntry": {
-        "description": "One pointer's pass-through PM item \u2014 title, body + comment\nthread, vendor-native.\n\n``label``/``web_url`` are the board-legible pointer label (``blizzard#8``) and its\nbrowser address \u2014 both null when no configured source names ``source``. A\nper-pointer forge failure degrades here rather than failing the whole read:\n``error`` carries the reason and ``title``/``body`` are null, so one unreachable\npointer never blinds the reader to the pointers it did reach.",
-        "properties": {
-          "body": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Body"
-          },
-          "comments": {
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "title": "Comments",
-            "type": "array"
-          },
-          "error": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Error"
-          },
-          "fetched_at": {
-            "title": "Fetched At",
-            "type": "string"
-          },
-          "label": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Label"
-          },
-          "ref": {
-            "title": "Ref",
-            "type": "string"
-          },
-          "source": {
-            "title": "Source",
-            "type": "string"
-          },
-          "title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Title"
-          },
-          "web_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Web Url"
-          }
-        },
-        "required": [
-          "source",
-          "ref",
-          "fetched_at"
-        ],
-        "title": "PmItemEntry",
-        "type": "object"
-      },
-      "PmItemsView": {
-        "description": "A chunk's pass-through PM items \u2014 one entry per pointer, order preserved.\n\nEmpty when the chunk holds no pointers \u2014 the board's empty state; a grouped chunk carrying\nmany pointers yields one entry per pointer, each fetched fresh and never stored.",
-        "properties": {
-          "items": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/PmItemEntry"
-            },
-            "title": "Items",
-            "type": "array"
-          }
-        },
-        "title": "PmItemsView",
-        "type": "object"
-      },
-      "PmPointerModel": {
-        "description": "One ``{source, ref}`` PM pointer \u2014 ``source`` names a configured\n``[[pm_source]]``; ``ref`` is that source's own item token.",
-        "properties": {
-          "ref": {
-            "title": "Ref",
-            "type": "string"
-          },
-          "source": {
-            "title": "Source",
-            "type": "string"
-          }
-        },
-        "required": [
-          "source",
-          "ref"
-        ],
-        "title": "PmPointerModel",
-        "type": "object"
-      },
-      "PmPointerView": {
-        "description": "A pointer as the views render it \u2014 the raw pair plus its legible\nlabel and browser URL, both rendered by the pointer's configured source binding.\n\n``label`` is the board-legible ``{name}#{ref}`` (e.g. ``blizzard#8``); ``web_url``\nis its browser-openable address. Both null when no configured source names\n``source`` \u2014 the board then leans on the chunk's stable short id instead.",
-        "properties": {
-          "label": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Label"
-          },
-          "ref": {
-            "title": "Ref",
-            "type": "string"
-          },
-          "source": {
-            "title": "Source",
-            "type": "string"
-          },
-          "web_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Web Url"
-          }
-        },
-        "required": [
-          "source",
-          "ref"
-        ],
-        "title": "PmPointerView",
         "type": "object"
       },
       "PrView": {
@@ -2809,17 +2647,17 @@
             "title": "Graph Id",
             "type": "string"
           },
-          "pm_pointers": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/PmPointerModel"
-            },
-            "title": "Pm Pointers",
-            "type": "array"
-          },
           "position": {
             "title": "Position",
             "type": "integer"
+          },
+          "work_refs": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/WorkRefModel"
+            },
+            "title": "Work Refs",
+            "type": "array"
           }
         },
         "required": [
@@ -3615,6 +3453,168 @@
         ],
         "title": "ValidationError",
         "type": "object"
+      },
+      "WorkItemEntry": {
+        "description": "One pointer's pass-through work item \u2014 title, body + comment\nthread, vendor-native.\n\n``label``/``web_url`` are the board-legible pointer label (``blizzard#8``) and its\nbrowser address \u2014 both null when no configured source names ``source``. A\nper-pointer forge failure degrades here rather than failing the whole read:\n``error`` carries the reason and ``title``/``body`` are null, so one unreachable\npointer never blinds the reader to the pointers it did reach.",
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "comments": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Comments",
+            "type": "array"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "fetched_at": {
+            "title": "Fetched At",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "web_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Web Url"
+          }
+        },
+        "required": [
+          "source",
+          "ref",
+          "fetched_at"
+        ],
+        "title": "WorkItemEntry",
+        "type": "object"
+      },
+      "WorkItemsView": {
+        "description": "A chunk's pass-through work items \u2014 one entry per pointer, order preserved.\n\nEmpty when the chunk holds no pointers \u2014 the board's empty state; a grouped chunk carrying\nmany pointers yields one entry per pointer, each fetched fresh and never stored.",
+        "properties": {
+          "items": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/WorkItemEntry"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "title": "WorkItemsView",
+        "type": "object"
+      },
+      "WorkRefModel": {
+        "description": "One ``{source, ref}`` work ref \u2014 ``source`` names a configured\n``[[work_source]]``; ``ref`` is that source's own item token.",
+        "properties": {
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "ref"
+        ],
+        "title": "WorkRefModel",
+        "type": "object"
+      },
+      "WorkRefView": {
+        "description": "A pointer as the views render it \u2014 the raw pair plus its legible\nlabel and browser URL, both rendered by the pointer's configured source binding.\n\n``label`` is the board-legible ``{name}#{ref}`` (e.g. ``blizzard#8``); ``web_url``\nis its browser-openable address. Both null when no configured source names\n``source`` \u2014 the board then leans on the chunk's stable short id instead.",
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "web_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Web Url"
+          }
+        },
+        "required": [
+          "source",
+          "ref"
+        ],
+        "title": "WorkRefView",
+        "type": "object"
       }
     }
   },
@@ -4353,8 +4353,9 @@
     },
     "/api/chunks/{chunk_id}/pm-items": {
       "get": {
-        "description": "Pass-through PM items read \u2014 one entry per pointer, contents never stored.\n\nEach pointer is resolved to its own binding by name (``pm.get(pointer.source)``), then\nfetched fresh from the forge; a per-pointer resolution or forge failure degrades to an\n``error`` on that entry rather than failing the whole read, so a grouped chunk\nstill surfaces the pointers it reached beside a notice for the ones it did not. A chunk\nwith no pointers is an empty list \u2014 the board's empty state \u2014 not a 404. No configured\nPM source at all is a 503 up front \u2014 the request-wide degradation preserved unchanged\nfrom before per-pointer resolution existed.",
-        "operationId": "get_pm_items_api_chunks__chunk_id__pm_items_get",
+        "deprecated": true,
+        "description": "Deprecated since issue #55 \u2014 use `GET /chunks/{chunk_id}/work-items`, which this path aliases onto the identical handler and returns the identical view.",
+        "operationId": "get_pm_items_deprecated_alias_api_chunks__chunk_id__pm_items_get",
         "parameters": [
           {
             "in": "path",
@@ -4371,7 +4372,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PmItemsView"
+                  "$ref": "#/components/schemas/WorkItemsView"
                 }
               }
             },
@@ -4388,7 +4389,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Get Pm Items",
+        "summary": "Deprecated alias for GET /chunks/{chunk_id}/work-items",
         "tags": [
           "chunks"
         ]
@@ -4581,6 +4582,49 @@
           }
         },
         "summary": "Stop Chunk",
+        "tags": [
+          "chunks"
+        ]
+      }
+    },
+    "/api/chunks/{chunk_id}/work-items": {
+      "get": {
+        "description": "Pass-through work items read \u2014 one entry per pointer, contents never stored.\n\nEach pointer is resolved to its own binding by name (``work_sources.get(pointer.source)``), then\nfetched fresh from the forge; a per-pointer resolution or forge failure degrades to an\n``error`` on that entry rather than failing the whole read, so a grouped chunk\nstill surfaces the pointers it reached beside a notice for the ones it did not. A chunk\nwith no pointers is an empty list \u2014 the board's empty state \u2014 not a 404. No configured\nwork source at all is a 503 up front \u2014 the request-wide degradation preserved unchanged\nfrom before per-pointer resolution existed.",
+        "operationId": "get_work_items_api_chunks__chunk_id__work_items_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkItemsView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Work Items",
         "tags": [
           "chunks"
         ]
@@ -5123,8 +5167,9 @@
     },
     "/api/fleet/chunks/{chunk_id}/pm-items": {
       "get": {
-        "description": "The build worker's PM-items proxy target (via the runner-local pass-through,\n``blizzard.runner.api.pm_items``), forwarded here with the runner's own bearer\ntoken \u2014 the same pass-through the board reads anonymously.",
-        "operationId": "get_pm_items_api_fleet_chunks__chunk_id__pm_items_get",
+        "deprecated": true,
+        "description": "Deprecated since issue #55 \u2014 use `GET /fleet/chunks/{chunk_id}/work-items`, which this path aliases onto the identical handler and returns the identical view.",
+        "operationId": "fleet_get_pm_items_deprecated_alias_api_fleet_chunks__chunk_id__pm_items_get",
         "parameters": [
           {
             "in": "path",
@@ -5141,7 +5186,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PmItemsView"
+                  "$ref": "#/components/schemas/WorkItemsView"
                 }
               }
             },
@@ -5158,7 +5203,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Get Pm Items",
+        "summary": "Deprecated alias for GET /fleet/chunks/{chunk_id}/work-items",
         "tags": [
           "fleet"
         ]
@@ -5202,6 +5247,49 @@
           }
         },
         "summary": "Rekey Route Token",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
+    "/api/fleet/chunks/{chunk_id}/work-items": {
+      "get": {
+        "description": "The build worker's work-items proxy target (via the runner-local pass-through,\n``blizzard.runner.api.work_items``), forwarded here with the runner's own bearer\ntoken \u2014 the same pass-through the board reads anonymously.",
+        "operationId": "get_work_items_api_fleet_chunks__chunk_id__work_items_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkItemsView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Work Items",
         "tags": [
           "fleet"
         ]
@@ -5479,7 +5567,7 @@
     },
     "/api/fleet/summary": {
       "get": {
-        "description": "The runner machine panel's fleet-pulse counts (issue #76), forwarded here with the\nrunner's own bearer token from the runner-local pass-through\n(:mod:`blizzard.runner.api.fleet_summary`). Fleet-router-only: unlike PM-items, the\nboard has no anonymous counterpart \u2014 its card list already carries every status.",
+        "description": "The runner machine panel's fleet-pulse counts (issue #76), forwarded here with the\nrunner's own bearer token from the runner-local pass-through\n(:mod:`blizzard.runner.api.fleet_summary`). Fleet-router-only: unlike work-items, the\nboard has no anonymous counterpart \u2014 its card list already carries every status.",
         "operationId": "fleet_summary_api_fleet_summary_get",
         "responses": {
           "200": {

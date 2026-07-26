@@ -5,7 +5,7 @@ All ``httpx`` usage is confined here (``bzh:dependency-inversion``). ``web_base`
 ``api_base`` default to real GitHub's split hosts but are overridable — the stub IdP
 (``blizzard-mock``) serves both shapes at one origin, so a service-tier scenario points
 both at it via one configured ``[[auth.oauth.provider]] api_base`` (mirroring
-``PmSourceConfig.api_base``'s own GHE-override precedent).
+``WorkSourceConfig.api_base``'s own GHE-override precedent).
 """
 
 from __future__ import annotations

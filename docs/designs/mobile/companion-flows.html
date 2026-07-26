@@ -428,7 +428,7 @@
           </div>
           <div class="homebar"></div>
         </div></div>
-        <div class="phone-cap lbl">G · pick from the PM source</div>
+        <div class="phone-cap lbl">G · pick from the work source</div>
       </div>
 
       <!-- Frame H: launched -->
@@ -468,10 +468,10 @@
 
       <div class="anno">
         <h3>Flow decisions</h3>
-        <p>The one <em>write</em> that turns the app from a monitor into a steering wheel. The picker is the PM source's open-issues read — the same list the board's pointers come from — with paste-a-URL as the escape hatch, mirroring <code>hub ingest blizzard:96</code>'s token forms.</p>
+        <p>The one <em>write</em> that turns the app from a monitor into a steering wheel. The picker is the work source's open-issues read — the same list the board's pointers come from — with paste-a-URL as the escape hatch, mirroring <code>hub ingest blizzard:96</code>'s token forms.</p>
         <p>Graph, runner, and model show as a preview card with sane defaults (pinned graph, least-loaded runner) — confirm-what-will-happen, not configure-it. Changing them is a tap into a picker, not a form.</p>
         <p>The launch screen hands off to sheet 1's run story: idea → fleet working, under a minute, from a couch.</p>
-        <p class="reuse">Reuses <b>pm-items</b> read, ingest endpoint, <b>compactRef</b>, run-story shell (sheet 1, D). New: issue picker shell, ingest-preview card.</p>
+        <p class="reuse">Reuses <b>work-items</b> read, ingest endpoint, <b>compactRef</b>, run-story shell (sheet 1, D). New: issue picker shell, ingest-preview card.</p>
       </div>
     </div>
   </section>
@@ -619,7 +619,7 @@
         <p>The ask flow's big sibling: same shape (context → decision → resume), but the context is a shippable change. The screen argues for trust in three beats — the reviewer's verdict with its rationale, CI, then the diffstat as <em>shape</em> (mostly the SSE lib, mostly adds, specs grew) rather than a diff to read at 13px.</p>
             <p>Approve is green and plain-tap — it's the expected outcome of a passed review, not a destructive act. Send-back requires a note (the agent needs a reason to act on); the GitHub link is the escape hatch for the change that needs desk-level scrutiny.</p>
         <p>Lives in the Asks tab: an awaiting-delivery chunk <em>is</em> a question — "ship it?"</p>
-        <p class="reuse">Reuses <b>chunk-awaiting-human</b> resume endpoint, <b>chunk-facts</b>, pm pointer → PR link. New: delivery-card shell, diffstat read (forge API via hub), diffstat bars.</p>
+        <p class="reuse">Reuses <b>chunk-awaiting-human</b> resume endpoint, <b>chunk-facts</b>, work ref → PR link. New: delivery-card shell, diffstat read (forge API via hub), diffstat bars.</p>
       </div>
     </div>
   </section>

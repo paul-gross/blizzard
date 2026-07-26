@@ -1,6 +1,6 @@
 """Builds the hub's OAuth provider registry from configuration (issue #92).
 
-Mirrors ``hub/pm/internal/factory.py``'s own shape: one composition-root builder that
+Mirrors ``hub/work_sources/internal/factory.py``'s own shape: one composition-root builder that
 resolves each provider's ``client_secret_env`` from the environment (never
 round-tripped through toml) and validates ``type``/``issuer`` *here*, at first
 consumption — #91 only structurally parsed-and-carried the entries ("parse-and-carry
@@ -29,7 +29,7 @@ def build_oauth_registry(
     """One provider conformer per configured entry, sharing one ``httpx.Client``.
 
     A misconfigured entry fails here, at boot, naming the offending provider — never
-    silently at first login (mirrors ``build_pm_registry``'s own missing-``token_env``
+    silently at first login (mirrors ``build_work_source_registry``'s own missing-``token_env``
     failure). ``http_client`` is injectable for tests; the ``host`` composition root
     leaves it unset for the real client."""
     client = http_client or httpx.Client(timeout=15.0)

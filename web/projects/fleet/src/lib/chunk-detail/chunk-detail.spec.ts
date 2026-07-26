@@ -16,7 +16,7 @@ const ROUTED_DETAIL: ChunkDetailModel = {
   status: 'running',
   current_node_id: 'nd_build',
   latest_epoch: 1,
-  pm_pointers: [],
+  work_refs: [],
   history: [],
   artifacts: [],
   route: { runner_id: 'rn_01', workspace_id: 'ws_01', environment_ids: [] },
@@ -29,7 +29,7 @@ const GATE_DETAIL: ChunkDetailModel = {
   status: 'waiting_on_human',
   current_node_id: 'nd_gate',
   latest_epoch: 1,
-  pm_pointers: [],
+  work_refs: [],
   history: [],
   artifacts: [],
   decision: {
@@ -64,7 +64,7 @@ const NOT_READY_DETAIL: ChunkDetailModel = {
   status: 'not_ready',
   current_node_id: null,
   latest_epoch: null,
-  pm_pointers: [],
+  work_refs: [],
   history: [],
   artifacts: [],
 };
@@ -94,7 +94,7 @@ describe('ChunkDetail container', () => {
         return pauseResponse;
       }
       if (method === 'PATCH' && path === '/api/chunks/ch_ready') return editPatchResponse;
-      if (method === 'GET' && path.endsWith('/pm-items')) {
+      if (method === 'GET' && path.endsWith('/work-items')) {
         return {
           items: [
             {
@@ -155,14 +155,14 @@ describe('ChunkDetail container', () => {
     expect(calls[0].body).toMatchObject({ choice: 'approve' });
   });
 
-  it('fetches the chunk’s PM items through the generated client and renders them in the work-item column (issue #24)', async () => {
+  it('fetches the chunk’s work items through the generated client and renders them in the work-item column (issue #24)', async () => {
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_gate');
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
     // It went through the real pass-through route (bzh:generated-client), no hand-written fetch.
-    expect(stub.forRoute('/api/chunks/ch_gate/pm-items', 'GET')).toHaveLength(1);
+    expect(stub.forRoute('/api/chunks/ch_gate/work-items', 'GET')).toHaveLength(1);
     expect(el.querySelector('[data-testid="issue-body"]')?.textContent).toContain('reproduces under load');
     expect(el.querySelector('[data-testid="issue-message"]')?.textContent).toContain('seen it too');
   });

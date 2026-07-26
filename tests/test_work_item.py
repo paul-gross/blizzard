@@ -1,4 +1,4 @@
-"""PM pass-through read — body + comments per pointer, never stored (component tier)."""
+"""work-item pass-through read — body + comments per pointer, never stored (component tier)."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.hub.pm.source import PmItem
-from tests.support import FakePmSource, build_hub, pointer_token
+from blizzard.hub.work_sources.source import WorkItem
+from tests.support import FakeWorkSource, build_hub, pointer_token
 
 pytestmark = pytest.mark.component
 
@@ -15,14 +15,14 @@ _POINTER = {"source": "widget", "ref": "42"}
 _POINTER_2 = {"source": "widget", "ref": "43"}
 
 
-def test_pm_items_reads_body_and_comments_from_the_forge(tmp_path: Path) -> None:
-    pm = FakePmSource(
+def test_work_items_reads_body_and_comments_from_the_forge(tmp_path: Path) -> None:
+    source = FakeWorkSource(
         name="widget", title="flaky test", body="please fix the flake", comments=["seen it too", "repro attached"]
     )
-    hub = build_hub(tmp_path, pm={"widget": pm})
+    hub = build_hub(tmp_path, work_sources={"widget": source})
     chunk_id = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}).json()["chunk_id"]
 
-    resp = hub.client.get(f"/api/chunks/{chunk_id}/pm-items")
+    resp = hub.client.get(f"/api/chunks/{chunk_id}/work-items")
     assert resp.status_code == 200
     items = resp.json()["items"]
     assert len(items) == 1
@@ -37,41 +37,41 @@ def test_pm_items_reads_body_and_comments_from_the_forge(tmp_path: Path) -> None
     assert item["error"] is None
     assert item["fetched_at"]
     # The read went to the forge for this pointer — contents are fetched, not stored.
-    assert pm.fetched == ["42"]
+    assert source.fetched == ["42"]
 
 
-def test_pm_items_returns_one_entry_per_pointer(tmp_path: Path) -> None:
+def test_work_items_returns_one_entry_per_pointer(tmp_path: Path) -> None:
     """A grouped chunk carrying many pointers yields one entry per pointer, order preserved."""
-    pm = FakePmSource(
+    source = FakeWorkSource(
         name="widget",
         by_ref={
-            "42": PmItem(body="first issue", comments=["a"]),
-            "43": PmItem(body="second issue", comments=[]),
+            "42": WorkItem(body="first issue", comments=["a"]),
+            "43": WorkItem(body="second issue", comments=[]),
         },
     )
-    hub = build_hub(tmp_path, pm={"widget": pm})
+    hub = build_hub(tmp_path, work_sources={"widget": source})
     chunk_id = hub.client.post(
         "/api/chunks", json={"tokens": [pointer_token(_POINTER), pointer_token(_POINTER_2)]}
     ).json()["chunk_id"]
 
-    items = hub.client.get(f"/api/chunks/{chunk_id}/pm-items").json()["items"]
+    items = hub.client.get(f"/api/chunks/{chunk_id}/work-items").json()["items"]
     assert [i["ref"] for i in items] == ["42", "43"]
     assert [i["body"] for i in items] == ["first issue", "second issue"]
 
 
-def test_pm_items_degrades_per_pointer_when_the_forge_is_unreachable(tmp_path: Path) -> None:
+def test_work_items_degrades_per_pointer_when_the_forge_is_unreachable(tmp_path: Path) -> None:
     """One unreachable pointer surfaces as an ``error`` entry; the reachable one still reads."""
-    pm = FakePmSource(
+    source = FakeWorkSource(
         name="widget",
-        by_ref={"42": PmItem(title="reachable issue", body="reachable", comments=[])},
+        by_ref={"42": WorkItem(title="reachable issue", body="reachable", comments=[])},
         fail_refs={"43"},
     )
-    hub = build_hub(tmp_path, pm={"widget": pm})
+    hub = build_hub(tmp_path, work_sources={"widget": source})
     chunk_id = hub.client.post(
         "/api/chunks", json={"tokens": [pointer_token(_POINTER), pointer_token(_POINTER_2)]}
     ).json()["chunk_id"]
 
-    resp = hub.client.get(f"/api/chunks/{chunk_id}/pm-items")
+    resp = hub.client.get(f"/api/chunks/{chunk_id}/work-items")
     assert resp.status_code == 200
     ok, failed = resp.json()["items"]
     assert ok["title"] == "reachable issue" and ok["body"] == "reachable" and ok["error"] is None
@@ -80,7 +80,7 @@ def test_pm_items_degrades_per_pointer_when_the_forge_is_unreachable(tmp_path: P
     assert failed["body"] is None and failed["error"] and "43" in failed["error"]
 
 
-def test_pm_items_with_no_pointers_is_an_empty_list(tmp_path: Path) -> None:
+def test_work_items_with_no_pointers_is_an_empty_list(tmp_path: Path) -> None:
     """A chunk with no pointers is the board's empty state — an empty list, 200, not a 404."""
     # Ingest guards against empty pointers at the front door (422), so mint the degenerate
     # empty-pointer chunk through the ingest service directly to prove the route still answers.
@@ -90,11 +90,11 @@ def test_pm_items_with_no_pointers_is_an_empty_list(tmp_path: Path) -> None:
     )
     chunk_id = hub.services.ingest.ingest([], graph=graph)
 
-    resp = hub.client.get(f"/api/chunks/{chunk_id}/pm-items")
+    resp = hub.client.get(f"/api/chunks/{chunk_id}/work-items")
     assert resp.status_code == 200
     assert resp.json()["items"] == []
 
 
-def test_pm_items_on_unknown_chunk_is_404(tmp_path: Path) -> None:
+def test_work_items_on_unknown_chunk_is_404(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
-    assert hub.client.get("/api/chunks/ch_missing/pm-items").status_code == 404
+    assert hub.client.get("/api/chunks/ch_missing/work-items").status_code == 404
