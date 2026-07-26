@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { RouterLink } from '@angular/router';
 
 import { KitBadge, KitPanel, formatCost, formatTokens, type FleetSpendView, type Tone } from 'fleet';
 
@@ -54,15 +55,16 @@ export interface Vitals {
  * attention rather than by entity: the vitals strip, then "Needs you", "In
  * motion", "Done today", and the comfort numbers ("Fleet spend · today") last.
  *
- * Read-only in this chunk (`bzh:frontend-container-presentational` split, no
- * action wiring yet): every row is a static line, not a button — tap-through to
- * the ask flow or the run story is the next chunk's work, per the task that
- * introduced this shell. Renders exactly what it is handed; injects no query.
+ * Presentational (`bzh:frontend-container-presentational`): renders exactly what
+ * it is handed and injects no query. Each chunk row carries a whole-row
+ * `routerLink` into that chunk's detail page (`/board/chunk/:chunkId`) — the one
+ * navigation this view owns, expressed as a link rather than an output so a row
+ * behaves like a link should (long-press, open-in-new-tab, a real `href`).
  */
 @Component({
   selector: 'app-glance-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitBadge, KitPanel],
+  imports: [KitBadge, KitPanel, RouterLink],
   template: `
     <div class="glance" data-testid="glance-board">
       <div class="vitals" data-testid="glance-vitals">
@@ -98,6 +100,7 @@ export interface Vitals {
           <ul class="rows">
             @for (row of needsYou(); track row.chunkId) {
               <li class="row" data-testid="needs-you-row" [attr.data-chunk]="row.chunkId">
+                <a class="hit" [routerLink]="['/board', 'chunk', row.chunkId]" [attr.aria-label]="'Open chunk ' + row.shortId"></a>
                 <fleet-kit-badge class="pill" [tone]="row.tone" variant="soft">{{ row.pillLabel }}</fleet-kit-badge>
                 <span class="grow">
                   <span class="cid">{{ row.shortId }}</span>
@@ -126,6 +129,7 @@ export interface Vitals {
           <ul class="rows">
             @for (row of inMotion(); track row.chunkId) {
               <li class="row" data-testid="in-motion-row" [attr.data-chunk]="row.chunkId">
+                <a class="hit" [routerLink]="['/board', 'chunk', row.chunkId]" [attr.aria-label]="'Open chunk ' + row.shortId"></a>
                 <fleet-kit-badge class="pill" tone="running" variant="soft">{{ row.pillLabel }}</fleet-kit-badge>
                 <span class="grow">
                   <span class="cid">{{ row.shortId }}</span>
@@ -154,6 +158,7 @@ export interface Vitals {
           <ul class="rows">
             @for (row of doneToday(); track row.chunkId) {
               <li class="row" data-testid="done-today-row" [attr.data-chunk]="row.chunkId">
+                <a class="hit" [routerLink]="['/board', 'chunk', row.chunkId]" [attr.aria-label]="'Open chunk ' + row.shortId"></a>
                 <fleet-kit-badge class="pill" tone="done" variant="soft">done</fleet-kit-badge>
                 <span class="grow">
                   <span class="cid">{{ row.shortId }}</span>
@@ -264,6 +269,7 @@ export interface Vitals {
       padding: 0;
     }
     .row {
+      position: relative;
       display: flex;
       align-items: center;
       gap: 8px;
@@ -272,6 +278,26 @@ export interface Vitals {
     }
     .row:last-child {
       border-bottom: 0;
+    }
+    /* A whole-row hit target for the chunk drill-down, laid over the row rather
+       than wrapped around it — the row's cells stay a flex layout of spans and
+       badges. pointer-events:none inherits, so any control added inside a cell
+       later needs pointer-events:auto of its own to stay clickable; none of
+       these rows carries one today. Scoped to :has(.hit) so the spend row —
+       same .row class, no drill-down — keeps normal behavior and never flashes
+       a pressed state for a tap that goes nowhere. */
+    .hit {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+    }
+    .row:has(.hit) > *:not(.hit) {
+      position: relative;
+      z-index: 1;
+      pointer-events: none;
+    }
+    .row:has(.hit):active {
+      background: var(--bezel-hi);
     }
     .grow {
       flex: 1;

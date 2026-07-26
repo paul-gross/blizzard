@@ -1,0 +1,219 @@
+import { provideZonelessChangeDetection } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
+import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import { hubClient } from 'fleet';
+import { stubError } from 'fleet/testing';
+import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+
+import { ArtifactPage } from './artifact-page';
+import { ChunkPage } from './chunk-page';
+
+/**
+ * The mobile chunk drill-down (`/board/chunk/:chunkId`) and its deeper
+ * single-artifact page. Driven through a real router (`RouterTestingHarness`)
+ * rather than a stubbed `ActivatedRoute`: both pages read their own route params
+ * *and* render `routerLink`s, so the route table is part of what is under test —
+ * a chunk row's link must actually resolve to the artifact page.
+ *
+ * The hub client's transport is stubbed, so this asserts what the pages compose
+ * off a known aggregate, not the queries themselves (those have their own specs).
+ */
+const CHUNK_ID = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
+
+const DETAIL = {
+  chunk_id: CHUNK_ID,
+  graph_id: 'gr_1',
+  graph_name: 'default',
+  current_node_id: 'nd_review',
+  current_node_name: 'review',
+  latest_epoch: 2,
+  model: 'claude-opus-5',
+  status: 'running',
+  work_refs: [{ source: 'blizzard', ref: '26', url: null }],
+  history: [
+    { node_id: 'nd_build', node_name: 'build', epoch: 1, at: '2026-07-16T11:00:00.000Z', outcome: 'transitioned' },
+  ],
+  artifacts: [
+    {
+      key: 'review.findings.2',
+      kind: 'asset',
+      name: 'findings',
+      node_id: 'nd_review',
+      node_name: 'review',
+      epoch: 2,
+      content: 'THE FINDINGS BODY',
+      recorded_at: '2026-07-16T11:30:00.000Z',
+    },
+    {
+      key: 'build.branch.1',
+      kind: 'git_commit',
+      name: 'branch',
+      node_id: 'nd_build',
+      node_name: 'build',
+      epoch: 1,
+      repo: 'paul-gross/blizzard',
+      branch_name: 'feature/x',
+      branch_url: 'https://example.test/branch',
+      commit_hash: 'abc1234',
+      recorded_at: '2026-07-16T11:10:00.000Z',
+    },
+  ],
+};
+
+const ROUTES = [
+  { path: 'board/chunk/:chunkId', component: ChunkPage },
+  { path: 'board/chunk/:chunkId/artifact/:artifactKey', component: ArtifactPage },
+];
+
+describe('Mobile chunk drill-down', () => {
+  let stub: RequestClientStub;
+
+  beforeEach(() => {
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path.endsWith('/work-items')) {
+        return { items: [{ ref: 'blizzard#26', title: 'Make the board mobile', state: 'open', web_url: null }] };
+      }
+      return DETAIL;
+    });
+    TestBed.configureTestingModule({
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideRouter(ROUTES),
+      ],
+    });
+  });
+
+  afterEach(() => stub.restore());
+
+  async function open(url: string): Promise<HTMLElement> {
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl(url);
+    await settle(harness.fixture);
+    return harness.fixture.nativeElement as HTMLElement;
+  }
+
+  it('stacks the regions in attention order — work item, issues, node history, asks, artifacts', async () => {
+    const el = await open(`/board/chunk/${CHUNK_ID}`);
+
+    expect(el.querySelector('[data-testid="board-chunk-detail"]')).not.toBeNull();
+    const sections = Array.from(el.querySelectorAll('[data-testid^="section-"]')).map((node) =>
+      node.getAttribute('data-testid'),
+    );
+    expect(sections).toEqual([
+      'section-work-item',
+      'section-issues',
+      'section-node-history',
+      'section-asks',
+      'section-artifacts',
+    ]);
+  });
+
+  it('renders the fleet detail regions verbatim rather than forking them', async () => {
+    const el = await open(`/board/chunk/${CHUNK_ID}`);
+
+    expect(el.querySelector('fleet-chunk-detail-facts')).not.toBeNull();
+    expect(el.querySelector('fleet-chunk-detail-issue-pane')).not.toBeNull();
+    expect(el.querySelector('fleet-chunk-detail-timeline')).not.toBeNull();
+    expect(el.querySelector('fleet-chunk-detail-awaiting-human')).not.toBeNull();
+    // …except artifacts, which are links here, never the desktop dock's inline bodies.
+    expect(el.querySelector('fleet-chunk-detail-artifacts')).toBeNull();
+  });
+
+  it('lists artifacts as links and never inlines their bodies', async () => {
+    const el = await open(`/board/chunk/${CHUNK_ID}`);
+
+    const links = Array.from(el.querySelectorAll<HTMLAnchorElement>('[data-testid="mobile-artifact-link"]'));
+    expect(links.map((a) => a.getAttribute('data-artifact-key'))).toEqual(['review.findings.2', 'build.branch.1']);
+    expect(el.textContent).not.toContain('THE FINDINGS BODY');
+    expect(links[0].getAttribute('href')).toBe(`/board/chunk/${CHUNK_ID}/artifact/review.findings.2`);
+  });
+
+  it('opens one asset artifact in full, one level deeper', async () => {
+    const el = await open(`/board/chunk/${CHUNK_ID}/artifact/review.findings.2`);
+
+    expect(el.querySelector('[data-testid="mobile-artifact-key"]')?.textContent).toContain('review.findings.2');
+    expect(el.querySelector('[data-testid="mobile-artifact-content"]')?.textContent).toContain('THE FINDINGS BODY');
+  });
+
+  it('renders a git_commit artifact as its pinned repo/branch/commit reference', async () => {
+    const el = await open(`/board/chunk/${CHUNK_ID}/artifact/build.branch.1`);
+
+    const ref = el.querySelector('[data-testid="mobile-artifact-ref"]')?.textContent ?? '';
+    expect(ref).toContain('paul-gross/blizzard');
+    expect(ref).toContain('abc1234');
+    expect(el.querySelector<HTMLAnchorElement>('[data-testid="mobile-artifact-branch"]')?.getAttribute('href')).toBe(
+      'https://example.test/branch',
+    );
+    expect(el.querySelector('[data-testid="mobile-artifact-content"]')).toBeNull();
+  });
+
+  it('reads no artifact-specific route — a stale key is a dead link, not an error', async () => {
+    const el = await open(`/board/chunk/${CHUNK_ID}/artifact/gone.missing.9`);
+
+    expect(el.querySelector('[data-testid="mobile-artifact-missing"]')?.textContent).toContain('NO SUCH ARTIFACT');
+    expect(el.querySelector('[data-testid="mobile-artifact-error"]')).toBeNull();
+  });
+
+  it('gives the chunk page a back link to the board', async () => {
+    const el = await open(`/board/chunk/${CHUNK_ID}`);
+
+    expect(el.querySelector<HTMLAnchorElement>('[data-testid="mobile-chunk-back"]')?.getAttribute('href')).toBe(
+      '/board',
+    );
+  });
+
+  it('says so when the chunk has no artifacts at all', async () => {
+    stub.restore();
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
+      return { ...DETAIL, artifacts: [] };
+    });
+    const el = await open(`/board/chunk/${CHUNK_ID}`);
+
+    expect(el.querySelector('[data-testid="mobile-artifacts-empty"]')?.textContent).toContain('No artifacts yet');
+    expect(el.querySelector('[data-testid="mobile-artifact-link"]')).toBeNull();
+  });
+
+  it('reports a failed chunk read rather than spinning on LOADING', async () => {
+    stub.restore();
+    stub = stubRequestClient(hubClient, () => stubError(404, { detail: 'unknown chunk' }));
+    const el = await open(`/board/chunk/${CHUNK_ID}`);
+
+    expect(el.querySelector('[data-testid="mobile-chunk-error"]')?.textContent).toContain('CHUNK UNAVAILABLE');
+    expect(el.querySelector('[data-testid="mobile-chunk-loading"]')).toBeNull();
+  });
+
+  it('surfaces an operator action failure instead of swallowing it', async () => {
+    stub.restore();
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'PATCH') return stubError(409, { detail: 'chunk is not ready' });
+      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
+      return { ...DETAIL, status: 'not_ready' };
+    });
+    const harness = await RouterTestingHarness.create();
+    const page = await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}`, ChunkPage);
+    await settle(harness.fixture);
+
+    // Fire the edit the facts pane exposes for a not-ready chunk, through the
+    // same handler its output is bound to.
+    (page as unknown as { onEditModel(e: { chunkId: string; model: string }): void }).onEditModel({
+      chunkId: CHUNK_ID,
+      model: 'claude-opus-5',
+    });
+    await settle(harness.fixture);
+
+    const el = harness.fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="mobile-chunk-action-error"]')?.textContent).toContain('chunk is not ready');
+  });
+
+  it('gives the artifact page a back link to its chunk', async () => {
+    const el = await open(`/board/chunk/${CHUNK_ID}/artifact/review.findings.2`);
+
+    expect(el.querySelector<HTMLAnchorElement>('[data-testid="mobile-artifact-back"]')?.getAttribute('href')).toBe(
+      `/board/chunk/${CHUNK_ID}`,
+    );
+  });
+});

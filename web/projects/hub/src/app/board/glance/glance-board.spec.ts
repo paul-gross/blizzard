@@ -1,5 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { hubClient } from 'fleet';
 import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
@@ -103,6 +104,8 @@ describe('GlanceBoard — attention bucketing and vitals', () => {
       imports: [GlanceBoard],
       providers: [
         provideZonelessChangeDetection(),
+        // GlanceView's rows are `routerLink`s into the mobile chunk page.
+        provideRouter([]),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       ],
     }).compileComponents();

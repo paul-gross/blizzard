@@ -27,6 +27,15 @@ export const routes: Routes = [
     loadComponent: () => import('./board/glance/glance-board').then((m) => m.GlanceBoard),
   },
   { path: 'board', loadComponent: () => import('./board/board-page').then((m) => m.BoardPage) },
+  // The mobile drill-down: a chunk's detail, and one level deeper, a single
+  // artifact. Deliberately **unguarded** — desktop reads a chunk in the board's
+  // own dock and never links here, but a shared URL opened on a laptop still
+  // resolves to a usable page rather than a no-route-matched dead end.
+  { path: 'board/chunk/:chunkId', loadComponent: () => import('./board/chunk/chunk-page').then((m) => m.ChunkPage) },
+  {
+    path: 'board/chunk/:chunkId/artifact/:artifactKey',
+    loadComponent: () => import('./board/chunk/artifact-page').then((m) => m.ArtifactPage),
+  },
   { path: 'graphs', loadComponent: () => import('./graphs/graphs-page').then((m) => m.GraphsPage) },
   { path: 'graphs/:graphId', loadComponent: () => import('./graphs/graphs-page').then((m) => m.GraphsPage) },
   { path: 'events', loadComponent: () => import('./events/events-page').then((m) => m.EventsPage) },
