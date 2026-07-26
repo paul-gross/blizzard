@@ -130,7 +130,17 @@ class ChunkSummary(BaseModel):
     spirit: the number of environments the chunk's live route holds, so the fleet registry
     can sum a runner's slot-bar numerator without the full ``environment_ids`` list (which
     stays out of scope on this status-only summary, reaching only
-    :class:`ChunkDetail.route`). ``cost`` is the one exception (issue #59): the derived
+    :class:`ChunkDetail.route`).
+
+    Both are **in-progress-only** (issue #140): a chunk at a terminal status
+    (``done``/``stopped``) reports ``runner_id = None`` and ``environment_count = 0`` even
+    when its route facts still show a route, because a finished chunk holds no claim. So a
+    consumer folding these per runner — the fleet registry's claim lines and its slot-bar
+    numerator — counts only live occupancy and needs no status filter of its own. The raw
+    route fact is unfiltered on :class:`ChunkDetail.route`, which is where a "where was
+    this worked" read belongs.
+
+    ``cost`` is the one exception (issue #59): the derived
     spend total is cheap to carry on every card and is not itself an operator fact, so it
     rides the summary rather than waiting for the detail fetch."""
 

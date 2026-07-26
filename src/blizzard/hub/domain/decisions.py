@@ -27,8 +27,8 @@ from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.graph import Graph
 from blizzard.hub.domain.route_auth import check_route_token
 from blizzard.hub.domain.work import (
+    TERMINAL_STATUSES,
     Chunk,
-    ChunkStatus,
     DecisionChoice,
     IWriteChunkRepository,
     derive_chunk_status,
@@ -38,8 +38,6 @@ from blizzard.hub.domain.work import (
 from blizzard.wire.completion import SubmittedArtifact
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
-
-_TERMINAL_STATUSES = frozenset({ChunkStatus.STOPPED, ChunkStatus.DONE})
 
 
 def _failure(detail: str) -> ApplyResponse:
@@ -99,7 +97,7 @@ class DecisionService:
         if self._chunks.find_decision(chunk.chunk_id, node_id=node.node_id, epoch=submission.epoch) is not None:
             return ApplyResponse(outcome=ApplyOutcome.PARKED_AT_GATE, detail=f"parked at gate `{node.name}`")
 
-        if derive_chunk_status(facts) in _TERMINAL_STATUSES:
+        if derive_chunk_status(facts) in TERMINAL_STATUSES:
             return _failure("chunk is terminal")
         latest = latest_epoch(facts)
         if latest is not None and submission.epoch != latest:

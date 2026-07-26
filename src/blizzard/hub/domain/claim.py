@@ -57,6 +57,7 @@ from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import Graph, IReadGraphRepository
 from blizzard.hub.domain.registry import IReadRunnerRegistry
 from blizzard.hub.domain.work import (
+    TERMINAL_STATUSES,
     Chunk,
     ChunkStatus,
     IWriteChunkRepository,
@@ -70,10 +71,6 @@ from blizzard.wire.envelope import NodeEnvelope
 #: the runner bearer token (`hub/domain/enrollment.py`), for the same reason: a
 #: 43-character URL-safe secret comfortably beyond brute-force range.
 _ROUTE_TOKEN_BYTES = 32
-
-# Same set `apply.py`/`decisions.py` guard on — duplicated here rather than shared,
-# following this codebase's existing per-module convention for this constant.
-_TERMINAL_STATUSES = frozenset({ChunkStatus.STOPPED, ChunkStatus.DONE})
 
 # Crash point (``bzh:crash-point-registry``, issue #84b) — the claim-family boundary: the
 # route and its capability-token fact (``record_route``) are durable, but the plaintext
@@ -228,7 +225,7 @@ class ClaimService:
         # peeked. Re-derive fresh, here, under the claim lock, rather than trusting the
         # peek to still hold.
         status = derive_chunk_status(facts) if facts is not None else ChunkStatus.NOT_READY
-        if status in _TERMINAL_STATUSES:
+        if status in TERMINAL_STATUSES:
             raise ClaimDeniedTerminal(chunk_id=chunk.chunk_id, status=status)
 
         # The runner mints the lease and reports its epoch via POST /events;

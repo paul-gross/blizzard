@@ -35,9 +35,9 @@ from blizzard.hub.domain.graph import RESERVED_TERMINAL, Edge, Executor, Graph, 
 from blizzard.hub.domain.produces_auth import check_produces
 from blizzard.hub.domain.route_auth import check_route_token
 from blizzard.hub.domain.work import (
+    TERMINAL_STATUSES,
     Chunk,
     ChunkFacts,
-    ChunkStatus,
     DecisionChoice,
     IWriteChunkRepository,
     MigrationMode,
@@ -47,8 +47,6 @@ from blizzard.hub.domain.work import (
 )
 from blizzard.wire.completion import CompletionSubmission, SubmittedArtifact, checks_gate_violated
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
-
-_TERMINAL_STATUSES = frozenset({ChunkStatus.STOPPED, ChunkStatus.DONE})
 
 # The cross-graph migration crash window (issue #90, ``bzh:crash-point-registry``): the
 # migration fact, the graph/model re-pin, the route release (unless the migration lands on
@@ -211,7 +209,7 @@ class ApplyService:
         if from_node.judged_by is JudgedBy.HUMAN:
             return _failure(f"human signoff required: node `{from_node.name}` is a gate — resolve its decision")
 
-        if derive_chunk_status(facts) in _TERMINAL_STATUSES:
+        if derive_chunk_status(facts) in TERMINAL_STATUSES:
             return _failure("chunk is terminal")
         latest = latest_epoch(facts)
         if latest is not None and submission.epoch != latest:
@@ -304,7 +302,7 @@ class ApplyService:
         facts = self._chunks.load_facts(chunk.chunk_id)
         if facts is None:
             return _failure(f"unknown chunk {chunk.chunk_id}")
-        if derive_chunk_status(facts) in _TERMINAL_STATUSES:
+        if derive_chunk_status(facts) in TERMINAL_STATUSES:
             return _failure("chunk is terminal")
         latest = latest_epoch(facts)
         if latest is not None and submission.epoch != latest:

@@ -28,6 +28,7 @@ from blizzard.hub.domain.fleet import Route
 from blizzard.hub.domain.graph import Executor
 from blizzard.hub.domain.work import (
     DEFAULT_EVENT_LIST_LIMIT,
+    TERMINAL_STATUSES,
     AnswerOutcome,
     BounceFact,
     Chunk,
@@ -62,7 +63,6 @@ from blizzard.hub.domain.work import (
 from blizzard.hub.store import schema as s
 
 _ROUTE_PREFIX = "route"
-_TERMINAL = frozenset({ChunkStatus.STOPPED, ChunkStatus.DONE})
 
 
 def _serialize_intended_migration(intended: IntendedMigration | None) -> str | None:
@@ -372,7 +372,7 @@ class ChunkStore:
         for chunk_id in chunk_ids:
             if chunk_id in grouped:
                 continue  # the pointer moved to the survivor; the grouped chunk is gone
-            if self._status(chunk_id) not in _TERMINAL:
+            if self._status(chunk_id) not in TERMINAL_STATUSES:
                 return chunk_id
         return None
 

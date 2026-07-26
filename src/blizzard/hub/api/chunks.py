@@ -62,6 +62,7 @@ from blizzard.hub.domain.ingest import IngestConflict
 from blizzard.hub.domain.pause import ChunkNotPausable
 from blizzard.hub.domain.stop import ChunkNotStoppable
 from blizzard.hub.domain.work import (
+    TERMINAL_STATUSES,
     Chunk,
     ChunkFacts,
     ChunkStatus,
@@ -419,11 +420,27 @@ def _summary_view(
     single-chunk caller (a transition verb) gets a fresh one when it passes none."""
     facts = services.chunks.load_facts(chunk.chunk_id) or ChunkFacts(minted=True)
     node_id, node_name = _current_node(services, chunk, facts, graph_cache if graph_cache is not None else {})
-    route = services.chunks.route_of(chunk.chunk_id)
+    status = derive_chunk_status(facts)
+    # A finished chunk holds no claim (issue #140). Status and route liveness are two
+    # independent derivations off the same facts, and they routinely disagree at ``done``:
+    # only a *hub* node landing the terminal releases the route
+    # (``HubNodeExecutor``'s ``release_route=to_node_id == RESERVED_TERMINAL``), while a
+    # terminal transition recorded from a **runner** node — any graph whose runner node
+    # authors a ``-> done`` choice, e.g. a post-merge ``verify`` — stamps no
+    # ``route.released`` at all, so ``route_of`` keeps answering with the route the last
+    # runner took. The fleet registry then rendered done chunks as live claims and summed
+    # their environments into a slot bar reading past capacity. Status wins here: a chunk
+    # nothing can move again holds nothing, whatever its route facts say, so the summary
+    # reports it unrouted rather than each consumer re-learning the vocabulary of "in
+    # progress". Deliberately scoped to this status-only summary — the raw route fact
+    # stays truthful on :class:`ChunkDetail`, the diagnostic surface, which the runner's
+    # own reassignment check reads. A retained route is inert either way: the claim path
+    # already refuses a terminal chunk (``ClaimDeniedTerminal``).
+    route = None if status in TERMINAL_STATUSES else services.chunks.route_of(chunk.chunk_id)
     return ChunkSummary(
         chunk_id=chunk.chunk_id,
         graph_id=chunk.graph_id,
-        status=derive_chunk_status(facts),
+        status=status,
         current_node_id=node_id,
         current_node_name=node_name,
         work_refs=_pointer_views(chunk, services.work_sources),

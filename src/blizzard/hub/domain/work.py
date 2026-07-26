@@ -46,6 +46,14 @@ class ChunkStatus(StrEnum):
     DONE = "done"
 
 
+# The two statuses a chunk never leaves — the one owner of "this chunk is finished",
+# defined here beside the enum it folds rather than re-spelled per call site (it was, in
+# four). Every other status is *in progress*: work is either live (``running``/
+# ``delivering``), parked on a human (``waiting_on_human``/``needs_human``/``paused``), or
+# not yet claimed (``not_ready``/``ready``) — all of which can still move.
+TERMINAL_STATUSES = frozenset({ChunkStatus.STOPPED, ChunkStatus.DONE})
+
+
 # --- Domain objects ---------------------------------------------------------
 
 
