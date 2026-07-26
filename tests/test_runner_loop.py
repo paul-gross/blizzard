@@ -1811,7 +1811,12 @@ def test_advance_harvests_git_commits_from_every_bound_environment(tmp_path):  #
     )
     wt = FakeWorktreeGit()
     ctx = make_context(
-        store, hub=hub, provider=provider, harness=FakeHarness(handle=_HANDLE, verdict="pass"), probe=FakeProbe(), worktree_git=wt
+        store,
+        hub=hub,
+        provider=provider,
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
+        probe=FakeProbe(),
+        worktree_git=wt,
     )
 
     advance(ctx)

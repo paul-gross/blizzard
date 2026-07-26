@@ -353,9 +353,15 @@ export type FleetSummaryView = {
  *
  * A worker's explicit git-commit declaration for one repo it touched.
  *
- * ``forge`` is worker-declared (decision R7): the runner cross-checks it against the
- * leased env's own ``origin`` during its later read-only verify (Phase 4) rather than
- * stamping it itself.
+ * Carries no forge: the origin a declaration is verified against is read from the
+ * environment's repo manifest, which the workspace provider owns. A worker naming its
+ * own forge could name the wrong one, and did — the field's default resolved ``origin``
+ * in the process cwd, which for a worker spawned at the workspace root is the workspace
+ * repo rather than the repo being declared.
+ *
+ * ``environment_id`` is optional while a chunk holds exactly one environment (the
+ * runner infers it); it is required once a chunk holds several, because the same repo
+ * has a worktree in each and ``repo`` alone no longer identifies one.
  */
 export type GitCommitDeclarationRequest = {
     /**
@@ -367,9 +373,9 @@ export type GitCommitDeclarationRequest = {
      */
     commit: string;
     /**
-     * Forge
+     * Environment Id
      */
-    forge: string;
+    environment_id?: string | null;
     /**
      * Repo
      */
@@ -382,6 +388,10 @@ export type GitCommitDeclarationRequest = {
  * ``POST /api/leases/{lease_id}/git-commits`` — the declaration landed durably.
  */
 export type GitCommitDeclarationResponse = {
+    /**
+     * Environment Id
+     */
+    environment_id: string;
     /**
      * Lease Id
      */

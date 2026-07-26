@@ -474,7 +474,7 @@
         "type": "object"
       },
       "GitCommitDeclarationRequest": {
-        "description": "A worker's explicit git-commit declaration for one repo it touched.\n\n``forge`` is worker-declared (decision R7): the runner cross-checks it against the\nleased env's own ``origin`` during its later read-only verify (Phase 4) rather than\nstamping it itself.",
+        "description": "A worker's explicit git-commit declaration for one repo it touched.\n\nCarries no forge: the origin a declaration is verified against is read from the\nenvironment's repo manifest, which the workspace provider owns. A worker naming its\nown forge could name the wrong one, and did \u2014 the field's default resolved ``origin``\nin the process cwd, which for a worker spawned at the workspace root is the workspace\nrepo rather than the repo being declared.\n\n``environment_id`` is optional while a chunk holds exactly one environment (the\nrunner infers it); it is required once a chunk holds several, because the same repo\nhas a worktree in each and ``repo`` alone no longer identifies one.",
         "properties": {
           "branch": {
             "title": "Branch",
@@ -484,9 +484,16 @@
             "title": "Commit",
             "type": "string"
           },
-          "forge": {
-            "title": "Forge",
-            "type": "string"
+          "environment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Environment Id"
           },
           "repo": {
             "title": "Repo",
@@ -494,7 +501,6 @@
           }
         },
         "required": [
-          "forge",
           "repo",
           "branch",
           "commit"
@@ -505,6 +511,10 @@
       "GitCommitDeclarationResponse": {
         "description": "``POST /api/leases/{lease_id}/git-commits`` \u2014 the declaration landed durably.",
         "properties": {
+          "environment_id": {
+            "title": "Environment Id",
+            "type": "string"
+          },
           "lease_id": {
             "title": "Lease Id",
             "type": "string"
@@ -521,7 +531,8 @@
         "required": [
           "recorded",
           "lease_id",
-          "repo"
+          "repo",
+          "environment_id"
         ],
         "title": "GitCommitDeclarationResponse",
         "type": "object"
