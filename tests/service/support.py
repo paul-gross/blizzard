@@ -146,14 +146,10 @@ BUILD_SCRIPT = (
     '    ["git", "-C", repo, "rev-parse", "HEAD"],\n'
     "    check=True, capture_output=True, text=True,\n"
     ").stdout.strip()\n"
-    "_forge = subprocess.run(\n"
-    '    ["git", "-C", repo, "remote", "get-url", "origin"],\n'
-    "    check=True, capture_output=True, text=True,\n"
-    ").stdout.strip()\n"
     'subprocess.run(["git", "-C", repo, "push", "origin", _branch], check=True)\n'
     "subprocess.run(\n"
     '    ["blizzard", "runner", "artifact", "commit",\n'
-    '     "--forge", _forge, "--repo", repo, "--branch", _branch, "--commit", _commit],\n'
+    '     "--repo", repo, "--branch", _branch, "--commit", _commit],\n'
     "    check=True,\n"
     ")\n"
 )

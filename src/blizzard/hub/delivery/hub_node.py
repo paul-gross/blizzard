@@ -148,6 +148,7 @@ class HubEnvInputs:
     forge_token: str | None = None
     forge_owner: str | None = None
     feature_title: str | None = None
+    expects_git_commits: bool = True
 
 
 # The env-injection contract (mirrors the worker's own, `_spawn_env` in
@@ -168,6 +169,23 @@ ENV_FORGE_OWNER = "BZ_FORGE_OWNER"  # qualifies a bare (owner-less) repo, mirror
 # the prose PR/merge title resolved from the chunk's primary PM item, absent when
 # it can't be resolved
 ENV_FEATURE_TITLE = "BZ_HUB_FEATURE_TITLE"
+# "1" when some node in this chunk's graph declares a `git_commit`-kind `produces:`, "0"
+# when none does. A delivery policy needs the difference: with no commits AND none ever
+# promised, an empty landing is the correct terminal for a non-code chunk (a review, a
+# spike) whose graph still routes through `deliver` as the uniform end; with commits
+# promised and none present, the same empty set is a defect.
+ENV_EXPECT_GIT_COMMITS = "BZ_HUB_EXPECT_GIT_COMMITS"
+
+
+def graph_declares_git_commit(graph: Graph) -> bool:
+    """Whether any node in ``graph`` declares a ``git_commit``-kind ``produces:``.
+
+    The graph's own statement of intent, and the only thing that tells an empty delivery
+    set apart from a failed one. A code graph promises a commit at ``build``, so reaching
+    ``deliver`` with none means something upstream lost it. A non-code graph — a review,
+    a spike — promises none and still routes through ``deliver`` as the uniform terminal
+    (MVP criterion 10), so an empty landing there is the correct answer, not a defect."""
+    return any(spec.kind is ArtifactKind.GIT_COMMIT for node in graph.nodes for spec in node.produces)
 
 
 def _delivery_repo(row: ArtifactRow) -> str | None:
@@ -275,6 +293,7 @@ def build_hub_env(inputs: HubEnvInputs) -> dict[str, str]:
         ENV_GIT_COMMITS: json.dumps(commits),
         ENV_ARTIFACT_NAMES: json.dumps(names),
         ENV_MARKER_CALLBACK_URL: inputs.marker_callback_url,
+        ENV_EXPECT_GIT_COMMITS: "1" if inputs.expects_git_commits else "0",
     }
     if inputs.forge_url:
         env[ENV_FORGE_URL] = inputs.forge_url
@@ -431,6 +450,7 @@ class HubNodeExecutor:
                     forge_token=self._forge_token,
                     forge_owner=self._forge_owner,
                     feature_title=self._resolve_feature_title(chunk),
+                    expects_git_commits=graph_declares_git_commit(graph),
                 )
             )
         except UnconvergedDeliveryError as exc:

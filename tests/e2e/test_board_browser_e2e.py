@@ -130,10 +130,8 @@ _ANSWER_SCRIPT = (
     "check=True, capture_output=True, text=True).stdout.strip(); "
     '_commit = subprocess.run(["git", "-C", repo, "rev-parse", "HEAD"], '
     "check=True, capture_output=True, text=True).stdout.strip(); "
-    '_forge = subprocess.run(["git", "-C", repo, "remote", "get-url", "origin"], '
-    "check=True, capture_output=True, text=True).stdout.strip(); "
     'subprocess.run(["git", "-C", repo, "push", "origin", _branch], check=True); '
-    'subprocess.run(["blizzard", "runner", "artifact", "commit", "--forge", _forge, '
+    'subprocess.run(["blizzard", "runner", "artifact", "commit", '
     '"--repo", repo, "--branch", _branch, "--commit", _commit], check=True)'
 )
 # build judgement (elicited on the resumed session after the commit): pass to review.

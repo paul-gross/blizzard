@@ -75,6 +75,7 @@ from __future__ import annotations
 import contextlib
 import os
 import signal
+import subprocess
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -922,6 +923,18 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
     property under test.
     """
     runner_dir = tmp_path / "runner"
+    # Materialize the env's worktrees. Every other scenario gets them from FILL's
+    # acquire; this one seeds its lease + binding directly, and a binding whose env was
+    # never prepared is a state production cannot reach — the declare edge checks the
+    # repo against the env's real manifest, and an unmaterialized env truthfully holds
+    # nothing.
+    subprocess.run(
+        ["winter", "ws", "init", _DECLARE_COMMIT_ENV],
+        cwd=crash_env.workspace,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
     # Nothing listens on ``hub_port`` — the declare path never calls the hub; the loop's
     # hub polls just fail and are swallowed, and the local API serves regardless.
     hub_port, runner_port = free_port(), free_port()

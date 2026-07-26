@@ -223,14 +223,10 @@ _TRANSCRIPT_BUILD_SCRIPT = (
     '    ["git", "-C", _repo_dir, "rev-parse", "HEAD"],\n'
     "    check=True, capture_output=True, text=True,\n"
     ").stdout.strip()\n"
-    "_forge = subprocess.run(\n"
-    '    ["git", "-C", _repo_dir, "remote", "get-url", "origin"],\n'
-    "    check=True, capture_output=True, text=True,\n"
-    ").stdout.strip()\n"
     'subprocess.run(["git", "-C", _repo_dir, "push", "origin", _branch], check=True)\n'
     "subprocess.run(\n"
     '    ["blizzard", "runner", "artifact", "commit",\n'
-    f'     "--forge", _forge, "--repo", {REPO_NAME!r}, "--branch", _branch, "--commit", _commit],\n'
+    f'     "--repo", {REPO_NAME!r}, "--branch", _branch, "--commit", _commit],\n'
     "    check=True,\n"
     ")\n"
 )

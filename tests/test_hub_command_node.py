@@ -31,6 +31,7 @@ from blizzard.hub.delivery.hub_node import (
     UnconvergedDeliveryError,
     _printed_choice,
     build_hub_env,
+    graph_declares_git_commit,
     poll_interval_for,
     poll_timeout_for,
 )
@@ -1301,3 +1302,36 @@ def test_delivery_falls_back_to_the_bare_name_for_an_origin_that_names_no_owner(
     )
 
     assert _commits_in(env) == [{"repo": "toy-api", "branch": "feat/x", "commit": "a" * 40}]
+
+
+def test_graph_declares_git_commit_reads_the_graphs_own_intent() -> None:
+    """The signal that tells a lost commit apart from one never promised. Read off the
+    graph rather than the artifacts, so a code graph that produced nothing still counts
+    as expecting something — which is the whole case being caught."""
+    graph, _ = _reified_merge_node()
+
+    declares = graph_declares_git_commit(graph)
+
+    assert declares is any(spec.kind is ArtifactKind.GIT_COMMIT for node in graph.nodes for spec in node.produces)
+
+
+def test_the_env_carries_the_graphs_git_commit_expectation() -> None:
+    assert _env_for_expectation(expects=True)["BZ_HUB_EXPECT_GIT_COMMITS"] == "1"
+    assert _env_for_expectation(expects=False)["BZ_HUB_EXPECT_GIT_COMMITS"] == "0"
+
+
+def _env_for_expectation(*, expects: bool) -> dict[str, str]:
+    _, merge_node = _reified_merge_node()
+    chunk = Chunk(chunk_id="ch_x", graph_id="gr_x", pm_pointers=[], minted_at=datetime(2026, 7, 17, tzinfo=UTC))
+    return build_hub_env(
+        HubEnvInputs(
+            chunk=chunk,
+            node=merge_node,
+            workdir="/tmp/ch_x",
+            epoch=1,
+            artifacts=[],
+            base_branch="main",
+            marker_callback_url="http://hub/api/chunks/ch_x/hub-markers",
+            expects_git_commits=expects,
+        )
+    )

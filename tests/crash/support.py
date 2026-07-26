@@ -113,8 +113,8 @@ def build_script(landed_file: str) -> str:
     pushes its branch and declares it (issue #143, Phase 4) — the runner no longer
     discovers or pushes the produced pointer, so the WORKER must, through the real
     `blizzard runner artifact commit` verb (Phase 3's local declaration channel).
-    `--forge` is the worker's own observed `origin` URL, trivially confirmable by the
-    runner's later read-only verify since it reads the very same worktree's `origin`."""
+    There is no `--forge`: the origin the runner verifies against comes from the
+    environment's repo manifest, so `--repo` is the only coordinate the worker supplies."""
     return (
         "import subprocess, pathlib\n"
         f"repo = {REPO_NAME!r}\n"
@@ -134,14 +134,10 @@ def build_script(landed_file: str) -> str:
         '    ["git", "-C", repo, "rev-parse", "HEAD"],\n'
         "    check=True, capture_output=True, text=True,\n"
         ").stdout.strip()\n"
-        "_forge = subprocess.run(\n"
-        '    ["git", "-C", repo, "remote", "get-url", "origin"],\n'
-        "    check=True, capture_output=True, text=True,\n"
-        ").stdout.strip()\n"
         'subprocess.run(["git", "-C", repo, "push", "--force-with-lease", "origin", _branch], check=True)\n'
         "subprocess.run(\n"
         '    ["blizzard", "runner", "artifact", "commit",\n'
-        '     "--forge", _forge, "--repo", repo, "--branch", _branch, "--commit", _commit],\n'
+        '     "--repo", repo, "--branch", _branch, "--commit", _commit],\n'
         "    check=True,\n"
         ")\n"
     )

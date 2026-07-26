@@ -28,9 +28,10 @@ at-least-once-per-step crash contract, ``bzh:hub-node-step-idempotence``).
 The node's authored choice — ``landed`` or ``conflict`` — is the LAST line printed to
 stdout (``bzh:hub-node-outcome-protocol``); every diagnostic goes to stderr so it never
 contaminates that line. Exit code is 0 for every outcome the policy can express, with
-one exception: being handed an EMPTY commit set is not an outcome but a defect upstream
-of delivery, and exits non-zero so the engine routes ``failure``
-(:func:`refuse_empty_delivery`).
+one exception: being handed an EMPTY commit set by a graph that declared a
+``git_commit`` somewhere is not an outcome but a defect upstream of delivery, and exits
+non-zero so the engine routes ``failure`` (:func:`refuse_empty_delivery`). A graph that
+declared none — a review, a spike — lands empty and exits 0, the uniform terminal.
 """
 
 from __future__ import annotations
@@ -51,6 +52,7 @@ _ENV_GIT_COMMITS = "BZ_HUB_GIT_COMMITS"
 _ENV_ARTIFACT_NAMES = "BZ_HUB_ARTIFACT_NAMES"
 _ENV_MARKER_CALLBACK_URL = "BZ_HUB_MARKER_CALLBACK_URL"
 _ENV_FEATURE_TITLE = "BZ_HUB_FEATURE_TITLE"
+_ENV_EXPECT_GIT_COMMITS = "BZ_HUB_EXPECT_GIT_COMMITS"
 
 # Test-only instrumentation for the mid-script crash sweep
 # (``tests/crash/test_kill9_sweep.py::test_kill9_between_default_graph_repo_pushes``).
@@ -92,7 +94,8 @@ def qualify_repo(repo: str, owner: str) -> str:
 
 
 def refuse_empty_delivery(commits: list[dict[str, str]]) -> None:
-    """Exit non-zero when a delivery node is handed nothing to deliver.
+    """Exit non-zero when a delivery node is handed nothing to deliver **and the graph
+    promised something**.
 
     "Nothing to deliver" and "everything already delivered" are not the same outcome,
     and every land policy used to answer both with ``landed``: the marker filter below
@@ -101,14 +104,20 @@ def refuse_empty_delivery(commits: list[dict[str, str]]) -> None:
     how a fully-built feature reached `done` with no PR, no merge, and a delivery log
     three lines long.
 
-    An empty ``commits`` (as opposed to an empty *pending*, which genuinely means the
-    markers are all present) is a defect upstream of delivery — no node declared a git
-    pointer — so this fails the node rather than reporting success. A non-zero exit is
-    the hub-node protocol's failure signal (``bzh:hub-node-outcome-protocol``), and the
-    stderr rides into the step's log artifact where an operator can read it.
+    But an empty set is not always wrong. A non-code chunk — a review, a spike — declares
+    no ``git_commit`` anywhere in its graph and still routes through ``deliver`` as the
+    uniform terminal (MVP criterion 10): landing nothing is its correct outcome. The two
+    are told apart by the graph's own statement of intent, injected as
+    ``BZ_HUB_EXPECT_GIT_COMMITS``, not by the emptiness alone — which is the same
+    information every caller of this function lacked on its own.
+
+    Absent (an older executor), the var reads as "expected": a delivery policy that fails
+    loudly on a set it cannot explain is the safer default of the two.
     """
     if commits:
         return
+    if os.environ.get(_ENV_EXPECT_GIT_COMMITS, "1") == "0":
+        return  # a non-code chunk: no node ever promised a commit, so none is missing
     print(
         "no git commits to deliver: this chunk submitted no git_commit artifact, so there "
         "is nothing to open a PR for. A delivery node reached with an empty commit set is "

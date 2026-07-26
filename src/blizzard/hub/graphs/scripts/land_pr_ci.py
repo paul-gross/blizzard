@@ -6,8 +6,9 @@ policy lives in YAML. It honors the same hub-command-node authoring contract as 
 (``blizzard-harness:/standards/hub-nodes.md``): pure stdlib against the forge, env
 injected by the executor, the authored choice (``landed``/``conflict``) or the reserved
 ``pending`` printed as the LAST stdout line, diagnostics to stderr, exit 0 for every
-outcome the policy can express — an EMPTY commit set being the one exception, a defect
-upstream of delivery that exits non-zero so the engine routes ``failure``
+outcome the policy can express — an EMPTY commit set from a graph that declared a
+``git_commit`` somewhere being the one exception, a defect upstream of delivery that
+exits non-zero so the engine routes ``failure``
 (:func:`~blizzard.hub.graphs.scripts.land_default.refuse_empty_delivery`).
 
 Unlike the default graph's strict one-shot (:mod:`blizzard.hub.graphs.scripts.land_default`,

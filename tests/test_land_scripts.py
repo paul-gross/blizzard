@@ -231,6 +231,7 @@ def test_an_empty_commit_set_fails_the_node_instead_of_reporting_landed(
     monkeypatch.setenv("BZ_FORGE_URL", "http://forge")
     monkeypatch.setenv("BZ_HUB_BASE_BRANCH", "main")
     monkeypatch.setenv("BZ_HUB_GIT_COMMITS", json.dumps([]))
+    monkeypatch.setenv("BZ_HUB_EXPECT_GIT_COMMITS", "1")  # the graph declared a git_commit
     monkeypatch.delenv("BZ_HUB_ARTIFACT_NAMES", raising=False)
     monkeypatch.delenv("BZ_FORGE_TOKEN", raising=False)
     monkeypatch.delenv("BZ_HUB_MARKER_CALLBACK_URL", raising=False)
@@ -259,6 +260,7 @@ def test_a_fully_marked_commit_set_still_reports_landed(
     monkeypatch.setenv("BZ_FORGE_URL", "http://forge")
     monkeypatch.setenv("BZ_HUB_BASE_BRANCH", "main")
     monkeypatch.setenv("BZ_HUB_GIT_COMMITS", json.dumps(_COMMITS))
+    monkeypatch.setenv("BZ_HUB_EXPECT_GIT_COMMITS", "1")
     monkeypatch.setenv("BZ_HUB_ARTIFACT_NAMES", json.dumps([f"merged/{_REPO}"]))
     monkeypatch.delenv("BZ_FORGE_TOKEN", raising=False)
     monkeypatch.delenv("BZ_HUB_MARKER_CALLBACK_URL", raising=False)
@@ -271,3 +273,48 @@ def test_a_fully_marked_commit_set_still_reports_landed(
 
     assert script.main() == 0
     assert capsys.readouterr().out.strip().splitlines()[-1] == "landed"
+
+
+@pytest.mark.parametrize("script", [land_default, land_pr_ci, land_ff], ids=["default", "pr-ci", "ff"])
+def test_a_non_code_chunk_lands_empty_because_its_graph_promised_no_commit(
+    script, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """MVP criterion 10: a review or a spike produces only assets, declares no
+    `git_commit` anywhere in its graph, and still routes through `deliver` as the uniform
+    terminal. Landing nothing is its correct outcome, not a defect — emptiness alone
+    cannot tell the two apart, which is exactly why the graph's intent is injected."""
+    monkeypatch.setenv("BZ_FORGE_URL", "http://forge")
+    monkeypatch.setenv("BZ_HUB_BASE_BRANCH", "main")
+    monkeypatch.setenv("BZ_HUB_GIT_COMMITS", json.dumps([]))
+    monkeypatch.setenv("BZ_HUB_EXPECT_GIT_COMMITS", "0")  # no node declared a git_commit
+    monkeypatch.delenv("BZ_HUB_ARTIFACT_NAMES", raising=False)
+    monkeypatch.delenv("BZ_FORGE_TOKEN", raising=False)
+    monkeypatch.delenv("BZ_HUB_MARKER_CALLBACK_URL", raising=False)
+    monkeypatch.setattr(
+        script,
+        "forge_request",
+        lambda *a, **k: pytest.fail("a non-code chunk must land without contacting the forge"),
+        raising=False,
+    )
+
+    assert script.main() == 0
+    assert capsys.readouterr().out.strip().splitlines()[-1] == "landed"
+
+
+@pytest.mark.parametrize("script", [land_default, land_pr_ci, land_ff], ids=["default", "pr-ci", "ff"])
+def test_an_absent_expectation_signal_is_treated_as_expected(script, monkeypatch: pytest.MonkeyPatch) -> None:
+    """An older executor injects no signal. Of the two possible defaults, failing loudly
+    on a set the policy cannot explain is the safer one — the alternative silently
+    restores the exact behavior that let a built feature reach `done` undelivered."""
+    monkeypatch.setenv("BZ_FORGE_URL", "http://forge")
+    monkeypatch.setenv("BZ_HUB_BASE_BRANCH", "main")
+    monkeypatch.setenv("BZ_HUB_GIT_COMMITS", json.dumps([]))
+    monkeypatch.delenv("BZ_HUB_EXPECT_GIT_COMMITS", raising=False)
+    monkeypatch.delenv("BZ_HUB_ARTIFACT_NAMES", raising=False)
+    monkeypatch.delenv("BZ_FORGE_TOKEN", raising=False)
+    monkeypatch.delenv("BZ_HUB_MARKER_CALLBACK_URL", raising=False)
+
+    with pytest.raises(SystemExit) as exc:
+        script.main()
+
+    assert exc.value.code == 1

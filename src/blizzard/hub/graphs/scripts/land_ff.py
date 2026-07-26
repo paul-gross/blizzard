@@ -49,9 +49,10 @@ Same env contract as :mod:`~blizzard.hub.graphs.scripts.land_default`
 The node's authored choice — ``landed`` or ``conflict`` — is the LAST line printed to
 stdout (``bzh:hub-node-outcome-protocol``); every diagnostic goes to stderr so it never
 contaminates that line. Exit code is 0 for every outcome the policy can express, except
-an EMPTY commit set, which is a defect upstream of delivery rather than an outcome and
-exits non-zero so the engine routes ``failure``
-(:func:`~blizzard.hub.graphs.scripts.land_default.refuse_empty_delivery`).
+an EMPTY commit set from a graph that declared a ``git_commit`` somewhere, which is a
+defect upstream of delivery rather than an outcome and exits non-zero so the engine
+routes ``failure`` (:func:`~blizzard.hub.graphs.scripts.land_default.refuse_empty_delivery`).
+A graph that declared none lands empty and exits 0.
 """
 
 from __future__ import annotations

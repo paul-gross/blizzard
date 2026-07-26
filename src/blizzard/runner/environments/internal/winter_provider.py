@@ -77,6 +77,12 @@ class WinterWorkspaceProvider:
         self._git = git if git is not None else SubprocessEnvGit()
         self._ready = False
         self._service_bound: bool | None = None
+        # Per-env repo manifests, memoized. The declare edge consults this on every
+        # `artifact commit`, and each miss costs a `winter` invocation plus a git call
+        # per repo — real latency on a path whose job is a durable write. An env's
+        # layout only changes when the env is re-prepared, so `_prepare` is the one
+        # place the entry is dropped.
+        self._repos: dict[str, list[RepoBinding]] = {}
 
     def acquire(self, chunk_id: str, count: int, held_ids: list[str]) -> list[AcquiredEnvironment]:
         free = [env for env in self._pool if env not in set(held_ids)]
@@ -121,6 +127,9 @@ class WinterWorkspaceProvider:
         the repo being described rather than of whatever repository happens to enclose
         the caller.
         """
+        cached = self._repos.get(environment_id)
+        if cached is not None:
+            return list(cached)
         raw = self._winter.capture(self._workspace_root, ["ws", "worktrees", "--json"])
         env_workdir = self._workspace_root / environment_id
         bindings: list[RepoBinding] = []
@@ -136,10 +145,14 @@ class WinterWorkspaceProvider:
                     origin_url=self._git.origin_url(path),
                 )
             )
-        return bindings
+        self._repos[environment_id] = bindings
+        return list(bindings)
 
     def _prepare(self, env: str) -> Path:
         """Reset-on-acquire: return the env fully reset to base and working."""
+        # The reset can add or remove worktrees (a membership reconcile materializes a
+        # newly-declared repo), so any memoized manifest for this env is now a guess.
+        self._repos.pop(env, None)
         workdir = self._workspace_root / env
         run = self._winter.run
         root = self._workspace_root

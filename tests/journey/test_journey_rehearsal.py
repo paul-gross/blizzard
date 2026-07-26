@@ -157,14 +157,10 @@ def _push_and_declare(repo):
         ["git", "-C", repo, "rev-parse", "HEAD"],
         check=True, capture_output=True, text=True,
     ).stdout.strip()
-    forge = subprocess.run(
-        ["git", "-C", repo, "remote", "get-url", "origin"],
-        check=True, capture_output=True, text=True,
-    ).stdout.strip()
     subprocess.run(["git", "-C", repo, "push", "origin", branch], check=True)
     subprocess.run(
         ["blizzard", "runner", "artifact", "commit",
-         "--forge", forge, "--repo", repo, "--branch", branch, "--commit", commit_sha],
+         "--repo", repo, "--branch", branch, "--commit", commit_sha],
         check=True,
     )
 
@@ -265,14 +261,10 @@ _ANSWER_SCRIPT = (
     '    ["git", "-C", repo, "rev-parse", "HEAD"],\n'
     "    check=True, capture_output=True, text=True,\n"
     ").stdout.strip()\n"
-    "_forge = subprocess.run(\n"
-    '    ["git", "-C", repo, "remote", "get-url", "origin"],\n'
-    "    check=True, capture_output=True, text=True,\n"
-    ").stdout.strip()\n"
     'subprocess.run(["git", "-C", repo, "push", "origin", _branch], check=True)\n'
     "subprocess.run(\n"
     '    ["blizzard", "runner", "artifact", "commit",\n'
-    '     "--forge", _forge, "--repo", repo, "--branch", _branch, "--commit", _commit_sha],\n'
+    '     "--repo", repo, "--branch", _branch, "--commit", _commit_sha],\n'
     "    check=True,\n"
     ")\n"
 )
