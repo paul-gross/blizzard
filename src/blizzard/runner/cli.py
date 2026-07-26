@@ -497,33 +497,36 @@ def artifact_create(name: str) -> None:
         raise click.ClickException(f"artifact create: could not record {name!r} ({exc})") from exc
 
 
-def _origin_url(cwd: Path) -> str:
-    """``git remote get-url origin`` run in ``cwd`` — the default ``--forge`` source for
-    ``artifact commit`` (the worker is already cd'd into the repo it is declaring). A
-    failure (no such remote, not a git worktree) reaches the worker as a
-    :class:`click.ClickException`, the same non-soft-fail contract every other
-    ``artifact`` verb rejection uses."""
-    result = subprocess.run(["git", "remote", "get-url", "origin"], cwd=cwd, capture_output=True, text=True)
-    if result.returncode != 0:
-        detail = (result.stderr or result.stdout).strip()
-        raise click.ClickException(f"artifact commit: could not derive --forge from `origin` ({detail})")
-    return result.stdout.strip()
+def _problem_detail(response: httpx.Response) -> str:
+    """The ``detail`` string from a rejected call's JSON body, or ``""``.
+
+    A rejection the worker can act on (an unknown ``--repo``, naming the repos the env
+    does list) carries its guidance in the body; surfacing it beats echoing a bare
+    status line the worker cannot correct from."""
+    try:
+        body = response.json()
+    except ValueError:
+        return ""
+    detail = body.get("detail") if isinstance(body, dict) else None
+    return str(detail) if detail else ""
 
 
 @artifact_group.command("commit")
 @click.option(
-    "--forge",
+    "--env",
+    "environment_id",
     default=None,
-    help="The forge the repo's `origin` points at. Defaults to this repo's own "
-    "`git remote get-url origin`; pass it explicitly only to override that default.",
+    help="The leased environment the repo worktree lives in. Optional while a chunk "
+    "holds exactly one environment (it is inferred); required once it holds several, "
+    "since the same repo has a worktree in each.",
 )
 @click.option(
     "--repo",
     required=True,
-    help="The leased env's repo worktree DIRECTORY NAME (not an `owner/name` slug or "
-    "URL) — the runner resolves this repo's worktree as a child of the leased env's "
-    "workdir by this exact name; a mismatch verifies against the wrong path and the "
-    "declaration silently drops.",
+    help="The repo's name in the leased env's manifest (not an `owner/name` slug or "
+    "URL) — the runner looks this up in the environment's repo manifest to find both "
+    "the worktree and the origin to verify against. A name the manifest does not list "
+    "is rejected outright, naming the repos that are.",
 )
 @click.option("--branch", required=True, help="The branch the commit was pushed to.")
 @click.option(
@@ -533,32 +536,42 @@ def _origin_url(cwd: Path) -> str:
     help="The FULL commit sha (`git rev-parse HEAD`), not an abbreviated form — verify "
     "compares it byte-exact against the forge's full sha.",
 )
-def artifact_commit(forge: str | None, repo: str, branch: str, commit_sha: str) -> None:
+def artifact_commit(environment_id: str | None, repo: str, branch: str, commit_sha: str) -> None:
     """Worker: durably declare a git-commit artifact for REPO (issue #143, Phase 3).
 
     A pure client of the runner's local API: the worker pushes its branch first, then
     posts this declaration for the lease in ``BLIZZARD_LEASE_ID`` to
     ``BLIZZARD_RUNNER_URL``, authorized by the lease token in ``BLIZZARD_LEASE_TOKEN`` —
     all three inherited from the spawn environment, so no identity arguments. Carries the
-    ``git_commit`` kind only: an asset artifact is declared through
-    ``artifact create`` instead. ``--forge`` is this declaration's own claim (decision
-    R7) — the runner later cross-checks it against the leased env's own ``origin`` rather
-    than trusting it outright; when omitted it defaults to this repo's own ``git remote
-    get-url origin`` (run in the current directory), so the common case needs no flag at
-    all. A rejection (a wrong/missing token, an unknown lease, an unreachable runner)
-    exits non-zero so the worker learns it rather than silently losing the declaration.
+    ``git_commit`` kind only: an asset artifact is declared through ``artifact create``
+    instead.
+
+    There is deliberately no ``--forge``: the origin a declaration is verified against
+    comes from the environment's repo manifest, which the workspace provider owns. A
+    worker cannot supply it, so it cannot supply the wrong one — the previous default
+    read ``git remote get-url origin`` in the process cwd, and since workers are spawned
+    at the workspace root, that resolved to the enclosing workspace repo for every repo
+    alike.
+
+    A rejection (a wrong/missing token, an unknown lease, a repo the env's manifest does
+    not list, an unreachable runner) exits non-zero so the worker learns it rather than
+    silently losing the declaration.
     """
     lease_id, runner_url, lease_token = _worker_lease_identity("artifact commit")
-    if forge is None:
-        forge = _origin_url(Path.cwd())
+    body: dict[str, str] = {"repo": repo, "branch": branch, "commit": commit_sha}
+    if environment_id is not None:
+        body["environment_id"] = environment_id
     try:
         resp = httpx.post(
             f"{runner_url.rstrip('/')}/api/leases/{lease_id}/git-commits",
-            json={"forge": forge, "repo": repo, "branch": branch, "commit": commit_sha},
+            json=body,
             headers={"X-Blizzard-Lease-Token": lease_token} if lease_token else {},
             timeout=_HEARTBEAT_TIMEOUT,
         )
         resp.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        detail = _problem_detail(exc.response) or str(exc)
+        raise click.ClickException(f"artifact commit: {repo!r} rejected ({detail})") from exc
     except httpx.HTTPError as exc:
         raise click.ClickException(f"artifact commit: could not record {repo!r} ({exc})") from exc
 

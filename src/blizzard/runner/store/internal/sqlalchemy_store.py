@@ -457,22 +457,31 @@ class SqlAlchemyRunnerStore:
         stmt = select(attachments.c.name, attachments.c.content).join(newest, attachments.c.id == newest.c.id)
         return {str(r.name): str(r.content) for r in self._all(stmt)}
 
-    def git_commit_declarations_for_lease(self, lease_id: str) -> dict[str, GitCommitDeclarationRecord]:
+    def git_commit_declarations_for_lease(
+        self, lease_id: str
+    ) -> dict[tuple[str, str], GitCommitDeclarationRecord]:
         newest = (
-            select(git_commit_declarations.c.repo, func.max(git_commit_declarations.c.id).label("id"))
+            select(
+                git_commit_declarations.c.environment_id,
+                git_commit_declarations.c.repo,
+                func.max(git_commit_declarations.c.id).label("id"),
+            )
             .where(git_commit_declarations.c.lease_id == lease_id)
-            .group_by(git_commit_declarations.c.repo)
+            .group_by(git_commit_declarations.c.environment_id, git_commit_declarations.c.repo)
             .subquery()
         )
         stmt = select(
-            git_commit_declarations.c.forge,
+            git_commit_declarations.c.environment_id,
             git_commit_declarations.c.repo,
             git_commit_declarations.c.branch,
             git_commit_declarations.c.commit,
         ).join(newest, git_commit_declarations.c.id == newest.c.id)
         return {
-            str(r.repo): GitCommitDeclarationRecord(
-                forge=str(r.forge), repo=str(r.repo), branch=str(r.branch), commit=str(r.commit)
+            (str(r.environment_id), str(r.repo)): GitCommitDeclarationRecord(
+                environment_id=str(r.environment_id),
+                repo=str(r.repo),
+                branch=str(r.branch),
+                commit=str(r.commit),
             )
             for r in self._all(stmt)
         }
@@ -842,7 +851,7 @@ class SqlAlchemyRunnerStore:
         chunk_id: str,
         node_id: str,
         epoch: int,
-        forge: str,
+        environment_id: str,
         repo: str,
         branch: str,
         commit: str,
@@ -858,7 +867,7 @@ class SqlAlchemyRunnerStore:
                     chunk_id=chunk_id,
                     node_id=node_id,
                     epoch=epoch,
-                    forge=forge,
+                    environment_id=environment_id,
                     repo=repo,
                     branch=branch,
                     commit=commit,

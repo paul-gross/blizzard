@@ -69,7 +69,7 @@ def test_runner_config_gate_buffers_a_decision_not_a_completion(tmp_path):  # ty
         chunk_id="ch_1",
         node_id="nd_build",
         epoch=1,
-        forge="file:///origins/toy-api.git",
+        environment_id="e1",
         repo="toy-api",
         branch="e1",
         commit="abc123",
@@ -91,7 +91,7 @@ def test_runner_config_gate_buffers_a_decision_not_a_completion(tmp_path):  # ty
 
     advance(ctx)  # gated -> the declared commit is verified, a decision is buffered, no verdict elicited
 
-    assert wt.verified_calls == [("/ws/e1/toy-api", "file:///origins/toy-api.git", "e1", "abc123")]
+    assert wt.verified_calls == [("file:///origins/toy-api.git", "e1", "abc123")]
     assert harness.judged == []  # the human judges — no verdict elicitation
     buffered = [b for b in store.pending_outbound() if b.kind == "decision.submitted"]
     assert len(buffered) == 1 and buffered[0].lease_id == "lease_1"
@@ -117,7 +117,7 @@ def test_gated_node_decision_elicited_exactly_once_while_flush_pending(tmp_path)
         chunk_id="ch_1",
         node_id="nd_build",
         epoch=1,
-        forge="file:///origins/toy-api.git",
+        environment_id="e1",
         repo="toy-api",
         branch="e1",
         commit="abc123",

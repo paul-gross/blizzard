@@ -98,6 +98,7 @@ from tests.crash.support import (
     OWNER,
     REPO,
     REPO_NAME,
+    RUNNER_ENV,
     CrashEnv,
     await_http,
     build_script,
@@ -886,8 +887,11 @@ def test_kill9_at_attach_crash_point(crash_env: CrashEnv, tmp_path: Path, point:
 
 
 _DECLARE_COMMIT_TOKEN = "the-declare-commit-lease-token"
-_DECLARE_COMMIT_FORGE = "github"
-_DECLARE_COMMIT_REPO = "blizzard"
+# The fixture workspace's one env and its one repo — the declare edge checks the repo
+# against that env's real manifest (`winter ws worktrees`), so these must be the actual
+# ones, not stand-ins.
+_DECLARE_COMMIT_ENV = RUNNER_ENV
+_DECLARE_COMMIT_REPO = REPO_NAME
 _DECLARE_COMMIT_BRANCH = "feat/declare-commit"
 _DECLARE_COMMIT_SHA = "deadbeefcafef00d"
 _DECLARE_COMMIT_NOW = datetime(2026, 7, 22, 12, 0, 0, tzinfo=UTC)
@@ -944,6 +948,14 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
         )
     )
     store.record_lease_token("lease_declare_commit", hash_token(_DECLARE_COMMIT_TOKEN), _DECLARE_COMMIT_NOW)
+    # The env this declaration resolves against — the declare edge reads the chunk's
+    # bindings to decide which environment's manifest to check the repo against.
+    store.record_binding(
+        chunk_id="ch_declare_commit",
+        environment_id=_DECLARE_COMMIT_ENV,
+        workdir=str(crash_env.workspace / _DECLARE_COMMIT_ENV),
+        bound_at=_DECLARE_COMMIT_NOW,
+    )
     store.record_ask(
         lease_id="lease_declare_commit",
         chunk_id="ch_declare_commit",
@@ -972,7 +984,6 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
             runner.post(
                 "/api/leases/lease_declare_commit/git-commits",
                 json={
-                    "forge": _DECLARE_COMMIT_FORGE,
                     "repo": _DECLARE_COMMIT_REPO,
                     "branch": _DECLARE_COMMIT_BRANCH,
                     "commit": _DECLARE_COMMIT_SHA,
@@ -983,15 +994,15 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
         assert code == -9, f"armed runner at {point} exited {code}, not SIGKILL (-9); point never reached?"
 
         # Durable across the kill -9: reopen the same store — the declaration and its
-        # full provenance (lease/chunk/node/epoch/forge/repo/branch/commit) are exactly
+        # full provenance (lease/chunk/node/epoch/env/repo/branch/commit) are exactly
         # what the worker submitted, though the 200 never returned.
         engine2 = create_engine_from_url(db_url)
         try:
             declarations = SqlAlchemyRunnerStore(engine2).git_commit_declarations_for_lease("lease_declare_commit")
-            assert set(declarations) == {_DECLARE_COMMIT_REPO}
-            declared = declarations[_DECLARE_COMMIT_REPO]
-            assert (declared.forge, declared.repo, declared.branch, declared.commit) == (
-                _DECLARE_COMMIT_FORGE,
+            assert set(declarations) == {(_DECLARE_COMMIT_ENV, _DECLARE_COMMIT_REPO)}
+            declared = declarations[(_DECLARE_COMMIT_ENV, _DECLARE_COMMIT_REPO)]
+            assert (declared.environment_id, declared.repo, declared.branch, declared.commit) == (
+                _DECLARE_COMMIT_ENV,
                 _DECLARE_COMMIT_REPO,
                 _DECLARE_COMMIT_BRANCH,
                 _DECLARE_COMMIT_SHA,
@@ -1023,7 +1034,7 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
         engine3 = create_engine_from_url(db_url)
         try:
             declarations = SqlAlchemyRunnerStore(engine3).git_commit_declarations_for_lease("lease_declare_commit")
-            assert set(declarations) == {_DECLARE_COMMIT_REPO}
+            assert set(declarations) == {(_DECLARE_COMMIT_ENV, _DECLARE_COMMIT_REPO)}
         finally:
             engine3.dispose()
     finally:
@@ -1562,14 +1573,10 @@ def _hang_once_build_script(landed_file: str, marker: Path) -> str:
         '    ["git", "-C", repo, "rev-parse", "HEAD"],\n'
         "    check=True, capture_output=True, text=True,\n"
         ").stdout.strip()\n"
-        "_forge = subprocess.run(\n"
-        '    ["git", "-C", repo, "remote", "get-url", "origin"],\n'
-        "    check=True, capture_output=True, text=True,\n"
-        ").stdout.strip()\n"
         'subprocess.run(["git", "-C", repo, "push", "--force-with-lease", "origin", _branch], check=True)\n'
         "subprocess.run(\n"
         '    ["blizzard", "runner", "artifact", "commit",\n'
-        '     "--forge", _forge, "--repo", repo, "--branch", _branch, "--commit", _commit],\n'
+        '     "--repo", repo, "--branch", _branch, "--commit", _commit],\n'
         "    check=True,\n"
         ")\n"
         "if not marker.exists():\n"
@@ -2285,14 +2292,10 @@ def _two_repo_build_script(landed_file: str) -> str:
         '        ["git", "-C", repo, "rev-parse", "HEAD"],\n'
         "        check=True, capture_output=True, text=True,\n"
         "    ).stdout.strip()\n"
-        "    _forge = subprocess.run(\n"
-        '        ["git", "-C", repo, "remote", "get-url", "origin"],\n'
-        "        check=True, capture_output=True, text=True,\n"
-        "    ).stdout.strip()\n"
         '    subprocess.run(["git", "-C", repo, "push", "--force-with-lease", "origin", _branch], check=True)\n'
         "    subprocess.run(\n"
         '        ["blizzard", "runner", "artifact", "commit",\n'
-        '         "--forge", _forge, "--repo", repo, "--branch", _branch, "--commit", _commit],\n'
+        '         "--repo", repo, "--branch", _branch, "--commit", _commit],\n'
         "        check=True,\n"
         "    )\n"
     )

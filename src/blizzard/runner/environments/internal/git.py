@@ -34,9 +34,24 @@ class SubprocessEnvGit:
             self._git(child, "clean", "-fdx")
         _log.info("environment cleaned of untracked files", env_workdir=str(env_workdir))
 
+    def origin_url(self, repo_workdir: Path) -> str:
+        """``git remote get-url origin`` read **in the repo's own worktree**.
+
+        Deliberately takes the worktree path rather than running in the process cwd:
+        git walks *up* from cwd to find an enclosing repository, so a caller standing
+        anywhere but inside the repo gets a plausible-looking URL for some other repo
+        (in a winter workspace, the workspace repo itself) instead of an error. Passing
+        the path the provider resolved makes that class of near-miss unrepresentable.
+        """
+        return self._capture(repo_workdir, "remote", "get-url", "origin").strip()
+
     def _git(self, cwd: Path, *args: str) -> None:
+        self._capture(cwd, *args)
+
+    def _capture(self, cwd: Path, *args: str) -> str:
         result = subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True)
         if result.returncode != 0:
             detail = (result.stderr or result.stdout).strip()
             _log.error("git reset step failed", args=list(args), cwd=str(cwd), detail=detail)
             raise EnvGitError(f"git {' '.join(args)} failed in {cwd}: {detail}")
+        return result.stdout

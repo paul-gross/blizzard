@@ -240,7 +240,7 @@ def test_env_prep_failure_emits_a_command_failed(tmp_path):  # type: ignore[no-u
 class _VerifyFailsWorktreeGit(FakeWorktreeGit):
     """A worktree git whose verify always raises — L(ii)'s catch site (issue #143, Phase 4)."""
 
-    def verify(self, repo_workdir: str, forge: str, branch: str, commit: str) -> bool:
+    def verify(self, origin_url: str, branch: str, commit: str) -> bool:
         raise WorktreeGitError("git ls-remote origin feat/x failed: remote rejected (no SSH_AUTH_SOCK)")
 
 
@@ -256,8 +256,8 @@ def test_git_verify_failure_emits_a_command_failed_and_continues(tmp_path):  # t
         chunk_id="ch_1",
         node_id="nd_build",
         epoch=1,
-        forge="file:///origins/app.git",
-        repo="app",
+        environment_id="e1",
+        repo="toy-api",
         branch="feat/x",
         commit="abc",
         declared_at=_NOW,

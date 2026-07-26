@@ -33,6 +33,7 @@ from blizzard.runner.environments.provider import (
     AcquiredEnvironment,
     EnvironmentPreparationError,
     IWorkspaceProvider,
+    RepoBinding,
     WorkspaceAcquisitionError,
 )
 
@@ -51,9 +52,10 @@ class _WinterCli(Protocol):
 
 
 class _EnvGit(Protocol):
-    """The untracked-file-clean sub-seam the provider drives."""
+    """The untracked-file-clean and origin-read sub-seam the provider drives."""
 
     def clean_environment(self, env_workdir: Path) -> None: ...
+    def origin_url(self, repo_workdir: Path) -> str: ...
 
 
 class WinterWorkspaceProvider:
@@ -103,6 +105,38 @@ class WinterWorkspaceProvider:
         # No-op mark: cleaning defers to the next acquire; the hold is a
         # runner-store fact, never the provider's to clear.
         _log.info("released environment (no-op mark)", environment_id=environment_id)
+
+    def repos(self, environment_id: str) -> list[RepoBinding]:
+        """``winter ws worktrees --json``, narrowed to ``environment_id``'s worktrees.
+
+        Winter is the authority on where it put things, so the layout is *read*, never
+        derived: the command already emits one ``kind="worktree"`` entry per
+        ``<env>/<repo>`` with its on-disk path, and omits entries whose directory does
+        not exist. The narrowing to ``kind == "worktree"`` also drops the standalone
+        clones, which matters here — a repo can be both a project repo (a worktree in
+        every env) and a standalone extension checkout elsewhere in the workspace, and
+        only the env's own worktree is the worker's to touch.
+
+        Each binding's ``origin_url`` is read from that worktree, so it is the origin of
+        the repo being described rather than of whatever repository happens to enclose
+        the caller.
+        """
+        raw = self._winter.capture(self._workspace_root, ["ws", "worktrees", "--json"])
+        env_workdir = self._workspace_root / environment_id
+        bindings: list[RepoBinding] = []
+        for entry in json.loads(raw):
+            if entry.get("kind") != "worktree" or entry.get("env") != environment_id:
+                continue
+            path = Path(entry["path"])
+            bindings.append(
+                RepoBinding(
+                    environment_id=environment_id,
+                    name=str(entry["repo"]),
+                    relpath=str(path.relative_to(env_workdir)),
+                    origin_url=self._git.origin_url(path),
+                )
+            )
+        return bindings
 
     def _prepare(self, env: str) -> Path:
         """Reset-on-acquire: return the env fully reset to base and working."""

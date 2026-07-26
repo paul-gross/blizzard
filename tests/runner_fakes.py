@@ -22,6 +22,7 @@ from blizzard.runner.environments.provider import (
     AcquiredEnvironment,
     EnvironmentPreparationError,
     IWorkspaceProvider,
+    RepoBinding,
     WorkspaceAcquisitionError,
 )
 from blizzard.runner.harness.adapter import IHarnessAdapter, WorkerHandle, WorkerPreamble
@@ -219,13 +220,30 @@ class FakeHub:
 
 
 class FakeProvider:
-    """A scriptable :class:`IWorkspaceProvider` over a fixed pool of workdirs."""
+    """A scriptable :class:`IWorkspaceProvider` over a fixed pool of workdirs.
 
-    def __init__(self, pool: dict[str, str], *, refuse: bool = False, prepare_fail: bool = False) -> None:
+    ``repos`` scripts the per-env manifest as ``{env_id: [(name, origin_url), ...]}``.
+    It defaults to the suite's stock ``toy-api`` repo for every pooled env, since almost
+    every test that reaches a git-commit declaration declares exactly that one; a test
+    exercising several repos, a differing origin, or an empty (nothing-authorized)
+    manifest names its own.
+    """
+
+    _DEFAULT_REPOS = (("toy-api", "file:///origins/toy-api.git"),)
+
+    def __init__(
+        self,
+        pool: dict[str, str],
+        *,
+        refuse: bool = False,
+        prepare_fail: bool = False,
+        repos: dict[str, Sequence[tuple[str, str]]] | None = None,
+    ) -> None:
         self._pool = pool  # env_id -> workdir
         self.refuse = refuse
         self.prepare_fail = prepare_fail
         self.released: list[str] = []
+        self._repos = {env: tuple(entries) for env, entries in (repos or {}).items()}
 
     def acquire(self, chunk_id: str, count: int, held_ids: list[str]) -> list[AcquiredEnvironment]:
         if self.refuse:
@@ -239,6 +257,15 @@ class FakeProvider:
 
     def release(self, environment_id: str) -> None:
         self.released.append(environment_id)
+
+    def repos(self, environment_id: str) -> list[RepoBinding]:
+        if environment_id not in self._pool:
+            return []
+        entries = self._repos.get(environment_id, self._DEFAULT_REPOS)
+        return [
+            RepoBinding(environment_id=environment_id, name=name, relpath=name, origin_url=origin)
+            for name, origin in entries
+        ]
 
 
 class FakeHarness:
@@ -393,18 +420,18 @@ class FakeWorktreeGit:
     """A scriptable :class:`IWorktreeGit`: a canned verify verdict, records every call.
 
     ``verified`` is either a single bool applied to every call, or a
-    ``{repo_workdir: bool}`` mapping for a test that needs some declarations to verify
+    ``{origin_url: bool}`` mapping for a test that needs some declarations to verify
     and others not to — an absent key defaults ``True`` (the common case: every
     declaration verifies)."""
 
     def __init__(self, verified: bool | dict[str, bool] = True) -> None:
         self._verified = verified
-        self.verified_calls: list[tuple[str, str, str, str]] = []
+        self.verified_calls: list[tuple[str, str, str]] = []
 
-    def verify(self, repo_workdir: str, forge: str, branch: str, commit: str) -> bool:
-        self.verified_calls.append((repo_workdir, forge, branch, commit))
+    def verify(self, origin_url: str, branch: str, commit: str) -> bool:
+        self.verified_calls.append((origin_url, branch, commit))
         if isinstance(self._verified, dict):
-            return self._verified.get(repo_workdir, True)
+            return self._verified.get(origin_url, True)
         return self._verified
 
 

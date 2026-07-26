@@ -2963,8 +2963,9 @@ def _nudge_message(missing: list[ProducesEntry]) -> str:
             lines.append(
                 f"#   - {spec.name} (git_commit): push your branch, then run "
                 f"`blizzard runner artifact commit --repo <repo> --branch <branch> "
-                f"--commit <sha>` for each repo you touched (--forge defaults to "
-                f"that repo's own `origin`; pass it only to override)."
+                f"--commit <sha>` for each repo you touched (`<repo>` is its name in "
+                f"the environment's manifest; add `--env <id>` when the chunk holds "
+                f"more than one environment)."
             )
         else:
             lines.append(
@@ -3017,80 +3018,118 @@ def _verify_and_collect_git_commits(
     ctx: LoopContext,
     lease: LeaseRecord,
     bindings: list[EnvBindingRecord],
-    already_declared: dict[str, GitCommitDeclarationRecord] | None = None,
-) -> tuple[list[SubmittedArtifact], dict[str, GitCommitDeclarationRecord]]:
+    already_declared: dict[tuple[str, str], GitCommitDeclarationRecord] | None = None,
+) -> tuple[list[SubmittedArtifact], dict[tuple[str, str], GitCommitDeclarationRecord]]:
     """Read back the worker's declared git commits for this lease and confirm each,
-    read-only, against the leased env's own repo worktree (issue #143, Phase 4) —
-    replaces the runner's former infer-and-push. The worker has already pushed its
-    branch and declared ``(forge, repo, branch, commit)`` through the local
-    declaration channel (Phase 3, `blizzard runner artifact commit`); this never
+    read-only, against the origin the declaring environment's repo manifest names
+    (issue #143, Phase 4) — replaces the runner's former infer-and-push. The worker has
+    already pushed its branch and declared ``(env, repo, branch, commit)`` through the
+    local declaration channel (Phase 3, `blizzard runner artifact commit`); this never
     mutates git and never infers a branch name off residue.
 
-    A declaration whose repo worktree cannot be found in this lease's bindings, or
-    whose forge/ref does not verify, is silently dropped rather than failing the
-    attempt: it is simply "not covered", which is exactly what drives the Phase-2
-    kind-coverage nudge (:func:`_missing_produces`) — this function's job is only to
-    say what verified, not to police what did not. A verify subprocess failure
-    (no such worktree, a network hiccup) is surfaced via :func:`_emit_command_failed`
-    — informational only: a read-only re-derivation opens no unsafe mutation window,
-    so unlike the push it replaces, this never re-raises to crash-loop the tick.
+    Spans **every** bound environment, not just the first. A chunk holding several envs
+    has a worktree of the same repo in each, and the declaration key carries the env, so
+    each is collected on its own terms; reading only ``bindings[0]`` would drop envs
+    2..N's work with no error, which is the same silent-loss shape this whole seam exists
+    to remove.
 
-    ``already_declared`` names the exact ``(forge, repo, branch, commit)`` this
-    lease's attempt already resolved on an earlier call this attempt (the pre-nudge
-    pass) — a repo whose freshly re-derived declaration is unchanged is skipped
-    entirely (no re-verify, no re-emit), since re-verifying it would only repeat the
-    same outcome (a duplicate `command-failed` for a `--repo` the worker never fixed).
-    A repo whose declaration differs (the worker re-declared it mid-nudge) is a
-    genuine amendment and is re-verified fresh. Returns the collected artifacts
-    alongside this call's own full declaration set, so a caller can thread it into a
-    later call as that later call's ``already_declared``."""
+    A declaration that does not verify is **not** silently dropped. It is reported via
+    :func:`_emit_command_failed` naming the declared branch/commit against the origin it
+    was checked at, so the worker — which is still alive and still holds the context —
+    can correct it, and it still counts as "not covered" for the Phase-2 kind-coverage
+    nudge (:func:`_missing_produces`). Relying on non-coverage alone was load-bearing
+    exactly once: when the coverage check could not see the ``git_commit`` spec, nothing
+    was left to notice, and a chunk sailed to `done` having delivered nothing. A verify
+    subprocess failure (unreachable origin, a network hiccup) is reported the same way —
+    informational only: a read-only re-derivation opens no unsafe mutation window, so
+    unlike the push it replaces, this never re-raises to crash-loop the tick.
 
-    # SOLO_ENV_COUNT (1) means a chunk's tenure holds exactly one leased env, whose
-    # workdir is the root the worker's repo worktrees live under as named children —
-    # `bindings[0]` is that env; the caller already guards `bindings` non-empty.
-    env_workdir = bindings[0].workdir
+    ``already_declared`` names the exact declarations this lease's attempt already
+    resolved on an earlier call this attempt (the pre-nudge pass) — an ``(env, repo)``
+    whose freshly re-derived declaration is unchanged is skipped entirely (no re-verify,
+    no re-emit), since re-verifying it would only repeat the same outcome (a duplicate
+    `command-failed` the worker never acted on). One whose declaration differs (the
+    worker re-declared it mid-nudge) is a genuine amendment and is re-verified fresh.
+    Returns the collected artifacts alongside this call's own full declaration set, so a
+    caller can thread it into a later call as that later call's ``already_declared``."""
+
     already_declared = already_declared or {}
     declarations = ctx.store.git_commit_declarations_for_lease(lease.lease_id)
+    origins = _repo_origins(ctx, bindings)
     submitted: list[SubmittedArtifact] = []
-    for repo, declared in declarations.items():
-        if already_declared.get(repo) == declared:
+    for key, declared in declarations.items():
+        if already_declared.get(key) == declared:
             continue
-        repo_workdir = os.path.join(env_workdir, repo)
-        try:
-            verified = ctx.worktree_git.verify(repo_workdir, declared.forge, declared.branch, declared.commit)
-        except WorktreeGitError as exc:
-            # Covers the read-only verify pair as a whole (`git remote get-url origin`
-            # then `git ls-remote origin <branch>`) rather than naming only the second
-            # call — a `WorktreeGitError` this early can just as easily come from the
-            # first, e.g. a `--repo` that does not name this env's worktree directory.
-            # Names the worktree path this declaration's `--repo` resolved to, so a
-            # wrong `--repo` (an `owner/name` slug, a path, wrong casing) is diagnosable
-            # from the event alone rather than opaque.
+        env_id, repo = key
+        origin_url = origins.get(key)
+        if origin_url is None:
+            # The declare edge checks the repo against the env's manifest, so reaching
+            # here means the manifest changed under the lease (an env re-prepared
+            # mid-attempt) rather than a worker typo. Report it: an unresolvable origin
+            # means this commit cannot be delivered, and that is worth saying out loud.
             _emit_command_failed(
                 ctx,
                 chunk_id=lease.chunk_id,
                 lease_id=lease.lease_id,
                 node_name=lease.node_name,
-                command=(
-                    f"git verify (remote get-url origin / ls-remote origin {declared.branch}) "
-                    f"in expected worktree {repo_workdir!r} (--repo {repo!r})"
+                command=f"resolve origin for --repo {repo!r} in environment {env_id!r}",
+                stderr_tail=(
+                    f"environment {env_id!r} no longer lists repo {repo!r}; "
+                    f"it lists {sorted(name for (env, name) in origins if env == env_id)}"
                 ),
+            )
+            continue
+        try:
+            verified = ctx.worktree_git.verify(origin_url, declared.branch, declared.commit)
+        except WorktreeGitError as exc:
+            _emit_command_failed(
+                ctx,
+                chunk_id=lease.chunk_id,
+                lease_id=lease.lease_id,
+                node_name=lease.node_name,
+                command=f"git ls-remote {origin_url} {declared.branch} (--repo {repo!r}, --env {env_id!r})",
                 stderr_tail=str(exc),
             )
             continue
         if not verified:
+            _emit_command_failed(
+                ctx,
+                chunk_id=lease.chunk_id,
+                lease_id=lease.lease_id,
+                node_name=lease.node_name,
+                command=f"git ls-remote {origin_url} {declared.branch} (--repo {repo!r}, --env {env_id!r})",
+                stderr_tail=(
+                    f"declared commit {declared.commit} is not what branch {declared.branch!r} "
+                    f"points at on {origin_url} — push the branch (or re-declare the sha "
+                    f"`git rev-parse HEAD` actually produced) and declare it again"
+                ),
+            )
             continue
         submitted.append(
             SubmittedArtifact(
                 name=repo,
                 kind=ArtifactKind.GIT_COMMIT,
-                forge=declared.forge,
+                forge=origin_url,
                 repo=repo,
                 branch_name=declared.branch,
                 commit_hash=declared.commit,
             )
         )
     return submitted, declarations
+
+
+def _repo_origins(ctx: LoopContext, bindings: list[EnvBindingRecord]) -> dict[tuple[str, str], str]:
+    """``{(environment_id, repo): origin_url}`` across every bound environment.
+
+    The provider is the authority on both which repos an env holds and where each one
+    pushes, so this is a lookup rather than a derivation — blizzard never joins an env
+    workdir to a repo name to guess a path, and never reads ``origin`` from whatever
+    directory it happens to be standing in."""
+    origins: dict[tuple[str, str], str] = {}
+    for binding in bindings:
+        for repo in ctx.provider.repos(binding.environment_id):
+            origins[(binding.environment_id, repo.name)] = repo.origin_url
+    return origins
 
 
 def _release_all(ctx: LoopContext, chunk_id: str) -> None:

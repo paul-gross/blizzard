@@ -14,7 +14,8 @@ accepted, the dedicated header checked first.
 
 ``503`` when the store or the declaration service is unwired (the store-free app);
 ``404`` for an unknown or already-closed lease; ``403`` for a missing or mismatched
-token; ``200`` on a recorded declaration.
+token; ``400`` for a repo (or environment) the lease does not hold, whose detail names
+the ones it does; ``200`` on a recorded declaration.
 """
 
 from __future__ import annotations
@@ -23,7 +24,11 @@ from fastapi import APIRouter, Request, status
 from fastapi.exceptions import HTTPException
 
 from blizzard.runner.api.lease_token import presented_lease_token
-from blizzard.runner.domain.git_commit_declaration import GitCommitDeclarationRejected, GitCommitDeclarationService
+from blizzard.runner.domain.git_commit_declaration import (
+    GitCommitDeclarationRejected,
+    GitCommitDeclarationService,
+    GitCommitDeclarationUnknownRepo,
+)
 from blizzard.runner.store.repository import IReadRunnerStore
 from blizzard.wire.git_commits import GitCommitDeclarationRequest, GitCommitDeclarationResponse
 
@@ -59,14 +64,21 @@ def record_git_commit_declaration(
     if lease is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"no active lease {lease_id}")
     try:
-        service.declare(
+        environment_id = service.declare(
             lease,
             presented_token=presented_lease_token(request),
-            forge=request_body.forge,
             repo=request_body.repo,
             branch=request_body.branch,
             commit=request_body.commit,
+            environment_id=request_body.environment_id,
         )
     except GitCommitDeclarationRejected as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
-    return GitCommitDeclarationResponse(recorded=True, lease_id=lease_id, repo=request_body.repo)
+    except GitCommitDeclarationUnknownRepo as exc:
+        # 400, not a silent accept: the detail names the repos (or environments) the
+        # lease does hold, so the worker can re-run the verb correctly while it is still
+        # alive to do so.
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return GitCommitDeclarationResponse(
+        recorded=True, lease_id=lease_id, repo=request_body.repo, environment_id=environment_id
+    )

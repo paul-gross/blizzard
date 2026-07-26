@@ -96,7 +96,7 @@ class _DeclaringGitCommitOnNudgeHarness(FakeHarness):
         node_id: str,
         epoch: int,
         repo: str,
-        forge: str,
+        environment_id: str,
         branch: str,
         commit: str,
         **kwargs,
@@ -109,7 +109,7 @@ class _DeclaringGitCommitOnNudgeHarness(FakeHarness):
         self._node_id = node_id
         self._epoch = epoch
         self._repo = repo
-        self._forge = forge
+        self._environment_id = environment_id
         self._branch = branch
         self._commit = commit
 
@@ -129,7 +129,7 @@ class _DeclaringGitCommitOnNudgeHarness(FakeHarness):
                 chunk_id=self._chunk_id,
                 node_id=self._node_id,
                 epoch=self._epoch,
-                forge=self._forge,
+                environment_id=self._environment_id,
                 repo=self._repo,
                 branch=self._branch,
                 commit=self._commit,
@@ -247,7 +247,7 @@ def test_nudge_fires_once_and_picks_up_a_git_commit_declared_mid_nudge(tmp_path:
         node_id="nd_build",
         epoch=1,
         repo="toy-api",
-        forge="file:///origins/toy-api.git",
+        environment_id="e1",
         branch="feature/worker-declared",
         commit="deadbeef",
         handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100"),
@@ -458,5 +458,5 @@ def test_nudge_message_branches_on_kind_and_stays_harness_inert() -> None:
         assert line.startswith("#"), f"non-inert line in the nudge message: {line!r}"
     assert "artifact create --name review-findings" in message
     assert "artifact commit --repo <repo> --branch <branch> --commit <sha>" in message
-    assert "--forge defaults to that repo's own `origin`" in message
+    assert "`<repo>` is its name in the environment's manifest" in message
     assert "runner attach" not in message

@@ -450,7 +450,7 @@ def test_advance_buffers_completion_then_flush_enters_hub_node(tmp_path):  # typ
         chunk_id="ch_1",
         node_id="nd_build",
         epoch=1,
-        forge="file:///origins/toy-api.git",
+        environment_id="e1",
         repo="toy-api",
         branch="e1",
         commit="abc123",
@@ -468,7 +468,7 @@ def test_advance_buffers_completion_then_flush_enters_hub_node(tmp_path):  # typ
 
     # The declared commit was verified read-only and the completion is BUFFERED — not
     # yet submitted.
-    assert wt.verified_calls == [("/ws/e1/toy-api", "file:///origins/toy-api.git", "e1", "abc123")]
+    assert wt.verified_calls == [("file:///origins/toy-api.git", "e1", "abc123")]
     assert hub.completions == []
     buffered = [b for b in store.pending_outbound() if b.kind == "completion.submitted"]
     assert len(buffered) == 1 and buffered[0].lease_id == "lease_1"
@@ -489,13 +489,15 @@ def test_advance_buffers_completion_then_flush_enters_hub_node(tmp_path):  # typ
 
 
 @pytest.mark.unit
-def test_advance_drops_a_declaration_whose_verify_is_false(tmp_path):  # type: ignore[no-untyped-def]
-    """A declared git commit whose read-only ``verify`` returns ``False`` (forge
-    mismatch or an absent/moved ref — issue #143, Phase 4) is treated as *not covered*:
-    the runner still calls ``verify`` and still buffers + flushes the completion, but it
-    carries **no** ``git_commit`` artifact, which is exactly what drives the Phase-2
-    kind-coverage nudge. Distinct from ``WorktreeGitError`` (a hard failure that emits a
-    ``command-failed`` event) — a clean ``False`` verdict is silent, informational only."""
+def test_advance_reports_and_drops_a_declaration_whose_verify_is_false(tmp_path):  # type: ignore[no-untyped-def]
+    """A declared git commit whose read-only ``verify`` returns ``False`` (an absent or
+    moved ref — issue #143, Phase 4) is treated as *not covered*: the completion carries
+    **no** ``git_commit`` artifact, which drives the Phase-2 kind-coverage nudge.
+
+    It is also *reported*. A clean ``False`` used to be silent, on the reasoning that
+    non-coverage was enough to catch it — which held right up until the coverage check
+    could not see the ``git_commit`` spec, at which point nothing was left to notice and
+    a chunk reached `done` having delivered nothing."""
     store = _store(tmp_path)
     _seed_running_lease(store)
     store.record_git_commit_declaration(
@@ -503,7 +505,7 @@ def test_advance_drops_a_declaration_whose_verify_is_false(tmp_path):  # type: i
         chunk_id="ch_1",
         node_id="nd_build",
         epoch=1,
-        forge="file:///origins/toy-api.git",
+        environment_id="e1",
         repo="toy-api",
         branch="e1",
         commit="abc123",
@@ -519,9 +521,10 @@ def test_advance_drops_a_declaration_whose_verify_is_false(tmp_path):  # type: i
 
     advance(ctx)
 
-    # verify WAS called on the declaration — the runner did not skip it — but the False
-    # verdict dropped it, so the buffered completion names no git-commit artifact.
-    assert wt.verified_calls == [("/ws/e1/toy-api", "file:///origins/toy-api.git", "e1", "abc123")]
+    # verify WAS called on the declaration — against the origin the env's manifest names,
+    # with no worktree path in sight — but the False verdict dropped it, so the buffered
+    # completion names no git-commit artifact.
+    assert wt.verified_calls == [("file:///origins/toy-api.git", "e1", "abc123")]
 
     pull(ctx)
 
@@ -557,7 +560,7 @@ def test_advance_drives_only_the_declared_branch_never_head_inference(tmp_path):
         chunk_id="ch_1",
         node_id="nd_build",
         epoch=1,
-        forge="file:///origins/toy-api.git",
+        environment_id="e1",
         repo="toy-api",
         branch="feature/worker-declared",
         commit="deadbeef",
@@ -576,7 +579,7 @@ def test_advance_drives_only_the_declared_branch_never_head_inference(tmp_path):
     # Only the read-only verify ran, over the worker's own declared branch — no branch
     # was ever inferred off any local HEAD, detached or otherwise.
     assert wt.verified_calls == [
-        ("/ws/e1/toy-api", "file:///origins/toy-api.git", "feature/worker-declared", "deadbeef")
+        ("file:///origins/toy-api.git", "feature/worker-declared", "deadbeef")
     ]
 
     pull(ctx)

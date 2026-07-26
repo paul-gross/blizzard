@@ -10,10 +10,17 @@ with a read-only ``verify`` over the worker's own DECLARED branch. This drives t
 ``git`` CLI (no fakes — this is the "real internal collaborators" tier) against a
 worktree left in detached HEAD, the exact state that used to wedge, and confirms
 ``verify`` neither reads nor cares about the worktree's own HEAD at all.
+
+``verify`` is now purely remote-side: it takes the origin URL the environment's repo
+manifest names and asks ``git ls-remote`` about it, consulting no working directory at
+all. The forge-vs-``origin`` comparison it used to make is gone along with the
+worker-supplied forge that fed it, so the normalization cases that comparison needed are
+gone too — there is no longer a second opinion to reconcile.
 """
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -57,7 +64,7 @@ def test_verify_confirms_a_declared_commit_against_a_detached_head_worktree(tmp_
     _git(workdir, "checkout", "--detach", commit)
     assert _current_branch_name(workdir) == "HEAD"
 
-    verified = SubprocessWorktreeGit().verify(str(workdir), f"file://{origin}", "main", commit)
+    verified = SubprocessWorktreeGit().verify(f"file://{origin}", "main", commit)
 
     assert verified is True
     # Read-only: verify never checked out a branch, never pushed, never mutated the
@@ -66,19 +73,30 @@ def test_verify_confirms_a_declared_commit_against_a_detached_head_worktree(tmp_
 
 
 @pytest.mark.component
-@pytest.mark.parametrize(
-    "cosmetic_forge",
-    [
-        pytest.param("{origin}/", id="trailing-slash"),
-        pytest.param("{origin_no_dot_git}", id="no-dot-git-suffix"),
-        pytest.param("{origin_no_dot_git}/", id="no-dot-git-suffix-and-trailing-slash"),
-    ],
-)
-def test_verify_normalizes_a_cosmetically_different_declared_forge(tmp_path: Path, cosmetic_forge: str) -> None:
-    """A declared ``forge`` that differs from ``origin`` only by a trailing ``/`` and/or
-    a trailing ``.git`` still verifies (issue #143 pre-push review: the byte-exact
-    equality trap). A worker's own observed ``origin`` and the runner's re-derivation of
-    it are cosmetically equivalent, not necessarily byte-identical."""
+def test_verify_rejects_a_commit_the_branch_does_not_point_at(tmp_path: Path) -> None:
+    """The check that remains is the one that was always load-bearing: does this branch,
+    at this origin, point at this commit? A stale or invented sha fails it."""
+    origin = tmp_path / "origin.git"
+    subprocess.run(["git", "init", "--bare", "-b", "main", str(origin)], check=True, capture_output=True)
+
+    workdir = tmp_path / "toy-api"
+    workdir.mkdir()
+    _git(workdir, "init", "-b", "main")
+    _git(workdir, "config", "user.email", "worker@example.test")
+    _git(workdir, "config", "user.name", "Worker")
+    (workdir / "f.txt").write_text("hello")
+    _git(workdir, "add", "f.txt")
+    _git(workdir, "commit", "-m", "work")
+    _git(workdir, "remote", "add", "origin", f"file://{origin}")
+    _git(workdir, "push", "-u", "origin", "main")
+
+    assert SubprocessWorktreeGit().verify(f"file://{origin}", "main", "0" * 40) is False
+
+
+@pytest.mark.component
+def test_verify_rejects_a_branch_that_was_never_pushed(tmp_path: Path) -> None:
+    """An unpushed branch is the failure this seam exists to catch — the worker committed
+    locally and declared it, but nothing reached the forge, so nothing can be delivered."""
     origin = tmp_path / "origin.git"
     subprocess.run(["git", "init", "--bare", "-b", "main", str(origin)], check=True, capture_output=True)
 
@@ -91,22 +109,18 @@ def test_verify_normalizes_a_cosmetically_different_declared_forge(tmp_path: Pat
     _git(workdir, "add", "f.txt")
     _git(workdir, "commit", "-m", "work")
     commit = _git(workdir, "rev-parse", "HEAD").strip()
-    origin_url = f"file://{origin}"
-    _git(workdir, "remote", "add", "origin", origin_url)
+    _git(workdir, "remote", "add", "origin", f"file://{origin}")
     _git(workdir, "push", "-u", "origin", "main")
+    _git(workdir, "checkout", "-b", "feat/never-pushed")
 
-    declared_forge = cosmetic_forge.format(origin=origin_url, origin_no_dot_git=origin_url[: -len(".git")])
-
-    verified = SubprocessWorktreeGit().verify(str(workdir), declared_forge, "main", commit)
-
-    assert verified is True
+    assert SubprocessWorktreeGit().verify(f"file://{origin}", "feat/never-pushed", commit) is False
 
 
 @pytest.mark.component
-def test_verify_still_rejects_a_genuinely_different_forge(tmp_path: Path) -> None:
-    """The normalization is narrow: a forge that differs by more than trailing ``/`` /
-    ``.git`` cosmetics still fails ``verify`` — the drop-and-nudge path this replaced
-    still holds for a real mismatch."""
+def test_verify_needs_no_working_directory_at_all(tmp_path: Path) -> None:
+    """Structural: the seam takes a URL, not a path. Nothing about the caller's cwd can
+    change the answer — which is precisely what let a worker standing at the workspace
+    root supply the workspace repo's ``origin`` for every repo alike."""
     origin = tmp_path / "origin.git"
     subprocess.run(["git", "init", "--bare", "-b", "main", str(origin)], check=True, capture_output=True)
 
@@ -122,9 +136,15 @@ def test_verify_still_rejects_a_genuinely_different_forge(tmp_path: Path) -> Non
     _git(workdir, "remote", "add", "origin", f"file://{origin}")
     _git(workdir, "push", "-u", "origin", "main")
 
-    verified = SubprocessWorktreeGit().verify(str(workdir), "https://github.com/org/other-repo.git", "main", commit)
-
-    assert verified is False
+    # Run from a directory that is not a git repository and knows nothing of the origin.
+    elsewhere = tmp_path / "not-a-repo"
+    elsewhere.mkdir()
+    cwd = Path.cwd()
+    try:
+        os.chdir(elsewhere)
+        assert SubprocessWorktreeGit().verify(f"file://{origin}", "main", commit) is True
+    finally:
+        os.chdir(cwd)
 
 
 @pytest.mark.component

@@ -187,14 +187,20 @@ class EscalationRecord:
 
 @dataclass(frozen=True)
 class GitCommitDeclarationRecord:
-    """A worker's explicit git-commit declaration for one repo (issue #143, Phase 3).
+    """A worker's explicit git-commit declaration for one repo in one environment.
 
-    ``forge`` is worker-declared (decision R7) — carried verbatim, never stamped by the
-    runner. Unread this phase; Phase 4's ADVANCE rewrite is the first caller of
-    :meth:`IReadRunnerStore.git_commit_declarations_for_lease`, which prefers this over
-    the inferred git residue it replaces."""
+    Carries no forge. The origin a declaration is verified against is read from the
+    environment's repo manifest at collection time, so it is a fact about the workspace
+    rather than a claim the worker makes — the field it replaces defaulted to ``origin``
+    in the worker's cwd, which for a worker spawned at the workspace root named the
+    workspace repo for every repo alike, and every such declaration failed verification
+    and was dropped without a word.
 
-    forge: str
+    ``environment_id`` is part of the identity, not a decoration: a chunk holding several
+    environments has a worktree of the same repo in each, so ``repo`` alone names a
+    branch ambiguously."""
+
+    environment_id: str
     repo: str
     branch: str
     commit: str
@@ -565,12 +571,20 @@ class IReadRunnerStore(Protocol):
         ``produces`` name."""
         ...
 
-    def git_commit_declarations_for_lease(self, lease_id: str) -> dict[str, GitCommitDeclarationRecord]:
-        """The lease's explicit git-commit declarations, newest per ``repo`` (issue #143,
-        Phase 3). Append-only, latest-wins-per-``(lease_id, repo)``: a worker's
-        re-declaration of the same repo (a correction) reads back as the replacement,
-        never a duplicate. Empty for a lease that never declared a commit. Keyed by
-        ``repo`` — unread this phase; Phase 4's ADVANCE rewrite is the first caller."""
+    def git_commit_declarations_for_lease(
+        self, lease_id: str
+    ) -> dict[tuple[str, str], GitCommitDeclarationRecord]:
+        """The lease's explicit git-commit declarations, newest per ``(environment_id,
+        repo)`` (issue #143, Phase 3), keyed the same way.
+
+        Append-only, latest-wins: a worker's re-declaration of the same repo in the same
+        environment (a correction) reads back as the replacement, never a duplicate.
+        Keying on the environment as well as the repo is what keeps a chunk holding
+        several environments from collapsing one env's branch onto another's — under a
+        ``repo``-only key the second declaration silently replaced the first, which is a
+        correction between two facts that are not the same fact.
+
+        Empty for a lease that never declared a commit."""
         ...
 
     def nudge_fired(self, lease_id: str, epoch: int) -> bool:
@@ -835,21 +849,23 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         chunk_id: str,
         node_id: str,
         epoch: int,
-        forge: str,
+        environment_id: str,
         repo: str,
         branch: str,
         commit: str,
         declared_at: datetime,
     ) -> None:
-        """Append a worker's explicit git-commit declaration for ``repo`` (issue #143,
-        Phase 3), a single committed transaction so it survives a ``kill -9`` between
-        this call and the collection that would otherwise read it. Called by
+        """Append a worker's explicit git-commit declaration for ``repo`` in
+        ``environment_id`` (issue #143, Phase 3), a single committed transaction so it
+        survives a ``kill -9`` between this call and the collection that would otherwise
+        read it. Called by
         :class:`~blizzard.runner.domain.git_commit_declaration.GitCommitDeclarationService`
-        once the presented lease token has been authorized — never directly from the API
-        edge (``bzh:controller-read-only``). Append-only: a later call for the same
-        ``(lease_id, repo)`` is a correction, read back as the replacement by
-        :meth:`~IReadRunnerStore.git_commit_declarations_for_lease`, never merged with
-        the prior row."""
+        once the presented lease token has been authorized and the repo checked against
+        the environment's manifest — never directly from the API edge
+        (``bzh:controller-read-only``). Append-only: a later call for the same
+        ``(lease_id, environment_id, repo)`` is a correction, read back as the
+        replacement by :meth:`~IReadRunnerStore.git_commit_declarations_for_lease`, never
+        merged with the prior row."""
         ...
 
     def record_nudge_fired(self, *, lease_id: str, epoch: int, at: datetime) -> None:

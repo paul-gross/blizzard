@@ -32,6 +32,10 @@ class _FakeWinter:
         self.ready = 0
         self.service_bound = service_bound
         self.fail_on = fail_on  # arg-list prefix that raises, simulating a failed winter step
+        # What `winter ws worktrees --json` reports. Defaults to the shape the real CLI
+        # emits: worktrees across every env, then standalone clones, then the workspace
+        # itself — the last two exist to be filtered out.
+        self.worktrees: list[dict[str, object]] = []
 
     def ensure_ready(self, workspace_root: Path) -> None:
         self.ready += 1
@@ -44,16 +48,24 @@ class _FakeWinter:
 
     def capture(self, workspace_root: Path, args) -> str:  # type: ignore[no-untyped-def]
         self.captures.append(list(args))
+        if list(args)[:2] == ["ws", "worktrees"]:
+            return json.dumps(self.worktrees)
         bound = "winter-service-tmux" if self.service_bound else None
         return json.dumps([{"slot": "service", "bound": bound, "binding_kind": "explicit"}])
 
 
 class _FakeGit:
-    def __init__(self) -> None:
+    def __init__(self, origins: dict[str, str] | None = None) -> None:
         self.cleans: list[str] = []
+        self.origin_reads: list[str] = []
+        self._origins = origins or {}
 
     def clean_environment(self, env_workdir: Path) -> None:
         self.cleans.append(str(env_workdir))
+
+    def origin_url(self, repo_workdir: Path) -> str:
+        self.origin_reads.append(str(repo_workdir))
+        return self._origins.get(str(repo_workdir), f"file:///origins/{Path(repo_workdir).name}.git")
 
 
 def _provider(root: str, pool, **kw):  # type: ignore[no-untyped-def]
@@ -293,3 +305,66 @@ def test_real_winter_acquire_recovers_stale_feature_branch_tracking(tmp_path: Pa
         assert (repo / "README.md").read_text() == readme
     assert not (repo_a / "work.txt").exists()
     assert not (repo_b / "junk.txt").exists()
+
+
+def _worktree_entry(env: str, repo: str, root: str) -> dict[str, object]:
+    return {"kind": "worktree", "env": env, "repo": repo, "name": None, "label": f"{env}/{repo}", "path": f"{root}/{env}/{repo}"}
+
+
+@pytest.mark.unit
+def test_repos_reads_the_env_manifest_from_winter_rather_than_guessing_paths() -> None:
+    """The manifest is *read*, not derived. Blizzard never joins an env workdir to a repo
+    name to guess where a worktree is — winter is the authority on where it put things,
+    and a repo's local directory name is free to differ from its remote's."""
+    winter = _FakeWinter()
+    winter.worktrees = [
+        _worktree_entry("e1", "blizzard", "/ws"),
+        _worktree_entry("e1", "blizzard-mock", "/ws"),
+    ]
+    git = _FakeGit({"/ws/e1/blizzard": "git@github.com:acme/blizzard.git"})
+    provider = WinterWorkspaceProvider("/ws", env_pool=["e1"], winter=winter, git=git)
+
+    bindings = provider.repos("e1")
+
+    assert [(b.name, b.relpath, b.origin_url) for b in bindings] == [
+        ("blizzard", "blizzard", "git@github.com:acme/blizzard.git"),
+        ("blizzard-mock", "blizzard-mock", "file:///origins/blizzard-mock.git"),
+    ]
+    assert all(b.environment_id == "e1" for b in bindings)
+    assert ["ws", "worktrees", "--json"] in winter.captures
+
+
+@pytest.mark.unit
+def test_repos_narrows_to_the_named_env_and_drops_standalone_clones() -> None:
+    """A repo can be BOTH a project repo (a worktree in every env) and a standalone
+    extension checkout elsewhere in the workspace — same origin, two paths. Only the
+    env's own worktree is the worker's to touch, so URL is not a usable key here and the
+    standalone entry must not leak into the manifest."""
+    winter = _FakeWinter()
+    winter.worktrees = [
+        _worktree_entry("e1", "blizzard-harness", "/ws"),
+        _worktree_entry("e2", "blizzard-harness", "/ws"),
+        {
+            "kind": "standalone",
+            "env": None,
+            "repo": None,
+            "name": "blizzard-harness",
+            "label": "blizzard-harness",
+            "path": "/ws/.winter/ext/harness",
+        },
+        {"kind": "workspace", "env": None, "repo": None, "name": "ws", "label": "<workspace>", "path": "/ws"},
+    ]
+    provider = WinterWorkspaceProvider("/ws", env_pool=["e1", "e2"], winter=winter, git=_FakeGit())
+
+    assert [(b.environment_id, b.relpath) for b in provider.repos("e1")] == [("e1", "blizzard-harness")]
+    assert [(b.environment_id, b.relpath) for b in provider.repos("e2")] == [("e2", "blizzard-harness")]
+
+
+
+@pytest.mark.unit
+def test_repos_is_empty_for_an_env_with_no_worktrees() -> None:
+    """An empty manifest authorizes nothing, which is the safe reading — not an error
+    the declare path has to special-case."""
+    provider = WinterWorkspaceProvider("/ws", env_pool=["e1"], winter=_FakeWinter(), git=_FakeGit())
+
+    assert provider.repos("e1") == []

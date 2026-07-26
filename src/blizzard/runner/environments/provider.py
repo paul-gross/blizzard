@@ -34,6 +34,31 @@ class AcquiredEnvironment:
     workdir: str
 
 
+@dataclass(frozen=True)
+class RepoBinding:
+    """One repo's worktree inside an acquired environment — the provider's answer to
+    "where does repo ``name`` live in this env, and what forge does it push to?".
+
+    Blizzard never infers this. The layout is the provider's to declare
+    (``bzh:pluggable-seams``): winter places a worktree per repo under the env workdir
+    by that repo's configured ``name``, but nothing in the protocol requires that, and a
+    binding is free to place them anywhere it likes. A consumer that string-joins its way
+    to a repo path instead of reading this manifest re-opens the class of silent misses
+    this type exists to close.
+
+    ``relpath`` is relative to the env's ``workdir`` — the env workdir is the sole
+    absolute anchor, so a relative segment can only come from a lookup, never from
+    reconstruction. ``name`` and ``origin_url`` are env-invariant (every env holds a
+    worktree of the *same* backing repo); they ride along per binding rather than in a
+    second type because the denormalization costs nothing and a join would.
+    """
+
+    environment_id: str
+    name: str
+    relpath: str
+    origin_url: str
+
+
 class WorkspaceAcquisitionError(RuntimeError):
     """A provider could not satisfy an acquire (pool exhausted, git failure, …).
 
@@ -71,4 +96,18 @@ class IWorkspaceProvider(Protocol):
 
     def release(self, environment_id: str) -> None:
         """Release an environment. No-op if unknown/already released; cleaning defers."""
+        ...
+
+    def repos(self, environment_id: str) -> list[RepoBinding]:
+        """Every repo worktree inside ``environment_id`` — the env's repo manifest.
+
+        The authorization set *and* the origin-URL source for git-commit declarations:
+        a declared repo not in this list is not part of the worker's lease, and a repo
+        that is in it carries the origin its commits must be verifiable against.
+
+        Whether an unknown repo is an error, an auto-add, or a fresh clone is the
+        provider's policy, not blizzard's — a binding simply returns what the worker is
+        entitled to touch. Returns ``[]`` for an unknown or released env rather than
+        raising: an empty manifest authorizes nothing, which is the safe reading.
+        """
         ...

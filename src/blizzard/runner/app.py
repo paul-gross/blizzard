@@ -386,7 +386,9 @@ def build_hosted_app(config: RunnerConfig) -> FastAPI:
     # ``blizzard runner artifact commit``'s backing service (issue #143, Phase 3). Its
     # own ``SystemClock()`` instance, like ``attachments`` above: stateless, so a second
     # instance is equivalent to sharing one.
-    git_commit_declarations = GitCommitDeclarationService(runner_store, SystemClock())
+    # Takes the workspace provider too: a declaration is checked against the
+    # environment's repo manifest, which is the provider's to declare.
+    git_commit_declarations = GitCommitDeclarationService(runner_store, SystemClock(), workspace_provider)
     # The SSO federation jti replay cache (issue #95, decision D4) — store-backed over
     # the same engine every other seam above shares.
     jti_cache = JtiCacheRepository(engine)
