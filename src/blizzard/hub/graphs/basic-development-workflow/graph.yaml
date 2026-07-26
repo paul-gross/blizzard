@@ -1,5 +1,5 @@
-# The basic-development-workflow graph — build -> review -> pre-push -> deliver,
-# on one single linear track.
+# The basic-development-workflow graph — build -> review -> pre-push -> deliver ->
+# retrospective, on one single linear track.
 #
 # This is the LIGHTWEIGHT lane, deliberately cut down from
 # advanced-development-workflow's shape: no `plan` or `plan-review` node — small work
@@ -27,6 +27,15 @@
 # recovery is to rebase again, not to rebuild a change that already passed review.
 # `pre-push` re-triages and returns to delivery; the hub node's bounce_cap bounds the
 # loop if the base keeps moving under it.
+#
+# A landing closes on `retrospective`, the same post-delivery node
+# advanced-development-workflow ends on — the lightweight lane is cut down on *gates*,
+# not on learning from itself, and the harness/context improvements a retrospective
+# names are worth strictly more from the lane that runs most often. It differs from that
+# graph's in one way: this lane's nodes carry no per-node `retrospective` diary to
+# synthesize (adding one to every node is exactly the per-node overhead this lane exists
+# to avoid), so the node reconstructs the journey from the assets the chunk did produce
+# — review-findings, the pre-push summary, the bounces — plus its own resumed session.
 #
 # Conforms to the canonical authoring schema: fused choice/edge entries, prompts as
 # file references inlined at mint, retries escaping to escalation. Every prompt below
@@ -118,9 +127,28 @@ nodes:
     judgement:
       choices:
         landed:
-          description: Every repo's base branch ref fast-forwarded cleanly to this chunk's commit.
-          to: done
+          description: Every repo's base branch ref fast-forwarded cleanly to this chunk's commit; the chunk closes with a retrospective.
+          to: retrospective
         conflict:
           description: A repo did not fast-forward cleanly (the base moved out from under it); returned to pre-push to rebase against the base as it now stands, not to build.
           to: pre-push
           prompt_addendum: ./prompts/pre-push.from-deliver.md
+
+  retrospective:
+    executor: runner
+    prompt: ./prompts/retrospective.md
+    session: resume  # the default, spelled out: `deliver` is a script node with no
+      # session, so the chunk's most-recent session is pre-push's — which is build's
+      # own (pre-push is `resume:build`). That is the session holding the whole
+      # journey, which is exactly what a retrospective synthesizes.
+    produces:
+      - retrospective
+    judgement:
+      prompt: ./prompts/retrospective.judgement.md
+      choices:
+        recorded:
+          description: The retrospective is written as the retrospective asset and the workspace's post-delivery work is done; the work is complete.
+          to: done
+    retries:
+      max: 1
+      exhausted: escalate
