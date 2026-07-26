@@ -62,9 +62,12 @@ class PmPointer:
 # The model a chunk runs on absent an edit (issue #27). Defined independently of the
 # runner's own ``DEFAULT_WORKER_MODEL`` (``blizzard.runner.harness.internal.
 # claude_code_adapter``) — the hub domain must not depend on the runner
-# (``bzh:domain-core``, separate daemons) — but carries the same value so a freshly
-# minted chunk's selection matches what the fleet actually ran before this field existed.
-DEFAULT_MODEL = "claude-opus-4-8"
+# (``bzh:domain-core``, separate daemons) — but the two must be moved together: a chunk
+# minted here with one model and spawned there with another would report a selection the
+# fleet never ran. The migration that introduced this field
+# (``20260717_2318_chunk_model_selection``) pins its own historical backfill value and is
+# deliberately NOT moved with them — it records what those rows actually ran.
+DEFAULT_MODEL = "claude-opus-5"
 
 
 class MigrationMode(StrEnum):

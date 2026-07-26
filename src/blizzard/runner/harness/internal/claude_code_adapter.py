@@ -104,7 +104,7 @@ _allowlisted_env = allowlisted_env
 # operator's ambient ``claude`` default (which can resolve to a lightweight model
 # unfit for the build/review work). Opus is the fleet's standing choice; override
 # per-adapter via the ``model`` constructor argument.
-DEFAULT_WORKER_MODEL = "claude-opus-4-8"
+DEFAULT_WORKER_MODEL = "claude-opus-5"
 
 
 def _result_envelope(output: str) -> dict[str, object] | None:
