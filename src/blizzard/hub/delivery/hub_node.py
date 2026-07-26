@@ -55,6 +55,7 @@ from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.ids import ARTIFACT_PREFIX, TRANSITION_PREFIX, mint
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.delivery.command_runner import IHubCommandRunner
+from blizzard.hub.delivery.repo_ref import parse_repo_ref
 from blizzard.hub.delivery.workdir import IHubWorkdir
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.graph import (
@@ -169,6 +170,18 @@ ENV_FORGE_OWNER = "BZ_FORGE_OWNER"  # qualifies a bare (owner-less) repo, mirror
 ENV_FEATURE_TITLE = "BZ_HUB_FEATURE_TITLE"
 
 
+def _delivery_repo(row: ArtifactRow) -> str | None:
+    """How delivery addresses one repo: ``owner/name`` read from its origin, else the
+    bare name for the script's configured-owner fallback to qualify.
+
+    The bare name is not a lesser answer — a git remote and a forge coordinate are
+    decoupled by design here (the verification forge fronts flat bare origins that
+    resolve under any owner), so an origin that names no owner leaves the configured
+    default as the only truth available."""
+    ref = parse_repo_ref(row.forge) if row.forge else None
+    return ref.qualified if ref else row.repo
+
+
 class UnconvergedDeliveryError(RuntimeError):
     """Delivery was handed several distinct branches for one repo.
 
@@ -239,7 +252,16 @@ def build_hub_env(inputs: HubEnvInputs) -> dict[str, str]:
     field here, and must never be one, naming an LLM/agent API key.
     """
     commits = [
-        {"repo": row.repo, "branch": row.data.partition(":")[0], "commit": row.data.partition(":")[2]}
+        {
+            # The forge coordinate the declaring repo's own origin encodes, when it
+            # encodes one — so a chunk spanning two owners addresses each correctly,
+            # instead of every repo being re-qualified with one workspace-wide owner.
+            # A bare or file-backed origin names no owner, and those fall through to the
+            # script's `BZ_FORGE_OWNER` qualification exactly as before.
+            "repo": _delivery_repo(row),
+            "branch": row.data.partition(":")[0],
+            "commit": row.data.partition(":")[2],
+        }
         for row in _latest_commit_per_repo(inputs.artifacts)
     ]
     names = sorted({row.name for row in inputs.artifacts if row.node_id == inputs.node.node_id})
@@ -425,9 +447,7 @@ class HubNodeExecutor:
                 content=f"[unconverged delivery]\n{exc}\n",
                 at=self._clock.now(),
             )
-            return self._route(
-                chunk, graph, node, epoch=epoch, choice=HUB_DEFAULT_FAILURE_CHOICE, commits=[]
-            )
+            return self._route(chunk, graph, node, epoch=epoch, choice=HUB_DEFAULT_FAILURE_CHOICE, commits=[])
 
         choice_names = frozenset(c.name for c in node.choices)
         chosen: str | None = None

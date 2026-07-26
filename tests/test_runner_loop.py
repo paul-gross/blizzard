@@ -578,9 +578,7 @@ def test_advance_drives_only_the_declared_branch_never_head_inference(tmp_path):
 
     # Only the read-only verify ran, over the worker's own declared branch — no branch
     # was ever inferred off any local HEAD, detached or otherwise.
-    assert wt.verified_calls == [
-        ("file:///origins/toy-api.git", "feature/worker-declared", "deadbeef")
-    ]
+    assert wt.verified_calls == [("file:///origins/toy-api.git", "feature/worker-declared", "deadbeef")]
 
     pull(ctx)
 

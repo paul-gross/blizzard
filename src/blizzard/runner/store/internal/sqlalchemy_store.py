@@ -457,9 +457,7 @@ class SqlAlchemyRunnerStore:
         stmt = select(attachments.c.name, attachments.c.content).join(newest, attachments.c.id == newest.c.id)
         return {str(r.name): str(r.content) for r in self._all(stmt)}
 
-    def git_commit_declarations_for_lease(
-        self, lease_id: str
-    ) -> dict[tuple[str, str], GitCommitDeclarationRecord]:
+    def git_commit_declarations_for_lease(self, lease_id: str) -> dict[tuple[str, str], GitCommitDeclarationRecord]:
         newest = (
             select(
                 git_commit_declarations.c.environment_id,

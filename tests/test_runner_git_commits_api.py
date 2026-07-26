@@ -212,7 +212,9 @@ def test_400_when_several_environments_are_held_and_none_is_named(tmp_path: Path
     store.record_binding(chunk_id="ch_1", environment_id="e2", workdir="/ws/e2", bound_at=_NOW)
 
     with TestClient(app) as client:
-        ambiguous = client.post("/api/leases/lease_1/git-commits", json=_BODY, headers={"X-Blizzard-Lease-Token": _TOKEN})
+        ambiguous = client.post(
+            "/api/leases/lease_1/git-commits", json=_BODY, headers={"X-Blizzard-Lease-Token": _TOKEN}
+        )
         named = client.post(
             "/api/leases/lease_1/git-commits",
             json={**_BODY, "environment_id": "e2"},

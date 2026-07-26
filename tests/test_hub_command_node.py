@@ -470,14 +470,26 @@ def test_build_hub_env_carries_no_model_credential_and_the_documented_keys() -> 
     assert not forbidden & env.keys()
 
 
-def _commit_row(*, node_name: str, epoch: int, commit: str, repo: str = "acme/widget") -> ArtifactRow:
-    """One repo's declared git pointer, as the node at ``epoch`` recorded it."""
+def _commit_row(
+    *,
+    node_name: str,
+    epoch: int,
+    commit: str,
+    repo: str = "acme/widget",
+    branch: str = "feat/x",
+    forge: str | None = None,
+) -> ArtifactRow:
+    """One repo's declared git pointer, as the node at ``epoch`` recorded it.
+
+    ``forge`` defaults to the origin the repo's own name implies, so a fixture naming two
+    repos describes two origins — the helper used to hardcode one regardless of ``repo``,
+    which made distinct repos indistinguishable once delivery started reading the origin."""
     return ArtifactRow(
         kind=ArtifactKind.GIT_COMMIT,
-        name="widget",  # named after the repo, never the literal produces name
-        data=f"feat/x:{commit}",
+        name=repo.rpartition("/")[2],  # named after the repo, never the literal produces name
+        data=f"{branch}:{commit}",
         repo=repo,
-        forge="https://github.com/acme/widget",
+        forge=forge if forge is not None else f"https://github.com/{repo}",
         artifact_id=f"art_{node_name}_{epoch}",
         chunk_id="ch_x",
         node_id=f"nd_{node_name}",
@@ -1217,59 +1229,28 @@ def test_poll_timeout_escalates_once_the_bounce_cap_is_crossed(tmp_path: Path) -
     assert len(detail2["bounces"]) == 2
 
 
-def _commit_artifact(*, repo: str, data: str, epoch: int, node_name: str, artifact_id: str) -> ArtifactRow:
-    return ArtifactRow(
-        kind=ArtifactKind.GIT_COMMIT,
-        name=repo,
-        data=data,
-        repo=repo,
-        forge=f"https://github.com/acme/{repo}",
-        artifact_id=artifact_id,
-        chunk_id="ch_x",
-        node_id=f"nd_{node_name}",
-        node_name=node_name,
-        epoch=epoch,
-    )
-
-
-def _env_for(artifacts: list[ArtifactRow]) -> dict[str, str]:
-    _, merge_node = _reified_merge_node()
-    chunk = Chunk(chunk_id="ch_x", graph_id="gr_x", pm_pointers=[], minted_at=datetime(2026, 7, 17, tzinfo=UTC))
-    return build_hub_env(
-        HubEnvInputs(
-            chunk=chunk,
-            node=merge_node,
-            workdir="/tmp/ch_x",
-            epoch=1,
-            artifacts=artifacts,
-            base_branch="main",
-            marker_callback_url="http://hub/api/chunks/ch_x/hub-markers",
-        )
-    )
-
-
 def test_a_later_epoch_supersedes_an_earlier_pointer_for_the_same_repo() -> None:
     """The rebase case the per-repo key exists for: pre-push rewrites build's branch, so
     the later declaration replaces it rather than delivery being handed both."""
-    env = _env_for(
+    env = _env_with(
         [
-            _commit_artifact(repo="widget", data="feat/x:aaa", epoch=1, node_name="build", artifact_id="a1"),
-            _commit_artifact(repo="widget", data="feat/x:bbb", epoch=3, node_name="pre-push", artifact_id="a2"),
+            _commit_row(node_name="build", epoch=1, commit="a" * 40),
+            _commit_row(node_name="pre-push", epoch=3, commit="b" * 40),
         ]
     )
 
-    assert json.loads(env["BZ_HUB_GIT_COMMITS"]) == [{"repo": "widget", "branch": "feat/x", "commit": "bbb"}]
+    assert _commits_in(env) == [{"repo": "acme/widget", "branch": "feat/x", "commit": "b" * 40}]
 
 
 def test_an_identical_re_declaration_at_one_epoch_is_a_correction_not_a_conflict() -> None:
-    env = _env_for(
+    env = _env_with(
         [
-            _commit_artifact(repo="widget", data="feat/x:aaa", epoch=2, node_name="build", artifact_id="a1"),
-            _commit_artifact(repo="widget", data="feat/x:aaa", epoch=2, node_name="build", artifact_id="a2"),
+            _commit_row(node_name="build", epoch=2, commit="a" * 40),
+            _commit_row(node_name="build", epoch=2, commit="a" * 40),
         ]
     )
 
-    assert json.loads(env["BZ_HUB_GIT_COMMITS"]) == [{"repo": "widget", "branch": "feat/x", "commit": "aaa"}]
+    assert _commits_in(env) == [{"repo": "acme/widget", "branch": "feat/x", "commit": "a" * 40}]
 
 
 def test_two_branches_for_one_repo_at_one_epoch_refuse_to_deliver() -> None:
@@ -1278,12 +1259,45 @@ def test_two_branches_for_one_repo_at_one_epoch_refuse_to_deliver() -> None:
     call it a landing — so an unconverged set is refused, not tie-broken. Convergence
     belongs to pre-push, which rolls the envs up and re-declares at a later epoch."""
     with pytest.raises(UnconvergedDeliveryError) as exc:
-        _env_for(
+        _env_with(
             [
-                _commit_artifact(repo="widget", data="feat/from-e1:aaa", epoch=2, node_name="build", artifact_id="a1"),
-                _commit_artifact(repo="widget", data="feat/from-e2:bbb", epoch=2, node_name="build", artifact_id="a2"),
+                _commit_row(node_name="build", epoch=2, commit="a" * 40, branch="feat/from-e1"),
+                _commit_row(node_name="build", epoch=2, commit="b" * 40, branch="feat/from-e2"),
             ]
         )
 
-    assert "widget" in str(exc.value)
+    assert "acme/widget" in str(exc.value)
     assert "rolled up" in str(exc.value)
+
+
+def test_delivery_addresses_a_repo_by_the_owner_its_own_origin_names() -> None:
+    """Two repos under two owners in one chunk: each is addressed by the coordinate its
+    own origin encodes, rather than both being re-qualified with one workspace-wide
+    owner — which could only ever be right for one of them."""
+    env = _env_with(
+        [
+            _commit_row(node_name="build", epoch=1, commit="a" * 40, repo="acme/widget"),
+            _commit_row(node_name="build", epoch=1, commit="b" * 40, repo="other-org/gadget"),
+        ]
+    )
+
+    assert {c["repo"] for c in _commits_in(env)} == {"acme/widget", "other-org/gadget"}
+
+
+def test_delivery_falls_back_to_the_bare_name_for_an_origin_that_names_no_owner() -> None:
+    """The verification forge fronts flat bare origins that resolve under any owner, so
+    an unqualifiable origin must leave the bare name for the script's configured-owner
+    fallback rather than inventing a coordinate."""
+    env = _env_with(
+        [
+            _commit_row(
+                node_name="build",
+                epoch=1,
+                commit="a" * 40,
+                repo="toy-api",
+                forge="file:///origins/toy-api.git",
+            )
+        ]
+    )
+
+    assert _commits_in(env) == [{"repo": "toy-api", "branch": "feat/x", "commit": "a" * 40}]

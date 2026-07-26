@@ -308,7 +308,14 @@ def test_real_winter_acquire_recovers_stale_feature_branch_tracking(tmp_path: Pa
 
 
 def _worktree_entry(env: str, repo: str, root: str) -> dict[str, object]:
-    return {"kind": "worktree", "env": env, "repo": repo, "name": None, "label": f"{env}/{repo}", "path": f"{root}/{env}/{repo}"}
+    return {
+        "kind": "worktree",
+        "env": env,
+        "repo": repo,
+        "name": None,
+        "label": f"{env}/{repo}",
+        "path": f"{root}/{env}/{repo}",
+    }
 
 
 @pytest.mark.unit
@@ -358,7 +365,6 @@ def test_repos_narrows_to_the_named_env_and_drops_standalone_clones() -> None:
 
     assert [(b.environment_id, b.relpath) for b in provider.repos("e1")] == [("e1", "blizzard-harness")]
     assert [(b.environment_id, b.relpath) for b in provider.repos("e2")] == [("e2", "blizzard-harness")]
-
 
 
 @pytest.mark.unit

@@ -571,9 +571,7 @@ class IReadRunnerStore(Protocol):
         ``produces`` name."""
         ...
 
-    def git_commit_declarations_for_lease(
-        self, lease_id: str
-    ) -> dict[tuple[str, str], GitCommitDeclarationRecord]:
+    def git_commit_declarations_for_lease(self, lease_id: str) -> dict[tuple[str, str], GitCommitDeclarationRecord]:
         """The lease's explicit git-commit declarations, newest per ``(environment_id,
         repo)`` (issue #143, Phase 3), keyed the same way.
 
