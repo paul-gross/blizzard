@@ -54,6 +54,34 @@ class ChunkStatus(StrEnum):
 TERMINAL_STATUSES = frozenset({ChunkStatus.STOPPED, ChunkStatus.DONE})
 
 
+def holds_claim(status: ChunkStatus) -> bool:
+    """Whether a chunk at ``status`` still holds the route it may be carrying (issue #140).
+
+    Terminal outranks route liveness, and this is the one place that says so for a
+    *route*. The two are independent derivations off the same facts and they routinely
+    disagree at ``done``: only a **hub** node landing the terminal releases the route
+    (``HubNodeExecutor``'s ``release_route=to_node_id == RESERVED_TERMINAL``), while a
+    terminal transition recorded from a **runner** node — any graph whose runner node
+    authors a ``-> done`` choice, e.g. a post-merge ``verify`` — stamps no
+    ``route.released`` at all, so ``route_of`` goes on answering with the route of the
+    runner that finished the chunk. That is untidy rather than unsafe: the claim path
+    refuses a terminal chunk outright (``ClaimDeniedTerminal``), so a retained route
+    confers no tenure.
+
+    It does mean route liveness is not a proxy for "being worked", so every consumer
+    folding routes into **live occupancy** — the fleet registry's claim lines and its
+    slot-bar numerator (issue #69), and any later one — asks this rather than re-deriving
+    the vocabulary of "in progress" for itself. :func:`derive_chunk_status` already
+    encodes the same precedence for the chunk's own status; this is its counterpart for
+    the route, kept in the domain so no controller has to hold the rule.
+
+    Deliberately *not* consulted by :meth:`IReadChunkRepository.route_of` or
+    :func:`_has_live_route`, which answer the raw fact — a "where was this worked" read
+    (the chunk detail) and the runner's own reassignment check both need it unfiltered.
+    """
+    return status not in TERMINAL_STATUSES
+
+
 # --- Domain objects ---------------------------------------------------------
 
 

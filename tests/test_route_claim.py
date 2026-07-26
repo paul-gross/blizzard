@@ -8,9 +8,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import select
 
-from blizzard.hub.domain.graph import RESERVED_TERMINAL
 from blizzard.hub.store import schema as s
-from blizzard.hub.store.internal.chunk_store import ChunkStore
 from tests.support import build_hub, pointer_token, report_lease
 
 pytestmark = pytest.mark.component
@@ -79,6 +77,31 @@ def test_summary_environment_count_counts_the_routes_environments(tmp_path: Path
     assert summaries[unrouted]["environment_count"] == 0
 
 
+# A graph whose single **runner** node authors `pass -> done`. This is the shape that
+# produces the #140 state: `ApplyService.record_transition` has no route-release parameter
+# at all, so landing the terminal from a runner node stamps no `route.released` — only a
+# hub node landing it does (`HubNodeExecutor`). Deliberately hub-node-free: `deliver` in
+# `test_completion_apply.py`'s graph would release the route and dissolve the bug.
+# Named `default-delivery` so ingest reuses it by name (the same trick that file uses),
+# and declaring no `produces:`, so a completion needs no artifact to be accepted.
+_RUNNER_TERMINAL_YAML = """
+name: default-delivery
+entry: build
+nodes:
+  build:
+    executor: runner
+    prompt: |
+      Build the change.
+    judgement:
+      prompt: |
+        Assess the build.
+      choices:
+        pass:
+          description: Complete and green.
+          to: done
+"""
+
+
 def test_summary_reports_a_finished_chunk_as_unrouted(tmp_path: Path) -> None:
     """A terminal chunk holds no claim (issue #140), so its ``runner_id`` /
     ``environment_count`` read unrouted even while its route facts still show a route.
@@ -86,36 +109,39 @@ def test_summary_reports_a_finished_chunk_as_unrouted(tmp_path: Path) -> None:
     The fleet registry folds exactly these two fields per runner — the card's claim lines
     and the slot-bar numerator (issue #69) — so a ``done`` chunk that kept its route
     rendered as a live claim and pushed the numerator past capacity (observed: a 4-env
-    runner reading 10/4). That state is ordinary rather than corrupt: only a *hub* node
-    landing the terminal releases the route, so a terminal transition recorded from a
-    runner node (any graph whose runner node authors a ``-> done`` choice) leaves one live
-    — which is what the ``record_transition`` below reproduces, byte-for-byte the write
-    ``ApplyService`` makes on that path. ``stop`` releases its route already; it is here
-    because status, not the release, is what the summary keys on."""
+    runner reading 10/4).
+
+    The ``done`` chunk here reaches that state **through the code the bug lives in** — a
+    real completion posted to ``POST /api/fleet/chunks/{id}/completions``, taking a runner
+    node's ``-> done`` choice — rather than by a hand-written transition row. That is what
+    keeps the premise honest: the ``route_of`` assertion below fails the moment apply
+    starts releasing the route on this path, instead of passing green against a fixture
+    that only ever *described* the old behavior. ``stop`` releases its route already; it
+    is here because status, not the release, is what the summary keys on."""
     hub = build_hub(tmp_path)
+    assert hub.client.post("/api/graphs", json={"definition_yaml": _RUNNER_TERMINAL_YAML}).status_code == 201
     running = _ingest(hub, ref="7")
     finished = _ingest(hub, ref="8")
     stopped = _ingest(hub, ref="9")
 
+    node_ids = {}
     for chunk_id, envs in ((running, ["env-a", "env-b"]), (finished, ["env-c"]), (stopped, ["env-d"])):
         resp = hub.client.post(
             "/api/fleet/routes",
             json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": envs},
         )
         assert resp.status_code == 201, resp.text
+        node_ids[chunk_id] = resp.json()["envelope"]["node"]["node_id"]
 
-    ChunkStore(hub.engine, hub.clock).record_transition(
-        transition_id="tr_terminal",
-        chunk_id=finished,
-        from_node_id="nd_entry",
-        to_node_id=RESERVED_TERMINAL,
-        choice_name="pass",
-        epoch=1,
-        runner_id="r1",
-        at=hub.clock.now(),
-        artifacts=[],
+    report_lease(hub, finished, epoch=1, seq=1)  # the fence input the completion checks against
+    resp = hub.client.post(
+        f"/api/fleet/chunks/{finished}/completions",
+        json={"choice": "pass", "epoch": 1, "runner_id": "r1", "from_node_id": node_ids[finished], "artifacts": []},
     )
-    assert hub.services.chunks.route_of(finished) is not None  # the route really did survive
+    assert resp.status_code == 200 and resp.json()["outcome"] == "done", resp.text
+    # The premise, asserted rather than asserted-about: apply landed the terminal and left
+    # the route live. If that ever changes, this line fails and the fix's rationale is stale.
+    assert hub.services.chunks.route_of(finished) is not None
     assert hub.client.post(f"/api/chunks/{stopped}/stop", json={"by": "operator"}).status_code == 202
 
     summaries = {c["chunk_id"]: c for c in hub.client.get("/api/chunks").json()}

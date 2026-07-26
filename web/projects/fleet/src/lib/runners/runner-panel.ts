@@ -59,10 +59,8 @@ export class RunnerPanel {
   /** Every routed chunk grouped by the runner holding it — each as a claim line
    * (short name + current node) for the registry rows.
    *
-   * No status filter here by design (issue #140): `runner_id` on the summary is already
-   * in-progress-only — the hub reports a terminal (`done`/`stopped`) chunk as unrouted —
-   * so `runner_id` set *is* "currently holds a route on". Re-filtering by status here
-   * would make the board a second owner of what counts as finished. */
+   * No status filter by design: `ChunkSummary.runner_id` is already in-progress-only
+   * (issue #140 — see its own docs), so `runner_id` set *is* "currently holds a route on". */
   private readonly claims = computed<Map<string, ClaimLine[]>>(() => {
     const grouped = new Map<string, ClaimLine[]>();
     for (const chunk of this.chunksQuery.data() ?? []) {
@@ -82,9 +80,7 @@ export class RunnerPanel {
    * each of its chunks' `environment_count`. A grouped chunk holding >1 environment
    * counts them all, so a runner working one 3-env chunk reads as using 3 slots, not 1.
    * Environments are exclusively leased and a runner's chunks are distinct, so a plain
-   * sum needs no dedup. Like {@link claims}, unfiltered by status on purpose (issue
-   * #140): a terminal chunk arrives with `environment_count` 0 and no `runner_id`, so
-   * the numerator is live occupancy and stays within capacity. */
+   * sum needs no dedup. Unfiltered by status for the same reason {@link claims} is. */
   private readonly usedByRunner = computed<Map<string, number>>(() => {
     const used = new Map<string, number>();
     for (const chunk of this.chunksQuery.data() ?? []) {

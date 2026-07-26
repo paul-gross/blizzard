@@ -51,12 +51,12 @@ const RUNNERS = {
 // rn_online at build, one routed elsewhere, one unrouted, and one rn_online
 // FINISHED — only the first shows under rn_online.
 //
-// The done row is shaped as the hub actually sends it (issue #140): a terminal chunk
-// reports `runner_id: null` / `environment_count: 0` even when its route facts still
-// name the runner that worked it, so this panel's status-filter-free folds see nothing.
-// It sits in the shared fixture, not a private one, so the claim-line and slot-bar
-// expectations below are asserted against a runner holding mixed finished + running
-// work — the case that read "10/4 slots" before the hub started excluding it.
+// The done row documents the shape the hub sends (issue #140): a terminal chunk reports
+// `runner_id: null` / `environment_count: 0` even when its route facts still name the
+// runner that worked it. It is a fixture, NOT a regression guard — the panel reaches it
+// on the same unrouted branch `ch_01idle…` already covers, so removing it fails nothing.
+// The behavior it documents lives wholly in the hub and is pinned there, by
+// `tests/test_route_claim.py::test_summary_reports_a_finished_chunk_as_unrouted`.
 const CHUNKS = [
   {
     chunk_id: 'ch_01claim000000000000000000000',
@@ -152,22 +152,6 @@ describe('RunnerPanel', () => {
 
     // rn_local's capacity is null — no bar rather than a zero-slot one.
     expect(el.querySelector('[data-runner="rn_local"] [data-testid="runner-slot-bar"]')).toBeNull();
-  });
-
-  it('counts only in-progress chunks as claims and slot usage (#140)', async () => {
-    const fixture = TestBed.createComponent(RunnerPanel);
-    await settle(fixture);
-    const el = fixture.nativeElement as HTMLElement;
-
-    // rn_online has both a running and a finished chunk. Only the running one is a
-    // claim, and used stays within capacity — before #140 the finished chunk arrived
-    // still carrying its runner_id and both folds counted it.
-    const claims = el.querySelectorAll('[data-runner="rn_online"] [data-testid="runner-claim"]');
-    expect(claims).toHaveLength(1);
-    expect(claims[0].querySelector('.c-id')?.getAttribute('title')).toBe('ch_01claim000000000000000000000');
-
-    const bar = el.querySelector('[data-runner="rn_online"] [data-testid="runner-slot-bar"]');
-    expect(bar?.querySelector('[data-testid="slot-bar-label"]')?.textContent?.trim()).toBe('2/4 slots');
   });
 
   it('distinguishes the hub brake, the runner\'s own, and both (#43)', async () => {
