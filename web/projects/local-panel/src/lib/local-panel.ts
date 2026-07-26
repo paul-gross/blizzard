@@ -1,6 +1,4 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, Router } from '@angular/router';
 import {
   type KitAsyncStateValue,
   MobileTabBar,
@@ -14,6 +12,7 @@ import { type MachineChunkStatus, deriveMachineChunkStatus } from './chunk-statu
 import { injectRunnerLeasesQuery } from './leases.query';
 import { LocalPanelLayout } from './local-panel-layout';
 import { LocalPanelMobile } from './local-panel-mobile';
+import { injectPanelSelection } from './panel-selection';
 import {
   injectRunnerAsksQuery,
   injectRunnerEnvironmentsQuery,
@@ -89,6 +88,14 @@ export interface MachineChunkRow {
               [chunksTriadState]="chunksTriadState()"
               [machineChunks]="machineChunks()"
               [openAskCount]="openAskCount()"
+              [selectedChunkLeases]="selectedChunkLeases()"
+              [selectedStatus]="selectedStatus()"
+              [selectedEscalation]="selectedEscalation()"
+              [selectedAttemptLeaseId]="selectedAttemptLeaseId()"
+              (selectChunk)="selectChunk($event)"
+              (selectLease)="selectLease($event)"
+              (selectAttempt)="selectAttempt($event)"
+              (closeDetail)="clearSelection()"
             />
           }
         }
@@ -302,58 +309,42 @@ export class LocalPanel {
     { testid: 'tab-transcripts', label: 'Transcripts', inert: true },
   ]);
 
-  private readonly route = inject(ActivatedRoute);
-  private readonly router = inject(Router);
+  /** What is open in the panel, held in the URL (issue #99) — see
+   * `panel-selection.ts` for why the router coupling lives there. */
+  private readonly selection = injectPanelSelection();
 
   /**
-   * The URL's selection query params — the source of truth for what is open in
-   * the panel (issue #99). `chunk` names the selected chunk, `attempt` the
-   * selected attempt lease within it; the panel state derives from these, and
-   * every selection writes them (never the other way around), so the URL is
-   * copyable, refresh-safe, and back/forward-navigable. Read as a signal off the
-   * router's `queryParamMap`, seeded from the current snapshot so the first
-   * render already reflects a deep-linked URL.
+   * The `chunk_id` currently selected. A lease row selects its chunk too
+   * ({@link selectLease}) — the lease rail and the chunks list share one
+   * selection, reflected on both.
    */
-  private readonly queryParams = toSignal(this.route.queryParamMap, {
-    initialValue: this.route.snapshot.queryParamMap,
-  });
-
-  /**
-   * The `chunk_id` currently selected, off the URL's `chunk` param (or `null`).
-   * A lease row selects its chunk too ({@link selectLease}) — the lease rail and
-   * the chunks list share one selection, reflected on both. An id naming a chunk
-   * not on this machine degrades to no-selection without error: nothing in the
-   * list matches it, and {@link selectedChunkLeases} falls through to empty.
-   */
-  protected readonly selectedChunkId = computed<string | null>(() => this.queryParams().get('chunk'));
+  protected readonly selectedChunkId = this.selection.chunkId;
 
   /** Write a chunk selection to the URL, clearing any stale `attempt` (attempt
    * lease ids are chunk-specific, so a new chunk defaults to its newest). */
   protected selectChunk(chunkId: string): void {
-    this.writeSelection(chunkId, null);
+    this.selection.select(chunkId, null);
   }
 
   /** Selecting a lease row selects its chunk — the shared selection both rails
    * reflect; the detail dock defaults to the chunk's newest attempt. */
   protected selectLease(leaseId: string): void {
     const lease = this.leases().find((candidate) => candidate.lease_id === leaseId);
-    if (lease) this.writeSelection(lease.chunk_id, null);
+    if (lease) this.selection.select(lease.chunk_id, null);
   }
 
   /** Write an attempt pick to the URL, keeping the current chunk selection. */
   protected selectAttempt(leaseId: string): void {
-    this.writeSelection(this.selectedChunkId(), leaseId);
+    this.selection.select(this.selectedChunkId(), leaseId);
   }
 
-  /** Merge the selection into the URL's query params — a client-side navigation
-   * (no reload) that pushes a history entry, so back/forward walk the selection
-   * history. `null` clears a param. */
-  private writeSelection(chunkId: string | null, attemptLeaseId: string | null): void {
-    void this.router.navigate([], {
-      relativeTo: this.route,
-      queryParams: { chunk: chunkId, attempt: attemptLeaseId },
-      queryParamsHandling: 'merge',
-    });
+  /** Clear the selection entirely — the mobile shell's back affordance, which
+   * closes its drill-down by removing what the detail screen renders off. A
+   * plain navigation like any other selection write, so the device back button
+   * and this button walk the same history. Desktop has no caller: its dock
+   * simply falls back to `SELECT A CHUNK`. */
+  protected clearSelection(): void {
+    this.selection.select(null, null);
   }
 
   /**
@@ -379,7 +370,7 @@ export class LocalPanel {
   protected readonly selectedAttemptLeaseId = computed<string | null>(() => {
     const leases = this.selectedChunkLeases();
     const newest = leases.at(-1) ?? null;
-    const wanted = this.queryParams().get('attempt');
+    const wanted = this.selection.attemptLeaseId();
     if (wanted !== null && leases.some((att) => att.lease_id === wanted)) return wanted;
     return newest?.lease_id ?? null;
   });

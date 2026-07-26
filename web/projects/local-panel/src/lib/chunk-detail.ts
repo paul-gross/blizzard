@@ -105,9 +105,12 @@ import { TranscriptPanel } from './transcript-panel';
       text-transform: uppercase;
       color: var(--label);
     }
+    /* Wraps rather than overflows once the dock is only as wide as a phone —
+       the same header, one line on a desktop column, two on a 390px screen. */
     .d-hdr {
       flex: none;
       display: flex;
+      flex-wrap: wrap;
       align-items: baseline;
       gap: 10px;
       padding: 6px 8px;
@@ -184,8 +187,11 @@ import { TranscriptPanel } from './transcript-panel';
       align-items: center;
       gap: 10px;
     }
+    /* Shrinkable, not fixed — 180px is the desktop width, but the bar gives it
+       up before the age label beside it is pushed out of a phone-width dock. */
     .hb-bar {
-      flex: 0 0 180px;
+      flex: 0 1 180px;
+      min-width: 0;
     }
     .resume-box {
       margin-top: 8px;

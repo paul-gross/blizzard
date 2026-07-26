@@ -1,8 +1,18 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
-import { KitAsyncState, type KitAsyncStateValue, KitPanel, MobileTitlebar, ViewportToggle, type runnerApi } from 'fleet';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import {
+  KitAsyncState,
+  type KitAsyncStateValue,
+  KitBackBar,
+  KitPanel,
+  MobileTitlebar,
+  ViewportToggle,
+  type runnerApi,
+} from 'fleet';
 
 import { AgentRow } from './agent-row';
 import { ChunkCard } from './chunk-card';
+import { MachineDetail } from './chunk-detail';
+import type { MachineChunkStatus } from './chunk-status';
 import { LocalAsks } from './local-asks';
 import { LocalIdentity } from './local-identity';
 import { LocalInfo } from './local-info';
@@ -18,12 +28,18 @@ import { injectRunnerStatusQuery } from './status.query';
  * desktop-layout component reused verbatim (`bzh:frontend-kit`) — this shell
  * only orders and stacks them, it never forks or re-styles their internals.
  *
- * The transcript panel and the wide detail docks (`local-panel-layout`'s
- * center/right columns beyond this) are deliberately absent — they assume
- * width a single column doesn't have, and are the next mobile chunk's work.
- * A tap on an agent/chunk row that would normally open a dock is inert here:
- * `AgentRow`/`ChunkRow` still emit `selectLease`/`selectChunk`, this shell
- * just binds neither.
+ * Selecting a chunk (a {@link ChunkCard} tap, or an {@link AgentRow} tap —
+ * which selects that lease's chunk, the same shared selection the desktop
+ * rails have) drills down to a **detail screen** in place of the list: the
+ * mobile answer to the desktop layout's side-by-side detail dock, which
+ * assumes width a single column doesn't have. The screen itself is
+ * {@link MachineDetail} reused verbatim (`bzh:frontend-kit`) — the same
+ * execution facts (lease/session/pid/env/workdir/heartbeat), the same
+ * per-attempt tabs, and the same transcript the desktop dock renders; this
+ * shell only swaps which of the two screens is mounted and adds the back
+ * affordance a drill-down needs. Selection itself stays the container's
+ * (and the URL's, issue #99), so a detail screen is deep-linkable and the
+ * device back button walks out of it like any other navigation.
  *
  * {@link LocalPauseControl} (issue #133) is likewise **not** mounted here —
  * a deliberate scope decision, not an oversight: #133 shipped desktop-only,
@@ -48,10 +64,12 @@ import { injectRunnerStatusQuery } from './status.query';
     AgentRow,
     ChunkCard,
     KitAsyncState,
+    KitBackBar,
     KitPanel,
     LocalAsks,
     LocalIdentity,
     LocalInfo,
+    MachineDetail,
     MobileTitlebar,
     ViewportToggle,
   ],
@@ -61,64 +79,135 @@ import { injectRunnerStatusQuery } from './status.query';
         <local-identity />
         <fleet-viewport-toggle />
       </fleet-mobile-titlebar>
-      <div class="lpm-sections">
-        <fleet-kit-panel class="section" label="machine · status" data-testid="mobile-info-pane">
-          <local-info />
-        </fleet-kit-panel>
-        <fleet-kit-panel class="section" label="agents · leases" data-testid="mobile-agents-pane">
-          <span header class="p-note" data-testid="mobile-lease-count">{{ activeLeases().length }} live</span>
-          <fleet-kit-async-state
-            [state]="leasesTriadState()"
-            loadingText="LOADING…"
-            loadingTestid="loading-state"
-            errorText="LEASES UNAVAILABLE — RUNNER LOCAL API UNREACHABLE"
-            errorTestid="error-state"
-            emptyText="NO LIVE LEASES — LOOP IDLE OR PAUSED"
-            emptyTestid="empty-state"
-          >
-            <div class="rows">
-              @for (lease of activeLeases(); track lease.lease_id) {
-                <local-agent-row [agent]="lease" />
-              }
+      @if (detailOpen()) {
+        <div class="lpm-detail" data-testid="panel-chunk-detail">
+          <button class="back-row" type="button" aria-label="Back to Machine" data-testid="mobile-detail-back" (click)="closeDetail.emit()">
+            <fleet-kit-back-bar label="Machine" />
+          </button>
+          <local-machine-detail
+            class="md"
+            [leases]="selectedChunkLeases()"
+            [status]="selectedStatus()"
+            [escalation]="selectedEscalation()"
+            [activeAttemptLeaseId]="selectedAttemptLeaseId()"
+            (selectAttempt)="selectAttempt.emit($event)"
+          />
+        </div>
+      } @else {
+        <div class="lpm-sections">
+          <fleet-kit-panel class="section" label="machine · status" data-testid="mobile-info-pane">
+            <local-info />
+          </fleet-kit-panel>
+          <fleet-kit-panel class="section" label="agents · leases" data-testid="mobile-agents-pane">
+            <span header class="p-note" data-testid="mobile-lease-count">{{ activeLeases().length }} live</span>
+            <div class="pane-body">
+              <fleet-kit-async-state
+                [state]="leasesTriadState()"
+                loadingText="LOADING…"
+                loadingTestid="loading-state"
+                errorText="LEASES UNAVAILABLE — RUNNER LOCAL API UNREACHABLE"
+                errorTestid="error-state"
+                emptyText="NO LIVE LEASES — LOOP IDLE OR PAUSED"
+                emptyTestid="empty-state"
+              >
+                <div class="rows">
+                  @for (lease of activeLeases(); track lease.lease_id) {
+                    <local-agent-row [agent]="lease" (selectLease)="selectLease.emit($event)" />
+                  }
+                </div>
+              </fleet-kit-async-state>
             </div>
-          </fleet-kit-async-state>
-        </fleet-kit-panel>
-        <fleet-kit-panel class="section" label="chunks on this machine" data-testid="mobile-chunks-pane">
-          <fleet-kit-async-state
-            [state]="chunksTriadState()"
-            loadingText="LOADING…"
-            errorText="CHUNKS UNAVAILABLE — RUNNER LOCAL API UNREACHABLE"
-            emptyText="NO CHUNKS ON THIS MACHINE"
-            emptyTestid="chunks-empty"
-          >
-            @for (chunk of machineChunks(); track chunk.lease.chunk_id) {
-              <local-chunk-card [lease]="chunk.lease" [status]="chunk.status" />
-            }
-          </fleet-kit-async-state>
-        </fleet-kit-panel>
-        <fleet-kit-panel class="section" label="local asks" data-testid="mobile-asks-pane">
-          <span header class="p-note">{{ openAskCount() }} open</span>
-          <local-asks />
-        </fleet-kit-panel>
-      </div>
+          </fleet-kit-panel>
+          <fleet-kit-panel class="section" label="chunks on this machine" data-testid="mobile-chunks-pane">
+            <div class="pane-body">
+              <fleet-kit-async-state
+                [state]="chunksTriadState()"
+                loadingText="LOADING…"
+                errorText="CHUNKS UNAVAILABLE — RUNNER LOCAL API UNREACHABLE"
+                emptyText="NO CHUNKS ON THIS MACHINE"
+                emptyTestid="chunks-empty"
+              >
+                @for (chunk of machineChunks(); track chunk.lease.chunk_id) {
+                  <local-chunk-card
+                    [lease]="chunk.lease"
+                    [status]="chunk.status"
+                    (selectChunk)="selectChunk.emit($event)"
+                  />
+                }
+              </fleet-kit-async-state>
+            </div>
+          </fleet-kit-panel>
+          <fleet-kit-panel class="section" label="local asks" data-testid="mobile-asks-pane">
+            <span header class="p-note">{{ openAskCount() }} open</span>
+            <local-asks />
+          </fleet-kit-panel>
+        </div>
+      }
     </div>
   `,
   styles: `
     :host {
       display: block;
+      height: 100%;
       font-family: var(--mono);
       font-size: var(--fs-base);
       font-variant-numeric: tabular-nums;
     }
+    /* The titlebar is chrome, not content: it sits outside the scroll region
+       so it stays fixed at the top while the sections scroll under it — the
+       same shape the hub's app-root gives its own mobile titlebar, and what
+       both MobileTitlebar and MobileTabBar already declare flex:none for.
+       Scrolling .lpm itself would carry the titlebar away with it. */
     .lpm {
       display: flex;
       flex-direction: column;
+      height: 100%;
+      min-height: 0;
+      overflow: hidden;
     }
     .lpm-sections {
       display: flex;
       flex-direction: column;
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
       gap: 8px;
       padding: 8px;
+    }
+    /* The drill-down screen fills the same box the sections list would have,
+       so MachineDetail's own transcript pane keeps the scrolling region it
+       sizes against on desktop — the facts and attempt tabs stay put while
+       the transcript scrolls under them. */
+    .lpm-detail {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+    }
+    .lpm-detail .md {
+      flex: 1;
+      min-height: 0;
+    }
+    /* A bare wrapper: KitBackBar owns the row's look and height, this owns only
+       the button reset and the focus ring. */
+    .back-row {
+      flex: none;
+      display: block;
+      padding: 0;
+      border: 0;
+      background: none;
+      text-align: left;
+    }
+    .back-row:focus-visible {
+      outline: 1px solid var(--cyan);
+      outline-offset: -1px;
+    }
+    /* A positioned box with real height for KitAsyncState's absolutely
+       centered status line — these panes size to their content, so an empty
+       one would otherwise collapse and paint its message over the pane below. */
+    .pane-body {
+      position: relative;
+      min-height: 56px;
     }
     /* This shell's panel chrome matches local-panel-layout's flat background +
        gradient header, unlike fleet's own gradient-panel/overlay-header scheme
@@ -155,6 +244,41 @@ export class LocalPanelMobile {
 
   /** The open-ask count for the local-asks section's header note. */
   readonly openAskCount = input.required<number>();
+
+  /** The selected chunk's attempts (oldest → newest), resolved by the
+   * container off the URL's `chunk` param — the detail screen's subject.
+   * Empty when nothing is selected, which is also what keeps the shell on
+   * the list: a `chunk` naming something not on this machine resolves to no
+   * attempts, so the drill-down degrades to the list rather than an empty
+   * screen. */
+  readonly selectedChunkLeases = input<readonly runnerApi.LeaseView[]>([]);
+
+  /** The selected chunk's derived machine-side status (container-folded). */
+  readonly selectedStatus = input<MachineChunkStatus | null>(null);
+
+  /** The selected chunk's open escalation, when there is one. */
+  readonly selectedEscalation = input<runnerApi.EscalationView | null>(null);
+
+  /** The attempt whose transcript the detail screen shows — the container's
+   * effective, URL-derived pick. */
+  readonly selectedAttemptLeaseId = input<string | null>(null);
+
+  /** A chunk card tap — the container writes it to the URL, which opens the
+   * detail screen on the next render. */
+  readonly selectChunk = output<string>();
+
+  /** An agent row tap — selects that lease's chunk, the same shared selection
+   * the desktop rails have. */
+  readonly selectLease = output<string>();
+
+  /** An attempt tab pick within the detail screen. */
+  readonly selectAttempt = output<string>();
+
+  /** The back affordance — the container clears the selection. */
+  readonly closeDetail = output<void>();
+
+  /** Whether the detail screen is mounted in place of the sections list. */
+  protected readonly detailOpen = computed(() => this.selectedChunkLeases().length > 0);
 
   /** The titlebar's own severable read (`local-info.ts`'s own instance dedupes
    * on the same query key, so this is not a second poll) — `hub.reachable`

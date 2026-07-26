@@ -69,7 +69,13 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
     .lbl.cnt-accent {
       color: var(--snow);
     }
+    /* Positioned so {@link KitAsyncState}'s absolutely-centered status line
+       resolves against *this* panel's body when the consumer provides no
+       nearer positioned ancestor of its own — without it the line escapes to
+       whatever ancestor happens to be positioned (the initial containing
+       block, when none is) and paints over unrelated content. */
     .p-body {
+      position: relative;
       overflow-y: auto;
       overflow-x: hidden;
       flex: 1;

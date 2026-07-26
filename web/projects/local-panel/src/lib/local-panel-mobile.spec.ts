@@ -124,20 +124,95 @@ describe('LocalPanelMobile', () => {
     expect(el.querySelector('[data-testid="local-asks"]')).not.toBeNull();
   });
 
-  it('never renders the transcript panel or a detail dock — out of scope for this shell', async () => {
+  it('shows the sections list, not a detail screen, while nothing is selected', async () => {
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
 
+    expect(el.querySelector('[data-testid="panel-chunk-detail"]')).toBeNull();
     expect(el.querySelector('[data-testid="transcript-panel"]')).toBeNull();
-    expect(el.querySelector('[data-testid="detail-empty"]')).toBeNull();
+    expect(el.querySelector('[data-testid="mobile-chunks-pane"]')).not.toBeNull();
   });
 
-  it('clicking a chunk card is inert — no selection/dock output to react to it', async () => {
+  it('emits the tapped chunk card id — the container writes the selection', async () => {
     const fixture = await render({ machineChunks: [MACHINE_CHUNK] });
     const el = fixture.nativeElement as HTMLElement;
+    const picked: string[] = [];
+    fixture.componentInstance.selectChunk.subscribe((id) => picked.push(id));
 
-    expect(() => el.querySelector<HTMLElement>('[data-testid="local-chunk-card"]')?.click()).not.toThrow();
-    expect(el.querySelector('[data-testid="local-chunk-card"]')?.classList.contains('selected')).toBe(false);
+    el.querySelector<HTMLElement>('[data-testid="local-chunk-card"]')?.click();
+
+    expect(picked).toEqual([LEASE().chunk_id]);
+  });
+
+  it('emits the tapped agent row lease id — a lease tap selects its chunk too', async () => {
+    const fixture = await render({ activeLeases: [LEASE()] });
+    const el = fixture.nativeElement as HTMLElement;
+    const picked: string[] = [];
+    fixture.componentInstance.selectLease.subscribe((id) => picked.push(id));
+
+    el.querySelector<HTMLElement>('[data-testid="agent-row"]')?.click();
+
+    expect(picked).toEqual([LEASE().lease_id]);
+  });
+
+  it('drills down to the chunk detail screen once the container resolves a selection', async () => {
+    const fixture = await render({ selectedChunkLeases: [LEASE()], selectedStatus: { label: 'RUNNING', tone: 'running' } });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="panel-chunk-detail"]')).not.toBeNull();
+    // The desktop dock reused verbatim — its execution facts and its transcript.
+    const facts = el.querySelector('[data-testid="detail-facts"]')?.textContent ?? '';
+    expect(facts).toContain('sess-77');
+    expect(facts).toContain('4821');
+    expect(facts).toContain('beta');
+    expect(facts).toContain('/ws/beta');
+    expect(el.querySelector('[data-testid="detail-transcript"]')).not.toBeNull();
+    // …in place of the sections list, not beside it.
+    expect(el.querySelector('[data-testid="mobile-chunks-pane"]')).toBeNull();
+  });
+
+  it('renders one attempt tab per lease of the selected chunk', async () => {
+    const fixture = await render({
+      selectedChunkLeases: [LEASE({ lease_id: 'lease_a1', epoch: 1, state: 'closed', closure_reason: 'transitioned' }), LEASE()],
+      selectedAttemptLeaseId: LEASE().lease_id,
+    });
+    const el = fixture.nativeElement as HTMLElement;
+
+    const tabs = Array.from(el.querySelectorAll('[data-testid="attempt-tab"]')).map((node) => node.textContent?.trim());
+    expect(tabs).toEqual(['a1 transitioned', 'a2 running']);
+  });
+
+  it('emits selectAttempt when an attempt tab is picked', async () => {
+    const fixture = await render({
+      selectedChunkLeases: [LEASE({ lease_id: 'lease_a1', epoch: 1, state: 'closed', closure_reason: 'transitioned' }), LEASE()],
+      selectedAttemptLeaseId: LEASE().lease_id,
+    });
+    const el = fixture.nativeElement as HTMLElement;
+    const picked: string[] = [];
+    fixture.componentInstance.selectAttempt.subscribe((id) => picked.push(id));
+
+    el.querySelector<HTMLElement>('[data-testid="attempt-tab"]')?.click();
+
+    expect(picked).toEqual(['lease_a1']);
+  });
+
+  it('emits closeDetail from the back affordance — the container clears the selection', async () => {
+    const fixture = await render({ selectedChunkLeases: [LEASE()] });
+    const el = fixture.nativeElement as HTMLElement;
+    let closed = 0;
+    fixture.componentInstance.closeDetail.subscribe(() => (closed += 1));
+
+    el.querySelector<HTMLElement>('[data-testid="mobile-detail-back"]')?.click();
+
+    expect(closed).toBe(1);
+  });
+
+  it('stays on the list when the selection names a chunk this machine does not hold', async () => {
+    const fixture = await render({ selectedChunkLeases: [] });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="panel-chunk-detail"]')).toBeNull();
+    expect(el.querySelector('[data-testid="mobile-chunks-pane"]')).not.toBeNull();
   });
 
   it('renders the shared mobile titlebar with its own menu slot, closed by default', async () => {

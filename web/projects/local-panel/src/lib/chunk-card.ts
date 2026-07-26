@@ -23,10 +23,9 @@ import type { MachineChunkStatus } from './chunk-status';
  * Line 3 is the node + attempt epoch, in the same quiet label tone
  * {@link ChunkRow}'s own `.node` cell uses.
  *
- * A tap here is inert in this chunk (`LocalPanelMobile` binds neither
- * `selectChunk` nor a `selected` state today, same as {@link ChunkRow} in the
- * mobile shell) — the output/keyboard handling stays wired so the card is
- * ready the moment a mobile detail dock exists, without a second pass here.
+ * A tap emits `selectChunk`, which `LocalPanelMobile` drills down on — the
+ * card's own `selected` state stays unbound there, since the mobile shell
+ * replaces the list with the detail screen rather than showing both at once.
  */
 @Component({
   selector: 'local-chunk-card',
