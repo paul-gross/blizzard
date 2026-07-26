@@ -80,6 +80,7 @@ from blizzard.wire.facts import (
     RunnerFactBatch,
 )
 from blizzard.wire.graph import ProducesEntry
+from blizzard.wire.queue import QueuePeekEntry
 from blizzard.wire.route import RouteClaim
 
 #: This module's public API — the loop steps it owns. ``HEARTBEAT_STALENESS_THRESHOLD``
@@ -125,8 +126,14 @@ _PAUSE_RESUME_MESSAGE = "# The operator resumed this chunk; continue your task w
 _COMPLETION_KIND = "completion.submitted"
 _DECISION_KIND = "decision.submitted"
 
-# The env count a solo chunk wants; batching (K>1) is parked.
-_SOLO_ENV_COUNT = 1
+# The env count a chunk gets when nothing says otherwise. One environment is the
+# default, not an assumption baked into everything downstream: git-commit declarations
+# are keyed by ``(lease, environment_id, repo)``, the ADVANCE harvest reads every bound
+# environment, and delivery refuses an unconverged set rather than tie-breaking it — so
+# a chunk holding several is representable and safe today. What is missing is only a
+# *producer*: nothing in the queue entry or the chunk yet says how many a piece of work
+# wants, so inventing a knob here would be a setting no caller sets.
+_DEFAULT_ENV_COUNT = 1
 
 # The lease capability token's byte length (issue #113, Phase 1) — mirrors the
 # hub's own route-token mint (`hub/domain/claim.py`'s `_ROUTE_TOKEN_BYTES`).
@@ -1421,6 +1428,18 @@ def _reconcile_interrupted_claims(ctx: LoopContext) -> None:
             _release_all(ctx, chunk_id)
 
 
+def _environments_wanted(entry: QueuePeekEntry) -> int:
+    """How many environments this queue entry's chunk should be acquired.
+
+    The single place the count is decided, so raising it above one is a change here
+    rather than an audit of everything that once assumed a lone binding. Returns
+    :data:`_DEFAULT_ENV_COUNT` for now because no producer names a number yet — the
+    demand ("this work wants N environments") is a property of the work, so it belongs on
+    the queue entry or the chunk, and neither carries it."""
+    del entry  # no per-chunk demand signal exists yet
+    return _DEFAULT_ENV_COUNT
+
+
 def _fill_one(ctx: LoopContext) -> bool:
     """Claim and start one chunk. Returns False when nothing more can be filled."""
     try:
@@ -1434,7 +1453,7 @@ def _fill_one(ctx: LoopContext) -> bool:
     held = ctx.store.held_environment_ids()
     _CP_FILL_BEFORE_ACQUIRE.reached()
     try:
-        acquired = ctx.provider.acquire(entry.chunk_id, _SOLO_ENV_COUNT, held)
+        acquired = ctx.provider.acquire(entry.chunk_id, _environments_wanted(entry), held)
     except EnvironmentPreparationError as exc:
         # Not capacity — a reset-on-acquire step failed. Surface it as an
         # attributable FILL error; the provider aborted rather than hand over a

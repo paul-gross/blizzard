@@ -1776,3 +1776,48 @@ def test_spawn_reflects_runtime_prompt_override_with_no_restart(tmp_path):  # ty
     _, preamble = harness.spawns[0]
     assert preamble.prompt_prefix.startswith(f"{DEFAULT_BLIZZARD_PREAMBLE}\n\nOVERRIDDEN\n\n")
     assert "STATIC-PROMPT" not in preamble.prompt_prefix
+
+
+@pytest.mark.unit
+def test_advance_harvests_git_commits_from_every_bound_environment(tmp_path):  # type: ignore[no-untyped-def]
+    """A chunk holding two environments has a worktree of the same repo in each. Reading
+    only the first binding would drop the second env's work with no error at all — the
+    silent-loss shape this seam exists to remove — so the harvest spans every binding and
+    verifies each against its own environment's origin."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    store.record_binding(chunk_id="ch_1", environment_id="e2", workdir="/ws/e2", bound_at=_NOW)
+    for env, commit in (("e1", "aaa111"), ("e2", "bbb222")):
+        store.record_git_commit_declaration(
+            lease_id="lease_1",
+            chunk_id="ch_1",
+            node_id="nd_build",
+            epoch=1,
+            environment_id=env,
+            repo="toy-api",
+            branch=f"feat/from-{env}",
+            commit=commit,
+            declared_at=_NOW,
+        )
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = _build_envelope()
+    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.HUB_NODE_TAKEN)]
+    provider = FakeProvider(
+        {"e1": "/ws/e1", "e2": "/ws/e2"},
+        repos={
+            "e1": [("toy-api", "file:///origins/toy-api.git")],
+            "e2": [("toy-api", "file:///origins/toy-api.git")],
+        },
+    )
+    wt = FakeWorktreeGit()
+    ctx = make_context(
+        store, hub=hub, provider=provider, harness=FakeHarness(handle=_HANDLE, verdict="pass"), probe=FakeProbe(), worktree_git=wt
+    )
+
+    advance(ctx)
+    pull(ctx)
+
+    assert len(wt.verified_calls) == 2  # both envs' declarations were checked
+    _chunk_id, submission = hub.completions[0]
+    branches = sorted(a.branch_name or "" for a in submission.artifacts if a.kind is ArtifactKind.GIT_COMMIT)
+    assert branches == ["feat/from-e1", "feat/from-e2"]
