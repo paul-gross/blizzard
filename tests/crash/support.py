@@ -24,6 +24,7 @@ import time
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import IO
 
 import httpx
 
@@ -526,11 +527,27 @@ def wait_death(proc: subprocess.Popen[str], *, timeout: float = 60.0) -> int:
 # --------------------------------------------------------------------------- #
 
 
+def _log_sink(path: Path) -> IO[str]:
+    """An append-mode file for a spawned daemon's merged stdout/stderr.
+
+    A daemon must NEVER be given ``stdout=PIPE`` here. Nothing in these suites drains
+    those pipes, so the daemon runs only until its output fills the ~64 KiB pipe buffer
+    and then blocks in ``write`` forever — wedged mid-tick, HTTP included, with every
+    subsequent ``wait_status`` timing out against a process that looks alive. The
+    deadlock is latent in output volume rather than in anything the test does, so it
+    surfaces as an unrelated-looking assertion far from its cause (it first bit the
+    journey's escalate chunk). A file has no such ceiling, and it makes the daemon's log
+    readable after a failure instead of discarded with the pipe."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path.open("a", buffering=1)
+
+
 @contextlib.contextmanager
 def forge_daemon(bin_dir: Path, origins: Path, port: int) -> Iterator[httpx.Client]:
+    log = _log_sink(origins.parent / "forge.log")
     proc = subprocess.Popen(
         [str(bin_dir / "blizzard-mock-forge"), "--repos-dir", str(origins), "--host", "127.0.0.1", "--port", str(port)],
-        stdout=subprocess.PIPE,
+        stdout=log,
         stderr=subprocess.STDOUT,
         text=True,
     )
@@ -583,7 +600,7 @@ def start_hub(
     return subprocess.Popen(
         [hub_bin, "host", "--dir", str(hub_dir), "--host", "127.0.0.1", "--port", str(port)],
         env=env,
-        stdout=subprocess.PIPE,
+        stdout=_log_sink(hub_dir / "daemon.log"),
         stderr=subprocess.STDOUT,
         text=True,
         start_new_session=new_session,
@@ -623,7 +640,7 @@ def start_runner(runner_dir: Path, *, crash_point: str | None) -> subprocess.Pop
     return subprocess.Popen(
         [runner_bin, "host", "--dir", str(runner_dir)],
         env=env,
-        stdout=subprocess.PIPE,
+        stdout=_log_sink(runner_dir / "daemon.log"),
         stderr=subprocess.STDOUT,
         text=True,
     )
