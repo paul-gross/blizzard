@@ -40,6 +40,10 @@ nodes:
   build:
     executor: runner
     prompt: ./prompts/build.md
+    session: resume:build  # explicit: re-entry from review/pre-push should pull
+      # build's own prior context, not whichever node ran last (review/pre-push
+      # are deliberately fresh, so bare `resume` would otherwise hand build their
+      # cold-read session instead of its own)
     produces:
       - {name: commit, kind: git_commit}  # the pushed branch(es); kind-matched, not name-matched
     judgement:
@@ -79,7 +83,9 @@ nodes:
   pre-push:
     executor: runner
     prompt: ./prompts/pre-push.md
-    session: fresh  # cold eyes for the integration step; the default is resume
+    session: resume:build  # integration is mechanical (rebase, lint, targeted
+      # tests), not a judgement call needing cold eyes — build's own context
+      # saves re-learning the codebase from scratch; the default is resume
     produces:
       - pre-push-summary
       # A rebase REWRITES the branch, so the commit `build` declared is orphaned the
