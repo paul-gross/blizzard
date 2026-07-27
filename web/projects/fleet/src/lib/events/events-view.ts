@@ -112,8 +112,12 @@ const SEVERITY_TONE: Readonly<Record<string, Tone>> = {
               <fleet-kit-badge class="sev" [tone]="toneFor(ev.severity)" variant="soft" data-testid="events-severity">{{
                 ev.severity
               }}</fleet-kit-badge>
-              <span class="kind" data-testid="events-kind">{{ ev.kind }}</span>
-              <span class="runner" data-testid="events-runner">{{ runnerLabel(ev.runner_id) }}</span>
+              <span class="kind" data-testid="events-kind" [title]="ev.kind">{{ ev.kind }}</span>
+              @if (ev.runner_id; as runnerId) {
+                <span class="runner" data-testid="events-runner" [title]="runnerId">{{ shortId(runnerId) }}</span>
+              } @else {
+                <span class="runner" data-testid="events-runner" aria-hidden="true">—</span>
+              }
               <span class="msg" data-testid="events-message">{{ ev.message }}</span>
               @if (ev.lease_id; as leaseId) {
                 <span class="lease" data-testid="events-lease">{{ shortId(leaseId) }}</span>
@@ -159,16 +163,23 @@ const SEVERITY_TONE: Readonly<Record<string, Tone>> = {
       flex: 1;
     }
     /* Time-first columns, matching the in-rail Event log's leading dim stamp
-       (event-log-panel.ts). The leading three tracks are FIXED, not content-sized:
-       every row is its own grid container, so only a fixed track aligns down the
-       feed. Time and chunk are fixed because they are the read-down-the-page
-       columns; severity is fixed too because it is a closed three-value set
-       (SEVERITY_TONE), and pinning it keeps the kind column from starting at a
-       different x on every row. Kind and runner stay content-sized (open sets — a
-       fixed track would clip), the message takes the rest, and the lease trails. */
+       (event-log-panel.ts). Every metadata track is FIXED, not content-sized:
+       each row is its own grid container, so only a fixed track aligns down the
+       feed — a content-sized one re-measures per row and the column wanders. That
+       covers the whole metadata block (time, chunk, severity, kind, runner), so
+       the message starts at one x on every row; the message takes the rest and the
+       lease trails.
+
+       Tracks are ch-based, so they scale with whatever face --mono resolves to on
+       the platform (tokens.css offers four) rather than assuming one face's advance
+       width. A ch here measures against the row's own --fs-sm, while the time and
+       runner cells render one step down at --fs-xs, so those two carry ~8% slack
+       for free. Kind and runner are open sets, so each is sized for its longest
+       known value and ellipsized past it — the full string stays in the title
+       attribute, so a truncation costs nothing. */
     .ev {
       display: grid;
-      grid-template-columns: 108px 64px 76px auto auto 1fr auto;
+      grid-template-columns: 15ch 8ch 10ch 18ch 12ch 1fr auto;
       align-items: baseline;
       gap: 6px;
       padding: 4px 8px;
@@ -179,11 +190,15 @@ const SEVERITY_TONE: Readonly<Record<string, Tone>> = {
     .kind {
       color: var(--cyan);
       white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .runner {
       color: var(--label-dim);
       font-size: var(--fs-xs);
       white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .msg {
       color: var(--text);
@@ -209,10 +224,14 @@ const SEVERITY_TONE: Readonly<Record<string, Tone>> = {
       border-color: var(--cyan);
     }
     /* A chunk-less (runner-scoped) row still occupies the chunk column, so the
-       columns after it stay aligned with the rows that do name a chunk. */
+       columns after it stay aligned with the rows that do name a chunk. The inset
+       matches the sibling .chunk button's own border + padding, so the dash sits
+       where that button's text sits rather than 5px to its left. */
     .chunk-none {
       color: var(--label-dim);
       font-size: var(--fs-xs);
+      justify-self: start;
+      padding: 0 5px;
     }
     .sev {
       justify-self: start;
@@ -220,6 +239,35 @@ const SEVERITY_TONE: Readonly<Record<string, Tone>> = {
     .lease {
       color: var(--label-dim);
       font-size: var(--fs-xs);
+    }
+    /* Below the board's own mobile cutoff the fixed metadata tracks no longer fit:
+       they alone are wider than a handset's content box, so the message track
+       would resolve to 0 and — with overflow-wrap: anywhere — wrap one character
+       per line, turning every row into a ribbon hundreds of pixels tall.
+
+       So a narrow viewport drops back to the wrapping flex line the row used
+       before the grid, with the message on its own full-width line beneath the
+       metadata. Flex cannot collapse a track to nothing, so this degrades at any
+       width rather than only at the ones someone thought to measure. Nothing is
+       lost: cross-row alignment buys a reader a column to scan down, and a phone
+       is one column wide already.
+
+       This forks on a media query rather than on ViewportService.mode(), which is
+       how the app picks a *shell* (matches-mobile-viewport.ts). The two answer
+       different questions: mode() includes a manual override, so a user pinning
+       mobile on a wide monitor still has room for the grid and should keep it,
+       while a narrow *desktop* window has no room and still needs the fallback.
+       What breaks the layout is available width, so width is what it keys on —
+       at the same 767.98px cutoff ViewportService uses, so the two agree wherever
+       both apply. */
+    @media (max-width: 767.98px) {
+      .ev {
+        display: flex;
+        flex-wrap: wrap;
+      }
+      .msg {
+        flex: 1 1 100%;
+      }
     }
   `,
 })
@@ -293,12 +341,6 @@ export class EventsView {
 
   protected shortId(id: string): string {
     return compactRef(id);
-  }
-
-  /** A row's runner, compact-ref'd — or a dim dash for a projected escalation, which
-   * names no runner (`runner_id: null`, issue #155). */
-  protected runnerLabel(runnerId: string | null | undefined): string {
-    return runnerId ? compactRef(runnerId) : '—';
   }
 
   protected formatWhen(iso: string): string {

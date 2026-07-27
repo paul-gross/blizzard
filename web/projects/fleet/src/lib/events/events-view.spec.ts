@@ -104,18 +104,41 @@ describe('EventsView', () => {
     ]);
   });
 
-  it('lays the row out as a grid whose leading tracks are fixed, so they align down the feed', async () => {
+  it('lays the row out as a grid whose metadata tracks are all fixed, so they align down the feed', async () => {
     const fixture = render();
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
     // jsdom has no layout engine, so the alignment itself is unassertable here — what is
-    // assertable is that the row is a grid and its time/chunk tracks are fixed lengths
-    // rather than content-sized (each row is its own grid container, so a content-sized
-    // track would size per-row and the columns would not line up).
+    // assertable is that the row is a grid and that every metadata track is a fixed
+    // length rather than content-sized (each row is its own grid container, so a
+    // content-sized track re-measures per row and the column wanders).
     const style = getComputedStyle(el.querySelector('.ev') as HTMLElement);
     expect(style.display).toBe('grid');
-    expect(style.gridTemplateColumns.split(' ').slice(0, 2)).toEqual(['108px', '64px']);
+    const tracks = style.gridTemplateColumns.split(' ');
+    // time, chunk, severity, kind, runner — then the message (1fr) and the lease.
+    expect(tracks.slice(0, 5).every((t) => t.endsWith('ch'))).toBe(true);
+    expect(tracks.slice(5)).toEqual(['1fr', 'auto']);
+  });
+
+  it('falls back to a wrapping flex line below the board mobile cutoff, so no track can collapse', async () => {
+    const fixture = render();
+    await fixture.whenStable();
+
+    // The regression this guards: the fixed metadata tracks are wider than a handset's
+    // content box, so on a narrow viewport the 1fr message track resolves to 0 and — with
+    // overflow-wrap: anywhere — wraps one character per line. jsdom has no layout engine
+    // and does not evaluate @media against a viewport, so what is assertable here is that
+    // the fallback rule EXISTS and targets the board's own breakpoint; the rendered result
+    // is proven in the browser (tests/e2e/test_event_log_e2e.py).
+    const styles = [...document.querySelectorAll('style')].map((s) => s.textContent ?? '');
+    const rowStyles = styles.find((s) => s.includes('grid-template-columns'));
+    expect(rowStyles).toBeDefined();
+    const narrow = /@media\s*\(max-width:\s*767\.98px\)\s*\{(.*)\}/s.exec(rowStyles ?? '')?.[1] ?? '';
+    // The row stops being a grid, and the message gets a full-width basis of its own.
+    expect(narrow).toMatch(/display:\s*flex/);
+    expect(narrow).toMatch(/flex-wrap:\s*wrap/);
+    expect(narrow).toMatch(/flex:\s*1 1 100%/);
   });
 
   it('keeps the chunk column occupied on a chunk-less row so the grid stays aligned', async () => {
