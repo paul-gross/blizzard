@@ -364,7 +364,11 @@ prompt: (1) a baked-in blizzard preamble — always present, framing the worker 
 operating inside the fleet and naming its worker-facing `blizzard runner` verbs
 (`ask`, `work-items`) — (2) the operator's own `workspace_prompt` prose, layered on top
 when set, and (3) a machine-local facts table (runner/chunk/lease identity, held
-environment(s)).
+environment(s)). Layer 1 closes by stating that division of labor for the worker's own
+benefit; read the shipped text
+(`src/blizzard/runner/harness/prompts/blizzard_preamble.md`) before authoring layer 2, so
+your prose adds deployment-specific policy rather than re-establishing framing the worker
+already has.
 
 Layer 1 is overridable but never absent: `blizzard-runner.toml`'s `runner_prompt`
 (inline text) or `runner_prompt_file` (a path, wins over inline text when both are

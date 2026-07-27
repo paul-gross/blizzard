@@ -91,6 +91,17 @@ def test_baked_default_used_when_runner_prompt_unset() -> None:
 
 
 @pytest.mark.unit
+def test_baked_default_opens_with_a_title_and_declares_its_scope() -> None:
+    # Issue #147: layer 1 is a titled document, not an untitled prose blob — and it says
+    # what it covers, so an operator's layer-2 prompt has no reason to re-establish it.
+    out = _render("", [AcquiredEnvironment("r1", "/ws/r1")])
+    assert out.startswith("# Blizzard fleet worker\n")
+    assert "## What this preamble covers" in out
+    # Names layer 2 as the home for deployment-specific prose, without supplying any.
+    assert "workspace prompt" in out
+
+
+@pytest.mark.unit
 def test_runner_prompt_overrides_the_baked_default() -> None:
     out = _render("", [AcquiredEnvironment("r1", "/ws/r1")], runner_prompt="Custom blizzard framing.")
     assert out.startswith("Custom blizzard framing.\n\n")
