@@ -75,7 +75,6 @@ from __future__ import annotations
 import contextlib
 import os
 import signal
-import subprocess
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -91,6 +90,7 @@ from blizzard.hub.config import HubConfig
 from blizzard.hub.domain.enrollment import hash_token
 from blizzard.hub.store import schema as hub_schema
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.environments.internal.winter_cli import SubprocessWinterCli
 from blizzard.runner.store import schema as runner_schema
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 from blizzard.runner.store.repository import NewLease
@@ -927,14 +927,12 @@ def test_kill9_at_declare_commit_crash_point(crash_env: CrashEnv, tmp_path: Path
     # acquire; this one seeds its lease + binding directly, and a binding whose env was
     # never prepared is a state production cannot reach — the declare edge checks the
     # repo against the env's real manifest, and an unmaterialized env truthfully holds
-    # nothing.
-    subprocess.run(
-        ["winter", "ws", "init", _DECLARE_COMMIT_ENV],
-        cwd=crash_env.workspace,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    # nothing. Driven through the same winter-CLI seam the daemon uses: the fixture
+    # workspace vendors ``tools/winter-cli``, so this needs no global ``winter`` binary
+    # (CI has none).
+    winter_cli = SubprocessWinterCli()
+    winter_cli.ensure_ready(crash_env.workspace)
+    winter_cli.run(crash_env.workspace, ["ws", "init", _DECLARE_COMMIT_ENV])
     # Nothing listens on ``hub_port`` — the declare path never calls the hub; the loop's
     # hub polls just fail and are swallowed, and the local API serves regardless.
     hub_port, runner_port = free_port(), free_port()
