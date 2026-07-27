@@ -3,7 +3,7 @@ import { Injectable, type Signal, computed, inject, signal } from '@angular/core
 import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs';
 
-/** The manual viewport override a user can pin from {@link ViewportToggle} —
+/** The manual viewport override a user can pin from {@link ViewportMenu} —
  * `'auto'` defers to the breakpoint-derived {@link ViewportMode}. */
 export type ViewportOverride = 'auto' | 'mobile' | 'desktop';
 
@@ -36,7 +36,7 @@ function readStoredOverride(): ViewportOverride {
  * (mobile vs. desktop). Two signals drive `mode`: the CDK's
  * `BreakpointObserver` for the breakpoint-derived mode, and a manual
  * `override` (persisted to localStorage) a user can pin instead of the
- * breakpoint — {@link ViewportToggle} is the control that sets it.
+ * breakpoint — {@link ViewportMenu} is the control that sets it.
  */
 @Injectable({ providedIn: 'root' })
 export class ViewportService {

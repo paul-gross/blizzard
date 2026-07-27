@@ -11,6 +11,7 @@ export { KitBadge, toneColor } from './kit-badge';
 export { KitBeacon, type BeaconTone } from './kit-beacon';
 export { KitButton } from './kit-button';
 export { KitChip, KitChips, type KitChipOption } from './kit-chips';
-export { KitMenu } from './kit-menu';
+export { KitMenu, KitMenuPanel } from './kit-menu';
+export { KitMenuItem, KitMenuItemRadio } from './kit-menu-item';
 export { KitSlotBar } from './kit-slot-bar';
 export type { Tone } from './tone';

@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
-import { MobileTitlebar as FleetMobileTitlebar, ViewportToggle } from 'fleet';
+import { CdkMenuTrigger } from '@angular/cdk/menu';
+import { KitMenuItem, KitMenuPanel, MobileTitlebar as FleetMobileTitlebar, ViewportMenu } from 'fleet';
 
 /**
  * The hub's mobile titlebar (mock screen C's `.appbar`,
@@ -12,9 +13,11 @@ import { MobileTitlebar as FleetMobileTitlebar, ViewportToggle } from 'fleet';
  * A thin wrapper around the shared {@link FleetMobileTitlebar} (issue #92) —
  * the runner's `local-panel-mobile.ts` mounts the same fleet component. This
  * layer only supplies the hub's own live signal (`FleetLiveUpdates`, the same
- * connection state the desktop titlebar's own "Hub" cell derives from) and
- * projects the viewport-override menu (item 5) into the shared component's
- * menu slot — deliberately **no** board/graphs tabs: mobile navigation lives
+ * connection state the desktop titlebar's own "Hub" cell derives from) and the
+ * shell menu's panel — the appearance switcher (item 5), now the CDK-menu
+ * submenu the shells share (issue #161), declared here rather than projected
+ * because a `CdkMenu` cannot see items across an `<ng-content>` boundary.
+ * Deliberately **no** board/graphs tabs: mobile navigation lives
  * in the bottom {@link MobileTabBar} instead (mock screen C's `.tabbar`),
  * never here. The fleet component defaults its own `testid` to
  * `'mobile-titlebar'`, so this wrapper needs no input to keep the hub's
@@ -23,11 +26,19 @@ import { MobileTitlebar as FleetMobileTitlebar, ViewportToggle } from 'fleet';
 @Component({
   selector: 'app-mobile-titlebar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FleetMobileTitlebar, ViewportToggle],
+  imports: [CdkMenuTrigger, FleetMobileTitlebar, KitMenuItem, KitMenuPanel, ViewportMenu],
   template: `
-    <fleet-mobile-titlebar [live]="live()">
-      <fleet-viewport-toggle />
-    </fleet-mobile-titlebar>
+    <fleet-mobile-titlebar [live]="live()" [menu]="shellMenu" />
+    <ng-template #shellMenu>
+      <fleet-kit-menu-panel testid="mobile-titlebar-menu-panel">
+        <fleet-kit-menu-item testid="mobile-titlebar-appearance" submenu [cdkMenuTriggerFor]="appearanceMenu">
+          Appearance
+        </fleet-kit-menu-item>
+      </fleet-kit-menu-panel>
+    </ng-template>
+    <ng-template #appearanceMenu>
+      <fleet-viewport-menu testid="mobile-titlebar-appearance-panel" />
+    </ng-template>
   `,
 })
 export class MobileTitlebar {

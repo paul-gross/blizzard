@@ -812,30 +812,34 @@ describe('LocalPanel', () => {
       expect(el.querySelectorAll('[data-testid="agent-row"]')).toHaveLength(1);
     });
 
-    it('the viewport toggle sits behind a quiet header menu, reachable in both modes', async () => {
+    it('the appearance switcher sits behind a quiet header menu, reachable in both modes', async () => {
       stub = stubRequestClient(runnerClient, routes([]));
       await setUp();
       const viewport = TestBed.inject(ViewportService);
       const fixture = TestBed.createComponent(LocalPanel);
 
+      // Each shell's menu is a CDK overlay (issue #161), so it renders on
+      // `document.body` rather than inside the fixture.
       viewport.setOverride('desktop');
       await settle(fixture);
       let el = fixture.nativeElement as HTMLElement;
-      expect(el.querySelector('fleet-viewport-toggle')).toBeNull();
+      expect(document.body.querySelector('[data-testid="local-panel-appearance"]')).toBeNull();
       el.querySelector<HTMLElement>('[data-testid="local-panel-menu"]')?.click();
       await settle(fixture);
-      el = fixture.nativeElement as HTMLElement;
-      expect(el.querySelector('[data-testid="local-panel-menu-panel"] fleet-viewport-toggle')).not.toBeNull();
+      expect(
+        document.body.querySelector('[data-testid="local-panel-menu-panel"] [data-testid="local-panel-appearance"]'),
+      ).not.toBeNull();
 
       viewport.setOverride('mobile');
       await settle(fixture);
       el = fixture.nativeElement as HTMLElement;
-      expect(el.querySelector('fleet-viewport-toggle')).toBeNull();
+      expect(document.body.querySelector('[data-testid="local-panel-mobile-appearance"]')).toBeNull();
       el.querySelector<HTMLElement>('[data-testid="local-panel-mobile-titlebar-menu"]')?.click();
       await settle(fixture);
-      el = fixture.nativeElement as HTMLElement;
       expect(
-        el.querySelector('[data-testid="local-panel-mobile-titlebar-menu-panel"] fleet-viewport-toggle'),
+        document.body.querySelector(
+          '[data-testid="local-panel-mobile-titlebar-menu-panel"] [data-testid="local-panel-mobile-appearance"]',
+        ),
       ).not.toBeNull();
     });
 

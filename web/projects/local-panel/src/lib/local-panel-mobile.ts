@@ -1,11 +1,14 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { CdkMenuTrigger } from '@angular/cdk/menu';
 import {
   KitAsyncState,
   type KitAsyncStateValue,
   KitBackBar,
+  KitMenuItem,
+  KitMenuPanel,
   KitPanel,
   MobileTitlebar,
-  ViewportToggle,
+  ViewportMenu,
   type runnerApi,
 } from 'fleet';
 
@@ -50,9 +53,12 @@ import { injectRunnerStatusQuery } from './status.query';
  *
  * Mounts the shared {@link MobileTitlebar} (issue #92) in place of its old
  * bespoke header — the same fleet component the hub's app-root mounts —
- * burying {@link ViewportToggle} behind the titlebar's own overflow menu
+ * burying the appearance switcher behind the titlebar's own overflow menu
  * (mobile polish feedback item 5; the desktop layout's own header hosts one
- * too, so the override stays reachable in both modes). Its `live` input is
+ * too, so the override stays reachable in both modes). Since the CDK-menu
+ * rebuild (issue #161) that menu's panel is declared here and passed to the
+ * titlebar as a template — a `CdkMenu` finds its items by a content query,
+ * which cannot cross an `<ng-content>` boundary. Its `live` input is
  * this runner's own hub-reachability read (`GET /api/runner`'s
  * `hub.reachable`, the same fact `local-info.ts`'s "link" cell renders) —
  * never a new poll, the same severable {@link injectRunnerStatusQuery} read.
@@ -70,15 +76,30 @@ import { injectRunnerStatusQuery } from './status.query';
     LocalIdentity,
     LocalInfo,
     MachineDetail,
+    CdkMenuTrigger,
+    KitMenuItem,
+    KitMenuPanel,
     MobileTitlebar,
-    ViewportToggle,
+    ViewportMenu,
   ],
   template: `
     <div class="lpm" data-testid="local-panel-mobile">
-      <fleet-mobile-titlebar [live]="hubReachable()" testid="local-panel-mobile-titlebar">
-        <local-identity />
-        <fleet-viewport-toggle />
-      </fleet-mobile-titlebar>
+      <fleet-mobile-titlebar [live]="hubReachable()" testid="local-panel-mobile-titlebar" [menu]="shellMenu" />
+      <ng-template #shellMenu>
+        <fleet-kit-menu-panel testid="local-panel-mobile-titlebar-menu-panel">
+          <local-identity />
+          <fleet-kit-menu-item
+            testid="local-panel-mobile-appearance"
+            submenu
+            [cdkMenuTriggerFor]="appearanceMenu"
+          >
+            Appearance
+          </fleet-kit-menu-item>
+        </fleet-kit-menu-panel>
+      </ng-template>
+      <ng-template #appearanceMenu>
+        <fleet-viewport-menu testid="local-panel-mobile-appearance-panel" />
+      </ng-template>
       @if (detailOpen()) {
         <div class="lpm-detail" data-testid="panel-chunk-detail">
           <button class="back-row" type="button" aria-label="Back to Machine" data-testid="mobile-detail-back" (click)="closeDetail.emit()">

@@ -1,5 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { hiddenAtContainerWidth } from 'fleet/testing';
 
 import type { ChunkStatus, ChunkSummary } from '../api/hub';
 import { LANES, STATUS_LANE } from '../chunk-lanes';
@@ -159,5 +160,83 @@ describe('BoardHeader', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="spend-today-value"]')?.textContent).toContain('~$0.10');
+  });
+
+  /*
+   * The tiered collapse (issue #163). jsdom parses `@container` rules but never
+   * evaluates them, so these resolve the component's own shipped rules at a
+   * given container width through `resolveContainerStyle` rather than trusting
+   * `getComputedStyle`, which would report the wide-tier value at every width.
+   */
+  describe('responsive collapse (issue #163)', () => {
+    const at = (el: HTMLElement, selector: string, width: number) =>
+      hiddenAtContainerWidth(el.querySelector(selector)!, { containerName: 'board-header', width });
+
+    const spendRender = async () => {
+      const fixture = TestBed.createComponent(BoardHeader);
+      fixture.componentRef.setInput('chunks', [chunk('ch_1', 'ready')]);
+      fixture.componentRef.setInput('spendToday', {
+        since: '2026-07-17T00:00:00Z',
+        input_tokens: 100,
+        output_tokens: 50,
+        cache_read_tokens: 0,
+        cache_create_tokens: 0,
+        cost_usd: 3.5,
+        cost_partial: false,
+      });
+      await fixture.whenStable();
+      return fixture.nativeElement as HTMLElement;
+    };
+
+    it('queries its own header width, not the viewport — so the two shells collapse independently', async () => {
+      const el = await render([]);
+      const header = el.querySelector<HTMLElement>('.mc-header')!;
+      expect(getComputedStyle(header).containerName).toBe('board-header');
+      expect(getComputedStyle(header).containerType).toBe('inline-size');
+    });
+
+    it('shows every region at the full tier', async () => {
+      const el = await spendRender();
+      expect(at(el, '[data-testid="board-header-stats"]', 1200)).toBe(false);
+      expect(at(el, '[data-testid="spend-today"]', 1200)).toBe(false);
+      expect(at(el, '.brand small', 1200)).toBe(false);
+      expect(at(el, '[data-testid="conn"]', 1200)).toBe(false);
+      expect(at(el, '.trailing', 1200)).toBe(false);
+    });
+
+    it('drops the stat strip at the mid tier, keeping spend, brand, connection, and the menu slot', async () => {
+      const el = await spendRender();
+      expect(at(el, '[data-testid="board-header-stats"]', 1000)).toBe(true);
+      expect(at(el, '[data-testid="spend-today"]', 1000)).toBe(false);
+      expect(at(el, '.brand small', 1000)).toBe(false);
+      expect(at(el, '[data-testid="conn"]', 1000)).toBe(false);
+      expect(at(el, '.trailing', 1000)).toBe(false);
+    });
+
+    it('drops spend and the brand tagline at the narrow tier — never the connection cell or the menu slot', async () => {
+      const el = await spendRender();
+      expect(at(el, '[data-testid="board-header-stats"]', 420)).toBe(true);
+      expect(at(el, '[data-testid="spend-today"]', 420)).toBe(true);
+      expect(at(el, '.brand small', 420)).toBe(true);
+      // The one guarantee the whole tiering exists for: on a phone forced into
+      // desktop mode, the profile menu behind this slot is the only way back.
+      expect(at(el, '[data-testid="conn"]', 420)).toBe(false);
+      expect(at(el, '.trailing', 420)).toBe(false);
+      expect(at(el, 'fleet-brand-mark', 420)).toBe(false);
+    });
+
+    it('makes the stat strip the only region that shrinks, so the trailing cluster is never pushed off', async () => {
+      const el = await render([]);
+      const strip = el.querySelector<HTMLElement>('[data-testid="board-header-stats"]')!;
+      // `min-width: 0` + `overflow: hidden` is what lets the strip clip instead
+      // of forcing the row wider than the viewport-locked shell.
+      expect(getComputedStyle(strip).minWidth).toBe('0px');
+      expect(getComputedStyle(strip).overflow).toBe('hidden');
+      expect(getComputedStyle(strip).flexShrink).toBe('1');
+
+      for (const selector of ['.brand', '[data-testid="conn"]', '.trailing']) {
+        expect(getComputedStyle(el.querySelector<HTMLElement>(selector)!).flexShrink).toBe('0');
+      }
+    });
   });
 });

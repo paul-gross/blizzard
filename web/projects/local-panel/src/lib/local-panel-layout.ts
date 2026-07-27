@@ -1,7 +1,19 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import type { runnerApi, StatCell } from 'fleet';
 
-import { BoardHeader, KitAsyncState, type KitAsyncStateValue, KitAvatar, KitMenu, KitPanel, ViewportToggle } from 'fleet';
+import { CdkMenuTrigger } from '@angular/cdk/menu';
+
+import {
+  BoardHeader,
+  KitAsyncState,
+  type KitAsyncStateValue,
+  KitAvatar,
+  KitMenu,
+  KitMenuItem,
+  KitMenuPanel,
+  KitPanel,
+  ViewportMenu,
+} from 'fleet';
 
 import { AgentRow } from './agent-row';
 import { MachineDetail } from './chunk-detail';
@@ -36,20 +48,22 @@ import type { MachineChunkRow } from './local-panel';
  * resolves through the shared design tokens (`fleet` library,
  * design/tokens.css), never hard-coded hex.
  *
- * The header's own {@link KitMenu} buries {@link ViewportToggle} (mobile
+ * The header's own {@link KitMenu} buries the appearance switcher (mobile
  * polish feedback item 5) — this is the existing header region the desktop
  * shell's override lives behind now, replacing {@link LocalPanel}'s old
  * always-visible `.viewport-strip`. Its trigger is the shared {@link KitAvatar}
  * profile glyph (issue #132) rather than the menu's default `⋮`, the same
  * trigger the hub's `AppNavMenu` projects — one shared component so both
- * shells' profile menus render identically.
+ * shells' profile menus render identically. Since the CDK-menu rebuild (issue
+ * #161) the panel is declared here and passed as a template: a `CdkMenu` finds
+ * its items by a content query, which cannot cross an `<ng-content>` boundary.
  *
  * The titlebar itself is the shared {@link BoardHeader} (issue #131) — the same
  * 48px chrome the hub board renders, rather than a bespoke local one. It carries
  * this machine's own capacity cells ({@link headerStats}, folded by the container
  * from the runner local API's status + environments reads) and a real connection
  * state, never a placeholder. {@link LocalPauseControl} (issue #133), `local-identity`,
- * and the shell's {@link KitMenu} ride along in the header's `[header-trailing]`
+ * and the shell's profile menu ride along in the header's `[header-trailing]`
  * slot — each a self-fetching mini-container of its own, composed here without
  * this layout or {@link BoardHeader} knowing anything about pause state or identity.
  */
@@ -59,6 +73,7 @@ import type { MachineChunkRow } from './local-panel';
   imports: [
     AgentRow,
     BoardHeader,
+    CdkMenuTrigger,
     MachineDetail,
     ChunkRow,
     EnvList,
@@ -66,23 +81,40 @@ import type { MachineChunkRow } from './local-panel';
     KitAsyncState,
     KitAvatar,
     KitMenu,
+    KitMenuItem,
+    KitMenuPanel,
     KitPanel,
     LocalAsks,
     LocalIdentity,
     LocalInfo,
     LocalPauseControl,
-    ViewportToggle,
+    ViewportMenu,
   ],
   template: `
     <div class="lp" data-testid="local-panel">
       <fleet-board-header [connection]="connection()" connectionLabel="Runner" tagline="runner · machine panel" [stats]="headerStats()">
         <local-pause-control header-trailing />
         <local-identity header-trailing />
-        <fleet-kit-menu header-trailing class="menu" ariaLabel="Profile menu" testid="local-panel-menu">
+        <fleet-kit-menu
+          header-trailing
+          class="menu"
+          ariaLabel="Profile menu"
+          testid="local-panel-menu"
+          [menu]="profileMenu"
+        >
           <fleet-kit-avatar trigger />
-          <fleet-viewport-toggle />
         </fleet-kit-menu>
       </fleet-board-header>
+      <ng-template #profileMenu>
+        <fleet-kit-menu-panel testid="local-panel-menu-panel">
+          <fleet-kit-menu-item testid="local-panel-appearance" submenu [cdkMenuTriggerFor]="appearanceMenu">
+            Appearance
+          </fleet-kit-menu-item>
+        </fleet-kit-menu-panel>
+      </ng-template>
+      <ng-template #appearanceMenu>
+        <fleet-viewport-menu testid="local-panel-appearance-panel" />
+      </ng-template>
       <main class="cols">
         <section class="col left">
           <fleet-kit-panel

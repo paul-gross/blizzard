@@ -1,44 +1,44 @@
-import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, TemplateRef, input } from '@angular/core';
+import { CdkMenu, CdkMenuTrigger } from '@angular/cdk/menu';
 
 /**
- * The quiet overflow menu (mobile polish feedback item 5, `../../../docs/designs/mobile/core-flows.html`)
- * — a small icon trigger that reveals its projected content in a floating
- * panel, closing on an outside click or `Escape`. Built for burying
- * {@link ViewportToggle} in a titlebar corner instead of leaving it always
- * visible: every titlebar (`hub`'s desktop nav and mobile titlebar, the
- * runner's local-panel header) wraps the same toggle in one of these rather
- * than forking its own popover.
+ * The quiet overflow menu's trigger (mobile polish feedback item 5,
+ * `../../../docs/designs/mobile/core-flows.html`) — a small icon button that
+ * opens its {@link KitMenuPanel} in a CDK overlay, closing on an outside
+ * click, `Escape`, or a triggered item.
  *
- * No CDK overlay: the codebase has no existing overlay/menu idiom to match
- * (`bzh:frontend-kit`'s "match whatever menu idiom exists" — there is none
- * yet), so this stays a minimal, token-styled, absolutely-positioned panel
- * rather than reaching for a heavier dependency for one popover.
+ * Built on `@angular/cdk/menu` (issue #161): the CDK is already a dependency,
+ * it is unstyled (so the token layer below applies untouched), and it carries
+ * the menu semantics a home-grown popover lacks — roving focus, arrow-key
+ * navigation, typeahead, and submenus.
  *
  * The trigger's own content is a `[trigger]`-selected projection, defaulting to
  * the classic `⋮` glyph — a caller wanting a different trigger (the shell's
  * profile menu projects {@link KitAvatar}, issue #132) marks its projected
  * element `trigger` rather than this component growing a variant input per
- * trigger shape.
+ * trigger shape. `aria-haspopup`/`aria-expanded` come from `CdkMenuTrigger`.
+ *
+ * The panel arrives as a {@link TemplateRef} rather than as projected content:
+ * `CdkMenu` discovers its items through a content query, and a content query
+ * does not reach across an `<ng-content>` boundary — a panel wrapped around a
+ * projection slot would register **zero** items and lose every keyboard
+ * behavior the CDK exists to provide. Passing the template keeps the panel and
+ * its items in the caller's own view, where the query finds them.
  */
 @Component({
   selector: 'fleet-kit-menu',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [CdkMenuTrigger],
   template: `
     <button
       type="button"
       class="trigger"
+      [cdkMenuTriggerFor]="menu()"
       [attr.aria-label]="ariaLabel()"
-      [attr.aria-expanded]="open()"
       [attr.data-testid]="testid()"
-      (click)="toggle()"
     >
       <ng-content select="[trigger]">⋮</ng-content>
     </button>
-    @if (open()) {
-      <div class="panel" [attr.data-testid]="panelTestid()">
-        <ng-content />
-      </div>
-    }
   `,
   styles: `
     :host {
@@ -63,57 +63,57 @@ import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, input
       color: var(--cyan);
       background: var(--overlay-25);
     }
-    .panel {
-      position: absolute;
-      top: 100%;
-      right: 0;
-      margin-top: 4px;
-      z-index: 20;
-      background: var(--panel);
-      border: 1px solid var(--bezel);
-      box-shadow: 0 8px 20px var(--overlay-40);
-      padding: 8px 10px;
-      white-space: nowrap;
-    }
   `,
-  host: {
-    '(document:click)': 'onDocumentClick($event)',
-    '(keydown.escape)': 'close()',
-  },
 })
 export class KitMenu {
-  private readonly elementRef = inject(ElementRef<HTMLElement>);
+  /** The panel this trigger opens — the `<ng-template>` holding a
+   * {@link KitMenuPanel} and its items, declared in the caller's own view. */
+  readonly menu = input.required<TemplateRef<unknown>>();
 
   /** The trigger button's accessible name. */
   readonly ariaLabel = input('Menu');
 
-  /** The trigger button's `data-testid`, or `null` for none. The panel's own
-   * testid (when open) is derived from it (`${testid}-panel`) rather than a
-   * second input, so every instance's panel testid stays distinct without a
-   * caller having to spell it out twice. */
+  /** The trigger button's `data-testid`, or `null` for none. */
   readonly testid = input<string | null>(null);
+}
 
-  protected readonly open = signal(false);
-
-  protected readonly panelTestid = computed(() => {
-    const testid = this.testid();
-    return testid ? `${testid}-panel` : null;
-  });
-
-  protected toggle(): void {
-    this.open.update((value) => !value);
-  }
-
-  protected close(): void {
-    this.open.set(false);
-  }
-
-  /** Closes on any click outside this component's own host — a click on the
-   * trigger or anywhere in the projected panel content is still inside the
-   * host element, so `contains` keeps it open; only a click elsewhere in the
-   * document closes it. */
-  protected onDocumentClick(event: MouseEvent): void {
-    if (!this.open()) return;
-    if (!this.elementRef.nativeElement.contains(event.target as Node)) this.close();
-  }
+/**
+ * A menu panel — the floating, token-styled surface a {@link KitMenu} trigger
+ * (or a {@link KitMenuItem} opening a submenu) renders into. Carries `CdkMenu`
+ * as a host directive, so it *is* the CDK menu: `role="menu"`, roving focus
+ * across its item children, arrow/Home/End navigation, and `Escape`/left-arrow
+ * to close back into its parent.
+ *
+ * Presentational: the panel owns chrome only, and every color resolves through
+ * the design-token layer — the same `--panel`/`--bezel` surface the home-grown
+ * popover this replaced carried, so the visual result is unchanged.
+ */
+@Component({
+  selector: 'fleet-kit-menu-panel',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  hostDirectives: [CdkMenu],
+  host: {
+    '[attr.data-testid]': 'testid()',
+  },
+  template: `<ng-content />`,
+  styles: `
+    :host {
+      display: flex;
+      flex-direction: column;
+      min-width: 150px;
+      margin-top: 4px;
+      background: var(--panel);
+      border: 1px solid var(--bezel);
+      box-shadow: 0 8px 20px var(--overlay-40);
+      padding: 4px 0;
+      font-family: var(--mono);
+      font-size: var(--fs-base);
+      white-space: nowrap;
+      outline: none;
+    }
+  `,
+})
+export class KitMenuPanel {
+  /** The panel's `data-testid`, or `null` for none. */
+  readonly testid = input<string | null>(null);
 }

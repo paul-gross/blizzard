@@ -300,10 +300,12 @@ describe('hub App', () => {
       expect(el.querySelector('[data-testid="nav-admin"]')).toBeNull();
 
       // Log out lives inside the header's profile menu (issue #132) — closed by
-      // default, so it opens the trigger before the entry is reachable.
+      // default, so it opens the trigger before the entry is reachable. The
+      // menu is a CDK overlay (issue #161), so it renders on `document.body`
+      // rather than inside the fixture.
       el.querySelector<HTMLElement>('[data-testid="app-nav-menu"]')?.click();
       await settle(fixture);
-      expect(el.querySelector('[data-testid="nav-logout"]')).toBeTruthy();
+      expect(document.body.querySelector('[data-testid="nav-logout"]')).toBeTruthy();
     });
   });
 });

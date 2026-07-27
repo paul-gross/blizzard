@@ -220,13 +220,16 @@ describe('LocalPanelMobile', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="local-panel-mobile-titlebar"]')).not.toBeNull();
-    expect(el.querySelector('fleet-viewport-toggle')).toBeNull();
+    // The CDK renders the menu into an overlay on `document.body` (issue #161).
+    expect(document.body.querySelector('[data-testid="local-panel-mobile-appearance"]')).toBeNull();
 
     el.querySelector<HTMLElement>('[data-testid="local-panel-mobile-titlebar-menu"]')?.click();
     await fixture.whenStable();
 
     expect(
-      el.querySelector('[data-testid="local-panel-mobile-titlebar-menu-panel"] fleet-viewport-toggle'),
+      document.body.querySelector(
+        '[data-testid="local-panel-mobile-titlebar-menu-panel"] [data-testid="local-panel-mobile-appearance"]',
+      ),
     ).not.toBeNull();
   });
 

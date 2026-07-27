@@ -243,16 +243,27 @@ describe('LocalPanelLayout', () => {
     expect(picked).toBe(older.lease_id);
   });
 
-  it('buries the viewport toggle behind the header menu, closed by default', async () => {
+  it('buries the appearance switcher behind the header menu, closed by default', async () => {
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('fleet-viewport-toggle')).toBeNull();
+    // The CDK renders the menu into an overlay on `document.body` (issue #161),
+    // outside the fixture's own element.
+    expect(document.body.querySelector('[data-testid="local-panel-appearance"]')).toBeNull();
 
     el.querySelector<HTMLElement>('[data-testid="local-panel-menu"]')?.click();
     await fixture.whenStable();
 
-    expect(el.querySelector('[data-testid="local-panel-menu-panel"] fleet-viewport-toggle')).not.toBeNull();
+    expect(
+      document.body.querySelector('[data-testid="local-panel-menu-panel"] [data-testid="local-panel-appearance"]'),
+    ).not.toBeNull();
+
+    document.body.querySelector<HTMLElement>('[data-testid="local-panel-appearance"]')?.click();
+    await fixture.whenStable();
+
+    expect(
+      document.body.querySelector('[data-testid="local-panel-appearance-panel"] [data-testid="viewport-menu-auto"]'),
+    ).not.toBeNull();
   });
 
   it('renders the shared avatar-circle trigger on the header menu (issue #132)', async () => {

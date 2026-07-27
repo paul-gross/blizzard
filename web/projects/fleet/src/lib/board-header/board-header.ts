@@ -31,6 +31,15 @@ export interface StatCell {
  * header controls (an avatar menu, a pause toggle) slot into without this
  * component knowing about either. All color comes from the design-token layer,
  * never hard-coded hex.
+ *
+ * Collapses in tiers as it narrows (issue #163), driven by `@container`
+ * queries on the header's own inline size rather than the viewport's: the two
+ * shells mount it over different layouts, so each must react to the width it
+ * actually has. Below ~1150px the stat strip drops; below ~700px the spend cell
+ * and the brand tagline follow. The trailing cluster — connection cell and
+ * projected menu — is `flex: none` at every width, so it can never be pushed
+ * past the clipped right edge of an `overflow: hidden` shell; the stat strip is
+ * the only region that shrinks.
  */
 @Component({
   selector: 'fleet-board-header',
@@ -42,14 +51,16 @@ export interface StatCell {
         <fleet-brand-mark [size]="30" />
         <div class="brand-text">blizzard<small>{{ tagline() }}</small></div>
       </div>
-      @for (cell of cells(); track cell.key) {
-        <div class="cell" [attr.data-stat]="cell.key">
-          <span class="stat-lbl">{{ cell.label }}</span>
-          <span class="v" [attr.data-testid]="'stat-' + cell.key"
-            >{{ cell.value }}{{ cell.capacity === undefined ? '' : '/' + cell.capacity }}</span
-          >
-        </div>
-      }
+      <div class="stats" data-testid="board-header-stats">
+        @for (cell of cells(); track cell.key) {
+          <div class="cell" [attr.data-stat]="cell.key">
+            <span class="stat-lbl">{{ cell.label }}</span>
+            <span class="v" [attr.data-testid]="'stat-' + cell.key"
+              >{{ cell.value }}{{ cell.capacity === undefined ? '' : '/' + cell.capacity }}</span
+            >
+          </div>
+        }
+      </div>
       <div class="spacer"></div>
       @if (spendToday(); as spend) {
         <!-- The fleet-wide spend-since read (issue #60) — "today" is whatever local
@@ -64,7 +75,14 @@ export interface StatCell {
         <span class="stat-lbl">{{ connectionLabel() }}</span>
         <span class="v">{{ connection() }}</span>
       </div>
-      <ng-content select="[header-trailing]" />
+      <!-- The trailing cluster is wrapped rather than projected straight into
+           the flex row so this component can pin it flex: none — view
+           encapsulation puts the *consumer's* attribute on projected nodes, so
+           a rule here could never reach them, and a shrinkable trailing cell is
+           exactly how the profile menu used to get clipped (issue #163). -->
+      <div class="trailing">
+        <ng-content select="[header-trailing]" />
+      </div>
     </header>
   `,
   styles: `
@@ -81,6 +99,13 @@ export interface StatCell {
       height: 48px;
       border-bottom: 1px solid var(--bezel);
       background: linear-gradient(180deg, var(--header-hi), var(--header-lo));
+      /* The header is its own query container, not a viewport-media consumer:
+         the hub board and the runner's local panel mount it at different
+         widths, so each must collapse by the width *it* actually has (issue
+         #163). Named so the container rules below can't be captured by some
+         future nested container. */
+      container-name: board-header;
+      container-type: inline-size;
     }
     .stat-lbl {
       font-size: var(--fs-label);
@@ -91,11 +116,23 @@ export interface StatCell {
     }
     .brand {
       display: flex;
+      flex: none;
       align-items: center;
       gap: 10px;
       padding: 0 14px;
       border-right: 1px solid var(--line);
       white-space: nowrap;
+    }
+    /* The one shrinkable region. Everything else is pinned flex: none, so an
+       overfull header eats into the stat strip — which then clips — instead of
+       pushing the connection cell and the profile menu past the clipped right
+       edge of a viewport-locked, scrollbar-less shell. */
+    .stats {
+      display: flex;
+      align-items: stretch;
+      flex: 0 1 auto;
+      min-width: 0;
+      overflow: hidden;
     }
     .brand-text {
       display: flex;
@@ -113,6 +150,7 @@ export interface StatCell {
     }
     .cell {
       display: flex;
+      flex: none;
       flex-direction: column;
       justify-content: center;
       padding: 0 14px;
@@ -147,6 +185,34 @@ export interface StatCell {
     }
     .spend .v {
       color: var(--amber-hi);
+    }
+    .trailing {
+      display: flex;
+      flex: none;
+      align-items: stretch;
+    }
+
+    /*
+     * Tiered collapse (issue #163). Below the wide breakpoint the per-lane
+     * count cells go — the board's own lane columns still carry those headings,
+     * so nothing is lost — and below the narrow one the spend cell and the
+     * brand's tagline follow. The brand mark, the connection cell, and the
+     * projected menu survive every tier: on a phone forced into desktop mode
+     * that menu is the only way back to mobile, so it must never be the thing
+     * that gets pushed off.
+     */
+    @container board-header (max-width: 1149px) {
+      .stats {
+        display: none;
+      }
+    }
+    @container board-header (max-width: 699px) {
+      .spend {
+        display: none;
+      }
+      .brand small {
+        display: none;
+      }
     }
   `,
 })

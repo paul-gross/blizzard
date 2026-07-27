@@ -7,6 +7,7 @@
  */
 
 export { settle } from './settle';
+export { hiddenAtContainerWidth, resolveContainerStyle } from './container-query';
 export {
   stubRequestClient,
   stubError,
