@@ -9,8 +9,10 @@ tell a worker killed mid-work from one that cleanly exited.
 
 Mirrors ``test_heartbeat.py`` — the same two tiers with no live socket: **component** exercises
 the endpoint over a real store (TestClient); **unit** exercises the verb's identity handling and
-soft-fail (``httpx.post`` stubbed), since the mock ``mock-claude-code`` façade does not emulate
-hooks. A third block asserts the settings document actually wires the hook.
+soft-fail (``httpx.post`` stubbed). The mock ``mock-claude-code`` façade now executes
+``--settings`` hook commands (``blizzard-mock:src/blizzard_mock/harness/README.md``
+§"Hook execution"); these tiers exercise the verb directly because they run without a live
+socket. A third block asserts the settings document actually wires the hook.
 """
 
 from __future__ import annotations

@@ -11,8 +11,9 @@ Two tiers, no live socket:
 
 * **component** — the endpoint over a real store (TestClient), the API + store half;
 * **unit** — the verb's identity handling and soft-fail (``httpx.post`` stubbed), the
-  CLI half. The mock ``mock-claude-code`` façade accepts ``--settings`` but does not
-  emulate hooks, so the verb is exercised directly here rather than through a hook.
+  CLI half. The mock ``mock-claude-code`` façade now executes ``--settings`` hook
+  commands (``blizzard-mock:src/blizzard_mock/harness/README.md`` §"Hook execution");
+  these tiers exercise the verb directly because they run without a live socket.
 """
 
 from __future__ import annotations
