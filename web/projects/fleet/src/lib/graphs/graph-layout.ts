@@ -1,7 +1,7 @@
 import dagre from '@dagrejs/dagre';
 
 import type { GraphNodeView, GraphView } from '../api/hub';
-import { producesNames } from './graph-node';
+import { producesNames, sessionLabel } from './graph-node';
 
 /**
  * The pure DAG-layout core for the graph diagram (`bzh:generated-client` — this
@@ -10,7 +10,9 @@ import { producesNames } from './graph-node';
  * #71's recommendation) and stays framework-light/DOM-free so it unit-tests without
  * a browser: `graph-diagram.ts` is the only caller, and it supplies a
  * {@link TextMeasurer} (canvas `measureText` in production, a stub in tests) so node
- * and label boxes size to their rendered text instead of a char-count estimate.
+ * and label boxes size to their rendered text instead of a char-count estimate. A node
+ * box therefore has no fixed size: its width follows the wider of its name row and its
+ * meta line, and its height grows with the meta line's wrap (see {@link nodeBox}).
  *
  * Blizzard graphs are not DAGs (`spike71/recommendation.md`): a choice edge may
  * target its own node (a self-loop retry) or an earlier node (a back edge, e.g.
@@ -25,7 +27,16 @@ import { producesNames } from './graph-node';
  * the wire model carries it as a plain string, not a discriminated value. */
 const DONE_TERMINAL = 'done';
 
-const NODE_HEIGHT = 60;
+/** A node box's height with a single (or no) meta line — the baseline every extra
+ * wrapped meta line adds {@link META_LINE_HEIGHT} to. */
+const BASE_NODE_HEIGHT = 60;
+/** Vertical advance between two wrapped meta lines, matching `.node-meta`'s 11px
+ * type in `graph-diagram.ts`. Exported so the component places line *i* at the same
+ * step the height derivation reserved for it. */
+export const META_LINE_HEIGHT = 15;
+/** The y offset of the first meta line's baseline within a node box — the component's
+ * `node.y + META_FIRST_LINE_Y`, from which further lines step by {@link META_LINE_HEIGHT}. */
+export const META_FIRST_LINE_Y = 44;
 const DONE_RADIUS = 24;
 /** Horizontal margin reserved so a self-loop's side arc doesn't clip the viewBox. */
 const SELF_LOOP_MARGIN = 60;
@@ -36,8 +47,16 @@ const BADGE_PAD_X = 6;
 const BADGE_GAP_R = 8;
 const META_PAD_X = 14;
 const MIN_NODE_WIDTH = 150;
+/** The width past which a node's meta line wraps onto further lines instead of
+ * widening the box further — without it a long `produces:` list alone dictates an
+ * absurdly wide box (issue #157). It bounds *wrapping*, not the box: the name row
+ * never wraps, and a single unsplittable meta segment wider than this still widens
+ * the box rather than being clipped. */
+const MAX_NODE_WIDTH = 420;
 const LABEL_PAD_X = 7;
 const LABEL_HEIGHT = 20;
+/** The separator drawn between two meta segments sharing a line. */
+const META_SEPARATOR = ' · ';
 
 /** An edge's derived semantic kind — purely structural, since the wire model
  * carries no `kind` field: an edge to the reserved `done` terminal (or any
@@ -49,7 +68,9 @@ export interface LaidOutNode {
   readonly id: string;
   readonly name: string;
   readonly executor: string;
-  readonly metaText: string;
+  /** The meta line, already wrapped to the box: one entry per rendered line, empty
+   * when the node has no meta at all. */
+  readonly metaLines: readonly string[];
   readonly isEntry: boolean;
   readonly x: number;
   readonly y: number;
@@ -110,9 +131,12 @@ export type TextKind = 'name' | 'badge' | 'meta' | 'label';
  * out of this DOM-free module). */
 export type TextMeasurer = (text: string, kind: TextKind) => number;
 
-function nodeMetaText(node: GraphNodeView): string {
+/** The meta line's segments, in render order — the atoms wrapping packs into lines.
+ * `session` renders in its authored form (`resume:<node>` for a targeted resume) via
+ * the shared {@link sessionLabel}, so the diagram and the detail table agree. */
+function nodeMetaSegments(node: GraphNodeView): string[] {
   const meta: string[] = [];
-  if (node.session) meta.push(node.session);
+  if (node.session) meta.push(sessionLabel(node));
   if (node.judged_by === 'human') meta.push('judged: human');
   if (node.mode) meta.push(node.mode);
   if (node.retries_max !== undefined && node.retries_max !== null) meta.push(`retries ${node.retries_max}`);
@@ -120,14 +144,50 @@ function nodeMetaText(node: GraphNodeView): string {
   if (produces && produces.length > 0) {
     meta.push(`→ ${produces.join(', ')}`);
   }
-  return meta.join(' · ');
+  return meta;
 }
 
-function nodeBoxWidth(node: GraphNodeView, meta: string, measure: TextMeasurer): number {
+/** Greedily packs meta segments into lines no wider than `maxTextWidth`, breaking only
+ * at the ` · ` separator. A single segment wider than the budget takes a line of its
+ * own and overflows it — segments are the smallest unit here, never split mid-token. */
+function wrapMetaSegments(segments: readonly string[], measure: TextMeasurer, maxTextWidth: number): string[] {
+  const lines: string[] = [];
+  let current = '';
+  for (const segment of segments) {
+    if (current === '') {
+      current = segment;
+      continue;
+    }
+    const candidate = current + META_SEPARATOR + segment;
+    if (measure(candidate, 'meta') <= maxTextWidth) current = candidate;
+    else {
+      lines.push(current);
+      current = segment;
+    }
+  }
+  if (current !== '') lines.push(current);
+  return lines;
+}
+
+interface NodeBox {
+  readonly metaLines: readonly string[];
+  readonly width: number;
+  readonly height: number;
+}
+
+/** Sizes one node's box to its *measured* text: the name row (never wrapped) sets a
+ * floor, and the meta line wraps at {@link MAX_NODE_WIDTH} with the box growing
+ * downward by {@link META_LINE_HEIGHT} per extra line (issue #157). */
+function nodeBox(node: GraphNodeView, measure: TextMeasurer): NodeBox {
   const badgeWidth = measure(node.executor.toUpperCase(), 'badge') + BADGE_PAD_X * 2;
   const nameRow = NAME_PAD_L + measure(node.name, 'name') + NAME_GAP + badgeWidth + BADGE_GAP_R;
-  const metaRow = meta ? META_PAD_X * 2 + measure(meta, 'meta') : 0;
-  return Math.max(MIN_NODE_WIDTH, Math.ceil(nameRow), Math.ceil(metaRow));
+  const metaLines = wrapMetaSegments(nodeMetaSegments(node), measure, MAX_NODE_WIDTH - META_PAD_X * 2);
+  const metaRow = metaLines.reduce((max, line) => Math.max(max, META_PAD_X * 2 + measure(line, 'meta')), 0);
+  return {
+    metaLines,
+    width: Math.max(MIN_NODE_WIDTH, Math.ceil(nameRow), Math.ceil(metaRow)),
+    height: BASE_NODE_HEIGHT + Math.max(0, metaLines.length - 1) * META_LINE_HEIGHT,
+  };
 }
 
 function labelBoxWidth(text: string, measure: TextMeasurer): number {
@@ -208,14 +268,17 @@ export function layoutGraph(graph: GraphView, measure: TextMeasurer): LayoutOutc
   }
 
   const usesDone = resolved.some((e) => e.toId === null);
-  const widths = new Map(nodes.map((n) => [n.node_id, nodeBoxWidth(n, nodeMetaText(n), measure)]));
+  const boxes = new Map(nodes.map((n) => [n.node_id, nodeBox(n, measure)]));
 
   try {
     const g = new dagre.graphlib.Graph({ multigraph: true });
     g.setGraph({ rankdir: 'TB', nodesep: 46, ranksep: 64, edgesep: 24, marginx: 24, marginy: 16 });
     g.setDefaultEdgeLabel(() => ({}));
 
-    for (const n of nodes) g.setNode(n.node_id, { width: widths.get(n.node_id)!, height: NODE_HEIGHT });
+    for (const n of nodes) {
+      const box = boxes.get(n.node_id)!;
+      g.setNode(n.node_id, { width: box.width, height: box.height });
+    }
     if (usesDone) g.setNode(DONE_TERMINAL, { width: DONE_RADIUS * 2, height: DONE_RADIUS * 2 });
 
     const forwardEdges = resolved.filter((e) => e.toId !== e.fromId);
@@ -229,17 +292,17 @@ export function layoutGraph(graph: GraphView, measure: TextMeasurer): LayoutOutc
 
     const laidOutNodes: LaidOutNode[] = nodes.map((n) => {
       const pos = g.node(n.node_id);
-      const w = widths.get(n.node_id)!;
+      const box = boxes.get(n.node_id)!;
       return {
         id: n.node_id,
         name: n.name,
         executor: n.executor,
-        metaText: nodeMetaText(n),
+        metaLines: box.metaLines,
         isEntry: n.node_id === graph.entry_node_id,
-        x: pos.x - w / 2,
-        y: pos.y - NODE_HEIGHT / 2,
-        width: w,
-        height: NODE_HEIGHT,
+        x: pos.x - box.width / 2,
+        y: pos.y - box.height / 2,
+        width: box.width,
+        height: box.height,
       };
     });
 
@@ -266,8 +329,7 @@ export function layoutGraph(graph: GraphView, measure: TextMeasurer): LayoutOutc
 
     const selfLoops: LaidOutSelfLoop[] = [...selfLoopsByNode.values()].map((edge) => {
       const n = g.node(edge.fromId);
-      const w = widths.get(edge.fromId)!;
-      const x0 = n.x + w / 2;
+      const x0 = n.x + boxes.get(edge.fromId)!.width / 2;
       const y0 = n.y - 12;
       const y1 = n.y + 12;
       const bulge = 44;

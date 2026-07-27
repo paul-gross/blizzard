@@ -1,16 +1,58 @@
 import { ChangeDetectionStrategy, Component, InjectionToken, computed, inject, input } from '@angular/core';
 
 import type { GraphView } from '../api/hub';
-import { type LayoutOutcome, type TextMeasurer, layoutGraph } from './graph-layout';
+import {
+  META_FIRST_LINE_Y,
+  META_LINE_HEIGHT,
+  type LaidOutNode,
+  type LayoutOutcome,
+  type TextMeasurer,
+  layoutGraph,
+} from './graph-layout';
+
+/**
+ * Resolves the concrete monospace family the SVG actually renders in — the `--mono`
+ * custom property from `tokens.css`, read off the document element **once**.
+ *
+ * Canvas font strings are CSS `font` *shorthand values*, not declarations, so they are
+ * resolved against no element and `var()` never substitutes: assigning
+ * `'400 11px var(--mono, monospace)'` is silently rejected and `ctx.font` keeps its
+ * `10px sans-serif` default, measuring every string far narrower than it renders
+ * (issue #157 — meta lines overflowed their boxes by ~80%). The property has to be
+ * dereferenced here and spliced into the shorthand literally.
+ *
+ * Falls back to bare `monospace` when the property is unset or the spliced shorthand
+ * is itself rejected — detected by assigning it and seeing `ctx.font` not move off a
+ * known-good probe, since canvas rejects an invalid font by leaving the old value in
+ * place rather than throwing.
+ */
+function resolveMonoFamily(ctx: CanvasRenderingContext2D | null): string {
+  let family: string;
+  try {
+    family = getComputedStyle(document.documentElement).getPropertyValue('--mono').trim();
+  } catch {
+    family = '';
+  }
+  if (family === '') return 'monospace';
+  if (ctx === null) return family;
+  ctx.font = '400 11px monospace';
+  const probe = ctx.font;
+  ctx.font = `400 11px ${family}`;
+  // Unchanged means either "rejected" or "resolves identically to monospace" — the
+  // fallback is the right answer for both.
+  return ctx.font === probe ? 'monospace' : family;
+}
 
 /**
  * Canvas-backed {@link TextMeasurer} — measures a string's rendered pixel width for
- * real, per the spike's "measured text, not char-count estimation" constraint. Falls
- * back to a fixed per-character estimate only if the runtime has no working 2D
- * canvas context (unsupported in practice for a real browser; this is the defensive
- * edge, not the intended path — jsdom under Vitest is exactly this edge, which is
- * why component specs stub {@link GRAPH_LAYOUT} directly rather than relying on this
- * measurer's output).
+ * real, per the spike's "measured text, not char-count estimation" constraint. Its
+ * font strings mirror the `.node-name` / `.node-badge` / `.node-meta` / `.edge-label`
+ * rules in this component's styles below; the two must be changed together, or boxes
+ * size to type the SVG does not draw. Falls back to a fixed per-character estimate
+ * only if the runtime has no working 2D canvas context (unsupported in practice for a
+ * real browser; this is the defensive edge, not the intended path — jsdom under Vitest
+ * is exactly this edge, which is why component specs stub {@link GRAPH_LAYOUT} directly
+ * rather than relying on this measurer's output).
  */
 function createCanvasTextMeasurer(): TextMeasurer {
   const canvas = document.createElement('canvas');
@@ -22,11 +64,12 @@ function createCanvasTextMeasurer(): TextMeasurer {
   } catch {
     ctx = null;
   }
+  const mono = resolveMonoFamily(ctx);
   const fonts: Record<string, string> = {
-    name: '600 13px var(--mono, monospace)',
-    badge: '700 10px var(--mono, monospace)',
-    meta: '400 11px var(--mono, monospace)',
-    label: '400 11px var(--mono, monospace)',
+    name: `600 13px ${mono}`,
+    badge: `700 10px ${mono}`,
+    meta: `400 11px ${mono}`,
+    label: `400 11px ${mono}`,
   };
   const fallbackCharWidth: Record<string, number> = { name: 8, badge: 7, meta: 6, label: 6.5 };
   return (text, kind) => {
@@ -201,8 +244,8 @@ export const GRAPH_TEXT_MEASURER = new InjectionToken<TextMeasurer>('fleet.GRAPH
                   >
                     {{ node.executor.toUpperCase() }}
                   </text>
-                  @if (node.metaText) {
-                    <text class="node-meta" [attr.x]="node.x + 14" [attr.y]="node.y + 44">{{ node.metaText }}</text>
+                  @for (line of node.metaLines; track $index) {
+                    <text class="node-meta" [attr.x]="node.x + 14" [attr.y]="metaLineY(node, $index)">{{ line }}</text>
                   }
                 </g>
               }
@@ -345,4 +388,10 @@ export class GraphDiagram {
   private readonly measure = inject(GRAPH_TEXT_MEASURER);
 
   protected readonly outcome = computed<LayoutOutcome>(() => this.layoutFn(this.graph(), this.measure));
+
+  /** Baseline y of the node's `index`-th wrapped meta line — the same step
+   * `graph-layout.ts` grew the box height by, so the lines land inside it. */
+  protected metaLineY(node: LaidOutNode, index: number): number {
+    return node.y + META_FIRST_LINE_Y + index * META_LINE_HEIGHT;
+  }
 }

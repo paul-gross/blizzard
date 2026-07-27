@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
 import type { GraphNodeView } from '../api/hub';
-import { producesNames } from './graph-node';
+import { producesNames, sessionLabel } from './graph-node';
 
 /**
  * The graph detail's node table (executor, session, judged-by, retries, mode,
@@ -37,7 +37,7 @@ import { producesNames } from './graph-node';
               }
             </td>
             <td>{{ node.executor }}</td>
-            <td>{{ node.session }}</td>
+            <td>{{ sessionLabel(node) }}</td>
             <td>{{ node.judged_by }}</td>
             <td>{{ retriesLabel(node) }}</td>
             <td>{{ node.mode ?? '—' }}</td>
@@ -95,4 +95,5 @@ export class GraphNodeTable {
   }
 
   protected readonly producesNames = producesNames;
+  protected readonly sessionLabel = sessionLabel;
 }

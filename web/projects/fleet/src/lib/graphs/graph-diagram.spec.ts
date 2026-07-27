@@ -23,18 +23,18 @@ const LAID_OUT: LaidOutGraph = {
       id: 'n_build',
       name: 'build',
       executor: 'runner',
-      metaText: 'resume',
+      metaLines: ['resume:code · retries 2', '→ plan, retrospective'],
       isEntry: true,
       x: 20,
       y: 20,
       width: 150,
-      height: 60,
+      height: 75,
     },
     {
       id: 'n_deliver',
       name: 'deliver',
       executor: 'hub',
-      metaText: '',
+      metaLines: [],
       isEntry: false,
       x: 20,
       y: 120,
@@ -117,5 +117,22 @@ describe('GraphDiagram', () => {
     const el = fixture.nativeElement as HTMLElement;
     const deliverNode = el.querySelector('[data-node-id="n_deliver"]') as HTMLElement;
     expect(deliverNode.querySelector('.node-meta')).toBeNull();
+  });
+
+  it('draws one meta text per wrapped line, stepped down inside the box the layout grew', () => {
+    const fixture = mount({ ok: true, graph: LAID_OUT });
+    const el = fixture.nativeElement as HTMLElement;
+    // Scoped by testid too: the self-loop group carries the same `data-node-id`.
+    const buildNode = el.querySelector('[data-testid="graph-diagram-node"][data-node-id="n_build"]') as HTMLElement;
+
+    const metas = buildNode.querySelectorAll('.node-meta');
+    expect(Array.from(metas).map((m) => m.textContent?.trim())).toEqual([
+      'resume:code · retries 2',
+      '→ plan, retrospective',
+    ]);
+    // Line i sits at `y + META_FIRST_LINE_Y + i * META_LINE_HEIGHT` (20 + 44, then +15),
+    // and the last baseline stays inside the box (y 20, height 75 -> bottom 95).
+    expect(metas[0].getAttribute('y')).toBe('64');
+    expect(metas[1].getAttribute('y')).toBe('79');
   });
 });

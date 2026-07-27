@@ -58,4 +58,23 @@ describe('GraphNodeTable', () => {
     expect(reviewRow.querySelector('[data-testid="graph-detail-entry-badge"]')).toBeNull();
     expect(reviewRow.textContent).toContain('—');
   });
+
+  it('renders the Session column in its authored form, targeted resumes included (issue #158)', async () => {
+    const fixture = TestBed.createComponent(GraphNodeTable);
+    fixture.componentRef.setInput('nodes', [
+      { ...NODES[0], node_id: 'n_targeted', session: 'resume', session_source: 'code' },
+      { ...NODES[0], node_id: 'n_bare', session: 'resume' },
+      { ...NODES[0], node_id: 'n_fresh', session: 'fresh' },
+    ] satisfies readonly GraphNodeView[]);
+    fixture.componentRef.setInput('entryNodeId', 'n_targeted');
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const session = (nodeId: string) =>
+      el.querySelector(`[data-node-id="${nodeId}"]`)?.querySelectorAll('td')[2]?.textContent?.trim();
+
+    expect(session('n_targeted')).toBe('resume:code');
+    expect(session('n_bare')).toBe('resume');
+    expect(session('n_fresh')).toBe('fresh');
+  });
 });

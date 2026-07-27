@@ -1,5 +1,5 @@
-import type { GraphView } from '../api/hub';
-import { type TextMeasurer, layoutGraph } from './graph-layout';
+import type { GraphNodeView, GraphView } from '../api/hub';
+import { META_LINE_HEIGHT, type TextMeasurer, layoutGraph } from './graph-layout';
 
 /** Deterministic stand-in for canvas `measureText` — a fixed per-character width so
  * layout math is reproducible without a DOM (the production measurer lives in
@@ -207,6 +207,103 @@ describe('layoutGraph', () => {
     // arc + label — a long label must not clip against the viewBox (bug fixed here).
     expect(outcome.graph.width).toBeGreaterThanOrEqual(arcExtentX);
     expect(outcome.graph.height).toBeGreaterThanOrEqual(arcExtentY);
+  });
+
+  describe('meta line', () => {
+    /** A one-node graph whose single node carries the given overrides — the smallest
+     * shape that isolates the box derivation from dagre's edge routing. */
+    function soloGraph(overrides: Partial<GraphNodeView>): GraphView {
+      return {
+        graph_id: 'gr_solo',
+        name: 'solo',
+        enabled: true,
+        entry_node_id: 'n_only',
+        nodes: [
+          {
+            node_id: 'n_only',
+            name: 'only',
+            executor: 'runner',
+            session: 'fresh',
+            judged_by: 'worker',
+            choices: [],
+            ...overrides,
+          },
+        ],
+        edges: [],
+        warnings: [],
+      };
+    }
+
+    function soloNode(overrides: Partial<GraphNodeView>) {
+      const outcome = layoutGraph(soloGraph(overrides), measure);
+      if (!outcome.ok) throw new Error('expected a layout');
+      return outcome.graph.nodes[0];
+    }
+
+    it('renders a targeted resume in its authored `resume:<node>` form', () => {
+      expect(soloNode({ session: 'resume', session_source: 'code' }).metaLines).toEqual(['resume:code']);
+    });
+
+    it('renders a bare resume and a fresh node without a target suffix', () => {
+      expect(soloNode({ session: 'resume' }).metaLines).toEqual(['resume']);
+      expect(soloNode({ session: 'fresh' }).metaLines).toEqual(['fresh']);
+    });
+
+    it('keeps a short meta on one line at the base box height', () => {
+      const node = soloNode({ session: 'resume', retries_max: 2 });
+      expect(node.metaLines).toEqual(['resume · retries 2']);
+      expect(node.height).toBe(60);
+    });
+
+    it('wraps a long meta onto further lines, growing the box height per extra line', () => {
+      // Seven produces names at 7px/char blow well past the 420px max box width, so the
+      // `→ …` segment cannot share a line with the leading session/retries segments.
+      const node = soloNode({
+        session: 'resume',
+        session_source: 'code',
+        retries_max: 2,
+        produces: Array.from({ length: 7 }, (_, i) => ({ name: `artifact-number-${i}` })),
+      });
+
+      expect(node.metaLines.length).toBeGreaterThan(1);
+      expect(node.metaLines[0]).toBe('resume:code · retries 2');
+      // Nothing is dropped by the wrap — the joined lines are the unwrapped meta.
+      expect(node.metaLines.join(' · ')).toBe(
+        `resume:code · retries 2 · → ${Array.from({ length: 7 }, (_, i) => `artifact-number-${i}`).join(', ')}`,
+      );
+      expect(node.height).toBe(60 + (node.metaLines.length - 1) * META_LINE_HEIGHT);
+    });
+
+    it('sizes the box to its widest wrapped line, never to the unwrapped meta', () => {
+      const node = soloNode({
+        session: 'resume',
+        retries_max: 2,
+        mode: 'merge-to-main',
+        produces: [{ name: 'plan' }, { name: 'retrospective' }, { name: 'review-findings' }],
+      });
+
+      const unwrapped = measure(node.metaLines.join(' · '), 'meta');
+      const widest = node.metaLines.reduce((max, line) => Math.max(max, measure(line, 'meta')), 0);
+      expect(widest).toBeLessThan(unwrapped);
+      // 28px is the meta row's horizontal padding (14 either side).
+      expect(node.width).toBeGreaterThanOrEqual(widest + 28);
+      expect(node.width).toBeLessThan(unwrapped + 28);
+    });
+
+    it('lets one unsplittable segment wider than the max width widen the box rather than clip', () => {
+      const long = `x`.repeat(120);
+      const node = soloNode({ session: 'fresh', produces: [{ name: long }] });
+
+      expect(node.metaLines).toEqual(['fresh', `→ ${long}`]);
+      expect(node.width).toBeGreaterThanOrEqual(measure(`→ ${long}`, 'meta') + 28);
+    });
+
+    it('gives a node with no meta at all no meta lines and the base height', () => {
+      // `session` is required on the wire, so the empty-meta case is an empty string.
+      const node = soloNode({ session: '' });
+      expect(node.metaLines).toEqual([]);
+      expect(node.height).toBe(60);
+    });
   });
 
   it('falls back to { ok: false } when a node has more than one self-loop (the spike\'s stated limitation)', () => {
