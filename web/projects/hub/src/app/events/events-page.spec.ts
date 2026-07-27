@@ -49,13 +49,15 @@ describe('EventsPage', () => {
     expect(el.querySelector('fleet-events-panel')).toBeTruthy();
   });
 
-  it('navigates to /board when the panel emits a chunk selection', async () => {
+  it('deep-links the emitted chunk onto the board, selected (issue #162)', async () => {
     const { fixture, navigate } = await mount();
 
     const panel = fixture.debugElement.query(By.css('fleet-events-panel'));
     panel.componentInstance.selectChunk.emit('ch_live');
     await fixture.whenStable();
 
-    expect(navigate).toHaveBeenCalledWith(['/board']);
+    // The row's chunk id rides along as the `chunk` param `BoardPage` selects from —
+    // it is not dropped on the way to the board.
+    expect(navigate).toHaveBeenCalledWith(['/board'], { queryParams: { chunk: 'ch_live' } });
   });
 });

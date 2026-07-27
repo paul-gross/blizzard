@@ -11,10 +11,10 @@ import { EventsPanel } from 'fleet';
  * concern (here, opening a chunk elsewhere) and leaves the query and filter state
  * to the panel itself.
  *
- * No chunk deep-link target exists on the board today (`selected` is local
- * component state on `BoardPage`, not route- or query-param-driven), so activating
- * a row's chunk navigates to `/board` — the surface where every chunk lives —
- * rather than a param the board doesn't yet read.
+ * Activating a row's chunk deep-links straight to it: `/board?chunk=<id>`, the
+ * query param {@link BoardPage} reads its selection from (issue #162). The feed
+ * names a chunk id on every row, so the operator lands on the board with that
+ * chunk already open in the dock rather than having to find it among the lanes.
  */
 @Component({
   selector: 'app-events-page',
@@ -22,7 +22,7 @@ import { EventsPanel } from 'fleet';
   imports: [EventsPanel],
   template: `
     <div class="layout">
-      <fleet-events-panel class="feed" (selectChunk)="openChunk()" />
+      <fleet-events-panel class="feed" (selectChunk)="openChunk($event)" />
     </div>
   `,
   styles: `
@@ -47,7 +47,9 @@ import { EventsPanel } from 'fleet';
 export class EventsPage {
   private readonly router = inject(Router);
 
-  protected openChunk(): void {
-    void this.router.navigate(['/board']);
+  /** Open one chunk on the board, selected — the same `chunk` param a board card
+   * writes, so arriving from the feed and clicking a card land in one state. */
+  protected openChunk(chunkId: string): void {
+    void this.router.navigate(['/board'], { queryParams: { chunk: chunkId } });
   }
 }
