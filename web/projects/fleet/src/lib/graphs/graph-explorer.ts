@@ -17,7 +17,8 @@ interface GraphGroup {
 /**
  * The graph explorer's **list** panel — every minted graph, grouped by name (the
  * primary object; a name is a lineage of immutable versions). Each group shows its
- * version count and the effective version's summary; expanding a group reveals the
+ * version count and the effective version's summary; expanding a group selects that
+ * effective version (issue #152 — the detail opens on the first click) and reveals the
  * full lineage newest-first, each row carrying its `graph_id`, `created_at`, and an
  * **effective** / **superseded** / **retired** badge — the `graphs` row itself is
  * never mutated (still insert-only), the marker is the `effective`/`retired` facts
@@ -48,7 +49,7 @@ interface GraphGroup {
                 type="button"
                 class="group-head"
                 data-testid="graph-explorer-group-toggle"
-                (click)="toggle(group.name)"
+                (click)="toggle(group)"
               >
                 <span class="name">{{ group.name }}</span>
                 <span class="count" data-testid="graph-explorer-group-count">{{ group.versions.length }} version{{
@@ -206,11 +207,16 @@ export class GraphExplorer {
   /** The currently open detail's graph id, or `null` — highlights its row. */
   readonly selectedGraphId = input<string | null>(null);
 
-  /** Emitted with the `graph_id` of a clicked row, effective or superseded alike. */
+  /** Emitted with the `graph_id` of a clicked row, effective or superseded alike — or
+   * of a group's effective version when its header expands the group. */
   readonly selectGraph = output<string>();
 
-  /** Group names the operator has expanded. */
-  private readonly expandedNames = signal<ReadonlySet<string>>(new Set());
+  /** Group names the operator has explicitly opened or closed, `true` for open. An
+   * *override*, not a plain expanded-set, because expansion is otherwise derived from
+   * the selection ({@link isExpanded}) and a header click now makes a selection —
+   * without a recorded `false`, collapsing a group the operator had just expanded
+   * would be undone by the very selection that click emitted. */
+  private readonly expansionOverrides = signal<ReadonlyMap<string, boolean>>(new Map());
 
   /** Every graph grouped by name; each group's lineage preserves the hub's
    * `created_at DESC` order (never re-derived client-side — the `effective`
@@ -230,20 +236,25 @@ export class GraphExplorer {
     }));
   });
 
-  protected toggle(name: string): void {
-    this.expandedNames.update((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
-    });
+  /** A header click expands the group **and** opens its effective version (issue #152)
+   * — the header already displays that id, so requiring a second click on the version
+   * row to see anything was pure friction. Collapsing only closes the group: the
+   * selection is left exactly as it was, so the header click can only ever add a
+   * selection, never clear or change one. */
+  protected toggle(group: GraphGroup): void {
+    const willExpand = !this.isExpanded(group);
+    this.expansionOverrides.update((prev) => new Map(prev).set(group.name, willExpand));
+    if (willExpand) this.selectGraph.emit(group.effective.graph_id);
   }
 
-  /** A group is expanded either because the operator toggled it open, or because
-   * it holds the currently selected/deep-linked version — so navigating straight
-   * to a superseded version's detail still reveals its row in the list. */
+  /** A group is expanded because the operator toggled it open, or — absent any
+   * explicit toggle — because it holds the currently selected/deep-linked version, so
+   * navigating straight to a superseded version's detail still reveals its row in the
+   * list. An explicit toggle wins over the selection-derived default in both
+   * directions; see {@link expansionOverrides}. */
   protected isExpanded(group: GraphGroup): boolean {
-    if (this.expandedNames().has(group.name)) return true;
+    const override = this.expansionOverrides().get(group.name);
+    if (override !== undefined) return override;
     const selected = this.selectedGraphId();
     return selected !== null && group.versions.some((v) => v.graph_id === selected);
   }

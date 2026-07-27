@@ -91,6 +91,73 @@ describe('GraphExplorer', () => {
     expect(emitted).toEqual(['gr_build_v1']);
   });
 
+  it('selects the group\'s effective version when its header expands the group (issue #152)', async () => {
+    const fixture = await mount();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const emitted: string[] = [];
+    fixture.componentInstance.selectGraph.subscribe((id: string) => emitted.push(id));
+
+    el.querySelector<HTMLButtonElement>('[data-name="build"] [data-testid="graph-explorer-group-toggle"]')?.click();
+    await settle(fixture);
+
+    // The effective version — the id the header already displayed — not the newest row.
+    expect(emitted).toEqual(['gr_build_v2']);
+    expect(el.querySelectorAll('[data-name="build"] [data-testid="graph-explorer-row"]')).toHaveLength(2);
+  });
+
+  it('falls back to the newest version when no version of a group is marked effective', async () => {
+    const fixture = await mount([
+      { ...GRAPHS[0], effective: false },
+      { ...GRAPHS[1], effective: false },
+    ]);
+    const el = fixture.nativeElement as HTMLElement;
+
+    const emitted: string[] = [];
+    fixture.componentInstance.selectGraph.subscribe((id: string) => emitted.push(id));
+
+    el.querySelector<HTMLButtonElement>('[data-name="build"] [data-testid="graph-explorer-group-toggle"]')?.click();
+    await settle(fixture);
+
+    expect(emitted).toEqual(['gr_build_v2']);
+  });
+
+  it('collapses on a second header click and leaves the selection untouched', async () => {
+    const fixture = await mount();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const emitted: string[] = [];
+    fixture.componentInstance.selectGraph.subscribe((id: string) => emitted.push(id));
+
+    const toggle = el.querySelector<HTMLButtonElement>(
+      '[data-name="build"] [data-testid="graph-explorer-group-toggle"]',
+    );
+    toggle?.click();
+    await settle(fixture);
+    // The parent routes on the emission and feeds the selection back in — the state the
+    // collapsing click actually runs against.
+    fixture.componentRef.setInput('selectedGraphId', 'gr_build_v2');
+    await settle(fixture);
+
+    toggle?.click();
+    await settle(fixture);
+
+    // Collapsed even though the selection still lives in this group, and no second
+    // emission: a header click only ever adds a selection, never clears or changes one.
+    expect(el.querySelector('[data-name="build"] [data-testid="graph-explorer-lineage"]')).toBeNull();
+    expect(emitted).toEqual(['gr_build_v2']);
+  });
+
+  it('still reveals the lineage of a deep-linked version the operator never toggled', async () => {
+    const fixture = await mount();
+    fixture.componentRef.setInput('selectedGraphId', 'gr_build_v1');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-name="build"] [data-testid="graph-explorer-lineage"]')).toBeTruthy();
+    expect(el.querySelector('[data-name="review"] [data-testid="graph-explorer-lineage"]')).toBeNull();
+  });
+
   it('shows a retired badge for a retired, non-effective version (issue #101)', async () => {
     const graphs = [
       { ...GRAPHS[0], effective: false },
