@@ -14,6 +14,13 @@ interface GraphGroup {
   readonly effective: GraphSummaryView;
 }
 
+/** One group's operator-set expansion state, stamped with the selection that was
+ * current when it was set — see `GraphExplorer.isExpanded` for how the stamp expires it. */
+interface ExpansionOverride {
+  readonly expanded: boolean;
+  readonly selectionAtToggle: string | null;
+}
+
 /**
  * The graph explorer's **list** panel — every minted graph, grouped by name (the
  * primary object; a name is a lineage of immutable versions). Each group shows its
@@ -211,12 +218,14 @@ export class GraphExplorer {
    * of a group's effective version when its header expands the group. */
   readonly selectGraph = output<string>();
 
-  /** Group names the operator has explicitly opened or closed, `true` for open. An
-   * *override*, not a plain expanded-set, because expansion is otherwise derived from
-   * the selection ({@link isExpanded}) and a header click now makes a selection —
-   * without a recorded `false`, collapsing a group the operator had just expanded
-   * would be undone by the very selection that click emitted. */
-  private readonly expansionOverrides = signal<ReadonlyMap<string, boolean>>(new Map());
+  /** One group's explicit open/closed state, plus the selection that was current when
+   * the operator set it. An *override*, not a plain expanded-set, because expansion is
+   * otherwise derived from the selection ({@link isExpanded}) and a header click now
+   * makes a selection — without a recorded `false`, collapsing a group the operator had
+   * just expanded would be undone by the very selection that click emitted. The recorded
+   * selection is what keeps the override from outliving its moment; see
+   * {@link isExpanded}. */
+  private readonly expansionOverrides = signal<ReadonlyMap<string, ExpansionOverride>>(new Map());
 
   /** Every graph grouped by name; each group's lineage preserves the hub's
    * `created_at DESC` order (never re-derived client-side — the `effective`
@@ -243,20 +252,31 @@ export class GraphExplorer {
    * selection, never clear or change one. */
   protected toggle(group: GraphGroup): void {
     const willExpand = !this.isExpanded(group);
-    this.expansionOverrides.update((prev) => new Map(prev).set(group.name, willExpand));
+    const override: ExpansionOverride = { expanded: willExpand, selectionAtToggle: this.selectedGraphId() };
+    this.expansionOverrides.update((prev) => new Map(prev).set(group.name, override));
     if (willExpand) this.selectGraph.emit(group.effective.graph_id);
   }
 
-  /** A group is expanded because the operator toggled it open, or — absent any
-   * explicit toggle — because it holds the currently selected/deep-linked version, so
-   * navigating straight to a superseded version's detail still reveals its row in the
-   * list. An explicit toggle wins over the selection-derived default in both
-   * directions; see {@link expansionOverrides}. */
+  /** A group is expanded because the operator toggled it open, or — absent a live
+   * toggle — because it holds the currently selected/deep-linked version, so navigating
+   * straight to a superseded version's detail still reveals its row in the list.
+   *
+   * A toggle stays live only until a *new* selection lands inside that same group: that
+   * navigation is a fresher statement of intent than the older click, so it supersedes
+   * it and the selection-derived default takes over again. Without that expiry a single
+   * collapse would suppress the reveal for the component's whole lifetime — the group
+   * would stay shut even when deep-linked straight into one of its versions. The
+   * selection a header click emits does *not* expire that click's own override: it is
+   * recorded as `selectionAtToggle`, so an expand survives its own emission and a
+   * collapse survives the selection it deliberately left in place. */
   protected isExpanded(group: GraphGroup): boolean {
-    const override = this.expansionOverrides().get(group.name);
-    if (override !== undefined) return override;
     const selected = this.selectedGraphId();
-    return selected !== null && group.versions.some((v) => v.graph_id === selected);
+    const holdsSelection = selected !== null && group.versions.some((v) => v.graph_id === selected);
+    const override = this.expansionOverrides().get(group.name);
+    if (override !== undefined && !(holdsSelection && selected !== override.selectionAtToggle)) {
+      return override.expanded;
+    }
+    return holdsSelection;
   }
 
   /** `effective` takes precedence (a graph can be both, briefly nonsensical, only if

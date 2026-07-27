@@ -148,6 +148,49 @@ describe('GraphExplorer', () => {
     expect(emitted).toEqual(['gr_build_v2']);
   });
 
+  it('reveals a deep-linked version even in a group the operator had collapsed', async () => {
+    const fixture = await mount();
+    const el = fixture.nativeElement as HTMLElement;
+    const toggle = el.querySelector<HTMLButtonElement>(
+      '[data-name="build"] [data-testid="graph-explorer-group-toggle"]',
+    );
+
+    // Expand (selects gr_build_v2), then collapse — the override the collapse records
+    // must not outlive the navigation that follows it.
+    toggle?.click();
+    await settle(fixture);
+    fixture.componentRef.setInput('selectedGraphId', 'gr_build_v2');
+    await settle(fixture);
+    toggle?.click();
+    await settle(fixture);
+    expect(el.querySelector('[data-name="build"] [data-testid="graph-explorer-lineage"]')).toBeNull();
+
+    // Deep-link to the *superseded* version inside that same collapsed group.
+    fixture.componentRef.setInput('selectedGraphId', 'gr_build_v1');
+    await settle(fixture);
+
+    expect(el.querySelector('[data-name="build"] [data-testid="graph-explorer-lineage"]')).toBeTruthy();
+    expect(el.querySelector('[data-graph-id="gr_build_v1"]')?.classList).toContain('selected');
+  });
+
+  it('keeps a collapsed group shut when the selection moves to a different group', async () => {
+    const fixture = await mount();
+    const el = fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLButtonElement>('[data-name="build"] [data-testid="graph-explorer-group-toggle"]')?.click();
+    await settle(fixture);
+    fixture.componentRef.setInput('selectedGraphId', 'gr_build_v2');
+    await settle(fixture);
+    el.querySelector<HTMLButtonElement>('[data-name="build"] [data-testid="graph-explorer-group-toggle"]')?.click();
+    await settle(fixture);
+
+    // A selection landing elsewhere is no statement about this group — it stays shut.
+    fixture.componentRef.setInput('selectedGraphId', 'gr_review_v1');
+    await settle(fixture);
+
+    expect(el.querySelector('[data-name="build"] [data-testid="graph-explorer-lineage"]')).toBeNull();
+  });
+
   it('still reveals the lineage of a deep-linked version the operator never toggled', async () => {
     const fixture = await mount();
     fixture.componentRef.setInput('selectedGraphId', 'gr_build_v1');

@@ -2,8 +2,9 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
 import type { GraphView } from '../api/hub';
-import { GRAPH_LAYOUT, GRAPH_TEXT_MEASURER, GraphDiagram } from './graph-diagram';
+import { GRAPH_LAYOUT, GraphDiagram } from './graph-diagram';
 import type { LaidOutGraph, LayoutOutcome } from './graph-layout';
+import { GRAPH_TEXT_MEASURER } from './graph-text-measurer';
 
 const GRAPH: GraphView = {
   graph_id: 'gr_build_v2',

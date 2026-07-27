@@ -1,6 +1,7 @@
 export { GraphExplorer } from './graph-explorer';
 export { GraphDetail } from './graph-detail';
-export { GraphDiagram, GRAPH_LAYOUT, GRAPH_TEXT_MEASURER } from './graph-diagram';
+export { GraphDiagram, GRAPH_LAYOUT } from './graph-diagram';
+export { GRAPH_TEXT_MEASURER } from './graph-text-measurer';
 export {
   layoutGraph,
   type LayoutOutcome,
