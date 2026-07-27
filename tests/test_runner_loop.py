@@ -14,20 +14,24 @@ import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy import Engine
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.artifacts import ArtifactKind
 from blizzard.hub.domain.enrollment import hash_token
 from blizzard.hub.domain.graph import SessionMode
 from blizzard.hub.domain.work import DEFAULT_MODEL, ChunkStatus
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.harness.preamble import DEFAULT_BLIZZARD_PREAMBLE
+from blizzard.runner.harness.preamble import DEFAULT_BLIZZARD_PREAMBLE, PreambleFingerprint
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.steps import _collect_asset_artifacts, advance, fill, pull, reap
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.loop.worktree import IWorktreeGit
+from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 from blizzard.runner.store.repository import NewLease
+from blizzard.runner.store.schema import metadata as runner_metadata
 from blizzard.wire.chunk import ChunkDetail, ChunkUsageTotalView, RouteView
 from blizzard.wire.completion import SubmittedArtifact
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
@@ -1776,6 +1780,69 @@ def test_spawn_reflects_runtime_prompt_override_with_no_restart(tmp_path):  # ty
     _, preamble = harness.spawns[0]
     assert preamble.prompt_prefix.startswith(f"{DEFAULT_BLIZZARD_PREAMBLE}\n\nOVERRIDDEN\n\n")
     assert "STATIC-PROMPT" not in preamble.prompt_prefix
+
+
+class _CountingPreambleStore(SqlAlchemyRunnerStore):
+    """The real store with one read counted (issue #149) — a subclass, not a hand-written
+    double, so every other method the loop touches keeps its genuine behaviour."""
+
+    def __init__(self, engine: Engine) -> None:
+        super().__init__(engine)
+        self.fingerprint_reads: list[str] = []
+
+    def session_preamble_fingerprint(self, session_id: str) -> PreambleFingerprint | None:
+        self.fingerprint_reads.append(session_id)
+        return super().session_preamble_fingerprint(session_id)
+
+
+@pytest.mark.unit
+def test_prior_preamble_is_read_only_when_the_spawn_resumes(tmp_path):  # type: ignore[no-untyped-def]
+    """The lookup is resume-**gated**, not merely resume-shaped (issue #149).
+
+    Without this, a refactor that hoists the read above the `resume_from` check passes
+    every other test in this file — a fresh session simply has no prior row to find *yet* —
+    and becomes wrong the moment a session id is reused, at which point a fresh spawn would
+    silently elide standing prose its brand-new session never received."""
+    engine = create_engine_from_url(f"sqlite:///{tmp_path / 'runner.db'}")
+    runner_metadata.create_all(engine)
+    store = _CountingPreambleStore(engine)
+    hub = FakeHub()
+    provider = FakeProvider({"e1": "/ws/e1"})
+    build_env = make_envelope(
+        "ch_1", "build", node_id="nd_build", choices=_CHOICES, session=SessionMode.RESUME, session_source="build"
+    )
+
+    # --- A fresh spawn: first arrival at `build`, nothing to resume.
+    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.claim_outcome = claimed_outcome("ch_1", build_env)
+    harness1 = FakeHarness(
+        handle=WorkerHandle(session_id="sess-build-1", pid=100, process_start_time="start-100"), verdict="pass"
+    )
+    ctx1 = make_context(store, hub=hub, provider=provider, harness=harness1, probe=FakeProbe(), clock=FixedClock(_NOW))
+    fill(ctx1)
+
+    assert harness1.resume_froms == [None]
+    assert store.fingerprint_reads == []  # never looked one up
+
+    # --- A resumed spawn: build re-entered on its own prior session.
+    hub.envelopes["ch_1"] = build_env
+    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=build_env)]
+    harness2 = FakeHarness(
+        handle=WorkerHandle(session_id="sess-build-1", pid=200, process_start_time="start-200"), verdict="pass"
+    )
+    ctx2 = make_context(
+        store,
+        hub=hub,
+        provider=provider,
+        harness=harness2,
+        probe=FakeProbe(),
+        clock=FixedClock(_NOW + timedelta(minutes=1)),
+    )
+    advance(ctx2)
+    pull(ctx2)
+
+    assert harness2.resume_froms == ["sess-build-1"]
+    assert store.fingerprint_reads == ["sess-build-1"]  # exactly one, for the resumed session
 
 
 @pytest.mark.unit

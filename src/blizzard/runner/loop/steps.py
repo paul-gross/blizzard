@@ -2325,14 +2325,25 @@ def _spawn_attempt(
     # facts, prepended to the envelope prompt; the worker's cwd is the workspace root.
     override = ctx.store.workspace_prompt_override(ctx.config.workspace_id)
     workspace_prompt = override if override is not None else ctx.config.workspace_prompt
-    prompt_prefix = render_worker_preamble(
+    # What standing prose the session being resumed was last sent (issue #149) — read here
+    # and ONLY when this spawn resumes one, so a fresh spawn can never accidentally elide
+    # (its session id is minted below and has nothing recorded against it yet). A resumed
+    # session with nothing recorded — any session first spawned before #149 shipped — reads
+    # `None` and renders in full, which is the safe direction and the whole back-compat
+    # story. Do not hoist this above the `resume_from` check: a fresh spawn passes today
+    # only because its session has no prior row *yet*, and that stops being true the moment
+    # a session id is reused.
+    prior_preamble = ctx.store.session_preamble_fingerprint(resume_from) if resume_from is not None else None
+    rendered = render_worker_preamble(
         runner_prompt=ctx.config.runner_prompt,
         workspace_prompt=workspace_prompt,
         environments=environments,
         lease_id=lease_id,
         runner_id=ctx.config.runner_id,
         chunk_id=chunk_id,
-    ).text
+        prior=prior_preamble,
+    )
+    prompt_prefix = rendered.text
     generation = _pending_generation(ctx, lease_id)
     preamble = WorkerPreamble(
         environments=environments,
@@ -2366,6 +2377,21 @@ def _spawn_attempt(
         session_id=handle.session_id,
         spawned_at=now,
     )
+    # What this session was just sent (issue #149), recorded on EVERY `_spawn_attempt` —
+    # node entry, retry, adopt, reclaim, requeue-resume alike. A fresh spawn's record is the
+    # baseline its first resume compares against, and the non-node-entry paths all mint
+    # fresh sessions that receive the full prose anyway, so no conditional belongs here.
+    # Keyed on the HANDLE's session id — the authoritative continuation id, which is
+    # `resume_from` for an in-place resume and would be the fork id if the adapter ever
+    # forked. Its own store call rather than a widening of `record_spawn`, whose three
+    # resume-with-message call sites send no prompt_prefix at all: see
+    # `record_session_preamble`'s docstring. Deliberately no crash-sweep point — the write
+    # lands after the spawn returns, so a durable fingerprint always implies the prose
+    # reached the process, and a kill that loses it leaves the next resume rendering in
+    # full (pre-change behavior). Recorded as an exemption in
+    # `blizzard-harness:/architecture/crash-correctness.md`. Placed before the checkpoint
+    # below so that point keeps meaning "every fact about this spawn is durable".
+    ctx.store.record_session_preamble(handle.session_id, fingerprint=rendered.fingerprint, at=now)
     _CP_SPAWN_AFTER_SPAWN.reached()
 
 
