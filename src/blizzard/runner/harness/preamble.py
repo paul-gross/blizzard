@@ -5,9 +5,10 @@ it has no cwd that implicitly names *which* environment(s) it holds. The runner 
 that gap by prepending a standing preamble to every node envelope, in three ordered
 layers: the baked-in blizzard preamble (issue #103 — always present, naming the
 `blizzard` CLI as the worker's interface), the operator-owned workspace prompt (the
-deployment-specific "you are a fleet worker in this winter workspace" framing, omitted
-when empty), and a machine-local info table naming the held environments and the
-spawn's identity.
+deployment-specific policy layer 1 cannot know — omitted when empty), and a machine-local
+info table naming the held environments and the spawn's identity. Layer 1 declares that
+division of labor in its own prose (issue #147), so an operator authoring layer 2 can see
+what has already been established rather than re-establishing it.
 
 This is a pure, deterministic renderer (``bzh:deterministic-shell``): the core calls it
 to build the ``prompt_prefix`` it hands the adapter, so the adapter stays dumb (it only
@@ -47,13 +48,22 @@ def render_worker_preamble(
 ) -> str:
     """Compose the spawn preamble prepended to the node envelope prompt (issues #17, #103).
 
-    Three ordered layers. (1) The blizzard preamble: the resolved ``runner_prompt`` when
-    non-empty, else :data:`DEFAULT_BLIZZARD_PREAMBLE` — never absent. (2) The operator's
-    ``workspace_prompt`` prose, omitted when empty. (3) A machine-local facts table: the
-    runner/chunk/lease identity, then one ``winter environment name`` + ``environment
-    workdir`` row-pair per held environment (the single-env case is just one pair).
-    Everything the worker needs to know which environment(s) to work in, now that its
-    cwd is the workspace root.
+    Three ordered layers, each owning a distinct slice of what the worker is told
+    (issue #147 — the division of labor is stated in the preamble prose itself, so an
+    operator authoring layer 2 can see what layer 1 has already established).
+
+    1. The blizzard preamble: the resolved ``runner_prompt`` when non-empty, else
+       :data:`DEFAULT_BLIZZARD_PREAMBLE` — never absent. Deployment-independent framing:
+       the worker's fleet identity, its worker-facing ``blizzard`` CLI surface, and a
+       pointer to the layer-3 table.
+    2. The operator's ``workspace_prompt`` prose, omitted when empty. Everything
+       deployment-specific layer 1 cannot know: workspace layout and environment
+       conventions, how work is delivered, the stop conditions that end a turn. It adds
+       to layer 1 rather than restating it.
+    3. A machine-local facts table: the runner/chunk/lease identity, then one ``winter
+       environment name`` + ``environment workdir`` row-pair per held environment (the
+       single-env case is just one pair). Everything the worker needs to know which
+       environment(s) to work in, now that its cwd is the workspace root.
     """
     rows = [
         ("runner id", runner_id),
