@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 
-import type { RunnerView } from '../api/hub';
+import type { ChunkStatus, RunnerView } from '../api/hub';
 import { hasPermission, injectMeQuery } from '../auth/me.query';
 import { compactRef } from '../compact-ref';
 import { injectHubChunksQuery } from '../chunks/chunks.query';
@@ -8,11 +8,14 @@ import { RunnerPanelView } from './runner-view';
 import { injectHubRunnersQuery } from './runners.query';
 import { injectRunnerPauseMutation } from './runners.mutations';
 
-/** One claim line under a registry row: the chunk a runner holds and where it sits. */
+/** One claim line under a registry row: the chunk a runner holds, where it sits, and
+ * how it is doing there (issue #156) — the node alone reads the same for a chunk
+ * actively running and one parked `needs_human`. */
 export interface ClaimLine {
   readonly chunkId: string;
   readonly shortId: string;
   readonly node: string;
+  readonly status: ChunkStatus;
 }
 
 /** A registry row: the runner plus the claims it holds, pre-folded so the
@@ -57,7 +60,7 @@ export class RunnerPanel {
   private readonly runners = computed<readonly RunnerView[]>(() => this.runnersQuery.data() ?? []);
 
   /** Every routed chunk grouped by the runner holding it — each as a claim line
-   * (short name + current node) for the registry rows.
+   * (short name + current node + status) for the registry rows.
    *
    * No status filter by design: `ChunkSummary.runner_id` is already in-progress-only
    * (issue #140 — see its own docs), so `runner_id` set *is* "currently holds a route on". */
@@ -70,6 +73,7 @@ export class RunnerPanel {
         chunkId: chunk.chunk_id,
         shortId: compactRef(chunk.chunk_id),
         node: chunk.current_node_name ?? chunk.current_node_id ?? '—',
+        status: chunk.status,
       });
       grouped.set(chunk.runner_id, lines);
     }

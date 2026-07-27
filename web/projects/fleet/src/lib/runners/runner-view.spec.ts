@@ -31,7 +31,7 @@ describe('RunnerPanelView', () => {
   it('renders each row with its liveness, paused state, and claims — off plain inputs alone', async () => {
     const fixture = TestBed.createComponent(RunnerPanelView);
     fixture.componentRef.setInput('rows', [
-      row('rn_online', { claims: [{ chunkId: 'ch_01', shortId: 'C-01', node: 'build' }] }),
+      row('rn_online', { claims: [{ chunkId: 'ch_01', shortId: 'C-01', node: 'build', status: 'running' }] }),
       row('rn_paused', { hub_paused: true }),
     ]);
     await fixture.whenStable();
@@ -42,6 +42,8 @@ describe('RunnerPanelView', () => {
     const claims = el.querySelectorAll('[data-runner="rn_online"] [data-testid="runner-claim"]');
     expect(claims).toHaveLength(1);
     expect(claims[0].textContent).toContain('build');
+    // The line ends with the chunk's status (#156); its tone is asserted in the container spec.
+    expect(claims[0].textContent).toContain('running');
     expect(el.querySelector('[data-runner="rn_paused"] [data-testid="runner-hub-paused"]')).not.toBeNull();
   });
 

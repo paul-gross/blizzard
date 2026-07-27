@@ -1,7 +1,11 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
+import type { ChunkStatus } from '../api/hub';
+import { STATUS_TONE } from '../chunk-lanes';
+import { KitBadge } from '../kit/kit-badge';
 import { KitPanel } from '../kit/kit-panel';
 import { KitSlotBar } from '../kit/kit-slot-bar';
+import type { Tone } from '../kit/tone';
 import { formatSeenAgo } from '../when';
 import type { RunnerRow } from './runner-panel';
 
@@ -14,7 +18,7 @@ import type { RunnerRow } from './runner-panel';
 @Component({
   selector: 'fleet-runner-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitPanel, KitSlotBar],
+  imports: [KitBadge, KitPanel, KitSlotBar],
   template: `
     <fleet-kit-panel
       aria-label="Runner registry"
@@ -52,16 +56,25 @@ import type { RunnerRow } from './runner-panel';
                 <div class="r2">
                   <span class="wid">{{ row.workspace_id }}</span>
                 </div>
-                <!-- The chunks this runner currently holds a route on, and the node each
-                     sits at — folded in by the container from the board's own chunk
-                     list, so the registry and the board can never disagree about who is
-                     working what. -->
+                <!-- The chunks this runner currently holds a route on, the node each
+                     sits at, and how it is doing there — folded in by the container from
+                     the board's own chunk list, so the registry and the board can never
+                     disagree about who is working what. The status badge colors off the
+                     same STATUS_TONE ladder the board card uses (issue #156), so a
+                     claim and its card always read the same tone. -->
                 @if (row.claims.length > 0) {
                   <ul class="claims" data-testid="runner-claims">
                     @for (claim of row.claims; track claim.chunkId) {
                       <li class="claim" data-testid="runner-claim">
                         <span class="c-id" [attr.title]="claim.chunkId">{{ claim.shortId }}</span>
                         <span class="c-node">{{ claim.node }}</span>
+                        <span class="c-sep" aria-hidden="true">·</span>
+                        <fleet-kit-badge
+                          data-testid="runner-claim-status"
+                          [attr.data-status]="claim.status"
+                          [tone]="toneFor(claim.status)"
+                          >{{ claim.status }}</fleet-kit-badge
+                        >
                       </li>
                     }
                   </ul>
@@ -225,6 +238,12 @@ import type { RunnerRow } from './runner-panel';
       letter-spacing: 0.1em;
       text-transform: uppercase;
     }
+    /* The node/status divider — dim, so the two facts read as one line rather
+       than competing for the eye. */
+    .claim .c-sep {
+      color: var(--label-dim);
+      font-size: var(--fs-label);
+    }
     .badges {
       display: flex;
       flex-wrap: wrap;
@@ -268,6 +287,13 @@ export class RunnerPanelView {
    * control the identity cannot use). Under `auth.mode = "none"` the implicit operator
    * holds every permission, so the brake renders exactly as before. */
   readonly canPause = input(false);
+
+  /** A claim's badge tone, read straight off `chunk-lanes.ts`'s `STATUS_TONE` — the
+   * single owner of the status→tone fold the board card colors from too (issue #156).
+   * No local table: a claim's color and its card's can never drift apart. */
+  protected toneFor(status: ChunkStatus): Tone {
+    return STATUS_TONE[status];
+  }
 
   /** Whether to render the env-slot bar (issue #69): only when the runner reported a
    * capacity. A runner registered by a client that predates the field has a null (or

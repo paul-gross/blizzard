@@ -5,6 +5,7 @@ import { vi } from 'vitest';
 
 import { settle } from '../testing/settle';
 import { client as hubClient } from '../api/hub/client.gen';
+import { toneColor } from '../kit/kit-badge';
 import { OPERATOR_ME_RESPONSE } from '../testing/auth-fixtures';
 import { type RequestClientStub, stubRequestClient } from '../testing/stub-request-client';
 import { RunnerPanel } from './runner-panel';
@@ -48,8 +49,12 @@ const RUNNERS = {
 };
 
 // The board's chunk list, as the claims read consumes it: one chunk routed to
-// rn_online at build, one routed elsewhere, one unrouted, and one rn_online
-// FINISHED — only the first shows under rn_online.
+// rn_online at build, one routed elsewhere, one escalated at rn_both, one unrouted,
+// and one rn_online FINISHED — only the first shows under rn_online.
+//
+// rn_both's chunk sits at the same node as rn_online's and differs only in status:
+// the pair the claim-status tone assertion (#156) reads, where the node alone would
+// make the two lines identical.
 //
 // The done row documents the shape the hub sends (issue #140): a terminal chunk reports
 // `runner_id: null` / `environment_count: 0` even when its route facts still name the
@@ -76,6 +81,16 @@ const CHUNKS = [
     current_node_name: 'review',
     model: 'claude-opus-4-8',
     runner_id: 'rn_paused',
+  },
+  {
+    chunk_id: 'ch_01needs000000000000000000000',
+    graph_id: 'gr_1',
+    status: 'needs_human',
+    current_node_id: 'nd_build',
+    current_node_name: 'build',
+    model: 'claude-opus-4-8',
+    runner_id: 'rn_both',
+    environment_count: 1,
   },
   {
     chunk_id: 'ch_01idle0000000000000000000000',
@@ -136,6 +151,23 @@ describe('RunnerPanel', () => {
     expect(claims[0].textContent).toContain('build');
     expect(el.querySelectorAll('[data-runner="rn_local"] [data-testid="runner-claim"]')).toHaveLength(0);
     expect(el.querySelector('[data-runner="rn_paused"] [data-testid="runner-hub-paused"]')).not.toBeNull();
+  });
+
+  it("ends each claim with the chunk's status, toned off the board's own ladder (#156)", async () => {
+    const fixture = TestBed.createComponent(RunnerPanel);
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    const badge = (id: string) =>
+      el.querySelector<HTMLElement>(`[data-runner="${id}"] [data-testid="runner-claim-status"] .badge`);
+
+    // Both chunks sit at `build`; only the status tells them apart, which is the point.
+    // The colors come from STATUS_TONE → toneColor, not a mapping of this panel's own, so
+    // a claim always reads the same tone as that chunk's board card.
+    expect(badge('rn_online')?.textContent?.trim()).toBe('running');
+    expect(badge('rn_online')?.getAttribute('style')).toContain(toneColor('running'));
+    expect(badge('rn_both')?.textContent?.trim()).toBe('needs_human');
+    expect(badge('rn_both')?.getAttribute('style')).toContain(toneColor('needs'));
   });
 
   it('renders a slot bar from env_capacity and summed environment_count, omitting it when null (#69)', async () => {
