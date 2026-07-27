@@ -2332,7 +2332,7 @@ def _spawn_attempt(
         lease_id=lease_id,
         runner_id=ctx.config.runner_id,
         chunk_id=chunk_id,
-    )
+    ).text
     generation = _pending_generation(ctx, lease_id)
     preamble = WorkerPreamble(
         environments=environments,
