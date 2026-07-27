@@ -10,6 +10,7 @@ requeues then escalates. The full happy path is exercised as a sequence of ticks
 
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import UTC, datetime, timedelta
 
@@ -23,6 +24,7 @@ from blizzard.hub.domain.enrollment import hash_token
 from blizzard.hub.domain.graph import SessionMode
 from blizzard.hub.domain.work import DEFAULT_MODEL, ChunkStatus
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD
+from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.preamble import (
     DEFAULT_BLIZZARD_PREAMBLE,
@@ -35,6 +37,7 @@ from blizzard.runner.harness.preamble import (
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.steps import (
     _collect_asset_artifacts,
+    _spawn_attempt,
     advance,
     fill,
     mark_resume_intents,
@@ -1075,6 +1078,54 @@ def test_a_resume_with_message_between_node_entries_does_not_disturb_the_fingerp
     assert "BLIZZARD-FRAMING" not in prefix
 
 
+@pytest.mark.component
+def test_an_announced_change_is_announced_once_and_then_elided(tmp_path):  # type: ignore[no-untyped-def]
+    """Scenario 6 — the fingerprint is re-recorded on a **resumed** spawn, not just a fresh one.
+
+    Three spawns with one workspace-prompt replace between the first and second. The third
+    is the discriminator: it must elide, because the second spawn recorded what it actually
+    sent. If `record_session_preamble` ran only on fresh spawns, the third would compare
+    against the stale *pre-replace* fingerprint and announce "your standing instructions
+    have been updated" ahead of prose unchanged since the previous turn — then so would the
+    fourth, and every remaining resumed node of the chunk.
+
+    That false alarm is precisely what this issue exists to prevent, and it is the mirror of
+    what `test_resume_with_a_whitespace_only_workspace_replace_announces_nothing` guards from
+    the other side. No existing test covers it: scenario 2's third spawn discriminates the
+    *digest source* but not the *write frequency* (with nothing changing, spawn 2's record is
+    byte-identical to spawn 1's, so skipping it is unobservable), and scenarios 3 and 4 change
+    something but stop at two spawns — one short of where a missing write shows."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    provider = FakeProvider({"e1": "/ws/e1"})
+    env = _resuming_build_env()
+
+    _first_build_spawn(store, hub, provider, env, session="sess-build-1", at=_NOW)
+    store.set_workspace_prompt("ws1", prompt="REPLACED-POLICY", at=_NOW + timedelta(seconds=30))
+
+    second = _reenter_build(store, hub, provider, env, session="sess-build-1", pid=200, at=_NOW + timedelta(minutes=1))
+    third = _reenter_build(store, hub, provider, env, session="sess-build-1", pid=300, at=_NOW + timedelta(minutes=2))
+
+    p2 = second.spawns[0][1].prompt_prefix
+    p3 = third.spawns[0][1].prompt_prefix
+
+    # The replace is announced exactly once, on the spawn that first carries it.
+    assert RESUME_UPDATED_NOTICE in p2
+    assert "REPLACED-POLICY" in p2
+
+    # ...and never again, because spawn 2 recorded the prose it sent.
+    assert RESUME_UPDATED_NOTICE not in p3, (
+        "a settled change was re-announced — the resumed spawn's fingerprint write was skipped"
+    )
+    assert RESUME_STANDING_UNCHANGED in p3
+    assert "REPLACED-POLICY" not in p3
+
+    # The store-level fact behind it: the newest row for the session is what spawn 2 sent.
+    settled = store.session_preamble_fingerprint("sess-build-1")
+    assert settled is not None
+    assert settled.workspace == hashlib.sha256(b"REPLACED-POLICY").hexdigest()
+
+
 @pytest.mark.unit
 def test_advance_review_harvests_findings_asset_from_assessment(tmp_path):  # type: ignore[no-untyped-def]
     """A node that `produces` a name no git commit covers emits the assessment as an asset."""
@@ -2033,6 +2084,13 @@ def test_spawn_reflects_runtime_prompt_override_with_no_restart(tmp_path):  # ty
     assert "STATIC-PROMPT" not in preamble.prompt_prefix
 
 
+def _engine_for(tmp_path):  # type: ignore[no-untyped-def]
+    """A migrated engine for the counting store below (mirrors `make_store`)."""
+    engine = create_engine_from_url(f"sqlite:///{tmp_path / 'runner.db'}")
+    runner_metadata.create_all(engine)
+    return engine
+
+
 class _CountingPreambleStore(SqlAlchemyRunnerStore):
     """The real store with one read counted (issue #149) — a subclass, not a hand-written
     double, so every other method the loop touches keeps its genuine behaviour."""
@@ -2054,9 +2112,7 @@ def test_prior_preamble_is_read_only_when_the_spawn_resumes(tmp_path):  # type: 
     every other test in this file — a fresh session simply has no prior row to find *yet* —
     and becomes wrong the moment a session id is reused, at which point a fresh spawn would
     silently elide standing prose its brand-new session never received."""
-    engine = create_engine_from_url(f"sqlite:///{tmp_path / 'runner.db'}")
-    runner_metadata.create_all(engine)
-    store = _CountingPreambleStore(engine)
+    store = _CountingPreambleStore(_engine_for(tmp_path))
     hub = FakeHub()
     provider = FakeProvider({"e1": "/ws/e1"})
     build_env = make_envelope(
@@ -2094,6 +2150,39 @@ def test_prior_preamble_is_read_only_when_the_spawn_resumes(tmp_path):  # type: 
 
     assert harness2.resume_froms == ["sess-build-1"]
     assert store.fingerprint_reads == ["sess-build-1"]  # exactly one, for the resumed session
+
+
+@pytest.mark.unit
+def test_an_empty_resume_from_is_not_treated_as_a_resume(tmp_path):  # type: ignore[no-untyped-def]
+    """The core's "is this a resume?" predicate matches the ADAPTER's (issue #149).
+
+    `claude_code_adapter` uses `if resume_from:` — an empty string falls through to
+    `--session-id`, i.e. a brand-new session. If the core used `is not None` it would look
+    up a fingerprint for `""` and could elide, handing a session that has never seen the
+    prose a line saying its standing instructions are unchanged.
+
+    Not reachable through today's callers (`_spawn_attempt` always passes a uuid
+    `session_hint`, and `latest_session_id` returns a real id or `None`), so this drives
+    `_spawn_attempt` directly — the point is to pin the two predicates together, since a
+    divergence that is safe only by accident is one refactor away from not being."""
+    store = _CountingPreambleStore(_engine_for(tmp_path))
+    hub = FakeHub()
+    envelope = _build_envelope()
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        clock=FixedClock(_NOW),
+    )
+
+    _spawn_attempt(ctx, "ch_1", envelope, [AcquiredEnvironment("e1", "/ws/e1")], via="test", resume_from="")
+
+    assert store.fingerprint_reads == [], "an empty resume_from was treated as a resume"
+    # And the prefix is a full fresh render, not a collapse banner.
+    assert RESUME_STANDING_UNCHANGED not in harness.spawns[0][1].prompt_prefix
 
 
 @pytest.mark.unit

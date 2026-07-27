@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from blizzard.runner.harness.preamble import PreambleFingerprint
+from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.store.repository import NewLease
 from tests.runner_fakes import make_store

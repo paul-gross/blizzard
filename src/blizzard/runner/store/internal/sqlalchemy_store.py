@@ -17,7 +17,7 @@ from sqlalchemy import Engine, and_, case, func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.harness.preamble import PreambleFingerprint
+from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.store.repository import (
     AskRecord,

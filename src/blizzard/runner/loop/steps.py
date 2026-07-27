@@ -2333,7 +2333,15 @@ def _spawn_attempt(
     # story. Do not hoist this above the `resume_from` check: a fresh spawn passes today
     # only because its session has no prior row *yet*, and that stops being true the moment
     # a session id is reused.
-    prior_preamble = ctx.store.session_preamble_fingerprint(resume_from) if resume_from is not None else None
+    # Truthiness, not `is not None`, to match the adapter's own `if resume_from:`
+    # (`harness/internal/claude_code_adapter.py`): an empty string there falls through to
+    # `--session-id`, i.e. a brand-new session. Under `is not None` the core would look up a
+    # fingerprint for `""` and could elide — handing a session that has never seen the prose
+    # a line saying its standing instructions are unchanged. Not reachable today (this
+    # function always passes a uuid `session_hint`, and `latest_session_id` returns either a
+    # real id or `None`), but the two predicates deciding "is this a resume?" differently is
+    # the kind of divergence that only stays safe by accident.
+    prior_preamble = ctx.store.session_preamble_fingerprint(resume_from) if resume_from else None
     rendered = render_worker_preamble(
         runner_prompt=ctx.config.runner_prompt,
         workspace_prompt=workspace_prompt,

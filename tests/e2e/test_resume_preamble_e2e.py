@@ -1,4 +1,4 @@
-"""Resume-time spawn-preamble elision end to end — scenario 12 of the standing e2e smoke — issue #149.
+"""Resume-time spawn-preamble elision end to end — scenario 15 of the standing e2e smoke — issue #149.
 
 The full-stack proof that a **resumed** node-entry spawn is actually handed less than a
 fresh one, and is told when its standing instructions moved. Everything below the unit and
