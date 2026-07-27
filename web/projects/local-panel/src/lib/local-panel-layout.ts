@@ -48,15 +48,10 @@ import type { MachineChunkRow } from './local-panel';
  * resolves through the shared design tokens (`fleet` library,
  * design/tokens.css), never hard-coded hex.
  *
- * The header's own {@link KitMenu} buries the appearance switcher (mobile
- * polish feedback item 5) — this is the existing header region the desktop
- * shell's override lives behind now, replacing {@link LocalPanel}'s old
- * always-visible `.viewport-strip`. Its trigger is the shared {@link KitAvatar}
- * profile glyph (issue #132) rather than the menu's default `⋮`, the same
- * trigger the hub's `AppNavMenu` projects — one shared component so both
- * shells' profile menus render identically. Since the CDK-menu rebuild (issue
- * #161) the panel is declared here and passed as a template: a `CdkMenu` finds
- * its items by a content query, which cannot cross an `<ng-content>` boundary.
+ * The header's own {@link KitMenu} buries the appearance switcher (mobile polish
+ * feedback item 5), replacing {@link LocalPanel}'s old always-visible
+ * `.viewport-strip`. Its trigger is the shared {@link KitAvatar} glyph (issue
+ * #132), the same one the hub's `AppNavMenu` projects.
  *
  * The titlebar itself is the shared {@link BoardHeader} (issue #131) — the same
  * 48px chrome the hub board renders, rather than a bespoke local one. It carries
@@ -67,11 +62,16 @@ import type { MachineChunkRow } from './local-panel';
  * slot — each a self-fetching mini-container of its own, composed here without
  * this layout or {@link BoardHeader} knowing anything about pause state or identity.
  *
- * Because this shell puts three things in that one slot where the hub board puts
- * one, it owns collapsing them as the header narrows (issue #163) — see the
- * `@container board-header` rule in the styles below. {@link BoardHeader}
- * guarantees its trailing cluster is never pushed off the clipped right edge,
- * but it can only collapse the cells it renders itself.
+ * Because this shell puts three things in that slot where the hub board puts one,
+ * it owns how they behave as the header narrows (issue #163): the `@container`
+ * rule below drops the pause control and identity at the narrow tier, and the
+ * `flex` rules beside it steer the cluster's shrink into the username, so a long
+ * one truncates rather than pushing the profile menu off the clipped right edge.
+ * A breakpoint alone could not cover that — a name long enough overflows at any
+ * width above it. `Log out` is a menu item rather than the identity block's own
+ * button so it survives that collapse, and so all three profile menus carry the
+ * same two items; the block still owns the session read and the logout call,
+ * reached through a template reference for the content-query reason above.
  */
 @Component({
   selector: 'local-panel-layout',
@@ -100,7 +100,10 @@ import type { MachineChunkRow } from './local-panel';
     <div class="lp" data-testid="local-panel">
       <fleet-board-header [connection]="connection()" connectionLabel="Runner" tagline="runner · machine panel" [stats]="headerStats()">
         <local-pause-control header-trailing />
-        <local-identity header-trailing />
+        <!-- Display-only: this shell's logout is the menu item below, so it does
+             not vanish with the header cell at the narrow tier, and all three of
+             the app's profile menus carry the same two items. -->
+        <local-identity #identity header-trailing variant="label" />
         <fleet-kit-menu
           header-trailing
           class="menu"
@@ -113,6 +116,9 @@ import type { MachineChunkRow } from './local-panel';
       </fleet-board-header>
       <ng-template #profileMenu>
         <fleet-kit-menu-panel testid="local-panel-menu-panel">
+          @if (identity.username()) {
+            <fleet-kit-menu-item testid="local-panel-logout" (triggered)="identity.logout()">Log out</fleet-kit-menu-item>
+          }
           <fleet-kit-menu-item testid="local-panel-appearance" submenu [cdkMenuTriggerFor]="appearanceMenu">
             Appearance
           </fleet-kit-menu-item>
@@ -221,25 +227,26 @@ import type { MachineChunkRow } from './local-panel';
       flex-direction: column;
       height: 100%;
     }
+    /* The menu never gives way; the identity does — this is where BoardHeader's
+       shrinkable trailing cluster lands, so the username truncates and the only
+       route back to mobile keeps its size at every width. */
     .menu {
       display: flex;
+      flex: none;
       align-items: center;
       padding: 0 10px;
     }
-    /*
-     * This layout's own half of the header's tiered collapse (issue #163).
-     * BoardHeader pins its trailing cluster flex: none so nothing there can be
-     * pushed off the clipped right edge — but it can only collapse what it
-     * owns, and this shell projects two more controls into that slot than the
-     * hub does. Left alone they push the profile menu clean off a phone-width
-     * header, and that menu is this shell's ONLY appearance switcher in desktop
-     * mode: a phone pinned to desktop would have no way back to mobile.
-     *
-     * The query container BoardHeader declares is named, so these rules ride the
-     * same board-header breakpoint from out here, where view encapsulation does
-     * reach the nodes this template declared. Status and identity are what give
-     * way; the menu never does.
-     */
+    local-pause-control {
+      flex: none;
+    }
+    local-identity {
+      min-width: 0;
+    }
+    /* This layout's own half of the tiered collapse: BoardHeader can only collapse
+       the cells it renders, and left standing these two push the profile menu off
+       a phone-width header — where, in desktop mode, that menu is this shell's
+       ONLY appearance switcher. The container it declares is named, so the rule
+       rides the same breakpoint from out here, on nodes this template owns. */
     @container board-header (max-width: 699px) {
       local-pause-control,
       local-identity {

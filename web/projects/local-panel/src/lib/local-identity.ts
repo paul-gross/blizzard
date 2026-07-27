@@ -59,9 +59,14 @@ import { injectRunnerLogoutMutation, injectRunnerSessionQuery, signedInUsername 
     }
   `,
   styles: `
+    /* The username is the one content-dependent width in the header, so it is
+       the one thing that must be able to give way: without a zero floor and an
+       ellipsis it sets a max-content that pushes everything after it — the
+       profile menu included — off a viewport-locked shell (issue #163). */
     :host {
       display: flex;
       align-items: center;
+      min-width: 0;
     }
     .identity {
       display: flex;
@@ -70,11 +75,13 @@ import { injectRunnerLogoutMutation, injectRunnerSessionQuery, signedInUsername 
       padding: 0 12px;
       border-left: 1px solid var(--line);
       white-space: nowrap;
+      min-width: 0;
     }
     .who {
       display: flex;
       flex-direction: column;
       justify-content: center;
+      min-width: 0;
     }
     .who-lbl {
       font-size: var(--fs-label);
@@ -85,6 +92,8 @@ import { injectRunnerLogoutMutation, injectRunnerSessionQuery, signedInUsername 
     .user {
       color: var(--cyan);
       font-size: var(--fs-sm);
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .logout {
       align-items: center;

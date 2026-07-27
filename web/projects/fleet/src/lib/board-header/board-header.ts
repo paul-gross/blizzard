@@ -37,17 +37,20 @@ export interface StatCell {
  * shells mount it over different layouts, so each must react to the width it
  * actually has. Below ~1150px the stat strip drops; below ~700px the spend cell
  * and the brand text (wordmark and tagline both) follow, leaving the brand mark.
- * The trailing cluster — connection cell and projected menu — is `flex: none` at
- * every width, so it can never be pushed past the clipped right edge of an
- * `overflow: hidden` shell; the stat strip is the only region that shrinks.
+ * The connection cell is `flex: none` at every width and the trailing cluster
+ * shrinks only into content its consumer marked shrinkable, so neither can be
+ * pushed past the clipped right edge of an `overflow: hidden` shell; the stat
+ * strip is the only region this component shrinks on its own.
  *
  * That guarantee only covers what *this* component owns. A consumer projecting
  * more than a menu into `[header-trailing]` — the runner's local panel projects
- * a pause control and an identity block beside its menu — owns collapsing its
- * own controls, and can: the query container is **named**, so a consumer writes
+ * a pause control and an identity block beside its menu — owns both collapsing
+ * its own controls and deciding which of them truncates, and can do both: the
+ * query container is **named**, so a consumer writes
  * `@container board-header (max-width: …)` against it in its own styles, where
- * view encapsulation reaches the nodes it declared. `local-panel-layout.ts` is
- * the worked example.
+ * view encapsulation reaches the nodes it declared, and it pins `flex` on those
+ * same nodes to steer where the cluster's shrink lands. `local-panel-layout.ts`
+ * is the worked example — a truncating username, a menu that never gives way.
  */
 @Component({
   selector: 'fleet-board-header',
@@ -83,11 +86,11 @@ export interface StatCell {
         <span class="stat-lbl">{{ connectionLabel() }}</span>
         <span class="v">{{ connection() }}</span>
       </div>
-      <!-- The trailing cluster is wrapped rather than projected straight into
-           the flex row so this component can pin it flex: none — view
-           encapsulation puts the *consumer's* attribute on projected nodes, so
-           a rule here could never reach them, and a shrinkable trailing cell is
-           exactly how the profile menu used to get clipped (issue #163). -->
+      <!-- The trailing cluster is wrapped rather than projected straight into the
+           flex row so this component can size it as one unit — view encapsulation
+           puts the *consumer's* attribute on projected nodes, so a rule here
+           could never reach them, and an unmanaged trailing cell is exactly how
+           the profile menu used to get clipped (issue #163). -->
       <div class="trailing">
         <ng-content select="[header-trailing]" />
       </div>
@@ -194,9 +197,21 @@ export interface StatCell {
     .spend .v {
       color: var(--amber-hi);
     }
+    /*
+     * The trailing cluster shrinks rather than overflowing, but only into
+     * whatever its consumer marked shrinkable — a consumer projecting content of
+     * *content-dependent* width (the runner's local panel projects a signed-in
+     * username) has to be able to truncate it, and a flex: none wrapper is sized
+     * to its max-content, so a long username would push the whole cluster, menu
+     * included, past the clipped right edge. A zero min-width removes that floor;
+     * each projected control then decides for itself whether it gives way (see
+     * local-panel-layout.ts, where the identity truncates and the menu is pinned
+     * flex: none).
+     */
     .trailing {
       display: flex;
-      flex: none;
+      flex: 0 1 auto;
+      min-width: 0;
       align-items: stretch;
     }
 

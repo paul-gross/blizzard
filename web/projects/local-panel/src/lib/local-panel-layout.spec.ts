@@ -2,8 +2,10 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { runnerClient, type runnerApi } from 'fleet';
-import { type RequestClientStub, hiddenAtContainerWidth, stubRequestClient } from 'fleet/testing';
+import { type RequestClientStub, hiddenAtContainerWidth, settle, stubRequestClient } from 'fleet/testing';
+import { vi } from 'vitest';
 
+import { LocalIdentity } from './local-identity';
 import { LocalPanelLayout } from './local-panel-layout';
 import type { MachineChunkRow } from './local-panel';
 
@@ -266,6 +268,72 @@ describe('LocalPanelLayout', () => {
     ).not.toBeNull();
   });
 
+  /*
+   * The desktop profile menu owns this shell's logout since #163's narrow tier
+   * hides the identity block outright — a header cell that disappears must not
+   * take the only way out with it. The default stub in this file answers the
+   * session route with the same empty shape as everything else, so these two
+   * re-stub it with a real signed-in session.
+   */
+  describe('Log out in the profile menu', () => {
+    const withSession = (session: unknown) => {
+      stub.restore();
+      stub = stubRequestClient(runnerClient, (method, path) => {
+        if (method === 'GET' && path === '/api/auth/session') return session;
+        if (method === 'POST' && path === '/api/auth/logout') return {};
+        return { items: [] };
+      });
+    };
+
+    const openMenu = async (fixture: Awaited<ReturnType<typeof render>>) => {
+      (fixture.nativeElement as HTMLElement)
+        .querySelector<HTMLElement>('[data-testid="local-panel-menu"]')
+        ?.click();
+      await settle(fixture);
+      return document.body.querySelector('[data-testid="local-panel-menu-panel"]')!;
+    };
+
+    it('carries Log out as a menu item, so it survives the header cell collapsing', async () => {
+      withSession({ auth_enabled: true, username: 'alice' });
+      const fixture = await render();
+
+      // Display-only in the header: exactly one logout affordance per shell, and
+      // all three profile menus now carry the same two items.
+      expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="identity-logout"]')).toBeNull();
+
+      const panel = await openMenu(fixture);
+      const items = Array.from(panel.querySelectorAll('[role="menuitem"]')).map((i) =>
+        i.getAttribute('data-testid'),
+      );
+      expect(items).toEqual(['local-panel-logout', 'local-panel-appearance']);
+    });
+
+    it('logs out through that item', async () => {
+      withSession({ auth_enabled: true, username: 'alice' });
+      const reload = vi
+        .spyOn(LocalIdentity.prototype as unknown as { reload: () => void }, 'reload')
+        .mockImplementation(() => undefined);
+      const fixture = await render();
+      const panel = await openMenu(fixture);
+
+      panel.querySelector<HTMLElement>('[data-testid="local-panel-logout"]')?.click();
+      // Triggering an item tears the overlay down mid-flight, so the fixture
+      // never restabilizes — plain macrotask ticks rather than `settle`.
+      for (let i = 0; i < 8; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(stub.forRoute('/api/auth/logout', 'POST')).toHaveLength(1);
+      expect(reload).toHaveBeenCalledTimes(1);
+    });
+
+    it('offers no Log out under a none-mode hub, where the surface is authless', async () => {
+      withSession({ auth_enabled: false, username: null });
+      const panel = await openMenu(await render());
+
+      expect(panel.querySelector('[data-testid="local-panel-logout"]')).toBeNull();
+      expect(panel.querySelector('[data-testid="local-panel-appearance"]')).not.toBeNull();
+    });
+  });
+
   it('renders the shared avatar-circle trigger on the header menu (issue #132)', async () => {
     const fixture = await render();
     const el = fixture.nativeElement as HTMLElement;
@@ -306,6 +374,18 @@ describe('LocalPanelLayout', () => {
       // The one that must survive: it is the only way back to mobile from a
       // forced-desktop phone on this shell.
       expect(at(el, '[data-testid="local-panel-menu"]', 390)).toBe(false);
+    });
+
+    it('steers the cluster\'s shrink into the username, never into the menu', async () => {
+      // The breakpoint above handles phone widths; this handles the band just
+      // above it, where a long enough username would otherwise push the menu off
+      // at *any* width. jsdom does no flex layout, so this pins the declarations
+      // that decide where the shrink lands — the widths are proven in a browser.
+      const el = (await render()).nativeElement as HTMLElement;
+
+      expect(getComputedStyle(el.querySelector<HTMLElement>('local-identity')!).minWidth).toBe('0px');
+      expect(getComputedStyle(el.querySelector<HTMLElement>('.menu')!).flexShrink).toBe('0');
+      expect(getComputedStyle(el.querySelector<HTMLElement>('local-pause-control')!).flexShrink).toBe('0');
     });
 
     it('rides the same named container the header declares, not a viewport media query', async () => {

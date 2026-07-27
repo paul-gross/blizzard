@@ -217,9 +217,6 @@ describe('BoardHeader', () => {
       const el = await spendRender();
       expect(at(el, '[data-testid="board-header-stats"]', 420)).toBe(true);
       expect(at(el, '[data-testid="spend-today"]', 420)).toBe(true);
-      // The wordmark goes with the tagline (issue #163's narrow tier leaves the
-      // brand *mark*) — ~190px that decides whether a phone-width header's
-      // trailing cluster fits at all.
       // The whole text block, tagline included — the tagline now goes with its
       // parent rather than by a rule of its own, which is why this asserts the
       // block: `hiddenAtContainerWidth` answers for one element's own resolved
@@ -232,7 +229,7 @@ describe('BoardHeader', () => {
       expect(at(el, 'fleet-brand-mark', 420)).toBe(false);
     });
 
-    it('makes the stat strip the only region that shrinks, so the trailing cluster is never pushed off', async () => {
+    it('lets the stat strip clip rather than force the row wider than its shell', async () => {
       const el = await render([]);
       const strip = el.querySelector<HTMLElement>('[data-testid="board-header-stats"]')!;
       // `min-width: 0` + `overflow: hidden` is what lets the strip clip instead
@@ -241,9 +238,24 @@ describe('BoardHeader', () => {
       expect(getComputedStyle(strip).overflow).toBe('hidden');
       expect(getComputedStyle(strip).flexShrink).toBe('1');
 
-      for (const selector of ['.brand', '[data-testid="conn"]', '.trailing']) {
+      // The brand and the connection cell are fixed-width chrome and never give.
+      for (const selector of ['.brand', '[data-testid="conn"]']) {
         expect(getComputedStyle(el.querySelector<HTMLElement>(selector)!).flexShrink).toBe('0');
       }
+    });
+
+    it('lets the trailing cluster shrink, so a consumer can truncate content-sized controls', async () => {
+      const el = await render([]);
+      const trailing = el.querySelector<HTMLElement>('.trailing')!;
+
+      // Pinning this `flex: none` would size it to max-content, and a consumer
+      // projecting something content-sized (the runner's signed-in username)
+      // would then push its own menu off the clipped right edge no matter how
+      // narrow the header got — a hard breakpoint cannot cover a width that
+      // depends on the data. Shrinkable here, with each projected control
+      // deciding for itself whether it gives way (`local-panel-layout.ts`).
+      expect(getComputedStyle(trailing).minWidth).toBe('0px');
+      expect(getComputedStyle(trailing).flexShrink).toBe('1');
     });
   });
 });

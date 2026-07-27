@@ -84,6 +84,25 @@ describe('LocalIdentity', () => {
     expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="identity-logout"]')).not.toBeNull();
   });
 
+  it('truncates the username instead of setting a floor the header cannot shrink past', async () => {
+    // The header's one *content-dependent* width. Without these the block's
+    // min-content is the whole rendered name, so a long one pushes the trailing
+    // cluster — profile menu included — off a viewport-locked shell at any width
+    // above the narrow breakpoint (issue #163). jsdom does no flex layout, so
+    // this pins the declarations that make truncation possible; the widths
+    // themselves are proven in a browser.
+    const { fixture, stub: s } = await render({ auth_enabled: true, username: 'christopher-mcallister' });
+    stub = s;
+    const el = fixture.nativeElement as HTMLElement;
+
+    for (const node of [fixture.nativeElement, el.querySelector('.identity'), el.querySelector('.who')]) {
+      expect(getComputedStyle(node as HTMLElement).minWidth).toBe('0px');
+    }
+    const user = el.querySelector<HTMLElement>('[data-testid="identity-username"]')!;
+    expect(getComputedStyle(user).overflow).toBe('hidden');
+    expect(getComputedStyle(user).textOverflow).toBe('ellipsis');
+  });
+
   it('POSTs /api/auth/logout and reloads when the logout control is activated', async () => {
     const { fixture, stub: s } = await render({ auth_enabled: true, username: 'alice' });
     stub = s;
