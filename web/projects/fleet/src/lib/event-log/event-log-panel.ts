@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 
 import { compactRef } from '../compact-ref';
 import { KitPanel } from '../kit/kit-panel';
-import { FleetLiveUpdates, type LoggedEvent } from '../sse/fleet-live';
+import { FleetLiveUpdates, type LoggedEvent, type RunnerChangeKind } from '../sse/fleet-live';
 import { formatClockTime } from '../when';
 
 /** One rendered Event log row — the logged frame plus its display strings. */
@@ -11,6 +11,32 @@ interface LogRow {
   readonly type: string;
   readonly time: string;
   readonly message: string;
+}
+
+/** The verb a `runner-changed` kind reads as, where the kind alone does not already read
+ * as one. Only the pause family needs an entry: the registration and heartbeat kinds
+ * never reach the feed (fleet-live.ts, `MUTED_RUNNER_KINDS`), and the fallback below
+ * renders any kind absent here as itself. */
+const RUNNER_CHANGE_VERB: ReadonlyMap<string, string> = new Map<RunnerChangeKind, string>([
+  ['paused', 'paused'],
+  ['resumed', 'resumed'],
+  ['locally-paused', 'locally paused'],
+  ['locally-resumed', 'locally resumed'],
+]);
+
+/**
+ * A `runner-changed` frame as prose (issue #151) — e.g. `runner runner-local paused by
+ * operator`, or `runner runner-local locally paused by runner-ceiling — spend ceiling
+ * reached`. A kind with no phrasing above degrades to the raw kind rather than dropping
+ * the row, on the same reasoning as {@link summarize}'s default: an unrecognized frame is
+ * news that this board is older than the hub, and silence would hide it.
+ */
+function summarizeRunnerChange(data: LoggedEvent['data']): string {
+  const runner = `runner ${compactRef(data.runner_id ?? '—')}`;
+  const verb = data.kind ? (RUNNER_CHANGE_VERB.get(data.kind) ?? data.kind) : 'changed';
+  const by = data.by ? ` by ${data.by}` : '';
+  const reason = data.reason ? ` — ${data.reason}` : '';
+  return `${runner} ${verb}${by}${reason}`;
 }
 
 /**
@@ -34,7 +60,7 @@ function summarize(event: LoggedEvent): string {
     case 'queue-changed':
       return 'ready queue changed';
     case 'runner-changed':
-      return `runner ${compactRef(event.data.runner_id ?? '—')} changed`;
+      return summarizeRunnerChange(event.data);
     case 'event-logged':
       return `${chunk || compactRef(event.data.runner_id ?? '—')} · ${event.data.severity ?? '—'} ${event.data.kind ?? '—'}`;
     default:

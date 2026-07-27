@@ -103,12 +103,44 @@ describe('FleetLiveUpdates', () => {
 
     const source = FakeEventSource.instances[0];
     source.open();
-    source.emitNamed('runner-changed', JSON.stringify({ runner_id: 'rn_1' }));
+    source.emitNamed('runner-changed', JSON.stringify({ runner_id: 'rn_1', kind: 'paused', by: 'alice' }));
     source.emitNamed('queue-changed', JSON.stringify({}));
 
     const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
     expect(keys).toContainEqual(['hub', 'runners']);
     expect(keys).toContainEqual(['hub', 'queue']);
+  });
+
+  it('re-reads the registry on every runner-changed kind, including the muted ones', () => {
+    // Issue #151: muting is the *feed's* concern only. The liveness column refreshes off
+    // the heartbeat flood, so a mute that reached dispatch would freeze it.
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+
+    const source = FakeEventSource.instances[0];
+    source.open();
+    source.emitNamed('runner-changed', JSON.stringify({ runner_id: 'rn_1', kind: 'registered' }));
+    source.emitNamed('runner-changed', JSON.stringify({ runner_id: 'rn_1', kind: 'heartbeat' }));
+
+    const registryHits = invalidate.mock.calls.filter((call) => call[0]?.queryKey?.[1] === 'runners');
+    expect(registryHits).toHaveLength(2);
+  });
+
+  it('keeps the registration and heartbeat kinds out of the event feed', () => {
+    // Issue #151: a runner re-registers every pull cycle, so left in the ring these would
+    // evict every event an operator actually wants within a few cycles.
+    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+    const live = TestBed.inject(FleetLiveUpdates);
+
+    const source = FakeEventSource.instances[0];
+    source.open();
+    source.emitNamed('runner-changed', JSON.stringify({ runner_id: 'rn_1', kind: 'registered' }));
+    source.emitNamed('runner-changed', JSON.stringify({ runner_id: 'rn_1', kind: 'heartbeat' }));
+    source.emitNamed('runner-changed', JSON.stringify({ runner_id: 'rn_1', kind: 'paused', by: 'alice' }));
+    // A frame from a hub too old to name a kind is news, not noise — it stays.
+    source.emitNamed('runner-changed', JSON.stringify({ runner_id: 'rn_1' }));
+
+    expect(live.log().map((e) => e.data.kind)).toEqual(['paused', undefined]);
   });
 
   it('accumulates the event feed into the log, oldest first, without touching dispatch', () => {

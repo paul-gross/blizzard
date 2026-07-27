@@ -495,7 +495,17 @@ def ingest_runner_facts(
             # the store but never pushed, so the board would keep showing a runner as
             # claiming until something unrelated forced a refetch.
             if fact.kind in (RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED):
-                services.events.publish_runner_changed(batch.runner_id)
+                # The frame carries the fact's own `by`/`reason` (issue #151) so the Event
+                # log can say *why* the runner braked itself, matching what `facts.py`
+                # lands in the registry — same `by` default when the fact omits it.
+                by = fact.payload.get("by")
+                reason = fact.payload.get("reason")
+                services.events.publish_runner_changed(
+                    batch.runner_id,
+                    kind="locally-paused" if fact.kind == RUNNER_LOCALLY_PAUSED else "locally-resumed",
+                    by=by if isinstance(by, str) else "operator",
+                    reason=reason if isinstance(reason, str) else None,
+                )
                 continue
             # An operational event (issue #125) may be runner-scoped (no chunk_id), so it is
             # broadcast here before the chunk branch below: `event-logged` refreshes the
@@ -547,7 +557,7 @@ def register_runner(
         public_url=request.url,
         redirect_uris=tuple(request.redirect_uris),
     )
-    services.events.publish_runner_changed(request.runner_id)
+    services.events.publish_runner_changed(request.runner_id, kind="registered")
     return RunnerRegistrationResponse(runner_id=request.runner_id, first_registration=first)
 
 
@@ -562,7 +572,7 @@ def heartbeat_runner(
     assert_owns(principal, runner_id, mode=_mode(http_request))
     if not services.fleet.heartbeat(runner_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown runner {runner_id}")
-    services.events.publish_runner_changed(runner_id)
+    services.events.publish_runner_changed(runner_id, kind="heartbeat")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

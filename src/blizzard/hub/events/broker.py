@@ -19,7 +19,10 @@ concurrent publishers.
 The event **type** names are the board's live vocabulary (the prompt's ``chunk-changed``,
 ``question-asked``/``-answered``, ``decision-opened``/``-resolved``, ``queue-changed``,
 plus ``runner-changed`` for the fleet's liveness column); each maps to the hub facts it
-is emitted on (see the call sites in ``blizzard.hub.api``).
+is emitted on (see the call sites in ``blizzard.hub.api``). A frame's payload carries only
+what identifies the change — a consumer re-GETs the REST resource for the rest — except
+where a frame is itself the news: ``runner-changed`` names its :data:`RunnerChangeKind`,
+since the runner-registry read it stales cannot say which change fired it.
 """
 
 from __future__ import annotations
@@ -30,6 +33,7 @@ import json
 import threading
 from collections import deque
 from dataclasses import dataclass
+from typing import Literal
 
 # SSE event-type names — the board's live vocabulary.
 CHUNK_CHANGED = "chunk-changed"
@@ -40,6 +44,13 @@ DECISION_RESOLVED = "decision-resolved"
 QUEUE_CHANGED = "queue-changed"
 RUNNER_CHANGED = "runner-changed"
 EVENT_LOGGED = "event-logged"
+
+#: What a ``runner-changed`` frame reports (issue #151). The frame's ``runner_id`` alone
+#: says only *that* something changed, which is all the board could ever render — and
+#: because a runner re-registers on every pull-loop cycle as its liveness heartbeat, that
+#: is overwhelmingly the ``registered``/``heartbeat`` pair. Naming the kind lets a consumer
+#: keep invalidating on every frame while showing an operator only the ones that carry news.
+RunnerChangeKind = Literal["registered", "heartbeat", "paused", "resumed", "locally-paused", "locally-resumed"]
 
 
 @dataclass(frozen=True)
@@ -120,9 +131,23 @@ class EventBroker:
         """The ready queue's membership or order changed — the board re-peeks."""
         return self.publish(QUEUE_CHANGED, {})
 
-    def publish_runner_changed(self, runner_id: str) -> int:
-        """A runner's registry state changed (registered / liveness / paused)."""
-        return self.publish(RUNNER_CHANGED, {"runner_id": runner_id})
+    def publish_runner_changed(
+        self, runner_id: str, *, kind: RunnerChangeKind, by: str | None = None, reason: str | None = None
+    ) -> int:
+        """A runner's registry state changed — ``kind`` names which change (issue #151).
+
+        Every kind still stales the board's fleet registry the same way, so the liveness
+        column keeps refreshing on the ``heartbeat`` flood; the kind is what lets the Event
+        log show the operator only the pause family. ``by`` rides the four pause/resume
+        kinds (who set or cleared the brake) and ``reason`` the runner-local pair, which
+        carries the free-text note off the ``runner.locally-paused``/``-resumed`` fact.
+        """
+        payload: dict[str, object] = {"runner_id": runner_id, "kind": kind}
+        if by is not None:
+            payload["by"] = by
+        if reason is not None:
+            payload["reason"] = reason
+        return self.publish(RUNNER_CHANGED, payload)
 
     def publish_event_logged(self, *, severity: str, kind: str, chunk_id: str | None, runner_id: str) -> int:
         """An operational event landed in the event log (issue #125) — the board's Events

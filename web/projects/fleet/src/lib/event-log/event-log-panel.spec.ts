@@ -46,4 +46,41 @@ describe('EventLogPanel', () => {
     expect(messages[0]).toContain('C-beta');
     expect(messages[1]).toContain('running');
   });
+
+  it('renders a runner-changed frame as what actually changed', () => {
+    // Issue #151: the pause family is the only kind that reaches the feed (fleet-live
+    // mutes registration/heartbeat), and each row must say who braked the runner and why.
+    log.set([
+      { seq: 1, type: 'runner-changed', data: { runner_id: 'runner-local', kind: 'paused', by: 'operator' }, at: 0 },
+      {
+        seq: 2,
+        type: 'runner-changed',
+        data: { runner_id: 'runner-local', kind: 'locally-paused', by: 'runner-ceiling', reason: 'disk full' },
+        at: 0,
+      },
+      { seq: 3, type: 'runner-changed', data: { runner_id: 'runner-local', kind: 'locally-resumed', by: 'ada' }, at: 0 },
+    ]);
+    const fixture = TestBed.createComponent(EventLogPanel);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    // Newest first, so seq 3 leads.
+    const messages = [...el.querySelectorAll('[data-testid="event-log-message"]')].map((n) => n.textContent?.trim());
+    expect(messages).toEqual([
+      'runner runner-local locally resumed by ada',
+      'runner runner-local locally paused by runner-ceiling — disk full',
+      'runner runner-local paused by operator',
+    ]);
+  });
+
+  it('degrades a kind-less runner-changed frame rather than rendering it blank', () => {
+    log.set([{ seq: 1, type: 'runner-changed', data: { runner_id: 'runner-local' }, at: 0 }]);
+    const fixture = TestBed.createComponent(EventLogPanel);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="event-log-message"]')?.textContent?.trim()).toBe(
+      'runner runner-local changed',
+    );
+  });
 });

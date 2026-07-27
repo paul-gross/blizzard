@@ -40,8 +40,17 @@ interface DecisionEvent {
   chunk_id: string;
   decision_id: string;
 }
+/** A `runner-changed` frame's payload. `kind` names which registry change fired it
+ * (issue #151) — one of {@link RunnerChangeKind}, but typed `string` here because
+ * {@link HubEventPayload} intersects these shapes and `event-logged` carries a `kind` of
+ * its own, from an unrelated vocabulary. `by` rides the four pause/resume kinds and
+ * `reason` the runner-local pair, both absent otherwise; a frame from a hub older than
+ * #151 carries no `kind` at all. */
 interface RunnerEvent {
   runner_id: string;
+  kind: string;
+  by: string;
+  reason: string;
 }
 /** An `event-logged` frame's payload — an operational event landed (`GET
  * /api/events`'s wire shape, Phase 4). `chunk_id` is `null`, not absent, for a
@@ -56,6 +65,26 @@ type HubEventPayload = Partial<ChunkChanged & QuestionEvent & DecisionEvent & Ru
 
 /** One of the named event types the hub broadcasts ({@link HUB_EVENT_TYPES}). */
 export type HubEventType = (typeof HUB_EVENT_TYPES)[number];
+
+/** Which registry change a `runner-changed` frame reports (events/broker.py,
+ * `RunnerChangeKind`). */
+export type RunnerChangeKind = 'registered' | 'heartbeat' | 'paused' | 'resumed' | 'locally-paused' | 'locally-resumed';
+
+/**
+ * The `runner-changed` kinds the Event log feed drops (issue #151). A runner re-registers
+ * on every pull-loop cycle as its liveness heartbeat, so these two are the overwhelming
+ * majority of all frames and carry no news an operator can act on — left in, they would
+ * evict every other event out of the {@link LOG_LIMIT} ring within a few cycles, so this
+ * is what keeps the feed legible rather than merely tidier. Dropping is scoped to the
+ * feed: {@link FleetLiveUpdates.dispatch} still invalidates on them, so the fleet
+ * registry's liveness column keeps refreshing on every heartbeat exactly as before.
+ */
+const MUTED_RUNNER_KINDS: ReadonlySet<string> = new Set<RunnerChangeKind>(['registered', 'heartbeat']);
+
+/** Whether a frame belongs in the Event log feed — see {@link MUTED_RUNNER_KINDS}. */
+function isLoggable(type: string, data: HubEventPayload): boolean {
+  return type !== 'runner-changed' || !MUTED_RUNNER_KINDS.has(data.kind ?? '');
+}
 
 /** A chunk-changed frame invalidates the fleet list, the ready queue (a status flip
  * can add or remove a chunk from it), that chunk's own detail when the payload names
@@ -142,9 +171,11 @@ const LOG_LIMIT = 256;
  * a fresh read — and the transport also resumes with `last_event_id` for the replay.
  *
  * It also tees the same event feed into {@link log}, a bounded ring the Event log panel
- * renders (issue #25): because the same single subscription records every frame, the
+ * renders (issue #25): because the same single subscription records each frame, the
  * broker's connect-time replay (its buffered history) lands in the log as backfill for
- * free, and the query-invalidation dispatch stays exactly as it was.
+ * free, and the query-invalidation dispatch stays exactly as it was. The tee is where
+ * the feed's noise floor is set — {@link isLoggable} mutes frames an operator cannot act
+ * on, and only there, never on the dispatch side.
  */
 @Injectable({ providedIn: 'root' })
 export class FleetLiveUpdates {
@@ -170,7 +201,8 @@ export class FleetLiveUpdates {
 
   /**
    * The recent-event feed for the Event log (issue #25), oldest → newest, capped at
-   * {@link LOG_LIMIT}. Empty before {@link start}; the panel reverses it for display.
+   * {@link LOG_LIMIT} and excluding the muted frames ({@link isLoggable}). Empty before
+   * {@link start}; the panel reverses it for display.
    */
   get log(): Signal<readonly LoggedEvent[]> {
     return this._log.asReadonly();
@@ -213,8 +245,11 @@ export class FleetLiveUpdates {
     });
   }
 
-  /** Append one frame to the bounded Event log ring, dropping the oldest past the cap. */
+  /** Append one frame to the bounded Event log ring, dropping the oldest past the cap.
+   * Frames the feed mutes ({@link isLoggable}) never enter the ring — and never consume
+   * a `seq`, so the panel's row keys stay dense. */
   private record(type: string, data: HubEventPayload): void {
+    if (!isLoggable(type, data)) return;
     const entry: LoggedEvent = { seq: ++this.seq, type, data, at: Date.now() };
     this._log.update((prev) => {
       const next = [...prev, entry];
