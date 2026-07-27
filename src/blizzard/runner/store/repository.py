@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
+from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.usage import UsageSample
 
 
@@ -612,6 +613,21 @@ class IReadRunnerStore(Protocol):
         Empty for an attempt whose checks never ran (or a node with no ``checks:``)."""
         ...
 
+    def session_preamble_fingerprint(self, session_id: str) -> PreambleFingerprint | None:
+        """The standing preamble prose this session was last sent, or ``None`` (issue #149).
+
+        The newest ``session_preamble_facts`` row for the session, read by
+        :func:`~blizzard.runner.loop.steps._spawn_attempt` when — and only when — this
+        spawn resumes one, and handed to
+        :func:`~blizzard.runner.harness.preamble.render_worker_preamble` as its ``prior``.
+
+        ``None`` means "nothing recorded for this session" and renders the full three-layer
+        preamble: the pre-issue-#149 behaviour, and what every session first spawned before
+        this shipped reads back. That is the safe direction — a missing fingerprint costs
+        tokens, an over-eager match would cost the worker its updated instructions — and is
+        why no data migration is owed."""
+        ...
+
 
 class IWriteRunnerStore(IReadRunnerStore, Protocol):
     """Read-write runner store — held only by the domain (the loop steps)."""
@@ -902,4 +918,24 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         and only for a node with a non-empty ``checks:``, so the marker implies its result
         rows exist. Idempotent by its own check-then-insert (``bzh:sql-portable``), mirroring
         :meth:`record_nudge_fired`."""
+        ...
+
+    def record_session_preamble(self, session_id: str, *, fingerprint: PreambleFingerprint, at: datetime) -> None:
+        """Record what standing preamble prose this session was just sent (issue #149).
+
+        Append-only; the newest row is what
+        :meth:`~IReadRunnerStore.session_preamble_fingerprint` reads back. The fact is
+        *"this prose was sent to this session"*, not *"a spawn happened"* — which is why it
+        is its own call rather than a widening of :meth:`record_spawn`. ``record_spawn``
+        has four call sites, and the three resume-with-message ones
+        (``_resume_in_place``, ``_resume_if_answered``, the pause-resume) send no
+        ``prompt_prefix`` at all while re-recording a session id a later node-entry resume
+        will target; folding this write into the shared path would poison that session's
+        newest row with a fingerprint no prose backs.
+
+        Called only from :func:`~blizzard.runner.loop.steps._spawn_attempt`, immediately
+        after ``record_spawn`` — the write lands after the spawn returns, so a durable
+        fingerprint always implies the prose reached the process, and a crash that loses
+        it leaves the next resume rendering in full (pre-change behaviour). See the
+        recorded exemption in ``blizzard-harness:/architecture/crash-correctness.md``."""
         ...

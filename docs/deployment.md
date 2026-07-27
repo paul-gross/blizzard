@@ -359,18 +359,44 @@ it is absent from a worker child by construction unless deliberately named here.
 
 ### The worker spawn preamble
 
-Every worker's spawn prompt is three ordered layers ahead of the node's own envelope
-prompt: (1) a baked-in blizzard preamble — always present, framing the worker as
-operating inside the fleet and naming its worker-facing `blizzard runner` verbs
-(`ask`, `work-items`) — (2) the operator's own `workspace_prompt` prose, layered on top
-when set, and (3) a machine-local facts table (runner/chunk/lease identity, held
-environment(s)). Layer 1 closes by stating that division of labor for the worker's own
-benefit; read the shipped text
-(`src/blizzard/runner/harness/prompts/blizzard_preamble.md`) before authoring layer 2, so
-your prose adds deployment-specific policy rather than re-establishing framing the worker
-already has.
+A worker's **first** spawn on a session carries three ordered layers ahead of the node's
+own envelope prompt: (1) a baked-in blizzard preamble — framing the worker as operating
+inside the fleet and naming its worker-facing `blizzard runner` verbs (`ask`,
+`work-items`) — (2) the operator's own `workspace_prompt` prose, layered on top when set,
+and (3) a machine-local facts table (runner/chunk/lease identity, held environment(s)).
+Layer 1 closes by stating that division of labor for the worker's own benefit; read the
+shipped text (`src/blizzard/runner/harness/prompts/blizzard_preamble.md`) before authoring
+layer 2, so your prose adds deployment-specific policy rather than re-establishing framing
+the worker already has.
 
-Layer 1 is overridable but never absent: `blizzard-runner.toml`'s `runner_prompt`
+#### What a resumed spawn gets instead
+
+Layers 1 and 2 are *standing* prose — a session that already received them still holds
+them. So on a node-step that **resumes** an existing session, the runner sends each of
+those two layers only when it has actually changed since that session was last spawned:
+
+- **Unchanged** — the layer collapses to a single line stating that it still applies. On a
+  graph like `advanced-development-workflow`, whose worker nodes resume by default
+  (`plan`, `build`, `verify`, `pre-push`, `resolve`, `retrospective` — only `plan-review`
+  and `review` are declared `fresh`), that is the ordinary case at every one of them.
+- **Changed** — the new prose is sent in full, led by an explicit statement that the
+  worker's standing instructions have been updated since its previous turn. A workspace
+  prompt replaced with an empty one is a change too, and is announced as a withdrawal.
+
+That announcement is the operator-visible reason `PUT /api/workspace-prompt` is
+trustworthy mid-chunk: a replace applies to the chunk's next resumed node-step, and the
+worker is told it is reading something new rather than being handed replacement prose in
+the same position the superseded block occupied. `runner_prompt` behaves the same way once
+it moves, but it is a startup knob — reaching a running fleet still takes the restart the
+section below describes.
+
+**Layer 3 is unconditional on every path.** The facts table is re-rendered per attempt
+around a freshly minted `lease_id`, and a worker whose table named a dead lease could not
+address the fleet at all. A fresh spawn, and any node declared `session: fresh`, renders
+all three layers exactly as before.
+
+Layer 1 is overridable but never *unset* — some layer-1 prose is always in effect, even on
+a resumed spawn that only restates it in one line. `blizzard-runner.toml`'s `runner_prompt`
 (inline text) or `runner_prompt_file` (a path, wins over inline text when both are
 set) — or `BZ_RUNNER_PROMPT` seeding a fresh scaffold — replaces the baked default
 wholesale when set; unset, the baked default renders. Both are config/startup knobs,

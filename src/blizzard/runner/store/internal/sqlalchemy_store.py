@@ -17,6 +17,7 @@ from sqlalchemy import Engine, and_, case, func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 
 from blizzard.foundation.logging import get_logger
+from blizzard.runner.harness.fingerprint import PreambleFingerprint
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.store.repository import (
     AskRecord,
@@ -63,6 +64,7 @@ from blizzard.runner.store.schema import (
     resume_intents,
     route_tokens,
     session_ends,
+    session_preamble_facts,
     takeover_ends,
     takeovers,
     usage_facts,
@@ -512,6 +514,21 @@ class SqlAlchemyRunnerStore:
             for r in rows
         ]
 
+    def session_preamble_fingerprint(self, session_id: str) -> PreambleFingerprint | None:
+        # Explicit total ordering on the autoincrement pk, not on `recorded_at`: two spawns
+        # of one session can share a clock stamp, and a newest-row read with no `order_by`
+        # happens to return insert order on sqlite while being undefined on postgres
+        # (`bzh:sql-portable`).
+        rows = self._all(
+            select(session_preamble_facts.c.blizzard_digest, session_preamble_facts.c.workspace_digest)
+            .where(session_preamble_facts.c.session_id == session_id)
+            .order_by(session_preamble_facts.c.id.desc())
+            .limit(1)
+        )
+        if not rows:
+            return None
+        return PreambleFingerprint(blizzard=str(rows[0].blizzard_digest), workspace=str(rows[0].workspace_digest))
+
     def resume_intent_lease_ids(self) -> set[str]:
         stmt = select(resume_intents.c.lease_id).where(_intent_is_open()).distinct()
         return {str(r.lease_id) for r in self._all(stmt)}
@@ -937,6 +954,22 @@ class SqlAlchemyRunnerStore:
                 return
             conn.execute(checks_ran.insert().values(lease_id=lease_id, epoch=epoch, ran_at=at))
         _log.info("checks marked ran", lease_id=lease_id, epoch=epoch)
+
+    def record_session_preamble(self, session_id: str, *, fingerprint: PreambleFingerprint, at: datetime) -> None:
+        # A plain append, no check-then-insert: unlike `nudge_facts`/`checks_ran` this is
+        # not a once-per-key guard, it is a per-spawn fact whose newest row is the answer.
+        # A replayed spawn re-records the same two digests, so a duplicate row reads back
+        # identically to the row it duplicates.
+        with self._begin() as conn:
+            conn.execute(
+                session_preamble_facts.insert().values(
+                    session_id=session_id,
+                    blizzard_digest=fingerprint.blizzard,
+                    workspace_digest=fingerprint.workspace,
+                    recorded_at=at,
+                )
+            )
+        _log.info("session preamble recorded", session_id=session_id)
 
     def record_resume_intent(self, *, lease_id: str, marked_at: datetime) -> None:
         with self._begin() as conn:

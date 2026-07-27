@@ -10,24 +10,46 @@ requeues then escalates. The full happy path is exercised as a sequence of ticks
 
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy import Engine
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.artifacts import ArtifactKind
 from blizzard.hub.domain.enrollment import hash_token
 from blizzard.hub.domain.graph import SessionMode
 from blizzard.hub.domain.work import DEFAULT_MODEL, ChunkStatus
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD
+from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.harness.preamble import DEFAULT_BLIZZARD_PREAMBLE
+from blizzard.runner.harness.preamble import (
+    DEFAULT_BLIZZARD_PREAMBLE,
+    RESUME_BLIZZARD_UNCHANGED,
+    RESUME_STANDING_UNCHANGED,
+    RESUME_UPDATED_NOTICE,
+    RESUME_WORKSPACE_UNCHANGED,
+    PreambleFingerprint,
+)
 from blizzard.runner.loop.context import LoopConfig
-from blizzard.runner.loop.steps import _collect_asset_artifacts, advance, fill, pull, reap
+from blizzard.runner.loop.steps import (
+    _collect_asset_artifacts,
+    _spawn_attempt,
+    advance,
+    fill,
+    mark_resume_intents,
+    pull,
+    reap,
+    resume,
+)
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.loop.worktree import IWorktreeGit
+from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 from blizzard.runner.store.repository import NewLease
+from blizzard.runner.store.schema import metadata as runner_metadata
 from blizzard.wire.chunk import ChunkDetail, ChunkUsageTotalView, RouteView
 from blizzard.wire.completion import SubmittedArtifact
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
@@ -818,6 +840,290 @@ def test_within_node_retry_stays_fresh_even_when_the_node_is_resume(tmp_path):  
     assert harness.resume_froms == [None]  # (d) a retry never resolves a resume target
     lease = store.active_lease_for_chunk("ch_1")
     assert lease is not None and lease.epoch == 2 and lease.session_id == "sess-b"
+
+
+# --------------------------------------------------------------------------- #
+# RESUME-TIME PREAMBLE ELISION (issue #149) — what a resumed node-entry spawn is
+# actually handed. Component-tier for the same reason the block above is: these
+# prove the WIRING (store read -> renderer -> adapter prefix, across a real
+# resume cycle with a real store recording between spawns), which the renderer's
+# own unit tier cannot. Every assertion reads
+# `harness.spawns[n][1].prompt_prefix`, never the renderer directly.
+# --------------------------------------------------------------------------- #
+
+
+def _preamble_config(*, workspace_prompt: str = "WORKSPACE-POLICY", runner_prompt: str = "BLIZZARD-FRAMING"):  # type: ignore[no-untyped-def]
+    return LoopConfig(
+        runner_id="r1",
+        workspace_id="ws1",
+        workspace_root="/ws",
+        workspace_prompt=workspace_prompt,
+        runner_prompt=runner_prompt,
+    )
+
+
+def _first_build_spawn(store, hub, provider, env, *, session, at, config=None):  # type: ignore[no-untyped-def]
+    """FILL's first arrival at `build` — a fresh session, nothing to resume."""
+    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.claim_outcome = claimed_outcome("ch_1", env)
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id=session, pid=100, process_start_time="start-100"), verdict="pass"
+    )
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=provider,
+        harness=harness,
+        probe=FakeProbe(),
+        clock=FixedClock(at),
+        config=config if config is not None else _preamble_config(),
+    )
+    fill(ctx)
+    return harness
+
+
+def _reenter_build(store, hub, provider, env, *, session, pid, at, config=None):  # type: ignore[no-untyped-def]
+    """One ADVANCE + PULL cycle re-entering `build` on its own prior session."""
+    hub.envelopes["ch_1"] = env
+    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=env)]
+    harness = FakeHarness(
+        handle=WorkerHandle(session_id=session, pid=pid, process_start_time=f"start-{pid}"), verdict="pass"
+    )
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=provider,
+        harness=harness,
+        probe=FakeProbe(),
+        clock=FixedClock(at),
+        config=config if config is not None else _preamble_config(),
+    )
+    advance(ctx)
+    pull(ctx)
+    return harness
+
+
+def _resuming_build_env():  # type: ignore[no-untyped-def]
+    return make_envelope(
+        "ch_1", "build", node_id="nd_build", choices=_CHOICES, session=SessionMode.RESUME, session_source="build"
+    )
+
+
+@pytest.mark.component
+def test_fresh_spawn_sends_all_three_layers_and_records_a_fingerprint(tmp_path):  # type: ignore[no-untyped-def]
+    """Scenario 1 (AC4): first arrival resumes nothing, so the prefix is exactly today's
+    three-layer composition — and the spawn leaves behind the baseline its first resume
+    will compare against."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    env = _resuming_build_env()
+
+    harness = _first_build_spawn(store, hub, FakeProvider({"e1": "/ws/e1"}), env, session="sess-build-1", at=_NOW)
+
+    assert harness.resume_froms == [None]
+    prefix = harness.spawns[0][1].prompt_prefix
+    assert (
+        prefix
+        == (
+            "BLIZZARD-FRAMING\n\n"
+            "WORKSPACE-POLICY\n\n"
+            "| Field | Value |\n"
+            "|-------|-------|\n"
+            "| runner id | `r1` |\n"
+            "| chunk id | `ch_1` |\n"
+            "| lease id | " + f"`{store.active_lease_for_chunk('ch_1').lease_id}` |\n"  # type: ignore[union-attr]
+            "| winter environment name | `e1` |\n"
+            "| environment workdir | `/ws/e1` |"
+        )
+    )
+    assert store.session_preamble_fingerprint("sess-build-1") is not None
+
+
+@pytest.mark.component
+def test_resume_with_unchanged_prose_elides_and_keeps_eliding(tmp_path):  # type: ignore[no-untyped-def]
+    """Scenario 2 (AC2, AC6). Two node re-entries on one session with nothing changed.
+
+    The **third** spawn is the load-bearing one: it is what distinguishes digesting the
+    resolved layer inputs from digesting the emitted output. Two spawns pass under either
+    reading, because a fingerprint recorded off the collapse banner only misfires on the
+    spawn *after* the first elision — which on `advanced-development-workflow` means from
+    the second resume onward, at build, verify, pre-push, resolve and retrospective."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    provider = FakeProvider({"e1": "/ws/e1"})
+    env = _resuming_build_env()
+
+    _first_build_spawn(store, hub, provider, env, session="sess-build-1", at=_NOW)
+    first_lease = store.active_lease_for_chunk("ch_1")
+    assert first_lease is not None
+
+    second = _reenter_build(store, hub, provider, env, session="sess-build-1", pid=200, at=_NOW + timedelta(minutes=1))
+    assert second.resume_froms == ["sess-build-1"]
+    second_prefix = second.spawns[0][1].prompt_prefix
+    assert RESUME_STANDING_UNCHANGED in second_prefix
+    assert "BLIZZARD-FRAMING" not in second_prefix
+    assert "WORKSPACE-POLICY" not in second_prefix
+    assert RESUME_UPDATED_NOTICE not in second_prefix
+    # AC6's real hazard is a STALE table surviving into a resumed spawn — "contains the new
+    # id" alone would not catch that, so the prior attempt's lease id must be absent too.
+    second_lease = store.active_lease_for_chunk("ch_1")
+    assert second_lease is not None
+    assert f"| lease id | `{second_lease.lease_id}` |" in second_prefix
+    assert first_lease.lease_id not in second_prefix
+    assert "| environment workdir | `/ws/e1` |" in second_prefix
+
+    third = _reenter_build(store, hub, provider, env, session="sess-build-1", pid=300, at=_NOW + timedelta(minutes=2))
+    third_prefix = third.spawns[0][1].prompt_prefix
+    assert RESUME_STANDING_UNCHANGED in third_prefix
+    assert RESUME_UPDATED_NOTICE not in third_prefix  # nothing changed — nothing announced
+    assert "BLIZZARD-FRAMING" not in third_prefix
+    assert "WORKSPACE-POLICY" not in third_prefix
+
+
+@pytest.mark.component
+def test_resume_after_a_live_workspace_prompt_replace_announces_the_new_prose(tmp_path):  # type: ignore[no-untyped-def]
+    """Scenario 3 — the correctness half of the issue. `PUT /api/workspace-prompt` between
+    two spawns of one session: the replacement reaches the worker announced, not disguised
+    as the block it was handed a spawn ago."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    provider = FakeProvider({"e1": "/ws/e1"})
+    env = _resuming_build_env()
+
+    _first_build_spawn(store, hub, provider, env, session="sess-build-1", at=_NOW)
+
+    # The local API's write, landing between the two spawns.
+    store.set_workspace_prompt("ws1", prompt="REPLACED-POLICY", at=_NOW + timedelta(seconds=30))
+
+    second = _reenter_build(store, hub, provider, env, session="sess-build-1", pid=200, at=_NOW + timedelta(minutes=1))
+
+    prefix = second.spawns[0][1].prompt_prefix
+    assert prefix.startswith(RESUME_UPDATED_NOTICE)
+    assert "REPLACED-POLICY" in prefix
+    assert "WORKSPACE-POLICY" not in prefix  # the superseded prose is gone
+    assert RESUME_BLIZZARD_UNCHANGED in prefix  # layer 1 did not move, so it stays collapsed
+    assert "BLIZZARD-FRAMING" not in prefix
+
+
+@pytest.mark.component
+def test_resume_after_a_runner_prompt_change_announces_and_re_sends_layer_one(tmp_path):  # type: ignore[no-untyped-def]
+    """Scenario 4 — layer 1's door. `runner_prompt` is a startup knob, so this is reachable
+    only across a runner restart, but a resumed session outlives one."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    provider = FakeProvider({"e1": "/ws/e1"})
+    env = _resuming_build_env()
+
+    _first_build_spawn(store, hub, provider, env, session="sess-build-1", at=_NOW)
+
+    # The restarted runner's config — same workspace prompt, new blizzard framing.
+    restarted = _preamble_config(runner_prompt="REFRAMED-BLIZZARD")
+    second = _reenter_build(
+        store, hub, provider, env, session="sess-build-1", pid=200, at=_NOW + timedelta(minutes=1), config=restarted
+    )
+
+    prefix = second.spawns[0][1].prompt_prefix
+    assert prefix.startswith(f"{RESUME_UPDATED_NOTICE}\n\nREFRAMED-BLIZZARD\n\n")
+    assert "BLIZZARD-FRAMING" not in prefix
+    assert RESUME_WORKSPACE_UNCHANGED in prefix  # layer 2 held, so it collapses
+    assert "WORKSPACE-POLICY" not in prefix
+
+
+@pytest.mark.component
+def test_a_resume_with_message_between_node_entries_does_not_disturb_the_fingerprint(tmp_path):  # type: ignore[no-untyped-def]
+    """Scenario 5. A restart-resume re-records the SAME session id via `record_spawn` while
+    sending no `prompt_prefix` at all. Because the fingerprint write is its own store call
+    reachable only from `_spawn_attempt`, that path cannot touch it — so the next node-entry
+    spawn still elides. Had the write ridden `record_spawn`, this session's newest row would
+    carry a fingerprint no prose backs, and the spawn below would announce an update ahead
+    of prose that never changed."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    provider = FakeProvider({"e1": "/ws/e1"})
+    env = _resuming_build_env()
+
+    _first_build_spawn(store, hub, provider, env, session="sess-build-1", at=_NOW)
+
+    # --- The graceful-restart re-attach, interleaved: mark, then RESUME in place.
+    mark_resume_intents(store, now=_NOW + timedelta(seconds=30))
+    hub.chunks["ch_1"] = ChunkDetail(
+        chunk_id="ch_1",
+        graph_id="gr_1",
+        status=ChunkStatus.RUNNING,
+        current_node_id="nd_build",
+        latest_epoch=1,
+        model=DEFAULT_MODEL,
+        route=RouteView(runner_id="r1", workspace_id="ws1", environment_ids=["e1"]),
+    )
+    resume_harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    resume(
+        make_context(
+            store,
+            hub=hub,
+            provider=provider,
+            harness=resume_harness,
+            probe=FakeProbe(),
+            clock=FixedClock(_NOW + timedelta(seconds=45)),
+            config=_preamble_config(),
+        )
+    )
+    assert resume_harness.resumed  # the resume-with-message really ran
+
+    # --- The next node entry on the same session still finds an honest fingerprint.
+    second = _reenter_build(store, hub, provider, env, session="sess-build-1", pid=200, at=_NOW + timedelta(minutes=1))
+
+    prefix = second.spawns[0][1].prompt_prefix
+    assert RESUME_STANDING_UNCHANGED in prefix
+    assert RESUME_UPDATED_NOTICE not in prefix
+    assert "BLIZZARD-FRAMING" not in prefix
+
+
+@pytest.mark.component
+def test_an_announced_change_is_announced_once_and_then_elided(tmp_path):  # type: ignore[no-untyped-def]
+    """Scenario 6 — the fingerprint is re-recorded on a **resumed** spawn, not just a fresh one.
+
+    Three spawns with one workspace-prompt replace between the first and second. The third
+    is the discriminator: it must elide, because the second spawn recorded what it actually
+    sent. If `record_session_preamble` ran only on fresh spawns, the third would compare
+    against the stale *pre-replace* fingerprint and announce "your standing instructions
+    have been updated" ahead of prose unchanged since the previous turn — then so would the
+    fourth, and every remaining resumed node of the chunk.
+
+    That false alarm is precisely what this issue exists to prevent, and it is the mirror of
+    what `test_resume_with_a_whitespace_only_workspace_replace_announces_nothing` guards from
+    the other side. No existing test covers it: scenario 2's third spawn discriminates the
+    *digest source* but not the *write frequency* (with nothing changing, spawn 2's record is
+    byte-identical to spawn 1's, so skipping it is unobservable), and scenarios 3 and 4 change
+    something but stop at two spawns — one short of where a missing write shows."""
+    store = _store(tmp_path)
+    hub = FakeHub()
+    provider = FakeProvider({"e1": "/ws/e1"})
+    env = _resuming_build_env()
+
+    _first_build_spawn(store, hub, provider, env, session="sess-build-1", at=_NOW)
+    store.set_workspace_prompt("ws1", prompt="REPLACED-POLICY", at=_NOW + timedelta(seconds=30))
+
+    second = _reenter_build(store, hub, provider, env, session="sess-build-1", pid=200, at=_NOW + timedelta(minutes=1))
+    third = _reenter_build(store, hub, provider, env, session="sess-build-1", pid=300, at=_NOW + timedelta(minutes=2))
+
+    p2 = second.spawns[0][1].prompt_prefix
+    p3 = third.spawns[0][1].prompt_prefix
+
+    # The replace is announced exactly once, on the spawn that first carries it.
+    assert RESUME_UPDATED_NOTICE in p2
+    assert "REPLACED-POLICY" in p2
+
+    # ...and never again, because spawn 2 recorded the prose it sent.
+    assert RESUME_UPDATED_NOTICE not in p3, (
+        "a settled change was re-announced — the resumed spawn's fingerprint write was skipped"
+    )
+    assert RESUME_STANDING_UNCHANGED in p3
+    assert "REPLACED-POLICY" not in p3
+
+    # The store-level fact behind it: the newest row for the session is what spawn 2 sent.
+    settled = store.session_preamble_fingerprint("sess-build-1")
+    assert settled is not None
+    assert settled.workspace == hashlib.sha256(b"REPLACED-POLICY").hexdigest()
 
 
 @pytest.mark.unit
@@ -1776,6 +2082,107 @@ def test_spawn_reflects_runtime_prompt_override_with_no_restart(tmp_path):  # ty
     _, preamble = harness.spawns[0]
     assert preamble.prompt_prefix.startswith(f"{DEFAULT_BLIZZARD_PREAMBLE}\n\nOVERRIDDEN\n\n")
     assert "STATIC-PROMPT" not in preamble.prompt_prefix
+
+
+def _engine_for(tmp_path):  # type: ignore[no-untyped-def]
+    """A migrated engine for the counting store below (mirrors `make_store`)."""
+    engine = create_engine_from_url(f"sqlite:///{tmp_path / 'runner.db'}")
+    runner_metadata.create_all(engine)
+    return engine
+
+
+class _CountingPreambleStore(SqlAlchemyRunnerStore):
+    """The real store with one read counted (issue #149) — a subclass, not a hand-written
+    double, so every other method the loop touches keeps its genuine behaviour."""
+
+    def __init__(self, engine: Engine) -> None:
+        super().__init__(engine)
+        self.fingerprint_reads: list[str] = []
+
+    def session_preamble_fingerprint(self, session_id: str) -> PreambleFingerprint | None:
+        self.fingerprint_reads.append(session_id)
+        return super().session_preamble_fingerprint(session_id)
+
+
+@pytest.mark.unit
+def test_prior_preamble_is_read_only_when_the_spawn_resumes(tmp_path):  # type: ignore[no-untyped-def]
+    """The lookup is resume-**gated**, not merely resume-shaped (issue #149).
+
+    Without this, a refactor that hoists the read above the `resume_from` check passes
+    every other test in this file — a fresh session simply has no prior row to find *yet* —
+    and becomes wrong the moment a session id is reused, at which point a fresh spawn would
+    silently elide standing prose its brand-new session never received."""
+    store = _CountingPreambleStore(_engine_for(tmp_path))
+    hub = FakeHub()
+    provider = FakeProvider({"e1": "/ws/e1"})
+    build_env = make_envelope(
+        "ch_1", "build", node_id="nd_build", choices=_CHOICES, session=SessionMode.RESUME, session_source="build"
+    )
+
+    # --- A fresh spawn: first arrival at `build`, nothing to resume.
+    hub.queue = [QueuePeekEntry(chunk_id="ch_1", graph_id="gr_1", position=0)]
+    hub.claim_outcome = claimed_outcome("ch_1", build_env)
+    harness1 = FakeHarness(
+        handle=WorkerHandle(session_id="sess-build-1", pid=100, process_start_time="start-100"), verdict="pass"
+    )
+    ctx1 = make_context(store, hub=hub, provider=provider, harness=harness1, probe=FakeProbe(), clock=FixedClock(_NOW))
+    fill(ctx1)
+
+    assert harness1.resume_froms == [None]
+    assert store.fingerprint_reads == []  # never looked one up
+
+    # --- A resumed spawn: build re-entered on its own prior session.
+    hub.envelopes["ch_1"] = build_env
+    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=build_env)]
+    harness2 = FakeHarness(
+        handle=WorkerHandle(session_id="sess-build-1", pid=200, process_start_time="start-200"), verdict="pass"
+    )
+    ctx2 = make_context(
+        store,
+        hub=hub,
+        provider=provider,
+        harness=harness2,
+        probe=FakeProbe(),
+        clock=FixedClock(_NOW + timedelta(minutes=1)),
+    )
+    advance(ctx2)
+    pull(ctx2)
+
+    assert harness2.resume_froms == ["sess-build-1"]
+    assert store.fingerprint_reads == ["sess-build-1"]  # exactly one, for the resumed session
+
+
+@pytest.mark.unit
+def test_an_empty_resume_from_is_not_treated_as_a_resume(tmp_path):  # type: ignore[no-untyped-def]
+    """The core's "is this a resume?" predicate matches the ADAPTER's (issue #149).
+
+    `claude_code_adapter` uses `if resume_from:` — an empty string falls through to
+    `--session-id`, i.e. a brand-new session. If the core used `is not None` it would look
+    up a fingerprint for `""` and could elide, handing a session that has never seen the
+    prose a line saying its standing instructions are unchanged.
+
+    Not reachable through today's callers (`_spawn_attempt` always passes a uuid
+    `session_hint`, and `latest_session_id` returns a real id or `None`), so this drives
+    `_spawn_attempt` directly — the point is to pin the two predicates together, since a
+    divergence that is safe only by accident is one refactor away from not being."""
+    store = _CountingPreambleStore(_engine_for(tmp_path))
+    hub = FakeHub()
+    envelope = _build_envelope()
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        clock=FixedClock(_NOW),
+    )
+
+    _spawn_attempt(ctx, "ch_1", envelope, [AcquiredEnvironment("e1", "/ws/e1")], via="test", resume_from="")
+
+    assert store.fingerprint_reads == [], "an empty resume_from was treated as a resume"
+    # And the prefix is a full fresh render, not a collapse banner.
+    assert RESUME_STANDING_UNCHANGED not in harness.spawns[0][1].prompt_prefix
 
 
 @pytest.mark.unit
