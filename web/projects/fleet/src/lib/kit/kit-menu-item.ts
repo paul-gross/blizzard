@@ -20,6 +20,17 @@ import { CdkMenuItem, CdkMenuItemRadio } from '@angular/cdk/menu';
  * A submenu item is this same component with `[cdkMenuTriggerFor]` bound on it
  * (the CDK's own idiom) plus `[submenu]="true"` for the trailing chevron —
  * right-arrow opens it, left-arrow returns.
+ *
+ * **A submenu parent opens on hover and toggles on click**, which is stock
+ * `@angular/cdk/menu` behavior we take deliberately rather than by omission: for
+ * a mouse the pointer landing on the row already opened the submenu, so the
+ * click that follows shuts it again. Keyboard (right-arrow) and touch (tap, with
+ * no hover to have opened it first) both do the obvious thing, and touch is what
+ * the shells' narrow widths actually get. Overriding it means re-entering the
+ * CDK's open/close bookkeeping from outside, and an attempt to do so did not
+ * hold up under test — so the behavior is pinned by the spec below instead of
+ * papered over. Revisit with a real fix if the mouse gesture starts to matter;
+ * do not reach for an ordering trick.
  */
 @Component({
   selector: 'fleet-kit-menu-item',

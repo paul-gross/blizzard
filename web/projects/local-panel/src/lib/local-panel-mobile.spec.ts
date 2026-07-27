@@ -3,7 +3,9 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { runnerClient, type runnerApi } from 'fleet';
 import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { vi } from 'vitest';
 
+import { LocalIdentity } from './local-identity';
 import { LocalPanelMobile } from './local-panel-mobile';
 import type { MachineChunkRow } from './local-panel';
 
@@ -231,6 +233,90 @@ describe('LocalPanelMobile', () => {
         '[data-testid="local-panel-mobile-titlebar-menu-panel"] [data-testid="local-panel-mobile-appearance"]',
       ),
     ).not.toBeNull();
+  });
+
+  /*
+   * The titlebar menu is a real `role="menu"` since the CDK rebuild (issue #161),
+   * so everything actionable inside it has to be a menu item: CDK's roving focus
+   * only rovers `CdkMenuItem`s and `Tab` closes the menu rather than falling
+   * through to a plain button, which would strand the identity block's own Log
+   * out exactly where a mobile operator most needs it.
+   */
+  describe('the signed-in identity inside the titlebar menu', () => {
+    const withSession = (session: unknown) => {
+      stub.restore();
+      stub = stubRequestClient(runnerClient, (method, path) => {
+        if (method === 'GET' && path === '/api/auth/session') return session;
+        if (method === 'POST' && path === '/api/auth/logout') return {};
+        return { items: [] };
+      });
+    };
+
+    const openMenu = async (fixture: Awaited<ReturnType<typeof render>>) => {
+      (fixture.nativeElement as HTMLElement)
+        .querySelector<HTMLElement>('[data-testid="local-panel-mobile-titlebar-menu"]')
+        ?.click();
+      await settle(fixture);
+      return document.body.querySelector('[data-testid="local-panel-mobile-titlebar-menu-panel"]')!;
+    };
+
+    it('offers Log out as a real menu item the roving focus can reach', async () => {
+      withSession({ auth_enabled: true, username: 'alice' });
+      const panel = await openMenu(await render());
+
+      const logout = panel.querySelector('[data-testid="local-panel-mobile-logout"]');
+      expect(logout?.getAttribute('role')).toBe('menuitem');
+      // In the tab order or one arrow key away — either way the key manager owns
+      // it, which a plain <button> in here would never be.
+      expect(logout?.getAttribute('tabindex')).not.toBeNull();
+      // The identity block itself stays a non-focusable label: no second button.
+      expect(panel.querySelector('[data-testid="identity-logout"]')).toBeNull();
+      expect(panel.querySelector('[data-testid="identity-username"]')?.textContent).toContain('alice');
+    });
+
+    it('owns only menu items and presentational rows, per the role="menu" content model', async () => {
+      withSession({ auth_enabled: true, username: 'alice' });
+      const panel = await openMenu(await render());
+
+      const allowed = ['menuitem', 'menuitemradio', 'menuitemcheckbox', 'group', 'separator', 'presentation'];
+      const untyped = Array.from(panel.children).filter(
+        (child) => !allowed.includes(child.getAttribute('role') ?? ''),
+      );
+      expect(untyped.map((child) => child.tagName)).toEqual([]);
+    });
+
+    it('logs out through that item', async () => {
+      withSession({ auth_enabled: true, username: 'alice' });
+      // Never actually navigate the jsdom window on logout — stubbed on the
+      // prototype because the identity block lives inside the CDK overlay, out of
+      // the fixture's own DebugElement tree.
+      const reload = vi
+        .spyOn(LocalIdentity.prototype as unknown as { reload: () => void }, 'reload')
+        .mockImplementation(() => undefined);
+      const fixture = await render();
+      const panel = await openMenu(fixture);
+
+      panel.querySelector<HTMLElement>('[data-testid="local-panel-mobile-logout"]')?.click();
+      // Plain macrotask ticks rather than `settle`: triggering a menu item closes
+      // the whole menu stack, so the overlay — and the identity block inside it —
+      // is torn down while the logout POST is still in flight, and the fixture
+      // never reports stable again. The request still goes out and the reload
+      // still runs, which is what this asserts.
+      for (let i = 0; i < 8; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(stub.forRoute('/api/auth/logout', 'POST')).toHaveLength(1);
+      expect(reload).toHaveBeenCalledTimes(1);
+    });
+
+    it('offers no Log out at all under a none-mode hub, where the surface is authless', async () => {
+      withSession({ auth_enabled: false, username: null });
+      const panel = await openMenu(await render());
+
+      expect(panel.querySelector('[data-testid="local-panel-mobile-logout"]')).toBeNull();
+      expect(panel.querySelector('[data-testid="local-identity"]')).toBeNull();
+      // The appearance switcher is unconditional — it is not an auth concern.
+      expect(panel.querySelector('[data-testid="local-panel-mobile-appearance"]')).not.toBeNull();
+    });
   });
 
   it('derives the titlebar live dot from the runner status hub-reachable read', async () => {

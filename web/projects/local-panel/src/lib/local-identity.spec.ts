@@ -60,6 +60,30 @@ describe('LocalIdentity', () => {
     expect(el.querySelector('[data-testid="local-identity"]')).toBeNull();
   });
 
+  it('drops its own button and goes presentational in the label shape, for inside a menu', async () => {
+    // A `role="menu"` may own only menu items, so the block's actionable half
+    // moves out to a real menu item the panel declares (issue #161); what is left
+    // here must be non-focusable and out of the accessibility tree.
+    const { fixture, stub: s } = await render({ auth_enabled: true, username: 'alice' });
+    stub = s;
+    fixture.componentRef.setInput('variant', 'label');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="identity-username"]')?.textContent).toContain('alice');
+    expect(el.querySelector('[data-testid="identity-logout"]')).toBeNull();
+    expect(el.querySelectorAll('button')).toHaveLength(0);
+    expect(fixture.nativeElement.getAttribute('role')).toBe('presentation');
+  });
+
+  it('carries no role in the default control shape, where it is header chrome', async () => {
+    const { fixture, stub: s } = await render({ auth_enabled: true, username: 'alice' });
+    stub = s;
+
+    expect(fixture.nativeElement.getAttribute('role')).toBeNull();
+    expect((fixture.nativeElement as HTMLElement).querySelector('[data-testid="identity-logout"]')).not.toBeNull();
+  });
+
   it('POSTs /api/auth/logout and reloads when the logout control is activated', async () => {
     const { fixture, stub: s } = await render({ auth_enabled: true, username: 'alice' });
     stub = s;

@@ -87,7 +87,16 @@ import { injectRunnerStatusQuery } from './status.query';
       <fleet-mobile-titlebar [live]="hubReachable()" testid="local-panel-mobile-titlebar" [menu]="shellMenu" />
       <ng-template #shellMenu>
         <fleet-kit-menu-panel testid="local-panel-mobile-titlebar-menu-panel">
-          <local-identity />
+          <!-- The identity block renders label-only in here: a role=menu may own
+               only menu items, so its logout is the real menu item below, driven
+               through the template reference — LocalIdentity stays the one owner
+               of the session read and the logout call. -->
+          <local-identity #identity variant="label" />
+          @if (identity.username()) {
+            <fleet-kit-menu-item testid="local-panel-mobile-logout" (triggered)="identity.logout()">
+              Log out
+            </fleet-kit-menu-item>
+          }
           <fleet-kit-menu-item
             testid="local-panel-mobile-appearance"
             submenu

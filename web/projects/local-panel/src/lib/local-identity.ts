@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { KitButton } from 'fleet';
 
 import { injectRunnerLogoutMutation, injectRunnerSessionQuery } from './auth.query';
@@ -16,19 +16,37 @@ import { injectRunnerLogoutMutation, injectRunnerSessionQuery } from './auth.que
  * *hub* logout), an ended one lands on the hub's login surface. The reload also escapes
  * the moment-after state where every other rail would start `401`ing on its next poll
  * with the session now gone.
+ *
+ * Two shapes, one owner of the session read and the logout call. The default
+ * `control` shape is the header's own username-plus-button block. The `label`
+ * shape drops the button and marks the host `role="presentation"`, for the one
+ * place the block sits inside a `role="menu"` panel (the runner's mobile
+ * titlebar menu, issue #161/#163): a `role="menu"` may only own menu items, and
+ * a plain `<button>` in there is unreachable — CDK's roving focus skips
+ * non-`CdkMenuItem`s and `Tab` closes the menu rather than falling through to
+ * it. The actionable half is a real `fleet-kit-menu-item` the panel's own
+ * template declares, calling {@link logout} through a template reference —
+ * `CdkMenu` finds its items by a content query that stops at a child
+ * component's template boundary, so a menu item rendered in *here* would never
+ * register with the panel out there.
  */
 @Component({
   selector: 'local-identity',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [KitButton],
+  host: {
+    '[attr.role]': "variant() === 'label' ? 'presentation' : null",
+  },
   template: `
     @if (username(); as user) {
-      <div class="identity" data-testid="local-identity">
+      <div class="identity" [class.label-only]="variant() === 'label'" data-testid="local-identity">
         <span class="who">
           <span class="who-lbl">signed in</span>
           <span class="user" data-testid="identity-username">{{ user }}</span>
         </span>
-        <fleet-kit-button class="logout" testid="identity-logout" (click)="logout()">Log out</fleet-kit-button>
+        @if (variant() === 'control') {
+          <fleet-kit-button class="logout" testid="identity-logout" (click)="logout()">Log out</fleet-kit-button>
+        }
       </div>
     }
   `,
@@ -63,20 +81,35 @@ import { injectRunnerLogoutMutation, injectRunnerSessionQuery } from './auth.que
     .logout {
       align-items: center;
     }
+    /* Inside a menu panel the block is a row, not a header cell — the header's
+       divider and side padding would read as chrome the menu doesn't have. */
+    .identity.label-only {
+      border-left: none;
+      padding: 4px 12px;
+    }
   `,
 })
 export class LocalIdentity {
   protected readonly query = injectRunnerSessionQuery();
   private readonly logoutMutation = injectRunnerLogoutMutation();
 
+  /** Which shape to render — `control` (the header block, with its own logout
+   * button) or `label` (a non-focusable identity row for inside a menu panel,
+   * whose logout is a menu item the panel declares; see the class docs). */
+  readonly variant = input<'control' | 'label'>('control');
+
   /** The signed-in hub username to render the control for, or `null` — hiding it
-   * entirely — under a `none`-mode hub or before any session resolves. */
-  protected readonly username = computed<string | null>(() => {
+   * entirely — under a `none`-mode hub or before any session resolves. Public so
+   * a menu panel can gate its own `Log out` item on the same fact this block
+   * gates itself on, rather than repeating the `auth_enabled`/`username` fold. */
+  readonly username = computed<string | null>(() => {
     const session = this.query.data();
     return session?.auth_enabled ? (session.username ?? null) : null;
   });
 
-  protected async logout(): Promise<void> {
+  /** Clears the session and reloads. Public so a `label`-shaped mount's sibling
+   * menu item can invoke it through a template reference. */
+  async logout(): Promise<void> {
     await this.logoutMutation.mutateAsync();
     this.reload();
   }

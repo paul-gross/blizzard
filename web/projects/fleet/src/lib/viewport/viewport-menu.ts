@@ -46,7 +46,10 @@ const OPTIONS: readonly AppearanceOption[] = [
           {{ option.label }}
         </fleet-kit-menu-item-radio>
       }
-      <span class="mode" data-testid="viewport-menu-mode">{{ viewport.mode() }}</span>
+      <!-- role=presentation: a role=menu may own only menu items, and this footer
+           is a readout, not a choice — the attribute takes it out of the
+           accessibility tree rather than leaving an untyped child in there. -->
+      <span class="mode" role="presentation" data-testid="viewport-menu-mode">{{ viewport.mode() }}</span>
     </fleet-kit-menu-panel>
   `,
   styles: `

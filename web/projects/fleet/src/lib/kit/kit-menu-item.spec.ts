@@ -109,6 +109,42 @@ describe('KitMenuItem', () => {
     expect(inOverlay('[data-testid="panel"]')).not.toBeNull();
   });
 
+  it('pins the CDK hover-then-click behavior: the pointer opens the submenu, the click shuts it', async () => {
+    // The real mouse gesture, which `element.click()` alone never reproduces —
+    // and which therefore used to be invisible to this tier. Hovering the row
+    // fires the CDK's hover-open; the click that follows toggles it back shut.
+    // Documented and pinned, not endorsed: see the class docs on KitMenuItem.
+    // Keyboard and touch, the paths the shells actually rely on, are covered by
+    // the arrow-key and closed-submenu specs either side of this one.
+    inOverlay('[data-testid="sub"]')?.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false }));
+    await fixture.whenStable();
+    expect(inOverlay('[data-testid="sub-panel"]')).not.toBeNull();
+
+    inOverlay('[data-testid="sub"]')?.click();
+    await fixture.whenStable();
+
+    expect(inOverlay('[data-testid="sub-panel"]')).toBeNull();
+  });
+
+  it('still opens a closed submenu on click — the only gesture touch has', async () => {
+    expect(inOverlay('[data-testid="sub-panel"]')).toBeNull();
+
+    inOverlay('[data-testid="sub"]')?.click();
+    await fixture.whenStable();
+
+    expect(inOverlay('[data-testid="sub-panel"]')).not.toBeNull();
+  });
+
+  it('owns only menu items, per the role="menu" content model', () => {
+    const panel = inOverlay('[data-testid="panel"]');
+    const untyped = Array.from(panel!.children).filter(
+      (child) => !['menuitem', 'menuitemradio', 'menuitemcheckbox', 'group', 'separator', 'presentation'].includes(
+        child.getAttribute('role') ?? '',
+      ),
+    );
+    expect(untyped).toEqual([]);
+  });
+
   it('marks its radio group so the checked option and assistive tech agree', async () => {
     inOverlay('[data-testid="sub"]')?.click();
     await fixture.whenStable();

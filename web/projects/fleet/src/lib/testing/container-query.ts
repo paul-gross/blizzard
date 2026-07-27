@@ -22,7 +22,12 @@ interface ContainerTier {
   readonly rules: readonly CSSStyleRule[];
 }
 
-const CONTAINER_PRELUDE = /^@container\s+([\w-]+)\s*\(\s*max-width:\s*(\d+(?:\.\d+)?)px\s*\)/;
+/** The container name a `@container` prelude opens with, when it names one at all
+ * (`@container (min-width: 40em)` is the valid unnamed form). Matched first and on
+ * its own, so a rule for some *other* container — or an unnamed one — is skipped
+ * rather than held to the narrow condition grammar below. */
+const CONTAINER_NAME = /^@container\s+([\w-]+)\s*\(/;
+const MAX_WIDTH_CONDITION = /^@container\s+[\w-]+\s*\(\s*max-width:\s*(\d+(?:\.\d+)?)px\s*\)/;
 
 /** Whether a CSSOM rule is a container at-rule — duck-typed rather than
  * `instanceof CSSContainerRule`, which jsdom does not expose as a global. */
@@ -45,13 +50,20 @@ function containerTiers(containerName: string): readonly ContainerTier[] {
     }
     for (const rule of rules) {
       if (!isContainerRule(rule)) continue;
-      const prelude = CONTAINER_PRELUDE.exec(rule.cssText);
-      if (!prelude) {
-        throw new Error(`container-query helper supports only \`(max-width: …px)\` conditions, got: ${rule.cssText.split('{')[0].trim()}`);
+      // Filter by name *before* insisting on the condition grammar: any component
+      // whose styles land in the same jsdom document contributes its rules here,
+      // and a spec asking about this header has no business failing over a
+      // `(min-width: …)` rule some unrelated file wrote for its own container.
+      const named = CONTAINER_NAME.exec(rule.cssText);
+      if (named?.[1] !== containerName) continue;
+      const condition = MAX_WIDTH_CONDITION.exec(rule.cssText);
+      if (!condition) {
+        throw new Error(
+          `container-query helper supports only \`(max-width: …px)\` conditions, got: ${rule.cssText.split('{')[0].trim()}`,
+        );
       }
-      if (prelude[1] !== containerName) continue;
       tiers.push({
-        maxWidth: Number(prelude[2]),
+        maxWidth: Number(condition[1]),
         rules: Array.from(rule.cssRules).filter((inner): inner is CSSStyleRule => 'selectorText' in inner),
       });
     }
@@ -66,6 +78,13 @@ function containerTiers(containerName: string): readonly ContainerTier[] {
  *
  * Selector matching runs against the real element, so Angular's view-
  * encapsulation attributes are honored exactly as the browser would honor them.
+ *
+ * Note the two sides are not the same kind of value: the base comes from
+ * `getComputedStyle` (resolved) while an override is the *declared* text. That is
+ * only safe for properties whose declared and computed forms coincide — `display`,
+ * which is what the tiers turn on. Ask this for `margin` or a `var()`-valued
+ * property and the two halves would not be comparable; widen it deliberately, with
+ * a resolution step, rather than by assuming.
  */
 export function resolveContainerStyle(
   element: Element,

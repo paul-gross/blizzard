@@ -43,7 +43,6 @@ import { CdkMenu, CdkMenuTrigger } from '@angular/cdk/menu';
   styles: `
     :host {
       display: inline-flex;
-      position: relative;
     }
     .trigger {
       font-family: inherit;
