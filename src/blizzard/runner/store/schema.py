@@ -678,3 +678,36 @@ git_commit_declarations = Table(
     Column("commit", String, nullable=False),
     Column("declared_at", UtcDateTime, nullable=False),
 )
+
+# --- Session preamble facts (what standing prose a session was last sent — issue #149) --
+#
+# A resumed spawn re-sends the whole three-layer preamble today, including the two
+# *standing* layers the session already holds. This table is the comparison key that lets
+# the renderer skip the unchanged ones and announce the changed ones: one row per spawn
+# recording the sha256 of layer 1 (the blizzard preamble) and layer 2 (the operator's
+# workspace prompt) as that spawn resolved them.
+#
+# Digests, not the prose (``canon:one-owner``): the operator's text lives in
+# ``workspace_prompt`` above and in config, and this table is never a second copy of it.
+#
+# Append-only (``bzh:facts-not-status``): the newest row for a session is the answer, so
+# the read carries an explicit total ``order_by(id.desc())`` — a newest-row read with no
+# ordering happens to work on sqlite and is undefined on postgres (``bzh:sql-portable``).
+# No index: no runner facts table declares one, and a session's row count is its spawn
+# count.
+#
+# Keyed on the SESSION, not the lease: the thing that already holds the earlier prose is
+# the harness session, which outlives the per-attempt lease a node-entry resume mints
+# fresh. A session with no row (every session first spawned before this shipped) reads
+# back ``None`` and renders in full — the safe direction, and why no data migration is
+# owed.
+
+session_preamble_facts = Table(
+    "session_preamble_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("session_id", String, nullable=False),
+    Column("blizzard_digest", String, nullable=False),  # sha256 of the resolved layer 1
+    Column("workspace_digest", String, nullable=False),  # sha256 of the resolved layer 2
+    Column("recorded_at", UtcDateTime, nullable=False),
+)

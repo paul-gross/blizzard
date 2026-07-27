@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from blizzard.runner.harness.preamble import PreambleFingerprint
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.store.repository import NewLease
 from tests.runner_fakes import make_store
@@ -512,3 +513,51 @@ def test_attachments_for_lease_is_scoped_per_lease(tmp_path):  # type: ignore[no
     )
     assert store.attachments_for_lease("lease_1") == {"n": "one"}
     assert store.attachments_for_lease("lease_2") == {"n": "two"}
+
+
+@pytest.mark.unit
+def test_session_preamble_fingerprint_is_none_for_an_unrecorded_session(tmp_path):  # type: ignore[no-untyped-def]
+    """The back-compat read (issue #149): a session nothing was ever recorded for reads
+    back ``None``, which is what makes the renderer send all three layers in full — the
+    pre-change behaviour every pre-existing session inherits with no data migration."""
+    store = _store(tmp_path)
+    assert store.session_preamble_fingerprint("sess_never_seen") is None
+
+
+@pytest.mark.unit
+def test_record_session_preamble_round_trips(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    store.record_session_preamble("sess_1", fingerprint=PreambleFingerprint(blizzard="aaa", workspace="bbb"), at=_NOW)
+    assert store.session_preamble_fingerprint("sess_1") == PreambleFingerprint(blizzard="aaa", workspace="bbb")
+
+
+@pytest.mark.unit
+def test_session_preamble_fingerprint_is_newest_row_wins(tmp_path):  # type: ignore[no-untyped-def]
+    """Append-only, newest-row-is-the-answer (``bzh:facts-not-status``): the second spawn's
+    prose is what the third spawn compares against, not the first's."""
+    store = _store(tmp_path)
+    store.record_session_preamble("sess_1", fingerprint=PreambleFingerprint(blizzard="a1", workspace="w1"), at=_NOW)
+    store.record_session_preamble(
+        "sess_1", fingerprint=PreambleFingerprint(blizzard="a1", workspace="w2"), at=_NOW + timedelta(minutes=5)
+    )
+    assert store.session_preamble_fingerprint("sess_1") == PreambleFingerprint(blizzard="a1", workspace="w2")
+
+
+@pytest.mark.unit
+def test_session_preamble_newest_row_wins_at_an_identical_stamp(tmp_path):  # type: ignore[no-untyped-def]
+    """Two spawns of one session can share a clock stamp (a fake clock in tests, a coarse
+    one in production), so the newest-row read orders on the insert id, never on
+    ``recorded_at`` — with an equal stamp, the later insert still wins."""
+    store = _store(tmp_path)
+    store.record_session_preamble("sess_1", fingerprint=PreambleFingerprint(blizzard="a1", workspace="w1"), at=_NOW)
+    store.record_session_preamble("sess_1", fingerprint=PreambleFingerprint(blizzard="a2", workspace="w2"), at=_NOW)
+    assert store.session_preamble_fingerprint("sess_1") == PreambleFingerprint(blizzard="a2", workspace="w2")
+
+
+@pytest.mark.unit
+def test_session_preamble_fingerprint_is_scoped_per_session(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    store.record_session_preamble("sess_1", fingerprint=PreambleFingerprint(blizzard="a1", workspace="w1"), at=_NOW)
+    store.record_session_preamble("sess_2", fingerprint=PreambleFingerprint(blizzard="a2", workspace="w2"), at=_NOW)
+    assert store.session_preamble_fingerprint("sess_1") == PreambleFingerprint(blizzard="a1", workspace="w1")
+    assert store.session_preamble_fingerprint("sess_2") == PreambleFingerprint(blizzard="a2", workspace="w2")
