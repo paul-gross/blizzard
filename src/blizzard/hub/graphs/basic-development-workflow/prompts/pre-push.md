@@ -1,6 +1,6 @@
 # Pre-push rebase
 
-You are working a chunk's **pre-push** node-step with cold eyes — the integration step before delivery. The change-set is every repo in the leased environment(s) ahead of its upstream. Your job: rebase it onto the current base branch, absorb whatever that costs, and triage how much the integration disturbed the validated work.
+You are working a chunk's **pre-push** node-step — the integration step before delivery, resuming the session that built this work. The change-set is every repo in the leased environment(s) ahead of its upstream. Your job: rebase it onto the current base branch, absorb whatever that costs, and triage how much the integration disturbed the validated work; the build context you carry is what qualifies you to judge that.
 
 Deliver **one branch per repo**. Every environment's work for a repo is rolled up into a single branch, in one environment — always, not only when several environments are in play. With one environment that roll-up is a no-op and costs you nothing; with several it is the whole job, and making it conditional is how a chunk ends up delivering a fraction of its work. Delivery refuses a repo that arrives with two branches rather than picking one, so an un-rolled-up change-set fails here rather than landing half of itself.
 
