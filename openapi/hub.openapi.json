@@ -1289,7 +1289,7 @@
         "type": "object"
       },
       "EventView": {
-        "description": "One operational event on the wire \u2014 an ``event_log`` row or a projected open\nescalation. ``chunk_id``/``lease_id``/``node_name`` are absent for a runner-scoped\nevent; ``detail`` is the event-specific JSON payload the fixed fields don't carry.",
+        "description": "One operational event on the wire \u2014 an ``event_log`` row or a projected open\nescalation. ``chunk_id``/``lease_id``/``node_name`` are absent for a runner-scoped\nevent; ``runner_id`` is absent for a projected escalation, which names no runner\n(issue #155 \u2014 ``null``, never ``\"\"``, so a consumer building a runner universe out\nof the feed reads it as \"no runner\" by type rather than filtering a sentinel);\n``detail`` is the event-specific JSON payload the fixed fields don't carry.",
         "properties": {
           "chunk_id": {
             "anyOf": [
@@ -1353,8 +1353,15 @@
             "type": "string"
           },
           "runner_id": {
-            "title": "Runner Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runner Id"
           },
           "severity": {
             "title": "Severity",
@@ -1366,7 +1373,6 @@
           "recorded_at",
           "severity",
           "kind",
-          "runner_id",
           "message"
         ],
         "title": "EventView",

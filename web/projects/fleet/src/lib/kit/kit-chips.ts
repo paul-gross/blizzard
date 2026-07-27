@@ -13,6 +13,12 @@ export interface KitChipOption {
  * so a caller with a single ad-hoc chip (not a whole options row) can use it
  * directly; {@link KitChips} composes it for the common case of an option
  * list.
+ *
+ * Fully rounded, matching `kit-badge.ts`'s `soft` variant (issue #153): the
+ * board's soft-pill vocabulary is one shape language, so every chips row —
+ * events filters, graph edge choices, any future status filter — reads the same
+ * as the badges beside it rather than as a row of hard-edged boxes. Selection
+ * stays the amber border-and-text highlight; only the shape changed.
  */
 @Component({
   selector: 'fleet-kit-chip',
@@ -36,9 +42,10 @@ export interface KitChipOption {
       font-family: inherit;
       background: transparent;
       border: 1px solid var(--line);
+      border-radius: 999px;
       color: var(--text);
       cursor: pointer;
-      padding: 1px 6px;
+      padding: 1px 8px;
       font-size: var(--fs-xs);
       letter-spacing: 0.04em;
     }

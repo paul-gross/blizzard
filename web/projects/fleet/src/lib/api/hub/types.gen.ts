@@ -925,7 +925,10 @@ export type EscalationView = {
  *
  * One operational event on the wire — an ``event_log`` row or a projected open
  * escalation. ``chunk_id``/``lease_id``/``node_name`` are absent for a runner-scoped
- * event; ``detail`` is the event-specific JSON payload the fixed fields don't carry.
+ * event; ``runner_id`` is absent for a projected escalation, which names no runner
+ * (issue #155 — ``null``, never ``""``, so a consumer building a runner universe out
+ * of the feed reads it as "no runner" by type rather than filtering a sentinel);
+ * ``detail`` is the event-specific JSON payload the fixed fields don't carry.
  */
 export type EventView = {
     /**
@@ -965,7 +968,7 @@ export type EventView = {
     /**
      * Runner Id
      */
-    runner_id: string;
+    runner_id?: string | null;
     /**
      * Severity
      */

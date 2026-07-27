@@ -66,6 +66,79 @@ describe('EventsView', () => {
     expect(rows[1].querySelector('[data-testid="events-severity"]')?.textContent).toContain('info');
   });
 
+  it('renders the severity badge in the calm soft variant, not the saturated pill', async () => {
+    const fixture = render();
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const badge = el.querySelector('[data-testid="events-severity"] .badge');
+    expect(badge?.classList.contains('soft')).toBe(true);
+    expect(badge?.classList.contains('pill')).toBe(false);
+  });
+
+  it('lays each row out time-first: time, chunk, severity, kind, runner, message, lease', async () => {
+    const fixture = render();
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    // Row 1 is the one carrying a lease; row 0 carries the chunk.
+    const rows = el.querySelectorAll('[data-testid="events-row"]');
+    const order = (row: Element) =>
+      [...row.children].map((c) => c.getAttribute('data-testid') ?? c.className);
+    expect(order(rows[0])).toEqual([
+      'events-time',
+      'events-chunk',
+      'events-severity',
+      'events-kind',
+      'events-runner',
+      'events-message',
+    ]);
+    expect(order(rows[1])).toEqual([
+      'events-time',
+      'chunk-none',
+      'events-severity',
+      'events-kind',
+      'events-runner',
+      'events-message',
+      'events-lease',
+    ]);
+  });
+
+  it('lays the row out as a grid whose leading tracks are fixed, so they align down the feed', async () => {
+    const fixture = render();
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    // jsdom has no layout engine, so the alignment itself is unassertable here — what is
+    // assertable is that the row is a grid and its time/chunk tracks are fixed lengths
+    // rather than content-sized (each row is its own grid container, so a content-sized
+    // track would size per-row and the columns would not line up).
+    const style = getComputedStyle(el.querySelector('.ev') as HTMLElement);
+    expect(style.display).toBe('grid');
+    expect(style.gridTemplateColumns.split(' ').slice(0, 2)).toEqual(['108px', '64px']);
+  });
+
+  it('keeps the chunk column occupied on a chunk-less row so the grid stays aligned', async () => {
+    const fixture = render();
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const rows = el.querySelectorAll('[data-testid="events-row"]');
+    // No chunk button, but the slot itself is still there — the second grid cell.
+    expect(rows[1].querySelector('[data-testid="events-chunk"]')).toBeNull();
+    expect(rows[1].children[1].className).toBe('chunk-none');
+  });
+
+  it('renders a dash for a projected escalation row, which names no runner', async () => {
+    const fixture = render({
+      events: [{ ...EVENTS[0], runner_id: null, kind: 'needs-human' }],
+    });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="events-runner"]')?.textContent?.trim()).toBe('—');
+  });
+
   it('emits selectChunk when a row carrying a chunk id is activated', async () => {
     const fixture = render();
     let selected: string | undefined;

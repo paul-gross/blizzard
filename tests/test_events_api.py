@@ -93,8 +93,15 @@ def test_events_feed_unifies_open_escalations_filtered_and_ordered(tmp_path: Pat
     ]
     # detail round-trips.
     assert next(e for e in feed if e["kind"] == "attempt-failed")["detail"] == {"via": "advance"}
-    # The projected escalation names its chunk.
-    assert next(e for e in feed if e["kind"] == "needs-human")["chunk_id"] == "ch_c"
+    # The projected escalation names its chunk — and, naming no runner, serves
+    # `runner_id: null` rather than `""` (issue #155: the board derives its runner-filter
+    # chip universe from these raw ids, and an empty string became a blank chip whose
+    # value collided with the "All" reset sentinel).
+    projected = next(e for e in feed if e["kind"] == "needs-human")
+    assert projected["chunk_id"] == "ch_c"
+    assert projected["runner_id"] is None
+    # Every real event_log row still names its reporting runner.
+    assert all(e["runner_id"] for e in feed if e["kind"] != "needs-human")
 
     # Filters.
     assert [e["kind"] for e in _events(hub, severity="critical")] == ["needs-human", "worker-lost"]

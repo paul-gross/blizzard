@@ -55,6 +55,15 @@ describe('KitChips', () => {
     expect(fixture.componentInstance.chosen).toBe('b');
   });
 
+  it('renders each chip fully rounded, matching the soft-pill vocabulary', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const chip = el.querySelector('.chip') as HTMLElement;
+    expect(getComputedStyle(chip).borderRadius).toBe('999px');
+  });
+
   it('forwards each option testid to its chip', async () => {
     const fixture = TestBed.createComponent(TestHost);
     await fixture.whenStable();

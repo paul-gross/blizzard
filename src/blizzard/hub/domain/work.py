@@ -439,13 +439,19 @@ class EventRow:
     ``detail`` is the event-specific payload the fixed columns don't carry, already
     decoded from its JSON-on-the-wire storage. A negative ``id`` marks a row
     :func:`derive_event_feed` **synthesized** from an open escalation rather than one
-    actually read from ``event_log`` — see that function."""
+    actually read from ``event_log`` — see that function.
+
+    ``runner_id`` is ``None`` **only** on such a projected row: an escalation is a
+    chunk-scoped standing surface that names no runner. Every row actually read from
+    ``event_log`` carries one (the column is ``NOT NULL``). It is spelled ``None``
+    rather than ``""`` so "names no runner" is absent-by-type, and no consumer has to
+    special-case an empty string (issue #155)."""
 
     id: int
     recorded_at: datetime
     severity: str
     kind: str
-    runner_id: str
+    runner_id: str | None
     chunk_id: str | None
     lease_id: str | None
     node_name: str | None
@@ -478,8 +484,9 @@ def derive_event_feed(events: list[EventRow], escalations: list[EscalationOpen])
     """Unify ``event_log`` rows with every currently-open escalation (issue #125).
 
     Each open escalation projects into a synthetic ``EventRow`` — ``severity="critical"``,
-    ``kind="needs-human"``, the escalation's own ``chunk_id``/``recorded_at``, and a
-    ``message`` naming the takeover — carrying a **negative, synthetic** ``id`` (it is
+    ``kind="needs-human"``, the escalation's own ``chunk_id``/``recorded_at``, a
+    ``runner_id`` of ``None`` (an escalation names no runner), and a ``message`` naming
+    the takeover — carrying a **negative, synthetic** ``id`` (it is
     not an ``event_log`` row; escalations are never written there). The merged list
     sorts **severity-then-recency**: critical before warning before info, newest
     ``recorded_at`` first within a severity band. A pure function of already-loaded
@@ -490,7 +497,7 @@ def derive_event_feed(events: list[EventRow], escalations: list[EscalationOpen])
             recorded_at=esc.recorded_at,
             severity="critical",
             kind="needs-human",
-            runner_id="",
+            runner_id=None,
             chunk_id=esc.chunk_id,
             lease_id=None,
             node_name=None,

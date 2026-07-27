@@ -44,6 +44,11 @@ const SEVERITY_TONE: Readonly<Record<string, Tone>> = {
  * Default sort is the server's (severity-then-recency, `GET /api/events`), so this
  * renders events as-received rather than re-sorting client-side.
  *
+ * Each row is a **time-first grid** — time, chunk, severity, kind, runner, message,
+ * lease — following the in-rail Event log's leading dim-stamp column
+ * (`event-log-panel.ts`) rather than the wrapping flex line it used to be, so a
+ * reader scans the feed down its timestamps instead of hunting for one per row.
+ *
  * Every test handle here is `events-`prefixed, distinct from the in-rail Event log's
  * `event-log-*` handles (`event-log-panel.ts`) — two components on the same board
  * would otherwise make a browser test's locator ambiguous.
@@ -90,12 +95,6 @@ const SEVERITY_TONE: Readonly<Record<string, Tone>> = {
         <div class="rows" data-testid="events-rows">
           @for (ev of events(); track ev.id) {
             <div class="ev" data-testid="events-row" [attr.data-severity]="ev.severity">
-              <fleet-kit-badge class="sev" [tone]="toneFor(ev.severity)" variant="pill" data-testid="events-severity">{{
-                ev.severity
-              }}</fleet-kit-badge>
-              <span class="kind" data-testid="events-kind">{{ ev.kind }}</span>
-              <span class="runner" data-testid="events-runner">{{ shortId(ev.runner_id) }}</span>
-              <span class="msg" data-testid="events-message">{{ ev.message }}</span>
               <span class="time" data-testid="events-time">{{ formatWhen(ev.recorded_at) }}</span>
               @if (ev.chunk_id; as chunkId) {
                 <button
@@ -107,7 +106,15 @@ const SEVERITY_TONE: Readonly<Record<string, Tone>> = {
                 >
                   {{ shortId(chunkId) }}
                 </button>
+              } @else {
+                <span class="chunk-none" aria-hidden="true">—</span>
               }
+              <fleet-kit-badge class="sev" [tone]="toneFor(ev.severity)" variant="soft" data-testid="events-severity">{{
+                ev.severity
+              }}</fleet-kit-badge>
+              <span class="kind" data-testid="events-kind">{{ ev.kind }}</span>
+              <span class="runner" data-testid="events-runner">{{ runnerLabel(ev.runner_id) }}</span>
+              <span class="msg" data-testid="events-message">{{ ev.message }}</span>
               @if (ev.lease_id; as leaseId) {
                 <span class="lease" data-testid="events-lease">{{ shortId(leaseId) }}</span>
               }
@@ -151,9 +158,17 @@ const SEVERITY_TONE: Readonly<Record<string, Tone>> = {
       min-height: 0;
       flex: 1;
     }
+    /* Time-first columns, matching the in-rail Event log's leading dim stamp
+       (event-log-panel.ts). The leading three tracks are FIXED, not content-sized:
+       every row is its own grid container, so only a fixed track aligns down the
+       feed. Time and chunk are fixed because they are the read-down-the-page
+       columns; severity is fixed too because it is a closed three-value set
+       (SEVERITY_TONE), and pinning it keeps the kind column from starting at a
+       different x on every row. Kind and runner stay content-sized (open sets — a
+       fixed track would clip), the message takes the rest, and the lease trails. */
     .ev {
-      display: flex;
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: 108px 64px 76px auto auto 1fr auto;
       align-items: baseline;
       gap: 6px;
       padding: 4px 8px;
@@ -163,6 +178,7 @@ const SEVERITY_TONE: Readonly<Record<string, Tone>> = {
     }
     .kind {
       color: var(--cyan);
+      white-space: nowrap;
     }
     .runner {
       color: var(--label-dim);
@@ -172,7 +188,7 @@ const SEVERITY_TONE: Readonly<Record<string, Tone>> = {
     .msg {
       color: var(--text);
       overflow-wrap: anywhere;
-      flex: 1;
+      min-width: 0;
     }
     .time {
       color: var(--label-dim);
@@ -187,9 +203,19 @@ const SEVERITY_TONE: Readonly<Record<string, Tone>> = {
       border: 1px solid var(--line);
       cursor: pointer;
       padding: 0 4px;
+      justify-self: start;
     }
     .chunk:hover {
       border-color: var(--cyan);
+    }
+    /* A chunk-less (runner-scoped) row still occupies the chunk column, so the
+       columns after it stay aligned with the rows that do name a chunk. */
+    .chunk-none {
+      color: var(--label-dim);
+      font-size: var(--fs-xs);
+    }
+    .sev {
+      justify-self: start;
     }
     .lease {
       color: var(--label-dim);
@@ -267,6 +293,12 @@ export class EventsView {
 
   protected shortId(id: string): string {
     return compactRef(id);
+  }
+
+  /** A row's runner, compact-ref'd — or a dim dash for a projected escalation, which
+   * names no runner (`runner_id: null`, issue #155). */
+  protected runnerLabel(runnerId: string | null | undefined): string {
+    return runnerId ? compactRef(runnerId) : '—';
   }
 
   protected formatWhen(iso: string): string {

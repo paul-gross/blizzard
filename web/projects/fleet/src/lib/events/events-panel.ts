@@ -72,10 +72,14 @@ export class EventsPanel {
   /** The runner-id universe for the filter chips: the distinct runners in the
    * severity-scoped feed, plus the active runner so its chip never disappears, sorted.
    * Empty (row hidden) when there is at most one runner and none is selected — nothing
-   * worth filtering. */
+   * worth filtering.
+   *
+   * Falsy ids are stripped, mirroring the chunk side below: a projected escalation names
+   * no runner, and an id-less row must not become a label-less chip whose `''` value
+   * collides with the "All" chip's own reset sentinel (issue #155). */
   protected readonly runnerIds = computed(() =>
     this.filterUniverse(
-      (this.optionsQuery.data() ?? []).map((e) => e.runner_id),
+      (this.optionsQuery.data() ?? []).map((e) => e.runner_id).filter((r): r is string => !!r),
       this.runnerId(),
     ),
   );

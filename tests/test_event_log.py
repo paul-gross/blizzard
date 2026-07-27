@@ -204,6 +204,9 @@ def test_derive_event_feed_sorts_severity_then_recency() -> None:
     projected = next(e for e in feed if e.kind == "needs-human")
     assert projected.id < 0
     assert projected.chunk_id == "ch_z"
+    # …and names no runner as `None`, never `""` — a consumer building a runner universe
+    # out of the feed reads absence by type rather than filtering a sentinel (issue #155).
+    assert projected.runner_id is None
 
 
 def test_migration_creates_event_log_on_in_place_upgrade(tmp_path: Path) -> None:

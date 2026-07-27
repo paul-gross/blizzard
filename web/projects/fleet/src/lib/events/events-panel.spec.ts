@@ -102,6 +102,24 @@ describe('EventsPanel', () => {
     expect(el.querySelector('[data-testid="events-runner-filter-rn_02"]')).not.toBeNull();
   });
 
+  it('builds no blank runner chip from an escalation row, which names no runner', async () => {
+    // `GET /api/events` unions the event_log with a projection of every open escalation,
+    // and a projected escalation carries `runner_id: null` — it must not become a
+    // label-less chip whose value collides with the "All" reset sentinel (issue #155).
+    const WITH_ESCALATION = [
+      { id: -1, recorded_at: '2026-07-16T00:00:03Z', severity: 'critical', kind: 'needs-human', runner_id: null, chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YAB', message: 'chunk needs a human' },
+      ...EVENTS,
+    ];
+    const fixture = await render(WITH_ESCALATION);
+    const el = fixture.nativeElement as HTMLElement;
+
+    const chips = [...el.querySelectorAll('[data-testid="events-runner-filter"] .chip')];
+    expect(chips.map((c) => c.textContent?.trim())).toEqual(['All', 'R-01', 'R-02']);
+    // Only "All" reads as selected — no empty-valued chip shares its sentinel.
+    expect(chips.filter((c) => c.classList.contains('selected'))).toHaveLength(1);
+    expect(el.querySelector('[data-testid="events-runner-filter-all"]')?.classList.contains('selected')).toBe(true);
+  });
+
   it('derives chunk filter chips from the feed and re-queries when a chunk is chosen', async () => {
     // A feed spanning two distinct chunks (plus a runner-scoped, chunk-less event to prove
     // the null chunk_id is stripped from the universe rather than becoming an empty chip).
