@@ -1477,7 +1477,7 @@
         "type": "object"
       },
       "WorkspacePromptResponse": {
-        "description": "The effective workspace prompt prepended to every worker spawn (openapi-ts consumes this).",
+        "description": "The effective workspace prompt prepended to a worker spawn. Sent in full on a fresh\nspawn; on a resumed one, only when it differs from what that session was last given \u2014\nand then announced as updated (openapi-ts consumes this).",
         "properties": {
           "prompt": {
             "title": "Prompt",

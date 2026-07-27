@@ -848,6 +848,7 @@ def test_within_node_retry_stays_fresh_even_when_the_node_is_resume(tmp_path):  
 # `harness.spawns[n][1].prompt_prefix`, never the renderer directly.
 # --------------------------------------------------------------------------- #
 
+
 def _preamble_config(*, workspace_prompt: str = "WORKSPACE-POLICY", runner_prompt: str = "BLIZZARD-FRAMING"):  # type: ignore[no-untyped-def]
     return LoopConfig(
         runner_id="r1",

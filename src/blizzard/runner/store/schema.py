@@ -352,7 +352,9 @@ local_pause_facts = Table(
 
 # --- Workspace prompt override (the runtime-settable spawn preamble — issue #17) --
 #
-# The runner prepends a standing workspace prompt to every worker spawn. Its static
+# The runner prepends a standing workspace prompt to a worker spawn — in full on a fresh
+# one, and on a resumed one only when it differs from what that session was last given
+# (issue #149; see ``session_preamble_facts`` below). Its static
 # source is config (``blizzard-runner.toml``, loaded at ``host`` startup); this table
 # is the *runtime* override the local API writes (``PUT /api/workspace-prompt``), so a
 # replacement takes effect on subsequent spawns with no restart. One upserted row per

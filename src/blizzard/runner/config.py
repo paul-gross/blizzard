@@ -122,9 +122,11 @@ class RunnerConfig:
     #: Node NAMES this runner imposes a human gate on. Reloaded each
     #: tick — the loop rebuilds its context from this config on every pass.
     gates: tuple[str, ...] = ()
-    #: The runner-owned workspace prompt prepended to every worker spawn (issue #17): the
+    #: The runner-owned workspace prompt prepended to a worker spawn (issue #17): the
     #: standing "you are a fleet worker in this winter workspace" framing above the node
-    #: envelope. Two source knobs, one effective value (:meth:`resolved_workspace_prompt`):
+    #: envelope. Sent in full on a fresh spawn; a resumed spawn re-sends it only when it
+    #: differs from what that session was last given, announced as updated (issue #149).
+    #: Two source knobs, one effective value (:meth:`resolved_workspace_prompt`):
     #: ``workspace_prompt`` is the inline text; ``workspace_prompt_file`` is a path (absolute,
     #: or relative to :attr:`root`) whose contents win over the inline text when set. Empty
     #: on a fresh scaffold — an absent prompt still spawns a valid worker (table-only). The
@@ -376,9 +378,10 @@ class RunnerConfig:
             f'base_branch = "{self.base_branch}"\n'
             "\n# Human gates this runner imposes by node name; empty = none.\n"
             f"gates = [{gates}]\n"
-            "\n# The runner-owned workspace prompt prepended to every worker spawn (issue #17).\n"
+            "\n# The runner-owned workspace prompt prepended to a worker spawn (issue #17).\n"
             "# `workspace_prompt` is inline text; `workspace_prompt_file` (a path) wins when set.\n"
             "# Empty = table-only injection. Replace at runtime via PUT /api/workspace-prompt.\n"
+            "# A resumed spawn re-sends this only when it changed, announced as updated.\n"
             f"workspace_prompt = {workspace_prompt}\n"
             f"workspace_prompt_file = {workspace_prompt_file}\n"
             "\n# The operator's override of the baked-in blizzard preamble (issue #103) — layer 1\n"

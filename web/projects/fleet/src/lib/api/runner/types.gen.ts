@@ -1040,7 +1040,9 @@ export type WorkspacePromptReplacement = {
 /**
  * WorkspacePromptResponse
  *
- * The effective workspace prompt prepended to every worker spawn (openapi-ts consumes this).
+ * The effective workspace prompt prepended to a worker spawn. Sent in full on a fresh
+ * spawn; on a resumed one, only when it differs from what that session was last given —
+ * and then announced as updated (openapi-ts consumes this).
  */
 export type WorkspacePromptResponse = {
     /**
