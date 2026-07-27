@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 import {
   BoardShell,
   ChunkDetail,
@@ -9,6 +9,8 @@ import {
   injectHubChunksQuery,
   injectPromoteChunkMutation,
 } from 'fleet';
+
+import { injectBoardSelection } from './board-selection';
 
 /**
  * The board route — the three-column mission-control surface extracted verbatim
@@ -28,6 +30,13 @@ import {
  * The titlebar, the {@link FleetLiveUpdates} spine, and the TanStack `QueryClient`
  * stay at the app root — none of them move here, so navigating away from and back
  * to `/board` never restarts the SSE stream or drops the query cache.
+ *
+ * Which card is open is **the URL's**, not this component's: `?chunk=…` on
+ * `/board`, read and written through {@link injectBoardSelection} (issue #162,
+ * the contract issue #99 set for the runner's local panel). Both selection
+ * sources — a board card and an ask in the right rail — write the same param,
+ * so a board is shareable, a reload keeps its place, and back/forward walk the
+ * selection history.
  */
 @Component({
   selector: 'app-board-page',
@@ -44,14 +53,14 @@ import {
           class="board"
           [chunks]="chunks()"
           [selectedChunkId]="selected()"
-          (selectChunk)="selected.set($event)"
+          (selectChunk)="select($event)"
           (promote)="promoteChunk.mutate({ chunkId: $event })"
         />
-        <fleet-chunk-detail class="dock" [chunkId]="selected()" (dismiss)="selected.set(null)" />
+        <fleet-chunk-detail class="dock" [chunkId]="selected()" (dismiss)="select(null)" />
       </div>
       <div class="col rail-right">
         <fleet-runner-panel />
-        <fleet-questions-panel (selectChunk)="selected.set($event)" />
+        <fleet-questions-panel (selectChunk)="select($event)" />
       </div>
     </main>
   `,
@@ -107,13 +116,34 @@ import {
 })
 export class BoardPage {
   private readonly chunksQuery = injectHubChunksQuery();
+  private readonly selection = injectBoardSelection();
 
   /** Promote a not-ready chunk to ready from its board card. */
   protected readonly promoteChunk = injectPromoteChunkMutation();
 
-  /** The board card the operator opened, or `null` when the dock is dismissed. */
-  protected readonly selected = signal<string | null>(null);
-
   /** The live fleet chunk list; empty until the first read resolves. */
   protected readonly chunks = computed(() => this.chunksQuery.data() ?? []);
+
+  /**
+   * The board card the operator opened, or `null` when nothing is selected —
+   * read from the URL (issue #162), never from local state.
+   *
+   * Held to the live fleet list, which `GET /api/chunks` returns whole: a
+   * `chunk` param naming a chunk that no longer exists (or one that has not
+   * arrived yet, on the first frame before the read resolves) reads as
+   * no-selection, so the dock shows its normal rest state instead of chasing a
+   * detail that will 404. The param itself is left alone — the board never
+   * rewrites the URL to "correct" it, so a link that is merely early still
+   * opens its chunk the moment the list lands.
+   */
+  protected readonly selected = computed<string | null>(() => {
+    const chunkId = this.selection.chunkId();
+    if (chunkId === null) return null;
+    return this.chunks().some((chunk) => chunk.chunk_id === chunkId) ? chunkId : null;
+  });
+
+  /** Open a chunk in the dock — or clear it — by writing the URL. */
+  protected select(chunkId: string | null): void {
+    this.selection.select(chunkId);
+  }
 }

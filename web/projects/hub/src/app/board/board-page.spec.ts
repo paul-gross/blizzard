@@ -1,25 +1,130 @@
+import { Location } from '@angular/common';
+import { provideLocationMocks } from '@angular/common/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
+import { Router, provideRouter, withRouterConfig } from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
+import { compactRef, hubClient } from 'fleet';
+import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
 
 import { BoardPage } from './board-page';
 
+/**
+ * The desktop board, driven through a **real** router (`RouterTestingHarness`)
+ * rather than a stubbed `ActivatedRoute`: the URL owns the chunk selection
+ * (issue #162), so a navigation's full round trip — write the param, re-read it,
+ * push a history entry — is part of what is under test. The router is configured
+ * exactly as `app.config.ts` configures it (`onSameUrlNavigation: 'reload'`), so
+ * the spec exercises the app's own navigation semantics.
+ *
+ * The hub client's transport is stubbed, so this asserts what the page composes
+ * off a known fleet list, not the queries themselves (those have their own specs).
+ */
+const RUNNING = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
+const ASKED = 'ch_01KXKVVF1J3D6H6VYZ3XYNBBBB';
+const GONE = 'ch_01KXKVVF1J3D6H6VYZ3XYNGONE';
+
+const CHUNK = (chunkId: string, status: string) => ({
+  chunk_id: chunkId,
+  graph_id: 'gr_1',
+  status,
+  current_node_id: 'nd_build',
+  current_node_name: 'build',
+  model: 'claude-opus-5',
+  work_refs: [],
+  runner_id: 'runner-local',
+  environment_count: 1,
+});
+
+const DETAIL = (chunkId: string) => ({
+  ...CHUNK(chunkId, 'running'),
+  graph_name: 'default',
+  latest_epoch: 1,
+  history: [
+    { node_id: 'nd_build', node_name: 'build', epoch: 1, at: '2026-07-16T11:00:00.000Z', outcome: 'transitioned' },
+  ],
+  artifacts: [],
+});
+
+/**
+ * The reads the board's four panels and its dock issue, answered off the two
+ * chunks above. Everything unnamed falls through to `{}` — the envelope reads
+ * (`/api/queue`, `/api/runners`, `/api/events`) unwrap that to their empty list,
+ * so the rails render as an idle fleet rather than an error.
+ */
+function hubRoutes(method: string, path: string): unknown {
+  if (method !== 'GET') return {};
+  if (path === '/api/me') return OPERATOR_ME_RESPONSE;
+  if (path === '/api/chunks') return [CHUNK(RUNNING, 'running'), CHUNK(ASKED, 'waiting_on_human')];
+  if (path === '/api/questions') {
+    return [
+      {
+        chunk_id: ASKED,
+        runner_id: 'runner-local',
+        lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
+        question: 'Which branch?',
+        asked_at: '2026-07-16T11:30:00.000Z',
+      },
+    ];
+  }
+  if (path.endsWith('/work-items')) return { items: [] };
+  const detail = /^\/api\/chunks\/([^/]+)$/.exec(path);
+  if (detail !== null) return DETAIL(detail[1]);
+  return {};
+}
+
 describe('BoardPage', () => {
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [BoardPage],
+  let stub: RequestClientStub;
+
+  beforeEach(() => {
+    stub = stubRequestClient(hubClient, hubRoutes);
+    TestBed.configureTestingModule({
       providers: [
         provideZonelessChangeDetection(),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        provideRouter([{ path: 'board', component: BoardPage }], withRouterConfig({ onSameUrlNavigation: 'reload' })),
+        provideLocationMocks(),
       ],
-    }).compileComponents();
+    });
   });
 
+  afterEach(() => stub.restore());
+
+  /**
+   * Open the board at `url` and let every read settle. The location-change
+   * listener the browser bootstrap wires up is opted into explicitly here — the
+   * harness does not — so a `popstate` (the back/forward spec below) reaches the
+   * router the way it does in the app.
+   */
+  async function open(url = '/board'): Promise<{ el: HTMLElement; harness: RouterTestingHarness }> {
+    const harness = await RouterTestingHarness.create();
+    TestBed.inject(Router).setUpLocationChangeListener();
+    await harness.navigateByUrl(url);
+    await settle(harness.fixture);
+    return { el: harness.fixture.nativeElement as HTMLElement, harness };
+  }
+
+  /** The board card for `chunkId`, found by the compact ref the shell renders on it. */
+  function card(el: HTMLElement, chunkId: string): HTMLElement {
+    const cards = Array.from(el.querySelectorAll<HTMLElement>('[data-testid="chunk-card"]'));
+    const match = cards.find(
+      (node) => node.querySelector('[data-testid="chunk-id"]')?.textContent?.trim() === compactRef(chunkId),
+    );
+    if (match === undefined) throw new Error(`no board card for ${chunkId}`);
+    return match;
+  }
+
+  /** Click a chunk's card the way an operator does — the card's own open button. */
+  async function openCard(harness: RouterTestingHarness, chunkId: string): Promise<void> {
+    const el = harness.fixture.nativeElement as HTMLElement;
+    card(el, chunkId).querySelector<HTMLElement>('.card-open')?.click();
+    await settle(harness.fixture);
+  }
+
   it('renders the shared fleet board shell and the operator controls', async () => {
-    const fixture = TestBed.createComponent(BoardPage);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
+    const { el } = await open();
 
     expect(el.querySelector('fleet-board-shell')).toBeTruthy();
     expect(el.querySelector('[data-testid="board-shell"]')).toBeTruthy();
@@ -32,9 +137,7 @@ describe('BoardPage', () => {
   });
 
   it('lays the board out as three columns', async () => {
-    const fixture = TestBed.createComponent(BoardPage);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
+    const { el } = await open();
 
     // Each rail and the centre are their own column of the main grid.
     const rails = el.querySelectorAll('.main > .col');
@@ -45,9 +148,7 @@ describe('BoardPage', () => {
   });
 
   it('docks chunk detail beside the rails, so selecting never resizes the board (issue #21)', async () => {
-    const fixture = TestBed.createComponent(BoardPage);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
+    const { el, harness } = await open();
 
     // Nothing selected: the dock is already mounted, stacked under the board inside
     // the centre column, and holds a rest state prompting the operator to pick a chunk.
@@ -59,25 +160,106 @@ describe('BoardPage', () => {
 
     // Selecting a card fills the SAME dock element — the layout gains no node, so the
     // board columns cannot resize or shift.
-    fixture.debugElement.query(By.css('fleet-board-shell')).componentInstance.selectChunk.emit('ch_1');
-    await fixture.whenStable();
+    await openCard(harness, RUNNING);
 
-    const dockAfter = el.querySelector('fleet-chunk-detail.dock');
-    expect(dockAfter).toBe(dockBefore);
-    expect(el.querySelector('[data-testid="chunk-detail-empty"]')?.textContent ?? '').not.toContain('SELECT');
+    expect(el.querySelector('fleet-chunk-detail.dock')).toBe(dockBefore);
+    expect(el.querySelector('fleet-chunk-detail-panel')).toBeTruthy();
   });
 
   it('opens a chunk from an ask in the right rail (MVP criterion 7)', async () => {
-    const fixture = TestBed.createComponent(BoardPage);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
+    const { el, harness } = await open();
 
     // An ask names a chunk nobody has selected; activating it fills the same dock the
     // board cards fill, which is where the answer is given.
     expect(el.querySelector('fleet-chunk-detail-panel')).toBeNull();
-    fixture.debugElement.query(By.css('fleet-questions-panel')).componentInstance.selectChunk.emit('ch_asked');
-    await fixture.whenStable();
+    harness.fixture.debugElement.query(By.css('fleet-questions-panel')).componentInstance.selectChunk.emit(ASKED);
+    await settle(harness.fixture);
 
-    expect(el.querySelector('[data-testid="chunk-detail-empty"]')?.textContent ?? '').not.toContain('SELECT');
+    expect(el.querySelector('fleet-chunk-detail-panel')).toBeTruthy();
+  });
+
+  describe('the URL drives selection (issue #162)', () => {
+    it('hydrates the selection from the URL on load, no click — a shareable, refresh-safe link', async () => {
+      const { el } = await open(`/board?chunk=${RUNNING}`);
+
+      // The dock is open on the URL's chunk straight away, and its card reads as selected…
+      expect(el.querySelector('fleet-chunk-detail-panel')).toBeTruthy();
+      expect(card(el, RUNNING).classList.contains('selected')).toBe(true);
+      expect(card(el, ASKED).classList.contains('selected')).toBe(false);
+      // …and hydration is a pure read: nothing rewrote the URL.
+      expect(TestBed.inject(Router).url).toBe(`/board?chunk=${RUNNING}`);
+    });
+
+    it('writes the selection into the URL when a card is clicked — a param merge, no reload', async () => {
+      const { el, harness } = await open();
+
+      await openCard(harness, RUNNING);
+
+      expect(TestBed.inject(Router).url).toBe(`/board?chunk=${RUNNING}`);
+      // A query-param navigation, not a route swap: the same page is still mounted.
+      expect(el.querySelector('fleet-board-shell')).toBeTruthy();
+      expect(card(el, RUNNING).classList.contains('selected')).toBe(true);
+    });
+
+    it('writes the same param when an ask in the right rail opens its chunk', async () => {
+      const { el, harness } = await open();
+
+      harness.fixture.debugElement.query(By.css('fleet-questions-panel')).componentInstance.selectChunk.emit(ASKED);
+      await settle(harness.fixture);
+
+      expect(TestBed.inject(Router).url).toBe(`/board?chunk=${ASKED}`);
+      expect(card(el, ASKED).classList.contains('selected')).toBe(true);
+    });
+
+    it('clears the param when the dock is dismissed', async () => {
+      const { el, harness } = await open(`/board?chunk=${RUNNING}`);
+
+      harness.fixture.debugElement.query(By.css('fleet-chunk-detail')).componentInstance.dismiss.emit();
+      await settle(harness.fixture);
+
+      expect(TestBed.inject(Router).url).toBe('/board');
+      expect(el.querySelector('[data-testid="chunk-detail-empty"]')?.textContent).toContain('SELECT');
+    });
+
+    it('merges into the URL, leaving query params it does not own alone', async () => {
+      const { harness } = await open('/board?lane=running');
+
+      await openCard(harness, RUNNING);
+
+      expect(TestBed.inject(Router).url).toBe(`/board?lane=running&chunk=${RUNNING}`);
+    });
+
+    it('degrades a chunk id that no longer exists to no-selection, leaving the URL untouched', async () => {
+      const { el } = await open(`/board?chunk=${GONE}`);
+
+      // The board renders its normal no-selection state rather than erroring…
+      expect(el.querySelector('[data-testid="chunk-detail-empty"]')?.textContent).toContain('SELECT A CHUNK');
+      expect(el.querySelectorAll('[data-testid="chunk-card"].selected').length).toBe(0);
+      // …no detail read fired for the chunk that is not there…
+      expect(stub.forRoute(`/api/chunks/${GONE}`, 'GET')).toEqual([]);
+      // …and the board never rewrote the URL to "correct" it.
+      expect(TestBed.inject(Router).url).toBe(`/board?chunk=${GONE}`);
+    });
+
+    it('back and forward walk the selection history', async () => {
+      const { el, harness } = await open();
+
+      await openCard(harness, RUNNING);
+      await openCard(harness, ASKED);
+      expect(TestBed.inject(Router).url).toBe(`/board?chunk=${ASKED}`);
+
+      // Back returns to the previously selected chunk, and the dock follows the URL.
+      TestBed.inject(Location).back();
+      await settle(harness.fixture);
+      expect(TestBed.inject(Router).url).toBe(`/board?chunk=${RUNNING}`);
+      expect(card(el, RUNNING).classList.contains('selected')).toBe(true);
+      expect(card(el, ASKED).classList.contains('selected')).toBe(false);
+
+      // Forward walks it again.
+      TestBed.inject(Location).forward();
+      await settle(harness.fixture);
+      expect(TestBed.inject(Router).url).toBe(`/board?chunk=${ASKED}`);
+      expect(card(el, ASKED).classList.contains('selected')).toBe(true);
+    });
   });
 });
