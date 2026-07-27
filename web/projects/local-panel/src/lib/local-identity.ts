@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { KitButton } from 'fleet';
 
-import { injectRunnerLogoutMutation, injectRunnerSessionQuery } from './auth.query';
+import { injectRunnerLogoutMutation, injectRunnerSessionQuery, signedInUsername } from './auth.query';
 
 /**
  * The panel header's identity control (issue #129) — the signed-in hub username
@@ -29,6 +29,14 @@ import { injectRunnerLogoutMutation, injectRunnerSessionQuery } from './auth.que
  * `CdkMenu` finds its items by a content query that stops at a child
  * component's template boundary, so a menu item rendered in *here* would never
  * register with the panel out there.
+ *
+ * `role="presentation"` removes the host *element* from the accessibility tree
+ * but not its text: a screen reader still reaches "signed in / alice" as content
+ * of the menu. That is deliberate. The alternative, `aria-hidden="true"`, would
+ * close the content model completely at the cost of hiding the signed-in
+ * identity from exactly the users who cannot see it rendered — a worse trade for
+ * a row that is genuinely informative. What mattered was removing the
+ * *focusable* control, which is done.
  */
 @Component({
   selector: 'local-identity',
@@ -102,10 +110,7 @@ export class LocalIdentity {
    * entirely — under a `none`-mode hub or before any session resolves. Public so
    * a menu panel can gate its own `Log out` item on the same fact this block
    * gates itself on, rather than repeating the `auth_enabled`/`username` fold. */
-  readonly username = computed<string | null>(() => {
-    const session = this.query.data();
-    return session?.auth_enabled ? (session.username ?? null) : null;
-  });
+  readonly username = computed<string | null>(() => signedInUsername(this.query.data()));
 
   /** Clears the session and reloads. Public so a `label`-shaped mount's sibling
    * menu item can invoke it through a template reference. */

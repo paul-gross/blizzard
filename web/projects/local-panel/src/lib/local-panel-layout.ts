@@ -66,6 +66,12 @@ import type { MachineChunkRow } from './local-panel';
  * and the shell's profile menu ride along in the header's `[header-trailing]`
  * slot — each a self-fetching mini-container of its own, composed here without
  * this layout or {@link BoardHeader} knowing anything about pause state or identity.
+ *
+ * Because this shell puts three things in that one slot where the hub board puts
+ * one, it owns collapsing them as the header narrows (issue #163) — see the
+ * `@container board-header` rule in the styles below. {@link BoardHeader}
+ * guarantees its trailing cluster is never pushed off the clipped right edge,
+ * but it can only collapse the cells it renders itself.
  */
 @Component({
   selector: 'local-panel-layout',
@@ -219,6 +225,26 @@ import type { MachineChunkRow } from './local-panel';
       display: flex;
       align-items: center;
       padding: 0 10px;
+    }
+    /*
+     * This layout's own half of the header's tiered collapse (issue #163).
+     * BoardHeader pins its trailing cluster flex: none so nothing there can be
+     * pushed off the clipped right edge — but it can only collapse what it
+     * owns, and this shell projects two more controls into that slot than the
+     * hub does. Left alone they push the profile menu clean off a phone-width
+     * header, and that menu is this shell's ONLY appearance switcher in desktop
+     * mode: a phone pinned to desktop would have no way back to mobile.
+     *
+     * The query container BoardHeader declares is named, so these rules ride the
+     * same board-header breakpoint from out here, where view encapsulation does
+     * reach the nodes this template declared. Status and identity are what give
+     * way; the menu never does.
+     */
+    @container board-header (max-width: 699px) {
+      local-pause-control,
+      local-identity {
+        display: none;
+      }
     }
     .cols {
       flex: 1;

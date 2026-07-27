@@ -36,10 +36,18 @@ export interface StatCell {
  * queries on the header's own inline size rather than the viewport's: the two
  * shells mount it over different layouts, so each must react to the width it
  * actually has. Below ~1150px the stat strip drops; below ~700px the spend cell
- * and the brand tagline follow. The trailing cluster — connection cell and
- * projected menu — is `flex: none` at every width, so it can never be pushed
- * past the clipped right edge of an `overflow: hidden` shell; the stat strip is
- * the only region that shrinks.
+ * and the brand text (wordmark and tagline both) follow, leaving the brand mark.
+ * The trailing cluster — connection cell and projected menu — is `flex: none` at
+ * every width, so it can never be pushed past the clipped right edge of an
+ * `overflow: hidden` shell; the stat strip is the only region that shrinks.
+ *
+ * That guarantee only covers what *this* component owns. A consumer projecting
+ * more than a menu into `[header-trailing]` — the runner's local panel projects
+ * a pause control and an identity block beside its menu — owns collapsing its
+ * own controls, and can: the query container is **named**, so a consumer writes
+ * `@container board-header (max-width: …)` against it in its own styles, where
+ * view encapsulation reaches the nodes it declared. `local-panel-layout.ts` is
+ * the worked example.
  */
 @Component({
   selector: 'fleet-board-header',
@@ -195,11 +203,17 @@ export interface StatCell {
     /*
      * Tiered collapse (issue #163). Below the wide breakpoint the per-lane
      * count cells go — the board's own lane columns still carry those headings,
-     * so nothing is lost — and below the narrow one the spend cell and the
-     * brand's tagline follow. The brand mark, the connection cell, and the
-     * projected menu survive every tier: on a phone forced into desktop mode
-     * that menu is the only way back to mobile, so it must never be the thing
-     * that gets pushed off.
+     * so nothing is lost — and below the narrow one the spend cell and the whole
+     * brand *text* block follow, leaving the brand mark, the connection cell,
+     * and the projected menu. Those three survive every tier: on a phone forced
+     * into desktop mode that menu is the only way back to mobile, so it must
+     * never be the thing that gets pushed off.
+     *
+     * The wordmark goes with the tagline rather than after it. Together they are
+     * ~190px of a 390px phone, which is the difference between the trailing
+     * cluster fitting and running off the edge on the runner's local panel,
+     * whose trailing slot carries more than the hub's — and the mark alone still
+     * identifies the app.
      */
     @container board-header (max-width: 1149px) {
       .stats {
@@ -210,7 +224,7 @@ export interface StatCell {
       .spend {
         display: none;
       }
-      .brand small {
+      .brand-text {
         display: none;
       }
     }

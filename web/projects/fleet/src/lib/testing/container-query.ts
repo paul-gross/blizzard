@@ -79,6 +79,10 @@ function containerTiers(containerName: string): readonly ContainerTier[] {
  * Selector matching runs against the real element, so Angular's view-
  * encapsulation attributes are honored exactly as the browser would honor them.
  *
+ * Answers for `element` alone: an ancestor collapsing above it is not consulted,
+ * so a child of a `display: none` block still reports its own declared value.
+ * Assert the element the rule actually names.
+ *
  * Note the two sides are not the same kind of value: the base comes from
  * `getComputedStyle` (resolved) while an override is the *declared* text. That is
  * only safe for properties whose declared and computed forms coincide — `display`,

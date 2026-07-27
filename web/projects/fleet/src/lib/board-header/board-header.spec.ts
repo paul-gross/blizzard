@@ -199,7 +199,7 @@ describe('BoardHeader', () => {
       const el = await spendRender();
       expect(at(el, '[data-testid="board-header-stats"]', 1200)).toBe(false);
       expect(at(el, '[data-testid="spend-today"]', 1200)).toBe(false);
-      expect(at(el, '.brand small', 1200)).toBe(false);
+      expect(at(el, '.brand-text', 1200)).toBe(false);
       expect(at(el, '[data-testid="conn"]', 1200)).toBe(false);
       expect(at(el, '.trailing', 1200)).toBe(false);
     });
@@ -208,16 +208,23 @@ describe('BoardHeader', () => {
       const el = await spendRender();
       expect(at(el, '[data-testid="board-header-stats"]', 1000)).toBe(true);
       expect(at(el, '[data-testid="spend-today"]', 1000)).toBe(false);
-      expect(at(el, '.brand small', 1000)).toBe(false);
+      expect(at(el, '.brand-text', 1000)).toBe(false);
       expect(at(el, '[data-testid="conn"]', 1000)).toBe(false);
       expect(at(el, '.trailing', 1000)).toBe(false);
     });
 
-    it('drops spend and the brand tagline at the narrow tier — never the connection cell or the menu slot', async () => {
+    it('drops spend and the whole brand text at the narrow tier — never the mark, connection cell, or menu slot', async () => {
       const el = await spendRender();
       expect(at(el, '[data-testid="board-header-stats"]', 420)).toBe(true);
       expect(at(el, '[data-testid="spend-today"]', 420)).toBe(true);
-      expect(at(el, '.brand small', 420)).toBe(true);
+      // The wordmark goes with the tagline (issue #163's narrow tier leaves the
+      // brand *mark*) — ~190px that decides whether a phone-width header's
+      // trailing cluster fits at all.
+      // The whole text block, tagline included — the tagline now goes with its
+      // parent rather than by a rule of its own, which is why this asserts the
+      // block: `hiddenAtContainerWidth` answers for one element's own resolved
+      // display, not for ancestors collapsing above it.
+      expect(at(el, '.brand-text', 420)).toBe(true);
       // The one guarantee the whole tiering exists for: on a phone forced into
       // desktop mode, the profile menu behind this slot is the only way back.
       expect(at(el, '[data-testid="conn"]', 420)).toBe(false);

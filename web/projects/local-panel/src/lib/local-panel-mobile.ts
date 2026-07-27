@@ -20,6 +20,7 @@ import { LocalAsks } from './local-asks';
 import { LocalIdentity } from './local-identity';
 import { LocalInfo } from './local-info';
 import type { MachineChunkRow } from './local-panel';
+import { injectRunnerSessionQuery, signedInUsername } from './auth.query';
 import { injectRunnerStatusQuery } from './status.query';
 
 /**
@@ -90,9 +91,13 @@ import { injectRunnerStatusQuery } from './status.query';
           <!-- The identity block renders label-only in here: a role=menu may own
                only menu items, so its logout is the real menu item below, driven
                through the template reference — LocalIdentity stays the one owner
-               of the session read and the logout call. -->
+               of the logout call. The item's *gate* is this shell's own session
+               read, not the block's: the block is constructed inside the overlay,
+               so its signal is still unresolved when CdkMenu picks the initially
+               focused item, and a Log out that appears a tick later is one the
+               keyboard has already skipped past. -->
           <local-identity #identity variant="label" />
-          @if (identity.username()) {
+          @if (signedIn()) {
             <fleet-kit-menu-item testid="local-panel-mobile-logout" (triggered)="identity.logout()">
               Log out
             </fleet-kit-menu-item>
@@ -319,4 +324,13 @@ export class LocalPanelMobile {
    * malformed body (e.g. a misrouted proxy) must degrade to `false`, not
    * throw mid-render — the same guard `local-info.ts`'s own `view` takes. */
   protected readonly hubReachable = computed(() => this.runnerStatusQuery.data()?.hub?.reachable ?? false);
+
+  private readonly sessionQuery = injectRunnerSessionQuery();
+
+  /** Whether a hub username is signed in — the gate on the titlebar menu's
+   * `Log out` item. Read here, on a component that has been alive since the
+   * shell mounted, rather than off the {@link LocalIdentity} inside the overlay,
+   * so the item exists in the panel's very first change detection and
+   * `CdkMenu` focuses it as the first item. */
+  protected readonly signedIn = computed(() => signedInUsername(this.sessionQuery.data()) !== null);
 }

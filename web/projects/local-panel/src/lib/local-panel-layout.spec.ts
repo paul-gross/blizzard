@@ -2,7 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { runnerClient, type runnerApi } from 'fleet';
-import { type RequestClientStub, stubRequestClient } from 'fleet/testing';
+import { type RequestClientStub, hiddenAtContainerWidth, stubRequestClient } from 'fleet/testing';
 
 import { LocalPanelLayout } from './local-panel-layout';
 import type { MachineChunkRow } from './local-panel';
@@ -271,5 +271,52 @@ describe('LocalPanelLayout', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="local-panel-menu"] fleet-kit-avatar')).not.toBeNull();
+  });
+
+  /*
+   * This shell's half of the header's tiered collapse (issue #163). `BoardHeader`
+   * pins its trailing cluster `flex: none`, but it can only collapse the cells it
+   * renders itself — and this shell projects a pause control and an identity
+   * block in beside the menu, where the hub board projects only the menu. Left
+   * standing they push the profile menu clean off a phone-width header, and in
+   * desktop mode that menu is this shell's ONLY appearance switcher, so a phone
+   * pinned to desktop would be stranded there.
+   *
+   * jsdom parses `@container` rules without evaluating them, so these resolve the
+   * rules this component actually ships at a given header width rather than
+   * trusting `getComputedStyle`, which reports the wide-tier value at every one.
+   */
+  describe('trailing-cluster collapse at narrow header widths (issue #163)', () => {
+    const at = (el: HTMLElement, selector: string, width: number) =>
+      hiddenAtContainerWidth(el.querySelector(selector)!, { containerName: 'board-header', width });
+
+    it('keeps every trailing control at a full-width header', async () => {
+      const el = (await render()).nativeElement as HTMLElement;
+
+      expect(at(el, 'local-pause-control', 1400)).toBe(false);
+      expect(at(el, 'local-identity', 1400)).toBe(false);
+      expect(at(el, '[data-testid="local-panel-menu"]', 1400)).toBe(false);
+    });
+
+    it('gives up the pause control and identity at the narrow tier, never the profile menu', async () => {
+      const el = (await render()).nativeElement as HTMLElement;
+
+      expect(at(el, 'local-pause-control', 390)).toBe(true);
+      expect(at(el, 'local-identity', 390)).toBe(true);
+      // The one that must survive: it is the only way back to mobile from a
+      // forced-desktop phone on this shell.
+      expect(at(el, '[data-testid="local-panel-menu"]', 390)).toBe(false);
+    });
+
+    it('rides the same named container the header declares, not a viewport media query', async () => {
+      const el = (await render()).nativeElement as HTMLElement;
+
+      // Styling nodes it declared itself, against `BoardHeader`'s named query
+      // container — the shell reacts to the *header's* width, so it collapses on
+      // its own terms rather than the window's.
+      expect(getComputedStyle(el.querySelector('.mc-header')!).containerName).toBe('board-header');
+      expect(at(el, 'local-pause-control', 700)).toBe(false);
+      expect(at(el, 'local-pause-control', 699)).toBe(true);
+    });
   });
 });

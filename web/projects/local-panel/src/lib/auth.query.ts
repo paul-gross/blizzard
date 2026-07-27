@@ -25,6 +25,24 @@ export function injectRunnerSessionQuery() {
 }
 
 /**
+ * The signed-in hub username a session read carries, or `null` when there is none
+ * to show — a `none`-mode hub (authless surface), an unresolved read, or oauth
+ * with no session riding along.
+ *
+ * One owner for the fold because two components gate on it: {@link LocalIdentity}
+ * renders itself off it, and the mobile shell gates its own `Log out` **menu
+ * item** off it. The shell cannot reuse the identity block's copy — that
+ * component is constructed inside the menu overlay, so its signal is still
+ * unresolved on the overlay's first change detection, and a menu item that
+ * appears a tick late is one `CdkMenu` has already skipped when setting initial
+ * focus. The shell reads the same query itself, long resolved by the time a menu
+ * opens; this keeps the two answers from drifting.
+ */
+export function signedInUsername(session: runnerApi.RunnerAuthSessionView | undefined): string | null {
+  return session?.auth_enabled ? (session.username ?? null) : null;
+}
+
+/**
  * `POST /api/auth/logout` (issue #129) — clears the runner's own session cookie, then
  * invalidates the session read so the control drops the username. The runner session
  * is a stateless signed cookie, so this is the whole logout; SSO stays honest — the
