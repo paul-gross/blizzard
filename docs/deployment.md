@@ -382,6 +382,63 @@ into every spawn too. Empty (the fresh-scaffold default) means the base allowlis
 only; a daemon credential such as `BZ_HUB_TOKEN` is never in scope for this list, so
 it is absent from a worker child by construction unless deliberately named here.
 
+### Model and effort tiers
+
+A graph's `sessions:` map names each session lineage's **capability tier** rather than a
+model — `blizzard:frontier`, `blizzard:advanced`, `blizzard:basic` — and a chunk's
+`default_model` uses the same vocabulary. The hub never interprets either: the mapping
+from a tier to a model *this* runner's harness understands lives in
+`blizzard-runner.toml`, which is what keeps a graph harness-agnostic. A codex runner maps
+the same three tiers to its own models and skips `opus` wherever a preference list names
+it.
+
+```toml
+[models.aliases]
+"blizzard:advanced" = "claude-opus-5"
+"blizzard:basic" = "haiku"
+
+[effort.aliases]
+max = "xhigh"
+```
+
+Both tables are optional. The Claude Code adapter ships built-in defaults for the three
+standard tiers (frontier → `fable`, advanced → `opus`, basic → `sonnet`), so a zero-config
+runner resolves them with no `[models.aliases]` at all; an entry here overrides the
+built-in for that alias. `[effort.aliases]` maps onto the well-known `low|medium|high|max`
+ordinal — the four need no entry, and the table exists so a deployment can name its own
+vocabulary or reach a native tier outside the ordinal (Claude Code's own `xhigh`).
+
+A `model` preference list resolves **left to right**: the first entry this runner can
+resolve wins, and an entry it cannot — an unmapped alias, or a name belonging to another
+harness — is **skipped**, never a spawn failure. A list nothing in resolves falls back to
+the runner's own default model with a logged note naming what it skipped. The aliases are
+deliberately **unordered roles, not a scale**: nothing substitutes downward when a tier is
+unmapped, so every degradation is something a graph author wrote.
+
+#### Session stickiness — a deployment requirement
+
+A session's **model** is applied when the session is minted and on no resume after it.
+That rests on the harness restoring a resumed session's own model, which all three target
+harnesses do — and which each one has a configuration that **defeats**. A deployment that
+trips one runs its mechanical lineage on the wrong model with every test tier still green,
+so these are requirements, not preferences:
+
+- **Claude Code** — a worker must never see the `ANTHROPIC_MODEL` family of variables.
+  They are absent from the base allowlist by construction; do not add one through
+  `[worker] env_passthrough`.
+- **opencode** — an adapter must not pin `agent.<name>.model`; it outranks session
+  stickiness.
+- **codex** — an adapter must keep `model` out of `config.toml` (it overrides every
+  resume), and needs a state-DB-era codex to restore a thread's model at all.
+
+**Effort is different, and is reasserted on every invocation.** Claude Code does *not*
+restore a session's effort across `--resume`: a session spawned at one effort reverts to
+the settings-resolved default on the next resume (measured against CLI 2.1.220). Applying
+it at mint only would therefore silently drop a declared effort on every member of a
+resuming pool, so the runner passes `--effort` on each turn. The cost is small and
+measured — 249 cache-creation tokens against 17 for a bare resume, nothing like the
+full-history rewrite a cross-model resume forces.
+
 ### The worker spawn preamble
 
 A worker's **first** spawn on a session carries three ordered layers ahead of the node's
