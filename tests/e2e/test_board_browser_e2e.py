@@ -492,7 +492,9 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 # The action lives in the chunk detail dock, not on the card (issue #42
                 # decided that pattern; the card stays a passive status view save for
                 # Promote), so A's card is opened first and paused from the dock.
-                a_card = page.locator('[data-status="running"]')
+                # Scoped to the board card: runner-view claim rows carry the same
+                # data-status attribute, so the bare selector would match both.
+                a_card = page.locator('[data-testid="chunk-card"][data-status="running"]')
                 expect(a_card).to_have_count(1)
                 a_card.click()
                 expect(page.get_by_test_id("chunk-detail")).to_be_visible()
