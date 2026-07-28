@@ -23,6 +23,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.steps import mark_crash_resume_intents, resume
 from blizzard.runner.loop.tick import tick
@@ -172,6 +173,50 @@ def test_marks_crash_after_an_earlier_session_ended(tmp_path):  # type: ignore[n
 
     assert marked == 1
     assert store.resume_intent_lease_ids() == {"lease_1"}
+
+
+@pytest.mark.unit
+def test_marks_worker_respawned_just_before_the_crash_with_no_beat_of_its_own(tmp_path):  # type: ignore[no-untyped-def]
+    """The reclassification issue #150 deliberately takes on in this classifier.
+
+    A lease resumed long after its last heartbeat — the ask/answer case, where the park
+    outlasted the staleness threshold — is killed by the daemon before its fresh worker
+    makes its first tool call. Every heartbeat it holds belongs to the *previous*
+    generation, so the pre-#150 baseline read it as "stalled at crash time" and abandoned
+    a genuinely working session to a fresh retry. The spawn fact says otherwise, and it
+    is the one that describes the process that was actually running: it resumes."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)  # the pre-park generation's last beat
+
+    respawned_at = _NOW + timedelta(hours=2)  # answered well past the threshold
+    store.record_spawn("lease_1", pid=200, process_start_time="start-200", session_id="sess-a", spawned_at=respawned_at)
+    crashed_at = respawned_at + timedelta(seconds=30)  # kill -9 lands 30s into the resumed turn
+    _crashed_at(store, crashed_at)
+
+    marked = mark_crash_resume_intents(store, process=FakeProbe(alive=set()), now=crashed_at)
+
+    assert marked == 1
+    assert store.resume_intent_lease_ids() == {"lease_1"}
+
+
+@pytest.mark.unit
+def test_still_skips_a_worker_whose_newest_spawn_is_also_stale(tmp_path):  # type: ignore[no-untyped-def]
+    """The skip the classifier was written for survives: when the newest **spawn** and the
+    newest beat both predate the crash by more than the threshold, the worker really had
+    wedged, and resuming it would only wedge it again."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)
+    respawned_at = _NOW + timedelta(minutes=1)
+    store.record_spawn("lease_1", pid=200, process_start_time="start-200", session_id="sess-a", spawned_at=respawned_at)
+    crashed_at = respawned_at + HEARTBEAT_STALENESS_THRESHOLD + timedelta(minutes=1)
+    _crashed_at(store, crashed_at)
+
+    marked = mark_crash_resume_intents(store, process=FakeProbe(alive=set()), now=crashed_at)
+
+    assert marked == 0
+    assert store.resume_intent_lease_ids() == set()
 
 
 @pytest.mark.unit

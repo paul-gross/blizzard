@@ -40,6 +40,7 @@ __all__ = [
     "as_utc",
     "derive_lease_state",
     "is_heartbeat_stale",
+    "last_activity",
 ]
 
 #: REAP's staleness threshold. Deliberately **conservative**:
@@ -66,25 +67,56 @@ LeaseState = Literal["running", "stale", "parked", "spawning", "exited", "closed
 def is_heartbeat_stale(store: IReadRunnerStore, lease: LeaseRecord, now: datetime) -> bool:
     """True iff the lease's last activity is older than the staleness threshold.
 
-    Last activity is the newest heartbeat, or — before the worker's first tool call —
-    the lease's own creation instant, so a freshly spawned worker is never read as
-    stalled inside the threshold window.
+    See :func:`last_activity` for what "last activity" means — the read this and
+    :class:`LocalLeaseService` share so REAP and the panel cannot drift apart.
     """
-    last = store.latest_heartbeat(lease.lease_id) or lease.created_at
-    return _staleness_exceeded(last, now, threshold=HEARTBEAT_STALENESS_THRESHOLD)
+    return _staleness_exceeded(last_activity(store, lease), now, threshold=HEARTBEAT_STALENESS_THRESHOLD)
 
 
-def _staleness_exceeded(last_heartbeat: datetime, now: datetime, *, threshold: timedelta) -> bool:
-    """Pure comparison: True iff ``last_heartbeat`` is older than ``threshold`` as of ``now``.
+def last_activity(store: IReadRunnerStore, lease: LeaseRecord) -> datetime:
+    """A lease's staleness baseline: the newest of its heartbeat, its spawn, and its mint.
+
+    The docstring's promise — *a freshly spawned worker is never read as stalled inside
+    the threshold window* — has to hold for **every** spawn generation, not just the
+    first (issue #150). Heartbeats ride tool calls, so a worker that ask-parks stops
+    beating the moment it exits. REAP correctly skips a parked lease, but the instant a
+    resume respawns the worker the lease is live again while the baseline is still the
+    pre-park beat (or the original mint). Any question left unanswered longer than
+    :data:`HEARTBEAT_STALENESS_THRESHOLD` therefore produced a worker that was stale at
+    birth: reaped on the next tick, seconds into a healthy first inference turn, before
+    a single tool call could land a fresh beat. Since the reap funnels into the retry
+    budget, the operator's *answer* got silently converted into an escalation.
+
+    Folding the newest ``lease_spawns`` row into the baseline closes it for every resume
+    path that reuses a lease — answer-resume, pause-resume, restart-resume, crash-resume
+    — with no new write and no new fact: :meth:`IWriteRunnerStore.record_spawn` already
+    records it atomically at each of those sites, so the fix is crash-safe by
+    construction and lives in one read-side function.
+
+    Deliberately **not** a fabricated heartbeat row. Heartbeats are worker-originated —
+    they prove the worker is making tool calls — and a runner-written beat would make
+    the ``heartbeats`` table lie about worker activity while still needing backfilling
+    at all four spawn sites. Deriving from the spawn fact keeps the facts honest.
+
+    ``max`` over all three rather than a precedence chain: a lease can hold a heartbeat
+    newer than its newest spawn (a worker beating away right now) or a spawn newer than
+    its newest heartbeat (a just-resumed worker), and only the newer of the two is
+    "activity". ``created_at`` is the floor for a lease that has neither.
+    """
+    facts = (store.latest_heartbeat(lease.lease_id), store.latest_spawn(lease.lease_id))
+    return max([as_utc(lease.created_at), *(as_utc(fact) for fact in facts if fact is not None)])
+
+
+def _staleness_exceeded(last_activity_at: datetime, now: datetime, *, threshold: timedelta) -> bool:
+    """Pure comparison: True iff ``last_activity_at`` is older than ``threshold`` as of ``now``.
 
     Split out of :func:`is_heartbeat_stale` so :class:`LocalLeaseService` can reuse the
     exact comparison after doing its own store read, without either copying the rule or
-    forcing :func:`derive_lease_state` to take a store (``bzh:domain-core``). REAP's
-    behavior is unchanged: :func:`is_heartbeat_stale` still resolves the same ``last``
-    and calls this with the same module threshold, so this is a shape refactor, not a
-    behavior change.
+    forcing :func:`derive_lease_state` to take a store (``bzh:domain-core``). What both
+    callers pass is :func:`last_activity`'s result, so the panel's ``stale`` and REAP's
+    reap decision cannot disagree.
     """
-    return now - as_utc(last_heartbeat) > threshold
+    return now - as_utc(last_activity_at) > threshold
 
 
 # ``as_utc`` re-exported from ``foundation/store/utc.py`` (issue #28, ``bzh:utc-instants``):
@@ -213,16 +245,21 @@ class LocalLeaseService:
 
         Reads ``parked_lease_ids()`` once (not per-lease) and, per lease (N+1 bounded
         by ``MAX_AGENTS``, ~4 — accepted rather than extending the repository, which
-        would be speculative): ``latest_heartbeat`` for the staleness read and the
-        panel's heartbeat-age column, and ``bindings_for_chunk`` for the environment
-        join.
+        would be speculative): ``latest_heartbeat`` for the panel's heartbeat-age column,
+        :func:`last_activity` for the staleness read, and ``bindings_for_chunk`` for the
+        environment join.
+
+        The two heartbeat reads are deliberate rather than redundant: the column shows
+        what the *worker* last did, while staleness is measured against the spawn too
+        (issue #150), so a just-resumed lease renders ``running`` with an honestly old
+        last-beat rather than ``stale``.
         """
         now = self._clock.now()
         parked = self._store.parked_lease_ids()
         activities: list[LeaseActivity] = []
         for lease in self._store.list_active_leases():
             last_heartbeat = self._store.latest_heartbeat(lease.lease_id)
-            baseline = last_heartbeat or lease.created_at
+            baseline = last_activity(self._store, lease)
             state = derive_lease_state(
                 lease,
                 is_closed=False,

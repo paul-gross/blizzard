@@ -302,7 +302,25 @@ class IReadRunnerStore(Protocol):
 
         REAP's stall signal: a live worker whose last beat is older than the
         conservative staleness threshold has stopped making tool calls. ``None``
-        falls back to the lease's own creation instant.
+        falls back to :meth:`latest_spawn`, then to the lease's own creation instant.
+        """
+        ...
+
+    def latest_spawn(self, lease_id: str) -> datetime | None:
+        """When this lease's newest process was spawned, or ``None`` if it never was.
+
+        The second half of REAP's staleness baseline (issue #150). A lease outlives its
+        processes — the ask/answer, pause, restart and crash resume paths all re-spawn
+        under the same ``lease_id`` — and each ``record_spawn`` appends a
+        ``lease_spawns`` row, so the newest one is when the *currently running* worker
+        actually started. Heartbeats ride tool calls and stop the moment a worker
+        ask-parks, so without this read a worker resumed after a park longer than the
+        staleness threshold is stale at birth and reaped before its first tool call can
+        beat.
+
+        ``None`` for a lease minted before its spawn-return landed (REAP's residue) and
+        for rows predating the crash-recovery-context revision; the baseline then falls
+        back to the lease's own ``created_at`` exactly as before.
         """
         ...
 

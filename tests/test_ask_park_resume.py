@@ -252,3 +252,64 @@ def test_answer_resumes_the_dormant_session_under_the_same_lease(tmp_path):  # t
     assert resumed_lease is not None and resumed_lease.pid == 4321
     # answer.delivered was buffered up to the hub (board detail).
     assert [f for f in store.pending_outbound() if f.kind == ANSWER_DELIVERED]
+
+
+def test_worker_resumed_after_a_park_past_the_threshold_survives_the_next_reap(tmp_path):  # type: ignore[no-untyped-def]
+    """Issue #150's live incident, end to end at the loop tier.
+
+    A build worker asks at T and exits; the park stops the reap clock, correctly. The
+    operator answers at T+2h — past ``HEARTBEAT_STALENESS_THRESHOLD``, so every heartbeat
+    the lease holds is ancient. ADVANCE resumes the dormant session, and the very next
+    REAP tick used to kill the fresh worker as stalled *before its first tool call could
+    beat*, then funnel the kill into the retry budget and escalate — silently converting
+    the operator's answer into a ``needs_human``. The resume's own ``lease_spawns`` row is
+    now part of the staleness baseline, so the resumed worker gets the full window.
+    """
+    store = _store(tmp_path)
+    _seed_exited_lease(store)
+    store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)
+    store.record_ask(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        question_id="qn_1",
+        question="Q",
+        options=[],
+        session_id="sess-a",
+        asked_at=_NOW,
+    )
+    store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
+
+    answered_at = _NOW + HEARTBEAT_STALENESS_THRESHOLD + timedelta(hours=1)
+    hub = FakeHub()
+    hub.questions["qn_1"] = _answered_question()
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    harness.resume_pid = 4321
+    resumed_probe = FakeProbe(alive={(4321, _HANDLE_START)})
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=resumed_probe,
+        clock=FixedClock(answered_at),
+    )
+
+    advance(ctx)
+    resumed = store.active_lease("lease_1")
+    assert resumed is not None and resumed.pid == 4321
+
+    # The next tick, half a minute into the resumed worker's first inference turn.
+    reap(
+        make_context(
+            store,
+            hub=hub,
+            provider=FakeProvider({"e1": "/ws/e1"}),
+            harness=harness,
+            probe=resumed_probe,
+            clock=FixedClock(answered_at + timedelta(seconds=30)),
+        )
+    )
+
+    assert store.active_lease("lease_1") is not None  # not reaped
+    assert resumed_probe.killed == []
+    assert [f for f in store.pending_outbound() if f.kind == "escalation.recorded"] == []

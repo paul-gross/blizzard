@@ -191,6 +191,63 @@ def test_is_heartbeat_stale_just_past_threshold_is_stale(tmp_path) -> None:  # t
     assert is_heartbeat_stale(store, lease, just_past) is True
 
 
+@pytest.mark.unit
+def test_a_worker_resumed_after_a_long_park_gets_the_full_staleness_window(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """Issue #150's live incident, at the predicate. A lease minted at T ask-parks, and
+    the answer arrives at T+2h — far past the threshold, so every heartbeat it has is
+    ancient. The resume records a fresh ``lease_spawns`` row, and from that instant the
+    worker gets the whole window back rather than being stale at birth and reaped
+    seconds into its first inference turn."""
+    store = _store(tmp_path)
+    _seed_lease(store)
+    store.record_spawn("lease_1", pid=1, process_start_time="s1", session_id="sess", spawned_at=_NOW)
+    store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None
+
+    # Parked for two hours: without the spawn fact in the baseline the lease is long stale.
+    resumed_at = _NOW + timedelta(hours=2)
+    assert is_heartbeat_stale(store, lease, resumed_at) is True
+
+    # The answer-resume respawns the same lease — a second generation, same lease_id.
+    store.record_spawn("lease_1", pid=2, process_start_time="s2", session_id="sess", spawned_at=resumed_at)
+
+    assert is_heartbeat_stale(store, lease, resumed_at + timedelta(seconds=1)) is False
+    assert is_heartbeat_stale(store, lease, resumed_at + HEARTBEAT_STALENESS_THRESHOLD) is False
+    assert (
+        is_heartbeat_stale(store, lease, resumed_at + HEARTBEAT_STALENESS_THRESHOLD + timedelta(seconds=1)) is True
+    )  # and the window still closes, absent new heartbeats
+
+
+@pytest.mark.unit
+def test_a_heartbeat_newer_than_the_spawn_still_sets_the_baseline(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """The baseline is the newest of the two, not the spawn alone: a worker beating away
+    long after its spawn must not be measured from the spawn and reaped mid-work."""
+    store = _store(tmp_path)
+    _seed_lease(store)
+    store.record_spawn("lease_1", pid=1, process_start_time="s1", session_id="sess", spawned_at=_NOW)
+    beat_at = _NOW + timedelta(minutes=50)
+    store.record_heartbeat(lease_id="lease_1", beat_at=beat_at)
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None
+
+    assert is_heartbeat_stale(store, lease, _NOW + HEARTBEAT_STALENESS_THRESHOLD + timedelta(minutes=1)) is False
+    assert is_heartbeat_stale(store, lease, beat_at + HEARTBEAT_STALENESS_THRESHOLD + timedelta(seconds=1)) is True
+
+
+@pytest.mark.unit
+def test_a_lease_with_neither_a_beat_nor_a_spawn_falls_back_to_its_mint(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """REAP's residue — minted at FILL, spawn-return never recorded. The pre-#150
+    ``created_at`` floor is unchanged for it."""
+    store = _store(tmp_path)
+    _seed_lease(store)
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None
+
+    assert is_heartbeat_stale(store, lease, _NOW + HEARTBEAT_STALENESS_THRESHOLD) is False
+    assert is_heartbeat_stale(store, lease, _NOW + HEARTBEAT_STALENESS_THRESHOLD + timedelta(seconds=1)) is True
+
+
 # --------------------------------------------------------------------------- #
 # LocalLeaseService.list_active() — component tier, real sqlite store
 # --------------------------------------------------------------------------- #
@@ -245,6 +302,27 @@ def test_list_active_joins_binding_and_heartbeat(tmp_path) -> None:  # type: ign
     # comes back UTC-aware, so the domain read model's value already equals what was
     # written — no coercion needed at this call site.
     assert activity.last_heartbeat_at == beat_at
+
+
+@pytest.mark.component
+def test_list_active_renders_a_just_resumed_lease_running_not_stale(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """The panel reuses REAP's baseline (issue #150), so a lease resumed after a long
+    park does not render ``stale`` while REAP is (correctly) leaving it alone. Its
+    ``last_heartbeat_at`` column stays honest — the old beat, not the spawn — because it
+    reports what the *worker* last did, not when staleness is measured from."""
+    store = _store(tmp_path)
+    _seed_lease(store)
+    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_heartbeat(lease_id="lease_1", beat_at=_NOW)
+    resumed_at = _NOW + timedelta(hours=3)
+    store.record_spawn("lease_1", pid=101, process_start_time="start-101", session_id="sess-a", spawned_at=resumed_at)
+    probe = FakeProbe(alive={(101, "start-101")})
+    service = LocalLeaseService(store, FixedClock(resumed_at + timedelta(seconds=30)), probe)
+
+    activities = service.list_active()
+
+    assert [a.state for a in activities] == ["running"]
+    assert activities[0].last_heartbeat_at == _NOW
 
 
 @pytest.mark.component

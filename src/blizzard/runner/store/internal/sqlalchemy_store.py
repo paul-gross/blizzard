@@ -244,6 +244,12 @@ class SqlAlchemyRunnerStore:
             value = conn.execute(stmt).scalar_one_or_none()
         return value
 
+    def latest_spawn(self, lease_id: str) -> datetime | None:
+        stmt = select(func.max(lease_spawns.c.spawned_at)).where(lease_spawns.c.lease_id == lease_id)
+        with self._connect() as conn:
+            value = conn.execute(stmt).scalar_one_or_none()
+        return value
+
     def pending_submission_lease_ids(self) -> set[str]:
         stmt = select(outbound_buffer.c.lease_id).where(
             and_(

@@ -672,7 +672,7 @@ def mark_crash_resume_intents(store: IWriteRunnerStore, *, process: IProcessProb
     * it recorded **no session-end** — the ``SessionEnd`` hook never fired, so the worker did
       not declare done. A dead pid *with* a session-end is a clean exit ADVANCE judges (the
       acceptance split this issue turns on);
-    * its heartbeat is **not stale** *as measured at crash time* — it was actively working when
+    * it is **not stale** *as measured at crash time* — it was actively working when
       killed. A worker already stalled at crash time is left to today's reap/verdict-less-fail
       path and retried per the node's ``retries`` (unchanged) — resuming a wedged session would
       only wedge it again.
@@ -684,6 +684,16 @@ def mark_crash_resume_intents(store: IWriteRunnerStore, *, process: IProcessProb
     in-flight lease as stalled and skip it — silently degrading exactly the reboot/OOM cases
     this issue exists for into the fresh-retry path it exists to prevent. ``now`` remains the
     fallback for a store that never ticked, which by construction holds no in-flight lease.
+
+    Issue #150 widened that staleness baseline to include the lease's newest **spawn**
+    (:func:`~blizzard.runner.domain.leases.last_activity`), and this classifier inherits the
+    reclassification **deliberately**: a worker respawned shortly before the daemon died, whose
+    heartbeats all belong to an earlier generation, was read as "stalled at crash time" and
+    abandoned to a fresh retry. It was in fact working — it had just not made its first tool
+    call of the new generation yet, the same blind spot the reap bug turns on. It now marks for
+    resume, which is what its live-at-crash-time process warranted all along. The skip still
+    fires for what it was written for: a worker whose newest spawn *and* newest beat both
+    predate ``crashed_at`` by more than the threshold really had wedged.
 
     Parked (dormant on a question, resumed by its answer) and pending-submission (outcome
     already elicited, awaiting flush) leases are skipped for the same reasons the graceful
