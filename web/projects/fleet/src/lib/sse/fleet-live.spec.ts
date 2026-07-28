@@ -97,20 +97,24 @@ describe('FleetLiveUpdates', () => {
     expect(keys).toContainEqual(['hub', 'chunk', 'ch_live']);
   });
 
-  it('re-reads the chunk and the ask list on an answer-delivered frame (issue #165)', () => {
-    // The frame exists precisely because a delivery moves no derived status: the hub's
-    // accompanying chunk-changed says nothing new, so without this row the dock's
-    // "delivered · agent resumed" line would sit stale until an unrelated frame arrived.
+  it('re-reads a chunk on a chunk-changed frame whose status did not move (issue #165)', () => {
+    // The client half of the delivery trail's live refresh. `answer.delivered` moves no
+    // derived status, so its `chunk-changed` frame repeats the status the board already
+    // shows — and this is exactly why the trail needs no event type of its own: dispatch
+    // keys off the frame *arriving*, never off the status value differing from the last
+    // one, so the chunk read is staled and the dock re-reads the delivered question.
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
     TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
 
     const source = FakeEventSource.instances[0];
     source.open();
-    source.emitNamed('answer-delivered', JSON.stringify({ chunk_id: 'ch_live', question_id: 'qn_1' }), '1');
+    source.emitNamed('chunk-changed', JSON.stringify({ chunk_id: 'ch_live', status: 'running' }), '1');
+    invalidate.mockClear();
+    // The same status a second time — what a delivery on a running chunk actually sends.
+    source.emitNamed('chunk-changed', JSON.stringify({ chunk_id: 'ch_live', status: 'running' }), '2');
 
     const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
     expect(keys).toContainEqual(['hub', 'chunk', 'ch_live']);
-    expect(keys).toContainEqual(['hub', 'questions']);
   });
 
   it('re-reads the registry on a runner-changed event and the queue on queue-changed', () => {

@@ -80,6 +80,45 @@ def _deserialize_intended_migration(value: str | None) -> IntendedMigration | No
     return IntendedMigration(mode=MigrationMode(data["mode"]), graph_id=data["graph_id"], node_name=data["node_name"])
 
 
+def _question_select():  # type: ignore[no-untyped-def]
+    """A question row with its derived answer and delivery state, in one query.
+
+    The three question reads (``get_question``, ``list_open_questions``,
+    ``load_questions``) share this so they cannot disagree about a row: each derived
+    field comes from the same joins for all of them. Both joins are **outer** — an
+    unanswered or undelivered question still yields its row, with NULLs for the rest.
+
+    Deliveries are pre-aggregated to the **earliest** instant per question rather than
+    joined row-for-row: ``answer_deliveries`` is append-only with no per-question
+    uniqueness, so a re-delivery would otherwise multiply the question's row. The first
+    delivery is when the agent actually woke; a later one is a re-delivery, not a
+    correction of that instant.
+
+    One query rather than the 2N+1 a per-question fetch costs — the chunk detail is the
+    board's hottest read, re-fetched on every ``chunk-changed`` frame.
+    """
+    earliest_delivery = (
+        select(
+            s.answer_deliveries.c.question_id.label("question_id"),
+            func.min(s.answer_deliveries.c.delivered_at).label("delivered_at"),
+        )
+        .group_by(s.answer_deliveries.c.question_id)
+        .subquery()
+    )
+    return (
+        select(
+            s.questions,
+            s.question_answers.c.answer,
+            s.question_answers.c.answered_by,
+            s.question_answers.c.answered_at,
+            earliest_delivery.c.delivered_at,
+        )
+        .select_from(s.questions)
+        .outerjoin(s.question_answers, s.question_answers.c.question_id == s.questions.c.question_id)
+        .outerjoin(earliest_delivery, earliest_delivery.c.question_id == s.questions.c.question_id)
+    )
+
+
 class ChunkStore:
     """Read-write chunk-facts adapter over the hub store engine."""
 
@@ -405,50 +444,24 @@ class ChunkStore:
 
     def get_question(self, question_id: str) -> QuestionRow | None:
         with self._engine.connect() as conn:
-            q = conn.execute(select(s.questions).where(s.questions.c.question_id == question_id)).one_or_none()
-            if q is None:
-                return None
-            answer = conn.execute(
-                select(s.question_answers).where(s.question_answers.c.question_id == question_id)
-            ).one_or_none()
-            return self._question_row(q, answer, self._delivered_at(conn, question_id))
+            row = conn.execute(_question_select().where(s.questions.c.question_id == question_id)).one_or_none()
+            return self._question_row(row) if row is not None else None
 
     def list_open_questions(self) -> list[QuestionRow]:
         with self._engine.connect() as conn:
             rows = conn.execute(
-                select(s.questions)
+                _question_select()
                 .where(s.questions.c.question_id.not_in(select(s.question_answers.c.question_id)))
                 .order_by(s.questions.c.asked_at)
             ).all()
-            # Open by construction, so neither an answer nor a delivery can exist: a
-            # delivery is the runner acting on an answer that is not there.
-            return [self._question_row(q, None, None) for q in rows]
+            return [self._question_row(row) for row in rows]
 
     def load_questions(self, chunk_id: str) -> list[QuestionRow]:
         with self._engine.connect() as conn:
             rows = conn.execute(
-                select(s.questions).where(s.questions.c.chunk_id == chunk_id).order_by(s.questions.c.asked_at)
+                _question_select().where(s.questions.c.chunk_id == chunk_id).order_by(s.questions.c.asked_at)
             ).all()
-            out: list[QuestionRow] = []
-            for q in rows:
-                answer = conn.execute(
-                    select(s.question_answers).where(s.question_answers.c.question_id == q.question_id)
-                ).one_or_none()
-                out.append(self._question_row(q, answer, self._delivered_at(conn, q.question_id)))
-            return out
-
-    @staticmethod
-    def _delivered_at(conn, question_id: str) -> datetime | None:  # type: ignore[no-untyped-def]
-        """When the resume-with-answer ran, or ``None`` while it has not (issue #165).
-
-        ``answer_deliveries`` carries no uniqueness constraint on ``question_id`` — it is
-        an append-only fact table keyed by a surrogate id — so this reads the **earliest**
-        row rather than assuming one: the first delivery is when the agent actually woke,
-        and any later row is a re-delivery, not a correction of that instant.
-        """
-        return conn.execute(
-            select(func.min(s.answer_deliveries.c.delivered_at)).where(s.answer_deliveries.c.question_id == question_id)
-        ).scalar()
+            return [self._question_row(row) for row in rows]
 
     def get_decision(self, decision_id: str) -> DecisionRow | None:
         with self._engine.connect() as conn:
@@ -1500,7 +1513,9 @@ class ChunkStore:
         return max(created_max or 0, released_max or 0, token_max or 0) + 1
 
     @staticmethod
-    def _question_row(q, answer, delivered_at) -> QuestionRow:  # type: ignore[no-untyped-def]
+    def _question_row(q) -> QuestionRow:  # type: ignore[no-untyped-def]
+        """One :func:`_question_select` row as its domain shape — every derived state read
+        off the joined columns, so the three question reads cannot disagree."""
         return QuestionRow(
             question_id=q.question_id,
             chunk_id=q.chunk_id,
@@ -1511,12 +1526,14 @@ class ChunkStore:
             question=q.question,
             options=json.loads(q.options) if q.options else [],
             asked_at=q.asked_at,
-            answered=answer is not None,
-            answer=answer.answer if answer is not None else None,
-            answered_by=answer.answered_by if answer is not None else None,
-            answered_at=answer.answered_at if answer is not None else None,
-            delivered=delivered_at is not None,
-            delivered_at=delivered_at,
+            # The outer joins leave these NULL when the row is absent; `answered_by` is the
+            # answer row's own non-nullable column, so its presence *is* the answer row's.
+            answered=q.answered_by is not None,
+            answer=q.answer,
+            answered_by=q.answered_by,
+            answered_at=q.answered_at,
+            delivered=q.delivered_at is not None,
+            delivered_at=q.delivered_at,
         )
 
     def _chunk(self, conn, row) -> Chunk:  # type: ignore[no-untyped-def]

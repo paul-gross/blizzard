@@ -20,7 +20,6 @@ export const HUB_EVENT_TYPES = [
   'chunk-changed',
   'question-asked',
   'question-answered',
-  'answer-delivered',
   'decision-opened',
   'decision-resolved',
   'queue-changed',
@@ -105,13 +104,10 @@ function chunkChangedKeys(data: HubEventPayload): readonly (readonly unknown[])[
   ];
 }
 
-/** A question-asked/-answered/answer-delivered frame invalidates the fleet-wide ask
- * list (the right rail surfaces an ask on a chunk nobody has selected, so it cannot
- * ride on the chunk's own detail read), the fleet list, and that chunk's detail when
- * named — the first two flip the derived status to/from `waiting_on_human`.
- * `answer-delivered` flips no status at all (issue #165): it is here precisely because
- * nothing else would stale the chunk read, so the dock's *delivered, agent resumed*
- * line would otherwise sit unwritten until an unrelated frame forced a refetch. */
+/** A question-asked/-answered frame invalidates the fleet-wide ask list (the right
+ * rail surfaces an ask on a chunk nobody has selected, so it cannot ride on the
+ * chunk's own detail read), the fleet list, and that chunk's detail when named —
+ * both flip the derived status to/from `waiting_on_human`. */
 function chunkQuestionKeys(data: HubEventPayload): readonly (readonly unknown[])[] {
   return [hubQuestionsKey, hubChunksKey, ...(data.chunk_id ? [hubChunkKey(data.chunk_id)] : [])];
 }
@@ -134,7 +130,6 @@ const EVENT_INVALIDATION_REGISTRY: Record<HubEventType, (data: HubEventPayload) 
   'chunk-changed': chunkChangedKeys,
   'question-asked': chunkQuestionKeys,
   'question-answered': chunkQuestionKeys,
-  'answer-delivered': chunkQuestionKeys,
   'decision-opened': chunkDecisionKeys,
   'decision-resolved': chunkDecisionKeys,
   'queue-changed': () => [hubQueueKey],

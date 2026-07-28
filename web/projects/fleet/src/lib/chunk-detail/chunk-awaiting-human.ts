@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 
-import type { ChunkDetail, DecisionView, EscalationView, QuestionView } from '../api/hub';
+import type { ChunkDetail, ChunkStatus, DecisionView, EscalationView, QuestionView } from '../api/hub';
 import { KitButton } from '../kit/kit-button';
 
 /** Emitted when the operator answers a chunk's open question from the dock. */
@@ -19,6 +19,11 @@ export interface ResolveDecisionEvent {
 
 /** How many recently answered questions the dock keeps a trail for (issue #165). */
 const ANSWERED_TRAIL_LIMIT = 3;
+
+/** The statuses a chunk never leaves. An answer still undelivered on one of these will
+ * never be delivered — nothing is left to resume — so the trail says that rather than
+ * showing an in-flight state forever. */
+const TERMINAL_STATUSES: ReadonlySet<string> = new Set<ChunkStatus>(['done', 'stopped']);
 
 /**
  * The chunk's awaiting-human gate (issue #79) — whatever the chunk waits on
@@ -113,8 +118,8 @@ const ANSWERED_TRAIL_LIMIT = 3;
               Answered by {{ q.answered_by || 'operator' }}
               <span class="trail-answer" data-testid="answered-answer">{{ q.answer }}</span>
             </p>
-            <p class="trail-line delivered" data-testid="answer-delivery">
-              {{ q.delivered ? 'Delivered · agent resumed' : 'Delivering to the agent…' }}
+            <p class="trail-line" [class.delivered]="q.delivered" data-testid="answer-delivery">
+              {{ deliveryLine(q) }}
             </p>
           </div>
         }
@@ -325,6 +330,23 @@ export class ChunkAwaitingHuman {
       .sort((a, b) => (b.answered_at ?? '').localeCompare(a.answered_at ?? ''))
       .slice(0, ANSWERED_TRAIL_LIMIT),
   );
+
+  /**
+   * The delivery leg of one answered question's trail.
+   *
+   * Three states, not two. An answer that has not been delivered is only *in flight*
+   * while the chunk can still resume — a question answered after its runner went down,
+   * or on a chunk since reaped or taken over, has no delivery row and never will. A
+   * two-state ternary reads the present-progressive "Delivering…" forever there, which
+   * is the one place this trail would assert something false rather than merely stale:
+   * it promises a return trip nothing will complete. On a terminal chunk it says so.
+   */
+  protected deliveryLine(question: QuestionView): string {
+    if (question.delivered) return 'Delivered · agent resumed';
+    return TERMINAL_STATUSES.has(this.detail().status)
+      ? 'Not delivered — the chunk ended first'
+      : 'Delivering to the agent…';
+  }
 
   /** The chunk's live gate decision while it still awaits the resolving transition. */
   protected readonly openDecision = computed<DecisionView | null>(() => {

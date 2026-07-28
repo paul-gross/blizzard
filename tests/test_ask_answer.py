@@ -8,8 +8,8 @@ Pins the hub half of the protocol against a fully-wired store:
 * the answer is **first-write-wins CAS** — a racing second answer loses with 409 and
   is told who already answered — and the winning row flips the chunk back to running;
 * the **return leg** (issue #165): the runner's ``answer.delivered`` fact derives
-  ``delivered``/``delivered_at`` onto every question view and publishes its own
-  ``answer-delivered`` frame, so the board can say the agent actually resumed;
+  ``delivered``/``delivered_at`` onto every question view, and the ``chunk-changed`` the
+  same ingest already publishes is what refreshes the board's trail live;
 * ``GET /questions`` lists only the open ones (the ``blizzard hub status`` surface).
 """
 
@@ -21,6 +21,7 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.hub.events.broker import CHUNK_CHANGED
 from tests.support import assert_all_timestamps_utc, build_hub, emitted_events, pointer_token
 
 pytestmark = pytest.mark.component
@@ -313,29 +314,94 @@ def test_a_replayed_delivery_keeps_the_first_delivered_at(tmp_path: Path) -> Non
     # A fresh seq, so the high-water mark does not dedupe it — a genuine second row.
     assert _deliver(hub, chunk_id, seq=10).status_code == 200
 
-    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["questions"][0]["delivered_at"] == first
+    questions = hub.client.get(f"/api/chunks/{chunk_id}").json()["questions"]
+    # Exactly one row back, not one per delivery: the read pre-aggregates deliveries to
+    # the earliest instant per question, so a second row cannot multiply the question.
+    assert [q["question_id"] for q in questions] == ["qn_1"]
+    assert questions[0]["delivered_at"] == first
 
 
-def test_landing_a_delivered_fact_publishes_an_answer_delivered_event(tmp_path: Path) -> None:
-    """AC 2 — the frame the board's live-update spine re-reads on.
+def test_landing_a_delivered_fact_publishes_chunk_changed_for_the_trail(tmp_path: Path) -> None:
+    """AC 2 — the delivered trail refreshes off the **existing** ``chunk-changed`` frame,
+    with no event type of its own.
 
-    A delivery moves no derived status (the chunk left ``waiting_on_human`` back at the
-    answer), so the ``chunk-changed`` the same ingest publishes says nothing new and a
-    board keying only off status would leave the trail stale. The dedicated frame is what
-    makes *delivered, agent resumed* arrive without a refresh.
+    A delivery moves no derived status, so the frame repeats the status the board already
+    shows. That is not a reason to mint a second event type: the ingest publishes
+    ``chunk-changed`` on the *fact*, not on a status change, and the board's live-update
+    spine keys off a frame arriving rather than off the status differing — so the chunk
+    read is staled and the dock re-reads the now-delivered question. This test pins the
+    hub half of that; ``fleet-live.spec.ts`` pins the client half against a repeated
+    status. Together they are why the dedicated frame the issue deferred is unnecessary.
     """
     hub = build_hub(tmp_path)
     chunk_id = _claim(hub)
     _ask(hub, chunk_id)
     hub.client.post("/api/questions/qn_1/answers", json={"answer": "rest"})
     before = int(emitted_events(hub)[-1]["id"])  # the last id published before the delivery
+    status_before = hub.client.get(f"/api/chunks/{chunk_id}").json()["status"]
 
     assert _deliver(hub, chunk_id).status_code == 200
 
     published = emitted_events(hub, since=before)
-    assert "answer-delivered" in [e["event"] for e in published]
-    frame = next(e for e in published if e["event"] == "answer-delivered")
-    assert json.loads(frame["data"]) == {"chunk_id": chunk_id, "question_id": "qn_1"}
+    frames = [(e["event"], json.loads(e["data"])) for e in published]
+    assert (CHUNK_CHANGED, {"chunk_id": chunk_id, "status": status_before}) in frames, frames
+    # The frame naming this chunk is what the board re-reads on — and it is the *only*
+    # frame the delivery emits, so a regression that adds a second one shows up here.
+    assert [event for event, _ in frames] == [CHUNK_CHANGED]
+    # It genuinely carries no news by itself: the status is unchanged across the delivery.
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == status_before
+
+
+def test_each_question_carries_its_own_delivery_instant(tmp_path: Path) -> None:
+    """Two questions on one chunk, delivered at different times, keep their own instants —
+    and an undelivered third stays undelivered.
+
+    The read pre-aggregates ``answer_deliveries`` per question. Aggregating without that
+    per-question grouping still yields one row and still passes a single-question test,
+    while silently smearing one arbitrary instant across every question on the chunk.
+    """
+    hub = build_hub(tmp_path)
+    chunk_id = _claim(hub)
+    for qid in ("qn_1", "qn_2", "qn_3"):
+        _ask(hub, chunk_id, question_id=qid)
+        hub.client.post(f"/api/questions/{qid}/answers", json={"answer": qid})
+
+    assert _deliver(hub, chunk_id, question_id="qn_1", seq=20).status_code == 200
+    hub.clock.advance(timedelta(minutes=5))
+    assert _deliver(hub, chunk_id, question_id="qn_2", seq=21).status_code == 200
+    # qn_3 is answered but never delivered.
+
+    by_id = {q["question_id"]: q for q in hub.client.get(f"/api/chunks/{chunk_id}").json()["questions"]}
+    assert [by_id[q]["delivered"] for q in ("qn_1", "qn_2", "qn_3")] == [True, True, False]
+    assert by_id["qn_3"]["delivered_at"] is None
+    # The two delivered instants are each their own, five minutes apart — not one shared.
+    assert by_id["qn_1"]["delivered_at"] != by_id["qn_2"]["delivered_at"]
+    assert by_id["qn_1"]["delivered_at"] < by_id["qn_2"]["delivered_at"]
+
+
+def test_every_question_read_derives_delivery_the_same_way(tmp_path: Path) -> None:
+    """A delivery is derived, never assumed away, on all three question reads.
+
+    ``record_answer_delivered`` has no answer-row precondition and the FK is on
+    ``question_id`` alone, so a malformed or replayed runner batch *can* land a delivery
+    for a question with no answer. Nothing about that is normal — but the open-question
+    list must not answer differently from the chunk detail about the same row, which is
+    what hardcoding "open, therefore never delivered" would do.
+    """
+    hub = build_hub(tmp_path)
+    chunk_id = _claim(hub)
+    _ask(hub, chunk_id)
+    # Deliberately no answer: the delivery lands against a still-open question.
+    assert _deliver(hub, chunk_id).status_code == 200
+
+    still_open = hub.client.get("/api/questions").json()
+    assert [q["question_id"] for q in still_open] == ["qn_1"], "no answer row, so it is still open"
+    on_detail = hub.client.get(f"/api/chunks/{chunk_id}").json()["questions"][0]
+    poll = hub.client.get("/api/fleet/questions/qn_1").json()
+
+    # All three agree — open, and delivered — rather than the list alone claiming otherwise.
+    assert [still_open[0]["answered"], on_detail["answered"], poll["answered"]] == [False, False, False]
+    assert [still_open[0]["delivered"], on_detail["delivered"], poll["delivered"]] == [True, True, True]
 
 
 def test_answer_unknown_question_is_404(tmp_path: Path) -> None:

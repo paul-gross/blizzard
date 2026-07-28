@@ -294,6 +294,45 @@ describe('ChunkAwaitingHuman', () => {
     expect(answers).toEqual(['q4', 'q3', 'q2']);
   });
 
+  it('says an undelivered answer will never arrive once the chunk is terminal', async () => {
+    // A question answered after its runner went down — or on a chunk since reaped or
+    // taken over — has no delivery row and never will. "Delivering to the agent…" there
+    // is the one place this trail asserts something false rather than merely stale: it
+    // promises a return trip nothing is left to complete.
+    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    fixture.componentRef.setInput('detail', { ...ANSWERED_UNDELIVERED_DETAIL, status: 'stopped' });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const delivery = el.querySelector('[data-testid="answer-delivery"]');
+    expect(delivery?.textContent).toContain('Not delivered');
+    expect(delivery?.textContent).not.toContain('Delivering');
+  });
+
+  it('still reads as in flight while the chunk can resume', async () => {
+    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    fixture.componentRef.setInput('detail', { ...ANSWERED_UNDELIVERED_DETAIL, status: 'running' });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="answer-delivery"]')?.textContent).toContain('Delivering');
+  });
+
+  it('reads as delivered on a terminal chunk whose answer did arrive', async () => {
+    // The terminal check must not override a real delivery — a chunk reaching `done`
+    // after its answer landed is the ordinary happy path, not a failed return trip.
+    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    fixture.componentRef.setInput('detail', {
+      ...ANSWERED_UNDELIVERED_DETAIL,
+      status: 'done',
+      questions: [answered({ question_id: 'qn_01', delivered: true, delivered_at: '2026-07-13T00:01:05Z' })],
+    });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="answer-delivery"]')?.textContent).toContain('agent resumed');
+  });
+
   it('orders the trail by when each was answered, not by when it was asked', async () => {
     // The hub sends questions ordered by `asked_at` (chunk_store.load_questions), which
     // is a different order from `answered_at` whenever asks and answers interleave. The
