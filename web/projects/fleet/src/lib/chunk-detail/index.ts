@@ -8,7 +8,7 @@ export { ChunkArtifactBody } from './chunk-artifact-body';
 export { ChunkArtifacts } from './chunk-artifacts';
 export { ChunkAwaitingHuman } from './chunk-awaiting-human';
 export { ChunkFacts } from './chunk-facts';
-export type { EditGraphEvent, EditModelEvent } from './chunk-facts';
+export type { EditGraphEvent } from './chunk-facts';
 export { ChunkIssuePane } from './chunk-issue-pane';
 export type { WorkItemsState } from './chunk-issue-pane';
 export { ChunkTimeline } from './chunk-timeline';

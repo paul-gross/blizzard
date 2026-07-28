@@ -39,11 +39,34 @@
 name: default-delivery
 entry: build
 
+# Named session pools (issue #144). Two lineages, both on the basic tier:
+#
+#   code  the mechanical build lineage, BOUNDED — it is the one that can accumulate
+#         indefinitely across a review-fail loop.
+#   gate  the cold-eyes review. No `rotate:` block: a gate is only ever reached through
+#         `fresh:gate`, so its head is minted every entry and rotation never applies.
+#
+# A re-EXPRESSION of the lineages these nodes already had, not a re-shaping: `--resume
+# <sid>` reuses the session id in place, so the members already share one session and
+# every prior spelling resolved to the same value. What the pool adds is the bound and
+# the tier pin. Declared here rather than inherited — a graph referencing a pool it does
+# not declare is rejected at mint, and `graph_sync` would go red on first boot.
+sessions:
+  code:
+    model: ["blizzard:basic"]
+    rotate:
+      # Harness INVOCATIONS, not node-steps: one node-step burns two or three.
+      max_invocations: 30
+      max_context_tokens: 120000
+      max_transcript_bytes: 20000000
+  gate:
+    model: ["blizzard:basic"]
+
 nodes:
   build:
     executor: runner
     prompt: ./prompts/build.md
-    session: resume:build  # re-entered build resumes its OWN prior build session, not the reviewer's
+    session: resume:code  # re-entered build resumes its OWN prior lineage, not the reviewer's
     produces:
       - {name: commit, kind: git_commit}  # the pushed branch(es); kind-matched, not name-matched
     judgement:
@@ -63,7 +86,7 @@ nodes:
   review:
     executor: runner
     prompt: ./prompts/review.md
-    session: fresh  # cold eyes for review; the default is resume
+    session: fresh:gate  # cold eyes for review; the default is resume
     produces:
       - review-findings  # asset artifact — carried back into build on a fail
     judgement:

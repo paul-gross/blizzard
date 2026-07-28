@@ -254,6 +254,7 @@ class ClaimService:
             raise ClaimConflict(held_by_runner_id=runner_id)
         envelope = build_node_envelope(
             chunk=chunk,
+            graph=graph,
             node=node,
             artifacts=self._chunks.load_artifacts(chunk.chunk_id),
             epoch=epoch,

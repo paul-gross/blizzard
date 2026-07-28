@@ -344,3 +344,60 @@ def test_read_turns_tail_caps_a_pathological_file_and_flags_truncated(
     total_read = sum(size for f in tracked_files for size in f.read_sizes)
     assert total_read <= cap + line_bytes  # never read anywhere close to file_size
     assert total_read < file_size
+
+
+# --------------------------------------------------------------------------- #
+# size_bytes (issue #144) — the signal behind `rotate.max_transcript_bytes`.
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.unit
+def test_size_bytes_reports_the_located_transcripts_size(tmp_path: Path) -> None:
+    project_dir = tmp_path / "-home-user-workspace"
+    project_dir.mkdir()
+    body = fx.user_env("hello") + "\n"
+    (project_dir / "sess-1.jsonl").write_text(body)
+    repo = JsonlTranscriptRepository(str(tmp_path), _error_factory())
+
+    assert repo.size_bytes("sess-1", spawn_cwd="/home/user/workspace") == len(body.encode())
+
+
+@pytest.mark.unit
+def test_size_bytes_of_a_missing_transcript_is_unknown_not_zero(tmp_path: Path) -> None:
+    """A freshly minted session has no file yet. `None` says *not measured*; a `0` would
+    read as "well under bound" and make the threshold inert exactly where it cannot see."""
+    repo = JsonlTranscriptRepository(str(tmp_path), _error_factory())
+
+    assert repo.size_bytes("no-such-session", spawn_cwd="/home/user/workspace") is None
+
+
+@pytest.mark.unit
+def test_size_bytes_uses_the_spawn_cwd_hint_to_break_a_multi_match(tmp_path: Path) -> None:
+    """Same location rule as the two reads: the hint is a tie-break, not the lookup key."""
+    wanted = tmp_path / mangle_cwd("/home/user/wanted")
+    other = tmp_path / mangle_cwd("/home/user/other")
+    wanted.mkdir()
+    other.mkdir()
+    (wanted / "sess-1.jsonl").write_text("x" * 50)
+    (other / "sess-1.jsonl").write_text("y" * 500)
+    repo = JsonlTranscriptRepository(str(tmp_path), _error_factory())
+
+    assert repo.size_bytes("sess-1", spawn_cwd="/home/user/wanted") == 50
+
+
+@pytest.mark.unit
+def test_size_bytes_measures_a_transcript_far_larger_than_the_read_cap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The file this measures is the one that grew too large to keep resuming into, so it
+    must be stat'd rather than read — `read_raw_lines`' tail cap does not apply."""
+    project_dir = tmp_path / "-home-user-workspace"
+    project_dir.mkdir()
+    from blizzard.runner.transcripts.internal import jsonl_transcript_repository as repo_module
+
+    cap = 200  # the real cap is 64 MiB; shrink it rather than writing that much
+    monkeypatch.setattr(repo_module, "MAX_FILE_BYTES", cap)
+    (project_dir / "sess-big.jsonl").write_text("x" * (cap + 1000))
+    repo = JsonlTranscriptRepository(str(tmp_path), _error_factory())
+
+    assert repo.size_bytes("sess-big", spawn_cwd="/home/user/workspace") == cap + 1000

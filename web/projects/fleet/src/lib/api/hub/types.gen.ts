@@ -242,6 +242,14 @@ export type ChunkDetail = {
      */
     current_node_name?: string | null;
     decision?: DecisionView | null;
+    /**
+     * Default Effort
+     */
+    default_effort?: string | null;
+    /**
+     * Default Model
+     */
+    default_model?: Array<string>;
     escalation?: EscalationView | null;
     /**
      * Graph Created At
@@ -272,10 +280,6 @@ export type ChunkDetail = {
      * Migrations
      */
     migrations?: Array<MigrationView>;
-    /**
-     * Model
-     */
-    model: string;
     /**
      * Open Prs
      */
@@ -383,20 +387,24 @@ export type ChunkIngestResponse = {
  */
 export type ChunkPatchRequest = {
     /**
+     * Default Effort
+     */
+    default_effort?: string | null;
+    /**
+     * Default Model
+     */
+    default_model?: Array<string> | null;
+    /**
      * Graph Id
      */
     graph_id?: string | null;
     intended_migration?: IntendedMigrationPatch | null;
-    /**
-     * Model
-     */
-    model?: string | null;
 };
 
 /**
  * ChunkPatchResponse
  *
- * The result of one ``PATCH /chunks/{id}`` (issue #124) — the chunk's three
+ * The result of one ``PATCH /chunks/{id}`` (issues #124, #144) — the chunk's
  * editable build properties after the edit, carried together since a PATCH can apply
  * more than one at once.
  */
@@ -406,14 +414,18 @@ export type ChunkPatchResponse = {
      */
     chunk_id: string;
     /**
+     * Default Effort
+     */
+    default_effort?: string | null;
+    /**
+     * Default Model
+     */
+    default_model?: Array<string>;
+    /**
      * Graph Id
      */
     graph_id: string;
     intended_migration?: IntendedMigrationView | null;
-    /**
-     * Model
-     */
-    model: string;
 };
 
 /**
@@ -495,6 +507,14 @@ export type ChunkSummary = {
      */
     current_node_name?: string | null;
     /**
+     * Default Effort
+     */
+    default_effort?: string | null;
+    /**
+     * Default Model
+     */
+    default_model?: Array<string>;
+    /**
      * Environment Count
      */
     environment_count?: number;
@@ -502,10 +522,6 @@ export type ChunkSummary = {
      * Graph Id
      */
     graph_id: string;
-    /**
-     * Model
-     */
-    model: string;
     /**
      * Runner Id
      */
@@ -1235,6 +1251,32 @@ export type GraphPolicyRequest = {
 };
 
 /**
+ * GraphSessionView
+ *
+ * One graph-level named session declaration (issue #144).
+ *
+ * The wire counterpart of :class:`~blizzard.hub.domain.graph.SessionDecl`. ``model`` is
+ * a prioritized preference list of opaque strings — a ``blizzard:`` tier alias or a
+ * harness-native name — resolved left-to-right by the runner's adapter at session mint;
+ * the hub interprets neither it nor ``effort``.
+ */
+export type GraphSessionView = {
+    /**
+     * Effort
+     */
+    effort?: string | null;
+    /**
+     * Model
+     */
+    model?: Array<string>;
+    /**
+     * Name
+     */
+    name: string;
+    rotate?: BlizzardWireGraphRotatePolicyView | null;
+};
+
+/**
  * GraphSummaryView
  *
  * One graph's summary row — a name-lineage entry as served by ``GET /graphs``.
@@ -1374,6 +1416,10 @@ export type GraphView = {
      * Retired
      */
     retired?: boolean;
+    /**
+     * Sessions
+     */
+    sessions?: Array<GraphSessionView>;
     /**
      * Warnings
      */
@@ -1696,6 +1742,19 @@ export type NodeConfig = {
      */
     retries_max?: number | null;
     session: SessionMode;
+    /**
+     * Session Effort
+     */
+    session_effort?: string | null;
+    /**
+     * Session Model
+     */
+    session_model?: Array<string>;
+    /**
+     * Session Name
+     */
+    session_name?: string | null;
+    session_rotate?: BlizzardWireEnvelopeRotatePolicyView | null;
     /**
      * Session Source
      */
@@ -2687,6 +2746,56 @@ export type WorkRefView = {
      * Web Url
      */
     web_url?: string | null;
+};
+
+/**
+ * RotatePolicyView
+ *
+ * The declared session's rotation bounds (issue #144).
+ *
+ * The wire counterpart of :class:`~blizzard.hub.domain.graph.RotatePolicy`, carried on
+ * :class:`NodeConfig` so the runner can decide at spawn time whether the pool's head is
+ * still resumable. ``max_invocations`` counts **harness invocations** (spawn, resume,
+ * judge, nudge), not node-steps — one node-step burns two or three of them.
+ */
+export type BlizzardWireEnvelopeRotatePolicyView = {
+    /**
+     * Max Context Tokens
+     */
+    max_context_tokens?: number | null;
+    /**
+     * Max Invocations
+     */
+    max_invocations?: number | null;
+    /**
+     * Max Transcript Bytes
+     */
+    max_transcript_bytes?: number | null;
+};
+
+/**
+ * RotatePolicyView
+ *
+ * One declared session's rotation bounds (issue #144).
+ *
+ * The wire counterpart of :class:`~blizzard.hub.domain.graph.RotatePolicy`. Every
+ * threshold is independently optional; ``max_invocations`` counts **harness
+ * invocations** (spawn, resume, judge, nudge), not node-steps — one node-step burns two
+ * or three of them.
+ */
+export type BlizzardWireGraphRotatePolicyView = {
+    /**
+     * Max Context Tokens
+     */
+    max_context_tokens?: number | null;
+    /**
+     * Max Invocations
+     */
+    max_invocations?: number | null;
+    /**
+     * Max Transcript Bytes
+     */
+    max_transcript_bytes?: number | null;
 };
 
 export type AuthorizeApiAuthAuthorizeGetData = {

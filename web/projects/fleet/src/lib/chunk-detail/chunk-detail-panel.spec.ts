@@ -9,7 +9,6 @@ import type { WorkItemsState } from './chunk-issue-pane';
 const ISSUE_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01issue00000000000000000000',
   graph_id: 'gr_1',
-  model: 'claude-opus-4-8',
   status: 'running',
   current_node_id: 'nd_build',
   latest_epoch: 1,
@@ -23,7 +22,6 @@ const ISSUE_DETAIL: ChunkDetail = {
 const ROUTED_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01routed000000000000000000',
   graph_id: 'gr_1',
-  model: 'claude-opus-4-8',
   status: 'running',
   current_node_id: 'nd_build',
   latest_epoch: 1,
@@ -36,7 +34,6 @@ const ROUTED_DETAIL: ChunkDetail = {
 const WAITING_QUESTION_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01ask00000000000000000000000',
   graph_id: 'gr_1',
-  model: 'claude-opus-4-8',
   status: 'waiting_on_human',
   current_node_id: 'nd_build',
   latest_epoch: 1,

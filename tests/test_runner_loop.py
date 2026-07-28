@@ -22,7 +22,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.artifacts import ArtifactKind
 from blizzard.hub.domain.enrollment import hash_token
 from blizzard.hub.domain.graph import SessionMode
-from blizzard.hub.domain.work import DEFAULT_MODEL, ChunkStatus
+from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerHandle
@@ -117,7 +117,6 @@ def _chunk_with_cost(  # type: ignore[no-untyped-def]
         status=status,
         current_node_id="nd_build",
         latest_epoch=epoch,
-        model=DEFAULT_MODEL,
         route=RouteView(runner_id=route_runner_id, workspace_id="ws1", environment_ids=["e1"]),
         cost=ChunkUsageTotalView(
             input_tokens=0,
@@ -1052,7 +1051,6 @@ def test_a_resume_with_message_between_node_entries_does_not_disturb_the_fingerp
         status=ChunkStatus.RUNNING,
         current_node_id="nd_build",
         latest_epoch=1,
-        model=DEFAULT_MODEL,
         route=RouteView(runner_id="r1", workspace_id="ws1", environment_ids=["e1"]),
     )
     resume_harness = FakeHarness(handle=_HANDLE, verdict="pass")
@@ -1402,7 +1400,6 @@ def test_poll_hub_node_releases_on_done(tmp_path):  # type: ignore[no-untyped-de
         status=ChunkStatus.DONE,
         current_node_id="deliver",
         latest_epoch=1,
-        model=DEFAULT_MODEL,
     )
     provider = FakeProvider({"e1": "/ws/e1"})
     ctx = make_context(
@@ -1426,7 +1423,6 @@ def test_poll_hub_node_waits_while_delivering(tmp_path):  # type: ignore[no-unty
         status=ChunkStatus.DELIVERING,
         current_node_id="deliver",
         latest_epoch=1,
-        model=DEFAULT_MODEL,
     )
     provider = FakeProvider({"e1": "/ws/e1"})
     ctx = make_context(
@@ -1478,7 +1474,6 @@ def test_advance_held_chunk_spawns_into_post_merge_node(tmp_path):  # type: igno
         current_node_id="nd_verify",
         current_node_name="verify",
         latest_epoch=2,  # the coordinator's hub_epoch — ahead of the runner's minted epoch 1
-        model=DEFAULT_MODEL,
     )
     hub.envelopes["ch_1"] = make_envelope("ch_1", "verify", node_id="nd_verify", choices=_CHOICES)
     provider = FakeProvider({"e1": "/ws/e1"})
@@ -1534,7 +1529,6 @@ def test_advance_held_chunk_does_not_respawn_a_buffered_escalation(tmp_path):  #
         current_node_id="nd_build",
         current_node_name="build",
         latest_epoch=2,
-        model=DEFAULT_MODEL,
     )
     hub.envelopes["ch_1"] = make_envelope("ch_1", "build", node_id="nd_build", choices=_CHOICES)
     provider = FakeProvider({"e1": "/ws/e1"})
@@ -2013,7 +2007,6 @@ def test_full_happy_path_across_ticks(tmp_path):  # type: ignore[no-untyped-def]
         status=ChunkStatus.DONE,
         current_node_id="deliver",
         latest_epoch=1,
-        model=DEFAULT_MODEL,
     )
     hub.queue = []
 

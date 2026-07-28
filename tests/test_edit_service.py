@@ -1,9 +1,9 @@
 """EditService (unit tier) — a chunk's graph/model/intended-migration edit, facts only
 (issue #27, admit set widened by #120, per-field redesign by #124).
 
-A fake stands in for the store — only ``load_facts``/``set_graph``/``set_model``/
+A fake stands in for the store — only ``load_facts``/``set_graph``/``set_defaults``/
 ``set_intended_migration`` are meaningfully implemented; every other seam is
-unreachable from :meth:`EditService.set_graph`/``set_model``/``edit`` and raises
+unreachable from :meth:`EditService.set_graph`/``set_defaults``/``edit`` and raises
 loudly if a regression starts calling it (``bzh:domain-core`` — no store, no tokens).
 Copies :mod:`tests.test_pause_service`'s fake-repo pattern exactly, including its
 ``__getattr__`` guard and the documented ``cast`` at the wide-Protocol call site
@@ -49,7 +49,7 @@ from tests.support import make_graph
 pytestmark = pytest.mark.unit
 
 _T0 = datetime(2026, 1, 1, tzinfo=UTC)
-_CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0, model="claude-opus-4-8")
+_CHUNK = Chunk(chunk_id="chk_1", graph_id="gr_1", work_refs=[], minted_at=_T0)
 _TARGET_GRAPH = make_graph("gr_2", "alt", entry_node_id="nd_1", created_at=_T0)
 
 
@@ -77,7 +77,7 @@ _TARGET_GRAPH_WITH_BUILD = make_graph(
 
 @dataclass
 class _FakeChunkRepo:
-    """Only ``load_facts``/``set_graph``/``set_model``/``set_intended_migration`` are
+    """Only ``load_facts``/``set_graph``/``set_defaults``/``set_intended_migration`` are
     live; anything else is a bug.
 
     Not typed against :class:`IWriteChunkRepository` directly — pyright cannot verify
@@ -86,7 +86,7 @@ class _FakeChunkRepo:
 
     facts: ChunkFacts | None
     graphs_set: list[tuple[str, str]] = field(default_factory=list)
-    models_set: list[tuple[str, str]] = field(default_factory=list)
+    defaults_set: list[tuple[str, list[str], str | None]] = field(default_factory=list)
     intended_migrations_set: list[tuple[str, IntendedMigration | None]] = field(default_factory=list)
 
     def load_facts(self, chunk_id: str) -> ChunkFacts | None:
@@ -95,8 +95,8 @@ class _FakeChunkRepo:
     def set_graph(self, chunk_id: str, *, graph_id: str) -> None:
         self.graphs_set.append((chunk_id, graph_id))
 
-    def set_model(self, chunk_id: str, *, model: str) -> None:
-        self.models_set.append((chunk_id, model))
+    def set_defaults(self, chunk_id: str, *, default_model: list[str], default_effort: str | None) -> None:
+        self.defaults_set.append((chunk_id, default_model, default_effort))
 
     def set_intended_migration(self, chunk_id: str, *, intended: IntendedMigration | None) -> None:
         self.intended_migrations_set.append((chunk_id, intended))
@@ -184,7 +184,7 @@ def _done_facts() -> ChunkFacts:
 
 
 # --------------------------------------------------------------------------- #
-# set_graph / set_model — unchanged behavior, now thin wrappers over edit().
+# set_graph / set_defaults — unchanged behavior, now thin wrappers over edit().
 # --------------------------------------------------------------------------- #
 
 
@@ -207,13 +207,13 @@ def test_set_graph_on_a_chunk_with_no_facts_at_all_is_not_ready_and_writes() -> 
     assert repo.graphs_set == [("chk_1", "gr_2")]
 
 
-def test_set_model_writes_on_a_not_ready_chunk() -> None:
+def test_set_defaults_writes_on_a_not_ready_chunk() -> None:
     repo = _FakeChunkRepo(facts=_not_ready_facts())
     service = _service(repo)
 
-    service.set_model(_CHUNK, model="claude-sonnet-4-5")
+    service.set_defaults(_CHUNK, default_model=["blizzard:basic"], default_effort="medium")
 
-    assert repo.models_set == [("chk_1", "claude-sonnet-4-5")]
+    assert repo.defaults_set == [("chk_1", ["blizzard:basic"], "medium")]
 
 
 def test_set_graph_writes_on_a_ready_unclaimed_chunk() -> None:
@@ -226,14 +226,14 @@ def test_set_graph_writes_on_a_ready_unclaimed_chunk() -> None:
     assert repo.graphs_set == [("chk_1", "gr_2")]
 
 
-def test_set_model_writes_on_a_ready_unclaimed_chunk() -> None:
+def test_set_defaults_writes_on_a_ready_unclaimed_chunk() -> None:
     """Issue #120 — a promoted-but-unclaimed chunk is still editable."""
     repo = _FakeChunkRepo(facts=_ready_facts())
     service = _service(repo)
 
-    service.set_model(_CHUNK, model="claude-sonnet-4-5")
+    service.set_defaults(_CHUNK, default_model=["blizzard:basic"], default_effort="medium")
 
-    assert repo.models_set == [("chk_1", "claude-sonnet-4-5")]
+    assert repo.defaults_set == [("chk_1", ["blizzard:basic"], "medium")]
 
 
 @pytest.mark.parametrize(
@@ -256,14 +256,14 @@ def test_set_graph_refuses_every_status_once_claimed(facts_factory: object) -> N
     [_running_facts, _waiting_on_human_facts, _needs_human_facts, _stopped_facts, _done_facts],
     ids=["running", "waiting_on_human", "needs_human", "stopped", "done"],
 )
-def test_set_model_refuses_every_status_once_claimed(facts_factory: object) -> None:
+def test_set_defaults_refuses_every_status_once_claimed(facts_factory: object) -> None:
     repo = _FakeChunkRepo(facts=facts_factory())  # type: ignore[operator]
     service = _service(repo)
 
     with pytest.raises(ChunkNotEditable):
-        service.set_model(_CHUNK, model="claude-sonnet-4-5")
+        service.set_defaults(_CHUNK, default_model=["blizzard:basic"], default_effort=None)
 
-    assert repo.models_set == []
+    assert repo.defaults_set == []
 
 
 def test_refusal_carries_the_offending_field_and_status_on_the_exception() -> None:
@@ -271,14 +271,14 @@ def test_refusal_carries_the_offending_field_and_status_on_the_exception() -> No
     service = _service(repo)
 
     with pytest.raises(ChunkNotEditable) as excinfo:
-        service.set_model(_CHUNK, model="claude-sonnet-4-5")
+        service.set_defaults(_CHUNK, default_model=["blizzard:basic"], default_effort=None)
 
     assert excinfo.value.status is ChunkStatus.RUNNING
     assert excinfo.value.chunk_id == "chk_1"
-    assert excinfo.value.field == "model"
+    assert excinfo.value.field == "default_model"
     assert "running" in str(excinfo.value)
     assert "chk_1" in str(excinfo.value)
-    assert "model" in str(excinfo.value)
+    assert "default_model" in str(excinfo.value)
 
 
 def test_set_graph_holds_the_injected_lock_across_its_check_and_write() -> None:
@@ -383,10 +383,13 @@ def test_edit_with_no_intended_migration_field_at_all_leaves_it_untouched() -> N
     repo = _FakeChunkRepo(facts=_ready_facts())
     service = _service(repo)
 
-    service.edit(_CHUNK, ChunkEdit(model="claude-sonnet-4-5"))
+    service.edit(_CHUNK, ChunkEdit(default_model=["blizzard:basic"]))
 
     assert repo.intended_migrations_set == []
-    assert repo.models_set == [("chk_1", "claude-sonnet-4-5")]
+    # `default_effort` was not supplied, so the write carries the chunk's own current
+    # value for it — "not supplied" stays "leave unchanged" even though the pair shares
+    # one repository write.
+    assert repo.defaults_set == [("chk_1", ["blizzard:basic"], None)]
     # graph_id was never supplied — confirms UNSET, not just "no migration field".
     assert ChunkEdit().graph_id is UNSET
 
@@ -487,30 +490,30 @@ def test_edit_applies_every_supplied_field_in_one_edit() -> None:
 
     service.edit(
         _CHUNK,
-        ChunkEdit(graph_id="gr_2", model="claude-sonnet-4-5"),
+        ChunkEdit(graph_id="gr_2", default_model=["blizzard:basic"], default_effort="high"),
         graph_target=_TARGET_GRAPH,
     )
 
     assert repo.graphs_set == [("chk_1", "gr_2")]
-    assert repo.models_set == [("chk_1", "claude-sonnet-4-5")]
+    assert repo.defaults_set == [("chk_1", ["blizzard:basic"], "high")]
 
 
 def test_edit_refuses_a_mixed_body_on_one_field_and_writes_nothing() -> None:
-    """``model`` is editable only pre-claim; a running chunk's ``intended_migration``
-    is editable, but the whole body is refused (and nothing written) because
-    ``model`` isn't — named on the exception."""
+    """``default_model`` is editable only pre-claim; a running chunk's
+    ``intended_migration`` is editable, but the whole body is refused (and nothing
+    written) because ``default_model`` isn't — named on the exception."""
     repo = _FakeChunkRepo(facts=_running_facts())
     service = _service(repo)
 
     with pytest.raises(ChunkNotEditable) as excinfo:
         service.edit(
             _CHUNK,
-            ChunkEdit(model="claude-sonnet-4-5", intended_migration=_MIGRATION_TO_GR2),
+            ChunkEdit(default_model=["blizzard:basic"], intended_migration=_MIGRATION_TO_GR2),
             migration_target=_TARGET_GRAPH,
         )
 
-    assert excinfo.value.field == "model"
-    assert repo.models_set == []
+    assert excinfo.value.field == "default_model"
+    assert repo.defaults_set == []
     assert repo.intended_migrations_set == []
 
 
@@ -521,5 +524,5 @@ def test_edit_with_an_empty_chunk_edit_writes_nothing() -> None:
     service.edit(_CHUNK, ChunkEdit())
 
     assert repo.graphs_set == []
-    assert repo.models_set == []
+    assert repo.defaults_set == []
     assert repo.intended_migrations_set == []

@@ -7,7 +7,6 @@ import { ChunkArtifacts } from './chunk-artifacts';
 const REVIEW_FAIL_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01review0000000000000000000',
   graph_id: 'gr_1',
-  model: 'claude-opus-4-8',
   status: 'running',
   current_node_id: 'nd_build',
   latest_epoch: 2,
@@ -40,7 +39,6 @@ const REVIEW_FAIL_DETAIL: ChunkDetail = {
 const NAMED_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01named000000000000000000000',
   graph_id: 'gr_1',
-  model: 'claude-opus-4-8',
   status: 'running',
   current_node_id: 'nd_review',
   current_node_name: 'review',

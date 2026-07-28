@@ -17,7 +17,7 @@ from sqlalchemy import MetaData
 from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.graph import SessionMode
-from blizzard.hub.domain.work import DEFAULT_MODEL, ChunkStatus
+from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.environments.provider import (
     AcquiredEnvironment,
     EnvironmentPreparationError,
@@ -39,7 +39,7 @@ from blizzard.runner.transcripts.repository import Transcript
 from blizzard.wire.chunk import ChunkDetail, HubAdvanceResponse, RouteView
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
-from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeConfig, NodeEnvelope
+from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeConfig, NodeEnvelope, RotatePolicyView
 from blizzard.wire.facts import RunnerFact, RunnerFactAck, RunnerFactBatch
 from blizzard.wire.graph import ProducesEntry
 from blizzard.wire.question import QuestionView
@@ -165,7 +165,6 @@ class FakeHub:
             status=ChunkStatus.DELIVERING,
             current_node_id="deliver",
             latest_epoch=1,
-            model=DEFAULT_MODEL,
             route=RouteView(runner_id=self.default_runner_id, workspace_id="ws1", environment_ids=[]),
         )
 
@@ -305,6 +304,20 @@ class FakeHarness:
         self.resumed: list[tuple[str, str, str]] = []  # (workdir, session_id, message)
         self.resumed_identity: list[tuple[WorkerPreamble | None, str]] = []  # (preamble, chunk_id) per resume
         self.resume_pid = 4321
+        # The (model, effort) each invocation was handed (issue #144) — one entry per
+        # call, so a test can assert the application contract per call site rather than
+        # only per node-entry path.
+        self.spawn_model_effort: list[tuple[str | None, str | None]] = []
+        self.judge_model_effort: list[tuple[str | None, str | None]] = []
+        self.resume_efforts: list[str | None] = []
+        self.usage_models: list[str | None] = []
+        # The (model, effort) each `resume_command` composition was handed (issue #144).
+        self.resume_command_config: list[tuple[str | None, str | None]] = []
+        # Scripted `resolve_model`/`resolve_effort` replies (issue #144). The default
+        # echoes the first preference / the value verbatim, so a test that does not care
+        # about resolution sees what it passed in.
+        self.resolved_model = "fake-model"
+        self.resolved_effort: str | None = None
 
     def spawn(
         self,
@@ -312,9 +325,13 @@ class FakeHarness:
         preamble: WorkerPreamble,
         session_hint: str | None,
         resume_from: str | None = None,
+        *,
+        model: str | None = None,
+        effort: str | None = None,
     ) -> WorkerHandle:
         self.spawns.append((envelope, preamble))
         self.resume_froms.append(resume_from)
+        self.spawn_model_effort.append((model, effort))
         # Mirrors the real in-place adapter contract (issue #115, plan Q1): a resume
         # continues under the SAME id it was given, never the scripted handle's; a
         # fresh spawn (`resume_from is None`) keeps today's scripted-handle behavior.
@@ -333,9 +350,12 @@ class FakeHarness:
         *,
         preamble: WorkerPreamble | None = None,
         chunk_id: str = "",
+        effort: str | None = None,
+        model: str | None = None,
     ) -> str:
         self.judged.append((workdir, session_id, judgement_prompt))
         self.judge_preambles.append(preamble)
+        self.judge_model_effort.append((model, effort))
         return "<judged output>"
 
     def resume_with_message(
@@ -347,15 +367,27 @@ class FakeHarness:
         *,
         preamble: WorkerPreamble | None = None,
         chunk_id: str = "",
+        effort: str | None = None,
     ) -> int:
         self.resumed.append((workdir, session_id, message))
+        self.resume_efforts.append(effort)
         # Captured separately so existing 3-tuple unpackers of `.resumed` keep working while
         # resume-identity assertions can read the preamble/chunk_id the caller supplied.
         self.resumed_identity.append((preamble, chunk_id))
         return self.resume_pid
 
-    def resume_command(self, workdir: str, session_id: str) -> str:
-        return f"cd {workdir} && claude --resume {session_id}"
+    def resume_command(
+        self, workdir: str, session_id: str, *, model: str | None = None, effort: str | None = None
+    ) -> str:
+        self.resume_command_config.append((model, effort))
+        flags = "".join(f" --{name} {value}" for name, value in (("model", model), ("effort", effort)) if value)
+        return f"cd {workdir} && claude --resume {session_id}{flags}"
+
+    def resolve_model(self, preferences: Sequence[str]) -> str:
+        return self.resolved_model
+
+    def resolve_effort(self, value: str | None) -> str | None:
+        return self.resolved_effort if self.resolved_effort is not None else value
 
     def parse_verdict(self, output: str) -> str | None:
         return self.verdict
@@ -363,12 +395,14 @@ class FakeHarness:
     def parse_assessment(self, output: str) -> str:
         return self.assessment
 
-    def parse_usage(self, output: str, kind: UsageKind) -> UsageSample | None:
+    def parse_usage(self, output: str, kind: UsageKind, *, model: str | None = None) -> UsageSample | None:
+        self.usage_models.append(model)
         if self.usage_by_kind is not None and kind in self.usage_by_kind:
             return self.usage_by_kind[kind]
         return self.usage
 
-    def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind) -> UsageSample:
+    def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind, *, model: str | None = None) -> UsageSample:
+        self.usage_models.append(model)
         return self.transcript_usage or UsageSample(
             kind=kind,
             model="fake-model",
@@ -382,17 +416,30 @@ class FakeHarness:
 
 class FakeTranscripts:
     """A scriptable :class:`IReadTranscriptRepository`: canned raw lines by session id
-    (issue #58's envelope-less usage fallback). ``read_turns`` is unused by the loop —
-    stubbed only to satisfy the Protocol."""
+    (issue #58's envelope-less usage fallback) and canned sizes (issue #144's
+    ``rotate.max_transcript_bytes``). ``read_turns`` is unused by the loop — stubbed only
+    to satisfy the Protocol.
 
-    def __init__(self, lines_by_session: dict[str, list[str]] | None = None) -> None:
+    ``sizes_by_session`` is deliberately separate from ``lines_by_session``: a rotation
+    test needs to script an *unreadable* size (a session absent from the map, reading
+    ``None``) independently of whether that session has lines."""
+
+    def __init__(
+        self,
+        lines_by_session: dict[str, list[str]] | None = None,
+        sizes_by_session: dict[str, int] | None = None,
+    ) -> None:
         self._lines = lines_by_session or {}
+        self._sizes = sizes_by_session or {}
 
     def read_turns(self, session_id: str, *, spawn_cwd: str | None) -> Transcript:
         return Transcript(session_id=session_id, available=False, reason="not_found", turns=[], truncated=False)
 
     def read_raw_lines(self, session_id: str, *, spawn_cwd: str | None) -> list[str]:
         return list(self._lines.get(session_id, []))
+
+    def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
+        return self._sizes.get(session_id)
 
 
 class FakeProbe:
@@ -503,6 +550,10 @@ def make_envelope(
     epoch: int = 0,
     session: SessionMode | None = None,
     session_source: str | None = None,
+    session_name: str | None = None,
+    session_model: list[str] | None = None,
+    session_effort: str | None = None,
+    session_rotate: RotatePolicyView | None = None,
     checks: list[str] | None = None,
     checks_cwd: str | None = None,
     checks_timeout: int | None = None,
@@ -518,6 +569,9 @@ def make_envelope(
 
     ``session``/``session_source`` (issue #115) default to ``SessionMode.FRESH``/``None``
     — today's unchanged behavior — unless a resume-mode test overrides them.
+    ``session_name``/``session_model``/``session_effort``/``session_rotate`` (issue #144)
+    are the hub-resolved effective declaration; all absent is a node belonging to no pool
+    and expressing no preference, which is every pre-#144 envelope.
 
     ``produces`` entries are a bare name (``kind=asset``, the pre-#143 shape every
     existing caller passes) or an explicit :class:`~blizzard.wire.graph.ProducesEntry`
@@ -532,6 +586,10 @@ def make_envelope(
         executor=Executor.RUNNER,
         session=session if session is not None else SessionMode.FRESH,
         session_source=session_source,
+        session_name=session_name,
+        session_model=session_model or [],
+        session_effort=session_effort,
+        session_rotate=session_rotate,
         judged_by=JudgedBy.WORKER,
         retries_max=2,
         checks=checks or [],

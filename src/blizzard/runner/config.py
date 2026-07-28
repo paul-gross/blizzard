@@ -211,6 +211,23 @@ class RunnerConfig:
     #: field hashable/immutable like `workspace_envs`/`gates` above). Resolution keys
     #: on the JWT's `username` claim only, never `email` (mutable, may be null).
     auth_users: tuple[tuple[str, str], ...] = ()
+    #: Model tier-alias mappings (issue #144, `[models.aliases]`) — a tuple of
+    #: `(alias, native_name)` pairs (not a `dict`, so the frozen dataclass keeps every
+    #: field hashable/immutable like `auth_users` above). Maps the namespaced
+    #: `blizzard:` tier aliases a graph's `sessions:` declaration or a chunk default
+    #: names — `blizzard:frontier`/`advanced`/`basic` are the standard three — onto the
+    #: model names *this* runner's harness understands. This is what keeps a graph
+    #: harness-agnostic: a codex runner maps the same tiers to its own models, and a
+    #: hub that never sees this table treats every entry as an opaque preference string.
+    #: An entry here overrides the adapter's own built-in tier defaults; an alias
+    #: mapped by neither is skipped at resolution, never a spawn failure.
+    model_aliases: tuple[tuple[str, str], ...] = ()
+    #: Effort alias mappings (issue #144, `[effort.aliases]`) — the same shape, mapping
+    #: an authored effort value onto the `low|medium|high|max` ordinal each adapter maps
+    #: to its own native tiers. The well-known four need no entry; this exists so a
+    #: deployment can name its own vocabulary (or reach a native tier outside the
+    #: ordinal, e.g. Claude Code's `xhigh`).
+    effort_aliases: tuple[tuple[str, str], ...] = ()
     #: The reverse-proxy trust set (issue #130) — proxy addresses or CIDRs whose
     #: `X-Forwarded-Proto` is honored when minting the runner's own SSO session cookie
     #: (`runner/auth/federation.py`, the `Secure` flag). Empty (the default) ignores the
@@ -425,6 +442,16 @@ class RunnerConfig:
             + f'hub_role_default = "{self.auth_hub_role_default}"\n'
             + "\n[auth.users]\n"
             + "".join(f'{username} = "{role}"\n' for username, role in self.auth_users)
+            + "\n# Model and effort tier aliases (issue #144) — how THIS runner's harness resolves the\n"
+            + "# harness-agnostic names a graph's `sessions:` declaration (or a chunk default) uses.\n"
+            + "# The Claude Code adapter ships built-in defaults for the three standard tiers\n"
+            + "# (blizzard:frontier/advanced/basic), so a zero-config runner needs no entry here;\n"
+            + "# an entry overrides the built-in. An unmapped alias is skipped at resolution, never\n"
+            + "# a spawn failure. Effort maps onto the low|medium|high|max ordinal.\n"
+            + "[models.aliases]\n"
+            + "".join(f'"{alias}" = "{native}"\n' for alias, native in self.model_aliases)
+            + "\n[effort.aliases]\n"
+            + "".join(f'"{alias}" = "{native}"\n' for alias, native in self.effort_aliases)
         )
 
     @classmethod
@@ -471,6 +498,8 @@ class RunnerConfig:
             auth_superuser=_parse_auth_superuser(raw.get("auth", {})),
             auth_hub_role_default=_parse_auth_hub_role_default(raw.get("auth", {})),
             auth_users=_parse_auth_users(raw.get("auth", {})),
+            model_aliases=_parse_aliases(raw.get("models", {})),
+            effort_aliases=_parse_aliases(raw.get("effort", {})),
             trusted_proxies=_parse_trusted_proxies(raw.get("trusted_proxies", ())),
         )
 
@@ -543,6 +572,19 @@ def _parse_auth_hub_role_default(auth: object) -> str:
     if not isinstance(auth, dict) or not auth.get("hub_role_default"):
         return "mirror"
     return str(auth["hub_role_default"])
+
+
+def _parse_aliases(table: object) -> tuple[tuple[str, str], ...]:
+    """``[models.aliases]`` / ``[effort.aliases]`` (issue #144) — an alias-keyed table
+    projected into an immutable pair tuple, mirroring :func:`_parse_auth_users` (a frozen
+    dataclass field must stay hashable). Absent, or present but empty, means no override:
+    the adapter's own built-in tier defaults stand."""
+    if not isinstance(table, dict):
+        return ()
+    aliases = table.get("aliases")
+    if not isinstance(aliases, dict):
+        return ()
+    return tuple((str(alias), str(native)) for alias, native in aliases.items())
 
 
 def _parse_auth_users(auth: object) -> tuple[tuple[str, str], ...]:

@@ -249,6 +249,10 @@ export type EscalationView = {
      */
     closed_at: string;
     /**
+     * Effort
+     */
+    effort?: string | null;
+    /**
      * Epoch
      */
     epoch: number;
@@ -257,6 +261,10 @@ export type EscalationView = {
      */
     lease_id: string;
     /**
+     * Model
+     */
+    model?: string | null;
+    /**
      * Node Id
      */
     node_id: string;
@@ -264,6 +272,10 @@ export type EscalationView = {
      * Resume Command
      */
     resume_command: string;
+    /**
+     * Session Name
+     */
+    session_name?: string | null;
 };
 
 /**

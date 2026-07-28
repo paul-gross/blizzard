@@ -61,3 +61,30 @@ def test_auth_defaults_round_trip_on_a_fresh_scaffold(tmp_path: Path) -> None:
     assert reloaded.auth_superuser is None
     assert reloaded.auth_hub_role_default == "mirror"
     assert reloaded.auth_users == ()
+
+
+# --- Model / effort tier aliases (issue #144) --------------------------------
+
+
+def test_model_and_effort_aliases_round_trip(tmp_path: Path) -> None:
+    """`runner init` has to scaffold these and `load` has to read them back, or an
+    operator's tier table is written and silently ignored."""
+    config = RunnerConfig(
+        root=tmp_path,
+        db_url="sqlite://",
+        model_aliases=(("blizzard:basic", "haiku"), ("blizzard:advanced", "claude-opus-5")),
+        effort_aliases=(("max", "xhigh"),),
+    )
+
+    reloaded = _round_trip(tmp_path, config)
+
+    assert reloaded.model_aliases == (("blizzard:basic", "haiku"), ("blizzard:advanced", "claude-opus-5"))
+    assert reloaded.effort_aliases == (("max", "xhigh"),)
+
+
+def test_a_scaffold_declaring_no_aliases_reads_back_empty(tmp_path: Path) -> None:
+    # The zero-config runner: the adapter's own built-in tier defaults stand.
+    reloaded = _round_trip(tmp_path, RunnerConfig(root=tmp_path, db_url="sqlite://"))
+
+    assert reloaded.model_aliases == ()
+    assert reloaded.effort_aliases == ()

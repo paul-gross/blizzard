@@ -168,10 +168,15 @@ def test_targeted_resume_naming_an_absent_node_is_an_error() -> None:
     doc["nodes"]["build"]["session"] = "resume:ghost"  # type: ignore[index]
     result = validate_graph(parse_graph_doc(doc))
     assert not result.ok
-    assert any("resume:ghost" in e and "names no node" in e for e in result.errors), result.errors
+    # Since #144 `resume:<name>` resolves declared-session-first, node-second, so the
+    # dangling-reference message names both tiers. The declared-session half of this
+    # rule lives in `test_graph_sessions.py`.
+    assert any("resume:ghost" in e and "names neither a declared session nor a node" in e for e in result.errors), (
+        result.errors
+    )
 
 
-@pytest.mark.parametrize("bad", ["resume:", "fresh:x", "bogus"])
+@pytest.mark.parametrize("bad", ["resume:", "fresh:", "bogus"])
 def test_malformed_session_forms_are_validation_errors(bad: str) -> None:
     doc = _min_build_deliver()
     doc["nodes"]["build"]["session"] = bad  # type: ignore[index]

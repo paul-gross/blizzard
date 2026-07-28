@@ -19,11 +19,13 @@ from dataclasses import dataclass, field
 
 from blizzard.hub.domain.graph import (
     RESERVED_TERMINAL,
+    SESSION_LEGAL_FORMS,
     Executor,
     GraphDoc,
     JudgedBy,
     NodeDoc,
     RetriesExhausted,
+    SessionDecl,
     SessionMode,
     classify_choice_target,
 )
@@ -48,14 +50,55 @@ def validate_graph(doc: GraphDoc) -> ValidationResult:
     warnings: list[str] = []
 
     node_names = {n.name for n in doc.nodes}
+    session_names = set(doc.sessions)
 
     _check_entry(doc, node_names, errors)
+    _check_sessions(doc, node_names, errors)
     for node in doc.nodes:
-        _check_node(node, node_names, errors)
+        _check_node(node, node_names, session_names, errors)
 
     _warn_reachability(doc, node_names, warnings)
 
     return ValidationResult(errors=errors, warnings=warnings)
+
+
+def _check_sessions(doc: GraphDoc, node_names: set[str], errors: list[str]) -> None:
+    """The graph-level ``sessions:`` map's own rules (issue #144).
+
+    A session name and a node name share one reference namespace — ``resume:<name>``
+    resolves declared-session-first, node-second — so a collision would make a node's
+    own lineage silently unreachable. Reject it rather than pick a winner.
+
+    ``effort`` is checked as a **non-empty string only**: the vocabulary is
+    ``low|medium|high|max`` plus whatever a runner's ``[effort.aliases]`` adds, and the
+    hub cannot see runner config. Recognizing the value — and logging an unrecognized
+    one — is the adapter's job (``bzh:one-owner``).
+    """
+    for name, decl in doc.sessions.items():
+        if name in node_names:
+            errors.append(
+                f"session `{name}`: a session name may not collide with a node name — "
+                f"`resume:{name}` would resolve to the session and never the node"
+            )
+        _check_session_decl(name, decl, errors)
+
+
+def _check_session_decl(name: str, decl: SessionDecl, errors: list[str]) -> None:
+    for entry in decl.model:
+        if not entry:
+            errors.append(f"session `{name}`: `model` entries must be non-empty strings")
+    if decl.effort is not None and not decl.effort.strip():
+        errors.append(f"session `{name}`: `effort` must be a non-empty string")
+    rotate = decl.rotate
+    if rotate is None:
+        return
+    for field_name, value in (
+        ("max_context_tokens", rotate.max_context_tokens),
+        ("max_transcript_bytes", rotate.max_transcript_bytes),
+        ("max_invocations", rotate.max_invocations),
+    ):
+        if value is not None and value <= 0:
+            errors.append(f"session `{name}`: `rotate.{field_name}` must be a positive number")
 
 
 def _check_entry(doc: GraphDoc, node_names: set[str], errors: list[str]) -> None:
@@ -63,7 +106,7 @@ def _check_entry(doc: GraphDoc, node_names: set[str], errors: list[str]) -> None
         errors.append(f"entry `{doc.entry}` does not name an existing node")
 
 
-def _check_node(node: NodeDoc, node_names: set[str], errors: list[str]) -> None:
+def _check_node(node: NodeDoc, node_names: set[str], session_names: set[str], errors: list[str]) -> None:
     judgement = node.judgement
 
     # `run:` is legal ONLY on a hub node — the generic hub command node (#65). Reject it
@@ -172,16 +215,28 @@ def _check_node(node: NodeDoc, node_names: set[str], errors: list[str]) -> None:
                     f"(and is not the reserved terminal `{RESERVED_TERMINAL}`)"
                 )
 
-    # A node's `session:` value (issue #115). `resume:<name>` names a source node whose
-    # most-recent session to resume — the targeted analogue of a choice `to` above: a
-    # malformed form is rejected, and a well-formed `resume:<name>` must name an existing
-    # node, exactly like the dangling-edge-target check.
+    # A node's `session:` value (issues #115, #144) — the targeted analogue of a choice
+    # `to` above: a malformed form is rejected, and a well-formed reference must resolve.
+    #
+    # `resume:<name>` resolves declared-session-first, node-second (#144 keeps #115's
+    # `resume:<node>` working by leaving node names as the second tier). `fresh:<name>`
+    # resolves against declared sessions *only* (D1): `fresh` always mints, so a node name
+    # there would name nothing — a session minted at node Y is not in node X's implicit
+    # lineage. It is a validation error, not a silently-inert reference.
     if node.session_malformed:
-        errors.append(f"node `{node.name}`: malformed session value — expected `fresh`, `resume`, or `resume:<node>`")
-    elif (
-        node.session is SessionMode.RESUME and node.session_source is not None and node.session_source not in node_names
-    ):
-        errors.append(f"node `{node.name}`: session `resume:{node.session_source}` names no node")
+        errors.append(f"node `{node.name}`: malformed session value — expected {SESSION_LEGAL_FORMS}")
+    elif node.session_source is None:
+        pass
+    elif node.session is SessionMode.FRESH:
+        if node.session_source not in session_names:
+            errors.append(
+                f"node `{node.name}`: session `fresh:{node.session_source}` names no declared session "
+                f"(`fresh:<name>` must name a `sessions:` entry, never a node)"
+            )
+    elif node.session_source not in session_names and node.session_source not in node_names:
+        errors.append(
+            f"node `{node.name}`: session `resume:{node.session_source}` names neither a declared session nor a node"
+        )
 
     # The retry escape hatch, when present, is the only legal exhaustion target.
     if node.retries_exhausted is not None and node.retries_exhausted != RetriesExhausted.ESCALATE.value:

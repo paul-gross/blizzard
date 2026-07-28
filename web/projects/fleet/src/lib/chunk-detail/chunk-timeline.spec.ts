@@ -7,7 +7,6 @@ import { ChunkTimeline } from './chunk-timeline';
 const REVIEW_FAIL_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01review0000000000000000000',
   graph_id: 'gr_1',
-  model: 'claude-opus-4-8',
   status: 'running',
   current_node_id: 'nd_build',
   latest_epoch: 2,
@@ -22,7 +21,6 @@ const REVIEW_FAIL_DETAIL: ChunkDetail = {
 const COST_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01cost00000000000000000000000',
   graph_id: 'gr_1',
-  model: 'claude-opus-4-8',
   status: 'running',
   current_node_id: 'nd_review',
   latest_epoch: 2,
@@ -78,7 +76,6 @@ const PARTIAL_COST_DETAIL: ChunkDetail = {
 const NAMED_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01named000000000000000000000',
   graph_id: 'gr_1',
-  model: 'claude-opus-4-8',
   status: 'running',
   current_node_id: 'nd_review',
   current_node_name: 'review',
@@ -104,7 +101,6 @@ const NAMED_DETAIL: ChunkDetail = {
 const TWO_GRAPH_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01twograph0000000000000000000',
   graph_id: 'gr_triage',
-  model: 'claude-opus-4-8',
   status: 'ready',
   current_node_id: 'nd_t_build',
   current_node_name: 'build',

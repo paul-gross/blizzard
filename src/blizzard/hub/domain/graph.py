@@ -92,22 +92,38 @@ class SessionMode(StrEnum):
 
 # The prefix for a node-entry targeted resume (issue #115): ``session: resume:<node>``
 # resumes node ``<node>``'s most-recent session instead of the chunk's most-recent
-# session overall (bare ``resume``).
+# session overall (bare ``resume``). Since #144 the ``<name>`` may also name a graph-level
+# **declared session** (a ``sessions:`` entry) — resolution is declared-session-first,
+# node-name-second, and belongs to the runner, not to this parser.
 SESSION_RESUME_TARGET_PREFIX = "resume:"
+
+# The prefix for a named-session fresh mint (issue #144): ``session: fresh:<name>`` always
+# mints a session and makes it the named pool's new head, which a later ``resume:<name>``
+# member continues. ``<name>`` must name a declared session — a node name would mean
+# nothing here, since ``fresh`` always mints and a session minted at node Y is not in node
+# X's implicit lineage (D1). The validator enforces that; this stays a pure parser.
+SESSION_FRESH_TARGET_PREFIX = "fresh:"
+
+# Every legal authored ``session:`` form, in the malformed-value error message's own words —
+# one owner for the vocabulary the validator quotes back at an author (``bzh:one-owner``).
+SESSION_LEGAL_FORMS = "`fresh`, `resume`, `resume:<node>`, `fresh:<session>`, or `resume:<session>`"
 
 
 def classify_session(raw: str) -> tuple[SessionMode, str | None, bool]:
     """Classify a node's authored ``session:`` value into ``(mode, source, malformed)``
-    (issue #115) — a pure syntax parser, mirroring :func:`classify_choice_target`.
+    (issues #115, #144) — a pure syntax parser, mirroring :func:`classify_choice_target`.
 
     - ``"resume"`` -> ``(RESUME, None, False)`` — resume the chunk's most-recent
       session (any node).
-    - ``"resume:<name>"`` -> ``(RESUME, "<name>", False)`` — resume node ``<name>``'s
-      most-recent session. ``<name>`` is carried verbatim; whether it names an
-      existing node is the validator's job — structural parse only, exactly the
+    - ``"resume:<name>"`` -> ``(RESUME, "<name>", False)`` — resume ``<name>``'s
+      most-recent session, where ``<name>`` is a declared session (#144) or, failing
+      that, a node (#115). ``<name>`` is carried verbatim; which of the two it names —
+      and whether it names either — is the validator's job, exactly the
       parse-never-validates split :func:`classify_choice_target` already keeps.
     - ``"fresh"`` -> ``(FRESH, None, False)``.
-    - anything else (``"resume:"`` with an empty name, ``"fresh:x"``, or an
+    - ``"fresh:<name>"`` -> ``(FRESH, "<name>", False)`` — mint a fresh head of the
+      declared session ``<name>`` (#144). Carried verbatim for the same reason.
+    - anything else (``"resume:"`` / ``"fresh:"`` with an empty name, or an
       unrecognized token) -> ``malformed=True``; ``mode``/``source`` are placeholders
       a caller must not rely on.
     """
@@ -119,6 +135,10 @@ def classify_session(raw: str) -> tuple[SessionMode, str | None, bool]:
         name = raw[len(SESSION_RESUME_TARGET_PREFIX) :]
         if name:
             return (SessionMode.RESUME, name, False)
+    if raw.startswith(SESSION_FRESH_TARGET_PREFIX):
+        name = raw[len(SESSION_FRESH_TARGET_PREFIX) :]
+        if name:
+            return (SessionMode.FRESH, name, False)
     return (SessionMode.RESUME, None, True)
 
 
@@ -252,12 +272,15 @@ class NodeDoc:
     # never reads either.
     poll_interval_seconds: int | None = None
     poll_timeout_seconds: int | None = None
-    # The targeted-resume source node name (issue #115) — the parsed ``<name>`` of a
-    # ``session: resume:<name>`` form, ``None`` for bare ``resume``/``fresh``. Set by
-    # :func:`classify_session`; whether it names an existing node is the validator's job.
+    # The session reference target (issues #115, #144) — the parsed ``<name>`` of a
+    # ``session: resume:<name>`` or ``session: fresh:<name>`` form, ``None`` for bare
+    # ``resume``/``fresh``. Set by :func:`classify_session`; whether it names a declared
+    # session or an existing node is the validator's job. Read with ``session`` beside it:
+    # the same ``<name>`` means "resume this pool's head" under ``RESUME`` and "mint this
+    # pool a new head" under ``FRESH``.
     session_source: str | None = None
-    # Whether the authored ``session:`` value was structurally malformed (issue #115) —
-    # e.g. ``resume:`` with an empty name, ``fresh:x``, or an unrecognized token. Kept
+    # Whether the authored ``session:`` value was structurally malformed (issues #115, #144) —
+    # e.g. ``resume:``/``fresh:`` with an empty name, or an unrecognized token. Kept
     # separate from ``session_source`` (which is ``None`` in this case too) so the
     # validator can distinguish "malformed syntax" from "well-formed but names no node"
     # without re-parsing raw YAML (parse never validates, but the validator still needs
@@ -276,12 +299,63 @@ class NodeDoc:
 
 
 @dataclass(frozen=True)
+class RotatePolicy:
+    """One declared session's rotation bounds (issue #144).
+
+    Every threshold is optional and independently declared; a policy with all three unset
+    is legal and bounds nothing. A head that breaches *any* declared threshold is not
+    resumed — the next member of its pool mints a fresh head instead.
+
+    ``max_invocations`` counts **harness invocations, not node-steps**: a single node-step
+    burns two or three (a spawn plus a judge, plus any nudge), so a bound set from a
+    node-step count runs roughly 3x tighter than its author intends.
+    """
+
+    max_context_tokens: int | None = None
+    max_transcript_bytes: int | None = None
+    max_invocations: int | None = None
+
+
+@dataclass(frozen=True)
+class SessionDecl:
+    """One graph-level named session declaration (issue #144).
+
+    The unit ``sessions:`` declares and a node references by name (``fresh:<name>`` /
+    ``resume:<name>``). It carries workflow *policy* — a capability tier, a reasoning
+    effort, rotation bounds — never application knowledge (``bzh:app-agnostic-graphs``).
+
+    ``model`` is a **prioritized preference list**, resolved left-to-right at session mint
+    by the runner's harness adapter: the first entry that resolves wins, unresolvable
+    entries are skipped, and an all-unresolvable list falls back to the runner's default.
+    Entries are opaque preference strings to the hub — a namespaced ``blizzard:`` tier
+    alias (``blizzard:frontier``/``advanced``/``basic``) or a harness-native model name.
+    The hub never interprets either; the alias table lives in each runner's own config, so
+    a graph stays harness-agnostic (``bzh:pluggable-seams``).
+
+    ``effort`` is model's twin, a single value rather than a list — every adapter can map
+    an ordinal *somewhere*, so there is no "unrecognized, try the next one" case. The hub
+    validates it as a non-empty string only: recognizing the value (and logging an
+    unrecognized one) needs the runner's config, which the hub cannot see.
+    """
+
+    name: str
+    model: list[str] = field(default_factory=list)
+    effort: str | None = None
+    rotate: RotatePolicy | None = None
+
+
+@dataclass(frozen=True)
 class GraphDoc:
     """A whole graph definition as authored — the validator's input."""
 
     name: str
     entry: str
     nodes: list[NodeDoc]
+    # The graph-level named-session declarations (issue #144), keyed by name — a top-level
+    # sibling of ``nodes:``, empty for every graph that declares none. ``default_factory``
+    # rather than a bare ``{}``: a mutable default raises on a frozen dataclass, and the
+    # default keeps every doc built without an opinion on sessions compiling unchanged.
+    sessions: dict[str, SessionDecl] = field(default_factory=dict)
 
     def node(self, name: str) -> NodeDoc | None:
         return next((n for n in self.nodes if n.name == name), None)
@@ -304,7 +378,50 @@ def parse_graph_doc(raw: dict[str, object]) -> GraphDoc:
         raise GraphParseError("`nodes` must be a map of node name -> node")
 
     nodes = [_parse_node(str(node_name), _as_dict(body, node_name)) for node_name, body in nodes_raw.items()]
-    return GraphDoc(name=name, entry=entry, nodes=nodes)
+    return GraphDoc(name=name, entry=entry, nodes=nodes, sessions=_parse_sessions(raw.get("sessions")))
+
+
+def _parse_sessions(raw: object) -> dict[str, SessionDecl]:
+    """Parse the optional top-level ``sessions:`` map (issue #144).
+
+    Absent (every pre-#144 graph) reads as ``{}``. Structural coercion only — a
+    session naming a node, or a ``resume:``/``fresh:`` reference naming nothing, is the
+    validator's verdict, not this parser's.
+    """
+    if raw is None:
+        return {}
+    body = _as_dict(raw, "`sessions`")
+    return {str(name): _parse_session(str(name), _as_dict(decl, f"session {name!r}")) for name, decl in body.items()}
+
+
+def _parse_session(name: str, body: dict[str, object]) -> SessionDecl:
+    raw_model = body.get("model")
+    # A single string is the natural one-entry spelling (`model: blizzard:basic`) and
+    # normalizes to the same one-entry list the sequence form parses to, so downstream
+    # readers see exactly one shape — the same both-authored-forms normalization
+    # ``_parse_produces_entry`` performs.
+    model = [str(raw_model)] if isinstance(raw_model, str) else [str(m) for m in _as_list(raw_model)]
+    raw_effort = body.get("effort")
+    raw_rotate = body.get("rotate")
+    rotate = _parse_rotate(_as_dict(raw_rotate, f"session {name!r} `rotate`")) if raw_rotate is not None else None
+    return SessionDecl(
+        name=name,
+        model=model,
+        effort=str(raw_effort) if raw_effort is not None else None,
+        rotate=rotate,
+    )
+
+
+def _parse_rotate(body: dict[str, object]) -> RotatePolicy:
+    def _int_or_none(key: str) -> int | None:
+        value = body.get(key)
+        return int(str(value)) if value is not None else None
+
+    return RotatePolicy(
+        max_context_tokens=_int_or_none("max_context_tokens"),
+        max_transcript_bytes=_int_or_none("max_transcript_bytes"),
+        max_invocations=_int_or_none("max_invocations"),
+    )
 
 
 def _parse_node(name: str, body: dict[str, object]) -> NodeDoc:
@@ -525,9 +642,9 @@ class Node:
     # The pending-poll cadence (#66), in seconds — see ``NodeDoc.poll_interval_seconds``.
     poll_interval_seconds: int | None = None
     poll_timeout_seconds: int | None = None
-    # The targeted-resume source node name (issue #115) — see ``NodeDoc.session_source``.
-    # ``None`` means "chunk most-recent" (bare ``resume``) or ``fresh``; a validated graph
-    # never carries a malformed session, so there is no ``Node``-level malformed flag.
+    # The session reference target (issues #115, #144) — see ``NodeDoc.session_source``.
+    # ``None`` means "chunk most-recent" (bare ``resume``) or bare ``fresh``; a validated
+    # graph never carries a malformed session, so there is no ``Node``-level malformed flag.
     session_source: str | None = None
     # Where the runner runs this node's ``checks:`` and the per-check timeout (issue #114) —
     # see ``NodeDoc.checks_cwd`` / ``NodeDoc.checks_timeout``.
@@ -556,6 +673,14 @@ class Graph:
     nodes: list[Node]
     edges: list[Edge]
     created_at: datetime
+    # The graph-level named-session declarations (issue #144), in authored order —
+    # empty for every graph that declares none. A list rather than the doc's map: a
+    # reified :class:`SessionDecl` already carries its own ``name``, and every reified
+    # collection on this type is a list. :meth:`session_by_name` is the lookup.
+    sessions: list[SessionDecl] = field(default_factory=list)
+
+    def session_by_name(self, name: str) -> SessionDecl | None:
+        return next((s for s in self.sessions if s.name == name), None)
 
     def node_by_name(self, name: str) -> Node | None:
         return next((n for n in self.nodes if n.name == name), None)

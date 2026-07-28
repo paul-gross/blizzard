@@ -7,10 +7,10 @@ domain services that hold the write repository; the list/detail reads
 derive status and current node from facts (``bzh:facts-not-status``), never a stored
 column. The work-item read is a vendor-native pass-through whose contents are never stored.
 ``PATCH /chunks/{id}`` (issue #104) repins a not-ready or ready-and-unclaimed chunk's
-workflow graph, model selection, or migration intent (issue #27, widened by #120) in one
-all-or-nothing edit — read is already carried on the list/detail views'
-``graph_id``/``model`` fields; write is refused (409) once the chunk has left the
-``{not_ready, ready}`` admit set.
+workflow graph, default model/effort, or migration intent (issue #27, widened by #120,
+retargeted by #144) in one all-or-nothing edit — read is already carried on the
+list/detail views' ``graph_id``/``default_model``/``default_effort`` fields; write is
+refused (409) once the chunk has left the ``{not_ready, ready}`` admit set.
 
 The transition verbs (``promote``/``detach``/``pause``/``resume``/``stop``/``requeues``,
 issue #104) return the transitioned chunk's :class:`~blizzard.wire.chunk.ChunkSummary`
@@ -433,7 +433,8 @@ def _summary_view(
         current_node_id=node_id,
         current_node_name=node_name,
         work_refs=_pointer_views(chunk, services.work_sources),
-        model=chunk.model,
+        default_model=list(chunk.default_model),
+        default_effort=chunk.default_effort,
         runner_id=route.runner_id if route is not None else None,
         environment_count=len(route.environment_ids) if route is not None else 0,
         cost=_usage_total_view(facts),
@@ -503,7 +504,8 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
         current_node_name=node_name,
         latest_epoch=latest_epoch(facts),
         work_refs=_pointer_views(chunk, services.work_sources),
-        model=chunk.model,
+        default_model=list(chunk.default_model),
+        default_effort=chunk.default_effort,
         intended_migration=_intended_migration_view(services, chunk),
         route=RouteView(
             runner_id=route.runner_id,
@@ -715,12 +717,16 @@ def promote_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_se
 def patch_chunk(
     chunk_id: str, request: ChunkPatchRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> ChunkPatchResponse:
-    """Apply any of ``graph_id``, ``model``, ``intended_migration`` in one all-or-nothing
-    edit (issue #124, in #104's shape) — the claimed-chunk counterpart to
-    ``POST .../graph``/``POST .../model``, which stay refused past ``ready``.
+    """Apply any of ``graph_id``, ``default_model``, ``default_effort``,
+    ``intended_migration`` in one all-or-nothing edit (issue #124, in #104's shape;
+    the two defaults replace #27's ``model`` field per issue #144).
 
-    ``graph_id``/``model`` behave exactly as their single-field POST siblings (404 on an
-    unknown chunk or graph, 422 on a blank model). ``intended_migration``, present only
+    ``graph_id`` 404s on an unknown chunk or graph. ``default_model`` is a prioritized
+    preference list — a blank entry is 422, and an empty list is a legitimate "express no
+    preference" clear; ``default_effort`` is 422 when blank and cleared by explicit
+    ``null``. Neither value's *vocabulary* is checked here: a ``blizzard:`` tier alias and
+    a harness-native name are both opaque preference strings to the hub, resolved by the
+    runner's adapter against its own config. ``intended_migration``, present only
     once the request body actually names it (``model_fields_set`` — see
     ``ChunkPatchRequest``), sets or overwrites the standing intent when it carries a
     value, or clears it on explicit ``null``; its ``to_graph`` resolves by id or name to
@@ -743,12 +749,29 @@ def patch_chunk(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {request.graph_id}")
         graph_id = graph_target.graph_id
 
-    model = UNSET
-    if request.model is not None:
-        model_value = request.model.strip()
-        if not model_value:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="model must not be blank")
-        model = model_value
+    default_model = UNSET
+    if request.default_model is not None:
+        entries = [entry.strip() for entry in request.default_model]
+        if any(not entry for entry in entries):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="default_model entries must not be blank"
+            )
+        default_model = entries
+
+    # `default_effort` is nullable-with-meaning, exactly like `intended_migration` below:
+    # explicit `null` clears the preference and an omitted field leaves it unchanged, and
+    # a plain `Optional` default cannot tell those apart on this model.
+    default_effort = UNSET
+    if "default_effort" in request.model_fields_set:
+        if request.default_effort is None:
+            default_effort = None
+        else:
+            effort_value = request.default_effort.strip()
+            if not effort_value:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="default_effort must not be blank"
+                )
+            default_effort = effort_value
 
     intended_migration = UNSET
     migration_target: Graph | None = None
@@ -771,7 +794,12 @@ def patch_chunk(
             mode = MigrationMode.FORCED if node_name is not None else MigrationMode.AUTO
             intended_migration = IntendedMigration(mode=mode, graph_id=migration_target.graph_id, node_name=node_name)
 
-    edit = ChunkEdit(graph_id=graph_id, model=model, intended_migration=intended_migration)
+    edit = ChunkEdit(
+        graph_id=graph_id,
+        default_model=default_model,
+        default_effort=default_effort,
+        intended_migration=intended_migration,
+    )
     try:
         services.edit.edit(chunk, edit, graph_target=graph_target, migration_target=migration_target)
     except ChunkNotEditable as exc:
@@ -790,7 +818,8 @@ def patch_chunk(
     return ChunkPatchResponse(
         chunk_id=chunk_id,
         graph_id=updated.graph_id,
-        model=updated.model,
+        default_model=list(updated.default_model),
+        default_effort=updated.default_effort,
         intended_migration=_intended_migration_view(services, updated),
     )
 

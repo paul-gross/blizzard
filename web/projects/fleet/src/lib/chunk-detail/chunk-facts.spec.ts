@@ -7,7 +7,6 @@ import { ChunkFacts } from './chunk-facts';
 const ROUTED_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01routed000000000000000000',
   graph_id: 'gr_1',
-  model: 'claude-opus-4-8',
   status: 'running',
   current_node_id: 'nd_build',
   latest_epoch: 1,
@@ -17,11 +16,10 @@ const ROUTED_DETAIL: ChunkDetail = {
   route: { runner_id: 'rn_01', workspace_id: 'ws_01', environment_ids: ['env_01'] },
 };
 
-// A not_ready chunk — the one window issue #27's graph/model edit is open.
+// A not_ready chunk — the one window issue #27's graph edit is open.
 const NOT_READY_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01ready000000000000000000000',
   graph_id: 'gr_default',
-  model: 'claude-opus-4-8',
   status: 'not_ready',
   current_node_id: null,
   latest_epoch: null,
@@ -61,16 +59,15 @@ describe('ChunkFacts', () => {
     expect(el.querySelector('[data-testid="fact-runner"]')?.textContent?.trim()).toBe('—');
   });
 
-  it('shows the chunk’s current graph as a compact ref and model as a plain fact for a running chunk', async () => {
+  it('shows the chunk’s current graph as a compact ref for a running chunk', async () => {
     const fixture = TestBed.createComponent(ChunkFacts);
-    fixture.componentRef.setInput('detail', { ...ROUTED_DETAIL, model: 'claude-sonnet-4-5' });
+    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
     const graphValue = el.querySelector('[data-testid="graph-value"]');
     expect(graphValue?.textContent?.trim()).toBe('G-1');
     expect(graphValue?.getAttribute('title')).toBe('gr_1');
-    expect(el.querySelector('[data-testid="model-value"]')?.textContent?.trim()).toBe('claude-sonnet-4-5');
   });
 
   it('renders the graph as compactRef#name-YYYYMMDD when the graph name and creation date are present (issue #102)', async () => {
@@ -136,7 +133,7 @@ describe('ChunkFacts', () => {
     expect(graphValue?.textContent).not.toContain('#');
   });
 
-  it('offers the graph and model edit inputs for a not_ready chunk', async () => {
+  it('offers the graph edit input for a not_ready chunk', async () => {
     const fixture = TestBed.createComponent(ChunkFacts);
     fixture.componentRef.setInput('detail', NOT_READY_DETAIL);
     await fixture.whenStable();
@@ -144,11 +141,9 @@ describe('ChunkFacts', () => {
 
     expect(el.querySelector('[data-testid="graph-input"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="graph-submit"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="model-input"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="model-submit"]')).not.toBeNull();
   });
 
-  it('offers the graph and model edit inputs for a ready, unclaimed chunk (issue #120)', async () => {
+  it('offers the graph edit input for a ready, unclaimed chunk (issue #120)', async () => {
     const fixture = TestBed.createComponent(ChunkFacts);
     fixture.componentRef.setInput('detail', { ...NOT_READY_DETAIL, status: 'ready' });
     await fixture.whenStable();
@@ -156,11 +151,22 @@ describe('ChunkFacts', () => {
 
     expect(el.querySelector('[data-testid="graph-input"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="graph-submit"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="model-input"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="model-submit"]')).not.toBeNull();
   });
 
-  it('withholds the graph and model edit inputs once the chunk is claimed', async () => {
+  it('renders no model row at all (issue #144)', async () => {
+    // `Chunk.model` is retired and its replacements have no web editing surface, so the
+    // row is gone rather than turned read-only — a read-only row for a field the board
+    // cannot write and the fleet no longer runs on would be worse than absent.
+    const fixture = TestBed.createComponent(ChunkFacts);
+    fixture.componentRef.setInput('detail', NOT_READY_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="fact-model"]')).toBeNull();
+    expect(el.querySelector('[data-testid="model-input"]')).toBeNull();
+  });
+
+  it('withholds the graph edit input once the chunk is claimed', async () => {
     for (const status of ['running', 'delivering', 'waiting_on_human', 'needs_human', 'paused', 'stopped', 'done'] as const) {
       const fixture = TestBed.createComponent(ChunkFacts);
       fixture.componentRef.setInput('detail', { ...NOT_READY_DETAIL, status });
@@ -168,7 +174,6 @@ describe('ChunkFacts', () => {
       const el = fixture.nativeElement as HTMLElement;
 
       expect(el.querySelector('[data-testid="graph-input"]'), status).toBeNull();
-      expect(el.querySelector('[data-testid="model-input"]'), status).toBeNull();
       expect(el.querySelector('[data-testid="graph-value"]'), status).not.toBeNull();
     }
   });
@@ -197,33 +202,6 @@ describe('ChunkFacts', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     el.querySelector<HTMLButtonElement>('[data-testid="graph-submit"]')?.click();
-    expect(emitted).toBe(false);
-  });
-
-  it('emits editModel with the typed model when Set is activated', async () => {
-    const fixture = TestBed.createComponent(ChunkFacts);
-    fixture.componentRef.setInput('detail', NOT_READY_DETAIL);
-    let emitted: { chunkId: string; model: string } | undefined;
-    fixture.componentInstance.editModel.subscribe((event) => (emitted = event));
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    const input = el.querySelector<HTMLInputElement>('[data-testid="model-input"]')!;
-    input.value = 'claude-sonnet-4-5';
-    el.querySelector<HTMLButtonElement>('[data-testid="model-submit"]')?.click();
-
-    expect(emitted).toEqual({ chunkId: NOT_READY_DETAIL.chunk_id, model: 'claude-sonnet-4-5' });
-  });
-
-  it('does not emit editModel for a blank model', async () => {
-    const fixture = TestBed.createComponent(ChunkFacts);
-    fixture.componentRef.setInput('detail', NOT_READY_DETAIL);
-    let emitted = false;
-    fixture.componentInstance.editModel.subscribe(() => (emitted = true));
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
-
-    el.querySelector<HTMLButtonElement>('[data-testid="model-submit"]')?.click();
     expect(emitted).toBe(false);
   });
 });

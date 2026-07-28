@@ -45,6 +45,9 @@ def list_escalations(request: Request) -> EscalationListResponse:
                 epoch=e.epoch,
                 closed_at=iso_utc(e.closed_at),
                 resume_command=e.resume_command,
+                session_name=e.session_name,
+                model=e.model,
+                effort=e.effort,
             )
             for e in service.escalations()
         ]

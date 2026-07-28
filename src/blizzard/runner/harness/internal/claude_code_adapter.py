@@ -65,6 +65,34 @@ identity-carrying variants add only the ``BLIZZARD_*`` vars on top of it.
 The ``workdir`` first positional of ``judge`` / ``resume_with_message`` /
 ``resume_command`` is the provider-returned path the runner resolves from the
 chunk→env binding and supplies for the op.
+
+**Model/effort application, and each harness's stickiness trap (issue #144).**
+``--model`` is passed at **session mint only**; every resume path omits it and leans on
+Claude Code restoring the session's own model, verified empirically against a differing
+settings default (CLI 2.1.220). That is what makes a cross-model resume — and its
+full-history prompt-cache rewrite, measured at 3,683 cache-creation tokens against 23 for
+the identical same-model resume — structurally impossible, and what preserves an
+operator's deliberate in-session model switch during a takeover.
+
+``--effort`` is passed on **every** invocation instead, because the D5 probe (same CLI)
+found effort is *not* sticky: a session spawned ``--effort low`` against a ``high``
+settings default ran ``high`` on a bare ``--resume``, while its model stayed put across
+the same resume. Mint-only would therefore silently drop a declared effort on every
+member of a resuming pool. Reasserting it is cheap and measured: 249 cache-creation
+tokens against 17 for the bare resume.
+
+Model stickiness is a **deployment requirement**, not just an observation — each target
+harness has a configuration that defeats it, and a deployment that trips one runs the
+mechanical lineage on the wrong model with every test tier still green:
+
+* **Claude Code** — a worker must not see the ``ANTHROPIC_MODEL`` family of env vars,
+  which override the session's restored model. Confirmed absent from
+  ``runner/harness/env_allowlist.py``'s base allowlist, and an operator must not add one
+  through ``[worker] env_passthrough``.
+* **opencode** — an adapter must not pin ``agent.<name>.model``; it outranks session
+  stickiness.
+* **codex** — an adapter must keep ``model`` out of ``config.toml`` (it overrides every
+  resume), and requires a state-DB-era codex to restore a thread's model at all.
 """
 
 from __future__ import annotations
@@ -100,11 +128,41 @@ _CHOICE_CLOSE = "</Choice>"
 _allowlisted_env = allowlisted_env
 
 
-# The model every fleet worker runs on. Pinned so a spawn never inherits the
-# operator's ambient ``claude`` default (which can resolve to a lightweight model
-# unfit for the build/review work). Opus is the fleet's standing choice; override
-# per-adapter via the ``model`` constructor argument.
+# The model a fleet worker runs on when nothing expressed a preference. Pinned so a
+# spawn never inherits the operator's ambient ``claude`` default (which can resolve to a
+# lightweight model unfit for the build/review work). Opus is the fleet's standing
+# choice; override per-adapter via the ``model`` constructor argument.
 DEFAULT_WORKER_MODEL = "claude-opus-5"
+
+# The namespaced tier-alias prefix (issue #144). An entry carrying it is a *role*, not a
+# model name, and is resolved through this adapter's tier table below (or the runner's
+# own ``[models.aliases]``, which overrides it). An entry without it is a harness-native
+# name, recognized directly.
+_TIER_PREFIX = "blizzard:"
+
+# This adapter's built-in tier mappings, so a zero-config runner resolves the three
+# standard tiers with no ``[models.aliases]`` at all. Overridden entry-by-entry by the
+# runner's own table. Deliberately **unordered roles, not a scale**: nothing substitutes
+# downward when a tier is unmapped — the author's preference list is the only fallback.
+_BUILTIN_TIERS = {
+    "blizzard:frontier": "fable",
+    "blizzard:advanced": "opus",
+    "blizzard:basic": "sonnet",
+}
+
+# The native model names this adapter recognizes without a tier alias. Short aliases the
+# ``claude`` CLI itself accepts, plus the ``claude-`` family prefix for a fully-qualified
+# id. The point of recognizing at all is to **skip** what belongs to another harness: an
+# author's ``["blizzard:basic", "gpt-5.3-codex"]`` must fall past the codex entry here
+# rather than hand a CLI a name it would reject and turn a preference into a spawn
+# failure.
+_NATIVE_SHORT_NAMES = frozenset({"fable", "opus", "sonnet", "haiku"})
+_NATIVE_PREFIX = "claude-"
+
+# The well-known effort ordinal every adapter maps to its own native tiers. Extended by
+# the runner's ``[effort.aliases]`` — which is also how a deployment reaches a native
+# tier outside the ordinal, e.g. Claude Code's own ``xhigh``.
+_EFFORT_ORDINAL = frozenset({"low", "medium", "high", "max"})
 
 
 def _result_envelope(output: str) -> dict[str, object] | None:
@@ -155,12 +213,21 @@ class ClaudeCodeAdapter:
         permission_mode: str | None = None,
         model: str = DEFAULT_WORKER_MODEL,
         env_passthrough: Sequence[str] = (),
+        model_aliases: Sequence[tuple[str, str]] = (),
+        effort_aliases: Sequence[tuple[str, str]] = (),
     ) -> None:
         self._binary = binary
         self._settings_path = settings_path
-        # The model passed to every ``claude`` spawn. Pinned so a worker never
-        # falls through to the operator's ambient default; defaults to Opus.
+        # The model a spawn falls back to when no preference resolves. Pinned so a worker
+        # never falls through to the operator's ambient default; defaults to Opus.
         self._model = model
+        # The runner's own tier tables (issue #144, ``[models.aliases]`` /
+        # ``[effort.aliases]``), overriding this adapter's built-ins entry by entry.
+        self._model_aliases = dict(model_aliases)
+        self._effort_aliases = dict(effort_aliases)
+        # Values already logged as unrecognized, so the notice fires once rather than on
+        # every spawn of a long-lived runner.
+        self._unrecognized_efforts: set[str] = set()
         # The headless permission mode passed to ``claude -p``. A non-interactive
         # worker has no one to approve tool use, so ``default`` mode blocks every edit and
         # non-trivial bash — the worker can inspect but never build. A workspace-isolated
@@ -173,12 +240,69 @@ class ClaudeCodeAdapter:
         # resume child alongside the fixed base allowlist.
         self._env_passthrough = tuple(env_passthrough)
 
+    def resolve_model(self, preferences: Sequence[str]) -> str:
+        """Left-to-right; first entry that resolves wins; unresolvable entries skipped."""
+        skipped: list[str] = []
+        for entry in preferences:
+            resolved = self._resolve_one_model(entry)
+            if resolved is not None:
+                if skipped:
+                    _log.info("skipped unresolvable model preferences", skipped=skipped, resolved=resolved)
+                return resolved
+            skipped.append(entry)
+        if skipped:
+            # Never a spawn failure: an all-unresolvable list means the author expressed
+            # preferences this harness has no mapping for, which is exactly the case a
+            # mixed-harness fleet produces. Fall back and say so.
+            _log.info(
+                "no model preference resolved; falling back to the adapter default",
+                skipped=skipped,
+                fallback=self._model,
+            )
+        return self._model
+
+    def _resolve_one_model(self, entry: str) -> str | None:
+        """One preference entry to a native name, or ``None`` if this adapter cannot."""
+        if entry.startswith(_TIER_PREFIX):
+            # Runner config first, adapter built-ins second — an operator's table
+            # overrides the shipped tier defaults rather than merging with them.
+            return self._model_aliases.get(entry) or _BUILTIN_TIERS.get(entry)
+        # A non-namespaced entry is a harness-native name. It may still be aliased (an
+        # operator naming their own shorthand), so the table is consulted first.
+        if entry in self._model_aliases:
+            return self._model_aliases[entry]
+        if entry in _NATIVE_SHORT_NAMES or entry.startswith(_NATIVE_PREFIX):
+            return entry
+        return None
+
+    def resolve_effort(self, value: str | None) -> str | None:
+        """The authored effort to a native tier, or ``None`` when none was expressed."""
+        if value is None:
+            return None
+        # Config first, so a deployment can both rename the ordinal and reach a native
+        # tier outside it (Claude Code's own ``xhigh``).
+        aliased = self._effort_aliases.get(value)
+        if aliased is not None:
+            return aliased
+        if value in _EFFORT_ORDINAL:
+            return value
+        # Claude Code *has* an effort knob, so an unrecognized value is an authoring
+        # mistake rather than a missing capability — logged once per value and dropped,
+        # never a spawn failure over a preference.
+        if value not in self._unrecognized_efforts:
+            self._unrecognized_efforts.add(value)
+            _log.info("unrecognized effort value; ignoring", effort=value, known=sorted(_EFFORT_ORDINAL))
+        return None
+
     def spawn(
         self,
         envelope: NodeEnvelope,
         preamble: WorkerPreamble,
         session_hint: str | None,
         resume_from: str | None = None,
+        *,
+        model: str | None = None,
+        effort: str | None = None,
     ) -> WorkerHandle:
         if not preamble.environments:
             raise HarnessSpawnError("spawn requires at least one acquired environment")
@@ -199,7 +323,24 @@ class ClaudeCodeAdapter:
         # above, so the fallback is always a real workdir here; `| None` on the return
         # type is for that second caller, whose fallback can legitimately be absent.
         workdir = resolve_spawn_cwd(preamble.workspace_root, preamble.environments[0].workdir)
-        cmd = [self._binary, "-p", "--output-format", "json", "--model", self._model]
+        cmd = [self._binary, "-p", "--output-format", "json"]
+        # `--model` at MINT ONLY (issue #144). Claude Code restores a session's model on
+        # `--resume` even against a differing settings default (verified empirically,
+        # CLI 2.1.220), and a cross-model resume forces a full-history cache rewrite —
+        # measured 3,683 cache-creation tokens against 23 for the identical same-model
+        # resume. So the resume path passes no model and leans on that stickiness, which
+        # also preserves an operator's deliberate in-session switch during a takeover.
+        if not resume_from:
+            cmd += ["--model", model or self._model]
+        # `--effort` on EVERY invocation, unlike `--model` — the D5 probe (CLI 2.1.220)
+        # found effort is **not** sticky: a session spawned `--effort low` against a
+        # `high` settings default ran `high` on a bare `--resume`, while its model stayed
+        # put across the same resume. Mint-only would therefore silently drop a declared
+        # effort on every member of a resuming pool. The cost of reasserting it is small
+        # and measured: 249 cache-creation tokens against 17 for the bare resume, nothing
+        # like a cross-model resume's full-history rewrite.
+        if effort:
+            cmd += ["--effort", effort]
         if resume_from:
             cmd += ["--resume", resume_from]
         elif session_id:
@@ -245,8 +386,15 @@ class ClaudeCodeAdapter:
         *,
         preamble: WorkerPreamble | None = None,
         chunk_id: str = "",
+        effort: str | None = None,
+        model: str | None = None,
     ) -> str:
         cmd = [self._binary, "-p", "--output-format", "json", "--resume", session_id]
+        # No `--model`: this is a resume, and the session's model is sticky (issue #144).
+        # `--effort` IS reasserted, because effort is not — see `spawn`'s note. `model` is
+        # taken only to attribute usage below, never to switch the session.
+        if effort:
+            cmd += ["--effort", effort]
         if self._permission_mode:
             cmd += ["--permission-mode", self._permission_mode]
         cmd.append(judgement_prompt)
@@ -275,8 +423,12 @@ class ClaudeCodeAdapter:
         *,
         preamble: WorkerPreamble | None = None,
         chunk_id: str = "",
+        effort: str | None = None,
     ) -> int:
         cmd = [self._binary, "-p", "--output-format", "json", "--resume", session_id]
+        # As on `judge`: no `--model` (sticky), `--effort` reasserted (not sticky).
+        if effort:
+            cmd += ["--effort", effort]
         # Re-attach the worker hook set, exactly as `spawn` does. `--resume` alone does
         # not carry the original spawn's `--settings`, so a resumed session would run with
         # no `PostToolUse` heartbeat and no `SessionEnd` hook: it would stop beating (blinding
@@ -306,8 +458,11 @@ class ClaudeCodeAdapter:
             proc = subprocess.Popen(cmd, cwd=workdir, env=env, stdout=stdout_file)
         return proc.pid
 
-    def resume_command(self, workdir: str, session_id: str) -> str:
-        return f"cd {workdir} && {self._binary} --resume {session_id}"
+    def resume_command(
+        self, workdir: str, session_id: str, *, model: str | None = None, effort: str | None = None
+    ) -> str:
+        flags = "".join(f" --{name} {value}" for name, value in (("model", model), ("effort", effort)) if value)
+        return f"cd {workdir} && {self._binary} --resume {session_id}{flags}"
 
     def parse_verdict(self, output: str) -> str | None:
         text = self._result_text(output)
@@ -328,7 +483,7 @@ class ClaudeCodeAdapter:
             return ""
         return text[close + len(_CHOICE_CLOSE) :].strip()
 
-    def parse_usage(self, output: str, kind: UsageKind) -> UsageSample | None:
+    def parse_usage(self, output: str, kind: UsageKind, *, model: str | None = None) -> UsageSample | None:
         envelope = _result_envelope(output)
         if envelope is None:
             return None
@@ -336,10 +491,10 @@ class ClaudeCodeAdapter:
         if not isinstance(usage, dict):
             return None
         cost = envelope.get("total_cost_usd")
-        model = envelope.get("model")
+        reported = envelope.get("model")
         return UsageSample(
             kind=kind,
-            model=str(model) if isinstance(model, str) and model else self._model,
+            model=str(reported) if isinstance(reported, str) and reported else (model or self._model),
             input_tokens=int(usage.get("input_tokens") or 0),
             output_tokens=int(usage.get("output_tokens") or 0),
             cache_read_tokens=int(usage.get("cache_read_input_tokens") or 0),
@@ -347,9 +502,9 @@ class ClaudeCodeAdapter:
             cost_usd=float(cost) if isinstance(cost, int | float) else None,
         )
 
-    def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind) -> UsageSample:
+    def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind, *, model: str | None = None) -> UsageSample:
         input_tokens = output_tokens = cache_read_tokens = cache_create_tokens = 0
-        model = self._model
+        resolved = model or self._model
         for raw_line in lines:
             line = raw_line.strip()
             if not line.startswith("{"):
@@ -365,7 +520,7 @@ class ClaudeCodeAdapter:
                 continue
             record_model = message.get("model")
             if isinstance(record_model, str) and record_model:
-                model = record_model
+                resolved = record_model
             usage = message.get("usage")
             if not isinstance(usage, dict):
                 continue
@@ -375,7 +530,7 @@ class ClaudeCodeAdapter:
             cache_create_tokens += int(usage.get("cache_creation_input_tokens") or 0)
         return UsageSample(
             kind=kind,
-            model=model,
+            model=resolved,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             cache_read_tokens=cache_read_tokens,

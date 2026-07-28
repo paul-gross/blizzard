@@ -95,17 +95,6 @@ class WorkRef:
     ref: str
 
 
-# The model a chunk runs on absent an edit (issue #27). Defined independently of the
-# runner's own ``DEFAULT_WORKER_MODEL`` (``blizzard.runner.harness.internal.
-# claude_code_adapter``) — the hub domain must not depend on the runner
-# (``bzh:domain-core``, separate daemons) — but the two must be moved together: a chunk
-# minted here with one model and spawned there with another would report a selection the
-# fleet never ran. The migration that introduced this field
-# (``20260717_2318_chunk_model_selection``) pins its own historical backfill value and is
-# deliberately NOT moved with them — it records what those rows actually ran.
-DEFAULT_MODEL = "claude-opus-5"
-
-
 class MigrationMode(StrEnum):
     """How a chunk's :class:`IntendedMigration` fires at its next transition (issue #124).
 
@@ -135,7 +124,7 @@ class IntendedMigration:
     complements, rather than replaces, the pre-claim :attr:`Chunk.graph_id` repin. A
     plain mutable chunk property (``bzh:facts-not-status`` governs status derivation,
     not every mutable field), the same precedent :attr:`Chunk.graph_id` and
-    :attr:`Chunk.model` set — the durable record of a migration that actually
+    :attr:`Chunk.default_model` set — the durable record of a migration that actually
     happened remains the :class:`MigrationFact`.
 
     ``node_name`` is required for :attr:`MigrationMode.FORCED` (the unconditional
@@ -156,13 +145,29 @@ class Chunk:
     graph_id: str
     work_refs: list[WorkRef]
     minted_at: datetime
-    # The chunk's model selection — editable while ``not_ready`` (issue #27,
-    # ``domain/edit.py``). Defaulted so the many fakes/tests that build a ``Chunk``
-    # without opinion on it keep compiling.
-    model: str = DEFAULT_MODEL
+    # The chunk's **default** model preference and effort (issue #144) — what a surface
+    # that declares neither inherits. Effective precedence is session declaration >
+    # chunk default > runner default, so these sit between a graph's ``sessions:`` entry
+    # and the runner's own fallback: they supply what a session omitting ``model:``/
+    # ``effort:`` needs, and what a node on the bare ``fresh``/``resume`` vocabulary —
+    # which references no declaration at all — needs.
+    #
+    # ``default_model`` is a prioritized preference list in the same vocabulary a session
+    # declaration uses (a ``blizzard:`` tier alias or a harness-native name, opaque to the
+    # hub); ``default_effort`` is its single-value twin. Both are editable while the chunk
+    # rests pre-claim (``domain/edit.py``), the window #27's retired ``model`` field had.
+    #
+    # Empty/``None`` is the minted value and means *express no preference*, which is what
+    # lets a runner's own ``[models.aliases]`` default apply: minting a concrete model here
+    # would pin a harness-native name on every chunk and outrank every session declaration
+    # that omits ``model:``. ``default_factory`` rather than a bare ``[]``, which raises on
+    # a frozen dataclass; defaulted at all so the many fakes/tests that build a ``Chunk``
+    # without opinion on either keep compiling.
+    default_model: list[str] = field(default_factory=list)
+    default_effort: str | None = None
     # The chunk's standing intent to migrate onto another graph at its next transition
     # (issue #124) — ``None`` while no intent is set. Defaulted so the many fakes/tests
-    # that build a ``Chunk`` without opinion on it keep compiling, mirroring ``model``.
+    # that build a ``Chunk`` without opinion on it keep compiling, mirroring the defaults.
     intended_migration: IntendedMigration | None = None
 
 
@@ -1535,7 +1540,9 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         """Record a cross-graph migration atomically and idempotently (issue #90).
 
         In one transaction: the ``chunk_migrations`` fact, the ``chunks.graph_id`` re-pin
-        (+ ``chunks.model`` when ``model`` is given), the ``route_released`` (unless
+        (+ ``chunks.default_model`` when ``model`` is given — issue #144 retargeted the
+        re-pin, leaving the authored ``model:`` key and its single-string type untouched),
+        the ``route_released`` (unless
         ``release_route`` is ``False``), and the submitting node-step's ``artifacts`` (so
         the triage node's reasoning asset carries to the landing claim — the migration
         branch bypasses :meth:`record_transition`, where a step's artifacts normally
@@ -1590,18 +1597,33 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         lock shared with :class:`~blizzard.hub.domain.claim.ClaimService` (issue #120)."""
         ...
 
-    def set_model(self, chunk_id: str, *, model: str) -> None:
-        """Repin a not-ready or ready-unclaimed chunk's model selection (issue #27, #120) — see :meth:`set_graph`."""
+    def set_defaults(self, chunk_id: str, *, default_model: list[str], default_effort: str | None) -> None:
+        """Repin a not-ready or ready-unclaimed chunk's default model/effort (issue #144)
+        — see :meth:`set_graph`.
+
+        Both together in one write, never one at a time: they are model's-twin fields
+        edited through the same all-or-nothing :meth:`~blizzard.hub.domain.edit.EditService.edit`
+        call, and a caller that could set one alone would be able to leave the pair
+        half-applied at a crash. An empty list / ``None`` is a real value — *express no
+        preference*, the minted state — not "leave unchanged".
+
+        The one caller is the edit path. A migration choice's ``model:`` re-pin
+        (issue #90) writes ``default_model`` too, but does so **inline inside**
+        :meth:`record_migration`'s own transaction rather than through this method: that
+        block writes the migration fact, the graph re-pin, the route release, the step's
+        artifacts and the intent clear all-or-nothing, and a second transactional write
+        from inside it would split the durable migration fact from the pin it implies.
+        """
         ...
 
     def set_intended_migration(self, chunk_id: str, *, intended: IntendedMigration | None) -> None:
         """Set, overwrite, or clear a chunk's standing migration intent (issue #124).
 
         A plain column overwrite, not an append-only fact — the same ``bzh:facts-not-status``
-        shape :meth:`set_graph`/:meth:`set_model` already carry: ``intended_migration`` is a
+        shape :meth:`set_graph`/:meth:`set_defaults` already carry: ``intended_migration`` is a
         mutable chunk property, consulted (never applied) at the chunk's next transition
         (``domain/apply.py``). ``intended=None`` clears it (an operator cancel); a non-``None``
-        value overwrites whatever was set before. Unlike :meth:`set_graph`/:meth:`set_model`,
+        value overwrites whatever was set before. Unlike :meth:`set_graph`/:meth:`set_defaults`,
         this field's editable window spans every non-terminal status, ``not_ready``/``ready``
         included — the caller (:class:`~blizzard.hub.domain.edit.EditService`) enforces the
         window, this method only writes. Setting it pre-claim is legitimate (an operator

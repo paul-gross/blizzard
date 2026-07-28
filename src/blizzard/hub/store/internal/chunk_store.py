@@ -81,6 +81,25 @@ def _deserialize_intended_migration(value: str | None) -> IntendedMigration | No
     return IntendedMigration(mode=MigrationMode(data["mode"]), graph_id=data["graph_id"], node_name=data["node_name"])
 
 
+def _serialize_default_model(preferences: list[str]) -> str | None:
+    """``chunks.default_model``'s column shape — a JSON ``list[str]`` (issue #144).
+
+    An empty preference list writes ``NULL`` rather than ``"[]"``, so "express no
+    preference" reads identically whether the chunk was minted before this column existed,
+    minted after it (ingest mints no default), or edited back to empty.
+
+    Shared by the edit path (:meth:`ChunkStore.set_defaults`) and the migration re-pin,
+    which shapes its value here but writes it inline in its own transaction — the value
+    shaping is what the two paths share, never a second transactional write.
+    """
+    return json.dumps(list(preferences)) if preferences else None
+
+
+def _deserialize_default_model(value: str | None) -> list[str]:
+    """The counterpart read — ``NULL``/absent reads back as the empty list (issue #144)."""
+    return [str(m) for m in json.loads(value)] if value else []
+
+
 def _question_select():  # type: ignore[no-untyped-def]
     """A question row with its derived answer and delivery state, in one query.
 
@@ -603,7 +622,11 @@ class ChunkStore:
                     chunk_id=chunk.chunk_id,
                     graph_id=chunk.graph_id,
                     minted_at=chunk.minted_at,
-                    model=chunk.model,
+                    # `chunks.model` is deliberately omitted (issue #144): the column is
+                    # retained for pre-#144 history only and the insert leans on its
+                    # `server_default`. See the schema comment on the column.
+                    default_model=_serialize_default_model(chunk.default_model),
+                    default_effort=chunk.default_effort,
                 )
             )
             for pointer in chunk.work_refs:
@@ -1090,7 +1113,9 @@ class ChunkStore:
         """Record a cross-graph migration **atomically and idempotently** (#90).
 
         In **one transaction**: insert the ``chunk_migrations`` fact, re-pin
-        ``chunks.graph_id`` (and ``chunks.model`` when ``model`` is given), release the
+        ``chunks.graph_id`` (and ``chunks.default_model`` when ``model`` is given —
+        issue #144 retargeted the re-pin, leaving the authored `model:` key, its
+        single-string type, and `MigrationRecord.model` untouched), release the
         route (unless ``release_route`` is ``False``), **and persist this node-step's
         artifacts** (MUST-FIX 1 — the migration branch bypasses ``record_transition``,
         which is where a step's artifacts normally commit; without this the triage node's
@@ -1140,7 +1165,17 @@ class ChunkStore:
             )
             values: dict[str, str | None] = {"graph_id": to_graph_id}
             if model is not None:
-                values["model"] = model
+                # Issue #144 retargeted the re-pin from `chunks.model` to
+                # `chunks.default_model`. Deliberately INLINE here rather than a
+                # `set_defaults` call: this block writes the migration fact, the graph
+                # re-pin, the route release, the step's artifacts and the intent clear
+                # all-or-nothing, and a second transactional write from inside it would
+                # split the durable fact from the pin it implies — a live
+                # `hub:migration-pin-consistent` violation in a window the crash-point
+                # registry does not cover (`migrate.after-record.before-response` fires
+                # after the whole call). The two paths share `_serialize_default_model`,
+                # the value shaping — never a second transactional write.
+                values["default_model"] = _serialize_default_model([model])
             if clear_intent:
                 values["intended_migration"] = None
             conn.execute(update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(**values))
@@ -1251,15 +1286,23 @@ class ChunkStore:
         with self._engine.begin() as conn:
             conn.execute(update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(graph_id=graph_id))
 
-    def set_model(self, chunk_id: str, *, model: str) -> None:
-        """Repin a not-ready or ready-unclaimed chunk's model selection (issue #27, #120)."""
+    def set_defaults(self, chunk_id: str, *, default_model: list[str], default_effort: str | None) -> None:
+        """Repin a not-ready or ready-unclaimed chunk's default model/effort (issues #27,
+        #120, #144) — both in one write; see :meth:`IWriteChunkRepository.set_defaults`."""
         with self._engine.begin() as conn:
-            conn.execute(update(s.chunks).where(s.chunks.c.chunk_id == chunk_id).values(model=model))
+            conn.execute(
+                update(s.chunks)
+                .where(s.chunks.c.chunk_id == chunk_id)
+                .values(
+                    default_model=_serialize_default_model(default_model),
+                    default_effort=default_effort,
+                )
+            )
 
     def set_intended_migration(self, chunk_id: str, *, intended: IntendedMigration | None) -> None:
         """Set, overwrite, or clear a chunk's standing migration intent (issue #124).
 
-        A plain column overwrite, mirroring :meth:`set_graph`/:meth:`set_model` — see
+        A plain column overwrite, mirroring :meth:`set_graph`/:meth:`set_defaults` — see
         :meth:`IWriteChunkRepository.set_intended_migration`. Editable at any
         non-terminal status, ``not_ready``/``ready`` included; the column carries no
         timestamp, so this write takes no ``at`` (unlike this repository's other
@@ -1552,7 +1595,8 @@ class ChunkStore:
             graph_id=row.graph_id,
             work_refs=pointers,
             minted_at=row.minted_at,
-            model=row.model,
+            default_model=_deserialize_default_model(row.default_model),
+            default_effort=row.default_effort,
             intended_migration=_deserialize_intended_migration(row.intended_migration),
         )
 

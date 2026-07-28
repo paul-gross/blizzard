@@ -8,7 +8,6 @@ import { ChunkDetailHeader } from './chunk-detail-header';
 const ISSUE_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01issue00000000000000000000',
   graph_id: 'gr_1',
-  model: 'claude-opus-4-8',
   status: 'running',
   current_node_id: 'nd_build',
   latest_epoch: 1,
@@ -22,7 +21,6 @@ const ISSUE_DETAIL: ChunkDetail = {
 const ROUTED_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01routed000000000000000000',
   graph_id: 'gr_1',
-  model: 'claude-opus-4-8',
   status: 'running',
   current_node_id: 'nd_build',
   latest_epoch: 1,
@@ -35,7 +33,6 @@ const ROUTED_DETAIL: ChunkDetail = {
 const ESCALATED_ROUTED_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01esc00000000000000000000000',
   graph_id: 'gr_1',
-  model: 'claude-opus-4-8',
   status: 'needs_human',
   current_node_id: 'nd_build',
   latest_epoch: 3,

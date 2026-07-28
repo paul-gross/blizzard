@@ -384,6 +384,12 @@ def test_an_escalated_lease_appears_with_its_resume_command(tmp_path: Path) -> N
         "epoch": 1,
         "closed_at": closed_at.isoformat(),
         "resume_command": "cd /ws/e1 && claude --resume sess-a",
+        # `_seed_lease` mints no session stamps (issue #144), so this escalation reads
+        # *unknown* on all three and renders today's bare resume command — the
+        # back-compat shape a pre-#144 lease keeps.
+        "session_name": None,
+        "model": None,
+        "effort": None,
     }
 
 
@@ -532,3 +538,35 @@ def test_facts_503_when_status_service_unwired(tmp_path: Path) -> None:
     config = RunnerConfig(root=tmp_path, db_url="sqlite://")
     with TestClient(create_app(config)) as client:
         assert client.get("/api/facts").status_code == 503
+
+
+@pytest.mark.component
+def test_an_escalation_carries_the_parked_sessions_own_configuration(tmp_path: Path) -> None:
+    """Issue #144 — the escalation is a **read** of the lease's stamps, not a
+    re-resolution, and its resume command lands the operator in the same configuration
+    the parked session actually ran with."""
+    app, store = _app_with_status(tmp_path)
+    _seed_lease(
+        store,
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        epoch=1,
+        session_name="code",
+        resolved_model="opus",
+        resolved_effort="high",
+    )
+    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_closure(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        reason="escalated",
+        closed_at=_NOW + timedelta(minutes=5),
+    )
+
+    with TestClient(app) as client:
+        item = client.get("/api/escalations").json()["items"][0]
+
+    assert (item["session_name"], item["model"], item["effort"]) == ("code", "opus", "high")
+    assert item["resume_command"] == "cd /ws/e1 && claude --resume sess-a --model opus --effort high"

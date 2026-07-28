@@ -495,7 +495,8 @@ def test_kill9_at_migrate_crash_point(crash_env: CrashEnv, tmp_path: Path, point
 
     ``migrate.*`` fires inside the HUB (``ApplyService._apply_migration``): the worker at
     the source graph's ``build`` node selects the ``migrate`` choice, the hub records the
-    migration atomically (graph/model re-pinned, route released, artifacts committed), then
+    migration atomically (graph and default-model re-pinned, route released, artifacts
+    committed), then
     self-SIGKILLs before returning ``MIGRATED``. The claim under test: the runner's
     lost-ack replay re-derives ``MIGRATED`` via the ``accepted_migration`` probe (no second
     re-pin — ``hub:one-migration-per-node-epoch`` stays green), the chunk re-queues at the

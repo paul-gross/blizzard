@@ -8,7 +8,7 @@ import {
   type ResolveDecisionEvent,
 } from './chunk-awaiting-human';
 import { ChunkDetailHeader } from './chunk-detail-header';
-import { ChunkFacts, type EditGraphEvent, type EditModelEvent } from './chunk-facts';
+import { ChunkFacts, type EditGraphEvent } from './chunk-facts';
 import { ChunkIssuePane, type WorkItemsState } from './chunk-issue-pane';
 import { ChunkTimeline } from './chunk-timeline';
 import { ChunkTokenBreakdown } from './chunk-token-breakdown';
@@ -16,7 +16,7 @@ import { ChunkTokenBreakdown } from './chunk-token-breakdown';
 export type { AnswerQuestionEvent, ResolveDecisionEvent } from './chunk-awaiting-human';
 // The container (`chunk-detail.ts`) imports these three from here too — re-exported
 // so it needs no edit for the split (issue #79's container-unchanged invariant).
-export type { EditGraphEvent, EditModelEvent } from './chunk-facts';
+export type { EditGraphEvent } from './chunk-facts';
 export type { WorkItemsState } from './chunk-issue-pane';
 
 /**
@@ -72,7 +72,6 @@ export type { WorkItemsState } from './chunk-issue-pane';
           <fleet-chunk-detail-facts
             [detail]="detail()"
             (editGraph)="editGraph.emit($event)"
-            (editModel)="editModel.emit($event)"
           >
             <fleet-chunk-detail-token-breakdown token-breakdown [detail]="detail()" />
           </fleet-chunk-detail-facts>
@@ -212,10 +211,6 @@ export class ChunkDetailPanel {
   /** Emitted when the operator sets a not-ready chunk's graph from the facts column
    * (issue #27). */
   readonly editGraph = output<EditGraphEvent>();
-
-  /** Emitted when the operator sets a not-ready chunk's model from the facts column
-   * (issue #27). */
-  readonly editModel = output<EditModelEvent>();
 
   /** The chunk's work ref count — legible before the forge read lands, for the
    * work-item column's own heading. */

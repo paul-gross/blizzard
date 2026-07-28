@@ -23,6 +23,7 @@ store missing columns that other checks in the same pass read.
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -377,11 +378,11 @@ def _seed_migration(
     to_graph: str,
     model_after: str | None,
     pin_graph: str,
-    pin_model: str,
+    pin_default_model: list[str],
     release_route: bool = True,
     landed_executor: str | None = None,
 ) -> None:
-    """A chunk pinned to (pin_graph, pin_model) with one migration targeting to_graph (#90).
+    """A chunk pinned to (pin_graph, pin_default_model) with one migration targeting to_graph (#90).
 
     A runner-landing ``record_migration`` releases the route in the migration's own
     transaction, so a consistent migration always carries its ``route_released``;
@@ -391,7 +392,17 @@ def _seed_migration(
     (issue #111) retains the route by design and is exempt from that assertion. Left None,
     the landing node has no node row (an unknown/runner landing), so the assertion applies.
     """
-    conn.execute(insert(hub.chunks).values(chunk_id="ch_1", graph_id=pin_graph, minted_at=_NOW, model=pin_model))
+    # `chunks.model` is retained-and-unread since #144; the re-pin the invariant checks
+    # lands in `default_model`, so that is what a seeded pin has to carry.
+    conn.execute(
+        insert(hub.chunks).values(
+            chunk_id="ch_1",
+            graph_id=pin_graph,
+            minted_at=_NOW,
+            model="unread-since-144",
+            default_model=json.dumps(pin_default_model) if pin_default_model else None,
+        )
+    )
     if landed_executor is not None:
         conn.execute(
             insert(hub.graph_nodes).values(
@@ -425,7 +436,9 @@ def test_a_consistent_migration_is_not_a_violation(tmp_path: Path) -> None:
     """The atomic re-pin landed with the fact: the chunk's pin matches its migration (#90)."""
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
-        _seed_migration(conn, to_graph="gr_triage", model_after="claude-x", pin_graph="gr_triage", pin_model="claude-x")
+        _seed_migration(
+            conn, to_graph="gr_triage", model_after="claude-x", pin_graph="gr_triage", pin_default_model=["claude-x"]
+        )
     assert check_hub_store(engine) == []
 
 
@@ -434,7 +447,7 @@ def test_a_migration_without_its_graph_repin_is_a_violation(tmp_path: Path) -> N
     the half-write a kill -9 in the ``migrate.`` window must never leave (#90)."""
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
-        _seed_migration(conn, to_graph="gr_triage", model_after=None, pin_graph="gr_src", pin_model="m")
+        _seed_migration(conn, to_graph="gr_triage", model_after=None, pin_graph="gr_src", pin_default_model=["m"])
     slugs = {v.invariant for v in check_hub_store(engine)}
     assert "hub:migration-pin-consistent" in slugs
 
@@ -443,9 +456,31 @@ def test_a_migration_without_its_model_repin_is_a_violation(tmp_path: Path) -> N
     """The graph pin landed but the model re-pin did not — still a torn migration write (#90)."""
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
-        _seed_migration(conn, to_graph="gr_triage", model_after="claude-x", pin_graph="gr_triage", pin_model="stale")
+        _seed_migration(
+            conn, to_graph="gr_triage", model_after="claude-x", pin_graph="gr_triage", pin_default_model=["stale"]
+        )
     slugs = {v.invariant for v in check_hub_store(engine)}
     assert "hub:migration-pin-consistent" in slugs
+
+
+def test_a_migration_whose_repin_survives_a_later_default_model_edit_is_not_a_violation(tmp_path: Path) -> None:
+    """Issue #144 — the check is **membership**, not equality against ``[model_after]``.
+
+    A migration re-queues the chunk to ``ready``, which reopens the pre-claim edit window,
+    so an operator can legitimately add a fallback entry or reorder the list afterwards
+    without undoing the re-pin. What this invariant exists to catch is a torn write — the
+    durable fact with the pin never applied — and that leaves ``default_model`` empty or
+    at its pre-migration value, which fails membership just as it fails equality."""
+    engine = _hub_engine(tmp_path)
+    with engine.begin() as conn:
+        _seed_migration(
+            conn,
+            to_graph="gr_triage",
+            model_after="claude-x",
+            pin_graph="gr_triage",
+            pin_default_model=["claude-x", "a-fallback-the-operator-added"],
+        )
+    assert check_hub_store(engine) == []
 
 
 def test_a_migration_without_its_route_release_is_a_violation(tmp_path: Path) -> None:
@@ -455,7 +490,12 @@ def test_a_migration_without_its_route_release_is_a_violation(tmp_path: Path) ->
     engine = _hub_engine(tmp_path)
     with engine.begin() as conn:
         _seed_migration(
-            conn, to_graph="gr_triage", model_after=None, pin_graph="gr_triage", pin_model="m", release_route=False
+            conn,
+            to_graph="gr_triage",
+            model_after=None,
+            pin_graph="gr_triage",
+            pin_default_model=["m"],
+            release_route=False,
         )
     slugs = {v.invariant for v in check_hub_store(engine)}
     assert "hub:migration-route-released" in slugs
@@ -474,7 +514,7 @@ def test_a_hub_landing_migration_retains_its_route_and_is_not_a_violation(tmp_pa
             to_graph="gr_triage",
             model_after=None,
             pin_graph="gr_triage",
-            pin_model="m",
+            pin_default_model=["m"],
             release_route=False,
             landed_executor="hub",
         )

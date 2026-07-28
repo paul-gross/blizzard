@@ -29,7 +29,9 @@ from blizzard.hub.domain.graph import (
     JudgedBy,
     Node,
     ProducesSpec,
+    RotatePolicy,
     RunStep,
+    SessionDecl,
     SessionMode,
     target_graph_of,
 )
@@ -39,6 +41,7 @@ from blizzard.hub.store.schema import (
     graph_lifecycle_facts,
     graph_nodes,
     graph_policy_facts,
+    graph_sessions,
     graphs,
 )
 
@@ -60,6 +63,19 @@ class GraphStore:
                     created_at=at,
                 )
             )
+            for ordinal, decl in enumerate(graph.sessions):
+                conn.execute(
+                    insert(graph_sessions).values(
+                        graph_id=graph.graph_id,
+                        name=decl.name,
+                        ordinal=ordinal,
+                        model=json.dumps(list(decl.model)),
+                        effort=decl.effort,
+                        rotate_max_context_tokens=decl.rotate.max_context_tokens if decl.rotate else None,
+                        rotate_max_transcript_bytes=decl.rotate.max_transcript_bytes if decl.rotate else None,
+                        rotate_max_invocations=decl.rotate.max_invocations if decl.rotate else None,
+                    )
+                )
             for node in graph.nodes:
                 conn.execute(
                     insert(graph_nodes).values(
@@ -263,6 +279,11 @@ class GraphStore:
             )
             for er in edge_rows
         ]
+        session_rows = conn.execute(
+            select(graph_sessions)
+            .where(graph_sessions.c.graph_id == graph_row.graph_id)
+            .order_by(graph_sessions.c.ordinal)
+        ).all()
         return Graph(
             graph_id=graph_row.graph_id,
             name=graph_row.name,
@@ -270,7 +291,25 @@ class GraphStore:
             nodes=nodes,
             edges=edges,
             created_at=graph_row.created_at,
+            sessions=[_session_decl(sr) for sr in session_rows],
         )
+
+
+def _session_decl(row) -> SessionDecl:  # type: ignore[no-untyped-def]
+    """Hydrate one ``graph_sessions`` row into a :class:`SessionDecl` (issue #144).
+
+    A row whose three ``rotate_*`` columns are all null carries **no** policy — the
+    declaration authored no ``rotate:`` block — and hydrates ``rotate=None`` rather than an
+    all-null :class:`RotatePolicy`, so a round-tripped graph compares equal to the reified
+    one ``mint_if_changed`` diffs it against.
+    """
+    bounds = (row.rotate_max_context_tokens, row.rotate_max_transcript_bytes, row.rotate_max_invocations)
+    return SessionDecl(
+        name=row.name,
+        model=_json_list(row.model),
+        effort=row.effort,
+        rotate=RotatePolicy(*bounds) if any(b is not None for b in bounds) else None,
+    )
 
 
 def _run_step_to_json(step: RunStep) -> dict[str, str | None]:

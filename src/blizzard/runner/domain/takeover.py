@@ -78,6 +78,11 @@ class OpenedTakeover:
     takeover_id: str
     command: str
     workdir: str
+    # The declared pool this session belongs to (issue #144), so an operator can be told
+    # *which* lineage they are taking over rather than only its opaque session id.
+    # ``None`` for a session on the bare/``resume:<node>`` vocabulary, which belongs to
+    # no pool, and for one predating the stamps.
+    session_name: str | None = None
 
 
 class TakeoverService:
@@ -145,8 +150,22 @@ class TakeoverService:
             if active.pid is not None:
                 self._process.kill(active.pid)  # the reap machinery's own best-effort kill
 
-        command = self._harness.resume_command(workdir, session_id)
-        return OpenedTakeover(takeover_id=takeover_id, command=command, workdir=workdir)
+        # Read the reference lease's stamps (issue #144) rather than re-resolving: the
+        # operator continues under exactly the configuration the session ran with, not
+        # whatever a fresh resolution would produce now. `None` on any of them is
+        # *unknown* (a lease predating the stamps) and renders the bare command.
+        command = self._harness.resume_command(
+            workdir,
+            session_id,
+            model=reference.resolved_model if reference is not None else None,
+            effort=reference.resolved_effort if reference is not None else None,
+        )
+        return OpenedTakeover(
+            takeover_id=takeover_id,
+            command=command,
+            workdir=workdir,
+            session_name=reference.session_name if reference is not None else None,
+        )
 
     def close(self, chunk_id: str, takeover_id: str) -> None:
         record = self._store.open_takeover_for_chunk(chunk_id)

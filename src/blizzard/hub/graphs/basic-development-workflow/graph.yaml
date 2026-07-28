@@ -45,11 +45,34 @@
 name: bas-dwf
 entry: build
 
+# Named session pools (issue #144). Two lineages, both on the basic tier:
+#
+#   code  the mechanical build lineage, BOUNDED — it is the one that can accumulate
+#         indefinitely across a review-fail loop.
+#   gate  the cold-eyes review. No `rotate:` block: a gate is only ever reached through
+#         `fresh:gate`, so its head is minted every entry and rotation never applies.
+#
+# A re-EXPRESSION of the lineages these nodes already had, not a re-shaping: `--resume
+# <sid>` reuses the session id in place, so the members already share one session and
+# every prior spelling resolved to the same value. What the pool adds is the bound and
+# the tier pin. Declared here rather than inherited — a graph referencing a pool it does
+# not declare is rejected at mint, and `graph_sync` would go red on first boot.
+sessions:
+  code:
+    model: ["blizzard:basic"]
+    rotate:
+      # Harness INVOCATIONS, not node-steps: one node-step burns two or three.
+      max_invocations: 30
+      max_context_tokens: 120000
+      max_transcript_bytes: 20000000
+  gate:
+    model: ["blizzard:basic"]
+
 nodes:
   build:
     executor: runner
     prompt: ./prompts/build.md
-    session: resume:build  # explicit: re-entry from review/pre-push should pull
+    session: resume:code  # explicit: re-entry from review/pre-push should pull
       # build's own prior context, not whichever node ran last (review/pre-push
       # are deliberately fresh, so bare `resume` would otherwise hand build their
       # cold-read session instead of its own)
@@ -72,7 +95,7 @@ nodes:
   review:
     executor: runner
     prompt: ./prompts/review.md
-    session: fresh  # cold eyes for review; the default is resume
+    session: fresh:gate  # cold eyes for review; the default is resume
     produces:
       - review-findings  # asset artifact — carried back into build on a fail
     judgement:
@@ -92,7 +115,7 @@ nodes:
   pre-push:
     executor: runner
     prompt: ./prompts/pre-push.md
-    session: resume:build  # integration is mechanical (rebase, lint, targeted
+    session: resume:code  # integration is mechanical (rebase, lint, targeted
       # tests), not a judgement call needing cold eyes — build's own context
       # saves re-learning the codebase from scratch; the default is resume
     produces:

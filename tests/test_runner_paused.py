@@ -19,7 +19,7 @@ import pytest
 from structlog.testing import capture_logs
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.work import DEFAULT_MODEL, ChunkStatus
+from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.harness.usage import UsageKind, UsageSample
@@ -293,7 +293,6 @@ def _running_chunk(chunk="ch_1", *, runner_id="r1"):  # type: ignore[no-untyped-
         status=ChunkStatus.RUNNING,
         current_node_id="nd_build",
         latest_epoch=1,
-        model=DEFAULT_MODEL,
         route=RouteView(runner_id=runner_id, workspace_id="ws1", environment_ids=["e1"]),
     )
 
@@ -520,7 +519,6 @@ def test_apply_response_next_spawn_suppressed_then_adopted_at_unpause(tmp_path):
         status=ChunkStatus.RUNNING,
         current_node_id="nd_review",
         latest_epoch=2,
-        model=DEFAULT_MODEL,
         route=RouteView(runner_id="r1", workspace_id="ws1", environment_ids=["e1"]),
     )
     hub.envelopes["ch_1"] = next_env
@@ -1008,7 +1006,6 @@ def test_a_chunk_paused_on_a_locally_paused_runner_resumes_for_neither_brake_alo
         status=ChunkStatus.PAUSED,
         current_node_id="nd_build",
         latest_epoch=1,
-        model=DEFAULT_MODEL,
         route=RouteView(runner_id="r1", workspace_id="ws1", environment_ids=["e1"]),
         pause=PauseView(by="operator", set_at="2026-07-13T12:00:00Z"),
     )
@@ -1041,7 +1038,6 @@ def test_a_chunk_paused_on_a_locally_paused_runner_resumes_for_neither_brake_alo
         status=ChunkStatus.PAUSED,
         current_node_id="nd_build",
         latest_epoch=1,
-        model=DEFAULT_MODEL,
         route=RouteView(runner_id="r1", workspace_id="ws1", environment_ids=["e1"]),
         pause=PauseView(by="operator", set_at="2026-07-13T12:05:00Z"),
     )

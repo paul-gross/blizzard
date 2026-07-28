@@ -30,7 +30,7 @@ from __future__ import annotations
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.graph import Graph, Node
 from blizzard.hub.domain.work import Chunk, TransitionFact
-from blizzard.wire.envelope import EnvelopeArtifact, EnvelopeChoice, NodeConfig, NodeEnvelope
+from blizzard.wire.envelope import EnvelopeArtifact, EnvelopeChoice, NodeConfig, NodeEnvelope, RotatePolicyView
 from blizzard.wire.graph import ProducesEntry
 
 
@@ -130,15 +130,63 @@ def addendum_for_transition(graph: Graph, transition: TransitionFact | None) -> 
     return edge.prompt_addendum if edge is not None else None
 
 
+def _effective_session(
+    chunk: Chunk, graph: Graph, node: Node
+) -> tuple[str | None, list[str], str | None, RotatePolicyView | None]:
+    """Resolve the node's effective session declaration (issue #144).
+
+    Precedence is **session declaration > chunk default**, merged *field by field* rather
+    than whole-record: a declaration that names a ``model`` but no ``effort`` takes the
+    chunk's effort, not nothing. The runner's own default is the last resort and is
+    applied there, so this never invents one.
+
+    Resolved hub-side because the hub owns both halves — the graph and the chunk. Two
+    tiers of "no declaration" reach here and both are legitimate:
+
+    * a node whose ``session:`` names a **node** (``resume:<node>``, issue #115) or is
+      bare — no pool, so ``session_name`` is ``None``, but the chunk's defaults still
+      apply. That is the precedence rule's intended reach and the one behavior change
+      this phase makes to a pre-#144 graph.
+    * a node whose ``session:`` names a declared session — the declaration wins per field.
+
+    A ``session_source`` that resolves to no declaration cannot be a dangling reference:
+    the validator rejected that at mint. It is the node-name form.
+    """
+    declaration = graph.session_by_name(node.session_source) if node.session_source else None
+    if declaration is None:
+        return (None, list(chunk.default_model), chunk.default_effort, None)
+    rotate = declaration.rotate
+    return (
+        declaration.name,
+        list(declaration.model) if declaration.model else list(chunk.default_model),
+        declaration.effort if declaration.effort is not None else chunk.default_effort,
+        RotatePolicyView(
+            max_context_tokens=rotate.max_context_tokens,
+            max_transcript_bytes=rotate.max_transcript_bytes,
+            max_invocations=rotate.max_invocations,
+        )
+        if rotate is not None
+        else None,
+    )
+
+
 def build_node_envelope(
     *,
     chunk: Chunk,
+    graph: Graph,
     node: Node,
     artifacts: list[ArtifactRow],
     epoch: int,
     arrival_addendum: str | None = None,
 ) -> NodeEnvelope:
-    """Assemble the envelope a runner works ``node`` from."""
+    """Assemble the envelope a runner works ``node`` from.
+
+    ``graph`` is required and carries no default (issue #144): the node's session
+    declaration is resolved against it, and a caller that forgot the argument silently
+    getting the pre-#144 "no declaration, no chunk default" envelope back — with no type
+    error — is exactly the drift this would otherwise invite. Every call site already
+    holds it.
+    """
     prompt = node.prompt
     if arrival_addendum:
         prompt = f"{prompt}\n\n{arrival_addendum}" if prompt else arrival_addendum
@@ -146,12 +194,17 @@ def build_node_envelope(
     if required_artifacts:
         prompt = f"{prompt}{required_artifacts}" if prompt else required_artifacts.lstrip("\n")
 
+    session_name, session_model, session_effort, session_rotate = _effective_session(chunk, graph, node)
     config = NodeConfig(
         node_id=node.node_id,
         node_name=node.name,
         executor=node.executor,
         session=node.session,
         session_source=node.session_source,
+        session_name=session_name,
+        session_model=session_model,
+        session_effort=session_effort,
+        session_rotate=session_rotate,
         judged_by=node.judged_by,
         checks=list(node.checks),
         checks_cwd=node.checks_cwd,

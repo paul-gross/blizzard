@@ -509,7 +509,12 @@ def chunk_show(chunk_id: str, as_json: bool, hub_url: str | None) -> None:
         f"{detail['chunk_id']}  status={detail['status']}  graph={detail.get('graph_name') or detail['graph_id']}"
     )
     node = detail.get("current_node_name") or detail.get("current_node_id") or "-"
-    click.echo(f"  node: {node}   model: {detail.get('model')}")
+    click.echo(f"  node: {node}")
+    # Both defaults, on their own line: `chunk set` can write either, so a text-mode
+    # read-back has to exist for both or an operator can only see what they wrote via
+    # `--json`. `-` is the minted "express no preference" state, not unknown.
+    models = ", ".join(detail.get("default_model") or []) or "-"
+    click.echo(f"  default model: {models}   default effort: {detail.get('default_effort') or '-'}")
     pointers = detail.get("work_refs") or []
     if pointers:
         labels = ", ".join(p.get("label") or f"{p['source']}#{p['ref']}" for p in pointers)
@@ -554,25 +559,47 @@ def chunk_ingest(pointers: tuple[str, ...], as_json: bool, hub_url: str | None) 
 @chunk_group.command("set")
 @click.argument("chunk_id")
 @click.option("--graph", "graph_id", default=None, help="Repin CHUNK's workflow graph to this graph id.")
-@click.option("--model", "model", default=None, help="Repin CHUNK's model selection.")
+@click.option(
+    "--default-model",
+    "default_model",
+    multiple=True,
+    help=(
+        "Repin CHUNK's default model preference. Repeatable and ORDERED — the first entry "
+        "that resolves at session mint wins. An entry is a `blizzard:` tier alias "
+        "(frontier/advanced/basic) or a harness-native model name."
+    ),
+)
+@click.option("--default-effort", "default_effort", default=None, help="Repin CHUNK's default effort.")
 @_json_option
 @_hub_url_options
-def chunk_set(chunk_id: str, graph_id: str | None, model: str | None, as_json: bool, hub_url: str | None) -> None:
-    """Repin CHUNK's graph and/or model in one call (issue #104).
+def chunk_set(
+    chunk_id: str,
+    graph_id: str | None,
+    default_model: tuple[str, ...],
+    default_effort: str | None,
+    as_json: bool,
+    hub_url: str | None,
+) -> None:
+    """Repin CHUNK's graph and/or default model/effort in one call (issues #104, #144).
 
-    A pure client of ``PATCH /api/chunks/{id}``, naming whichever of ``graph_id``/
-    ``model`` was given — the counterpart to the deprecated single-field
-    ``POST .../graph``/``POST .../model``, applied all-or-nothing under
-    ``EditService.edit``. At least one of --graph/--model is required; ``chunk migrate``
-    is the standing-migration-intent sibling of this verb."""
-    if graph_id is None and model is None:
-        raise click.UsageError("at least one of --graph/--model is required")
+    A pure client of ``PATCH /api/chunks/{id}``, naming whichever fields were given,
+    applied all-or-nothing under ``EditService.edit``. At least one option is required;
+    ``chunk migrate`` is the standing-migration-intent sibling of this verb.
+
+    The defaults sit between a graph's ``sessions:`` declaration and the runner's own
+    default — a session declaring its own ``model:``/``effort:`` outranks them. Both are
+    editable only while CHUNK rests ``not_ready`` or sits ``ready`` unclaimed (409
+    otherwise). There is no web editing surface for either; ``chunk show`` reads them back."""
+    if graph_id is None and not default_model and default_effort is None:
+        raise click.UsageError("at least one of --graph/--default-model/--default-effort is required")
     base = hub_url
     body: dict[str, object] = {}
     if graph_id is not None:
         body["graph_id"] = graph_id
-    if model is not None:
-        body["model"] = model
+    if default_model:
+        body["default_model"] = list(default_model)
+    if default_effort is not None:
+        body["default_effort"] = default_effort
     resp = _request("patch", f"/api/chunks/{chunk_id}", hub_url=base, json_body=body)
     _check(
         resp,
@@ -586,8 +613,10 @@ def chunk_set(chunk_id: str, graph_id: str | None, model: str | None, as_json: b
     parts = []
     if graph_id is not None:
         parts.append(f"graph → {view['graph_id']}")
-    if model is not None:
-        parts.append(f"model → {view['model']}")
+    if default_model:
+        parts.append(f"default model → {', '.join(view.get('default_model') or []) or '-'}")
+    if default_effort is not None:
+        parts.append(f"default effort → {view.get('default_effort') or '-'}")
     click.echo(f"{chunk_id}: {', '.join(parts)}")
 
 

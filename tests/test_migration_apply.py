@@ -227,7 +227,9 @@ def test_a_cross_graph_choice_migrates_repins_and_re_queues_at_the_landing_node(
     assert detail["graph_id"] == triage_id  # re-pinned to the target graph
     assert detail["status"] == "ready"  # re-queued, claimable — not done/delivering
     assert detail["current_node_name"] == "build"  # name-match landing on triage's build
-    assert detail["model"] == "claude-sonnet-5"  # per-choice model re-pin
+    # Issue #144 retargeted the re-pin onto `default_model`: the authored choice `model:`
+    # is still a single string, landing as the list's one entry.
+    assert detail["default_model"] == ["claude-sonnet-5"]  # per-choice model re-pin
     # The triage node's reasoning asset carried across (MUST-FIX 1).
     assert any(a["name"] == "triage-notes" for a in detail["artifacts"])
 

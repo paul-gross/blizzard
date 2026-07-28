@@ -497,6 +497,22 @@ def artifact_create(name: str) -> None:
         raise click.ClickException(f"artifact create: could not record {name!r} ({exc})") from exc
 
 
+def _session_label(escalation: dict) -> str:
+    """The parked session's identity, as a trailing clause — ``"  session=code (opus, high)"``.
+
+    Empty when the escalation carries none of the three (issue #144): a session on the
+    bare vocabulary belongs to no pool, and one predating the stamps is *unknown*. Neither
+    case invents a value — a bare line reads as "not recorded", which is the truth.
+    """
+    pool = escalation.get("session_name")
+    config = ", ".join(str(v) for v in (escalation.get("model"), escalation.get("effort")) if v)
+    if not pool and not config:
+        return ""
+    if not pool:
+        return f"  session=({config})"
+    return f"  session={pool}" + (f" ({config})" if config else "")
+
+
 def _problem_detail(response: httpx.Response) -> str:
     """The ``detail`` string from a rejected call's JSON body, or ``""``.
 
@@ -723,7 +739,7 @@ def status(directory: str, runner_url: str | None) -> None:
     escalations = escalations_resp.json().get("items", [])
     click.echo(f"\nescalations ({len(escalations)}):")
     for esc in escalations:
-        click.echo(f"  chunk {esc['chunk_id']}  node={esc['node_id']}  since {esc['closed_at']}")
+        click.echo(f"  chunk {esc['chunk_id']}  node={esc['node_id']}  since {esc['closed_at']}{_session_label(esc)}")
         click.echo(f"    resume: {esc['resume_command']}")
 
     takeovers = takeovers_resp.json().get("items", [])

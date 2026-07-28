@@ -34,7 +34,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from blizzard.hub.domain.work import DEFAULT_MODEL, ChunkStatus
+from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.steps import advance, fill, pull, reap
 from blizzard.runner.loop.tick import tick
@@ -106,7 +106,6 @@ def _detached_chunk(chunk="ch_1", *, status=ChunkStatus.READY):  # type: ignore[
         status=status,
         current_node_id="nd_build",
         latest_epoch=1,
-        model=DEFAULT_MODEL,
         route=None,
     )
 
@@ -118,7 +117,6 @@ def _routed_chunk(chunk="ch_1", *, status: ChunkStatus, runner_id="r1"):  # type
         status=status,
         current_node_id="nd_build",
         latest_epoch=1,
-        model=DEFAULT_MODEL,
         route=RouteView(runner_id=runner_id, workspace_id="ws1", environment_ids=["e1"]),
     )
 

@@ -1,12 +1,13 @@
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
 
-import type { GraphEdgeView, GraphNodeView } from '../api/hub';
+import type { GraphEdgeView, GraphNodeView, GraphSessionView } from '../api/hub';
 import { hasPermission, injectMeQuery } from '../auth/me.query';
 import { errorMessage } from '../error-message';
 import { KitButton } from '../kit/kit-button';
 import { GraphDiagram } from './graph-diagram';
 import { injectGraphLifecycleMutation } from './graph-lifecycle.mutations';
 import { GraphNodeTable } from './graph-node-table';
+import { GraphSessionTable } from './graph-session-table';
 import { injectHubGraphQuery } from './graphs.query';
 
 /** One outgoing edge, resolved against the choice it fires on (the choice lives on
@@ -20,8 +21,9 @@ interface ResolvedEdge {
 /**
  * The graph explorer's **detail** view — one minted graph's immutable structure,
  * rendered in full: the entry node, a node table (executor, session, judged-by,
- * retries, mode, checks, produces), every edge with the choice it fires on and its
- * prompt addendum, and each node's judgement/prompt text. Consumes
+ * retries, mode, checks, produces), the graph-level session declarations (issue #144),
+ * every edge with the choice it fires on and its prompt addendum, and each node's
+ * judgement/prompt text. Consumes
  * `injectHubGraphQuery` reactively over the `graphId` input, which the host page
  * binds to the `/graphs/:graphId` route param — refresh-safe and deep-linkable by
  * construction (`bzh:generated-client`; no hand-written fetch).
@@ -33,7 +35,7 @@ interface ResolvedEdge {
 @Component({
   selector: 'fleet-graph-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [GraphDiagram, GraphNodeTable, KitButton],
+  imports: [GraphDiagram, GraphNodeTable, GraphSessionTable, KitButton],
   template: `
     <section class="gd-panel graph-detail" aria-label="Graph detail" data-testid="graph-detail">
       @if (graphQuery.isPending()) {
@@ -78,6 +80,8 @@ interface ResolvedEdge {
           <fleet-graph-diagram [graph]="g" data-testid="graph-detail-diagram" />
 
           <fleet-graph-node-table [nodes]="nodes()" [entryNodeId]="g.entry_node_id" />
+
+          <fleet-graph-session-table [sessions]="sessions()" />
 
           <div class="section" data-testid="graph-detail-edges">
             <span class="gd-lbl">Edges &amp; choices</span>
@@ -266,6 +270,10 @@ export class GraphDetail {
   protected readonly actionError = signal<string | null>(null);
 
   protected readonly nodes = computed<readonly GraphNodeView[]>(() => this.graph()?.nodes ?? []);
+
+  /** The graph's declared sessions (issue #144) — empty for every graph minted before
+   * #144, which is what makes the session table render nothing at all there. */
+  protected readonly sessions = computed<readonly GraphSessionView[]>(() => this.graph()?.sessions ?? []);
 
   protected readonly entryNodeName = computed<string>(() => {
     const g = this.graph();

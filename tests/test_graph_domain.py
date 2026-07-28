@@ -35,7 +35,13 @@ def test_classify_session_fresh_is_fresh_with_no_source() -> None:
     assert classify_session("fresh") == (SessionMode.FRESH, None, False)
 
 
-@pytest.mark.parametrize("raw", ["resume:", "fresh:x", "bogus", ""])
+def test_classify_session_named_fresh_carries_the_name_as_source() -> None:
+    # #144's new form. It was malformed before #144, which is what makes adding it
+    # back-compatible: no already-minted graph can be carrying it.
+    assert classify_session("fresh:code") == (SessionMode.FRESH, "code", False)
+
+
+@pytest.mark.parametrize("raw", ["resume:", "fresh:", "bogus", ""])
 def test_classify_session_malformed_forms_are_flagged(raw: str) -> None:
     _mode, _source, malformed = classify_session(raw)
     assert malformed is True

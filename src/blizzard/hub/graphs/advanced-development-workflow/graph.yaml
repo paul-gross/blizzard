@@ -17,11 +17,50 @@
 name: adv-dwf
 entry: plan
 
+# Named session pools (issue #144). Three lineages, each with its own capability tier:
+#
+#   planning  the plan node's own long-running context, on the advanced tier — authoring
+#             a plan against the verifiability matrix and architecture guidance is the
+#             judgement-heaviest work this graph does.
+#   code      the mechanical build lineage — build -> verify -> pre-push -> resolve — on
+#             the basic tier and BOUNDED, since it is the one lineage that can accumulate
+#             indefinitely across a review-fail loop.
+#   gate      the two cold-eyes gates, on the basic tier. No `rotate:` block: a gate is
+#             only ever reached through `fresh:gate`, so its head is minted every entry
+#             and rotation never applies.
+#
+# This is a re-EXPRESSION of the lineages these nodes already had, not a re-shaping of
+# them. Naming `code` changes nothing about which session each member continues:
+# `--resume <sid>` reuses the session id in place (forking is opt-in and never used), so
+# build/verify/pre-push/resolve already share ONE session id today — `resume:build`,
+# bare `resume`, `resume:verify` and `resume:pre-push` all resolve to the same value.
+# What the pool adds is the bound and the tier pin.
+#
+# Deliberately NOT the issue's illustrative YAML, which shows `plan`/`build` on
+# `fresh:<name>`. `fresh:` mints on EVERY entry, so transcribing it would re-enter `plan`
+# with no memory of authoring the plan and `build` cold after a review-fail — silently
+# reverting the deliberate `resume:<node>` decisions the comments below still carry. The
+# `rotate:` thresholds supply the bounding `fresh:` was standing in for.
+sessions:
+  planning:
+    model: ["blizzard:advanced"]
+    effort: high
+  code:
+    model: ["blizzard:basic"]
+    rotate:
+      # Harness INVOCATIONS, not node-steps: one node-step burns two or three (a spawn
+      # plus a judge, plus any nudge), so this is roughly ten node-steps, not thirty.
+      max_invocations: 30
+      max_context_tokens: 120000
+      max_transcript_bytes: 20000000
+  gate:
+    model: ["blizzard:basic"]
+
 nodes:
   plan:
     executor: runner
     prompt: ./prompts/plan.md
-    session: resume:plan  # explicit: a must-fix loop-back from plan-review (fresh)
+    session: resume:planning  # explicit: a must-fix loop-back from plan-review (fresh)
       # would otherwise hand plan the gate's cold-read session via bare resume
       # instead of its own prior drafting context
     produces:
@@ -40,7 +79,7 @@ nodes:
   plan-review:
     executor: runner
     prompt: ./prompts/plan-review.md
-    session: fresh  # cold eyes for the gate; the default is resume
+    session: fresh:gate  # cold eyes for the gate; the default is resume
     produces:
       - plan-findings
       - retrospective
@@ -61,7 +100,7 @@ nodes:
   build:
     executor: runner
     prompt: ./prompts/build.md
-    session: resume:build  # explicit: loop-backs arrive from verify/review/resolve
+    session: resume:code  # explicit: loop-backs arrive from verify/review/resolve
       # (all non-build sessions); bare resume would hand build whichever of
       # those ran last instead of its own coding context
     produces:
@@ -84,6 +123,9 @@ nodes:
   verify:
     executor: runner
     prompt: ./prompts/verify.md
+    session: resume:code  # was bare `resume`, which already resolved to this same
+      # lineage — named so the whole mechanical track shares one bounded, tier-pinned
+      # pool rather than two spellings of the same thing
     produces:
       - verification-report
       - retrospective
@@ -104,7 +146,7 @@ nodes:
   review:
     executor: runner
     prompt: ./prompts/review.md
-    session: fresh
+    session: fresh:gate
     produces:
       - review-findings
       - retrospective
@@ -125,8 +167,8 @@ nodes:
   pre-push:
     executor: runner
     prompt: ./prompts/pre-push.md
-    session: resume:verify  # integration is mechanical (rebase, lint, targeted
-      # tests), not a judgement call — verify's session already carries build's
+    session: resume:code  # integration is mechanical (rebase, lint, targeted
+      # tests), not a judgement call — the `code` lineage already carries build's
       # context plus whatever gaps verify itself closed
     produces:
       - pre-push-summary
@@ -178,9 +220,9 @@ nodes:
   resolve:
     executor: runner
     prompt: ./prompts/resolve.md
-    session: resume:pre-push  # mechanical (base-merge, transient CI/forge blip),
-      # not a judgement call — deliver is a script node with no session, so
-      # pre-push is the closest prior node holding relevant branch/rebase context
+    session: resume:code  # mechanical (base-merge, transient CI/forge blip),
+      # not a judgement call — deliver is a script node with no session, so the
+      # `code` lineage is the closest context holding the branch/rebase history
     produces:
       - resolve-report
       - retrospective

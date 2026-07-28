@@ -113,12 +113,16 @@ export const getChunkApiChunksChunkIdGet = <ThrowOnError extends boolean = false
 /**
  * Patch Chunk
  *
- * Apply any of ``graph_id``, ``model``, ``intended_migration`` in one all-or-nothing
- * edit (issue #124, in #104's shape) — the claimed-chunk counterpart to
- * ``POST .../graph``/``POST .../model``, which stay refused past ``ready``.
+ * Apply any of ``graph_id``, ``default_model``, ``default_effort``,
+ * ``intended_migration`` in one all-or-nothing edit (issue #124, in #104's shape;
+ * the two defaults replace #27's ``model`` field per issue #144).
  *
- * ``graph_id``/``model`` behave exactly as their single-field POST siblings (404 on an
- * unknown chunk or graph, 422 on a blank model). ``intended_migration``, present only
+ * ``graph_id`` 404s on an unknown chunk or graph. ``default_model`` is a prioritized
+ * preference list — a blank entry is 422, and an empty list is a legitimate "express no
+ * preference" clear; ``default_effort`` is 422 when blank and cleared by explicit
+ * ``null``. Neither value's *vocabulary* is checked here: a ``blizzard:`` tier alias and
+ * a harness-native name are both opaque preference strings to the hub, resolved by the
+ * runner's adapter against its own config. ``intended_migration``, present only
  * once the request body actually names it (``model_fields_set`` — see
  * ``ChunkPatchRequest``), sets or overwrites the standing intent when it carries a
  * value, or clears it on explicit ``null``; its ``to_graph`` resolves by id or name to

@@ -22,7 +22,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.work import DEFAULT_MODEL, ChunkStatus
+from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerHandle
 from blizzard.runner.loop.internal.subprocess_worktree_git import WorktreeGitError
@@ -179,7 +179,6 @@ def test_reassign_abandon_branch_emits_an_info_attempt_abandoned(tmp_path):  # t
         status=ChunkStatus.RUNNING,
         current_node_id="nd_build",
         latest_epoch=1,
-        model=DEFAULT_MODEL,
         route=RouteView(runner_id="r2", workspace_id="ws1", environment_ids=["e1"]),
     )
     ctx = make_context(
@@ -279,7 +278,7 @@ def test_git_verify_failure_emits_a_command_failed_and_continues(tmp_path):  # t
 class _SpawnFailsHarness(FakeHarness):
     """A harness whose spawn fails to launch — L(iii)'s catch site."""
 
-    def spawn(self, envelope, preamble, session_hint, resume_from=None):  # type: ignore[no-untyped-def]
+    def spawn(self, envelope, preamble, session_hint, resume_from=None, *, model=None, effort=None):  # type: ignore[no-untyped-def]
         raise HarnessSpawnError("failed to spawn claude in /ws/e1: [Errno 2] No such file or directory")
 
 

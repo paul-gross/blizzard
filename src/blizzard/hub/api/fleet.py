@@ -273,6 +273,7 @@ def get_envelope(chunk_id: str, services: Annotated[HubServices, Depends(get_ser
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="chunk has no current runner node (terminal)")
     return build_node_envelope(
         chunk=chunk,
+        graph=graph,
         node=node,
         artifacts=services.chunks.load_artifacts(chunk_id),
         epoch=latest_epoch(facts) or 0,

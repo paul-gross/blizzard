@@ -89,6 +89,33 @@ class GraphEdgeView(BaseModel):
     prompt_addendum: str | None = None
 
 
+class RotatePolicyView(BaseModel):
+    """One declared session's rotation bounds (issue #144).
+
+    The wire counterpart of :class:`~blizzard.hub.domain.graph.RotatePolicy`. Every
+    threshold is independently optional; ``max_invocations`` counts **harness
+    invocations** (spawn, resume, judge, nudge), not node-steps — one node-step burns two
+    or three of them."""
+
+    max_context_tokens: int | None = None
+    max_transcript_bytes: int | None = None
+    max_invocations: int | None = None
+
+
+class GraphSessionView(BaseModel):
+    """One graph-level named session declaration (issue #144).
+
+    The wire counterpart of :class:`~blizzard.hub.domain.graph.SessionDecl`. ``model`` is
+    a prioritized preference list of opaque strings — a ``blizzard:`` tier alias or a
+    harness-native name — resolved left-to-right by the runner's adapter at session mint;
+    the hub interprets neither it nor ``effort``."""
+
+    name: str
+    model: list[str] = []
+    effort: str | None = None
+    rotate: RotatePolicyView | None = None
+
+
 class GraphNodeView(BaseModel):
     """A reified node in a minted graph — the full immutable definition."""
 
@@ -96,9 +123,10 @@ class GraphNodeView(BaseModel):
     name: str
     executor: str
     session: str
-    # The targeted-resume source node name (issue #115) — see
+    # The session reference target (issues #115, #144) — see
     # ``blizzard.hub.domain.graph.Node.session_source``. ``None`` means "chunk
-    # most-recent" (bare ``resume``) or ``fresh``.
+    # most-recent" (bare ``resume``) or bare ``fresh``; otherwise the declared session or
+    # node name the ``resume:``/``fresh:`` reference targets, read together with ``session``.
     session_source: str | None = None
     judged_by: str
     retries_max: int | None = None
@@ -140,6 +168,9 @@ class GraphView(BaseModel):
     enabled: bool
     retired: bool = False
     follow_latest: bool | None = None
+    # The graph-level named-session declarations (issue #144), in authored order — empty
+    # for every graph that declares none, which is every graph minted before #144.
+    sessions: list[GraphSessionView] = []
     nodes: list[GraphNodeView] = []
     edges: list[GraphEdgeView] = []
     warnings: list[str] = []

@@ -9,7 +9,6 @@ import {
   ChunkTimeline,
   ChunkTokenBreakdown,
   type EditGraphEvent,
-  type EditModelEvent,
   KitAsyncState,
   type KitAsyncStateValue,
   KitBackBar,
@@ -25,7 +24,6 @@ import {
   injectHubChunkWorkItemsQuery,
   injectResolveDecisionMutation,
   injectSetChunkGraphMutation,
-  injectSetChunkModelMutation,
   readAnswerFailure,
 } from 'fleet';
 
@@ -97,7 +95,7 @@ import { ArtifactLinks } from './artifact-links';
             <span class="node" data-testid="mobile-chunk-node">{{ nodeLabel() }}</span>
           </header>
           <fleet-kit-panel class="section" data-testid="section-work-item" label="work item" [count]="pointerCount() || null">
-            <fleet-chunk-detail-facts [detail]="d" (editGraph)="onEditGraph($event)" (editModel)="onEditModel($event)">
+            <fleet-chunk-detail-facts [detail]="d" (editGraph)="onEditGraph($event)">
               <fleet-chunk-detail-token-breakdown token-breakdown [detail]="d" />
             </fleet-chunk-detail-facts>
           </fleet-kit-panel>
@@ -231,7 +229,6 @@ export class ChunkPage {
   private readonly answerMutation = injectAnswerQuestionMutation();
   private readonly resolveMutation = injectResolveDecisionMutation();
   private readonly editGraphMutation = injectSetChunkGraphMutation();
-  private readonly editModelMutation = injectSetChunkModelMutation();
 
   /** The chunk aggregate, or `undefined` while the first read is in flight. */
   protected readonly detail = computed(() => this.detailQuery.data());
@@ -311,14 +308,6 @@ export class ChunkPage {
     this.editGraphMutation.mutate(
       { chunkId: event.chunkId, graphId: event.graphId },
       { onError: (error) => this.actionError.set(errorMessage(error, 'Set graph failed.')) },
-    );
-  }
-
-  protected onEditModel(event: EditModelEvent): void {
-    this.beginAction();
-    this.editModelMutation.mutate(
-      { chunkId: event.chunkId, model: event.model },
-      { onError: (error) => this.actionError.set(errorMessage(error, 'Set model failed.')) },
     );
   }
 }
