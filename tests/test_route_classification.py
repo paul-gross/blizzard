@@ -65,6 +65,8 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("GET", "/api/events/stream"): FLEET_VIEW,
     ("GET", "/api/events"): FLEET_VIEW,
     ("POST", "/api/graphs"): GRAPH_EDIT,
+    # Reconciliation mints (issue #146), so it needs exactly what an explicit mint needs.
+    ("POST", "/api/graphs/sync"): GRAPH_EDIT,
     ("GET", "/api/graphs"): FLEET_VIEW,
     ("GET", "/api/graphs/{graph_id}"): FLEET_VIEW,
     ("POST", "/api/graphs/{graph_id}/retire"): GRAPH_EDIT,

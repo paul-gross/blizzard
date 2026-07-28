@@ -1046,6 +1046,38 @@ def graph_mint(path: str, as_json: bool, hub_url: str | None) -> None:
         click.echo(f"warning: {warning}")
 
 
+@graph_group.command("sync")
+@_json_option
+@_hub_url_options
+def graph_sync(as_json: bool, hub_url: str | None) -> None:
+    """Reconcile the hub's packaged graphs into its store, minting only what changed.
+
+    The deploy verb (issue #146). Graphs live in the store, not on disk — the hub
+    resolves a *minted* graph per chunk and never re-reads the packaged YAML — so
+    installing a wheel with a changed graph used to change nothing, silently, with every
+    deploy check still green. Run this at the end of every deploy: it is idempotent, so a
+    wheel that changed no graph mints nothing and churns no lineage.
+
+    A pure client of ``POST /api/graphs/sync``; the **hub's own** packaged set is what is
+    reconciled, not this CLI's, so a client wheel that has drifted from the daemon's
+    cannot mint the wrong definitions. Exits non-zero only if a packaged graph failed to
+    load or validate — the others still reconciled, and their outcomes are printed."""
+    resp = _request("post", "/api/graphs/sync", hub_url=hub_url, json_body={})
+    _check(resp, "POST /graphs/sync")
+    body = resp.json()
+    if as_json:
+        click.echo(json.dumps(body))
+    else:
+        for entry in body.get("entries", []):
+            detail = f" — {entry['detail']}" if entry.get("detail") else ""
+            graph_id = f" {entry['graph_id']}" if entry.get("graph_id") else ""
+            click.echo(f"{entry['name']}: {entry['status']}{graph_id}{detail}")
+        if not body.get("entries"):
+            click.echo("no packaged graphs to reconcile")
+    if not body.get("ok", True):
+        raise click.ClickException("one or more packaged graphs failed to reconcile")
+
+
 @graph_group.command("retire")
 @click.argument("graph_id")
 @click.option("--by", "by", default="operator", help="Who is retiring (recorded on the fact).")

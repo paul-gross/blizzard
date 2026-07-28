@@ -68,6 +68,31 @@ If the wheel is installed somewhere other than `/opt/blizzard/venv`, edit the
 `ExecStart`/`ExecStartPre` paths to match `command -v blizzard-hub` — systemd
 requires an absolute path there.
 
+**Reconcile the graphs after every deploy — `blizzard hub graph sync`.** Unlike the store,
+which self-heals on restart, a wheel's **graph** changes are inert until they are minted:
+graphs live in the hub's store, the hub resolves a *minted* graph per chunk, and it never
+re-reads the packaged YAML. So a deploy that ships a changed graph and stops at the
+restart leaves every new chunk running the previous definition — with no error, log line,
+or status output saying so.
+
+```bash
+# after the hub is back up, and before you consider the deploy done
+/opt/blizzard/venv/bin/blizzard hub graph sync
+```
+
+It compares each packaged graph's **fully inlined** definition against the newest mint of
+its name and mints only what actually differs, so it is safe to run unconditionally: an
+unchanged wheel mints nothing and churns no lineage. Inlined is the operative word — a
+mint folds every `prompt` / `prompt_addendum` file reference into the stored definition,
+so an edit confined to a `prompts/*.md` is a real graph change that a `graph.yaml` diff
+would miss entirely. A graph that fails to load or validate is reported as `failed` and
+exits non-zero without stopping the others from reconciling.
+
+Minting is **additive**: the new definition becomes `effective` and supersedes the prior
+one for future resolution, while every in-flight chunk stays pinned to the definition it
+started under (moving one deliberately is `hub chunk migrate`, below). Confirm with
+`blizzard hub graph list` — the newest per name should read `effective`.
+
 **Upgrades self-heal the store — for an additive or backfill revision.** To adopt a new
 wheel, `pip install` it into the venv and `systemctl restart` the units — no manual
 migration step. Each unit's `ExecStartPre` runs `… migrate` before the daemon opens its

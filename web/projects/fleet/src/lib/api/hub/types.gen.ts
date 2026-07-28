@@ -1250,6 +1250,55 @@ export type GraphSummaryView = {
 };
 
 /**
+ * GraphSyncEntry
+ *
+ * One packaged graph's reconciliation outcome (issue #146).
+ *
+ * ``status`` is ``minted``, ``up-to-date``, or ``failed``. ``graph_id`` is the freshly
+ * minted graph's id, present only on ``minted``. ``detail`` says *why* a graph minted,
+ * or what went wrong when it failed.
+ */
+export type GraphSyncEntry = {
+    /**
+     * Detail
+     */
+    detail?: string | null;
+    /**
+     * Graph Id
+     */
+    graph_id?: string | null;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Status
+     */
+    status: string;
+};
+
+/**
+ * GraphSyncResponse
+ *
+ * ``POST /graphs/sync``'s report — one entry per packaged graph (issue #146).
+ *
+ * ``ok`` is false iff any entry failed, so a deploy can gate on the field rather than
+ * re-deriving the rule from the rows. Always ``200``: a per-graph failure is data in
+ * this report, not a transport error — the other graphs still reconciled, and the
+ * caller needs to see both halves.
+ */
+export type GraphSyncResponse = {
+    /**
+     * Entries
+     */
+    entries?: Array<GraphSyncEntry>;
+    /**
+     * Ok
+     */
+    ok: boolean;
+};
+
+/**
  * GraphView
  *
  * A minted graph as served by ``GET /graphs/{graph_id}`` and the mint response.
@@ -3860,6 +3909,22 @@ export type MintGraphApiGraphsPostResponses = {
 };
 
 export type MintGraphApiGraphsPostResponse = MintGraphApiGraphsPostResponses[keyof MintGraphApiGraphsPostResponses];
+
+export type SyncGraphsApiGraphsSyncPostData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/graphs/sync';
+};
+
+export type SyncGraphsApiGraphsSyncPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: GraphSyncResponse;
+};
+
+export type SyncGraphsApiGraphsSyncPostResponse = SyncGraphsApiGraphsSyncPostResponses[keyof SyncGraphsApiGraphsSyncPostResponses];
 
 export type GetGraphApiGraphsGraphIdGetData = {
     body?: never;

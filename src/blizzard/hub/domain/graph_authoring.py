@@ -170,6 +170,43 @@ class GraphMintService:
                 )
         return warnings
 
+    def mint_if_changed(self, doc: GraphDoc, *, definition_yaml: str, minted: GraphDoc | None) -> Graph | None:
+        """Mint ``doc`` only if it differs from ``minted``, the store's newest of its name.
+
+        Reconciliation's per-graph rule (issue #146). Returns the freshly minted
+        :class:`Graph`, or ``None`` when the store is already up to date. Raises
+        :class:`GraphValidationError` exactly as :meth:`mint` does — an invalid packaged
+        graph must not be silently skipped as "unchanged".
+
+        Graphs live in the store, not on disk: the hub resolves a *minted* graph per
+        chunk and never re-reads the packaged YAML. Nothing minted at startup and
+        ``graph mint`` was operator-only, so shipping a changed graph in a new wheel did
+        not change fleet behavior — the deploy went green, the daemons came up healthy,
+        and every new chunk kept running the previous definition, with no error, log line
+        or status output saying so.
+
+        ``minted`` is the newest-minted definition of this name **re-parsed back into an
+        authoring doc**, or ``None`` for a name never minted (a fresh store, or a newly
+        added graph — which mints as the first of its lineage). Resolved by the caller,
+        which is also where YAML parsing lives, keeping this a pure taker-of-objects
+        (``bzh:domain-takes-objects``); :mod:`blizzard.hub.graph_sync` is that caller.
+
+        Comparing the *parsed* docs is what makes "only if changed" correct:
+
+        * ``mint`` inlines every ``prompt`` / ``prompt_addendum`` file reference into the
+          stored definition, so an edit confined to a ``prompts/*.md`` file changes the
+          minted graph while leaving ``graph.yaml`` byte-identical. Diffing the source
+          file would miss exactly the change most likely to be made.
+        * :class:`GraphDoc` and everything under it are frozen dataclasses, so ``==`` is a
+          total structural comparison, indifferent to YAML formatting — quoting, block
+          style, key order, the re-serialization ``inline_graph_yaml`` itself performs. A
+          reformat does not churn the lineage, and a real change is not hidden by one.
+        """
+        if minted is not None and minted == doc:
+            return None
+        graph, _ = self.mint(doc, definition_yaml=definition_yaml)
+        return graph
+
     def ensure_default(self, doc: GraphDoc, *, definition_yaml: str) -> Graph:
         """Mint the configured default graph if no graph of its name has ever existed.
 

@@ -30,6 +30,18 @@ def default_graph_yaml() -> str:
     return DEFAULT_GRAPH_PATH.read_text()
 
 
+def packaged_graph_paths() -> list[Path]:
+    """Every packaged graph's ``graph.yaml``, sorted by directory name (issue #146).
+
+    The set reconciliation walks: one directory per graph under this package, each
+    holding its own ``graph.yaml``. Sorted so a reconcile report reads the same way twice
+    and a failure in one graph lands in a predictable place. ``scripts/`` and
+    ``__pycache__`` carry no ``graph.yaml`` and so are skipped by construction — the
+    filename is the membership test, not a name blocklist that would need maintaining.
+    """
+    return sorted(_GRAPHS_DIR.glob("*/graph.yaml"), key=lambda path: path.parent.name)
+
+
 def load_graph_doc(path: Path) -> GraphDoc:
     """Load a graph definition file, inline its prompt references, and parse it.
 

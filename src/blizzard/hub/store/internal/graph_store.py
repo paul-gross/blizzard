@@ -124,6 +124,18 @@ class GraphStore:
                     return self._reify(conn, row)
             return None
 
+    def newest_definition_yaml(self, name: str) -> str | None:
+        # Same ordering as get_enabled_by_name, minus the retired filter — see the
+        # protocol docstring for why reconciliation compares against the newest *minted*.
+        with self._engine.connect() as conn:
+            row = conn.execute(
+                select(graphs.c.definition_yaml)
+                .where(graphs.c.name == name)
+                .order_by(graphs.c.created_at.desc(), graphs.c.graph_id.desc())
+                .limit(1)
+            ).first()
+        return str(row.definition_yaml) if row is not None else None
+
     def list_all(self) -> list[Graph]:
         with self._engine.connect() as conn:
             rows = conn.execute(select(graphs).order_by(graphs.c.created_at.desc())).all()

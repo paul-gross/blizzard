@@ -1,7 +1,8 @@
-"""``blizzard hub graph list|show|retire|enable|mint`` (unit tier) — pure clients of the
-graph lifecycle and mint endpoints, driven here with ``httpx`` stubbed (issue #101,
-issue #104, issue #123). ``mint`` supersedes the former ``upload`` — same file-inlining
-behavior, plus stdin (``-``) support and a fuller validation report.
+"""``blizzard hub graph list|show|retire|enable|mint|sync`` (unit tier) — pure clients of
+the graph lifecycle, mint, and reconciliation endpoints, driven here with ``httpx``
+stubbed (issue #101, issue #104, issue #123, issue #146). ``mint`` supersedes the former
+``upload`` — same file-inlining behavior, plus stdin (``-``) support and a fuller
+validation report; ``sync`` is the deploy verb, reconciling the **hub's** packaged set.
 """
 
 from __future__ import annotations
@@ -298,3 +299,56 @@ def test_graph_mint_reads_the_definition_from_stdin(monkeypatch: pytest.MonkeyPa
     assert isinstance(body, dict)
     assert body["definition_yaml"] == _UPLOAD_GRAPH_YAML
     assert "gr_new" in result.output
+
+
+@pytest.mark.unit
+def test_graph_sync_prints_every_outcome_and_exits_zero(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The deploy verb (issue #146): one line per packaged graph, minted or not."""
+    calls: list[str] = []
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        calls.append(url)
+        return _FakeResponse(
+            200,
+            {
+                "ok": True,
+                "entries": [
+                    {"name": "default", "status": "up-to-date", "graph_id": None, "detail": None},
+                    {"name": "bas-dwf", "status": "minted", "graph_id": "gr_new", "detail": "first of its name"},
+                ],
+            },
+        )
+
+    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["graph", "sync"], env={"BZ_HUB_URL": "http://hub.local:8421"})
+
+    assert result.exit_code == 0, result.output
+    assert calls == ["http://hub.local:8421/api/graphs/sync"]
+    assert "default: up-to-date" in result.output
+    assert "bas-dwf: minted gr_new — first of its name" in result.output
+
+
+@pytest.mark.unit
+def test_graph_sync_exits_non_zero_when_a_packaged_graph_failed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A per-graph failure is a non-zero exit — but the graphs that did reconcile are
+    still reported, since the reconciler does not stop at the first bad one."""
+
+    def fake_post(url: str, *, json: object, timeout: float) -> _FakeResponse:
+        return _FakeResponse(
+            200,
+            {
+                "ok": False,
+                "entries": [
+                    {"name": "default", "status": "minted", "graph_id": "gr_a", "detail": "first of its name"},
+                    {"name": "broken", "status": "failed", "graph_id": None, "detail": "entry node not found"},
+                ],
+            },
+        )
+
+    monkeypatch.setattr(hub_cli.httpx, "post", fake_post)
+    result = CliRunner().invoke(hub_group, ["graph", "sync"])
+
+    assert result.exit_code != 0
+    assert "default: minted gr_a" in result.output
+    assert "broken: failed — entry node not found" in result.output
+    assert "failed to reconcile" in result.output

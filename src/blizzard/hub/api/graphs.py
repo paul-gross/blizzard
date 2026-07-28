@@ -1,5 +1,5 @@
-"""Graph routes — ``POST /api/graphs``, ``GET /api/graphs``, ``GET /api/graphs/{id}``,
-``POST /api/graphs/{id}/retire``, ``POST /api/graphs/{id}/enable``.
+"""Graph routes — ``POST /api/graphs``, ``POST /api/graphs/sync``, ``GET /api/graphs``,
+``GET /api/graphs/{id}``, ``POST /api/graphs/{id}/retire``, ``POST /api/graphs/{id}/enable``.
 
 Mint a workflow graph from a YAML definition: parse it, validate (errors reject 422
 with a :class:`GraphValidationReport`, warnings flag), reify immutable.
@@ -7,6 +7,12 @@ with a :class:`GraphValidationReport`, warnings flag), reify immutable.
 newest non-retired graph of each name marked ``effective`` — the domain's
 :func:`~blizzard.hub.domain.graph.mark_effective` derives the marker, so the
 "newest-per-name, retired-excluded" rule (issue #101) lives in one place.
+``POST /api/graphs/sync`` reconciles the hub's own **packaged** graph set against the
+store, minting only what changed (issue #146) — the reconciliation itself is
+:mod:`blizzard.hub.graph_sync`'s, so this route is a thin adapter and the same function
+serves an at-startup reconciliation unchanged. It is hub-side rather than a CLI-composed
+loop because the packaged set that matters is the one the **running daemon** was deployed
+with, which a possibly-different client wheel cannot speak for.
 ``GET /api/graphs/{graph_id}`` serves the full reified graph; unknown id resolves to
 404 at the edge. ``retire``/``enable`` append a reversible lifecycle fact
 (:class:`~blizzard.hub.domain.graph_lifecycle.GraphLifecycleService`) — the ``graphs``
@@ -40,6 +46,7 @@ from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
 from blizzard.hub.domain.graph import Graph, GraphParseError, Node, mark_effective, parse_graph_doc
 from blizzard.hub.domain.graph_authoring import GraphValidationError
+from blizzard.hub.graph_sync import GraphSyncStatus, reconcile_packaged_graphs
 from blizzard.wire.graph import (
     GraphChoiceView,
     GraphEdgeView,
@@ -47,6 +54,8 @@ from blizzard.wire.graph import (
     GraphMintRequest,
     GraphNodeView,
     GraphSummaryView,
+    GraphSyncEntry,
+    GraphSyncResponse,
     GraphValidationReport,
     GraphView,
     ProducesEntry,
@@ -127,6 +136,31 @@ def mint_graph(request: GraphMintRequest, services: Annotated[HubServices, Depen
 
     # A freshly minted graph carries no lifecycle fact yet — it starts enabled.
     return _graph_view(graph, retired=False, warnings=warnings)
+
+
+@router.post("/graphs/sync", response_model=GraphSyncResponse, dependencies=[Depends(require(GRAPH_EDIT))])
+def sync_graphs(services: Annotated[HubServices, Depends(get_services)]) -> GraphSyncResponse:
+    """Reconcile the packaged graph set against the store, minting only what changed.
+
+    Safe to run unconditionally at the end of every deploy (issue #146): a wheel whose
+    packaged graphs all match the newest mint of their name mints nothing and churns no
+    lineage, so re-running it is a no-op rather than a new generation of every graph.
+
+    Registered **above** ``/graphs/{graph_id}``'s routes so ``sync`` is not swallowed as a
+    graph id — FastAPI matches in declaration order, and the two would otherwise collide
+    only for the one literal that matters.
+
+    Always ``200``. A graph that fails to load or validate is a ``failed`` row in the
+    report rather than a status code, because the other graphs still reconciled and the
+    caller needs to see both halves; ``ok`` carries the pass/fail the CLI exits on.
+    """
+    outcomes = reconcile_packaged_graphs(services.graph_mint, services.graphs)
+    return GraphSyncResponse(
+        ok=all(o.status is not GraphSyncStatus.FAILED for o in outcomes),
+        entries=[
+            GraphSyncEntry(name=o.name, status=o.status.value, graph_id=o.graph_id, detail=o.detail) for o in outcomes
+        ],
+    )
 
 
 @router.get("/graphs", response_model=list[GraphSummaryView], dependencies=[Depends(require(FLEET_VIEW))])

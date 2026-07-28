@@ -1750,6 +1750,69 @@
         "title": "GraphSummaryView",
         "type": "object"
       },
+      "GraphSyncEntry": {
+        "description": "One packaged graph's reconciliation outcome (issue #146).\n\n``status`` is ``minted``, ``up-to-date``, or ``failed``. ``graph_id`` is the freshly\nminted graph's id, present only on ``minted``. ``detail`` says *why* a graph minted,\nor what went wrong when it failed.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "graph_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graph Id"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "status"
+        ],
+        "title": "GraphSyncEntry",
+        "type": "object"
+      },
+      "GraphSyncResponse": {
+        "description": "``POST /graphs/sync``'s report \u2014 one entry per packaged graph (issue #146).\n\n``ok`` is false iff any entry failed, so a deploy can gate on the field rather than\nre-deriving the rule from the rows. Always ``200``: a per-graph failure is data in\nthis report, not a transport error \u2014 the other graphs still reconciled, and the\ncaller needs to see both halves.",
+        "properties": {
+          "entries": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GraphSyncEntry"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "GraphSyncResponse",
+        "type": "object"
+      },
       "GraphView": {
         "description": "A minted graph as served by ``GET /graphs/{graph_id}`` and the mint response.\n\n``enabled`` is ``not retired`` \u2014 the graph's own lifecycle state (issue #101),\nindependent of whether it is currently the newest of its name. ``retired`` is the\nsame fact spelled out explicitly for a board that wants to distinguish \"retired\"\nfrom \"merely superseded by a newer version\" (:class:`GraphSummaryView`'s\n``effective``). Deliberately two wire fields for one fact, not drift: the only\nconstructor, :func:`~blizzard.hub.api.graphs._graph_view`, sets both from the same\n``retired`` bool in one call (``enabled=not retired, retired=retired``) \u2014 there is\nno second call site that could set one and forget the other.",
         "properties": {
@@ -5670,6 +5733,28 @@
           }
         },
         "summary": "Mint Graph",
+        "tags": [
+          "graphs"
+        ]
+      }
+    },
+    "/api/graphs/sync": {
+      "post": {
+        "description": "Reconcile the packaged graph set against the store, minting only what changed.\n\nSafe to run unconditionally at the end of every deploy (issue #146): a wheel whose\npackaged graphs all match the newest mint of their name mints nothing and churns no\nlineage, so re-running it is a no-op rather than a new generation of every graph.\n\nRegistered **above** ``/graphs/{graph_id}``'s routes so ``sync`` is not swallowed as a\ngraph id \u2014 FastAPI matches in declaration order, and the two would otherwise collide\nonly for the one literal that matters.\n\nAlways ``200``. A graph that fails to load or validate is a ``failed`` row in the\nreport rather than a status code, because the other graphs still reconciled and the\ncaller needs to see both halves; ``ok`` carries the pass/fail the CLI exits on.",
+        "operationId": "sync_graphs_api_graphs_sync_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphSyncResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Sync Graphs",
         "tags": [
           "graphs"
         ]

@@ -124,6 +124,31 @@ class GraphView(BaseModel):
     warnings: list[str] = []
 
 
+class GraphSyncEntry(BaseModel):
+    """One packaged graph's reconciliation outcome (issue #146).
+
+    ``status`` is ``minted``, ``up-to-date``, or ``failed``. ``graph_id`` is the freshly
+    minted graph's id, present only on ``minted``. ``detail`` says *why* a graph minted,
+    or what went wrong when it failed."""
+
+    name: str
+    status: str
+    graph_id: str | None = None
+    detail: str | None = None
+
+
+class GraphSyncResponse(BaseModel):
+    """``POST /graphs/sync``'s report — one entry per packaged graph (issue #146).
+
+    ``ok`` is false iff any entry failed, so a deploy can gate on the field rather than
+    re-deriving the rule from the rows. Always ``200``: a per-graph failure is data in
+    this report, not a transport error — the other graphs still reconciled, and the
+    caller needs to see both halves."""
+
+    ok: bool
+    entries: list[GraphSyncEntry] = []
+
+
 class GraphSummaryView(BaseModel):
     """One graph's summary row — a name-lineage entry as served by ``GET /graphs``.
 

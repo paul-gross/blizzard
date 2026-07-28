@@ -621,6 +621,20 @@ class IReadGraphRepository(Protocol):
 
     def list_all(self) -> list[Graph]: ...
 
+    def newest_definition_yaml(self, name: str) -> str | None:
+        """The newest-minted graph of ``name``'s stored source YAML, or ``None`` if the
+        name has never been minted (issue #146).
+
+        Reads back the ``definition_yaml`` column the mint persists "for audit and
+        re-export" — reconciliation is that re-export. Deliberately **newest-minted**,
+        not newest-*enabled*: this answers "what does the store already hold for this
+        name", which is what makes re-running the reconciler a no-op. Retirement is a
+        separate lifecycle (issue #101) and does not change what was minted, so it is not
+        consulted here; the tie-break matches :meth:`get_enabled_by_name` and
+        :func:`mark_effective` so "newest" means the same thing everywhere.
+        """
+        ...
+
     def is_retired(self, graph_id: str) -> bool:
         """Whether ``graph_id``'s newest lifecycle fact reads retired (issue #101).
 
