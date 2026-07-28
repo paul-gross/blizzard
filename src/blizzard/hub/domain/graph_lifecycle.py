@@ -51,3 +51,19 @@ class GraphLifecycleService:
         all) just appends another ``retired=False`` fact, a harmless no-op.
         """
         self._graphs.record_lifecycle(graph.graph_id, retired=False, at=self._clock.now(), by=by)
+
+    def set_follow_latest(self, graph: Graph, *, follow_latest: bool | None, by: str) -> None:
+        """Append this graph's follow-latest policy — the tri-state (issue #164).
+
+        ``True``/``False`` override :attr:`~blizzard.hub.config.HubConfig.follow_latest`
+        for every chunk pinned to this mint; ``None`` reverts to inheriting it. All three
+        are recordable values, so clearing an override is an appended fact like any other
+        — the history stays, and there is no delete path here any more than there is for
+        retire/re-enable.
+
+        A **second** lifecycle on the same graph, not a widening of the retire brake: a
+        graph can be retired and re-enabled any number of times without that saying
+        anything about whether its chunks follow the newest mint, so the two facts are
+        appended independently and read independently.
+        """
+        self._graphs.record_policy(graph.graph_id, follow_latest=follow_latest, at=self._clock.now(), by=by)

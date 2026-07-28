@@ -342,6 +342,7 @@ def build_hub(
     runner_auth_mode: str = RUNNER_AUTH_WARN,
     route_token_mode: str = ROUTE_TOKEN_WARN,
     produces_mode: str = PRODUCES_WARN,
+    follow_latest: bool = False,
     auth_mode: str = AUTH_MODE_NONE,
     superuser: str | None = None,
     oauth_providers: dict[str, IOAuthProvider] | None = None,
@@ -374,6 +375,7 @@ def build_hub(
         runner_auth_mode=runner_auth_mode,
         route_token_mode=route_token_mode,
         produces_mode=produces_mode,
+        follow_latest=follow_latest,
         auth=AuthConfig(mode=auth_mode, superuser=superuser),
         trusted_proxies=tuple(trusted_proxies),
     )

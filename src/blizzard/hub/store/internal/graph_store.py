@@ -33,7 +33,14 @@ from blizzard.hub.domain.graph import (
     SessionMode,
     target_graph_of,
 )
-from blizzard.hub.store.schema import graph_choices, graph_edges, graph_lifecycle_facts, graph_nodes, graphs
+from blizzard.hub.store.schema import (
+    graph_choices,
+    graph_edges,
+    graph_lifecycle_facts,
+    graph_nodes,
+    graph_policy_facts,
+    graphs,
+)
 
 
 class GraphStore:
@@ -173,6 +180,35 @@ class GraphStore:
         """Append a ``graph.retired``/``graph.enabled`` fact — newest-fact-wins (issue #101)."""
         with self._engine.begin() as conn:
             conn.execute(insert(graph_lifecycle_facts).values(graph_id=graph_id, retired=retired, set_at=at, set_by=by))
+
+    def follow_latest(self, graph_id: str) -> bool | None:
+        """Newest ``graph_policy_facts`` row for ``graph_id`` wins; no row reads ``None``
+        (inherit the hub setting) — issue #164.
+
+        Ordered by ``id`` rather than ``set_at``, exactly like ``_is_retired``: two facts
+        appended within the same clock tick must still resolve newest-write-wins, and the
+        autoincrement key is the only monotonic thing on the row. ``row.follow_latest`` is
+        itself nullable, so a present row reading ``None`` is a deliberate revert-to-inherit
+        and is returned as such — indistinguishable in *effect* from no row, which is the
+        intent, but preserved as history rather than deleted.
+        """
+        with self._engine.connect() as conn:
+            row = conn.execute(
+                select(graph_policy_facts.c.follow_latest)
+                .where(graph_policy_facts.c.graph_id == graph_id)
+                .order_by(graph_policy_facts.c.id.desc())
+                .limit(1)
+            ).first()
+        if row is None or row.follow_latest is None:
+            return None
+        return bool(row.follow_latest)
+
+    def record_policy(self, graph_id: str, *, follow_latest: bool | None, at: datetime, by: str) -> None:
+        """Append a follow-latest policy fact — newest-fact-wins (issue #164)."""
+        with self._engine.begin() as conn:
+            conn.execute(
+                insert(graph_policy_facts).values(graph_id=graph_id, follow_latest=follow_latest, set_at=at, set_by=by)
+            )
 
     def _reify(self, conn, graph_row) -> Graph:  # type: ignore[no-untyped-def]
         node_rows = conn.execute(select(graph_nodes).where(graph_nodes.c.graph_id == graph_row.graph_id)).all()

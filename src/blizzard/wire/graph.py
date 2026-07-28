@@ -35,6 +35,19 @@ class GraphLifecycleRequest(BaseModel):
     by: str = "operator"
 
 
+class GraphPolicyRequest(BaseModel):
+    """Set a graph's follow-latest policy — the tri-state (issue #164).
+
+    ``follow_latest`` is required and all three values are meaningful: ``true``/``false``
+    override the hub-level setting for chunks pinned to this mint, and explicit ``null``
+    reverts to inheriting it. It carries no default, so "clear the override" is something
+    a caller asks for by naming ``null`` rather than something an omitted field does by
+    accident; ``by`` is recorded on the appended fact, exactly as retire/re-enable do."""
+
+    follow_latest: bool | None
+    by: str = "operator"
+
+
 class GraphValidationReport(BaseModel):
     """The validator's verdict — the 422 body when errors reject a mint."""
 
@@ -112,13 +125,21 @@ class GraphView(BaseModel):
     ``effective``). Deliberately two wire fields for one fact, not drift: the only
     constructor, :func:`~blizzard.hub.api.graphs._graph_view`, sets both from the same
     ``retired`` bool in one call (``enabled=not retired, retired=retired``) — there is
-    no second call site that could set one and forget the other."""
+    no second call site that could set one and forget the other.
+
+    ``follow_latest`` is the stored **tri-state** (issue #164), served as-is: ``true`` /
+    ``false`` override the hub-level setting for chunks pinned to this mint, and ``null``
+    — every mint's default — inherits it. Deliberately the stored value rather than the
+    resolved one, so a reader can tell "this graph says nothing" from "this graph says
+    false"; the resolution against `HubConfig.follow_latest` happens at the transition,
+    where the hub setting is in hand."""
 
     graph_id: str
     name: str
     entry_node_id: str
     enabled: bool
     retired: bool = False
+    follow_latest: bool | None = None
     nodes: list[GraphNodeView] = []
     edges: list[GraphEdgeView] = []
     warnings: list[str] = []

@@ -821,6 +821,44 @@ executor — a migration landing on a hub-executed node derives `delivering`, ex
 a transition into one does. See `blizzard hub chunk migrate --help` for the CLI's full
 contract.
 
+### Following the latest mint automatically
+
+The intent above is per chunk and aims at one resolved mint **id** — deliberately, so a
+later mint under the same name never silently redirects a chunk an operator aimed by
+hand. The cost is that every workflow edit strands the fleet on old mints until each
+in-flight chunk is migrated individually. `follow_latest` (issue #164) is the standing
+policy that removes that chore: a chunk pinned to a follow-latest graph re-pins to the
+newest *enabled* mint of its own graph's **name** at its next transition.
+
+Two levels, and the graph wins where it speaks:
+
+| Where | Value | Meaning |
+|-------|-------|---------|
+| `follow_latest` in `blizzard-hub.toml` | `true` / `false` (default `false`) | the fleet-wide default for every graph that says nothing |
+| `blizzard hub graph follow-latest <graph-id> true\|false\|inherit` | `true` / `false` / `null` | this mint's own override; `inherit` (the default for every mint) defers to the hub |
+
+The shipped default is `false`, so landing this changed nothing until someone opts in.
+The policy is set **per mint**, not per name: a chunk consults the policy of the graph it
+is pinned to, so arming a lineage means arming the mint its chunks sit on — or setting
+the hub default, which covers every name at once. `GET /api/graphs/{id}` serves the
+stored tri-state as-is, so a reader can tell "this graph says nothing" from "this graph
+says false".
+
+It rides the same deferred path as an explicit intent, with the same guarantees: nothing
+in-flight is interrupted, the move is recorded as a **migration** fact rather than
+disguised as a transition, and it fires only at a transition the chunk was making anyway.
+Landing is name-match-else-entry on that transition's own destination — the chunk goes
+where it was already going, just on the newer mint, falling back to the target's entry
+node when the newer definition no longer has that node at all.
+
+An explicit `intended_migration` **outranks** the policy: if a chunk carries one, the
+policy is not consulted at all, including on a transition where an `auto` intent falls
+through for want of a name match. The policy is otherwise a plain no-op — no error, no
+fact — when the chunk is already on the newest mint, when every newer mint is retired, or
+when the effective policy resolves `false`. It will never move a chunk *backwards*: if a
+chunk's own mint has been retired so name resolution answers with an older one, the chunk
+stays where it is.
+
 ## Graph lifecycle — retire and re-enable
 
 `blizzard hub graph list` / `graph retire <graph_id>` / `graph enable <graph_id>`

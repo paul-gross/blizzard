@@ -47,7 +47,7 @@ from blizzard.hub.composition import HubServices
 from blizzard.hub.delivery.hub_node import poll_interval_for
 from blizzard.hub.domain.claim import ClaimConflict, ClaimDeniedPaused, ClaimDeniedTerminal
 from blizzard.hub.domain.envelope import addendum_for_transition, build_node_envelope
-from blizzard.hub.domain.graph import Graph
+from blizzard.hub.domain.graph import Graph, resolve_follow_latest
 from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
@@ -99,6 +99,10 @@ def _produces_mode(request: Request) -> str:
     return request.app.state.config.produces_mode
 
 
+def _follow_latest_default(request: Request) -> bool:
+    return bool(request.app.state.config.follow_latest)
+
+
 def _resolve_intended_migration_target(services: HubServices, chunk: Chunk) -> Graph | None:
     """The chunk's own standing migration intent's target, resolved by id (issue #124) —
     or ``None`` when no intent is set, the target was never minted, or it has since been
@@ -120,6 +124,51 @@ def _resolve_intended_migration_target(services: HubServices, chunk: Chunk) -> G
     if target is None or services.graphs.is_retired(target.graph_id):
         return None
     return target
+
+
+def _resolve_follow_latest_target(
+    services: HubServices, chunk: Chunk, graph: Graph, *, hub_default: bool
+) -> Graph | None:
+    """The newer same-name mint a follow-latest chunk drifts to, or ``None`` (issue #164).
+
+    Migration is otherwise explicit and per-chunk: an operator sets a standing
+    ``intended_migration``, and when they name a *graph name* the hub resolves it to the
+    newest enabled mint **at request time** and stores the resolved id, so a later mint
+    under the same name never silently redirects the chunk. That safety default is right
+    for a targeted move, but it means every workflow edit strands the fleet on old mints
+    until each chunk is migrated by hand. ``follow_latest`` is the standing policy that
+    says "chunks on this graph always drift to the newest enabled mint of the same name",
+    resolved here, at the edge, so :class:`~blizzard.hub.domain.apply.ApplyService` stays
+    a taker-of-objects (``bzh:domain-takes-objects``) like its two sibling resolvers.
+
+    ``None`` — the policy is a no-op, and the transition applies unchanged — in every one
+    of these cases:
+
+    * the chunk carries an explicit ``intended_migration``. The explicit intent wins and
+      the policy is **not consulted at all**, including when that intent is an ``auto``
+      that falls through this transition for want of a name match: an operator who aimed a
+      chunk somewhere has said where it goes.
+    * the effective policy resolves ``false`` — the graph's own tri-state, else the hub
+      default (:func:`~blizzard.hub.domain.graph.resolve_follow_latest`).
+    * the name resolves to the chunk's own mint (it is already newest), or to nothing.
+    * the resolved mint is **not newer** than the chunk's own. Not redundant with the
+      identity check above: ``get_enabled_by_name`` answers with the newest *non-retired*
+      mint, so a chunk sitting on a mint that has since been retired would otherwise be
+      dragged **backwards** onto an older enabled one. Following latest must only ever
+      move a chunk forward, and the ``(created_at, graph_id)`` comparison is the same
+      newest-wins order :func:`~blizzard.hub.domain.graph.mark_effective` and
+      ``get_enabled_by_name`` already sort by.
+    """
+    if chunk.intended_migration is not None:
+        return None
+    if not resolve_follow_latest(services.graphs.follow_latest(graph.graph_id), hub_default=hub_default):
+        return None
+    newest = services.graphs.get_enabled_by_name(graph.name)
+    if newest is None or newest.graph_id == graph.graph_id:
+        return None
+    if (newest.created_at, newest.graph_id) <= (graph.created_at, graph.graph_id):
+        return None
+    return newest
 
 
 def _resolve_cross_graph_target(services: HubServices, graph: Graph, submission: CompletionSubmission) -> Graph | None:
@@ -390,6 +439,9 @@ def submit_completion(
         chunk_id, from_node_id=submission.from_node_id, epoch=submission.epoch
     )
     intended_target_graph = _resolve_intended_migration_target(services, chunk)
+    follow_latest_graph = _resolve_follow_latest_target(
+        services, chunk, graph, hub_default=_follow_latest_default(http_request)
+    )
     response = services.apply.apply(
         chunk,
         graph,
@@ -398,6 +450,7 @@ def submit_completion(
         produces_mode=_produces_mode(http_request),
         target_graph=target_graph,
         intended_target_graph=intended_target_graph,
+        follow_latest_graph=follow_latest_graph,
     )
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)

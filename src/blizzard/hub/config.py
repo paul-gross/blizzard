@@ -206,6 +206,15 @@ class HubConfig:
     runner_auth_mode: str = RUNNER_AUTH_WARN
     route_token_mode: str = ROUTE_TOKEN_WARN
     produces_mode: str = PRODUCES_WARN
+    #: The fleet-wide **follow-latest** default (issue #164): whether a chunk drifts to
+    #: the newest enabled mint of its own graph's name at its next transition. ``False``
+    #: — today's pin-by-id behavior — is the shipped default, so adopting the policy is
+    #: a deliberate act. A graph's own ``follow_latest`` tri-state overrides this for
+    #: chunks pinned to that mint; ``null`` there (every mint's default) inherits it.
+    #: Not a `*_mode` string like the three above: those name a rollout ramp
+    #: (off/warn/enforce), while this is a plain on/off with no intermediate state to
+    #: warn about.
+    follow_latest: bool = False
     auth: AuthConfig = field(default_factory=AuthConfig)
     #: The reverse-proxy trust set (issue #130) — proxy addresses or CIDRs whose
     #: ``X-Forwarded-Proto``/``X-Forwarded-For`` headers are honored (cookie ``Secure``
@@ -246,6 +255,11 @@ class HubConfig:
             f'runner_auth_mode = "{self.runner_auth_mode}"\n',
             f'route_token_mode = "{self.route_token_mode}"\n',
             f'produces_mode = "{self.produces_mode}"\n',
+            "\n# Follow-latest (issue #164): when true, a chunk re-pins to the newest enabled\n"
+            "# mint of its own graph's NAME at its next transition, so a workflow edit reaches\n"
+            "# in-flight work without migrating each chunk by hand. A graph's own follow_latest\n"
+            "# overrides this; false (the default) keeps every chunk on the mint it started on.\n",
+            f"follow_latest = {str(self.follow_latest).lower()}\n",
             "\n# Reverse-proxy trust set (issue #130): proxy IPs/CIDRs whose forwarded\n"
             "# X-Forwarded-Proto/-For headers are honored (cookie Secure flag, login-throttle\n"
             "# key, auth-fact actor IP). Empty = ignore those headers from every peer.\n",
@@ -303,6 +317,11 @@ class HubConfig:
         produces_mode = str(raw.get("produces_mode", PRODUCES_WARN))
         if produces_mode not in _KNOWN_PRODUCES_MODES:
             raise ConfigError(f"produces_mode must be one of {sorted(_KNOWN_PRODUCES_MODES)}, got {produces_mode!r}")
+        follow_latest = raw.get("follow_latest", False)
+        if not isinstance(follow_latest, bool):
+            # Validated rather than coerced: `follow_latest = "true"` is a plausible typo,
+            # and truthy-coercing it would silently arm a fleet-wide migration policy.
+            raise ConfigError(f"follow_latest must be a boolean, got {follow_latest!r}")
         if RENAMED_WORK_SOURCE_KEY in raw:
             raise ConfigError(
                 f"[[{RENAMED_WORK_SOURCE_KEY}]] is now [[work_source]] — rename the block(s) in "
@@ -318,6 +337,7 @@ class HubConfig:
             runner_auth_mode=runner_auth_mode,
             route_token_mode=route_token_mode,
             produces_mode=produces_mode,
+            follow_latest=follow_latest,
             auth=_parse_auth(raw.get("auth", {})),
             trusted_proxies=_parse_trusted_proxies(raw.get("trusted_proxies", ())),
         )

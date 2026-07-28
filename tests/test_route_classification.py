@@ -71,6 +71,8 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("GET", "/api/graphs/{graph_id}"): FLEET_VIEW,
     ("POST", "/api/graphs/{graph_id}/retire"): GRAPH_EDIT,
     ("POST", "/api/graphs/{graph_id}/enable"): GRAPH_EDIT,
+    # The follow-latest policy (issue #164) — a graph lifecycle write like retire/enable.
+    ("POST", "/api/graphs/{graph_id}/follow-latest"): GRAPH_EDIT,
     ("POST", "/api/chunks"): CHUNK_INGEST,
     ("GET", "/api/chunks"): FLEET_VIEW,
     ("GET", "/api/chunks/{chunk_id}"): FLEET_VIEW,

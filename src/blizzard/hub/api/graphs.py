@@ -53,6 +53,7 @@ from blizzard.wire.graph import (
     GraphLifecycleRequest,
     GraphMintRequest,
     GraphNodeView,
+    GraphPolicyRequest,
     GraphSummaryView,
     GraphSyncEntry,
     GraphSyncResponse,
@@ -90,13 +91,16 @@ def _node_view(node: Node) -> GraphNodeView:
     )
 
 
-def _graph_view(graph: Graph, *, retired: bool, warnings: list[str] | None = None) -> GraphView:
+def _graph_view(
+    graph: Graph, *, retired: bool, follow_latest: bool | None = None, warnings: list[str] | None = None
+) -> GraphView:
     return GraphView(
         graph_id=graph.graph_id,
         name=graph.name,
         entry_node_id=graph.entry_node_id,
         enabled=not retired,
         retired=retired,
+        follow_latest=follow_latest,
         nodes=[_node_view(n) for n in graph.nodes],
         edges=[
             GraphEdgeView(
@@ -188,7 +192,9 @@ def get_graph(graph_id: str, services: Annotated[HubServices, Depends(get_servic
     graph = services.graphs.get(graph_id)
     if graph is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {graph_id}")
-    return _graph_view(graph, retired=services.graphs.is_retired(graph_id))
+    return _graph_view(
+        graph, retired=services.graphs.is_retired(graph_id), follow_latest=services.graphs.follow_latest(graph_id)
+    )
 
 
 @router.post(
@@ -206,7 +212,7 @@ def retire_graph(
     if graph is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {graph_id}")
     services.graph_lifecycle.retire(graph, by=request.by)
-    return _graph_view(graph, retired=True)
+    return _graph_view(graph, retired=True, follow_latest=services.graphs.follow_latest(graph_id))
 
 
 @router.post(
@@ -224,4 +230,33 @@ def enable_graph(
     if graph is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {graph_id}")
     services.graph_lifecycle.enable(graph, by=request.by)
-    return _graph_view(graph, retired=False)
+    return _graph_view(graph, retired=False, follow_latest=services.graphs.follow_latest(graph_id))
+
+
+@router.post(
+    "/graphs/{graph_id}/follow-latest",
+    response_model=GraphView,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require(GRAPH_EDIT))],
+)
+def set_graph_follow_latest(
+    graph_id: str, request: GraphPolicyRequest, services: Annotated[HubServices, Depends(get_services)]
+) -> GraphView:
+    """Set this graph's follow-latest policy — ``true``/``false``/``null`` (issue #164).
+
+    Appends a policy fact beside the retire/re-enable lifecycle rather than mutating the
+    immutable ``graphs`` row. ``true``/``false`` override
+    :attr:`~blizzard.hub.config.HubConfig.follow_latest` for chunks pinned to this mint;
+    explicit ``null`` reverts to inheriting it, and is itself an appended fact, so
+    clearing an override keeps the history. Idempotent, and 404 on an unknown id.
+
+    Sets the policy on **one mint**, not on the name: a chunk consults the policy of the
+    graph it is pinned to, so arming a lineage means arming the mint its chunks sit on
+    (or the hub default, which covers every name at once)."""
+    graph = services.graphs.get(graph_id)
+    if graph is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown graph {graph_id}")
+    services.graph_lifecycle.set_follow_latest(graph, follow_latest=request.follow_latest, by=request.by)
+    return _graph_view(
+        graph, retired=services.graphs.is_retired(graph_id), follow_latest=services.graphs.follow_latest(graph_id)
+    )

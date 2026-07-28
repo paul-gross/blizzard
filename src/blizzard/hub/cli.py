@@ -1098,6 +1098,40 @@ def graph_enable(graph_id: str, by: str, as_json: bool, hub_url: str | None) -> 
     _set_graph_lifecycle(graph_id, verb="enable", by=by, hub_url=hub_url, as_json=as_json)
 
 
+@graph_group.command("follow-latest")
+@click.argument("graph_id")
+@click.argument("value", type=click.Choice(["true", "false", "inherit"]))
+@click.option("--by", "by", default="operator", help="Who is setting the policy (recorded on the fact).")
+@_json_option
+@_hub_url_options
+def graph_follow_latest(graph_id: str, value: str, by: str, as_json: bool, hub_url: str | None) -> None:
+    """Set GRAPH_ID's follow-latest policy: true, false, or inherit (issue #164).
+
+    With the policy on, a chunk pinned to this mint re-pins to the newest enabled mint of
+    the same *name* at its next transition — so a workflow edit reaches work already in
+    flight instead of stranding it until each chunk is migrated by hand. ``inherit`` (the
+    stored ``null``, and every mint's default) defers to the hub's own ``follow_latest``;
+    ``true``/``false`` override it for this mint.
+
+    An explicit per-chunk migration intent (``hub chunk migrate``) always wins over the
+    policy. Appended as a fact, so setting it never mutates the immutable graph."""
+    follow_latest = None if value == "inherit" else value == "true"
+    resp = _request(
+        "post",
+        f"/api/graphs/{graph_id}/follow-latest",
+        hub_url=hub_url,
+        json_body={"follow_latest": follow_latest, "by": by},
+    )
+    _check(resp, "POST /graphs/{id}/follow-latest", on_status={404: f"unknown graph {graph_id}"})
+    body = resp.json()
+    if as_json:
+        click.echo(json.dumps(body))
+        return
+    stored = body.get("follow_latest")
+    rendered = "inherit (the hub default)" if stored is None else str(stored).lower()
+    click.echo(f"graph {graph_id} follow-latest is now {rendered}")
+
+
 def _set_graph_lifecycle(graph_id: str, *, verb: str, by: str, hub_url: str | None, as_json: bool) -> None:
     resp = _request("post", f"/api/graphs/{graph_id}/{verb}", hub_url=hub_url, json_body={"by": by})
     _check(resp, f"POST /graphs/{{id}}/{verb}", on_status={404: f"unknown graph {graph_id}"})

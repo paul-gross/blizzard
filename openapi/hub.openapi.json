@@ -1711,6 +1711,32 @@
         "title": "GraphNodeView",
         "type": "object"
       },
+      "GraphPolicyRequest": {
+        "description": "Set a graph's follow-latest policy \u2014 the tri-state (issue #164).\n\n``follow_latest`` is required and all three values are meaningful: ``true``/``false``\noverride the hub-level setting for chunks pinned to this mint, and explicit ``null``\nreverts to inheriting it. It carries no default, so \"clear the override\" is something\na caller asks for by naming ``null`` rather than something an omitted field does by\naccident; ``by`` is recorded on the appended fact, exactly as retire/re-enable do.",
+        "properties": {
+          "by": {
+            "default": "operator",
+            "title": "By",
+            "type": "string"
+          },
+          "follow_latest": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Follow Latest"
+          }
+        },
+        "required": [
+          "follow_latest"
+        ],
+        "title": "GraphPolicyRequest",
+        "type": "object"
+      },
       "GraphSummaryView": {
         "description": "One graph's summary row \u2014 a name-lineage entry as served by ``GET /graphs``.\n\n``effective`` is the newest **non-retired** graph of this ``name`` (issue #101);\n``retired`` is this graph's own lifecycle state, independent of ``effective`` \u2014 a\nretired graph is never effective, but a non-retired, non-effective graph is merely\nsuperseded by a newer version of the same name.",
         "properties": {
@@ -1814,7 +1840,7 @@
         "type": "object"
       },
       "GraphView": {
-        "description": "A minted graph as served by ``GET /graphs/{graph_id}`` and the mint response.\n\n``enabled`` is ``not retired`` \u2014 the graph's own lifecycle state (issue #101),\nindependent of whether it is currently the newest of its name. ``retired`` is the\nsame fact spelled out explicitly for a board that wants to distinguish \"retired\"\nfrom \"merely superseded by a newer version\" (:class:`GraphSummaryView`'s\n``effective``). Deliberately two wire fields for one fact, not drift: the only\nconstructor, :func:`~blizzard.hub.api.graphs._graph_view`, sets both from the same\n``retired`` bool in one call (``enabled=not retired, retired=retired``) \u2014 there is\nno second call site that could set one and forget the other.",
+        "description": "A minted graph as served by ``GET /graphs/{graph_id}`` and the mint response.\n\n``enabled`` is ``not retired`` \u2014 the graph's own lifecycle state (issue #101),\nindependent of whether it is currently the newest of its name. ``retired`` is the\nsame fact spelled out explicitly for a board that wants to distinguish \"retired\"\nfrom \"merely superseded by a newer version\" (:class:`GraphSummaryView`'s\n``effective``). Deliberately two wire fields for one fact, not drift: the only\nconstructor, :func:`~blizzard.hub.api.graphs._graph_view`, sets both from the same\n``retired`` bool in one call (``enabled=not retired, retired=retired``) \u2014 there is\nno second call site that could set one and forget the other.\n\n``follow_latest`` is the stored **tri-state** (issue #164), served as-is: ``true`` /\n``false`` override the hub-level setting for chunks pinned to this mint, and ``null``\n\u2014 every mint's default \u2014 inherits it. Deliberately the stored value rather than the\nresolved one, so a reader can tell \"this graph says nothing\" from \"this graph says\nfalse\"; the resolution against `HubConfig.follow_latest` happens at the transition,\nwhere the hub setting is in hand.",
         "properties": {
           "edges": {
             "default": [],
@@ -1831,6 +1857,17 @@
           "entry_node_id": {
             "title": "Entry Node Id",
             "type": "string"
+          },
+          "follow_latest": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Follow Latest"
           },
           "graph_id": {
             "title": "Graph Id",
@@ -5851,6 +5888,59 @@
           }
         },
         "summary": "Enable Graph",
+        "tags": [
+          "graphs"
+        ]
+      }
+    },
+    "/api/graphs/{graph_id}/follow-latest": {
+      "post": {
+        "description": "Set this graph's follow-latest policy \u2014 ``true``/``false``/``null`` (issue #164).\n\nAppends a policy fact beside the retire/re-enable lifecycle rather than mutating the\nimmutable ``graphs`` row. ``true``/``false`` override\n:attr:`~blizzard.hub.config.HubConfig.follow_latest` for chunks pinned to this mint;\nexplicit ``null`` reverts to inheriting it, and is itself an appended fact, so\nclearing an override keeps the history. Idempotent, and 404 on an unknown id.\n\nSets the policy on **one mint**, not on the name: a chunk consults the policy of the\ngraph it is pinned to, so arming a lineage means arming the mint its chunks sit on\n(or the hub default, which covers every name at once).",
+        "operationId": "set_graph_follow_latest_api_graphs__graph_id__follow_latest_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "graph_id",
+            "required": true,
+            "schema": {
+              "title": "Graph Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GraphPolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraphView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Graph Follow Latest",
         "tags": [
           "graphs"
         ]

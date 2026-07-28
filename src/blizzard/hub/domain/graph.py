@@ -603,6 +603,22 @@ def mark_effective(graphs: list[Graph], *, retired_ids: Collection[str]) -> dict
     return {g.graph_id: g.graph_id in effective_ids for g in graphs}
 
 
+def resolve_follow_latest(graph_policy: bool | None, *, hub_default: bool) -> bool:
+    """Whether a chunk pinned to a graph follows the newest mint of its name (issue #164).
+
+    The two-level policy, resolved in one place so no caller re-spells it: the graph's own
+    tri-state wins where it is set, and ``None`` — every mint's default — inherits the
+    hub-level ``follow_latest``. A pure function over two already-read values rather than a
+    repository read, so the precedence is unit-testable with no store (``bzh:domain-core``).
+
+    ``hub_default`` is keyword-only and carries no default of its own: the whole point of
+    the flag is that a fleet opts *in*, and a caller that forgot to pass the hub setting
+    silently getting ``True`` — or silently getting ``False`` and never migrating anything
+    — are both failures no type error would catch.
+    """
+    return hub_default if graph_policy is None else graph_policy
+
+
 # --- Repository seams (I-prefix, read/write split — bzh:repository-split) ----
 
 
@@ -652,6 +668,17 @@ class IReadGraphRepository(Protocol):
         """
         ...
 
+    def follow_latest(self, graph_id: str) -> bool | None:
+        """This graph's own follow-latest policy — the stored tri-state (issue #164).
+
+        ``True``/``False`` override the hub-level setting for chunks pinned to this
+        mint; ``None`` — the value for a graph with no policy fact at all, which is
+        every graph by default — inherits it (:func:`resolve_follow_latest`).
+        Newest-fact-wins over ``graph_policy_facts``, exactly like :meth:`is_retired`
+        over the lifecycle facts.
+        """
+        ...
+
 
 class IWriteGraphRepository(IReadGraphRepository, Protocol):
     """Read-write graph access. Only the domain layer depends on this variant."""
@@ -664,5 +691,14 @@ class IWriteGraphRepository(IReadGraphRepository, Protocol):
         """Append a ``graph.retired``/``graph.enabled`` fact — newest-fact-wins (issue #101).
 
         Never touches the ``graphs`` row itself — it stays insert-only and immutable.
+        """
+        ...
+
+    def record_policy(self, graph_id: str, *, follow_latest: bool | None, at: datetime, by: str) -> None:
+        """Append a follow-latest policy fact — newest-fact-wins (issue #164).
+
+        ``follow_latest=None`` is a real, recordable value (revert to inheriting the hub
+        setting), not "leave unchanged" — appending it is how a graph-level override is
+        cleared without deleting history. Never touches the ``graphs`` row.
         """
         ...

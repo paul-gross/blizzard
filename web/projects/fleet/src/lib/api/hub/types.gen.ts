@@ -1213,6 +1213,28 @@ export type GraphNodeView = {
 };
 
 /**
+ * GraphPolicyRequest
+ *
+ * Set a graph's follow-latest policy — the tri-state (issue #164).
+ *
+ * ``follow_latest`` is required and all three values are meaningful: ``true``/``false``
+ * override the hub-level setting for chunks pinned to this mint, and explicit ``null``
+ * reverts to inheriting it. It carries no default, so "clear the override" is something
+ * a caller asks for by naming ``null`` rather than something an omitted field does by
+ * accident; ``by`` is recorded on the appended fact, exactly as retire/re-enable do.
+ */
+export type GraphPolicyRequest = {
+    /**
+     * By
+     */
+    by?: string;
+    /**
+     * Follow Latest
+     */
+    follow_latest: boolean | null;
+};
+
+/**
  * GraphSummaryView
  *
  * One graph's summary row — a name-lineage entry as served by ``GET /graphs``.
@@ -1311,6 +1333,13 @@ export type GraphSyncResponse = {
  * constructor, :func:`~blizzard.hub.api.graphs._graph_view`, sets both from the same
  * ``retired`` bool in one call (``enabled=not retired, retired=retired``) — there is
  * no second call site that could set one and forget the other.
+ *
+ * ``follow_latest`` is the stored **tri-state** (issue #164), served as-is: ``true`` /
+ * ``false`` override the hub-level setting for chunks pinned to this mint, and ``null``
+ * — every mint's default — inherits it. Deliberately the stored value rather than the
+ * resolved one, so a reader can tell "this graph says nothing" from "this graph says
+ * false"; the resolution against `HubConfig.follow_latest` happens at the transition,
+ * where the hub setting is in hand.
  */
 export type GraphView = {
     /**
@@ -1325,6 +1354,10 @@ export type GraphView = {
      * Entry Node Id
      */
     entry_node_id: string;
+    /**
+     * Follow Latest
+     */
+    follow_latest?: boolean | null;
     /**
      * Graph Id
      */
@@ -3985,6 +4018,36 @@ export type EnableGraphApiGraphsGraphIdEnablePostResponses = {
 };
 
 export type EnableGraphApiGraphsGraphIdEnablePostResponse = EnableGraphApiGraphsGraphIdEnablePostResponses[keyof EnableGraphApiGraphsGraphIdEnablePostResponses];
+
+export type SetGraphFollowLatestApiGraphsGraphIdFollowLatestPostData = {
+    body: GraphPolicyRequest;
+    path: {
+        /**
+         * Graph Id
+         */
+        graph_id: string;
+    };
+    query?: never;
+    url: '/api/graphs/{graph_id}/follow-latest';
+};
+
+export type SetGraphFollowLatestApiGraphsGraphIdFollowLatestPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SetGraphFollowLatestApiGraphsGraphIdFollowLatestPostError = SetGraphFollowLatestApiGraphsGraphIdFollowLatestPostErrors[keyof SetGraphFollowLatestApiGraphsGraphIdFollowLatestPostErrors];
+
+export type SetGraphFollowLatestApiGraphsGraphIdFollowLatestPostResponses = {
+    /**
+     * Successful Response
+     */
+    202: GraphView;
+};
+
+export type SetGraphFollowLatestApiGraphsGraphIdFollowLatestPostResponse = SetGraphFollowLatestApiGraphsGraphIdFollowLatestPostResponses[keyof SetGraphFollowLatestApiGraphsGraphIdFollowLatestPostResponses];
 
 export type RetireGraphApiGraphsGraphIdRetirePostData = {
     body: GraphLifecycleRequest;

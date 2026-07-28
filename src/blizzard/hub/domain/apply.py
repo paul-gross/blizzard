@@ -126,6 +126,7 @@ class ApplyService:
         produces_mode: str = PRODUCES_WARN,
         target_graph: Graph | None = None,
         intended_target_graph: Graph | None = None,
+        follow_latest_graph: Graph | None = None,
     ) -> ApplyResponse:
         """Apply a completion. ``target_graph`` is the pre-resolved cross-graph migration
         target (issue #90) — the edge caller resolves the chosen edge's ``graph:<name>``
@@ -138,7 +139,11 @@ class ApplyService:
         only ever *consulted*, never applied eagerly: at the first fresh transition this
         completion produces, it either fires (recording a migration, never this
         transition) or — for ``auto`` with no destination-name match — falls through to
-        an ordinary transition, leaving the intent set for next time."""
+        an ordinary transition, leaving the intent set for next time.
+        ``follow_latest_graph`` is the standing **policy**'s target (issue #164): the newer
+        same-name mint this chunk should drift to, pre-resolved the same way and already
+        ``None`` whenever the policy is a no-op — including whenever the chunk carries an
+        explicit intent, which outranks it."""
         facts = self._chunks.load_facts(chunk.chunk_id)
         if facts is None:
             return _failure(f"unknown chunk {chunk.chunk_id}")
@@ -203,7 +208,9 @@ class ApplyService:
         # graph gate (human node) or runner-config gate (worker node): validate and
         # record it against the resolved decision, marking that decision transitioned.
         if submission.decision_id is not None:
-            return self._apply_gate_resolution(chunk, graph, from_node, submission, target_graph, intended_target_graph)
+            return self._apply_gate_resolution(
+                chunk, graph, from_node, submission, target_graph, intended_target_graph, follow_latest_graph
+            )
         # A plain transition OUT of a human-judged node is rejected — human signoff
         # required; only the resolving transition above may leave a gate node.
         if from_node.judged_by is JudgedBy.HUMAN:
@@ -256,7 +263,9 @@ class ApplyService:
         # after. Ordered after every rejection above (never on a replay, a stale/terminal
         # chunk, or a produces-backstop refusal) and before ``record_transition`` so a
         # firing intent writes no transition row of its own.
-        migrated = self._consult_intended_migration(chunk, from_node, submission, edge, intended_target_graph)
+        migrated = self._consult_intended_migration(
+            chunk, from_node, submission, edge, intended_target_graph, follow_latest_graph
+        )
         if migrated is not None:
             return migrated
 
@@ -281,6 +290,7 @@ class ApplyService:
         submission: CompletionSubmission,
         target_graph: Graph | None = None,
         intended_target_graph: Graph | None = None,
+        follow_latest_graph: Graph | None = None,
     ) -> ApplyResponse:
         """Advance a chunk past a resolved gate — the resolving transition.
 
@@ -327,7 +337,9 @@ class ApplyService:
         # A resolved gate's own migration intent gets its one shot here too, threading
         # ``submission.decision_id`` through so the resolved decision derives closed
         # exactly as the #90 gate-migration branch above does.
-        migrated = self._consult_intended_migration(chunk, gate_node, submission, edge, intended_target_graph)
+        migrated = self._consult_intended_migration(
+            chunk, gate_node, submission, edge, intended_target_graph, follow_latest_graph
+        )
         if migrated is not None:
             return migrated
 
@@ -429,6 +441,7 @@ class ApplyService:
         submission: CompletionSubmission,
         edge: Edge,
         intended_target_graph: Graph | None,
+        follow_latest_graph: Graph | None,
     ) -> ApplyResponse | None:
         """The transition-time consult (issue #124) — the shared helper wired at both
         common-apply-path transition sites (the ordinary worker verdict in :meth:`apply`
@@ -448,9 +461,17 @@ class ApplyService:
         regardless of this transition's destination. ``auto`` fires only when this
         transition's own destination node name also exists on the target graph (a name
         match) — otherwise the transition applies unchanged and the intent stays set for
-        the transition after."""
+        the transition after.
+
+        ``follow_latest_graph`` (issue #164) rides the same deferred path, and the
+        **explicit intent outranks it**: the edge already passes ``None`` for the policy
+        whenever a standing intent exists, and the ordering here — intent first, policy
+        only on the ``intent is None`` fall-through — is the second half of that same
+        precedence, so neither side can fire twice or fire together."""
         intent = chunk.intended_migration
-        if intent is None or intended_target_graph is None:
+        if intent is None:
+            return self._consult_follow_latest(chunk, from_node, submission, edge, follow_latest_graph)
+        if intended_target_graph is None:
             return None
         if intent.mode is MigrationMode.FORCED:
             assert intent.node_name is not None  # request-time validation requires this for `forced`
@@ -475,6 +496,56 @@ class ApplyService:
             model=None,
             artifacts=submission.artifacts,
             clear_intent=True,
+        )
+
+    def _consult_follow_latest(
+        self,
+        chunk: Chunk,
+        from_node: Node,
+        submission: CompletionSubmission,
+        edge: Edge,
+        follow_latest_graph: Graph | None,
+    ) -> ApplyResponse | None:
+        """The standing follow-latest policy's own consult (issue #164).
+
+        Reached only when the chunk carries **no** explicit intent — an operator's aim
+        outranks a standing drift. ``follow_latest_graph is None`` covers every no-op the
+        edge already folded together (policy off, no newer enabled mint, the chunk is
+        already on the newest), so this fires exactly when a real forward move is due.
+
+        Landing is **name-match-else-entry** on this transition's own destination —
+        :func:`~blizzard.hub.domain.work.landing_node`, the same rule a #90 authored
+        migration edge lands by. Two halves, both deliberate:
+
+        * matching on the *destination* rather than the departed node keeps the chunk
+          moving forward: it lands where this transition was already going, just on the
+          newer mint. Landing on the departed node's name would re-run the node-step that
+          just finished.
+        * the **entry fallback** is what makes the policy total, and is where it differs
+          from a ``#124`` ``auto`` intent (which falls through and stays set for next
+          time). There is nothing to stay set for here — the policy is standing, so
+          falling through would defer it forever, transition after transition, on exactly
+          the graph whose shape changed enough to drop the destination node. Sending such
+          a chunk back to the target's entry is the same triage answer #90 gives a
+          cross-graph move into an unfamiliar graph.
+
+        Recorded as a **migration** fact, never disguised as a transition, and
+        ``clear_intent=False`` because there is no per-chunk intent to clear — the policy
+        is standing and applies again at the next transition if a newer mint appears.
+        """
+        if follow_latest_graph is None:
+            return None
+        return self._land_migration(
+            chunk,
+            from_node,
+            submission,
+            target_graph=follow_latest_graph,
+            landed_node_id=landing_node(follow_latest_graph, edge.to_node_name),
+            choice_name=submission.choice,
+            decision_id=submission.decision_id,
+            model=None,
+            artifacts=submission.artifacts,
+            clear_intent=False,
         )
 
     def _land_migration(

@@ -132,6 +132,26 @@ graph_lifecycle_facts = Table(
     Column("set_by", String, nullable=False),  # who flipped it — recorded on the fact
 )
 
+# The per-graph follow-latest policy (issue #164) — append-only, newest-fact-wins, in the
+# shape `graph_lifecycle_facts` established. Its own table rather than a nullable column
+# there because the two are independent: a graph can be retired and re-enabled any number
+# of times without saying anything about whether its chunks follow the newest mint, and
+# folding them together would make every retire also assert a policy (or leave a null that
+# cannot be told from "unset").
+#
+# `follow_latest` is **tri-state** and so nullable: NULL inherits `HubConfig.follow_latest`
+# (every mint's default), True/False override it for chunks pinned to this mint. A graph
+# with no row at all reads NULL — inherit — so a freshly minted graph needs no seed row.
+graph_policy_facts = Table(
+    "graph_policy_facts",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("graph_id", String, ForeignKey("graphs.graph_id"), nullable=False),
+    Column("follow_latest", Boolean, nullable=True),  # tri-state: null inherits the hub setting
+    Column("set_at", UtcDateTime, nullable=False),
+    Column("set_by", String, nullable=False),
+)
+
 # --- Chunks and their work refs (chunk.minted) ------------------------------
 
 chunks = Table(
