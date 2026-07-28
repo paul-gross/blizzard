@@ -268,14 +268,6 @@ import type { MachineChunkRow } from './local-panel';
       min-height: 0;
       min-width: 0;
     }
-    /* This layout's panel chrome is a flat background + gradient header, unlike
-       fleet's own gradient-panel/overlay-header scheme — these two kit-panel
-       custom-property hooks retarget the kit panel's chrome to match, without
-       forking the component. Applies to every kit panel this layout renders. */
-    fleet-kit-panel {
-      --kit-panel-bg: var(--panel);
-      --kit-panel-header-bg: linear-gradient(180deg, var(--header-hi), var(--header-lo));
-    }
     .p-note {
       color: var(--label-dim);
       font-size: var(--fs-label);

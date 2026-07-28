@@ -244,13 +244,7 @@ import { injectRunnerStatusQuery } from './status.query';
       position: relative;
       min-height: 56px;
     }
-    /* This shell's panel chrome matches local-panel-layout's flat background +
-       gradient header, unlike fleet's own gradient-panel/overlay-header scheme
-       — the same two kit-panel custom-property hooks retarget the chrome
-       without forking the component (see local-panel-layout.ts). */
     fleet-kit-panel.section {
-      --kit-panel-bg: var(--panel);
-      --kit-panel-header-bg: linear-gradient(180deg, var(--header-hi), var(--header-lo));
       flex: none;
     }
     .p-note {
