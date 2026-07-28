@@ -2154,7 +2154,7 @@
         "type": "string"
       },
       "MigrationView": {
-        "description": "One cross-graph migration step in a chunk's history (issue #90).\n\nA judgement choice targeting another graph ends the chunk's attempt in ``from_graph``\nand re-queues it at ``landed_node`` in ``to_graph`` \u2014 its own step in the timeline,\nnever a transition (``bzh:migration-not-transition``). The board renders it as a\ngraph-to-graph hop: ``from_graph/from_node --choice--> to_graph/landed_node``. Node and\ngraph names are resolved server-side against each side's own graph (null when\nunresolvable); ``model`` is the re-pinned model, or null when the chunk kept its own.",
+        "description": "One cross-graph migration step in a chunk's history (issue #90).\n\nA judgement choice targeting another graph ends the chunk's attempt in ``from_graph``\nand re-queues it at ``landed_node`` in ``to_graph`` \u2014 its own step in the timeline,\nnever a transition (``bzh:migration-not-transition``). The board renders it as a\ngraph-to-graph hop: ``from_graph/from_node --choice--> to_graph/landed_node``. Node and\ngraph names are resolved server-side against each side's own graph (null when\nunresolvable); ``model`` is the re-pinned model, or null when the chunk kept its own.\n\n``source`` (issue #164) says **what** moved the chunk \u2014 ``authored-edge`` (a #90\njudgement choice), ``intent`` (an operator's #124 standing intent), or\n``follow-latest`` (the standing policy). It is the only one of the three a human did\nnot ask for, so this is how a reader learns why a chunk sits on a graph it did not\nstart on. Null on a migration recorded before the discriminator existed \u2014 unrecorded,\nnot defaulted, since a legacy row's two operator sources are indistinguishable.",
         "properties": {
           "choice_name": {
             "anyOf": [
@@ -2240,6 +2240,17 @@
           "recorded_at": {
             "title": "Recorded At",
             "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
           },
           "to_graph_id": {
             "title": "To Graph Id",

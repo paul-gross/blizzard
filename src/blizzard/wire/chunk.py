@@ -219,7 +219,14 @@ class MigrationView(BaseModel):
     never a transition (``bzh:migration-not-transition``). The board renders it as a
     graph-to-graph hop: ``from_graph/from_node --choice--> to_graph/landed_node``. Node and
     graph names are resolved server-side against each side's own graph (null when
-    unresolvable); ``model`` is the re-pinned model, or null when the chunk kept its own."""
+    unresolvable); ``model`` is the re-pinned model, or null when the chunk kept its own.
+
+    ``source`` (issue #164) says **what** moved the chunk — ``authored-edge`` (a #90
+    judgement choice), ``intent`` (an operator's #124 standing intent), or
+    ``follow-latest`` (the standing policy). It is the only one of the three a human did
+    not ask for, so this is how a reader learns why a chunk sits on a graph it did not
+    start on. Null on a migration recorded before the discriminator existed — unrecorded,
+    not defaulted, since a legacy row's two operator sources are indistinguishable."""
 
     from_node_id: str | None
     from_node_name: str | None = None
@@ -231,6 +238,7 @@ class MigrationView(BaseModel):
     landed_node_name: str | None = None
     choice_name: str | None = None
     model: str | None = None
+    source: str | None = None
     recorded_at: str
 
 

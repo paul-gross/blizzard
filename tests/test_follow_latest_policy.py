@@ -21,6 +21,7 @@ import httpx
 import pytest
 
 from blizzard.hub.domain.graph import resolve_follow_latest
+from blizzard.hub.domain.work import MigrationSource
 from tests.support import HubHarness, build_hub, pointer_token, report_lease
 
 _POINTER = {"source": "default", "ref": "9"}
@@ -342,3 +343,84 @@ def test_the_policy_and_the_retire_brake_are_independent(tmp_path: Path) -> None
     assert hub.client.post(f"/api/graphs/{graph_id}/enable", json={"by": "op"}).json()["follow_latest"] is True
 
     assert _set_policy(hub, graph_id, None).json()["retired"] is False
+
+
+@pytest.mark.component
+def test_the_terminal_transition_is_never_hijacked_by_the_policy(tmp_path: Path) -> None:
+    """A chunk one submission from `done` must finish, not restart on the newer mint.
+
+    The regression this pins: `RESERVED_TERMINAL` is the string `"done"`, no graph has a
+    node named `done`, and the policy's landing rule is name-match-**else-entry** — so the
+    final transition resolved to the target's *entry node*, and a chunk that had finished
+    its whole workflow came back `ready` at `build` to run the entire thing again. The
+    consult sits ahead of `_respond`'s terminal check, so the policy won.
+
+    The mint ordering is the point: v2 appears while the chunk sits at `deliver`, so the
+    one transition left for it to take is the terminal one. That is the ordinary state of
+    affairs after any deploy that touches a graph, now that #146 reconciles automatically.
+    """
+    hub = build_hub(tmp_path, follow_latest=True)
+    v1 = _mint(hub, _YAML.format(name="default-delivery", prompt="Build."))
+    chunk_id, build_node = _claimed_chunk(hub)
+
+    # build -pass-> deliver, while v1 is still the only mint: an ordinary transition.
+    assert _complete(hub, chunk_id, build_node).json()["outcome"] != "migrated"
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["current_node_name"] == "deliver"
+
+    # A deploy mints v2 of the same name while the chunk sits one step from done.
+    hub.clock.advance(timedelta(minutes=1))
+    v2 = _mint(hub, _YAML.format(name="default-delivery", prompt="Build, but better."))
+    assert v2 != v1
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    deliver_node = detail["current_node_id"]
+    epoch = detail["latest_epoch"]
+    resp = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json={"choice": "pass", "epoch": epoch, "runner_id": "r1", "from_node_id": deliver_node, "artifacts": []},
+    )
+
+    assert resp.json()["outcome"] == "done", resp.text
+    final = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert final["status"] == "done"
+    assert final["graph_id"] == v1, "a terminating chunk must not be re-pinned"
+    facts = hub.services.chunks.load_facts(chunk_id)
+    assert facts is not None and len(facts.migrations) == 0
+
+
+@pytest.mark.component
+def test_a_policy_migration_is_attributed_to_the_policy_in_history(tmp_path: Path) -> None:
+    """The move is recorded as the policy's, not as an operator's.
+
+    All three migration paths write the same fact, and same-name is not a tell (`hub chunk
+    migrate` by name also resolves to a newer same-name mint). The policy is the only one
+    that moves a chunk with nobody having asked, so an operator finding a chunk on a graph
+    it did not start on has to be able to read *why* off the history.
+    """
+    hub = build_hub(tmp_path, follow_latest=True)
+    chunk_id, build_node, _v2 = _arm(hub)
+
+    assert _complete(hub, chunk_id, build_node).json()["outcome"] == "migrated"
+
+    facts = hub.services.chunks.load_facts(chunk_id)
+    assert facts is not None
+    assert [m.source for m in facts.migrations] == [MigrationSource.FOLLOW_LATEST]
+    # And it is surfaced, not merely stored — the board/CLI history renders it.
+    migrations = hub.client.get(f"/api/chunks/{chunk_id}").json()["migrations"]
+    assert [m["source"] for m in migrations] == ["follow-latest"]
+
+
+@pytest.mark.component
+def test_an_operator_intent_migration_is_attributed_to_the_intent(tmp_path: Path) -> None:
+    """The discriminator tells the three paths apart — an explicit intent reads `intent`,
+    so `follow-latest` genuinely identifies the unasked-for move rather than tagging
+    every migration alike."""
+    hub = build_hub(tmp_path)
+    chunk_id, build_node, _v2 = _arm(hub)
+    other = _mint(hub, _YAML.format(name="triage-delivery", prompt="Triage."))
+    hub.client.patch(f"/api/chunks/{chunk_id}", json={"intended_migration": {"to_graph": other}})
+
+    assert _complete(hub, chunk_id, build_node).json()["outcome"] == "migrated"
+
+    migrations = hub.client.get(f"/api/chunks/{chunk_id}").json()["migrations"]
+    assert [m["source"] for m in migrations] == ["intent"]

@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from blizzard.hub.domain.graph import SessionMode, classify_session, mark_effective
+from blizzard.hub.domain.graph import SessionMode, classify_session, is_newer_mint, mark_effective
 from tests.support import make_graph
 
 pytestmark = pytest.mark.unit
@@ -127,3 +127,38 @@ def test_mark_effective_requires_retired_ids_explicitly() -> None:
 
     with pytest.raises(TypeError):
         mark_effective([only])  # type: ignore[call-arg]
+
+
+# --------------------------------------------------------------------------- #
+# is_newer_mint — the newest-wins order, named rather than open-coded (issue #164)
+# --------------------------------------------------------------------------- #
+
+_T0 = datetime(2026, 5, 1, tzinfo=UTC)
+
+
+@pytest.mark.unit
+def test_is_newer_mint_orders_by_created_at() -> None:
+    older = make_graph("gr_b", "wf", created_at=_T0)
+    newer = make_graph("gr_a", "wf", created_at=_T0 + timedelta(minutes=1))
+    # `created_at` dominates the id: the newer mint wins even with the smaller id.
+    assert is_newer_mint(newer, older) is True
+    assert is_newer_mint(older, newer) is False
+
+
+@pytest.mark.unit
+def test_is_newer_mint_breaks_a_created_at_tie_on_graph_id() -> None:
+    """Two mints can share a `created_at` — a fixed clock, or two mints inside one tick.
+    ULIDs sort lexically by creation, so the id is the deterministic tiebreak, kept in
+    lockstep with `mark_effective` and `get_enabled_by_name`'s own ORDER BY."""
+    low = make_graph("gr_aaa", "wf", created_at=_T0)
+    high = make_graph("gr_bbb", "wf", created_at=_T0)
+    assert is_newer_mint(high, low) is True
+    assert is_newer_mint(low, high) is False
+
+
+@pytest.mark.unit
+def test_a_mint_is_not_newer_than_itself() -> None:
+    """Strictness is what the follow-latest policy leans on — an equal mint is a no-op,
+    not a migration onto the graph the chunk is already pinned to."""
+    graph = make_graph("gr_a", "wf", created_at=_T0)
+    assert is_newer_mint(graph, graph) is False

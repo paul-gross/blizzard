@@ -41,6 +41,7 @@ from blizzard.hub.domain.work import (
     DecisionChoice,
     IWriteChunkRepository,
     MigrationMode,
+    MigrationSource,
     derive_chunk_status,
     landing_node,
     latest_epoch,
@@ -432,6 +433,7 @@ class ApplyService:
             model=edge.model,
             artifacts=submitted,
             clear_intent=False,
+            source=MigrationSource.AUTHORED_EDGE,
         )
 
     def _consult_intended_migration(
@@ -496,6 +498,7 @@ class ApplyService:
             model=None,
             artifacts=submission.artifacts,
             clear_intent=True,
+            source=MigrationSource.INTENT,
         )
 
     def _consult_follow_latest(
@@ -511,29 +514,49 @@ class ApplyService:
         Reached only when the chunk carries **no** explicit intent — an operator's aim
         outranks a standing drift. ``follow_latest_graph is None`` covers every no-op the
         edge already folded together (policy off, no newer enabled mint, the chunk is
-        already on the newest), so this fires exactly when a real forward move is due.
+        already on the newest).
 
-        Landing is **name-match-else-entry** on this transition's own destination —
-        :func:`~blizzard.hub.domain.work.landing_node`, the same rule a #90 authored
-        migration edge lands by. Two halves, both deliberate:
+        **A transition to the reserved terminal is the one further no-op, and it is
+        load-bearing.** ``RESERVED_TERMINAL`` is the string ``"done"``, and it is a
+        sentinel destination rather than a node any graph declares — so under
+        name-match-else-entry below it would match nothing and fall to the target's
+        **entry node**, turning a chunk's last submission into a full restart of the
+        workflow on the newer mint: real agent-hours, real repo mutations, the work done
+        twice. That is not a corner case, because every shipped graph has a ``to: done``
+        edge and #146 makes a newer same-name mint the ordinary state after any deploy
+        that touches a graph — with the policy on, every chunk finishing after a deploy
+        would be resurrected. It has to be checked *here* rather than left to
+        :meth:`_respond`'s terminal branch, because the consult runs first and wins.
+        A chunk reaching the terminal has nothing left to follow: there is no next
+        node-step for a newer definition to govern.
+
+        Landing is otherwise **name-match-else-entry** on this transition's own
+        destination — :func:`~blizzard.hub.domain.work.landing_node`, the same rule a #90
+        authored migration edge lands by. Two halves, both deliberate:
 
         * matching on the *destination* rather than the departed node keeps the chunk
           moving forward: it lands where this transition was already going, just on the
           newer mint. Landing on the departed node's name would re-run the node-step that
           just finished.
-        * the **entry fallback** is what makes the policy total, and is where it differs
-          from a ``#124`` ``auto`` intent (which falls through and stays set for next
-          time). There is nothing to stay set for here — the policy is standing, so
-          falling through would defer it forever, transition after transition, on exactly
-          the graph whose shape changed enough to drop the destination node. Sending such
-          a chunk back to the target's entry is the same triage answer #90 gives a
-          cross-graph move into an unfamiliar graph.
+        * the **entry fallback** is what makes the policy total for a *non-terminal*
+          destination, and is where it differs from a ``#124`` ``auto`` intent (which
+          falls through and stays set for next time). There is nothing to stay set for
+          here — the policy is standing, so falling through would defer it forever,
+          transition after transition, on exactly the graph whose shape changed enough to
+          drop the destination node. Sending such a chunk back to the target's entry is
+          the same triage answer #90 gives a cross-graph move into an unfamiliar graph.
 
-        Recorded as a **migration** fact, never disguised as a transition, and
-        ``clear_intent=False`` because there is no per-chunk intent to clear — the policy
-        is standing and applies again at the next transition if a newer mint appears.
+        Recorded as a **migration** fact, never disguised as a transition, carrying
+        :attr:`~blizzard.hub.domain.work.MigrationSource.FOLLOW_LATEST` so the move is
+        attributable to the policy rather than to an operator. ``clear_intent=False``
+        because there is no per-chunk intent to clear.
+
+        Note this is a **per-mint** policy, not a per-lineage one: the chunk lands on the
+        newer mint, which carries its own (default ``null``) tri-state, so a graph-level
+        ``true`` governs one hop. Sustaining the drift across a lineage is the hub-level
+        flag's job — see ``docs/deployment.md``.
         """
-        if follow_latest_graph is None:
+        if follow_latest_graph is None or edge.to_node_name == RESERVED_TERMINAL:
             return None
         return self._land_migration(
             chunk,
@@ -546,6 +569,7 @@ class ApplyService:
             model=None,
             artifacts=submission.artifacts,
             clear_intent=False,
+            source=MigrationSource.FOLLOW_LATEST,
         )
 
     def _land_migration(
@@ -561,6 +585,7 @@ class ApplyService:
         model: str | None,
         artifacts: list[SubmittedArtifact],
         clear_intent: bool,
+        source: MigrationSource,
     ) -> ApplyResponse:
         """The landing tail shared by a #90 authored-choice migration
         (:meth:`_apply_migration`) and an issue #124 applied intent
@@ -585,6 +610,7 @@ class ApplyService:
             choice_name=choice_name,
             decision_id=decision_id,
             model=model,
+            source=source,
             epoch=submission.epoch,
             at=self._clock.now(),
             artifacts=[self._row(chunk, from_node, submission.epoch, a) for a in artifacts],

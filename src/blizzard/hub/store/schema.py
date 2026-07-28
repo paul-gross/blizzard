@@ -241,6 +241,11 @@ chunk_migrations = Table(
     Column("model_after", String, nullable=True),  # the re-pinned model, or null (kept current)
     Column("epoch", Integer, nullable=False),  # the submitting fence; the natural-key third part
     Column("recorded_at", UtcDateTime, nullable=False),
+    # What moved the chunk (issue #164): authored-edge | intent | follow-latest. Nullable
+    # because rows predating the discriminator cannot be attributed — a legacy row's two
+    # possible operator sources are indistinguishable, so it stays honestly unrecorded
+    # rather than back-filled to a guess.
+    Column("source", String, nullable=True),
 )
 
 # --- Artifacts (the chunk artifact store) --------------------------------------

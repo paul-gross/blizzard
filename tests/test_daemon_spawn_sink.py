@@ -30,14 +30,27 @@ _TESTS_DIR = Path(__file__).resolve().parent
 # matches an explicit hand-wired pipe.
 _PIPE = re.compile(r"stdout\s*=\s*subprocess\.PIPE")
 
+#: The escape hatch. The AC this guard automates permits a pipe that is genuinely read —
+#: ``_await_http``'s old early-exit ``proc.stdout.read()`` was one such site before it
+#: moved to the log file. A blanket ban would force the next legitimate
+#: ``communicate()`` spawn to weaken the guard rather than annotate itself, so a site that
+#: drains its own pipe says so on the same line and is skipped. Deliberately verbose: it
+#: should be easier to reach for the sink than to type this.
+_DRAINED = "# drained-pipe: this spawn reads its own stdout"
+
+#: Resolved, because ``rglob`` yields paths under the already-resolved ``_TESTS_DIR``. An
+#: unresolved ``Path(__file__)`` never matches one of those under a symlinked checkout,
+#: and this file then flags its own docstring.
+_SELF = Path(__file__).resolve()
+
 
 def test_no_test_spawns_a_daemon_onto_an_undrained_pipe() -> None:
     offenders = [
         f"{path.relative_to(_TESTS_DIR)}:{lineno}"
         for path in sorted(_TESTS_DIR.rglob("*.py"))
-        if path != Path(__file__)
+        if path != _SELF
         for lineno, line in enumerate(path.read_text().splitlines(), start=1)
-        if _PIPE.search(line)
+        if _PIPE.search(line) and _DRAINED not in line
     ]
     assert offenders == [], (
         "these spawn sites pipe a daemon's stdout to a buffer nothing drains; "

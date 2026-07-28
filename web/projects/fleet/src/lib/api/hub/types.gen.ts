@@ -1592,6 +1592,13 @@ export type MigrationMode = 'auto' | 'forced';
  * graph-to-graph hop: ``from_graph/from_node --choice--> to_graph/landed_node``. Node and
  * graph names are resolved server-side against each side's own graph (null when
  * unresolvable); ``model`` is the re-pinned model, or null when the chunk kept its own.
+ *
+ * ``source`` (issue #164) says **what** moved the chunk — ``authored-edge`` (a #90
+ * judgement choice), ``intent`` (an operator's #124 standing intent), or
+ * ``follow-latest`` (the standing policy). It is the only one of the three a human did
+ * not ask for, so this is how a reader learns why a chunk sits on a graph it did not
+ * start on. Null on a migration recorded before the discriminator existed — unrecorded,
+ * not defaulted, since a legacy row's two operator sources are indistinguishable.
  */
 export type MigrationView = {
     /**
@@ -1630,6 +1637,10 @@ export type MigrationView = {
      * Recorded At
      */
     recorded_at: string;
+    /**
+     * Source
+     */
+    source?: string | null;
     /**
      * To Graph Id
      */

@@ -741,3 +741,62 @@ def test_runner_trusted_proxies_rejects_a_malformed_entry(tmp_path: Path) -> Non
     (root / "blizzard-runner.toml").write_text('db_url = "sqlite:///x"\ntrusted_proxies = ["10.0.0.0/999"]\n')
     with pytest.raises(ConfigError):
         RunnerConfig.load(root)
+
+
+# --------------------------------------------------------------------------- #
+# `follow_latest` — the fleet-wide auto-migration policy default (issue #164).
+# Not a `*_mode` rollout ramp like the three above: a plain on/off, so the trio
+# here pins the boolean shape rather than a value set.
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.unit
+def test_follow_latest_defaults_to_false(tmp_path: Path) -> None:
+    """The shipped default keeps every chunk pinned to the mint it started on — adopting
+    the policy is a deliberate act, so this is the pin against arming a fleet by upgrade."""
+    assert _hub_config(tmp_path).follow_latest is False
+
+
+@pytest.mark.unit
+def test_follow_latest_round_trips_through_to_toml_and_load(tmp_path: Path) -> None:
+    config = _hub_config(tmp_path)
+    config.config_path.write_text(config.to_toml())
+    loaded = HubConfig.load(config.root)
+    assert loaded.follow_latest is False
+
+    edited = dataclasses.replace(loaded, follow_latest=True)
+    edited.config_path.write_text(edited.to_toml())
+    reloaded = HubConfig.load(edited.root)
+    assert reloaded.follow_latest is True
+
+
+@pytest.mark.unit
+def test_follow_latest_stays_a_top_level_key_in_the_emitted_toml(tmp_path: Path) -> None:
+    """`to_toml` hand-rolls its emit as an ordered list of strings, so a key can drift
+    below a `[table]` header without any type error. `follow_latest` would then load as
+    `False` and the fleet-wide policy would be silently off — the failure direction with
+    no symptom. Pin its position: it must precede the first table header."""
+    emitted = dataclasses.replace(_hub_config(tmp_path), follow_latest=True).to_toml()
+    assert "\nfollow_latest = true\n" in emitted
+    first_table = emitted.index("\n[")
+    assert emitted.index("\nfollow_latest = true\n") < first_table
+
+
+@pytest.mark.unit
+def test_follow_latest_absent_from_toml_defaults_to_false(tmp_path: Path) -> None:
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///x"\n')
+    assert HubConfig.load(root).follow_latest is False
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("value", ['"true"', '"yes"', "1", "[]"])
+def test_follow_latest_non_boolean_raises(tmp_path: Path, value: str) -> None:
+    """Validated, never truthy-coerced: `follow_latest = "true"` is a plausible typo, and
+    coercing it would silently arm a fleet-wide migration policy nobody chose."""
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text(f'db_url = "sqlite:///x"\nfollow_latest = {value}\n')
+    with pytest.raises(HubConfigError, match="follow_latest"):
+        HubConfig.load(root)

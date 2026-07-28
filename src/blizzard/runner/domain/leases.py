@@ -64,6 +64,16 @@ RECENT_LEASE_LIMIT = 20
 LeaseState = Literal["running", "stale", "parked", "spawning", "exited", "closed"]
 
 
+class _Unread:
+    """The "caller did not supply a heartbeat" sentinel for :func:`last_activity`.
+
+    A distinct type rather than ``None``, because ``None`` is itself a meaningful value
+    there — a lease that has never beaten — and the two must not collapse."""
+
+
+_UNREAD = _Unread()
+
+
 def is_heartbeat_stale(store: IReadRunnerStore, lease: LeaseRecord, now: datetime) -> bool:
     """True iff the lease's last activity is older than the staleness threshold.
 
@@ -73,7 +83,9 @@ def is_heartbeat_stale(store: IReadRunnerStore, lease: LeaseRecord, now: datetim
     return _staleness_exceeded(last_activity(store, lease), now, threshold=HEARTBEAT_STALENESS_THRESHOLD)
 
 
-def last_activity(store: IReadRunnerStore, lease: LeaseRecord) -> datetime:
+def last_activity(
+    store: IReadRunnerStore, lease: LeaseRecord, *, heartbeat: datetime | None | _Unread = _UNREAD
+) -> datetime:
     """A lease's staleness baseline: the newest of its heartbeat, its spawn, and its mint.
 
     The docstring's promise — *a freshly spawned worker is never read as stalled inside
@@ -102,8 +114,17 @@ def last_activity(store: IReadRunnerStore, lease: LeaseRecord) -> datetime:
     newer than its newest spawn (a worker beating away right now) or a spawn newer than
     its newest heartbeat (a just-resumed worker), and only the newer of the two is
     "activity". ``created_at`` is the floor for a lease that has neither.
+
+    ``heartbeat`` lets a caller that has **already** read ``latest_heartbeat`` pass it in
+    rather than have this issue the identical query a second time —
+    :meth:`LocalLeaseService.list_active` reads it anyway for the panel's heartbeat-age
+    column, and its N+1 is bounded by ``MAX_AGENTS``, so growing it per lease for no new
+    information is pure waste. The sentinel distinguishes "not supplied, go read it" from
+    a supplied ``None`` (a lease that has genuinely never beaten), which a plain ``None``
+    default could not.
     """
-    facts = (store.latest_heartbeat(lease.lease_id), store.latest_spawn(lease.lease_id))
+    beat = store.latest_heartbeat(lease.lease_id) if isinstance(heartbeat, _Unread) else heartbeat
+    facts = (beat, store.latest_spawn(lease.lease_id))
     return max([as_utc(lease.created_at), *(as_utc(fact) for fact in facts if fact is not None)])
 
 
@@ -249,17 +270,18 @@ class LocalLeaseService:
         :func:`last_activity` for the staleness read, and ``bindings_for_chunk`` for the
         environment join.
 
-        The two heartbeat reads are deliberate rather than redundant: the column shows
+        The column and the staleness baseline are different questions — the column shows
         what the *worker* last did, while staleness is measured against the spawn too
         (issue #150), so a just-resumed lease renders ``running`` with an honestly old
-        last-beat rather than ``stale``.
+        last-beat rather than ``stale`` — but they share the one heartbeat read, handed to
+        :func:`last_activity` rather than issued twice.
         """
         now = self._clock.now()
         parked = self._store.parked_lease_ids()
         activities: list[LeaseActivity] = []
         for lease in self._store.list_active_leases():
             last_heartbeat = self._store.latest_heartbeat(lease.lease_id)
-            baseline = last_activity(self._store, lease)
+            baseline = last_activity(self._store, lease, heartbeat=last_heartbeat)
             state = derive_lease_state(
                 lease,
                 is_closed=False,

@@ -22,6 +22,7 @@ from blizzard.runner.domain.leases import (
     LocalLeaseService,
     derive_lease_state,
     is_heartbeat_stale,
+    last_activity,
 )
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 from blizzard.runner.store.repository import LeaseRecord, NewLease
@@ -423,3 +424,24 @@ def test_list_recent_closed_activity_carries_no_environment_binding(tmp_path) ->
     assert len(activities) == 1
     assert activities[0].environment_id is None
     assert activities[0].workdir is None
+
+
+@pytest.mark.unit
+def test_last_activity_uses_a_supplied_heartbeat_without_re_reading_it(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """The panel already reads `latest_heartbeat` for its own column, so it hands the
+    value in rather than making `last_activity` issue the identical query again. The
+    sentinel keeps a supplied `None` — a lease that genuinely never beat — distinct from
+    "not supplied, go read it"."""
+    store = _store(tmp_path)
+    _seed_lease(store)
+    store.record_spawn("lease_1", pid=1, process_start_time="s1", session_id="sess", spawned_at=_NOW)
+    beat_at = _NOW + timedelta(minutes=30)
+    store.record_heartbeat(lease_id="lease_1", beat_at=beat_at)
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None
+
+    assert last_activity(store, lease) == beat_at  # unsupplied: reads it itself
+    assert last_activity(store, lease, heartbeat=beat_at) == beat_at  # supplied: same answer
+    # A supplied None means "never beat" and must not be re-read into the real value —
+    # the baseline falls back to the spawn, not to the heartbeat sitting in the store.
+    assert last_activity(store, lease, heartbeat=None) == _NOW

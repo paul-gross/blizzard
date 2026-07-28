@@ -356,6 +356,30 @@ class HubNodePollFact:
     polled_at: datetime
 
 
+class MigrationSource(StrEnum):
+    """What moved a chunk onto another graph — a migration's attribution (issue #164).
+
+    Three paths reach the same :meth:`IWriteChunkRepository.record_migration`, and without
+    a discriminator their facts are byte-identical in history. Two of them are
+    operator-initiated, so an operator finding a chunk on a graph it did not start on can
+    at least reconstruct their own action; the third is a **standing policy** that moves
+    chunks with nobody having asked, and that one has to be able to answer "why is this
+    chunk here" on its own.
+
+    Same-name is not a usable tell, because ``hub chunk migrate`` by name also resolves to
+    a newer mint of the same name — so the fact records the source rather than leaving a
+    reader to infer it.
+    """
+
+    #: A judgement choice whose ``to:`` named ``graph:<name>`` (issue #90) — authored into
+    #: the graph itself, so the move is part of the workflow's own design.
+    AUTHORED_EDGE = "authored-edge"
+    #: The chunk's standing ``intended_migration``, set by an operator (issue #124).
+    INTENT = "intent"
+    #: The standing follow-latest policy (issue #164) — nobody asked for this move.
+    FOLLOW_LATEST = "follow-latest"
+
+
 @dataclass(frozen=True)
 class MigrationFact:
     """A ``chunk_migrations`` fact — a cross-graph migration re-pinned the chunk (issue #90).
@@ -376,6 +400,12 @@ class MigrationFact:
     :attr:`TransitionFact.to_node_executor` — so a migration landing on a hub-executed
     node derives ``delivering``, not ``ready`` (issue #111). Defaults to
     ``Executor.RUNNER`` so existing constructions that predate this field still work.
+
+    ``source`` (issue #164) attributes the move — see :class:`MigrationSource`. ``None``
+    for a row written before the discriminator existed: deliberately *unrecorded* rather
+    than back-filled to a guess, since the two operator-driven sources are
+    indistinguishable in a legacy row and claiming either would be a fabricated
+    provenance.
     """
 
     from_node_id: str | None
@@ -387,6 +417,7 @@ class MigrationFact:
     epoch: int
     recorded_at: datetime
     landed_node_executor: Executor = Executor.RUNNER
+    source: MigrationSource | None = None
 
 
 @dataclass(frozen=True)
@@ -1497,6 +1528,7 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         epoch: int,
         at: datetime,
         artifacts: list[ArtifactRow],
+        source: MigrationSource,
         release_route: bool = True,
         clear_intent: bool = False,
     ) -> bool:

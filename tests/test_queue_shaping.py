@@ -233,7 +233,7 @@ def test_group_rejects_an_acquired_member(tmp_path: Path) -> None:
     detail = resp.json()["detail"]
     assert running in detail
     assert "running" in detail
-    assert "no runner holds" in detail
+    assert "no runner holding it" in detail
     # Nothing was merged — the running chunk is untouched, the survivor keeps one pointer.
     assert hub.client.get(f"/api/chunks/{running}").status_code == 200
     survivor_detail = hub.client.get(f"/api/chunks/{survivor}").json()
@@ -273,3 +273,26 @@ def test_grouped_pointer_reingest_points_at_survivor(tmp_path: Path) -> None:
     )
     assert resp.status_code == 409
     assert resp.json()["existing_chunk_id"] == survivor
+
+
+def test_group_refuses_a_paused_backlog_chunk_without_claiming_a_runner_holds_it(tmp_path: Path) -> None:
+    """A never-claimed backlog chunk can be paused (`PauseService` refuses only
+    done/stopped/delivering), and `PAUSED` outranks the un-promoted branch in the
+    derivation — so it reads `paused` with no runner anywhere near it.
+
+    Grouping still refuses it: a pause is a standing human hold, and folding a chunk out
+    of existence under one is not this operation's call. But the refusal must not *claim*
+    a runner holds it — that is the same wrong-invariant wording issue #141 removed, one
+    status over."""
+    hub = build_hub(tmp_path)
+    survivor, held = _ingest_backlog(hub, 1), _ingest_backlog(hub, 2)
+    assert hub.client.post(f"/api/chunks/{held}/pause", json={"by": "operator"}).status_code == 202
+    assert _status(hub, held) == "paused"
+
+    resp = hub.client.post(f"/api/chunks/{survivor}/group", json={"merge_chunk_ids": [held]})
+
+    assert resp.status_code == 409
+    detail = resp.json()["detail"]
+    assert "is paused" in detail
+    assert "no runner holds it" not in detail  # would be false: nothing ever claimed it
+    assert "not_ready or ready" in detail

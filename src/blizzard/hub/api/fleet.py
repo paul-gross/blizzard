@@ -47,7 +47,7 @@ from blizzard.hub.composition import HubServices
 from blizzard.hub.delivery.hub_node import poll_interval_for
 from blizzard.hub.domain.claim import ClaimConflict, ClaimDeniedPaused, ClaimDeniedTerminal
 from blizzard.hub.domain.envelope import addendum_for_transition, build_node_envelope
-from blizzard.hub.domain.graph import Graph, resolve_follow_latest
+from blizzard.hub.domain.graph import Graph, is_newer_mint, resolve_follow_latest
 from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
@@ -150,23 +150,16 @@ def _resolve_follow_latest_target(
       chunk somewhere has said where it goes.
     * the effective policy resolves ``false`` — the graph's own tri-state, else the hub
       default (:func:`~blizzard.hub.domain.graph.resolve_follow_latest`).
-    * the name resolves to the chunk's own mint (it is already newest), or to nothing.
-    * the resolved mint is **not newer** than the chunk's own. Not redundant with the
-      identity check above: ``get_enabled_by_name`` answers with the newest *non-retired*
-      mint, so a chunk sitting on a mint that has since been retired would otherwise be
-      dragged **backwards** onto an older enabled one. Following latest must only ever
-      move a chunk forward, and the ``(created_at, graph_id)`` comparison is the same
-      newest-wins order :func:`~blizzard.hub.domain.graph.mark_effective` and
-      ``get_enabled_by_name`` already sort by.
+    * the name resolves to nothing, or to a mint that is not strictly newer than the
+      chunk's own — :func:`~blizzard.hub.domain.graph.is_newer_mint`, which owns that
+      comparison (including why "not newer" is not merely "not the same one").
     """
     if chunk.intended_migration is not None:
         return None
     if not resolve_follow_latest(services.graphs.follow_latest(graph.graph_id), hub_default=hub_default):
         return None
     newest = services.graphs.get_enabled_by_name(graph.name)
-    if newest is None or newest.graph_id == graph.graph_id:
-        return None
-    if (newest.created_at, newest.graph_id) <= (graph.created_at, graph.graph_id):
+    if newest is None or not is_newer_mint(newest, graph):
         return None
     return newest
 

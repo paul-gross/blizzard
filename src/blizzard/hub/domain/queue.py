@@ -40,30 +40,42 @@ class ChunkNotFound(LookupError):
         self.chunk_id = chunk_id
 
 
-#: The statuses a chunk may be **grouped** at (issue #141) — the two in which no runner
-#: holds it. Deliberately a status set rather than a route-liveness read: ``not_ready``
-#: and ``ready`` are exactly :func:`~blizzard.hub.domain.work.derive_chunk_status`'s
-#: pre-claim fall-through, so every post-claim state — ``running``/``delivering``, the
-#: human-parked ``waiting_on_human``/``needs_human``/``paused``, and the terminal
-#: ``stopped``/``done`` — is refused by construction, with no second vocabulary of "in
-#: progress" to keep in lockstep.
+#: The statuses a chunk may be **grouped** at (issue #141): the two
+#: :func:`~blizzard.hub.domain.work.derive_chunk_status` falls through to when a chunk
+#: is neither claimed nor parked nor finished.
+#:
+#: Deliberately a status set rather than a route-liveness read. "No runner holds it" is
+#: what motivated widening the gate past ``ready``, but it is **not** sufficient on its
+#: own, and the set is not its synonym: ``paused``, ``waiting_on_human`` and
+#: ``needs_human`` are all reachable with no live route at all — a never-claimed backlog
+#: chunk can be paused (``PauseService`` refuses only ``done``/``stopped``/``delivering``),
+#: and ``PAUSED`` outranks the un-promoted branch in the derivation, so it reads ``paused``
+#: rather than ``not_ready``. Each of those is a standing human hold, and folding a chunk
+#: out of existence under one is not this operation's call to make. Keying on the two
+#: statuses keeps that correct without a second vocabulary of "available" to hold in
+#: lockstep with the derivation.
 GROUPABLE_STATUSES = frozenset({ChunkStatus.NOT_READY, ChunkStatus.READY})
 
 
 class ChunkNotGroupable(ValueError):
-    """A group op named a chunk some runner holds — or one already finished (issue #141).
+    """A group op named a chunk that is not free to be folded away (issue #141).
 
-    The invariant grouping actually needs is "no runner holds it", not "it sits in the
-    ready queue". Grouping was gated on ``ready`` for every participant, so merging three
-    backlog chunks meant promoting all three into the *claimable* queue first — making
-    them claimable by any live runner mid-flow purely to satisfy a merge, and leaving the
-    survivor ready as a side effect rather than by choice.
+    Grouping was gated on ``ready`` for every participant, so merging three backlog chunks
+    meant promoting all three into the *claimable* queue first — making them claimable by
+    any live runner mid-flow purely to satisfy a merge, and leaving the survivor ready as a
+    side effect rather than by choice.
+
+    The message names what is **actually enforced** rather than the motivating half of it.
+    "No runner holds it" alone would be a false claim on a refused ``paused`` chunk, which
+    is exactly the kind of wrong-invariant wording issue #141 set out to remove — one
+    status over.
     """
 
     def __init__(self, chunk_id: str, status: ChunkStatus) -> None:
         super().__init__(
-            f"chunk {chunk_id} is {status.value} — grouping needs a chunk no runner holds "
-            f"({', '.join(sorted(s.value for s in GROUPABLE_STATUSES))})"
+            f"chunk {chunk_id} is {status.value} — grouping needs a chunk at "
+            f"{' or '.join(sorted(s.value for s in GROUPABLE_STATUSES))}: "
+            "no runner holding it, and no human hold or terminal on it either"
         )
         self.chunk_id = chunk_id
         self.status = status

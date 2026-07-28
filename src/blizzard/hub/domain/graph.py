@@ -603,6 +603,27 @@ def mark_effective(graphs: list[Graph], *, retired_ids: Collection[str]) -> dict
     return {g.graph_id: g.graph_id in effective_ids for g in graphs}
 
 
+def is_newer_mint(candidate: Graph, current: Graph) -> bool:
+    """Whether ``candidate`` is a strictly newer mint than ``current``.
+
+    The fourth place this codebase needs "which of two mints is newer", and the one that
+    makes it a named rule rather than a fourth open-coded tuple comparison: the ordering
+    is already owned by :func:`mark_effective`'s tie-break and
+    :meth:`IReadGraphRepository.get_enabled_by_name`'s ``ORDER BY``, and it must stay in
+    lockstep with both.
+
+    ``created_at`` first, ``graph_id`` as the tie-break — ULIDs sort lexically by creation,
+    so two mints sharing a ``created_at`` (a fixed clock, or two mints inside one tick)
+    still order deterministically rather than by whichever the store happened to return.
+
+    Its caller is the follow-latest policy (issue #164), which needs **strictly** newer:
+    ``get_enabled_by_name`` answers with the newest *non-retired* mint, so a chunk sitting
+    on a mint that has since been retired would otherwise be dragged **backwards** onto an
+    older enabled one. Following latest must only ever move a chunk forward.
+    """
+    return (candidate.created_at, candidate.graph_id) > (current.created_at, current.graph_id)
+
+
 def resolve_follow_latest(graph_policy: bool | None, *, hub_default: bool) -> bool:
     """Whether a chunk pinned to a graph follows the newest mint of its name (issue #164).
 

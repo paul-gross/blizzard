@@ -210,6 +210,7 @@ def _migration_views(facts: ChunkFacts, graphs: dict[str | None, Graph | None]) 
                 landed_node_name=_node_name(to_graph, m.landed_node_id),
                 choice_name=m.choice_name,
                 model=m.model,
+                source=m.source.value if m.source is not None else None,
                 recorded_at=iso_utc(m.recorded_at),
             )
         )

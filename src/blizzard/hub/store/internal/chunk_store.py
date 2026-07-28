@@ -46,6 +46,7 @@ from blizzard.hub.domain.work import (
     LeaseFact,
     MigrationFact,
     MigrationMode,
+    MigrationSource,
     PauseFact,
     PrOpenedFact,
     QuestionFact,
@@ -234,6 +235,9 @@ class ChunkStore:
                     epoch=m.epoch,
                     recorded_at=m.recorded_at,
                     landed_node_executor=executors.get(m.landed_node_id, Executor.RUNNER),
+                    # Null for a row predating the discriminator — read as unrecorded, never
+                    # guessed at (issue #164).
+                    source=MigrationSource(m.source) if m.source else None,
                 )
                 for m in migration_rows
             ]
@@ -1079,6 +1083,7 @@ class ChunkStore:
         epoch: int,
         at: datetime,
         artifacts: list[ArtifactRow],
+        source: MigrationSource,
         release_route: bool = True,
         clear_intent: bool = False,
     ) -> bool:
@@ -1130,6 +1135,7 @@ class ChunkStore:
                     model_after=model,
                     epoch=epoch,
                     recorded_at=at,
+                    source=source.value,
                 )
             )
             values: dict[str, str | None] = {"graph_id": to_graph_id}
