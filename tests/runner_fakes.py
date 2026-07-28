@@ -410,17 +410,30 @@ class FakeHarness:
 
 class FakeTranscripts:
     """A scriptable :class:`IReadTranscriptRepository`: canned raw lines by session id
-    (issue #58's envelope-less usage fallback). ``read_turns`` is unused by the loop —
-    stubbed only to satisfy the Protocol."""
+    (issue #58's envelope-less usage fallback) and canned sizes (issue #144's
+    ``rotate.max_transcript_bytes``). ``read_turns`` is unused by the loop — stubbed only
+    to satisfy the Protocol.
 
-    def __init__(self, lines_by_session: dict[str, list[str]] | None = None) -> None:
+    ``sizes_by_session`` is deliberately separate from ``lines_by_session``: a rotation
+    test needs to script an *unreadable* size (a session absent from the map, reading
+    ``None``) independently of whether that session has lines."""
+
+    def __init__(
+        self,
+        lines_by_session: dict[str, list[str]] | None = None,
+        sizes_by_session: dict[str, int] | None = None,
+    ) -> None:
         self._lines = lines_by_session or {}
+        self._sizes = sizes_by_session or {}
 
     def read_turns(self, session_id: str, *, spawn_cwd: str | None) -> Transcript:
         return Transcript(session_id=session_id, available=False, reason="not_found", turns=[], truncated=False)
 
     def read_raw_lines(self, session_id: str, *, spawn_cwd: str | None) -> list[str]:
         return list(self._lines.get(session_id, []))
+
+    def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
+        return self._sizes.get(session_id)
 
 
 class FakeProbe:

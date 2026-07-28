@@ -18,15 +18,22 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.foundation.logging import get_logger
 from blizzard.hub.domain.graph import SessionMode
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.loop.steps import advance, fill, pull
-from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
+from blizzard.runner.harness.usage import UsageSample
+from blizzard.runner.loop.steps import _resolve_session, advance, fill, pull
+from blizzard.runner.store.repository import NewLease
+from blizzard.runner.transcripts.internal.jsonl_transcript_repository import JsonlTranscriptRepository
+from blizzard.runner.transcripts.locator import mangle_cwd
+from blizzard.runner.transcripts.repository import TranscriptErrorFactory
+from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, RotatePolicyView
 from tests.runner_fakes import (
     FakeHarness,
     FakeHub,
     FakeProbe,
     FakeProvider,
+    FakeTranscripts,
     QueuePeekEntry,
     claimed_outcome,
     make_context,
@@ -356,3 +363,246 @@ def _blank_stamps(store, chunk_id: str) -> None:  # type: ignore[no-untyped-def]
             .where(s.lease_context.c.chunk_id == chunk_id)
             .values(session_name=None, resolved_model=None, resolved_effort=None)
         )
+
+
+# --------------------------------------------------------------------------- #
+# Rotation (issue #144, phase 6). A head is resumed only while every *readable*
+# declared threshold is under bound AND its stamped model still matches the pool's
+# currently-resolved one. An unreadable signal is NOT a breach — a missing
+# measurement would otherwise make every freshly minted head instantly ineligible.
+# --------------------------------------------------------------------------- #
+
+
+def _rotate(**bounds):  # type: ignore[no-untyped-def]
+    return RotatePolicyView(**bounds)
+
+
+def _bounded(mode: SessionMode, rotate=None, model=None):  # type: ignore[no-untyped-def]
+    return make_envelope(
+        "ch_1",
+        "verify",
+        node_id="nd_verify",
+        choices=_CHOICES,
+        session=mode,
+        session_source="code",
+        session_name="code",
+        session_model=model if model is not None else ["blizzard:basic"],
+        session_rotate=rotate,
+    )
+
+
+def _seed_head(store, *, session_id: str = "sess-head", model: str = "sonnet") -> str:
+    """A pool head for `code` — a session-bearing lease stamping the pool name."""
+    store.record_lease(
+        NewLease(
+            lease_id="lease_head",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=1,
+            runner_id="r1",
+            retries_max=2,
+            session_name="code",
+            resolved_model=model,
+            resolved_effort="medium",
+            created_at=_NOW,
+        )
+    )
+    store.record_spawn("lease_head", pid=1, process_start_time="t", session_id=session_id, spawned_at=_NOW)
+    return session_id
+
+
+def _seed_usage(store, *, kind: str = "spawn", generation: int = 1, tokens: int = 0) -> None:
+    store.record_usage(
+        lease_id="lease_head",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        epoch=1,
+        generation=generation,
+        sample=UsageSample(
+            kind=kind,  # type: ignore[arg-type]
+            model="sonnet",
+            input_tokens=tokens,
+            output_tokens=0,
+            cache_read_tokens=0,
+            cache_create_tokens=0,
+            cost_usd=None,
+        ),
+        recorded_at=_NOW + timedelta(seconds=generation),
+    )
+
+
+def _resolve(store, envelope, *, transcripts=None, resolved_model: str = "sonnet"):  # type: ignore[no-untyped-def]
+    """Run the node-entry resolver against a seeded store; returns the resume target."""
+    harness = FakeHarness(handle=WorkerHandle(session_id="unused", pid=9, process_start_time="t"), verdict="pass")
+    harness.resolved_model = resolved_model
+    ctx = make_context(
+        store,
+        hub=FakeHub(),
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        clock=FixedClock(_NOW),
+        transcripts=transcripts,
+    )
+    return _resolve_session(ctx, "ch_1", envelope.node, "/ws/e1")
+
+
+@pytest.mark.component
+def test_a_head_under_every_declared_bound_is_resumed(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    head = _seed_head(store)
+    _seed_usage(store, tokens=10)
+    env = _bounded(SessionMode.RESUME, _rotate(max_context_tokens=1000, max_invocations=10))
+
+    assert _resolve(store, env) == head
+
+
+@pytest.mark.component
+def test_a_declaration_with_no_rotate_block_bounds_nothing(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    head = _seed_head(store)
+    for generation in range(1, 20):
+        _seed_usage(store, generation=generation, tokens=10_000_000)
+
+    assert _resolve(store, _bounded(SessionMode.RESUME)) == head
+
+
+@pytest.mark.component
+@pytest.mark.parametrize(
+    ("tokens", "bound", "resumed"),
+    [(99, 100, True), (100, 100, True), (101, 100, False)],
+    ids=["under", "at", "over"],
+)
+def test_max_context_tokens_fires_strictly_over_the_bound(tmp_path, tokens, bound, resumed):  # type: ignore[no-untyped-def]
+    """At the bound is still under it — a threshold is a ceiling, not a trigger point."""
+    store = _store(tmp_path)
+    head = _seed_head(store)
+    _seed_usage(store, tokens=tokens)
+    env = _bounded(SessionMode.RESUME, _rotate(max_context_tokens=bound))
+
+    assert _resolve(store, env) == (head if resumed else None)
+
+
+@pytest.mark.component
+@pytest.mark.parametrize(
+    ("invocations", "bound", "resumed"),
+    [(2, 3, True), (3, 3, True), (4, 3, False)],
+    ids=["under", "at", "over"],
+)
+def test_max_invocations_counts_harness_invocations_not_node_steps(tmp_path, invocations, bound, resumed):  # type: ignore[no-untyped-def]
+    """Every `usage_facts` row counts — `spawn`, `resume`, `judge`, `nudge` alike — so one
+    node-step burns two or three. An author setting this from a node-step count bounds the
+    lineage roughly three times tighter than they intend."""
+    store = _store(tmp_path)
+    head = _seed_head(store)
+    for generation in range(1, invocations + 1):
+        _seed_usage(store, kind="judge" if generation % 2 else "spawn", generation=generation)
+    env = _bounded(SessionMode.RESUME, _rotate(max_invocations=bound))
+
+    assert _resolve(store, env) == (head if resumed else None)
+
+
+@pytest.mark.component
+@pytest.mark.parametrize(
+    ("size", "bound", "resumed"),
+    [(99, 100, True), (100, 100, True), (101, 100, False)],
+    ids=["under", "at", "over"],
+)
+def test_max_transcript_bytes_fires_strictly_over_the_bound(tmp_path, size, bound, resumed):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    head = _seed_head(store)
+    env = _bounded(SessionMode.RESUME, _rotate(max_transcript_bytes=bound))
+    transcripts = FakeTranscripts(sizes_by_session={head: size})
+
+    assert _resolve(store, env, transcripts=transcripts) == (head if resumed else None)
+
+
+@pytest.mark.component
+def test_an_unreadable_context_signal_is_not_a_breach(tmp_path):  # type: ignore[no-untyped-def]
+    """A freshly minted head has no usage fact yet. Reading that as 0 would be right by
+    accident; reading it as a breach would make every new head instantly ineligible."""
+    store = _store(tmp_path)
+    head = _seed_head(store)  # no usage seeded at all
+    env = _bounded(SessionMode.RESUME, _rotate(max_context_tokens=1))
+
+    assert _resolve(store, env) == head
+
+
+@pytest.mark.component
+def test_an_unreadable_transcript_size_is_not_a_breach(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    head = _seed_head(store)
+    env = _bounded(SessionMode.RESUME, _rotate(max_transcript_bytes=1))
+
+    assert _resolve(store, env, transcripts=FakeTranscripts(sizes_by_session={})) == head
+
+
+@pytest.mark.component
+def test_an_unwired_transcripts_seam_reads_as_unreadable_not_as_zero(tmp_path):  # type: ignore[no-untyped-def]
+    """`ctx.transcripts` is `| None`. Absent must mean *not measured*, exactly like a
+    missing file — not a zero that would make the threshold silently inert."""
+    store = _store(tmp_path)
+    head = _seed_head(store)
+    env = _bounded(SessionMode.RESUME, _rotate(max_transcript_bytes=1))
+
+    assert _resolve(store, env, transcripts=None) == head
+
+
+@pytest.mark.component
+def test_model_drift_rotates_even_with_every_threshold_under_bound(tmp_path):  # type: ignore[no-untyped-def]
+    """A graph edit changed the pool's model list mid-chunk. The head stays on what it was
+    minted with — a cross-model resume is structurally impossible — so the change takes
+    effect at the next mint, which is where a fresh context is being built anyway."""
+    store = _store(tmp_path)
+    _seed_head(store, model="sonnet")
+    _seed_usage(store, tokens=1)
+    env = _bounded(SessionMode.RESUME, _rotate(max_context_tokens=1_000_000, max_invocations=1000))
+
+    assert _resolve(store, env, resolved_model="opus") is None
+
+
+@pytest.mark.component
+def test_no_drift_when_the_resolved_model_still_matches_the_stamp(tmp_path):  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    head = _seed_head(store, model="sonnet")
+
+    assert _resolve(store, _bounded(SessionMode.RESUME), resolved_model="sonnet") == head
+
+
+@pytest.mark.component
+def test_a_head_with_no_model_stamp_cannot_drift(tmp_path):  # type: ignore[no-untyped-def]
+    """A pre-#144 lease reads NULL — *unknown*. Comparing an unknown against a resolved
+    name would rotate every such session once, for no reason anyone could name."""
+    store = _store(tmp_path)
+    head = _seed_head(store, model=None)  # type: ignore[arg-type]
+
+    assert _resolve(store, _bounded(SessionMode.RESUME), resolved_model="opus") == head
+
+
+@pytest.mark.component
+def test_max_transcript_bytes_fires_against_the_real_repository_at_the_production_root(tmp_path):  # type: ignore[no-untyped-def]
+    """The threshold end to end over the **real** `JsonlTranscriptRepository`, against a
+    file at the production path shape — not a scripted size.
+
+    The scripted-size cases above pin the comparison; this pins that the comparison is
+    reading the thing it thinks it is. A `size_bytes` that silently returned `None` for
+    every real transcript would leave every one of them green.
+    """
+    store = _store(tmp_path)
+    head = _seed_head(store)
+    projects_root = tmp_path / "projects"
+    project_dir = projects_root / mangle_cwd("/ws/e1")
+    project_dir.mkdir(parents=True)
+    (project_dir / f"{head}.jsonl").write_text("x" * 5000)
+    transcripts = JsonlTranscriptRepository(str(projects_root), TranscriptErrorFactory(get_logger("test")))
+
+    assert (
+        _resolve(store, _bounded(SessionMode.RESUME, _rotate(max_transcript_bytes=10_000)), transcripts=transcripts)
+        == head
+    )
+    assert (
+        _resolve(store, _bounded(SessionMode.RESUME, _rotate(max_transcript_bytes=1_000)), transcripts=transcripts)
+        is None
+    )

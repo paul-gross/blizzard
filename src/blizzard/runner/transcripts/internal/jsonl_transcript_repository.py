@@ -97,6 +97,21 @@ class JsonlTranscriptRepository:
             return []
         return lines
 
+    def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
+        """``stat().st_size`` on the located transcript, or ``None`` when there is none.
+
+        Deliberately a ``stat``, not a read: the file this measures is the one that has
+        grown too large to keep resuming into."""
+        matches = sorted(self._projects_root.glob(f"*/{session_id}.jsonl"))
+        if not matches:
+            return None
+        try:
+            path = matches[0] if len(matches) == 1 else self._disambiguate(matches, spawn_cwd)
+            return path.stat().st_size
+        except OSError as exc:
+            self._errors.from_io(exc, f"transcript unreadable: {session_id}", session_id=session_id)
+            return None
+
     @staticmethod
     def _disambiguate(matches: list[Path], spawn_cwd: str | None) -> Path:
         """Multi-match tie-break: the spawn-cwd hint, else newest by mtime."""

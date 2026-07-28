@@ -334,6 +334,43 @@ class IReadRunnerStore(Protocol):
         """
         ...
 
+    def session_context_tokens(self, session_id: str) -> int | None:
+        """The session's **latest invocation's** context size in tokens, or ``None``.
+
+        The signal behind a declared ``rotate.max_context_tokens`` (issue #144):
+        ``cache_read + cache_create + input`` on the newest ``usage_facts`` row for any
+        lease that ran ``session_id`` — an approximation of how much context the next
+        resume would re-ingest, which is what the threshold is actually bounding.
+
+        ``usage_facts`` carries no ``session_id`` of its own, so this joins through
+        ``leases.session_id``; a session spanning several leases (``--resume`` reuses the
+        id in place) is measured across all of them, newest row wins.
+
+        **Telemetry-derived**, and ``None`` when the session has no usage fact at all.
+        That is an *unknown*, not a zero: a freshly minted session has no fact yet, and a
+        rotation check that read it as 0 would be right by accident there and wrong the
+        moment telemetry is merely missing.
+        """
+        ...
+
+    def session_invocation_count(self, session_id: str) -> int:
+        """How many harness invocations this session has recorded (issue #144).
+
+        The signal behind a declared ``rotate.max_invocations``. Counts ``usage_facts``
+        rows across every lease that ran ``session_id``.
+
+        **Harness invocations, not node-steps**: ``kind`` spans ``spawn|resume|judge|nudge``,
+        so a single node-step burns two or three rows. An author setting this from a
+        node-step count bounds the lineage roughly three times tighter than they intend,
+        which is why the field's own description says so.
+
+        Telemetry-derived like :meth:`session_context_tokens`: an invocation that recorded
+        no usage fact is not counted, the approximation the issue's own wording accepts.
+        Zero is a real answer here (a session that has recorded nothing), not an unknown —
+        a count that cannot be read is simply a count of the rows that exist.
+        """
+        ...
+
     def lease_for_session(self, session_id: str) -> LeaseRecord | None:
         """The newest lease that ran ``session_id``, or ``None`` (issue #144).
 

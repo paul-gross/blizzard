@@ -124,3 +124,20 @@ class IReadTranscriptRepository(Protocol):
         wants the raw per-message ``usage`` objects, not the panel's collapsed turns.
         """
         ...
+
+    def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
+        """The session transcript's size on disk, or ``None`` when it cannot be read.
+
+        The signal behind a declared ``rotate.max_transcript_bytes`` (issue #144). Same
+        location rule as the two reads above.
+
+        ``None`` is an **unknown**, never a zero: no file exists yet (the session was just
+        minted), or the file could not be stat'd. The rotation check treats an unreadable
+        signal as "not measured" and lets the head stand — a missing measurement is not a
+        breach — so returning 0 here would silently read as "well under bound" and make
+        the threshold inert in exactly the case it cannot see.
+
+        Reads the size, never the content: an unbounded transcript is precisely what this
+        threshold exists to catch, so it must not be read into memory to measure.
+        """
+        ...

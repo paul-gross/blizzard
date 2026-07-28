@@ -244,6 +244,37 @@ class SqlAlchemyRunnerStore:
             resolved_effort=row.resolved_effort,
         )
 
+    def session_context_tokens(self, session_id: str) -> int | None:
+        """The newest usage fact for any lease running ``session_id``, summed to its
+        context size. Joined through ``leases.session_id`` — ``usage_facts`` carries no
+        session id of its own."""
+        stmt = (
+            select(
+                usage_facts.c.cache_read_tokens,
+                usage_facts.c.cache_create_tokens,
+                usage_facts.c.input_tokens,
+            )
+            .join(leases, leases.c.lease_id == usage_facts.c.lease_id)
+            .where(leases.c.session_id == session_id)
+            .order_by(usage_facts.c.recorded_at.desc(), usage_facts.c.id.desc())
+            .limit(1)
+        )
+        rows = self._all(stmt)
+        if not rows:
+            return None
+        row = rows[0]
+        return int(row.cache_read_tokens) + int(row.cache_create_tokens) + int(row.input_tokens)
+
+    def session_invocation_count(self, session_id: str) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(usage_facts)
+            .join(leases, leases.c.lease_id == usage_facts.c.lease_id)
+            .where(leases.c.session_id == session_id)
+        )
+        rows = self._all(stmt)
+        return int(rows[0][0]) if rows else 0
+
     def lease_for_session(self, session_id: str) -> LeaseRecord | None:
         """The newest lease that ran ``session_id`` — same ordering as `pool_head`."""
         stmt = (

@@ -59,6 +59,7 @@ from blizzard.runner.store.repository import (
     IWriteRunnerStore,
     LeaseRecord,
     NewLease,
+    PoolHead,
 )
 from blizzard.wire.completion import (
     CheckResult,
@@ -2307,14 +2308,74 @@ def _resolve_session(ctx: LoopContext, chunk_id: str, node: NodeConfig, spawn_cw
 
 
 def _resume_pool_head(ctx: LoopContext, chunk_id: str, node: NodeConfig, spawn_cwd: str | None) -> str | None:
-    """The named pool's head if it is still resumable, else ``None`` to mint a new one.
-
-    Phase 5 resolves the head; the rotation thresholds that can reject it are phase 6's,
-    which lands in :func:`_head_is_resumable`."""
-    head = ctx.store.pool_head(chunk_id, node.session_name or "")
+    """The named pool's head if it is still resumable, else ``None`` to mint a new one."""
+    pool = node.session_name or ""
+    head = ctx.store.pool_head(chunk_id, pool)
     if head is None:
         return None  # an empty pool — this member mints the head
-    return head.session_id
+    breach = _rotation_breach(ctx, head, node, spawn_cwd)
+    if breach is None:
+        return head.session_id
+    _log.info(
+        "rotating session pool",
+        chunk_id=chunk_id,
+        session_pool=pool,
+        breached=breach,
+        old_session_id=head.session_id,
+    )
+    return None
+
+
+def _rotation_breach(ctx: LoopContext, head: PoolHead, node: NodeConfig, spawn_cwd: str | None) -> str | None:
+    """Why this pool head must not be resumed, or ``None`` when it may be (issue #144).
+
+    A head is resumed only while every *readable* declared threshold is under bound **and**
+    its stamped model still matches the pool's currently-resolved model. Anything else
+    mints a fresh head, which is where a model change takes effect: a cross-model resume is
+    thereby structurally impossible, and the re-ingest cost of a model change is paid
+    exactly where a fresh context is being built anyway.
+
+    **An unreadable signal does not force rotation.** A threshold whose measurement comes
+    back ``None`` — no usage fact yet, no transcript file, a transcripts seam that is not
+    wired — is *not measured*, and a missing measurement is not a breach. Rotating on it
+    would make every freshly minted head immediately ineligible, which is the opposite of
+    what a bound is for.
+
+    Returns the breached threshold's name (or ``model-drift``) so the caller can log which
+    one fired, rather than a bare bool that leaves an operator guessing.
+    """
+    # Model drift first: it is the one check that needs no telemetry, and a pool whose
+    # declaration was edited mid-chunk should rotate on the next member regardless of how
+    # much context the old head had accumulated.
+    resolved = ctx.harness.resolve_model(node.session_model) if node.session_model else None
+    if resolved is not None and head.resolved_model is not None and head.resolved_model != resolved:
+        return "model-drift"
+
+    rotate = node.session_rotate
+    if rotate is None:
+        return None  # the declaration bounds nothing
+
+    if rotate.max_context_tokens is not None:
+        tokens = ctx.store.session_context_tokens(head.session_id)
+        if tokens is not None and tokens > rotate.max_context_tokens:
+            return "max_context_tokens"
+
+    # A count is never an unknown — it is the number of rows that exist.
+    if (
+        rotate.max_invocations is not None
+        and ctx.store.session_invocation_count(head.session_id) > rotate.max_invocations
+    ):
+        return "max_invocations"
+
+    if rotate.max_transcript_bytes is not None and ctx.transcripts is not None:
+        # `ctx.transcripts` is `| None` (wired at both real construction sites, absent only
+        # in a test context); treat that absence as unreadable too, exactly like a missing
+        # file — not as a zero that would make the threshold silently inert.
+        size = ctx.transcripts.size_bytes(head.session_id, spawn_cwd=spawn_cwd)
+        if size is not None and size > rotate.max_transcript_bytes:
+            return "max_transcript_bytes"
+
+    return None
 
 
 def _resolve_model_and_effort(
