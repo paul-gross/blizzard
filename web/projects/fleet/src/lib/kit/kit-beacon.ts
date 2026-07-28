@@ -16,7 +16,7 @@ const BEACON_COLOR: Record<BeaconTone, string> = {
  * The square lane-blink beacon (issue #106) — a small square that throbs for an
  * active/occupied state and sits static grey otherwise, honoring
  * `prefers-reduced-motion` either way. Extracted from the board's occupied-lane
- * header indicator (`board-shell.ts`) and the environments rail's held indicator
+ * header indicator (`board-column.ts`) and the environments rail's held indicator
  * (`local-panel`'s `env-list.ts`), which had each retyped the same
  * `.blink`/`@keyframes` chrome — `bzh:frontend-kit-floor` requires presentational
  * chrome like this come from the kit once, not a re-typed copy per consumer.

@@ -274,29 +274,26 @@ export class BoardHeader {
   readonly stats = input<readonly StatCell[] | null>(null);
 
   /**
-   * The live fleet counts, left → right: the whole fleet, the ready rail, then one
-   * cell per board lane in the board's own order.
+   * The live fleet counts, left → right: the whole fleet, then one cell per board
+   * lane in the board's own order — Ready among them, no longer a special case.
    *
    * Every count is grouped through {@link laneFor} rather than by naming statuses
    * here. The header sits directly above the board and must not be able to disagree
    * with it: a status this header listed and the board did not (or the reverse) would
    * be a silent contradiction, whereas a new status added to the wire is a compile
-   * error in `chunk-lanes`, the one place that decides where it belongs.
+   * error in `chunk-lanes`, the one place that decides where it belongs. The Ready
+   * cell used to count the lane-less `ready` status the left rail owned; the READY
+   * lane (issue #137) makes it a plain lane tally like every other cell.
    */
   protected readonly chunkStats = computed<readonly StatCell[]>(() => {
     const chunks = this.chunks();
     const perLane = new Map<string, number>(LANES.map((lane) => [lane.key, 0]));
-    // A null lane means the chunk is in the ready rail rather than on the board —
-    // that is what the Ready cell counts, derived rather than re-named.
-    let ready = 0;
     for (const chunk of chunks) {
       const lane = laneFor(chunk.status);
-      if (lane === null) ready++;
-      else perLane.set(lane, (perLane.get(lane) ?? 0) + 1);
+      perLane.set(lane, (perLane.get(lane) ?? 0) + 1);
     }
     return [
       { key: 'total', label: 'Chunks', value: chunks.length },
-      { key: 'ready', label: 'Ready', value: ready },
       ...LANES.map((lane) => ({
         key: lane.key,
         label: lane.headerLabel,

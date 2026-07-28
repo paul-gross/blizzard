@@ -1,9 +1,19 @@
+import { CdkDropList, type CdkDragDrop } from '@angular/cdk/drag-drop';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { TestBed } from '@angular/core/testing';
+import { type ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 
 import type { ChunkSummary } from '../api/hub';
 import { compactRef } from '../compact-ref';
 import { BoardShell } from './board-shell';
+
+const READY = (suffix: string): ChunkSummary => ({
+  chunk_id: `ch_01ready${suffix}`,
+  graph_id: 'gr_1',
+  status: 'ready',
+  current_node_id: 'nd_build',
+  work_refs: [],
+});
 
 describe('BoardShell', () => {
   beforeEach(async () => {
@@ -13,18 +23,44 @@ describe('BoardShell', () => {
     }).compileComponents();
   });
 
-  it('renders the board shell with all five columns and an empty state', async () => {
+  /** Render the board off a chunk list (and, when the READY lane is under test,
+   * the hub's dispatch order for it), settled. */
+  const render = async (chunks: ChunkSummary[], readyOrder: string[] = []) => {
+    const fixture = TestBed.createComponent(BoardShell);
+    fixture.componentRef.setInput('chunks', chunks);
+    fixture.componentRef.setInput('readyOrder', readyOrder);
+    await fixture.whenStable();
+    return fixture;
+  };
+
+  /** The chunk ids rendered in a lane, top to bottom. */
+  const laneIds = (el: HTMLElement, column: string): string[] =>
+    [...el.querySelectorAll(`[data-col="${column}"] [data-testid="chunk-card"]`)].map(
+      (card) => card.getAttribute('data-chunk') ?? '',
+    );
+
+  it('renders the board shell with all six columns and an empty state', async () => {
     const fixture = TestBed.createComponent(BoardShell);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="board-shell"]')).toBeTruthy();
-    // Five board columns: the not-ready backlog plus the four post-dispatch lanes.
-    // READY has no column — ready chunks live in the queue rail (issue #22).
-    expect(el.querySelectorAll('[data-col]')).toHaveLength(5);
+    // Six board columns: the backlog, the ready queue, and the four post-dispatch
+    // lanes. READY is a lane like any other (issue #137) — the ready queue is on the
+    // board, not in a rail beside it.
+    expect(el.querySelectorAll('[data-col]')).toHaveLength(6);
     expect(el.querySelector('[data-col="notready"]')).toBeTruthy();
-    expect(el.querySelector('[data-col="ready"]')).toBeNull();
+    expect(el.querySelector('[data-col="ready"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="empty-state"]')?.textContent).toContain('NO CHUNKS');
+  });
+
+  it('engraves the backlog column BACKLOG and the queue column READY, in dispatch order', async () => {
+    const fixture = TestBed.createComponent(BoardShell);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const heads = [...el.querySelectorAll('[data-col] .col-lbl')].map((n) => n.textContent?.trim());
+    expect(heads).toEqual(['BACKLOG', 'READY', 'RUNNING', 'WAIT/HUMAN', 'NEEDS HUMAN', 'DONE']);
   });
 
   it('renders a not-ready chunk in the backlog column with a Promote action that emits its id', async () => {
@@ -50,31 +86,29 @@ describe('BoardShell', () => {
     expect(promoted).toBe('ch_01notready00000000000000000');
   });
 
-  it('renders one card per non-ready chunk, in its derived-status column, showing status + current node', async () => {
+  it('renders one card per chunk, in its derived-status column, showing status + current node', async () => {
     const chunks: ChunkSummary[] = [
       { chunk_id: 'ch_01ready0000000000000000000', graph_id: 'gr_1', status: 'ready', current_node_id: 'nd_build', work_refs: [] },
       { chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', status: 'running', current_node_id: 'nd_build', work_refs: [] },
       { chunk_id: 'ch_01done00000000000000000000', graph_id: 'gr_1', status: 'done', current_node_id: 'done', work_refs: [] },
     ];
-    const fixture = TestBed.createComponent(BoardShell);
-    fixture.componentRef.setInput('chunks', chunks);
-    await fixture.whenStable();
-    const el = fixture.nativeElement as HTMLElement;
+    const el = (await render(chunks)).nativeElement as HTMLElement;
 
-    // No empty state once the fleet has chunks. The ready chunk is not a board card —
-    // it lives in the queue rail (issue #22) — so only running + done render here.
+    // No empty state once the fleet has chunks, and every chunk is a card —
+    // the ready one included, in the READY lane (issue #137).
     expect(el.querySelector('[data-testid="empty-state"]')).toBeNull();
-    expect(el.querySelectorAll('[data-testid="chunk-card"]')).toHaveLength(2);
+    expect(el.querySelectorAll('[data-testid="chunk-card"]')).toHaveLength(3);
 
     // A card carries the derived status and the current node id.
     const running = el.querySelector('[data-col="running"] [data-testid="chunk-card"]');
     expect(running?.querySelector('[data-testid="chunk-status"]')?.textContent).toContain('running');
     expect(running?.querySelector('[data-testid="chunk-node"]')?.textContent).toContain('nd_build');
 
-    // Each non-ready status lands in its own column; the ready chunk never appears as a card.
+    // Each status lands in its own column, and a chunk is a card in exactly one of them.
+    expect(el.querySelectorAll('[data-col="ready"] [data-testid="chunk-card"]')).toHaveLength(1);
     expect(el.querySelectorAll('[data-col="running"] [data-testid="chunk-card"]')).toHaveLength(1);
     expect(el.querySelectorAll('[data-col="done"] [data-testid="chunk-card"]')).toHaveLength(1);
-    expect(el.querySelector('[data-status="ready"]')).toBeNull();
+    expect(el.querySelectorAll('[data-chunk="ch_01ready0000000000000000000"]')).toHaveLength(1);
   });
 
   it('renders a paused chunk in the WAIT/HUMAN column (issue #46)', async () => {
@@ -159,8 +193,7 @@ describe('BoardShell', () => {
   it('degrades to the short chunk id when a chunk has no labeled pointer', async () => {
     const chunks: ChunkSummary[] = [
       // Zero pointers, and a pointer whose URL did not parse (null label) — no chips,
-      // the short id carries the identity, and nothing errors. Both are non-ready so
-      // they render on the board (ready chunks would live in the rail instead).
+      // the short id carries the identity, and nothing errors.
       { chunk_id: 'ch_01done00000000000000000000', graph_id: 'gr_1', status: 'done', current_node_id: 'done', work_refs: [] },
       {
         chunk_id: 'ch_01running000000000000000000',
@@ -250,5 +283,134 @@ describe('BoardShell', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="card-cost"]')).toBeNull();
+  });
+
+  /*
+   * The READY lane (issue #137) — the ready queue as a board column: ordered by
+   * the hub's dispatch order, and the only lane carrying the queue-shaping
+   * affordances the retired left rail used to own (same testids, moved not
+   * renamed).
+   */
+  describe('the READY lane', () => {
+    const A = READY('aaaaaaaaaaaaaaaaaaaa');
+    const B = READY('bbbbbbbbbbbbbbbbbbbb');
+    const C = READY('cccccccccccccccccccc');
+
+    /** A `CdkDragDrop`-shaped event for the drop handler. A real pointer drag is
+     * an e2e concern; what this component owns is the index → anchor arithmetic,
+     * and that is exactly what the event carries. */
+    const drop = (previousIndex: number, currentIndex: number) =>
+      ({ previousIndex, currentIndex }) as CdkDragDrop<unknown>;
+
+    /** Fire a drop on the READY lane's drop list through its real
+     * `(cdkDropListDropped)` binding. */
+    const dropOnReady = (fixture: ComponentFixture<BoardShell>, event: CdkDragDrop<unknown>): void => {
+      const lists = fixture.debugElement.queryAll(By.directive(CdkDropList));
+      // Exactly one, and it is READY's: no other lane is reorderable.
+      expect(lists).toHaveLength(1);
+      expect(lists[0].nativeElement.closest('[data-col]').getAttribute('data-col')).toBe('ready');
+      lists[0].injector.get(CdkDropList).dropped.emit(event);
+    };
+
+    it('orders its cards by the hub dispatch order, not the fleet list order', async () => {
+      const fixture = await render([A, B, C], [C.chunk_id, A.chunk_id, B.chunk_id]);
+
+      expect(laneIds(fixture.nativeElement as HTMLElement, 'ready')).toEqual([C.chunk_id, A.chunk_id, B.chunk_id]);
+    });
+
+    it('sorts a ready chunk the queue read does not yet name after the ones it does, order kept', async () => {
+      // A promote the queue read has not caught up with is still a ready chunk; it
+      // waits at the back rather than jumping the queue or vanishing off the board.
+      const fixture = await render([A, B, C], [C.chunk_id]);
+
+      expect(laneIds(fixture.nativeElement as HTMLElement, 'ready')).toEqual([C.chunk_id, A.chunk_id, B.chunk_id]);
+    });
+
+    it('opens a ready chunk in the detail dock on click, like any other card', async () => {
+      const fixture = await render([A], [A.chunk_id]);
+      let selected: string | undefined;
+      fixture.componentInstance.selectChunk.subscribe((id) => (selected = id));
+
+      (fixture.nativeElement as HTMLElement)
+        .querySelector<HTMLButtonElement>('[data-col="ready"] [data-testid="chunk-card"] .card-open')
+        ?.click();
+
+      expect(selected).toBe(A.chunk_id);
+    });
+
+    it('emits moveToTop from a card\'s Top button, disabled for the one already there', async () => {
+      const fixture = await render([A, B], [A.chunk_id, B.chunk_id]);
+      let emitted: string | undefined;
+      fixture.componentInstance.moveToTop.subscribe((id) => (emitted = id));
+      const el = fixture.nativeElement as HTMLElement;
+
+      const tops = el.querySelectorAll<HTMLButtonElement>('[data-testid="queue-move-top"]');
+      expect(tops).toHaveLength(2);
+      expect(tops[0].disabled).toBe(true);
+      tops[1].click();
+      expect(emitted).toBe(B.chunk_id);
+    });
+
+    it('emits group with the checked ids in lane order, and only from two up', async () => {
+      const fixture = await render([A, B, C], [A.chunk_id, B.chunk_id, C.chunk_id]);
+      let emitted: readonly string[] | undefined;
+      fixture.componentInstance.group.subscribe((ids) => (emitted = ids));
+      const el = fixture.nativeElement as HTMLElement;
+
+      const groupButton = el.querySelector<HTMLButtonElement>('[data-testid="group-selected"]');
+      expect(groupButton?.disabled).toBe(true);
+
+      const checks = el.querySelectorAll<HTMLInputElement>('[data-testid="queue-select"]');
+      checks[2].click();
+      checks[1].click();
+      fixture.detectChanges();
+
+      // Lane order, not click order — the top-most selected is the survivor.
+      el.querySelector<HTMLButtonElement>('[data-testid="group-selected"]')?.click();
+      expect(emitted).toEqual([B.chunk_id, C.chunk_id]);
+    });
+
+    it('carries the queue-shaping controls in READY alone', async () => {
+      const el = (
+        await render([
+          A,
+          { chunk_id: 'ch_01running000000000000000000', graph_id: 'gr_1', status: 'running', current_node_id: 'nd_build', work_refs: [] },
+        ])
+      ).nativeElement as HTMLElement;
+
+      expect(el.querySelectorAll('[data-testid="queue-select"]')).toHaveLength(1);
+      expect(el.querySelectorAll('[data-testid="group-selected"]')).toHaveLength(1);
+      expect(el.querySelector('[data-col="ready"] [data-testid="queue-select"]')).toBeTruthy();
+      expect(el.querySelector('[data-col="running"] [data-testid="queue-move-top"]')).toBeNull();
+    });
+
+    it('resolves a drop to the anchor it landed after — null at the top', async () => {
+      const fixture = await render([A, B, C], [A.chunk_id, B.chunk_id, C.chunk_id]);
+      const moves: { chunkId: string; afterChunkId: string | null }[] = [];
+      fixture.componentInstance.reposition.subscribe((move) => moves.push(move));
+
+      // C dragged to the very top: no chunk above it.
+      dropOnReady(fixture, drop(2, 0));
+      // A dragged into the middle: it lands under whatever closed up behind it.
+      dropOnReady(fixture, drop(0, 1));
+      // A dragged to the bottom: the anchor is the last of the others.
+      dropOnReady(fixture, drop(0, 2));
+
+      expect(moves).toEqual([
+        { chunkId: C.chunk_id, afterChunkId: null },
+        { chunkId: A.chunk_id, afterChunkId: B.chunk_id },
+        { chunkId: A.chunk_id, afterChunkId: C.chunk_id },
+      ]);
+    });
+
+    it('writes nothing for a drop that changed no order', async () => {
+      const fixture = await render([A, B], [A.chunk_id, B.chunk_id]);
+      const moves: unknown[] = [];
+      fixture.componentInstance.reposition.subscribe((move) => moves.push(move));
+
+      dropOnReady(fixture, drop(1, 1));
+
+      expect(moves).toEqual([]);
+    });
   });
 });

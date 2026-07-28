@@ -6,10 +6,12 @@ ready is a **derived** status (a minted chunk with no live route) and the queue'
 is an explicit hub-side property. A runner's FILL step peeks the same ready queue
 through its own fleet-side counterpart (``GET /api/fleet/queue/peek``,
 :mod:`blizzard.hub.api.fleet`) rather than this route — both share :func:`_entries`.
-``PUT /api/queue`` is the idempotent whole-order replacement the board's queue panel
-drives (issue #104); ``POST /chunks/{id}/group`` is the Group control. Controllers stay
-read-only over the store and delegate the writes to the queue-shaping domain services
-(``bzh:controller-read-only``).
+``PUT /api/queue`` is the explicit whole-order operator verb behind ``blizzard hub queue
+set`` — no longer any client's reorder path, now that ``POST /api/queue/position``
+(issue #137) is the single-chunk fractional write the board's drag-and-drop and
+``blizzard hub queue move`` both drive. ``POST /chunks/{id}/group`` is the Group
+control. Controllers stay read-only over the store and delegate the writes to the
+queue-shaping domain services (``bzh:controller-read-only``).
 
 ``dependencies=[Depends(reject_runner_principal)]`` rejects a runner's bearer token
 here rather than treating it as anonymous-plus-credential.
@@ -35,6 +37,7 @@ from blizzard.wire.queue import (
     ChunkGroupResponse,
     QueuePeekEntry,
     QueuePeekResponse,
+    QueuePositionRequest,
     QueueReplaceRequest,
 )
 
@@ -63,7 +66,9 @@ def get_queue(services: Annotated[HubServices, Depends(get_services)]) -> QueueP
 def replace_queue(
     request: QueueReplaceRequest, services: Annotated[HubServices, Depends(get_services)]
 ) -> QueuePeekResponse:
-    """Idempotent whole-order replacement of the ready queue — the board's queue panel.
+    """Idempotent whole-order replacement of the ready queue — the explicit operator
+    verb behind ``blizzard hub queue set``, no longer any client's reorder path
+    (``POST /api/queue/position`` is that path now).
 
     Resolves every named id against the current ready set here (the edge concern,
     ``bzh:domain-takes-objects``): ``409`` names the first id that is not a ready
@@ -81,6 +86,41 @@ def replace_queue(
     ordered = [ready_by_id[chunk_id] for chunk_id in request.chunk_ids]
     ordered.extend(chunk for chunk in ready if chunk.chunk_id not in named_ids)
     services.queue.replace_order(ordered)
+    services.events.publish_queue_changed()
+    return QueuePeekResponse(entries=_entries(services.queue.ordered_ready()))
+
+
+@router.post("/queue/position", response_model=QueuePeekResponse, dependencies=[Depends(require(QUEUE_REORDER))])
+def reposition_queue(
+    request: QueuePositionRequest, services: Annotated[HubServices, Depends(get_services)]
+) -> QueuePeekResponse:
+    """Single-chunk fractional reorder — the board's drag-and-drop and
+    ``blizzard hub queue move`` (issue #137).
+
+    Resolves both ``chunk_id`` and ``after_chunk_id`` (if not null) against the current
+    ready set here (the edge concern, ``bzh:domain-takes-objects``): ``409`` names
+    either one if it is not a ready chunk, ``422`` rejects ``after_chunk_id`` naming
+    ``chunk_id`` itself (self-anchor is nonsensical). ``after_chunk_id=null`` moves the
+    chunk to the very top of the queue.
+    """
+    if request.after_chunk_id == request.chunk_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="after_chunk_id must not equal chunk_id"
+        )
+    ready_by_id = {chunk.chunk_id: chunk for chunk in services.queue.ordered_ready()}
+    chunk = ready_by_id.get(request.chunk_id)
+    if chunk is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=f"chunk {request.chunk_id} is not a ready chunk"
+        )
+    after: Chunk | None = None
+    if request.after_chunk_id is not None:
+        after = ready_by_id.get(request.after_chunk_id)
+        if after is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail=f"chunk {request.after_chunk_id} is not a ready chunk"
+            )
+    services.queue.reposition(chunk, after)
     services.events.publish_queue_changed()
     return QueuePeekResponse(entries=_entries(services.queue.ordered_ready()))
 

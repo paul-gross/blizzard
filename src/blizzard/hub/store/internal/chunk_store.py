@@ -420,6 +420,12 @@ class ChunkStore:
         # id is monotonic per insert, so the last row seen for a chunk is its newest fact.
         return {r.chunk_id: float(r.position) for r in rows}
 
+    def promoted_ats(self) -> dict[str, datetime]:
+        """Each promoted chunk's ``chunk_promoted.promoted_at`` (issue #137)."""
+        with self._engine.connect() as conn:
+            rows = conn.execute(select(s.chunk_promoted.c.chunk_id, s.chunk_promoted.c.promoted_at)).all()
+        return {r.chunk_id: r.promoted_at for r in rows}
+
     def find_live_holder(self, pointer: WorkRef) -> str | None:
         with self._engine.connect() as conn:
             grouped = self._grouped_ids(conn)

@@ -33,7 +33,7 @@ interface ExpansionOverride {
  * of the pre-#101 `effective` derivation). Any version, effective, superseded, or
  * retired, is selectable and opens identically (`selectGraph`); retiring/re-enabling
  * itself is driven from the detail view (`graph-detail.ts`), not this list. Follows
- * `queue-panel.ts`: a standalone `fleet-`prefixed, OnPush container over the
+ * `runner-panel.ts`: a standalone `fleet-`prefixed, OnPush container over the
  * generated client (bzh:generated-client) via TanStack Query.
  */
 @Component({

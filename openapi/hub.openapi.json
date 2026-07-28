@@ -2963,6 +2963,32 @@
         "title": "QueuePeekResponse",
         "type": "object"
       },
+      "QueuePositionRequest": {
+        "description": "Single-chunk fractional reposition \u2014 ``POST /api/queue/position`` (issue #137).\n\n``chunk_id`` is the chunk being moved; ``after_chunk_id=null`` moves it to the very\ntop of the ready queue, otherwise it lands immediately after the named chunk. Both\nmust name currently-ready chunks (``409`` otherwise), and ``after_chunk_id`` must\nnot equal ``chunk_id`` (``422``) \u2014 a chunk cannot anchor against itself.",
+        "properties": {
+          "after_chunk_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After Chunk Id"
+          },
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "after_chunk_id"
+        ],
+        "title": "QueuePositionRequest",
+        "type": "object"
+      },
       "QueueReplaceRequest": {
         "description": "Idempotent whole-order replacement of the ready queue \u2014 ``PUT /api/queue``.\n\n``chunk_ids`` is the desired order, front to back; every id must name a\ncurrently-ready chunk (``409`` otherwise) and must not repeat (``422``\notherwise). A ready chunk not named here keeps its current relative order,\nappended after the named ones.",
         "properties": {
@@ -6429,7 +6455,7 @@
         ]
       },
       "put": {
-        "description": "Idempotent whole-order replacement of the ready queue \u2014 the board's queue panel.\n\nResolves every named id against the current ready set here (the edge concern,\n``bzh:domain-takes-objects``): ``409`` names the first id that is not a ready\nchunk, ``422`` rejects a duplicate id. A ready chunk not named keeps its current\nrelative order, appended after the named ones, so the replacement is total and\nidempotent.",
+        "description": "Idempotent whole-order replacement of the ready queue \u2014 the explicit operator\nverb behind ``blizzard hub queue set``, no longer any client's reorder path\n(``POST /api/queue/position`` is that path now).\n\nResolves every named id against the current ready set here (the edge concern,\n``bzh:domain-takes-objects``): ``409`` names the first id that is not a ready\nchunk, ``422`` rejects a duplicate id. A ready chunk not named keeps its current\nrelative order, appended after the named ones, so the replacement is total and\nidempotent.",
         "operationId": "replace_queue_api_queue_put",
         "requestBody": {
           "content": {
@@ -6464,6 +6490,48 @@
           }
         },
         "summary": "Replace Queue",
+        "tags": [
+          "queue"
+        ]
+      }
+    },
+    "/api/queue/position": {
+      "post": {
+        "description": "Single-chunk fractional reorder \u2014 the board's drag-and-drop and\n``blizzard hub queue move`` (issue #137).\n\nResolves both ``chunk_id`` and ``after_chunk_id`` (if not null) against the current\nready set here (the edge concern, ``bzh:domain-takes-objects``): ``409`` names\neither one if it is not a ready chunk, ``422`` rejects ``after_chunk_id`` naming\n``chunk_id`` itself (self-anchor is nonsensical). ``after_chunk_id=null`` moves the\nchunk to the very top of the queue.",
+        "operationId": "reposition_queue_api_queue_position_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QueuePositionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueuePeekResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reposition Queue",
         "tags": [
           "queue"
         ]

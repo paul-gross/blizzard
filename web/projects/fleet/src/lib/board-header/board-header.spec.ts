@@ -65,20 +65,21 @@ describe('BoardHeader', () => {
     // so the two cannot drift apart; a lane added there appears in both or neither.
     const el = await render([]);
     const cells = [...el.querySelectorAll('[data-stat]')].map((c) => c.getAttribute('data-stat'));
-    expect(cells).toEqual(['total', 'ready', ...LANES.map((l) => l.key)]);
+    // Ready is one of those lane cells now (issue #137), not a cell of its own
+    // ahead of them — the board grew the READY column it counts.
+    expect(cells).toEqual(['total', ...LANES.map((l) => l.key)]);
   });
 
   it('counts every wire status into some cell, so none can go silently missing', async () => {
     // The exhaustive Record in chunk-lanes makes a new status a compile error there;
-    // this asserts the consequence — the lanes plus the ready rail account for the
-    // whole fleet, so total always equals the sum of the cells beside it.
+    // this asserts the consequence — the lanes account for the whole fleet, so
+    // total always equals the sum of the cells beside it.
     const everyStatus = Object.keys(STATUS_LANE) as ChunkStatus[];
     const el = await render(everyStatus.map((s, i) => chunk(`ch_${i}`, s)));
 
     const value = (key: string) =>
       Number(el.querySelector(`[data-testid="stat-${key}"]`)?.textContent?.trim() ?? '0');
-    const lanesAndReady = value('ready') + LANES.reduce((sum, lane) => sum + value(lane.key), 0);
-    expect(lanesAndReady).toBe(everyStatus.length);
+    expect(LANES.reduce((sum, lane) => sum + value(lane.key), 0)).toBe(everyStatus.length);
     expect(value('total')).toBe(everyStatus.length);
   });
 

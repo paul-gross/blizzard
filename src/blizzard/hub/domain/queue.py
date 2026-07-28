@@ -17,7 +17,9 @@ stored column), and raise typed errors the controller maps to HTTP.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
+from datetime import datetime
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
@@ -91,8 +93,9 @@ class QueueService:
     def ordered_ready(self) -> list[Chunk]:
         """Ready chunks in queue order — ascending by effective position."""
         positions = self._chunks.queue_positions()
+        promoted_ats = self._chunks.promoted_ats()
         ready = self._chunks.list_ready()
-        return sorted(ready, key=lambda c: self._effective_position(c, positions))
+        return sorted(ready, key=lambda c: self._effective_position(c, positions, promoted_ats))
 
     def replace_order(self, ordered: list[Chunk]) -> None:
         """Idempotent whole-order replacement: append one ascending explicit
@@ -110,16 +113,85 @@ class QueueService:
             self._chunks.record_queue_position(chunk.chunk_id, position=float(position), at=at)
         _log.info("ready queue replaced", chunk_ids=[c.chunk_id for c in ordered])
 
-    @staticmethod
-    def _effective_position(chunk: Chunk, positions: dict[str, float]) -> float:
-        """A chunk's sort key: its newest explicit position, else its mint instant.
+    def reposition(self, chunk: Chunk, after: Chunk | None) -> None:
+        """Single-chunk fractional reorder: stamp ``chunk`` a new explicit position that
+        lands it immediately after ``after`` (or at the very top when ``after is None``),
+        without restamping every other ready chunk (issue #137's board drag-and-drop).
 
-        Before a chunk is ever moved, its position is its ``minted_at`` as a unix
-        timestamp — so an un-reordered queue is plain FIFO, and any explicit move (a
-        smaller float) lifts a chunk above the un-moved tail.
+        Takes already-resolved ``Chunk`` objects, never ids (``bzh:domain-takes-objects``)
+        — the caller (``POST /api/queue/position``) has already resolved and validated
+        both ``chunk`` and ``after`` against the current ready set.
+
+        Reads the same effective-position machinery :meth:`ordered_ready` does, then
+        excludes ``chunk`` itself from the ordering it anchors against — a chunk being
+        moved must never count as its own neighbour. ``after=None`` computes a position
+        below the current lowest (``first - 1.0``, or ``0.0`` if the ready set is
+        otherwise empty); anchored after the last chunk computes ``after_pos + 1.0``;
+        anchored anywhere else computes the midpoint between ``after`` and the chunk
+        immediately following it.
+
+        Floats are finite: repeated midpoint bisection between the same two neighbours
+        eventually has no representable double strictly between them
+        (:func:`math.nextafter` guards this). When that happens, this renormalizes —
+        restamps every currently-ready chunk with dense ascending positions via
+        :meth:`replace_order`, ``chunk`` included at its new logical slot — and then
+        recomputes the midpoint against the freshly-spread neighbour values, which are
+        always a whole float apart and so always have room.
+        """
+        positions = self._chunks.queue_positions()
+        promoted_ats = self._chunks.promoted_ats()
+        ready = [c for c in self._chunks.list_ready() if c.chunk_id != chunk.chunk_id]
+        ordered = sorted(ready, key=lambda c: self._effective_position(c, positions, promoted_ats))
+
+        if after is None:
+            new_position = self._effective_position(ordered[0], positions, promoted_ats) - 1.0 if ordered else 0.0
+        else:
+            after_index = next(i for i, c in enumerate(ordered) if c.chunk_id == after.chunk_id)
+            after_pos = self._effective_position(after, positions, promoted_ats)
+            if after_index == len(ordered) - 1:
+                new_position = after_pos + 1.0
+            else:
+                next_chunk = ordered[after_index + 1]
+                next_pos = self._effective_position(next_chunk, positions, promoted_ats)
+                if math.nextafter(after_pos, next_pos) >= next_pos:
+                    renormalized = [*ordered[: after_index + 1], chunk, *ordered[after_index + 1 :]]
+                    self.replace_order(renormalized)
+                    positions = self._chunks.queue_positions()
+                    promoted_ats = self._chunks.promoted_ats()
+                    after_pos = self._effective_position(after, positions, promoted_ats)
+                    next_pos = self._effective_position(next_chunk, positions, promoted_ats)
+                new_position = (after_pos + next_pos) / 2
+
+        self._chunks.record_queue_position(chunk.chunk_id, position=new_position, at=self._clock.now())
+        _log.info(
+            "ready queue chunk repositioned",
+            chunk_id=chunk.chunk_id,
+            after_chunk_id=after.chunk_id if after is not None else None,
+            position=new_position,
+        )
+
+    @staticmethod
+    def _effective_position(chunk: Chunk, positions: dict[str, float], promoted_ats: dict[str, datetime]) -> float:
+        """A chunk's sort key: its newest explicit position, else its promotion instant,
+        else its mint instant (issue #137).
+
+        Before a chunk is ever moved, its position falls back to its
+        ``chunk_promoted.promoted_at`` as a unix timestamp if it has been promoted, or its
+        ``minted_at`` otherwise — so a chunk minted long ago but promoted late still
+        sorts at the tail rather than mid-queue, and a never-promoted chunk (unreachable
+        via this sort, since only ready chunks are ever ranked, but exercised directly by
+        the unit tests) still falls back to plain FIFO by mint order. Any explicit move (a
+        smaller float) lifts a chunk above the un-moved tail either way.
+
+        :class:`~blizzard.hub.domain.promote.PromoteService` reuses this same fallback
+        to compute its own tail-stamp arithmetic — see its docstring for why that reuse
+        is what makes a lost tail-stamp write self-healing rather than a safety break.
         """
         explicit = positions.get(chunk.chunk_id)
-        return explicit if explicit is not None else chunk.minted_at.timestamp()
+        if explicit is not None:
+            return explicit
+        promoted_at = promoted_ats.get(chunk.chunk_id)
+        return promoted_at.timestamp() if promoted_at is not None else chunk.minted_at.timestamp()
 
 
 @dataclass(frozen=True)

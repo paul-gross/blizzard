@@ -92,6 +92,7 @@ _HUMAN: dict[tuple[str, str], Permission] = {
     ("POST", "/api/decisions/{decision_id}/resolutions"): GATE_RESOLVE,
     ("GET", "/api/queue"): FLEET_VIEW,
     ("PUT", "/api/queue"): QUEUE_REORDER,
+    ("POST", "/api/queue/position"): QUEUE_REORDER,
     ("POST", "/api/chunks/{chunk_id}/group"): QUEUE_REORDER,
     ("POST", "/api/questions"): QUESTION_ANSWER,
     ("POST", "/api/questions/{question_id}/answers"): QUESTION_ANSWER,

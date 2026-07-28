@@ -24,6 +24,8 @@ import { BoardPage } from './board-page';
  */
 const RUNNING = 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9';
 const ASKED = 'ch_01KXKVVF1J3D6H6VYZ3XYNBBBB';
+const READY = 'ch_01KXKVVF1J3D6H6VYZ3XYNRDY1';
+const READY_NEXT = 'ch_01KXKVVF1J3D6H6VYZ3XYNRDY2';
 const GONE = 'ch_01KXKVVF1J3D6H6VYZ3XYNGONE';
 
 const CHUNK = (chunkId: string, status: string) => ({
@@ -49,15 +51,30 @@ const DETAIL = (chunkId: string) => ({
 });
 
 /**
- * The reads the board's four panels and its dock issue, answered off the two
+ * The reads the board's panels and its dock issue, answered off the three
  * chunks above. Everything unnamed falls through to `{}` — the envelope reads
- * (`/api/queue`, `/api/runners`, `/api/events`) unwrap that to their empty list,
- * so the rails render as an idle fleet rather than an error.
+ * (`/api/runners`, `/api/events`) unwrap that to their empty list, so the rail
+ * renders as an idle fleet rather than an error.
  */
 function hubRoutes(method: string, path: string): unknown {
   if (method !== 'GET') return {};
   if (path === '/api/me') return OPERATOR_ME_RESPONSE;
-  if (path === '/api/chunks') return [CHUNK(RUNNING, 'running'), CHUNK(ASKED, 'waiting_on_human')];
+  if (path === '/api/queue') {
+    return {
+      entries: [
+        { chunk_id: READY, graph_id: 'gr_1', position: 0, work_refs: [] },
+        { chunk_id: READY_NEXT, graph_id: 'gr_1', position: 1, work_refs: [] },
+      ],
+    };
+  }
+  if (path === '/api/chunks') {
+    return [
+      CHUNK(RUNNING, 'running'),
+      CHUNK(ASKED, 'waiting_on_human'),
+      CHUNK(READY, 'ready'),
+      CHUNK(READY_NEXT, 'ready'),
+    ];
+  }
   if (path === '/api/questions') {
     return [
       {
@@ -128,23 +145,59 @@ describe('BoardPage', () => {
 
     expect(el.querySelector('fleet-board-shell')).toBeTruthy();
     expect(el.querySelector('[data-testid="board-shell"]')).toBeTruthy();
-    // The two rails compose alongside the board: queue + event log at the left,
-    // runners + asks at the right. The titlebar itself lives at the app root now.
-    expect(el.querySelector('[data-testid="queue-panel"]')).toBeTruthy();
-    expect(el.querySelector('[data-testid="event-log-panel"]')).toBeTruthy();
+    // The one rail composes beside the board: runners, asks, event log. The
+    // titlebar itself lives at the app root now.
     expect(el.querySelector('[data-testid="runner-panel"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="questions-panel"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="event-log-panel"]')).toBeTruthy();
   });
 
-  it('lays the board out as three columns', async () => {
+  it('lays the board out as two columns, the ready queue among the board lanes', async () => {
     const { el } = await open();
 
-    // Each rail and the centre are their own column of the main grid.
-    const rails = el.querySelectorAll('.main > .col');
-    expect(rails.length).toBe(3);
-    expect(el.querySelector('[data-testid="queue-panel"]')?.closest('.col')).toBe(rails[0]);
-    expect(el.querySelector('fleet-board-shell')?.closest('.col')).toBe(rails[1]);
-    expect(el.querySelector('[data-testid="runner-panel"]')?.closest('.col')).toBe(rails[2]);
+    // The centre and the one rail are the columns of the main grid — the left
+    // rail is gone with the queue panel it held (issue #137).
+    const columns = el.querySelectorAll('.main > .col');
+    expect(columns.length).toBe(2);
+    expect(el.querySelector('fleet-board-shell')?.closest('.col')).toBe(columns[0]);
+    expect(el.querySelector('[data-testid="runner-panel"]')?.closest('.col')).toBe(columns[1]);
+    expect(el.querySelector('fleet-queue-panel')).toBeNull();
+    expect(el.querySelector('[data-testid="queue-panel"]')).toBeNull();
+  });
+
+  it('stacks the event log under the asks in the right rail', async () => {
+    const { el } = await open();
+
+    const rail = el.querySelector('[data-testid="runner-panel"]')?.closest('.col');
+    const log = el.querySelector('fleet-event-log-panel')!;
+    const questions = el.querySelector('fleet-questions-panel')!;
+    expect(log.closest('.col')).toBe(rail);
+    // Below the asks, not above them: runners → asks → log.
+    expect(questions.compareDocumentPosition(log) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('renders a ready chunk exactly once across the whole page (issue #22)', async () => {
+    const { el } = await open();
+
+    // The READY lane replaced the rail rather than joining it: one chunk, one
+    // place on the board, wherever its status puts it.
+    expect(el.querySelectorAll(`[data-chunk="${READY}"]`)).toHaveLength(1);
+    expect(card(el, READY).closest('[data-col]')?.getAttribute('data-col')).toBe('ready');
+  });
+
+  it('repositions a ready chunk with no anchor when its Top control is used', async () => {
+    const { el, harness } = await open();
+
+    // The lane renders in the queue read's order, so the second card is the one
+    // with somewhere to go; the first one's Top is disabled.
+    const tops = el.querySelectorAll<HTMLButtonElement>('[data-testid="queue-move-top"]');
+    expect(tops[0].disabled).toBe(true);
+    tops[1].click();
+    await settle(harness.fixture);
+
+    const calls = stub.forRoute('/api/queue/position', 'POST');
+    expect(calls).toHaveLength(1);
+    expect(calls[0].body).toEqual({ chunk_id: READY_NEXT, after_chunk_id: null });
   });
 
   it('docks chunk detail beside the rails, so selecting never resizes the board (issue #21)', async () => {

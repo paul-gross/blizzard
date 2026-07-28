@@ -1235,18 +1235,21 @@ def queue_set(chunk_ids: tuple[str, ...], as_json: bool, hub_url: str | None) ->
 def queue_move(chunk_id: str, position: int, as_json: bool, hub_url: str | None) -> None:
     """Move CHUNK_ID to POSITION in the ready queue (``0`` is the front).
 
-    Composes the whole-order ``PUT /api/queue`` client-side (issue #105): reads the
-    current order, splices CHUNK_ID out and reinserts it at the clamped target index —
-    every other ready chunk keeping its relative order — then replaces the order in one
-    idempotent call. 409 when CHUNK_ID is not a ready chunk."""
+    A client of the single-chunk fractional ``POST /api/queue/position`` (issue #137):
+    reads the current order, drops CHUNK_ID out of it and clamps POSITION into what's
+    left to find its new neighbour, then sends one anchor — ``after_chunk_id=null`` for
+    the front, else the chunk immediately before the clamped index — rather than
+    composing and replacing the whole order. 409 when CHUNK_ID is not a ready chunk."""
     base = hub_url
     peek = _request("get", "/api/queue", hub_url=base)
     _check(peek, "GET /queue")
     rest = [entry["chunk_id"] for entry in peek.json().get("entries", []) if entry["chunk_id"] != chunk_id]
     index = min(max(position, 0), len(rest))
-    chunk_ids = [*rest[:index], chunk_id, *rest[index:]]
-    resp = _request("put", "/api/queue", hub_url=base, json_body={"chunk_ids": chunk_ids})
-    _check(resp, "PUT /queue", on_status={409: f"chunk {chunk_id} is not a ready chunk"})
+    after_chunk_id = rest[index - 1] if index > 0 else None
+    resp = _request(
+        "post", "/api/queue/position", hub_url=base, json_body={"chunk_id": chunk_id, "after_chunk_id": after_chunk_id}
+    )
+    _check(resp, "POST /queue/position", on_status={409: f"chunk {chunk_id} is not a ready chunk"})
     body = resp.json()
     if as_json:
         click.echo(json.dumps(body))
