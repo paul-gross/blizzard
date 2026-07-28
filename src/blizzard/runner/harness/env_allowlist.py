@@ -22,6 +22,12 @@ from collections.abc import Sequence
 # ``claude`` harness on the dogfooding fleet. Deliberately conservative — an operator
 # widens it via ``[worker] env_passthrough`` (``RunnerConfig.worker_env_passthrough``)
 # rather than this list growing ad hoc.
+# `ANTHROPIC_MODEL` and its family are deliberately ABSENT and must stay absent (issue
+# #144): they override the model Claude Code restores for a resumed session, which is the
+# stickiness the mint-only `--model` contract rests on. A deployment that forwards one
+# runs every resuming pool member on the wrong model with every test tier still green —
+# so this is a deployment requirement, not a preference. The same warning applies to
+# widening the list through `[worker] env_passthrough`.
 BASE_ALLOWLIST_VARS: tuple[str, ...] = ("PATH", "HOME", "USER", "LANG", "TERM", "TMPDIR")
 # ``LC_*`` locale vars are a family, not a fixed set of names, so they are matched by
 # prefix rather than enumerated in ``BASE_ALLOWLIST_VARS``.

@@ -270,7 +270,14 @@ class _HangingAdapter:
     catch."""
 
     def spawn(
-        self, envelope: object, preamble: object, session_hint: str | None, resume_from: str | None = None
+        self,
+        envelope: object,
+        preamble: object,
+        session_hint: str | None,
+        resume_from: str | None = None,
+        *,
+        model: str | None = None,
+        effort: str | None = None,
     ) -> WorkerHandle:
         threading.Event().wait()  # blocks forever
         raise AssertionError("unreachable")
@@ -284,6 +291,7 @@ class _HangingAdapter:
         *,
         preamble: WorkerPreamble | None = None,
         chunk_id: str = "",
+        effort: str | None = None,
     ) -> int:
         raise AssertionError("unreachable — spawn never returns")
 
@@ -298,6 +306,8 @@ class _HangingAdapter:
         *,
         preamble: WorkerPreamble | None = None,
         chunk_id: str = "",
+        effort: str | None = None,
+        model: str | None = None,
     ) -> str:
         raise AssertionError("unreachable — spawn never returns")
 
@@ -307,10 +317,16 @@ class _HangingAdapter:
     def parse_assessment(self, output: str) -> str:
         raise AssertionError("unreachable — spawn never returns")
 
-    def parse_usage(self, output: str, kind: UsageKind) -> UsageSample | None:
+    def resolve_model(self, preferences: Sequence[str]) -> str:
+        return "fake-model"
+
+    def resolve_effort(self, value: str | None) -> str | None:
+        return value
+
+    def parse_usage(self, output: str, kind: UsageKind, *, model: str | None = None) -> UsageSample | None:
         raise AssertionError("unreachable — spawn never returns")
 
-    def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind) -> UsageSample:
+    def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind, *, model: str | None = None) -> UsageSample:
         raise AssertionError("unreachable — spawn never returns")
 
 
@@ -346,7 +362,14 @@ class _FixedPidAdapter:
         self.resume_pid = resume_pid
 
     def spawn(
-        self, envelope: object, preamble: object, session_hint: str | None, resume_from: str | None = None
+        self,
+        envelope: object,
+        preamble: object,
+        session_hint: str | None,
+        resume_from: str | None = None,
+        *,
+        model: str | None = None,
+        effort: str | None = None,
     ) -> WorkerHandle:
         return WorkerHandle(session_id=session_hint or "sid", pid=self.spawn_pid, process_start_time="spawn-t")
 
@@ -359,6 +382,7 @@ class _FixedPidAdapter:
         *,
         preamble: WorkerPreamble | None = None,
         chunk_id: str = "",
+        effort: str | None = None,
     ) -> int:
         return self.resume_pid
 
@@ -373,6 +397,8 @@ class _FixedPidAdapter:
         *,
         preamble: WorkerPreamble | None = None,
         chunk_id: str = "",
+        effort: str | None = None,
+        model: str | None = None,
     ) -> str:
         return json.dumps({"result": "<Choice>pass</Choice>"})
 
@@ -382,10 +408,16 @@ class _FixedPidAdapter:
     def parse_assessment(self, output: str) -> str:
         return ""
 
-    def parse_usage(self, output: str, kind: UsageKind) -> UsageSample | None:
+    def resolve_model(self, preferences: Sequence[str]) -> str:
+        return "fake-model"
+
+    def resolve_effort(self, value: str | None) -> str | None:
+        return value
+
+    def parse_usage(self, output: str, kind: UsageKind, *, model: str | None = None) -> UsageSample | None:
         return None
 
-    def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind) -> UsageSample:
+    def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind, *, model: str | None = None) -> UsageSample:
         return UsageSample(
             kind=kind,
             model="",

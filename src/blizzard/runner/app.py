@@ -345,6 +345,8 @@ def build_hosted_app(config: RunnerConfig) -> FastAPI:
         binary=config.harness_binary,
         settings_path=config.worker_settings_path,
         permission_mode=config.harness_permission_mode,
+        model_aliases=config.model_aliases,
+        effort_aliases=config.effort_aliases,
     )
     # The panel's derived-lease-state read (issue #28) — ``stale_after`` is left at its
     # default (``HEARTBEAT_STALENESS_THRESHOLD``) so the panel and REAP never desync.

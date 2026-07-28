@@ -25,9 +25,11 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from structlog.testing import capture_logs
 
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.adapter import WorkerPreamble
+from blizzard.runner.harness.env_allowlist import allowlisted_env
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.wire.envelope import NodeEnvelope
 from tests.conftest import _WORKER_IDENTITY_ENV
@@ -902,3 +904,257 @@ def test_resume_without_output_format_json_yields_no_envelope(tmp_path: Path) ->
     )
 
     assert adapter.parse_usage(result.stdout, "resume") is None
+
+
+# --------------------------------------------------------------------------- #
+# Model / effort resolution behind the adapter seam (issue #144).
+#
+# The seam that keeps the hub and graph YAML harness-agnostic: the loop hands an
+# ordered list of opaque preference strings and receives one name THIS harness
+# understands. Left-to-right, first that resolves wins, unresolvable entries
+# skipped — never a spawn failure.
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.unit
+def test_resolve_model_maps_the_standard_tiers_with_no_config_at_all() -> None:
+    # A zero-config runner resolves the three standard tiers off the adapter's built-ins.
+    adapter = ClaudeCodeAdapter(binary="claude")
+    assert adapter.resolve_model(["blizzard:frontier"]) == "fable"
+    assert adapter.resolve_model(["blizzard:advanced"]) == "opus"
+    assert adapter.resolve_model(["blizzard:basic"]) == "sonnet"
+
+
+@pytest.mark.unit
+def test_resolve_model_takes_the_first_entry_that_resolves() -> None:
+    adapter = ClaudeCodeAdapter(binary="claude")
+    assert adapter.resolve_model(["blizzard:advanced", "blizzard:basic"]) == "opus"
+
+
+@pytest.mark.unit
+def test_resolve_model_skips_a_native_name_belonging_to_another_harness() -> None:
+    # The whole point of recognizing native names: an author's mixed list must fall past
+    # the codex entry rather than hand `claude` a name it would reject, turning a stated
+    # preference into a spawn failure.
+    adapter = ClaudeCodeAdapter(binary="claude")
+    assert adapter.resolve_model(["gpt-5.3-codex", "blizzard:basic"]) == "sonnet"
+
+
+@pytest.mark.unit
+def test_resolve_model_skips_an_alias_neither_config_nor_builtins_map() -> None:
+    adapter = ClaudeCodeAdapter(binary="claude")
+    assert adapter.resolve_model(["blizzard:experimental", "blizzard:basic"]) == "sonnet"
+
+
+@pytest.mark.unit
+def test_resolve_model_accepts_a_native_short_name_and_the_claude_family_prefix() -> None:
+    adapter = ClaudeCodeAdapter(binary="claude")
+    assert adapter.resolve_model(["haiku"]) == "haiku"
+    assert adapter.resolve_model(["claude-sonnet-5"]) == "claude-sonnet-5"
+
+
+@pytest.mark.unit
+def test_runner_config_overrides_the_adapters_builtin_tier() -> None:
+    adapter = ClaudeCodeAdapter(binary="claude", model_aliases=(("blizzard:basic", "haiku"),))
+    assert adapter.resolve_model(["blizzard:basic"]) == "haiku"
+
+
+@pytest.mark.unit
+def test_an_all_unresolvable_list_falls_back_to_the_adapter_default_with_a_note() -> None:
+    # Never a spawn failure: an all-unresolvable list is exactly what a mixed-harness
+    # fleet produces, and the fallback says which entries it skipped.
+    adapter = ClaudeCodeAdapter(binary="claude", model="claude-opus-5")
+
+    with capture_logs() as logs:
+        resolved = adapter.resolve_model(["gpt-5.3-codex", "blizzard:experimental"])
+
+    assert resolved == "claude-opus-5"
+    note = next(entry for entry in logs if "falling back" in entry["event"])
+    assert note["skipped"] == ["gpt-5.3-codex", "blizzard:experimental"]
+    assert note["fallback"] == "claude-opus-5"
+
+
+@pytest.mark.unit
+def test_an_empty_preference_list_is_the_adapter_default() -> None:
+    # The pre-#144 world and every chunk that expresses no preference.
+    assert ClaudeCodeAdapter(binary="claude", model="claude-opus-5").resolve_model([]) == "claude-opus-5"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("value", ["low", "medium", "high", "max"])
+def test_resolve_effort_passes_the_well_known_ordinal_through(value: str) -> None:
+    assert ClaudeCodeAdapter(binary="claude").resolve_effort(value) == value
+
+
+@pytest.mark.unit
+def test_resolve_effort_reaches_a_native_tier_outside_the_ordinal_via_config() -> None:
+    # `xhigh` is Claude Code's own, outside the well-known four — reachable by alias.
+    adapter = ClaudeCodeAdapter(binary="claude", effort_aliases=(("max", "xhigh"),))
+    assert adapter.resolve_effort("max") == "xhigh"
+
+
+@pytest.mark.unit
+def test_resolve_effort_of_no_preference_is_none() -> None:
+    assert ClaudeCodeAdapter(binary="claude").resolve_effort(None) is None
+
+
+@pytest.mark.unit
+def test_an_unrecognized_effort_logs_once_and_is_ignored() -> None:
+    # Claude Code HAS an effort knob, so an unrecognized value is an authoring mistake,
+    # not a missing capability — dropped rather than failing a spawn, and noted once
+    # rather than on every spawn of a long-lived runner.
+    adapter = ClaudeCodeAdapter(binary="claude")
+
+    with capture_logs() as logs:
+        assert adapter.resolve_effort("glacial") is None
+        assert adapter.resolve_effort("glacial") is None
+
+    assert len([entry for entry in logs if "unrecognized effort" in entry["event"]]) == 1
+
+
+# --------------------------------------------------------------------------- #
+# The application contract (issue #144), asserted as argv on EVERY invocation
+# path — not just the node-entry spawn.
+#
+#   `--model`  at MINT ONLY. Claude Code restores a session's model on `--resume`
+#              (verified, CLI 2.1.220), and a cross-model resume forces a
+#              full-history cache rewrite.
+#   `--effort` on EVERY invocation. The D5 probe found effort is NOT sticky: a
+#              session spawned `--effort low` against a `high` settings default ran
+#              `high` on a bare resume, while its model stayed put. Mint-only would
+#              silently drop a declared effort on every member of a resuming pool.
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.unit
+def test_spawn_at_mint_carries_the_resolved_model_and_effort(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, list[str]] = {}
+    monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
+    adapter, envelope, preamble = _spawn_fixture()
+
+    adapter.spawn(envelope, preamble, session_hint="sid", model="sonnet", effort="high")
+
+    cmd = captured["cmd"]
+    assert cmd[cmd.index("--model") + 1] == "sonnet"
+    assert cmd[cmd.index("--effort") + 1] == "high"
+
+
+@pytest.mark.unit
+def test_spawn_on_a_resume_carries_the_effort_but_never_the_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, list[str]] = {}
+    monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
+    adapter, envelope, preamble = _spawn_fixture()
+
+    adapter.spawn(envelope, preamble, session_hint="sid", resume_from="prior", model="sonnet", effort="high")
+
+    cmd = captured["cmd"]
+    assert "--model" not in cmd  # the harness restores the session's own
+    assert cmd[cmd.index("--effort") + 1] == "high"  # not sticky, so reasserted
+
+
+@pytest.mark.unit
+def test_spawn_supplying_neither_behaves_exactly_as_before(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, list[str]] = {}
+    monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
+    adapter, envelope, preamble = _spawn_fixture()
+
+    adapter.spawn(envelope, preamble, session_hint="sid")
+
+    cmd = captured["cmd"]
+    assert cmd[cmd.index("--model") + 1] == "claude-opus-5"  # the adapter's own default
+    assert "--effort" not in cmd
+
+
+@pytest.mark.unit
+def test_judge_carries_the_effort_but_never_the_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, list[str]] = {}
+
+    def _fake_run(cmd: list[str], **kwargs: object) -> object:
+        captured["cmd"] = cmd
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", _fake_run)
+
+    ClaudeCodeAdapter(binary="claude").judge("/ws", "sid", "verdict?", effort="high", model="sonnet")
+
+    cmd = captured["cmd"]
+    assert "--model" not in cmd
+    assert cmd[cmd.index("--effort") + 1] == "high"
+
+
+@pytest.mark.unit
+def test_resume_with_message_carries_the_effort_but_never_the_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, list[str]] = {}
+    monkeypatch.setattr(subprocess, "Popen", _fake_popen_capturing(captured))
+
+    ClaudeCodeAdapter(binary="claude").resume_with_message("/ws", "sid", "msg", effort="high")
+
+    cmd = captured["cmd"]
+    assert "--model" not in cmd
+    assert cmd[cmd.index("--effort") + 1] == "high"
+
+
+# --------------------------------------------------------------------------- #
+# Usage attribution (issue #144). Before per-session resolution the adapter's one
+# pinned model was always the right guess for an invocation the harness reported
+# no model for; now it is not, so the caller supplies what it resolved.
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.unit
+def test_parse_usage_attributes_to_the_supplied_model_when_the_harness_reports_none() -> None:
+    adapter = ClaudeCodeAdapter(binary="claude", model="claude-opus-5")
+    output = json.dumps({"result": "x", "usage": {"input_tokens": 5}})
+
+    sample = adapter.parse_usage(output, "spawn", model="sonnet")
+
+    assert sample is not None
+    assert sample.model == "sonnet"
+
+
+@pytest.mark.unit
+def test_parse_usage_still_prefers_what_the_harness_itself_reports() -> None:
+    adapter = ClaudeCodeAdapter(binary="claude")
+    output = json.dumps({"result": "x", "model": "claude-haiku-4-5", "usage": {"input_tokens": 5}})
+
+    sample = adapter.parse_usage(output, "spawn", model="sonnet")
+
+    assert sample is not None
+    assert sample.model == "claude-haiku-4-5"
+
+
+@pytest.mark.unit
+def test_parse_usage_without_a_supplied_model_keeps_the_adapter_default() -> None:
+    adapter = ClaudeCodeAdapter(binary="claude", model="claude-opus-5")
+    output = json.dumps({"result": "x", "usage": {"input_tokens": 5}})
+
+    sample = adapter.parse_usage(output, "spawn")
+
+    assert sample is not None
+    assert sample.model == "claude-opus-5"
+
+
+@pytest.mark.unit
+def test_sum_transcript_usage_attributes_to_the_supplied_model_when_no_line_names_one() -> None:
+    adapter = ClaudeCodeAdapter(binary="claude", model="claude-opus-5")
+    lines = [json.dumps({"type": "assistant", "message": {"usage": {"input_tokens": 3}}})]
+
+    sample = adapter.sum_transcript_usage(lines, "spawn", model="sonnet")
+
+    assert sample.model == "sonnet"
+    assert sample.input_tokens == 3
+
+
+@pytest.mark.unit
+def test_the_base_allowlist_carries_no_anthropic_model_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Issue #144's one deployment requirement, pinned. `ANTHROPIC_MODEL` and its family
+    override the model Claude Code restores for a resumed session — the stickiness the
+    mint-only `--model` contract rests on. A deployment that leaked one would run every
+    resuming pool member on the wrong model with every other tier still green, which is
+    exactly the failure no test can otherwise see."""
+    monkeypatch.setenv("ANTHROPIC_MODEL", "claude-haiku-4-5")
+    monkeypatch.setenv("ANTHROPIC_DEFAULT_SONNET_MODEL", "claude-haiku-4-5")
+
+    env = allowlisted_env(())
+
+    assert not [name for name in env if name.startswith("ANTHROPIC_")]

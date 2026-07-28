@@ -304,6 +304,18 @@ class FakeHarness:
         self.resumed: list[tuple[str, str, str]] = []  # (workdir, session_id, message)
         self.resumed_identity: list[tuple[WorkerPreamble | None, str]] = []  # (preamble, chunk_id) per resume
         self.resume_pid = 4321
+        # The (model, effort) each invocation was handed (issue #144) — one entry per
+        # call, so a test can assert the application contract per call site rather than
+        # only per node-entry path.
+        self.spawn_model_effort: list[tuple[str | None, str | None]] = []
+        self.judge_model_effort: list[tuple[str | None, str | None]] = []
+        self.resume_efforts: list[str | None] = []
+        self.usage_models: list[str | None] = []
+        # Scripted `resolve_model`/`resolve_effort` replies (issue #144). The default
+        # echoes the first preference / the value verbatim, so a test that does not care
+        # about resolution sees what it passed in.
+        self.resolved_model = "fake-model"
+        self.resolved_effort: str | None = None
 
     def spawn(
         self,
@@ -311,9 +323,13 @@ class FakeHarness:
         preamble: WorkerPreamble,
         session_hint: str | None,
         resume_from: str | None = None,
+        *,
+        model: str | None = None,
+        effort: str | None = None,
     ) -> WorkerHandle:
         self.spawns.append((envelope, preamble))
         self.resume_froms.append(resume_from)
+        self.spawn_model_effort.append((model, effort))
         # Mirrors the real in-place adapter contract (issue #115, plan Q1): a resume
         # continues under the SAME id it was given, never the scripted handle's; a
         # fresh spawn (`resume_from is None`) keeps today's scripted-handle behavior.
@@ -332,9 +348,12 @@ class FakeHarness:
         *,
         preamble: WorkerPreamble | None = None,
         chunk_id: str = "",
+        effort: str | None = None,
+        model: str | None = None,
     ) -> str:
         self.judged.append((workdir, session_id, judgement_prompt))
         self.judge_preambles.append(preamble)
+        self.judge_model_effort.append((model, effort))
         return "<judged output>"
 
     def resume_with_message(
@@ -346,8 +365,10 @@ class FakeHarness:
         *,
         preamble: WorkerPreamble | None = None,
         chunk_id: str = "",
+        effort: str | None = None,
     ) -> int:
         self.resumed.append((workdir, session_id, message))
+        self.resume_efforts.append(effort)
         # Captured separately so existing 3-tuple unpackers of `.resumed` keep working while
         # resume-identity assertions can read the preamble/chunk_id the caller supplied.
         self.resumed_identity.append((preamble, chunk_id))
@@ -356,18 +377,26 @@ class FakeHarness:
     def resume_command(self, workdir: str, session_id: str) -> str:
         return f"cd {workdir} && claude --resume {session_id}"
 
+    def resolve_model(self, preferences: Sequence[str]) -> str:
+        return self.resolved_model
+
+    def resolve_effort(self, value: str | None) -> str | None:
+        return self.resolved_effort if self.resolved_effort is not None else value
+
     def parse_verdict(self, output: str) -> str | None:
         return self.verdict
 
     def parse_assessment(self, output: str) -> str:
         return self.assessment
 
-    def parse_usage(self, output: str, kind: UsageKind) -> UsageSample | None:
+    def parse_usage(self, output: str, kind: UsageKind, *, model: str | None = None) -> UsageSample | None:
+        self.usage_models.append(model)
         if self.usage_by_kind is not None and kind in self.usage_by_kind:
             return self.usage_by_kind[kind]
         return self.usage
 
-    def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind) -> UsageSample:
+    def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind, *, model: str | None = None) -> UsageSample:
+        self.usage_models.append(model)
         return self.transcript_usage or UsageSample(
             kind=kind,
             model="fake-model",

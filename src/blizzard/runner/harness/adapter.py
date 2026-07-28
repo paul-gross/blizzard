@@ -113,8 +113,35 @@ class IHarnessAdapter(Protocol):
         preamble: WorkerPreamble,
         session_hint: str | None,
         resume_from: str | None = None,
+        *,
+        model: str | None = None,
+        effort: str | None = None,
     ) -> WorkerHandle:
         """Start a headless worker; return its session id, pid, and start time.
+
+        ``model``/``effort`` (issue #144) are the already-resolved native values — the
+        caller ran them through :meth:`resolve_model`/:meth:`resolve_effort` first, so the
+        adapter applies rather than resolves. Both ``None`` keeps the adapter's own
+        default, which is what makes a caller that supplies neither behave exactly as
+        before.
+
+        **Application contract.** ``model`` is applied at **mint only**: a spawn with
+        ``resume_from`` set passes no model flag and leans on the harness restoring the
+        session's own — verified for all three target harnesses, so a cross-model resume
+        (and its full-history cache rewrite) is structurally impossible, and an operator's
+        deliberate in-session switch during a takeover survives. ``effort`` is applied on
+        **every** invocation, because Claude Code's effort is *not* sticky (D5 probe, CLI
+        2.1.220): a session spawned at one effort reverts to the settings default on a
+        bare resume, so mint-only would silently drop a declared effort on every member
+        of a resuming pool. The escape hatch for a hypothetical non-sticky-*model*
+        harness is the same one: pass the flag on every invocation.
+
+        **Each harness carries a stickiness trap a deployment must avoid**, or the
+        mint-only model contract is silently defeated: a Claude Code worker must not see
+        `ANTHROPIC_MODEL`-family env vars, an opencode adapter must not pin
+        `agent.<name>.model` (it outranks session stickiness), and a codex adapter must
+        keep `model` out of `config.toml` (it overrides every resume) and requires a
+        state-DB-era codex.
 
         ``resume_from`` (issue #115) is the prior session id a node-entry resume
         continues; ``None`` is today's fresh spawn (``session_hint`` mints/honors a
@@ -133,6 +160,7 @@ class IHarnessAdapter(Protocol):
         *,
         preamble: WorkerPreamble | None = None,
         chunk_id: str = "",
+        effort: str | None = None,
     ) -> int:
         """Headless resume-with-message; returns the new pid. Kill first.
 
@@ -162,6 +190,8 @@ class IHarnessAdapter(Protocol):
         *,
         preamble: WorkerPreamble | None = None,
         chunk_id: str = "",
+        effort: str | None = None,
+        model: str | None = None,
     ) -> str:
         """Deliver the judgement prompt into the session and return the raw reply.
 
@@ -171,6 +201,11 @@ class IHarnessAdapter(Protocol):
         loop hands to :meth:`parse_verdict`. Separated from
         :meth:`resume_with_message` because the verdict elicitation must capture the
         reply, where async message delivery only needs the new pid.
+
+        ``effort`` (issue #144) is reasserted here for the same reason it is on every
+        other path — it is not session-sticky. ``model`` is taken only to attribute this
+        invocation's usage; it is never passed to the harness, which restores the
+        session's own.
 
         ``preamble`` re-supplies the per-lease worker identity exactly as it does on
         :meth:`resume_with_message` — the judgement turn runs its own
@@ -184,6 +219,43 @@ class IHarnessAdapter(Protocol):
 
     def resume_command(self, workdir: str, session_id: str) -> str:
         """The literal interactive-takeover shell command for the escalation record."""
+        ...
+
+    def resolve_model(self, preferences: Sequence[str]) -> str:
+        """Resolve a prioritized model preference list to a native model name (issue #144).
+
+        The seam that keeps the hub and graph YAML harness-agnostic: the loop hands an
+        ordered list of **opaque preference strings** — namespaced ``blizzard:`` tier
+        aliases (``frontier``/``advanced``/``basic`` are the standard three) mixed freely
+        with harness-native names — and receives back one name *this* harness understands.
+
+        Left-to-right, first entry that resolves wins. An entry this adapter cannot
+        resolve — an alias its config and built-ins both miss, or a native name belonging
+        to another harness — is **skipped**, never a spawn failure: a preference list is
+        an author's stated preference order, not a contract, and a codex runner is
+        expected to skip ``opus``. An empty list, or one whose every entry is
+        unresolvable, falls back to the adapter's own default with one log naming what
+        was skipped.
+
+        The aliases are deliberately **unordered roles, not an ordered scale**: nothing
+        substitutes downward when a tier is unmapped. The list itself is the only
+        fallback mechanism, so every degradation is author-written.
+        """
+        ...
+
+    def resolve_effort(self, value: str | None) -> str | None:
+        """Resolve an authored effort value to this harness's native tier (issue #144).
+
+        Model's twin, as a single value rather than a list: every adapter can map an
+        ordinal *somewhere*, so there is no "unrecognized, try the next one" case.
+        ``low|medium|high|max`` is the well-known vocabulary, extended by the runner's
+        own ``[effort.aliases]``.
+
+        ``None`` in (no preference expressed) returns ``None`` — the adapter passes no
+        effort flag and the harness's own default stands. ``None`` out *also* covers a
+        harness with no effort knob at all, which logs the value's arrival once and
+        ignores it thereafter rather than failing a spawn over a knob it does not have.
+        """
         ...
 
     def parse_verdict(self, output: str) -> str | None:
@@ -200,7 +272,7 @@ class IHarnessAdapter(Protocol):
         when the reply carries no assessment."""
         ...
 
-    def parse_usage(self, output: str, kind: UsageKind) -> UsageSample | None:
+    def parse_usage(self, output: str, kind: UsageKind, *, model: str | None = None) -> UsageSample | None:
         """Translate a result envelope's ``usage`` + ``total_cost_usd`` into a sample.
 
         ``kind`` names which invocation produced ``output`` (the caller knows —
@@ -210,10 +282,16 @@ class IHarnessAdapter(Protocol):
         :meth:`sum_transcript_usage`. Dumb translation only (``bzh:deterministic-
         shell``): never a model call, never a cost estimate — cost rides verbatim
         off the harness's own ``total_cost_usd``.
+
+        ``model`` (issue #144) is the model this invocation actually ran under, used
+        **only** when the harness reports none of its own. Before per-session resolution
+        the adapter's single pinned model was always the right guess; now it is not, so
+        the caller — which knows what it resolved, or what the session's own stamp says —
+        supplies it. ``None`` keeps the adapter default, the pre-#144 behavior.
         """
         ...
 
-    def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind) -> UsageSample:
+    def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind, *, model: str | None = None) -> UsageSample:
         """Sum per-message ``usage`` across a session transcript's raw JSONL lines.
 
         The envelope-less fallback: when a worker is killed/reaped before it ever
@@ -224,5 +302,8 @@ class IHarnessAdapter(Protocol):
         parse_turns`'s ``lines: list[str]`` shape, so the file locate/read step
         (:mod:`blizzard.runner.transcripts.internal.jsonl_transcript_repository`)
         is never duplicated here.
+
+        ``model`` is the same attribution fallback :meth:`parse_usage` takes, applying
+        when no transcript line names a model either.
         """
         ...

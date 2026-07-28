@@ -66,6 +66,8 @@ def build_loop_context(
         settings_path=config.worker_settings_path,
         permission_mode=config.harness_permission_mode,
         env_passthrough=config.worker_env_passthrough,
+        model_aliases=config.model_aliases,
+        effort_aliases=config.effort_aliases,
     )
     # The per-lease harness-stdout directory (issue #58) — under the runner's own data
     # directory, created once here (never inside the adapter), so a worker's stdout
