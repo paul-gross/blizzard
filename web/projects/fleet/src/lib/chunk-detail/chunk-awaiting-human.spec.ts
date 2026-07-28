@@ -7,7 +7,6 @@ import { ChunkAwaitingHuman } from './chunk-awaiting-human';
 const REVIEW_FAIL_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01review0000000000000000000',
   graph_id: 'gr_1',
-  model: 'claude-opus-4-8',
   status: 'running',
   current_node_id: 'nd_build',
   latest_epoch: 2,
@@ -19,7 +18,6 @@ const REVIEW_FAIL_DETAIL: ChunkDetail = {
 const WAITING_QUESTION_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01ask00000000000000000000000',
   graph_id: 'gr_1',
-  model: 'claude-opus-4-8',
   status: 'waiting_on_human',
   current_node_id: 'nd_build',
   latest_epoch: 1,
@@ -44,7 +42,6 @@ const WAITING_QUESTION_DETAIL: ChunkDetail = {
 const WAITING_DECISION_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01gate0000000000000000000000',
   graph_id: 'gr_1',
-  model: 'claude-opus-4-8',
   status: 'waiting_on_human',
   current_node_id: 'nd_gate',
   latest_epoch: 1,
@@ -89,7 +86,6 @@ function answered(overrides: Partial<QuestionView> & Pick<QuestionView, 'questio
 const ANSWERED_UNDELIVERED_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01trail000000000000000000000',
   graph_id: 'gr_1',
-  model: 'claude-opus-4-8',
   status: 'running',
   current_node_id: 'nd_build',
   latest_epoch: 1,
@@ -102,7 +98,6 @@ const ANSWERED_UNDELIVERED_DETAIL: ChunkDetail = {
 const ESCALATED_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01esc00000000000000000000000',
   graph_id: 'gr_1',
-  model: 'claude-opus-4-8',
   status: 'needs_human',
   current_node_id: 'nd_build',
   latest_epoch: 3,

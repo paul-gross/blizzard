@@ -7,7 +7,6 @@ import { ChunkTokenBreakdown } from './chunk-token-breakdown';
 const COST_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01cost00000000000000000000000',
   graph_id: 'gr_1',
-  model: 'claude-opus-4-8',
   status: 'running',
   current_node_id: 'nd_review',
   latest_epoch: 2,

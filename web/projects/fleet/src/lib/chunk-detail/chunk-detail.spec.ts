@@ -12,7 +12,6 @@ import { ChunkDetail } from './chunk-detail';
 const ROUTED_DETAIL: ChunkDetailModel = {
   chunk_id: 'ch_routed',
   graph_id: 'gr_1',
-  model: 'claude-opus-4-8',
   status: 'running',
   current_node_id: 'nd_build',
   latest_epoch: 1,
@@ -25,7 +24,6 @@ const ROUTED_DETAIL: ChunkDetailModel = {
 const GATE_DETAIL: ChunkDetailModel = {
   chunk_id: 'ch_gate',
   graph_id: 'gr_1',
-  model: 'claude-opus-4-8',
   status: 'waiting_on_human',
   current_node_id: 'nd_gate',
   latest_epoch: 1,
@@ -60,7 +58,6 @@ const PAUSED_ASKING_DETAIL: ChunkDetailModel = {
 const ASK_DETAIL: ChunkDetailModel = {
   chunk_id: 'ch_ask',
   graph_id: 'gr_1',
-  model: 'claude-opus-4-8',
   status: 'waiting_on_human',
   current_node_id: 'nd_build',
   latest_epoch: 1,
@@ -94,7 +91,6 @@ const ASK_ANSWERED_DETAIL: ChunkDetailModel = {
 const NOT_READY_DETAIL: ChunkDetailModel = {
   chunk_id: 'ch_ready',
   graph_id: 'gr_default',
-  model: 'claude-opus-4-8',
   status: 'not_ready',
   current_node_id: null,
   latest_epoch: null,

@@ -7,7 +7,6 @@ import { ChunkFacts } from './chunk-facts';
 const ROUTED_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01routed000000000000000000',
   graph_id: 'gr_1',
-  model: 'claude-opus-4-8',
   status: 'running',
   current_node_id: 'nd_build',
   latest_epoch: 1,
@@ -21,7 +20,6 @@ const ROUTED_DETAIL: ChunkDetail = {
 const NOT_READY_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01ready000000000000000000000',
   graph_id: 'gr_default',
-  model: 'claude-opus-4-8',
   status: 'not_ready',
   current_node_id: null,
   latest_epoch: null,
