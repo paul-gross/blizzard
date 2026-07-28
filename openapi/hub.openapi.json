@@ -1822,7 +1822,7 @@
           "rotate": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/RotatePolicyView"
+                "$ref": "#/components/schemas/blizzard__wire__graph__RotatePolicyView"
               },
               {
                 "type": "null"
@@ -2472,6 +2472,46 @@
           "session": {
             "$ref": "#/components/schemas/SessionMode"
           },
+          "session_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Effort"
+          },
+          "session_model": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Session Model",
+            "type": "array"
+          },
+          "session_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Name"
+          },
+          "session_rotate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/blizzard__wire__envelope__RotatePolicyView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "session_source": {
             "anyOf": [
               {
@@ -3000,46 +3040,6 @@
           "role"
         ],
         "title": "RoleAssignmentRequest",
-        "type": "object"
-      },
-      "RotatePolicyView": {
-        "description": "One declared session's rotation bounds (issue #144).\n\nThe wire counterpart of :class:`~blizzard.hub.domain.graph.RotatePolicy`. Every\nthreshold is independently optional; ``max_invocations`` counts **harness\ninvocations** (spawn, resume, judge, nudge), not node-steps \u2014 one node-step burns two\nor three of them.",
-        "properties": {
-          "max_context_tokens": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Max Context Tokens"
-          },
-          "max_invocations": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Max Invocations"
-          },
-          "max_transcript_bytes": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Max Transcript Bytes"
-          }
-        },
-        "title": "RotatePolicyView",
         "type": "object"
       },
       "RouteClaim": {
@@ -3894,6 +3894,86 @@
           "ref"
         ],
         "title": "WorkRefView",
+        "type": "object"
+      },
+      "blizzard__wire__envelope__RotatePolicyView": {
+        "description": "The declared session's rotation bounds (issue #144).\n\nThe wire counterpart of :class:`~blizzard.hub.domain.graph.RotatePolicy`, carried on\n:class:`NodeConfig` so the runner can decide at spawn time whether the pool's head is\nstill resumable. ``max_invocations`` counts **harness invocations** (spawn, resume,\njudge, nudge), not node-steps \u2014 one node-step burns two or three of them.",
+        "properties": {
+          "max_context_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Context Tokens"
+          },
+          "max_invocations": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Invocations"
+          },
+          "max_transcript_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Transcript Bytes"
+          }
+        },
+        "title": "RotatePolicyView",
+        "type": "object"
+      },
+      "blizzard__wire__graph__RotatePolicyView": {
+        "description": "One declared session's rotation bounds (issue #144).\n\nThe wire counterpart of :class:`~blizzard.hub.domain.graph.RotatePolicy`. Every\nthreshold is independently optional; ``max_invocations`` counts **harness\ninvocations** (spawn, resume, judge, nudge), not node-steps \u2014 one node-step burns two\nor three of them.",
+        "properties": {
+          "max_context_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Context Tokens"
+          },
+          "max_invocations": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Invocations"
+          },
+          "max_transcript_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Transcript Bytes"
+          }
+        },
+        "title": "RotatePolicyView",
         "type": "object"
       }
     }

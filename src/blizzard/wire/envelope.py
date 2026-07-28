@@ -48,6 +48,19 @@ class EnvelopeChoice(BaseModel):
     requires_checks: bool = False
 
 
+class RotatePolicyView(BaseModel):
+    """The declared session's rotation bounds (issue #144).
+
+    The wire counterpart of :class:`~blizzard.hub.domain.graph.RotatePolicy`, carried on
+    :class:`NodeConfig` so the runner can decide at spawn time whether the pool's head is
+    still resumable. ``max_invocations`` counts **harness invocations** (spawn, resume,
+    judge, nudge), not node-steps — one node-step burns two or three of them."""
+
+    max_context_tokens: int | None = None
+    max_transcript_bytes: int | None = None
+    max_invocations: int | None = None
+
+
 class NodeConfig(BaseModel):
     """The node's invariant identity for this step."""
 
@@ -55,10 +68,30 @@ class NodeConfig(BaseModel):
     node_name: str
     executor: Executor
     session: SessionMode
-    # The targeted-resume source node name (issue #115) — see
+    # The session reference target (issues #115, #144) — see
     # ``blizzard.hub.domain.graph.Node.session_source``. ``None`` means "chunk
-    # most-recent" (bare ``resume``) or ``fresh``.
+    # most-recent" (bare ``resume``) or bare ``fresh``.
     session_source: str | None = None
+    # The **effective** session declaration for this node-step (issue #144), resolved
+    # hub-side because the hub owns both halves of the precedence it settles: a graph's
+    # `sessions:` declaration over the chunk's own defaults, field by field. The runner
+    # applies only its own default as the last resort, so it never needs the graph.
+    #
+    # ``session_name`` is the declared pool this node-step belongs to — the key the
+    # runner's pool-head lookup and its `lease_context` stamp use. ``None`` for a node
+    # whose `session:` names a NODE (`resume:<node>`) or is bare: those carry no pool, but
+    # still carry the chunk's defaults below, which is the precedence rule's intended
+    # reach.
+    session_name: str | None = None
+    # The prioritized model preference list and the effort value, already merged. Both are
+    # opaque preference strings — a `blizzard:` tier alias or a harness-native name — that
+    # the runner's adapter resolves against its own config (`bzh:pluggable-seams`). Empty /
+    # ``None`` means *express no preference*: the runner's own default applies.
+    session_model: list[str] = []
+    session_effort: str | None = None
+    # The pool's rotation bounds, ``None`` when the declaration authored none (or the node
+    # references no declaration at all) — nothing bounds the lineage.
+    session_rotate: RotatePolicyView | None = None
     judged_by: JudgedBy
     checks: list[str] = []
     # Where the runner runs this node's checks and the per-check timeout (issue #114) —

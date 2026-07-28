@@ -9,7 +9,17 @@ import pytest
 
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
 from blizzard.hub.domain.envelope import build_node_envelope, latest_artifacts_by_name
-from blizzard.hub.domain.graph import Choice, Executor, JudgedBy, Node, ProducesSpec, SessionMode
+from blizzard.hub.domain.graph import (
+    Choice,
+    Executor,
+    Graph,
+    JudgedBy,
+    Node,
+    ProducesSpec,
+    RotatePolicy,
+    SessionDecl,
+    SessionMode,
+)
 from blizzard.hub.domain.work import Chunk, WorkRef
 
 pytestmark = pytest.mark.unit
@@ -49,6 +59,20 @@ def _node() -> Node:
     )
 
 
+def _graph(*sessions: SessionDecl) -> Graph:
+    """The node's own graph — required by ``build_node_envelope`` since #144, since the
+    node's effective session declaration is resolved against its ``sessions:`` map."""
+    return Graph(
+        graph_id="gr_1",
+        name="t",
+        entry_node_id="nd_build",
+        nodes=[_node()],
+        edges=[],
+        created_at=datetime(2026, 7, 13, tzinfo=UTC),
+        sessions=list(sessions),
+    )
+
+
 def _chunk() -> Chunk:
     return Chunk(
         chunk_id="ch_1",
@@ -69,7 +93,7 @@ def test_envelope_carries_authored_judgement_prose_and_choice_set() -> None:
     # elicitation tail from node.choices when it delivers the judgement into the
     # session. The envelope must therefore carry the prose verbatim and the
     # choice set — never a baked-in tail (which would duplicate it and break the mock).
-    env = build_node_envelope(chunk=_chunk(), node=_node(), artifacts=[_row("f", 1)], epoch=1)
+    env = build_node_envelope(chunk=_chunk(), graph=_graph(), node=_node(), artifacts=[_row("f", 1)], epoch=1)
     assert env.epoch == 1
     assert env.node.node_name == "build"
     assert env.node.checks == ["mise run test"]
@@ -85,19 +109,19 @@ def test_envelope_carries_session_source() -> None:
     # Mirrors target_graph beside the raw `to`: session_source is derived once at
     # parse and carried verbatim onto the envelope's NodeConfig (issue #115).
     node = replace(_node(), session_source="build")
-    env = build_node_envelope(chunk=_chunk(), node=node, artifacts=[], epoch=1)
+    env = build_node_envelope(chunk=_chunk(), graph=_graph(), node=node, artifacts=[], epoch=1)
     assert env.node.session == SessionMode.RESUME
     assert env.node.session_source == "build"
 
 
 def test_envelope_session_source_defaults_to_none() -> None:
-    env = build_node_envelope(chunk=_chunk(), node=_node(), artifacts=[], epoch=1)
+    env = build_node_envelope(chunk=_chunk(), graph=_graph(), node=_node(), artifacts=[], epoch=1)
     assert env.node.session_source is None
 
 
 def test_arrival_addendum_appends_to_the_pre_prompt() -> None:
     env = build_node_envelope(
-        chunk=_chunk(), node=_node(), artifacts=[], epoch=2, arrival_addendum="the review found X"
+        chunk=_chunk(), graph=_graph(), node=_node(), artifacts=[], epoch=2, arrival_addendum="the review found X"
     )
     assert env.prompt == "do the work\n\nthe review found X"
 
@@ -114,7 +138,7 @@ def test_required_artifacts_table_renders_name_and_kind_and_is_harness_inert() -
             ProducesSpec(name="commit", kind=ArtifactKind.GIT_COMMIT),
         ],
     )
-    env = build_node_envelope(chunk=_chunk(), node=node, artifacts=[], epoch=1)
+    env = build_node_envelope(chunk=_chunk(), graph=_graph(), node=node, artifacts=[], epoch=1)
 
     assert env.prompt is not None
     assert env.prompt.startswith("do the work\n\n")
@@ -135,7 +159,7 @@ def test_required_artifacts_table_is_empty_when_node_produces_nothing() -> None:
     # Mirrors `_node()`'s own `produces=[]` — asserted already by
     # `test_envelope_carries_authored_judgement_prose_and_choice_set`'s exact `env.prompt`
     # match; this test names the reason explicitly.
-    env = build_node_envelope(chunk=_chunk(), node=_node(), artifacts=[], epoch=1)
+    env = build_node_envelope(chunk=_chunk(), graph=_graph(), node=_node(), artifacts=[], epoch=1)
     assert env.prompt == "do the work"
 
 
@@ -156,7 +180,7 @@ def test_hub_node_has_no_judgement_prompt() -> None:
         judgement_prompt=None,
         choices=[],
     )
-    env = build_node_envelope(chunk=_chunk(), node=hub_node, artifacts=[], epoch=1)
+    env = build_node_envelope(chunk=_chunk(), graph=_graph(), node=hub_node, artifacts=[], epoch=1)
     assert env.judgement_prompt is None
     assert env.node.choices == []
 
@@ -170,7 +194,7 @@ def test_envelope_carries_checks_gating_fields() -> None:
         checks_timeout=300,
         choices=[Choice("cho_1", "pass", "it works", requires_checks=True), Choice("cho_2", "fail", "it does not")],
     )
-    env = build_node_envelope(chunk=_chunk(), node=node, artifacts=[], epoch=1)
+    env = build_node_envelope(chunk=_chunk(), graph=_graph(), node=node, artifacts=[], epoch=1)
     assert env.node.checks_cwd == "blizzard"
     assert env.node.checks_timeout == 300
     by_name = {c.name: c for c in env.node.choices}
@@ -179,7 +203,94 @@ def test_envelope_carries_checks_gating_fields() -> None:
 
 
 def test_envelope_checks_gating_fields_default_off() -> None:
-    env = build_node_envelope(chunk=_chunk(), node=_node(), artifacts=[], epoch=1)
+    env = build_node_envelope(chunk=_chunk(), graph=_graph(), node=_node(), artifacts=[], epoch=1)
     assert env.node.checks_cwd is None
     assert env.node.checks_timeout is None
     assert all(not c.requires_checks for c in env.node.choices)
+
+
+# --------------------------------------------------------------------------- #
+# The effective session declaration (issue #144) — precedence resolved hub-side,
+# because the hub owns both halves: session declaration > chunk default. The
+# runner's own default is the last resort and is applied there.
+# --------------------------------------------------------------------------- #
+
+
+def _chunk_with_defaults(model: list[str], effort: str | None) -> Chunk:
+    return replace(_chunk(), default_model=model, default_effort=effort)
+
+
+def test_a_declaration_only_node_carries_the_declaration() -> None:
+    node = replace(_node(), session=SessionMode.FRESH, session_source="code")
+    decl = SessionDecl(name="code", model=["blizzard:basic"], effort="medium", rotate=RotatePolicy(max_invocations=30))
+
+    env = build_node_envelope(chunk=_chunk(), graph=_graph(decl), node=node, artifacts=[], epoch=1)
+
+    assert env.node.session_name == "code"
+    assert env.node.session_model == ["blizzard:basic"]
+    assert env.node.session_effort == "medium"
+    assert env.node.session_rotate is not None
+    assert env.node.session_rotate.max_invocations == 30
+    assert env.node.session_rotate.max_context_tokens is None
+
+
+def test_a_chunk_default_only_node_carries_the_chunk_default_and_no_pool() -> None:
+    # A bare `resume`/`fresh` node references no declaration, so it belongs to no pool —
+    # but the chunk's defaults still reach it. That is the precedence rule's intended
+    # reach, and the one behavior change this makes to a pre-#144 graph.
+    chunk = _chunk_with_defaults(["blizzard:advanced"], "high")
+
+    env = build_node_envelope(chunk=chunk, graph=_graph(), node=_node(), artifacts=[], epoch=1)
+
+    assert env.node.session_name is None
+    assert env.node.session_model == ["blizzard:advanced"]
+    assert env.node.session_effort == "high"
+    assert env.node.session_rotate is None
+
+
+def test_a_declaration_outranks_the_chunk_default_field_by_field() -> None:
+    # Merged per field, not whole-record: a declaration naming `model` but no `effort`
+    # takes the chunk's effort rather than nothing.
+    node = replace(_node(), session_source="code")
+    decl = SessionDecl(name="code", model=["blizzard:basic"])
+    chunk = _chunk_with_defaults(["blizzard:advanced"], "high")
+
+    env = build_node_envelope(chunk=chunk, graph=_graph(decl), node=node, artifacts=[], epoch=1)
+
+    assert env.node.session_model == ["blizzard:basic"]  # the declaration wins
+    assert env.node.session_effort == "high"  # the chunk default fills the gap
+
+
+def test_a_declaration_with_neither_field_falls_all_the_way_to_the_chunk_default() -> None:
+    node = replace(_node(), session=SessionMode.FRESH, session_source="gate")
+    chunk = _chunk_with_defaults(["blizzard:advanced"], "high")
+
+    env = build_node_envelope(chunk=chunk, graph=_graph(SessionDecl(name="gate")), node=node, artifacts=[], epoch=1)
+
+    assert env.node.session_name == "gate"  # still a pool member
+    assert env.node.session_model == ["blizzard:advanced"]
+    assert env.node.session_effort == "high"
+
+
+def test_neither_a_declaration_nor_a_chunk_default_expresses_no_preference() -> None:
+    # The pre-#144 world, unchanged: the runner's own default applies.
+    env = build_node_envelope(chunk=_chunk(), graph=_graph(), node=_node(), artifacts=[], epoch=1)
+
+    assert env.node.session_name is None
+    assert env.node.session_model == []
+    assert env.node.session_effort is None
+    assert env.node.session_rotate is None
+
+
+def test_a_node_name_session_target_carries_no_pool_but_still_the_chunk_default() -> None:
+    # `resume:<node>` (issue #115) resolves against node names, not the `sessions:` map,
+    # so it names no pool. The validator already rejected a reference that resolves to
+    # neither, so a source that misses the map here IS the node-name form.
+    node = replace(_node(), session_source="build")
+    chunk = _chunk_with_defaults(["blizzard:advanced"], "high")
+
+    env = build_node_envelope(chunk=chunk, graph=_graph(SessionDecl(name="code")), node=node, artifacts=[], epoch=1)
+
+    assert env.node.session_source == "build"
+    assert env.node.session_name is None
+    assert env.node.session_model == ["blizzard:advanced"]

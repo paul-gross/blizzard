@@ -666,6 +666,7 @@ class ApplyService:
         addendum = edge.prompt_addendum if edge is not None else _addendum(graph, from_node, submission.choice)
         envelope = build_node_envelope(
             chunk=chunk,
+            graph=graph,
             node=to_node,
             artifacts=self._chunks.load_artifacts(chunk.chunk_id),
             epoch=submission.epoch,

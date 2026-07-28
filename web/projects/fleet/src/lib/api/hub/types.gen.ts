@@ -1273,7 +1273,7 @@ export type GraphSessionView = {
      * Name
      */
     name: string;
-    rotate?: RotatePolicyView | null;
+    rotate?: BlizzardWireGraphRotatePolicyView | null;
 };
 
 /**
@@ -1743,6 +1743,19 @@ export type NodeConfig = {
     retries_max?: number | null;
     session: SessionMode;
     /**
+     * Session Effort
+     */
+    session_effort?: string | null;
+    /**
+     * Session Model
+     */
+    session_model?: Array<string>;
+    /**
+     * Session Name
+     */
+    session_name?: string | null;
+    session_rotate?: BlizzardWireEnvelopeRotatePolicyView | null;
+    /**
      * Session Source
      */
     session_source?: string | null;
@@ -2115,31 +2128,6 @@ export type RoleAssignmentRequest = {
      * Role
      */
     role: string;
-};
-
-/**
- * RotatePolicyView
- *
- * One declared session's rotation bounds (issue #144).
- *
- * The wire counterpart of :class:`~blizzard.hub.domain.graph.RotatePolicy`. Every
- * threshold is independently optional; ``max_invocations`` counts **harness
- * invocations** (spawn, resume, judge, nudge), not node-steps — one node-step burns two
- * or three of them.
- */
-export type RotatePolicyView = {
-    /**
-     * Max Context Tokens
-     */
-    max_context_tokens?: number | null;
-    /**
-     * Max Invocations
-     */
-    max_invocations?: number | null;
-    /**
-     * Max Transcript Bytes
-     */
-    max_transcript_bytes?: number | null;
 };
 
 /**
@@ -2758,6 +2746,56 @@ export type WorkRefView = {
      * Web Url
      */
     web_url?: string | null;
+};
+
+/**
+ * RotatePolicyView
+ *
+ * The declared session's rotation bounds (issue #144).
+ *
+ * The wire counterpart of :class:`~blizzard.hub.domain.graph.RotatePolicy`, carried on
+ * :class:`NodeConfig` so the runner can decide at spawn time whether the pool's head is
+ * still resumable. ``max_invocations`` counts **harness invocations** (spawn, resume,
+ * judge, nudge), not node-steps — one node-step burns two or three of them.
+ */
+export type BlizzardWireEnvelopeRotatePolicyView = {
+    /**
+     * Max Context Tokens
+     */
+    max_context_tokens?: number | null;
+    /**
+     * Max Invocations
+     */
+    max_invocations?: number | null;
+    /**
+     * Max Transcript Bytes
+     */
+    max_transcript_bytes?: number | null;
+};
+
+/**
+ * RotatePolicyView
+ *
+ * One declared session's rotation bounds (issue #144).
+ *
+ * The wire counterpart of :class:`~blizzard.hub.domain.graph.RotatePolicy`. Every
+ * threshold is independently optional; ``max_invocations`` counts **harness
+ * invocations** (spawn, resume, judge, nudge), not node-steps — one node-step burns two
+ * or three of them.
+ */
+export type BlizzardWireGraphRotatePolicyView = {
+    /**
+     * Max Context Tokens
+     */
+    max_context_tokens?: number | null;
+    /**
+     * Max Invocations
+     */
+    max_invocations?: number | null;
+    /**
+     * Max Transcript Bytes
+     */
+    max_transcript_bytes?: number | null;
 };
 
 export type AuthorizeApiAuthAuthorizeGetData = {
