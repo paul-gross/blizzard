@@ -11,9 +11,15 @@ import { injectGroupChunksMutation, injectReorderQueueMutation } from './queue.m
  *
  * - **Prioritize**: a move-to-top action per row drives a whole-order `PUT /api/queue`
  *   composed client-side (issue #105 removed the single-move route); the next acquire honors the new order;
- * - **Group**: multi-select two or more ready chunks and merge them into the
+ * - **Group**: multi-select two or more chunks and merge them into the
  *   top-most selected survivor via `POST /api/chunks/{id}/group` — the survivor
- *   carries the union of work refs, the rest are discarded.
+ *   carries the union of work refs and keeps its own status, the rest are discarded.
+ *
+ * The route itself accepts any **unacquired** chunk, `not_ready` or `ready` (issue
+ * #141); this panel reaches only the ready ones because its rows *are* the ready queue,
+ * which is also what Prioritize reorders. Grouping backlog chunks is the CLI's
+ * (`blizzard hub chunk group`) — a backlog selection surface is a separate affordance,
+ * not a constraint of the route.
  *
  * A container (issue #80): it owns the queue query and both mutations, all
  * through the generated client (bzh:generated-client), and renders the

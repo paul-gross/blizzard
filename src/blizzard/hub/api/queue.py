@@ -27,7 +27,7 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.queue import ChunkNotFound, ChunkNotReady
+from blizzard.hub.domain.queue import ChunkNotFound, ChunkNotGroupable
 from blizzard.hub.domain.work import Chunk
 from blizzard.wire.chunk import WorkRefModel
 from blizzard.wire.queue import (
@@ -93,17 +93,25 @@ def group_chunks(
     request: ChunkGroupRequest,
     services: Annotated[HubServices, Depends(get_services)],
 ) -> object:
-    """Merge unacquired chunks into ``chunk_id`` — the board's Group control."""
+    """Merge unacquired chunks into ``chunk_id`` — the board's Group control.
+
+    Accepts ``not_ready`` and ``ready`` participants alike (issue #141); 409 names the
+    first chunk a runner holds, or one already finished.
+    """
     try:
-        survivor = services.group.group(chunk_id, request.merge_chunk_ids)
+        result = services.group.group(chunk_id, request.merge_chunk_ids)
     except ChunkNotFound as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except ChunkNotReady as exc:
+    except ChunkNotGroupable as exc:
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content={"detail": str(exc)})
     # Each merged-away chunk vanished from the listings, and the survivor's pointers grew:
-    # refresh the queue and the survivor's row on the board.
+    # refresh the queue and the survivor's row on the board. The survivor's status comes
+    # from the group result rather than a ``"ready"`` constant — grouping backlog chunks
+    # leaves a backlog survivor, and a frame claiming otherwise would flip the board's row
+    # to a status the store never derives (issue #141).
+    survivor = result.survivor
     services.events.publish_queue_changed()
-    services.events.publish_chunk_changed(survivor.chunk_id, "ready")
+    services.events.publish_chunk_changed(survivor.chunk_id, result.status.value)
     return ChunkGroupResponse(
         chunk_id=survivor.chunk_id,
         work_refs=[WorkRefModel(source=p.source, ref=p.ref) for p in survivor.work_refs],

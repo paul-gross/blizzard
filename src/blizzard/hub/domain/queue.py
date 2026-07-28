@@ -1,13 +1,14 @@
 """Queue-shaping domain — ready-queue reordering and grouping.
 
-The two operator actions that shape the ready queue rather than execute work
+The two operator actions that shape the queue rather than execute work
 : **Prioritize** (replace the whole ready order) and
 **Group** (merge unacquired chunks into one surviving chunk). Both are pure hub-side
 properties over the fact store — order derives from appended position facts,
 and grouping folds work refs into the survivor and discards the rest as ephemeral.
-Neither touches an acquired chunk: reordering and grouping are legal
-only in ``ready`` (the fill/peek surface), so a running chunk is never reshaped under a
-runner's feet.
+Neither touches an acquired chunk, but their scopes differ (issue #141): reordering *is*
+the ready queue's own order, so it is ready-only by definition, while grouping needs only
+that **no runner holds** the chunk — a merge is not an execution, and a backlog chunk
+should not have to become claimable to take part in one.
 
 Pure-ish domain services (``bzh:controller-read-only``): they hold the write chunk
 repository and the injected clock, validate against the **derived** status (never a
@@ -15,6 +16,8 @@ stored column), and raise typed errors the controller maps to HTTP.
 """
 
 from __future__ import annotations
+
+from dataclasses import dataclass
 
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
@@ -37,11 +40,31 @@ class ChunkNotFound(LookupError):
         self.chunk_id = chunk_id
 
 
-class ChunkNotReady(ValueError):
-    """A queue-shaping op named a chunk that is not in ``ready``."""
+#: The statuses a chunk may be **grouped** at (issue #141) — the two in which no runner
+#: holds it. Deliberately a status set rather than a route-liveness read: ``not_ready``
+#: and ``ready`` are exactly :func:`~blizzard.hub.domain.work.derive_chunk_status`'s
+#: pre-claim fall-through, so every post-claim state — ``running``/``delivering``, the
+#: human-parked ``waiting_on_human``/``needs_human``/``paused``, and the terminal
+#: ``stopped``/``done`` — is refused by construction, with no second vocabulary of "in
+#: progress" to keep in lockstep.
+GROUPABLE_STATUSES = frozenset({ChunkStatus.NOT_READY, ChunkStatus.READY})
+
+
+class ChunkNotGroupable(ValueError):
+    """A group op named a chunk some runner holds — or one already finished (issue #141).
+
+    The invariant grouping actually needs is "no runner holds it", not "it sits in the
+    ready queue". Grouping was gated on ``ready`` for every participant, so merging three
+    backlog chunks meant promoting all three into the *claimable* queue first — making
+    them claimable by any live runner mid-flow purely to satisfy a merge, and leaving the
+    survivor ready as a side effect rather than by choice.
+    """
 
     def __init__(self, chunk_id: str, status: ChunkStatus) -> None:
-        super().__init__(f"chunk {chunk_id} is {status.value}, not ready — queue shaping is ready-only")
+        super().__init__(
+            f"chunk {chunk_id} is {status.value} — grouping needs a chunk no runner holds "
+            f"({', '.join(sorted(s.value for s in GROUPABLE_STATUSES))})"
+        )
         self.chunk_id = chunk_id
         self.status = status
 
@@ -87,31 +110,58 @@ class QueueService:
         return explicit if explicit is not None else chunk.minted_at.timestamp()
 
 
+@dataclass(frozen=True)
+class GroupResult:
+    """A completed group: the survivor and the status it is left at (issue #141).
+
+    The survivor's status rides along because grouping no longer implies ``ready``:
+    folding backlog chunks yields a backlog survivor, so a caller that announces the
+    change (the SSE ``chunk-changed`` frame) must publish what the survivor *is* rather
+    than the ``"ready"`` the ready-only gate once made a safe constant.
+    """
+
+    survivor: Chunk
+    status: ChunkStatus
+
+
 class GroupService:
-    """Merge unacquired (ready) chunks into one surviving chunk."""
+    """Merge unacquired chunks — ``not_ready`` or ``ready`` — into one surviving chunk."""
 
     def __init__(self, *, chunks: IWriteChunkRepository, clock: IClock) -> None:
         self._chunks = chunks
         self._clock = clock
 
-    def group(self, survivor_id: str, merge_ids: list[str]) -> Chunk:
+    def group(self, survivor_id: str, merge_ids: list[str]) -> GroupResult:
         """Fold ``merge_ids`` into ``survivor_id``; the survivor absorbs their pointers.
 
-        The survivor and every merged chunk must be ``ready`` (unacquired) — grouping is
-        not batching and never reshapes running work. The merged
-        chunks' work refs are appended to the survivor (union), and each merged
-        chunk records a ``chunk.grouped`` fact, becoming ephemeral.
+        The survivor and every merged chunk must be **unacquired**
+        (:data:`GROUPABLE_STATUSES`) — grouping is not batching and never reshapes work a
+        runner holds. It does not require ``ready``: an operator merging three backlog
+        chunks should not have to promote them into the claimable queue first, which
+        exposes each of them to a live runner mid-flow purely to satisfy a merge
+        (issue #141). The merged chunks' work refs are appended to the survivor (union),
+        and each merged chunk records a ``chunk.grouped`` fact, becoming ephemeral.
+
+        The survivor's own status is **unchanged** by grouping: no promote fact is
+        written here, so a ``not_ready`` survivor stays ``not_ready`` and a ``ready`` one
+        stays ``ready``. Promotion stays a separate, deliberate act.
         """
-        survivor = self._require_ready_chunk(survivor_id)
+        survivor, survivor_status = self._require_unacquired_chunk(survivor_id)
         targets = self._resolve_targets(survivor_id, merge_ids)
 
         now = self._clock.now()
         for target in targets:
             self._chunks.add_work_refs(survivor_id, target.work_refs, at=now)
             self._chunks.record_grouped(target.chunk_id, grouped_into=survivor_id, at=now)
-        _log.info("chunks grouped", survivor=survivor_id, merged=[t.chunk_id for t in targets], count=len(targets))
+        _log.info(
+            "chunks grouped",
+            survivor=survivor_id,
+            status=survivor_status.value,
+            merged=[t.chunk_id for t in targets],
+            count=len(targets),
+        )
         merged = self._chunks.get(survivor_id)
-        return merged if merged is not None else survivor
+        return GroupResult(survivor=merged if merged is not None else survivor, status=survivor_status)
 
     def _resolve_targets(self, survivor_id: str, merge_ids: list[str]) -> list[Chunk]:
         seen: set[str] = set()
@@ -120,15 +170,15 @@ class GroupService:
             if merge_id == survivor_id or merge_id in seen:
                 continue  # self and duplicates are no-ops, not errors
             seen.add(merge_id)
-            targets.append(self._require_ready_chunk(merge_id))
+            targets.append(self._require_unacquired_chunk(merge_id)[0])
         return targets
 
-    def _require_ready_chunk(self, chunk_id: str) -> Chunk:
+    def _require_unacquired_chunk(self, chunk_id: str) -> tuple[Chunk, ChunkStatus]:
         chunk = self._chunks.get(chunk_id)
         facts = self._chunks.load_facts(chunk_id)
         if chunk is None or facts is None:
             raise ChunkNotFound(chunk_id)
         status = derive_chunk_status(facts if facts is not None else ChunkFacts(minted=True))
-        if status is not ChunkStatus.READY:
-            raise ChunkNotReady(chunk_id, status)
-        return chunk
+        if status not in GROUPABLE_STATUSES:
+            raise ChunkNotGroupable(chunk_id, status)
+        return chunk, status

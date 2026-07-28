@@ -149,6 +149,9 @@ export const detachChunkApiChunksChunkIdDetachPost = <ThrowOnError extends boole
  * Group Chunks
  *
  * Merge unacquired chunks into ``chunk_id`` — the board's Group control.
+ *
+ * Accepts ``not_ready`` and ``ready`` participants alike (issue #141); 409 names the
+ * first chunk a runner holds, or one already finished.
  */
 export const groupChunksApiChunksChunkIdGroupPost = <ThrowOnError extends boolean = false>(options: Options<GroupChunksApiChunksChunkIdGroupPostData, ThrowOnError>): RequestResult<GroupChunksApiChunksChunkIdGroupPostResponses, GroupChunksApiChunksChunkIdGroupPostErrors, ThrowOnError> => (options.client ?? client).post<GroupChunksApiChunksChunkIdGroupPostResponses, GroupChunksApiChunksChunkIdGroupPostErrors, ThrowOnError>({
     url: '/api/chunks/{chunk_id}/group',

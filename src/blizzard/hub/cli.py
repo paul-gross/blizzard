@@ -777,9 +777,11 @@ def chunk_migrate(
 def chunk_group_cmd(chunk_id: str, merge_ids: tuple[str, ...], as_json: bool, hub_url: str | None) -> None:
     """Merge MERGE_IDS into CHUNK_ID, the survivor — the board's Group control.
 
-    A pure client of ``POST /api/chunks/{id}/group``: every merge id must currently be
-    a ready, unacquired chunk (409 otherwise); the survivor absorbs the union of every
-    merged chunk's work refs."""
+    A pure client of ``POST /api/chunks/{id}/group``: the survivor and every merge id
+    must currently be **unacquired** — ``not_ready`` or ``ready``, in any mix (409
+    otherwise, naming the chunk a runner holds). The survivor absorbs the union of every
+    merged chunk's work refs and keeps its own status, so merging backlog chunks needs no
+    promote first and leaves the survivor in the backlog."""
     base = hub_url
     resp = _request(
         "post", f"/api/chunks/{chunk_id}/group", hub_url=base, json_body={"merge_chunk_ids": list(merge_ids)}
@@ -787,7 +789,7 @@ def chunk_group_cmd(chunk_id: str, merge_ids: tuple[str, ...], as_json: bool, hu
     _check(
         resp,
         "POST /chunks/{id}/group",
-        on_status={404: f"unknown chunk {chunk_id}", 409: "one of the named chunks is not ready"},
+        on_status={404: f"unknown chunk {chunk_id}", 409: "one of the named chunks is not unacquired"},
     )
     body = resp.json()
     if as_json:

@@ -18,18 +18,32 @@ from tests.support import HubHarness, build_hub, pointer_token, write_chunk_paus
 pytestmark = pytest.mark.component
 
 
-def _ingest(hub: HubHarness, n: int) -> str:
-    """Ingest and promote one chunk holding a distinct pointer, advancing the clock.
+def _ingest_backlog(hub: HubHarness, n: int) -> str:
+    """Ingest one chunk holding a distinct pointer and leave it ``not_ready``.
 
-    Queue shaping is ready-only, so the chunk is promoted out of its not-ready resting
-    state before it can be peeked, reordered, or grouped."""
+    A freshly ingested chunk rests in the backlog. Grouping takes it there (issue #141);
+    peeking and reordering, which *are* the ready queue, need :func:`_ingest`'s promote.
+    """
     pointer = {"source": "default", "ref": str(n)}
     resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token(pointer)]})
     assert resp.status_code == 201, resp.text
     chunk_id = resp.json()["chunk_id"]
-    assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
     hub.clock.advance(timedelta(seconds=1))  # distinct minted_at → deterministic FIFO
     return chunk_id
+
+
+def _ingest(hub: HubHarness, n: int) -> str:
+    """Ingest and promote one chunk holding a distinct pointer, advancing the clock.
+
+    The ready queue is what ``GET/PUT /api/queue`` reads and reorders, so a chunk is
+    promoted out of its not-ready resting state before it can be peeked or reordered."""
+    chunk_id = _ingest_backlog(hub, n)
+    assert hub.client.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+    return chunk_id
+
+
+def _status(hub: HubHarness, chunk_id: str) -> str:
+    return str(hub.client.get(f"/api/chunks/{chunk_id}").json()["status"])
 
 
 def _peek_ids(hub: HubHarness) -> list[str]:
@@ -170,7 +184,43 @@ def test_group_is_pointer_union_deduped(tmp_path: Path) -> None:
     assert sorted(refs) == ["9", "shared"]
 
 
-def test_group_rejects_a_non_ready_member(tmp_path: Path) -> None:
+def test_group_merges_backlog_chunks_without_promoting_any_of_them(tmp_path: Path) -> None:
+    # Issue #141: the dogfooded flow. Three freshly minted chunks merge as they are —
+    # no promote, so none of them is ever claimable by a live runner mid-flow, and the
+    # survivor is left in the backlog rather than ready as a side effect.
+    hub = build_hub(tmp_path)
+    survivor, b, c = _ingest_backlog(hub, 1), _ingest_backlog(hub, 2), _ingest_backlog(hub, 3)
+    assert [_status(hub, i) for i in (survivor, b, c)] == ["not_ready"] * 3
+
+    resp = hub.client.post(f"/api/chunks/{survivor}/group", json={"merge_chunk_ids": [b, c]})
+    assert resp.status_code == 200, resp.text
+    assert {p["ref"] for p in resp.json()["work_refs"]} == {"1", "2", "3"}
+    assert _status(hub, survivor) == "not_ready"  # the survivor keeps its own status
+    assert _peek_ids(hub) == []  # nothing was promoted into the claimable queue
+    assert hub.client.get(f"/api/chunks/{b}").status_code == 404
+
+
+def test_group_mixes_backlog_and_ready_members_and_leaves_the_survivor_alone(tmp_path: Path) -> None:
+    # The survivor's status is whatever it already was, in either direction: a ready
+    # survivor absorbing a backlog chunk stays ready, and vice versa.
+    hub = build_hub(tmp_path)
+    ready_survivor, backlog = _ingest(hub, 1), _ingest_backlog(hub, 2)
+    resp = hub.client.post(f"/api/chunks/{ready_survivor}/group", json={"merge_chunk_ids": [backlog]})
+    assert resp.status_code == 200, resp.text
+    assert {p["ref"] for p in resp.json()["work_refs"]} == {"1", "2"}
+    assert _status(hub, ready_survivor) == "ready"
+    assert _peek_ids(hub) == [ready_survivor]
+
+    backlog_survivor, ready_member = _ingest_backlog(hub, 3), _ingest(hub, 4)
+    resp = hub.client.post(f"/api/chunks/{backlog_survivor}/group", json={"merge_chunk_ids": [ready_member]})
+    assert resp.status_code == 200, resp.text
+    assert {p["ref"] for p in resp.json()["work_refs"]} == {"3", "4"}
+    assert _status(hub, backlog_survivor) == "not_ready"
+    # The merged-away ready chunk left the queue with it; the survivor never joined.
+    assert _peek_ids(hub) == [ready_survivor]
+
+
+def test_group_rejects_an_acquired_member(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     survivor, running = _ingest(hub, 1), _ingest(hub, 2)
     hub.client.post(
@@ -179,10 +229,29 @@ def test_group_rejects_a_non_ready_member(tmp_path: Path) -> None:
     )
     resp = hub.client.post(f"/api/chunks/{survivor}/group", json={"merge_chunk_ids": [running]})
     assert resp.status_code == 409
+    # The refusal names the actual invariant — a runner holds it — not "not ready".
+    detail = resp.json()["detail"]
+    assert running in detail
+    assert "running" in detail
+    assert "no runner holds" in detail
     # Nothing was merged — the running chunk is untouched, the survivor keeps one pointer.
     assert hub.client.get(f"/api/chunks/{running}").status_code == 200
     survivor_detail = hub.client.get(f"/api/chunks/{survivor}").json()
     assert len(survivor_detail["work_refs"]) == 1
+
+
+def test_group_rejects_an_acquired_survivor(tmp_path: Path) -> None:
+    # The survivor is gated exactly like a merge id — the invariant is about the chunk,
+    # not about which side of the merge it is on.
+    hub = build_hub(tmp_path)
+    running, member = _ingest(hub, 1), _ingest_backlog(hub, 2)
+    hub.client.post(
+        "/api/fleet/routes",
+        json={"chunk_id": running, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e"]},
+    )
+    resp = hub.client.post(f"/api/chunks/{running}/group", json={"merge_chunk_ids": [member]})
+    assert resp.status_code == 409
+    assert len(hub.client.get(f"/api/chunks/{member}").json()["work_refs"]) == 1
 
 
 def test_group_into_unknown_survivor_is_404(tmp_path: Path) -> None:

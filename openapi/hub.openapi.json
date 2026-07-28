@@ -4198,7 +4198,7 @@
     },
     "/api/chunks/{chunk_id}/group": {
       "post": {
-        "description": "Merge unacquired chunks into ``chunk_id`` \u2014 the board's Group control.",
+        "description": "Merge unacquired chunks into ``chunk_id`` \u2014 the board's Group control.\n\nAccepts ``not_ready`` and ``ready`` participants alike (issue #141); 409 names the\nfirst chunk a runner holds, or one already finished.",
         "operationId": "group_chunks_api_chunks__chunk_id__group_post",
         "parameters": [
           {
