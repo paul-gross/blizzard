@@ -1,31 +1,40 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 import {
   BoardShell,
+  type BoardReposition,
   ChunkDetail,
   EventLogPanel,
   QuestionsPanel,
-  QueuePanel,
   RunnerPanel,
+  injectGroupChunksMutation,
   injectHubChunksQuery,
+  injectHubQueueQuery,
   injectPromoteChunkMutation,
+  injectRepositionQueueMutation,
 } from 'fleet';
 
 import { injectBoardSelection } from './board-selection';
 
 /**
- * The board route — the three-column mission-control surface extracted verbatim
- * from the app root ({@link App}) when the router landed. Behavior is unchanged:
+ * The board route — the two-column mission-control surface:
  *
- * - the **left rail** holds {@link QueuePanel}, which shapes the ready queue
- *   (prioritize + group), over {@link EventLogPanel}'s live feed;
  * - the **centre** stacks {@link BoardShell} — every chunk in its derived-status
- *   column — over the {@link ChunkDetail} dock. The dock is always mounted:
- *   selecting a card fills it (the work item, node history, artifacts, and the
- *   human-loop actions) and deselecting clears it to a rest state, so the board
- *   never resizes or reflows;
+ *   column, the ready queue among them as the READY lane — over the
+ *   {@link ChunkDetail} dock. The dock is always mounted: selecting a card fills
+ *   it (the work item, node history, artifacts, and the human-loop actions) and
+ *   deselecting clears it to a rest state, so the board never resizes or reflows;
  * - the **right rail** holds {@link RunnerPanel}, the registry with pause/resume
- *   (MVP criterion 11), over {@link QuestionsPanel}, the fleet's open agent asks —
- *   clicking one opens its chunk in the dock, where it is answered.
+ *   (MVP criterion 11), then {@link QuestionsPanel}, the fleet's open agent asks —
+ *   clicking one opens its chunk in the dock, where it is answered — then
+ *   {@link EventLogPanel}'s live feed.
+ *
+ * The left rail that used to hold the ready queue over the event log is gone
+ * (issue #137): queue shaping — prioritize and
+ * group — happens on the READY lane itself, so a ready chunk is a board card
+ * like every other chunk instead of a row in a second surface. This page owns
+ * the writes those affordances imply, since {@link BoardShell} is
+ * presentational: the queue read feeds the lane's order, and its three outputs
+ * drive `POST /api/queue/position` (drag and Top alike) and the group merge.
  *
  * The titlebar, the {@link FleetLiveUpdates} spine, and the TanStack `QueryClient`
  * stay at the app root — none of them move here, so navigating away from and back
@@ -41,26 +50,27 @@ import { injectBoardSelection } from './board-selection';
 @Component({
   selector: 'app-board-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BoardShell, ChunkDetail, EventLogPanel, QuestionsPanel, QueuePanel, RunnerPanel],
+  imports: [BoardShell, ChunkDetail, EventLogPanel, QuestionsPanel, RunnerPanel],
   template: `
     <main class="main">
-      <div class="col rail-left">
-        <fleet-queue-panel class="rail-queue" />
-        <fleet-event-log-panel class="rail-log" />
-      </div>
       <div class="col col-center">
         <fleet-board-shell
           class="board"
           [chunks]="chunks()"
+          [readyOrder]="readyOrder()"
           [selectedChunkId]="selected()"
           (selectChunk)="select($event)"
           (promote)="promoteChunk.mutate({ chunkId: $event })"
+          (reposition)="reposition($event)"
+          (moveToTop)="moveToTop($event)"
+          (group)="group($event)"
         />
         <fleet-chunk-detail class="dock" [chunkId]="selected()" (dismiss)="select(null)" />
       </div>
       <div class="col rail-right">
         <fleet-runner-panel />
         <fleet-questions-panel (selectChunk)="select($event)" />
+        <fleet-event-log-panel class="rail-log" />
       </div>
     </main>
   `,
@@ -74,9 +84,11 @@ import { injectBoardSelection } from './board-selection';
       height: 100%;
       min-height: 0;
       display: grid;
-      /* 330px rails, but allowed to give ground on a narrow window:
-         held rigid they starve the board, which is the column that matters. */
-      grid-template-columns: minmax(260px, 330px) 1fr minmax(260px, 330px);
+      /* One 330px rail, allowed to give ground on a narrow window: held rigid it
+         starves the board, which is the column that matters — and the board now
+         carries the READY lane the left rail used to, so it needs the width more
+         than before. */
+      grid-template-columns: 1fr minmax(260px, 330px);
       gap: 6px;
       padding: 6px;
     }
@@ -87,19 +99,14 @@ import { injectBoardSelection } from './board-selection';
       min-height: 0;
       min-width: 0;
     }
-    /* The rails run the full height of the workspace; the ready queue takes the
-       larger share and the event log the rest, each scrolling its own body. */
-    .rail-queue {
-      flex: 1.35;
-      min-height: 0;
-      overflow-y: auto;
-    }
+    /* The rail runs the full height of the workspace: runners and asks size to
+       their content and the event log takes the remainder, scrolling its own body. */
     .rail-log {
       flex: 1;
       min-height: 0;
     }
     /* The centre column stacks the board over the chunk detail, so the detail sits
-       to the right of the rails rather than spanning the window beneath them. Both
+       to the left of the rail rather than spanning the window beneath it. Both
        are permanently mounted and hold their share of the column, so selecting or
        clearing a chunk never resizes or reflows the board. */
     .board {
@@ -116,13 +123,45 @@ import { injectBoardSelection } from './board-selection';
 })
 export class BoardPage {
   private readonly chunksQuery = injectHubChunksQuery();
+  private readonly queueQuery = injectHubQueueQuery();
+  private readonly repositionQueue = injectRepositionQueueMutation();
+  private readonly groupChunks = injectGroupChunksMutation();
   private readonly selection = injectBoardSelection();
 
-  /** Promote a not-ready chunk to ready from its board card. */
+  /** Promote a backlog chunk to ready from its board card. */
   protected readonly promoteChunk = injectPromoteChunkMutation();
 
   /** The live fleet chunk list; empty until the first read resolves. */
   protected readonly chunks = computed(() => this.chunksQuery.data() ?? []);
+
+  /**
+   * The ready queue in the hub's own dispatch order, as bare ids — the READY
+   * lane's ordering. It comes from `GET /api/queue` rather than from the fleet
+   * list, because order is the queue's fact and the chunk list carries no rank.
+   */
+  protected readonly readyOrder = computed<readonly string[]>(() =>
+    (this.queueQuery.data() ?? []).map((entry) => entry.chunk_id),
+  );
+
+  /** A READY card dropped somewhere new — placed after the anchor it landed on
+   * (`null` = the very top), which is what the hub route takes. */
+  protected reposition(move: BoardReposition): void {
+    this.repositionQueue.mutate({ chunkId: move.chunkId, afterChunkId: move.afterChunkId });
+  }
+
+  /** A READY card's Top button — the same reposition with no anchor. */
+  protected moveToTop(chunkId: string): void {
+    this.repositionQueue.mutate({ chunkId, afterChunkId: null });
+  }
+
+  /** `ids` is the READY lane's multi-selection in lane order (the top-most is
+   * the group survivor) — the lane owns the checkbox state itself, since it is
+   * plain UI state, not query-derived. */
+  protected group(ids: readonly string[]): void {
+    if (ids.length < 2) return;
+    const [survivorId, ...mergeChunkIds] = ids;
+    this.groupChunks.mutate({ survivorId, mergeChunkIds });
+  }
 
   /**
    * The board card the operator opened, or `null` when nothing is selected —

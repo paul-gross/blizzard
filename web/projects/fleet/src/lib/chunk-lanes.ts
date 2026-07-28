@@ -1,7 +1,7 @@
 import type { ChunkStatus } from './api/hub';
 import type { Tone } from './kit/tone';
 
-/** The board's lanes, left → right: the not-ready backlog, then dispatch → done. */
+/** The board's lanes, left → right: the backlog, the ready queue, then dispatch → done. */
 export interface Lane {
   readonly key: string;
   /** The board column's engraved heading. */
@@ -11,7 +11,8 @@ export interface Lane {
 }
 
 export const LANES: readonly Lane[] = [
-  { key: 'notready', label: 'NOT READY', headerLabel: 'Not ready' },
+  { key: 'notready', label: 'BACKLOG', headerLabel: 'Backlog' },
+  { key: 'ready', label: 'READY', headerLabel: 'Ready' },
   { key: 'running', label: 'RUNNING', headerLabel: 'Running' },
   { key: 'waiting', label: 'WAIT/HUMAN', headerLabel: 'Waiting' },
   { key: 'needs', label: 'NEEDS HUMAN', headerLabel: 'Needs human' },
@@ -24,19 +25,20 @@ export const LANES: readonly Lane[] = [
  *
  * The transient `delivering` shows under RUNNING and the terminal `stopped` under
  * DONE. `paused` shares WAIT/HUMAN with `waiting_on_human`: that is the lane for work
- * stopped pending a human, which is what an operator's pause is. `ready` maps to **no**
- * lane (`null`): the ready queue lives in the left rail
- * (fleet-queue-panel), so a ready chunk shows there and never also as a board card
- * (issue #22) — which makes `null` mean "in the rail, not on the board", and the
- * titlebar counts its Ready cell off exactly that rather than re-naming the status.
+ * stopped pending a human, which is what an operator's pause is. `ready` has its own
+ * READY lane on the board (issue #137) — the ready queue *is* a board column now,
+ * ordered by hub dispatch order and reshaped in place by drag-and-drop, so every
+ * status maps to a lane and a chunk shows in exactly one place. The lane's key is
+ * still `notready` for the renamed BACKLOG column: the key is a selector consumed by
+ * styles, specs, and e2e locators, so only its rendered labels moved.
  *
  * Typed `Record<ChunkStatus, …>` deliberately: a new status added to the wire is then
  * a compile error here — the one place that has to decide where it belongs — instead
  * of silently vanishing from a surface that forgot to list it.
  */
-export const STATUS_LANE: Record<ChunkStatus, string | null> = {
+export const STATUS_LANE: Record<ChunkStatus, string> = {
   not_ready: 'notready',
-  ready: null,
+  ready: 'ready',
   running: 'running',
   delivering: 'running',
   waiting_on_human: 'waiting',
@@ -46,8 +48,8 @@ export const STATUS_LANE: Record<ChunkStatus, string | null> = {
   done: 'done',
 };
 
-/** The lane a chunk's status belongs to, or `null` when it belongs to the ready rail. */
-export function laneFor(status: ChunkStatus): string | null {
+/** The board lane a chunk's status belongs to — total, since every status has one. */
+export function laneFor(status: ChunkStatus): string {
   return STATUS_LANE[status];
 }
 

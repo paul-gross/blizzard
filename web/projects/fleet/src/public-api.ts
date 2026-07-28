@@ -20,6 +20,7 @@ export * from './lib/auth';
 export * from './lib/admin';
 export * from './lib/design';
 export * from './lib/format';
+export * from './lib/board-card';
 export * from './lib/board-header';
 export * from './lib/board-shell';
 export * from './lib/chunk-detail';

@@ -1,35 +1,26 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import type { ChunkStatus, ChunkSummary } from '../api/hub';
+import type { ChunkSummary } from '../api/hub';
+import type { BoardCard } from '../board-card/board-card';
+import { BoardColumn, type BoardReposition } from './board-column';
 import { compactRef } from '../compact-ref';
 import { LANES, STATUS_LANE } from '../chunk-lanes';
-import { formatCost } from '../cost-format';
-import { KitBeacon } from '../kit/kit-beacon';
 import { KitPanel } from '../kit/kit-panel';
 
-/** One rendered board card — the derived-status view of a chunk. */
-export interface BoardCard {
-  readonly chunkId: string;
-  readonly shortId: string;
-  readonly status: ChunkStatus;
-  /** The node's human graph name (`build`, `review`); falls back to the raw id. */
-  readonly node: string;
-  /** The raw `nd_` ULID, kept reachable as the node label's tooltip. */
-  readonly nodeId: string;
-  /** The chunk's work item — the server-derived `{source}#{ref}` label,
-   * empty when no pointer names a configured source. Plural pointers join with a space. */
-  readonly pointerLabel: string;
-  /** The chunk's derived spend total (issue #60), from `ChunkSummary.cost`. */
-  readonly costUsd: number;
-  /** Whether {@link costUsd} is a lower bound — a summed invocation's envelope-less
-   * cost was absent (crash/reap path); never presented as exact. */
-  readonly costPartial: boolean;
-}
+export type { BoardCard, BoardReposition };
 
 /**
- * The mission-control chunk board — the five status columns and their
+ * The mission-control chunk board — the six status columns and their
  * cards, filling the centre column above the chunk detail. The titlebar is not
- * here: it spans all three columns, so {@link BoardHeader} owns it.
+ * here: it spans the whole window, so {@link BoardHeader} owns it.
+ *
+ * READY is one of those columns (issue #137), not a rail beside them: the ready
+ * queue is dispatch order, so it renders top-to-bottom in the order the hub will
+ * hand work out ({@link readyOrder}) and is reshaped in place — drag a card, or
+ * use its Top button, and {@link reposition}/{@link moveToTop} leave for whoever
+ * owns the write. {@link group} carries the lane's multi-select. Every one of
+ * those affordances belongs to READY alone; {@link BoardColumn} arms them off a
+ * single flag.
  *
  * This is the shared fleet view the hub app renders; it lives once here so the
  * runner app can compose it too. Presentational only: it holds no data client.
@@ -39,7 +30,7 @@ export interface BoardCard {
 @Component({
   selector: 'fleet-board-shell',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitBeacon, KitPanel],
+  imports: [BoardColumn, KitPanel],
   template: `
     <div class="mc" data-testid="board-shell">
       <fleet-kit-panel
@@ -50,72 +41,17 @@ export interface BoardCard {
         <span header class="col-lbl">graph: default</span>
         <div class="board" data-testid="board">
           @for (col of columns; track col.key) {
-            <div class="b-col" [attr.data-col]="col.key">
-              <div class="b-col-head">
-                <span class="col-lbl">{{ col.label }}</span>
-                <span class="n">
-                  <!-- A live lane with occupants announces itself: a flashing square
-                       ahead of the count — amber for work in flight or parked on a
-                       human, red for an escalation. Quiet (empty) lanes show none. -->
-                  @if (cardsFor(col.key).length > 0 && blinkFor(col.key); as blink) {
-                    <fleet-kit-beacon data-testid="lane-blink" [attr.data-blink]="blink" [active]="true" [tone]="blink" />
-                  }
-                  {{ cardsFor(col.key).length }}
-                </span>
-              </div>
-              <div class="b-col-body">
-                @for (card of cardsFor(col.key); track card.chunkId) {
-                  <div
-                    class="card"
-                    data-testid="chunk-card"
-                    [attr.data-status]="card.status"
-                    [class.selected]="card.chunkId === selectedChunkId()"
-                    [attr.aria-current]="card.chunkId === selectedChunkId() ? 'true' : null"
-                  >
-                    <button
-                      type="button"
-                      class="card-open"
-                      [attr.aria-label]="'Open chunk ' + card.shortId"
-                      (click)="selectChunk.emit(card.chunkId)"
-                    >
-                      <span class="tid">
-                        <span class="card-id" data-testid="chunk-id">{{ card.shortId }}</span>
-                        <span class="nd" data-testid="chunk-node" [attr.title]="card.nodeId || null">{{
-                          card.node
-                        }}</span>
-                      </span>
-                      <!-- The pointer label is plain text here, not a link: a card is a
-                           target for opening the chunk, and an anchor inside it competes
-                           for the same click. The detail panel owns the link out to the work source. -->
-                      @if (card.pointerLabel) {
-                        <span class="iss" data-testid="work-ref-chip" [title]="card.pointerLabel">{{
-                          card.pointerLabel
-                        }}</span>
-                      }
-                      <span class="st-row">
-                        <span class="st" data-testid="chunk-status" [title]="card.status">{{ card.status }}</span>
-                        @if (card.costUsd > 0 || card.costPartial) {
-                          <span class="cost" data-testid="card-cost">{{
-                            formatCost(card.costUsd, card.costPartial)
-                          }}</span>
-                        }
-                      </span>
-                    </button>
-                    @if (card.status === 'not_ready') {
-                      <button
-                        type="button"
-                        class="card-promote"
-                        data-testid="promote-chunk"
-                        [attr.aria-label]="'Promote chunk ' + card.shortId + ' to ready'"
-                        (click)="promote.emit(card.chunkId)"
-                      >
-                        PROMOTE
-                      </button>
-                    }
-                  </div>
-                }
-              </div>
-            </div>
+            <fleet-board-column
+              [column]="col"
+              [cards]="cardsFor(col.key)"
+              [selectedChunkId]="selectedChunkId()"
+              [queueControls]="col.key === 'ready'"
+              (selectChunk)="selectChunk.emit($event)"
+              (promote)="promote.emit($event)"
+              (reposition)="reposition.emit($event)"
+              (moveToTop)="moveToTop.emit($event)"
+              (group)="group.emit($event)"
+            />
           }
         </div>
         @if (total() === 0) {
@@ -140,13 +76,14 @@ export interface BoardCard {
       height: 100%;
       min-height: 0;
     }
-    /* The board's own engraved labels: the second panel-head span (projected into
-       the kit panel's header slot) and every column's header label. Content
-       projected into a child component keeps *this* component's style scope
-       (Angular content projection doesn't move a node into the child's
-       encapsulation), so this is a local rule, not a re-typed copy of the kit
-       panel's own label chrome — same look, kept separate from the retired
-       chrome class names so the structural gate stays honest. */
+    /* The board's own engraved label: the second panel-head span, projected into
+       the kit panel's header slot. Content projected into a child component keeps
+       *this* component's style scope (Angular content projection doesn't move a
+       node into the child's encapsulation), so this is a local rule, not a
+       re-typed copy of the kit panel's own label chrome — same look, kept
+       separate from the retired chrome class names so the structural gate stays
+       honest. Each column's own head label is BoardColumn's, for the same reason
+       in reverse: a rule here could not reach into its encapsulation. */
     .col-lbl {
       font-size: var(--fs-label);
       letter-spacing: 0.18em;
@@ -158,198 +95,17 @@ export interface BoardCard {
       flex: 1;
       position: relative;
     }
+    /* One equal track per lane, laid out by flow rather than a repeat() count —
+       LANES is the single owner of how many lanes there are (issue #137 added
+       READY), and a hard-coded count here is a second place to forget. */
     .board {
       display: grid;
-      grid-template-columns: repeat(5, 1fr);
+      grid-auto-flow: column;
+      grid-auto-columns: 1fr;
       gap: 1px;
       background: var(--line);
       flex: 1;
       min-height: 0;
-    }
-    .b-col {
-      background: var(--panel-deep);
-      display: flex;
-      flex-direction: column;
-      min-height: 0;
-    }
-    .b-col-head {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      padding: 4px 6px;
-      border-bottom: 1px solid var(--line);
-      flex: none;
-    }
-    .b-col-head .n {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      font-size: var(--fs-md);
-      color: var(--label-dim);
-    }
-    /* Per the mockup, the header labels stay uniformly grey and the **count** carries
-       each lane's color: amber for live work (running, parked on a human), red for an
-       escalation, green for done — all from tokens. */
-    .b-col[data-col='running'] .b-col-head .n,
-    .b-col[data-col='waiting'] .b-col-head .n {
-      color: var(--amber);
-    }
-    .b-col[data-col='needs'] .b-col-head .n {
-      color: var(--red);
-    }
-    .b-col[data-col='done'] .b-col-head .n {
-      color: var(--green);
-    }
-    /* The DONE column keeps its green head accent and card accents. */
-    .b-col[data-col='done'] .b-col-head {
-      border-bottom-color: var(--green-dim);
-    }
-    .b-col[data-col='done'] .card {
-      border-left-color: var(--green);
-    }
-    /* An escalated chunk reads in the alarm color: the card's left bar and its name,
-       matching the mockup's NEEDS HUMAN treatment. */
-    .b-col[data-col='needs'] .card {
-      border-left-color: var(--red);
-    }
-    .b-col[data-col='needs'] .card-id {
-      color: var(--red);
-    }
-    /* The NOT READY backlog column reads as held/inert: a muted header label and a
-       dim card accent, distinct from the ready queue in the rail and from any live
-       lane. Colors come from tokens, never hard-coded hex. */
-    .b-col[data-col='notready'] .b-col-head .col-lbl {
-      color: var(--label-dim);
-    }
-    .card[data-status='not_ready'] {
-      border-left-color: var(--label-dim);
-    }
-    .card-promote {
-      align-self: flex-start;
-      border: 1px solid var(--amber-dim);
-      background: transparent;
-      color: var(--amber-hi);
-      padding: 1px 6px;
-      font: inherit;
-      font-size: var(--fs-label);
-      letter-spacing: 0.14em;
-      cursor: pointer;
-    }
-    .card-promote:hover,
-    .card-promote:focus-visible {
-      border-color: var(--amber);
-      outline: none;
-    }
-    .b-col-body {
-      overflow-y: auto;
-      overflow-x: hidden;
-      flex: 1;
-      padding: 4px;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-    .card {
-      box-sizing: border-box;
-      border: 1px solid var(--line);
-      border-left: 3px solid var(--amber);
-      background: var(--overlay-25);
-      padding: 4px 6px;
-      display: flex;
-      flex-direction: column;
-      gap: 3px;
-      width: 100%;
-      min-width: 0;
-    }
-    .card:hover {
-      border-color: var(--cyan);
-    }
-    /* The chunk whose detail fills the dock — an outline ring (not border-color, which
-       would repaint the status-colored left bar) plus a faint cyan wash, so the
-       board answers "which one am I looking at" at a glance. */
-    .card.selected {
-      outline: 1px solid var(--cyan);
-      outline-offset: -1px;
-      background: color-mix(in srgb, var(--cyan) 8%, var(--overlay-25));
-    }
-    .card-open {
-      border: 0;
-      background: transparent;
-      padding: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      width: 100%;
-      min-width: 0;
-      text-align: left;
-      font: inherit;
-      color: inherit;
-      cursor: pointer;
-    }
-    .card-open:focus-visible {
-      outline: 1px solid var(--cyan);
-      outline-offset: 1px;
-    }
-    /* The card's identity line: the chunk's short name, with the node it currently
-       sits at pushed to the far right.
-
-       Every line here holds to one line and ellipsises instead of wrapping. A board
-       column is narrow, and a wrapped card is worse than a clipped one twice over: it
-       breaks a value mid-token (a chunk name split across two lines is unreadable and
-       unsearchable) and it makes cards in the same column different heights, so the
-       column stops scanning as a list. The full value stays reachable in the detail. */
-    .tid {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      gap: 6px;
-      min-width: 0;
-    }
-    .card-id {
-      color: var(--amber);
-      font-size: var(--fs-md);
-      letter-spacing: 0.04em;
-      white-space: nowrap;
-    }
-    .tid .nd {
-      color: var(--label);
-      font-size: var(--fs-label);
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .iss,
-    .st {
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .iss {
-      color: var(--cyan);
-      font-size: var(--fs-xs);
-    }
-    .st-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      gap: 6px;
-      min-width: 0;
-    }
-    .st {
-      color: var(--label);
-      font-size: var(--fs-label);
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-    }
-    /* The chunk's derived spend total (issue #60) — the leading-tilde lower-bound
-       prefix (formatCost) is the card's whole PARTIAL marker; no separate badge on a
-       card this small. */
-    .cost {
-      color: var(--amber-hi);
-      font-size: var(--fs-xs);
-      white-space: nowrap;
     }
     .empty {
       position: absolute;
@@ -364,10 +120,17 @@ export interface BoardCard {
   `,
 })
 export class BoardShell {
-  protected readonly formatCost = formatCost;
-
   /** The fleet chunk list (derived status + current node); empty when the fleet is idle. */
   readonly chunks = input<readonly ChunkSummary[]>([]);
+
+  /**
+   * The ready chunk ids in hub dispatch order — the top of the list is what the
+   * next acquire takes. The READY lane renders in exactly this order; a ready
+   * chunk the order does not name (a promote the queue read has not caught up
+   * with yet) sorts after the ones it does, keeping its relative order, rather
+   * than jumping the queue or vanishing.
+   */
+  readonly readyOrder = input<readonly string[]>([]);
 
   /** Emitted with a chunk id when its card is activated — fills the detail dock. */
   readonly selectChunk = output<string>();
@@ -376,28 +139,27 @@ export class BoardShell {
    * the selection highlight so the board says which one is open. */
   readonly selectedChunkId = input<string | null>(null);
 
-  /** Emitted with a chunk id when a not-ready card's Promote is clicked. */
+  /** Emitted with a chunk id when a backlog card's Promote is clicked. */
   readonly promote = output<string>();
 
-  protected readonly columns = LANES;
+  /** Emitted when a READY card is dragged somewhere new — the chunk and the
+   * anchor it now sits after (`null` = the very top of the queue). */
+  readonly reposition = output<BoardReposition>();
 
-  /** The beacon color for an occupied lane's header, or null for the quiet lanes:
-   * amber for work in flight or parked on a human, red for an escalation. */
-  protected blinkFor(columnKey: string): 'amber' | 'red' | null {
-    if (columnKey === 'running' || columnKey === 'waiting') return 'amber';
-    if (columnKey === 'needs') return 'red';
-    return null;
-  }
+  /** Emitted with a chunk id when a READY card's Top button is clicked. */
+  readonly moveToTop = output<string>();
+
+  /** Emitted with the READY lane's multi-selection, in lane order (the top-most
+   * is the group survivor), when the operator activates Group. */
+  readonly group = output<readonly string[]>();
+
+  protected readonly columns = LANES;
 
   /** Every chunk rendered as a board card, grouped into its status column. */
   private readonly cards = computed<Map<string, BoardCard[]>>(() => {
     const grouped = new Map<string, BoardCard[]>(LANES.map((lane) => [lane.key, []]));
     for (const chunk of this.chunks()) {
-      const column = STATUS_LANE[chunk.status];
-      // Ready chunks belong to the left rail (fleet-queue-panel), not the board —
-      // a null column skips them so they never double-show as a board card (issue #22).
-      if (!column) continue;
-      grouped.get(column)?.push({
+      grouped.get(STATUS_LANE[chunk.status])?.push({
         chunkId: chunk.chunk_id,
         shortId: compactRef(chunk.chunk_id),
         status: chunk.status,
@@ -412,6 +174,18 @@ export class BoardShell {
         costPartial: chunk.cost?.cost_partial ?? false,
       });
     }
+    // READY alone is ordered rather than listed: it is a queue, so its rank comes
+    // from the hub's own dispatch order. Unranked ids sort to the end on a stable
+    // sort, which keeps their relative order among themselves.
+    const rank = new Map(this.readyOrder().map((chunkId, index) => [chunkId, index]));
+    const rankOf = (card: BoardCard): number => rank.get(card.chunkId) ?? Number.POSITIVE_INFINITY;
+    grouped.get('ready')?.sort((a, b) => {
+      // Subtracting the ranks would be NaN for two unranked cards, and a NaN
+      // comparator forfeits the stability this leans on.
+      const [left, right] = [rankOf(a), rankOf(b)];
+      if (left === right) return 0;
+      return left < right ? -1 : 1;
+    });
     return grouped;
   });
 

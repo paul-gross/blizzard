@@ -9,8 +9,10 @@ every seam real, no tokens and no network. It proves the operator surface end to
 (MVP criterion 11):
 
 0. **Promote from the board.** Ingest rests a chunk not-ready: it renders in the
-   board's backlog column and no runner may claim it. Promoting it from its card makes it
-   claimable — it leaves the board for the rail's ready queue (there is no READY column).
+   board's BACKLOG column and no runner may claim it. Promoting it from its card makes it
+   claimable — and the card moves one lane right, into the board's **READY column**
+   (issue #137 folded the ready queue back onto the board as a lane), landing at the
+   bottom of that lane. It never leaves the board.
 1. **Live board, no reload.** The board is loaded once and never reloaded. As facts
    land at the hub they fan out over ``GET /api/events/stream`` (SSE), the
    ``FleetLiveUpdates`` spine invalidates the TanStack reads, and the chunk's status
@@ -23,11 +25,15 @@ every seam real, no tokens and no network. It proves the operator surface end to
    permanently mounted at a fixed height, so filling or clearing it leaves the board's
    geometry **pixel-identical** — issue #21's criteria, and the one claim in this file
    that only a laying-out browser can prove.
-3. **Queue shaping honored by FILL.** Two ready chunks are **grouped** into one from
-   the UI — the survivor carries the union of work refs (plural) — and the ready
-   queue is **reordered** (move-to-top) from the UI. The next FILL then honors **both**:
-   the grouped survivor, with its plural pointers, is what the runner claims, and it is
-   claimed **first** because it was moved to the top.
+3. **Queue shaping honored by FILL.** The READY column *is* the ready queue (issue
+   #137): it renders top-to-bottom in the hub's dispatch order and is reshaped in
+   place. Two ready chunks are **grouped** into one from their cards' own select
+   boxes — the survivor carries the union of work refs (plural) — and the queue is
+   then **reordered** by dragging that survivor's card to the top of the lane with
+   real pointer events, the `@angular/cdk` drop list resolving the drop to the anchor
+   it landed after. The next FILL then honors **both**: the grouped survivor, with its
+   plural pointers, is what the runner claims, and it is claimed **first** because it
+   was dragged to the top.
 4. **Answer from the board.** A parked chunk's open question is answered from the detail
    dock; the holding runner resumes the dormant session and the chunk lands
    (MVP criterion 7).
@@ -73,11 +79,13 @@ from __future__ import annotations
 import contextlib
 import dataclasses
 import os
+import re
 import subprocess
 import threading
 import time
 from collections.abc import Iterator
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import httpx
 import pytest
@@ -98,6 +106,9 @@ from tests.e2e.test_acceptance_loop import (
     _runner_config,
     _winter_source,
 )
+
+if TYPE_CHECKING:  # playwright is imported lazily below — the module must import unskipped
+    from playwright.sync_api import Locator, Page
 
 pytestmark = [
     pytest.mark.e2e,
@@ -256,6 +267,29 @@ def _tick_n(config: RunnerConfig, fenced: dict[str, str], count: int) -> None:
         os.environ.update(prior)
 
 
+def _drag_ready_card_to_top(page: Page, dragged: Locator, top: Locator) -> None:
+    """Drag one READY card above the lane's current top card, with real pointer events.
+
+    ``@angular/cdk``'s drop list is driven by ``pointerdown`` on the draggable, a run of
+    ``pointermove``\\ s past its own start threshold, and ``pointerup`` — so the gesture is
+    spelled out with ``page.mouse`` rather than Playwright's ``drag_to``, which fires the
+    HTML5 drag pair (``dragstart``/``drop``) that the cdk never listens for. The first,
+    short move is what crosses the threshold and arms the drag; the long one carries the
+    preview over the target's **upper** half, which is where the cdk's sort decides the
+    dragged item now belongs above it.
+    """
+    source = dragged.bounding_box()
+    target = top.bounding_box()
+    assert source is not None and target is not None, "a READY card is not laid out"
+    x = source["x"] + source["width"] / 2
+    page.mouse.move(x, source["y"] + source["height"] / 2)
+    page.mouse.down()
+    page.mouse.move(x, source["y"] + source["height"] / 2 - 12, steps=4)  # arm the drag
+    page.mouse.move(x, target["y"] + 2, steps=25)  # over the top card's upper edge
+    page.mouse.move(x, target["y"] + 1, steps=2)  # settle, so the sort has a frame to run
+    page.mouse.up()
+
+
 def _ingest_chunk(forge: httpx.Client, hub: httpx.Client, title: str) -> str:
     """File a forge issue and ingest its pointer into a not-ready chunk; return the chunk id.
 
@@ -335,8 +369,10 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 # --- Load the board ONCE. It is never reloaded again. -------------------
                 # Chunk ids minted in the same instant share a 12-char prefix, so the
                 # board's short-id label is not unique — cards are located by their
-                # derived-status COLUMN instead (data-col), which is what the operator
-                # actually reads. The queue rows carry the full id (data-chunk).
+                # derived-status COLUMN (data-col), which is what the operator actually
+                # reads, and where one *particular* chunk has to be named, by the full id
+                # `BoardCardComponent` puts on the card root (data-chunk). That attribute
+                # is on the card and nowhere else, so it stays one node per chunk.
                 page.goto(f"http://127.0.0.1:{hub_port}/", wait_until="load")
                 expect(page.get_by_test_id("board-shell")).to_be_visible()
 
@@ -346,44 +382,66 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 def col_cards(key: str):
                     return col(key).get_by_test_id("chunk-card")
 
-                def queue_row(chunk_id: str):
-                    return page.locator(f'[data-testid="queue-row"][data-chunk="{chunk_id}"]')
+                def ready_card(chunk_id: str):
+                    """One chunk's card in the READY lane, by its full id."""
+                    return col("ready").locator(f'[data-chunk="{chunk_id}"]')
+
+                def ready_block(chunk_id: str):
+                    """That card *with* its queue controls. `BoardColumn` wraps the two in
+                    one draggable block, so `queue-select`/`queue-move-top` are the card's
+                    siblings rather than its descendants — and the block, not the card, is
+                    what a pointer drag grabs."""
+                    return col("ready").locator(f'.q-card:has([data-chunk="{chunk_id}"])')
 
                 # All three chunks rest NOT READY — held from the fleet in the
-                # board's backlog column, and queued for no claim. No runner has
+                # board's BACKLOG column, and queued for no claim. No runner has
                 # registered yet.
                 expect(page.get_by_test_id("chunk-card")).to_have_count(3)
                 expect(col_cards("notready")).to_have_count(3)
                 expect(page.get_by_test_id("runners-empty")).to_be_visible()
-                expect(page.get_by_test_id("queue-row")).to_have_count(0)
+                expect(col_cards("ready")).to_have_count(0)
 
                 # --- Promote all three from the board ---------------------------------
-                # Promoting is what makes a chunk claimable. A ready chunk is *not* a
-                # board card — the READY column was dropped in favor of the rail's ready
-                # queue — so the backlog empties into the queue as each is promoted.
-                # Each click is awaited by the backlog shrinking: promote is idempotent, so
-                # clicking `.first` again before the promoted card has left would just
-                # re-promote the same chunk.
-                for remaining in (2, 1, 0):
-                    col("notready").get_by_test_id("promote-chunk").first.click()
+                # Promoting is what makes a chunk claimable. A ready chunk is still a
+                # board card (issue #137): it crosses from BACKLOG into the READY lane
+                # rather than leaving the board, so the two counts trade card for card.
+                # Each promote names its chunk by data-chunk instead of taking `.first`,
+                # because promote order *is* queue order now (a promote stamps the tail),
+                # and the queue this scenario goes on to reshape has to start known.
+                for promoted, (chunk_id, remaining) in enumerate(((chunk_a, 2), (chunk_b, 1), (chunk_c, 0)), start=1):
+                    col("notready").locator(f'[data-chunk="{chunk_id}"]').get_by_test_id("promote-chunk").click()
                     expect(col_cards("notready")).to_have_count(remaining)
-                expect(page.get_by_test_id("chunk-card")).to_have_count(0)
-                expect(page.get_by_test_id("queue-row")).to_have_count(3)
+                    expect(col_cards("ready")).to_have_count(promoted)
+                expect(page.get_by_test_id("chunk-card")).to_have_count(3)
 
-                # --- Group B + C from the UI (survivor = top-most selected = B) --------
-                queue_row(chunk_b).get_by_test_id("queue-select").check()
-                queue_row(chunk_c).get_by_test_id("queue-select").check()
+                # --- Group B + C from their cards (survivor = top-most selected = B) ---
+                ready_block(chunk_b).get_by_test_id("queue-select").check()
+                ready_block(chunk_c).get_by_test_id("queue-select").check()
                 page.get_by_test_id("group-selected").click()
 
-                # C is merged away (ephemeral) — it vanishes from the board live —
-                # and B survives carrying the union of work refs (plural, "+1").
-                expect(page.get_by_test_id("queue-row")).to_have_count(2)
-                expect(queue_row(chunk_c)).to_have_count(0)
-                expect(queue_row(chunk_b).get_by_test_id("queue-pointer")).to_contain_text("+1")
+                # C is merged away (ephemeral) — it vanishes from the board live — and B
+                # survives carrying the union of work refs, which the card shows as its
+                # two space-joined pointer labels rather than one.
+                expect(col_cards("ready")).to_have_count(2)
+                expect(page.get_by_test_id("chunk-card")).to_have_count(2)
+                expect(ready_card(chunk_c)).to_have_count(0)
+                expect(ready_card(chunk_b).get_by_test_id("work-ref-chip")).to_have_text(re.compile(r"^\S+\s+\S+$"))
 
-                # --- Reorder from the UI: move the grouped survivor to the top ---------
-                queue_row(chunk_b).get_by_test_id("queue-move-top").click()
-                expect(page.get_by_test_id("queue-row").first).to_have_attribute("data-chunk", chunk_b)
+                # --- Reorder from the UI: drag the grouped survivor to the top ---------
+                # Promote stamped B at the tail, so A leads the lane; B is dragged over it
+                # with a real pointer sequence (mouse.move/down/move…/up), which is what
+                # `@angular/cdk`'s drop list listens for — Playwright's `drag_to` fires a
+                # single HTML5-drag pair the cdk never sees. Nothing reorders client-side:
+                # the drop only emits an anchor, and the lane re-renders when the write's
+                # `queue-changed` frame invalidates the queue read. So the assertion below
+                # is the full round trip, not an optimistic DOM shuffle. (The index →
+                # anchor arithmetic itself is fenced at `web:unit-test` with a synthesized
+                # `CdkDragDrop`; this tier proves the pointer gesture reaches it at all.)
+                # The before-shot is asserted too, so the after-shot cannot pass vacuously
+                # on a lane that already had B on top.
+                expect(col_cards("ready").first).to_have_attribute("data-chunk", chunk_a)
+                _drag_ready_card_to_top(page, ready_block(chunk_b), ready_block(chunk_a))
+                expect(col_cards("ready").first).to_have_attribute("data-chunk", chunk_b)
 
                 # Fleet truth corroborates both shaping actions before the runner claims.
                 grouped = hub.get(f"/api/chunks/{chunk_b}").json()
@@ -405,11 +463,11 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 # --- Live chip flip, no reload: drive to the park and watch it flip ----
                 status = _tick_until(config, hub, chunk_b, fenced, {"waiting_on_human", "done", "needs_human"}, 90.0)
                 assert status == "waiting_on_human", f"survivor did not park on its question (status {status!r})"
-                # The survivor left the ready queue and its card landed in WAIT/HUMAN, live
-                # over SSE with no reload; A stays ready in the queue.
+                # The survivor's card crossed from READY to WAIT/HUMAN, live over SSE with
+                # no reload; A stays behind in READY.
                 expect(col_cards("waiting")).to_have_count(1)
                 expect(col("waiting").get_by_test_id("chunk-status")).to_have_text("waiting_on_human")
-                expect(queue_row(chunk_a)).to_have_count(1)  # A still ready, still queued
+                expect(ready_card(chunk_a)).to_have_count(1)  # A still ready, still queued
 
                 # --- Detail dock: selecting must not move the board (issue #21) --------
                 # The dock is mounted whether or not a chunk is open, so it rests on a
@@ -461,7 +519,7 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 )
 
                 # --- Pause brake from the board: A stays ready while paused ------------
-                expect(page.get_by_test_id("queue-row")).to_have_count(1)  # A alone remains ready
+                expect(col_cards("ready")).to_have_count(1)  # A alone remains ready
                 page.get_by_test_id("runner-toggle").click()  # Pause
                 # The board's toggle drives the *hub's* brake; the runner's own brake is a
                 # separate concept the board renders apart and cannot clear.
@@ -471,14 +529,14 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
 
                 _tick_n(config, fenced, 4)  # PULL reads paused → FILL claims nothing
                 assert hub.get(f"/api/chunks/{chunk_a}").json()["status"] == "ready", "paused runner still claimed A"
-                expect(queue_row(chunk_a)).to_have_count(1)
+                expect(ready_card(chunk_a)).to_have_count(1)
 
                 # --- Resume from the board: the claim resumes -------------------------
                 page.get_by_test_id("runner-toggle").click()  # Resume
                 expect(page.get_by_test_id("runner")).to_have_attribute("data-hub-paused", "false")
                 status = _tick_until(config, hub, chunk_a, fenced, {"running"}, 30.0)
                 assert status == "running", f"resumed runner did not claim A as running (status {status!r})"
-                expect(queue_row(chunk_a)).to_have_count(0)  # A left the ready queue — the claim resumed
+                expect(ready_card(chunk_a)).to_have_count(0)  # A left the READY lane — the claim resumed
 
                 # --- Per-chunk pause from the board (issue #46) -------------------------
                 # A is genuinely running — claimed and spawned, not yet parked on its
@@ -507,7 +565,7 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 expect(col_cards("running")).to_have_count(0)
                 expect(col_cards("waiting")).to_have_count(1)
                 expect(col("waiting").get_by_test_id("chunk-status")).to_have_text("paused")
-                expect(queue_row(chunk_a)).to_have_count(0)  # kept the claim — never re-enters the queue
+                expect(ready_card(chunk_a)).to_have_count(0)  # kept the claim — never re-enters the queue
 
                 # The runner kills the live worker and parks the lease on its next PULL,
                 # keeping the claim — no requeue, no released route (unlike detach).

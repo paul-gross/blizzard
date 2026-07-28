@@ -8,7 +8,7 @@ import type { MachineChunkStatus } from './chunk-status';
  * One chunk on this machine — the machine-chunks list's card (issue #134):
  * a lane-colored left edge (the derived status's own {@link toneColor}, the
  * same ladder {@link KitBadge} paints its pill with — the hub board's own
- * card scheme, `fleet/board-shell/board-shell.ts`) over three stacked lines —
+ * card scheme, `fleet/board-card/board-card.ts`) over three stacked lines —
  * compact chunk ref + node name/attempt epoch, the work-item chips (linked to
  * the work items) and title, then the derived status. Same fields as the
  * row this replaces, laid out like the hub board's card instead of one
@@ -86,7 +86,7 @@ import type { MachineChunkStatus } from './chunk-status';
     }
     /* An outline ring (not border-color, which would repaint the tone-colored
        left edge) plus a faint cyan wash — the hub board card's own selected
-       treatment (fleet/board-shell/board-shell.ts), so the two read alike. */
+       treatment (fleet/board-card/board-card.ts), so the two read alike. */
     .c-card.selected {
       outline: 1px solid var(--cyan);
       outline-offset: -1px;

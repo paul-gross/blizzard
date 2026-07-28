@@ -2073,6 +2073,27 @@ export type QueuePeekResponse = {
 };
 
 /**
+ * QueuePositionRequest
+ *
+ * Single-chunk fractional reposition — ``POST /api/queue/position`` (issue #137).
+ *
+ * ``chunk_id`` is the chunk being moved; ``after_chunk_id=null`` moves it to the very
+ * top of the ready queue, otherwise it lands immediately after the named chunk. Both
+ * must name currently-ready chunks (``409`` otherwise), and ``after_chunk_id`` must
+ * not equal ``chunk_id`` (``422``) — a chunk cannot anchor against itself.
+ */
+export type QueuePositionRequest = {
+    /**
+     * After Chunk Id
+     */
+    after_chunk_id: string | null;
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+};
+
+/**
  * QueueReplaceRequest
  *
  * Idempotent whole-order replacement of the ready queue — ``PUT /api/queue``.
@@ -4352,6 +4373,31 @@ export type ReplaceQueueApiQueuePutResponses = {
 };
 
 export type ReplaceQueueApiQueuePutResponse = ReplaceQueueApiQueuePutResponses[keyof ReplaceQueueApiQueuePutResponses];
+
+export type RepositionQueueApiQueuePositionPostData = {
+    body: QueuePositionRequest;
+    path?: never;
+    query?: never;
+    url: '/api/queue/position';
+};
+
+export type RepositionQueueApiQueuePositionPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RepositionQueueApiQueuePositionPostError = RepositionQueueApiQueuePositionPostErrors[keyof RepositionQueueApiQueuePositionPostErrors];
+
+export type RepositionQueueApiQueuePositionPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: QueuePeekResponse;
+};
+
+export type RepositionQueueApiQueuePositionPostResponse = RepositionQueueApiQueuePositionPostResponses[keyof RepositionQueueApiQueuePositionPostResponses];
 
 export type ReadyApiReadyGetData = {
     body?: never;

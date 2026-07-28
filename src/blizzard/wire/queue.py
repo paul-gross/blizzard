@@ -40,6 +40,19 @@ class QueueReplaceRequest(BaseModel):
     chunk_ids: list[str]
 
 
+class QueuePositionRequest(BaseModel):
+    """Single-chunk fractional reposition — ``POST /api/queue/position`` (issue #137).
+
+    ``chunk_id`` is the chunk being moved; ``after_chunk_id=null`` moves it to the very
+    top of the ready queue, otherwise it lands immediately after the named chunk. Both
+    must name currently-ready chunks (``409`` otherwise), and ``after_chunk_id`` must
+    not equal ``chunk_id`` (``422``) — a chunk cannot anchor against itself.
+    """
+
+    chunk_id: str
+    after_chunk_id: str | None
+
+
 class ChunkGroupRequest(BaseModel):
     """Merge unacquired chunks into one — the board's Group control.
 

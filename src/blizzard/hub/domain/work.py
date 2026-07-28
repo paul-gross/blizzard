@@ -1225,6 +1225,12 @@ class IReadChunkRepository(Protocol):
         """The newest explicit ready-queue position per chunk — the order peek honours."""
         ...
 
+    def promoted_ats(self) -> dict[str, datetime]:
+        """Each promoted chunk's ``chunk_promoted.promoted_at`` — the ready-queue's
+        fallback sort instant (issue #137) once a chunk has never had an explicit
+        position stamped, superseding a never-promoted chunk's own ``minted_at``."""
+        ...
+
     def find_live_holder(self, pointer: WorkRef) -> str | None:
         """The chunk_id of a live (non-terminal) chunk holding ``pointer``, or None."""
         ...

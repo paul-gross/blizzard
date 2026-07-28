@@ -18,11 +18,11 @@
  *      bzh:frontend-container-presentational) over every Angular component
  *      file (one declaring `@Component(`) — armed in phase 3 (#80) now that
  *      the chunk-detail decomposition (#79) and the panel splits (#80) have
- *      brought every in-scope file under the cap. `board-shell.ts` is a
- *      named, narrow exemption (see `MAX_LINES_EXEMPT_FILES`): it is over the
- *      cap today but out of both #79's and #80's file lists, so shrinking it
- *      is out of scope here and tracked as a standing gap instead of silently
- *      failing every future push.
+ *      brought every in-scope file under the cap. `board-shell.ts`'s own
+ *      standing gap over the cap (see history) closed with the `board-card`
+ *      extraction (issue #137) — `MAX_LINES_EXEMPT_FILES` is empty again, so a
+ *      *new* oversized file still fails the gate rather than being silently
+ *      exempted by precedent.
  *
  * Run from `web/`: `npm run structural-gate` (`node scripts/structural-gate.js`).
  */
@@ -65,15 +65,13 @@ const MAX_LINES = 400;
  * `max-lines` exemptions — deliberately narrow (named files, not directories),
  * so a *new* oversized file is still caught.
  *
- * - `board-shell.ts` (437 lines) predates this half's arming and is outside
- *   both #79's (chunk-detail) and #80's (runner/queue/questions/local-panel)
- *   file lists — shrinking it is a standing gap for a future pass, not
- *   silently exempted by omission. `BoardShell` is already presentational
- *   (not a container split), so the follow-up it needs is a further
- *   presentational sub-view extraction — e.g. a board-card child — not a
- *   container/presentational split.
+ * None today: `board-shell.ts` (437 lines) was the one standing exemption,
+ * closed by extracting its per-card markup into a `board-card` presentational
+ * sibling (issue #137) rather than a container/presentational split —
+ * `BoardShell` is already presentational, so its follow-up was a further
+ * sub-view extraction, not a re-layering.
  */
-const MAX_LINES_EXEMPT_FILES = [path.join('fleet', 'src', 'lib', 'board-shell', 'board-shell.ts')];
+const MAX_LINES_EXEMPT_FILES = [];
 
 // The retired chrome-class blocks (blizzard-context bzh:frontend-kit Detect).
 // Matched as a CSS class selector opener — the name as a whole word, directly
