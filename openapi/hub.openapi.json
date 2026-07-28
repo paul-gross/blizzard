@@ -1737,6 +1737,49 @@
         "title": "GraphPolicyRequest",
         "type": "object"
       },
+      "GraphSessionView": {
+        "description": "One graph-level named session declaration (issue #144).\n\nThe wire counterpart of :class:`~blizzard.hub.domain.graph.SessionDecl`. ``model`` is\na prioritized preference list of opaque strings \u2014 a ``blizzard:`` tier alias or a\nharness-native name \u2014 resolved left-to-right by the runner's adapter at session mint;\nthe hub interprets neither it nor ``effort``.",
+        "properties": {
+          "effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effort"
+          },
+          "model": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Model",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "rotate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RotatePolicyView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "GraphSessionView",
+        "type": "object"
+      },
       "GraphSummaryView": {
         "description": "One graph's summary row \u2014 a name-lineage entry as served by ``GET /graphs``.\n\n``effective`` is the newest **non-retired** graph of this ``name`` (issue #101);\n``retired`` is this graph's own lifecycle state, independent of ``effective`` \u2014 a\nretired graph is never effective, but a non-retired, non-effective graph is merely\nsuperseded by a newer version of the same name.",
         "properties": {
@@ -1889,6 +1932,14 @@
             "default": false,
             "title": "Retired",
             "type": "boolean"
+          },
+          "sessions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GraphSessionView"
+            },
+            "title": "Sessions",
+            "type": "array"
           },
           "warnings": {
             "default": [],
@@ -2893,6 +2944,46 @@
           "role"
         ],
         "title": "RoleAssignmentRequest",
+        "type": "object"
+      },
+      "RotatePolicyView": {
+        "description": "One declared session's rotation bounds (issue #144).\n\nThe wire counterpart of :class:`~blizzard.hub.domain.graph.RotatePolicy`. Every\nthreshold is independently optional; ``max_invocations`` counts **harness\ninvocations** (spawn, resume, judge, nudge), not node-steps \u2014 one node-step burns two\nor three of them.",
+        "properties": {
+          "max_context_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Context Tokens"
+          },
+          "max_invocations": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Invocations"
+          },
+          "max_transcript_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Transcript Bytes"
+          }
+        },
+        "title": "RotatePolicyView",
         "type": "object"
       },
       "RouteClaim": {

@@ -124,6 +124,11 @@ def reify_graph(doc: GraphDoc, clock: IClock) -> Graph:
         nodes=nodes,
         edges=edges,
         created_at=created_at,
+        # Session declarations mint no id of their own (issue #144): a declaration is
+        # identified by its authored name, which is what a node's `fresh:`/`resume:`
+        # reference and the runner's pool lookup both key on. Authored order is preserved
+        # by dict insertion order — the doc's map is the only source of ordering.
+        sessions=list(doc.sessions.values()),
     )
 
 

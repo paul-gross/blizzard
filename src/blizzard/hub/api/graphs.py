@@ -54,12 +54,14 @@ from blizzard.wire.graph import (
     GraphMintRequest,
     GraphNodeView,
     GraphPolicyRequest,
+    GraphSessionView,
     GraphSummaryView,
     GraphSyncEntry,
     GraphSyncResponse,
     GraphValidationReport,
     GraphView,
     ProducesEntry,
+    RotatePolicyView,
 )
 
 router = APIRouter(prefix="/api", tags=["graphs"], dependencies=[Depends(reject_runner_principal)])
@@ -101,6 +103,21 @@ def _graph_view(
         enabled=not retired,
         retired=retired,
         follow_latest=follow_latest,
+        sessions=[
+            GraphSessionView(
+                name=s.name,
+                model=list(s.model),
+                effort=s.effort,
+                rotate=RotatePolicyView(
+                    max_context_tokens=s.rotate.max_context_tokens,
+                    max_transcript_bytes=s.rotate.max_transcript_bytes,
+                    max_invocations=s.rotate.max_invocations,
+                )
+                if s.rotate is not None
+                else None,
+            )
+            for s in graph.sessions
+        ],
         nodes=[_node_view(n) for n in graph.nodes],
         edges=[
             GraphEdgeView(

@@ -115,6 +115,33 @@ graph_edges = Table(
     Column("to_graph_model", String, nullable=True),
 )
 
+# The graph-level named-session declarations (issue #144) — one row per `sessions:` entry,
+# immutable with the graph that owns it. A declaration has no id of its own: (graph_id, name)
+# is the key, because `name` is what a node's `fresh:<name>`/`resume:<name>` reference and
+# the runner's pool lookup both key on.
+graph_sessions = Table(
+    "graph_sessions",
+    metadata,
+    Column("graph_id", String, ForeignKey("graphs.graph_id"), primary_key=True),
+    Column("name", String, primary_key=True),
+    # The declaration's 0-based position in the authored `sessions:` map. Order carries no
+    # semantics — every lookup is by name — but it is what the graph explorer renders, and
+    # the composite primary key above makes an index scan (name order) the natural plan for
+    # the by-graph read, so authored order has to be a persisted fact rather than an
+    # insertion-order accident to survive the round trip.
+    Column("ordinal", Integer, nullable=False),
+    # The prioritized model preference list — JSON `list[str]` of opaque preference strings
+    # (a `blizzard:` tier alias or a harness-native name). The hub never interprets an entry;
+    # left-to-right resolution is the runner adapter's (``bzh:pluggable-seams``).
+    Column("model", Text, nullable=True),
+    Column("effort", String, nullable=True),  # a single aliased value; null declares none
+    # The rotation bounds — all nullable and independently declared; a declaration with no
+    # `rotate:` at all leaves all three null and bounds nothing.
+    Column("rotate_max_context_tokens", Integer, nullable=True),
+    Column("rotate_max_transcript_bytes", Integer, nullable=True),
+    Column("rotate_max_invocations", Integer, nullable=True),
+)
+
 # --- Graph lifecycle facts (graph.retired / graph.enabled — issue #101) -------
 #
 # The reversible retire/re-enable brake over one specific graph_id, keyed the same way

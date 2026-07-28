@@ -1235,6 +1235,32 @@ export type GraphPolicyRequest = {
 };
 
 /**
+ * GraphSessionView
+ *
+ * One graph-level named session declaration (issue #144).
+ *
+ * The wire counterpart of :class:`~blizzard.hub.domain.graph.SessionDecl`. ``model`` is
+ * a prioritized preference list of opaque strings — a ``blizzard:`` tier alias or a
+ * harness-native name — resolved left-to-right by the runner's adapter at session mint;
+ * the hub interprets neither it nor ``effort``.
+ */
+export type GraphSessionView = {
+    /**
+     * Effort
+     */
+    effort?: string | null;
+    /**
+     * Model
+     */
+    model?: Array<string>;
+    /**
+     * Name
+     */
+    name: string;
+    rotate?: RotatePolicyView | null;
+};
+
+/**
  * GraphSummaryView
  *
  * One graph's summary row — a name-lineage entry as served by ``GET /graphs``.
@@ -1374,6 +1400,10 @@ export type GraphView = {
      * Retired
      */
     retired?: boolean;
+    /**
+     * Sessions
+     */
+    sessions?: Array<GraphSessionView>;
     /**
      * Warnings
      */
@@ -2069,6 +2099,31 @@ export type RoleAssignmentRequest = {
      * Role
      */
     role: string;
+};
+
+/**
+ * RotatePolicyView
+ *
+ * One declared session's rotation bounds (issue #144).
+ *
+ * The wire counterpart of :class:`~blizzard.hub.domain.graph.RotatePolicy`. Every
+ * threshold is independently optional; ``max_invocations`` counts **harness
+ * invocations** (spawn, resume, judge, nudge), not node-steps — one node-step burns two
+ * or three of them.
+ */
+export type RotatePolicyView = {
+    /**
+     * Max Context Tokens
+     */
+    max_context_tokens?: number | null;
+    /**
+     * Max Invocations
+     */
+    max_invocations?: number | null;
+    /**
+     * Max Transcript Bytes
+     */
+    max_transcript_bytes?: number | null;
 };
 
 /**
