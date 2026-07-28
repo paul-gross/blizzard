@@ -119,6 +119,15 @@ lease_context = Table(
     Column("node_id", String, nullable=False),  # which node this attempt is at
     Column("node_name", String, nullable=False),
     Column("retries_max", Integer, nullable=False),  # the node's retry budget, from the envelope
+    # What session this attempt ran, and under what configuration (issue #144). The
+    # declared pool name (null for the bare/`resume:<node>` forms, which belong to no
+    # pool), and the model/effort the session ACTUALLY ran under — never the freshly
+    # resolved preference, which on a resume would describe a configuration the running
+    # process never saw. NULL on a lease minted before this existed means *unknown*, and
+    # both consumers (takeover, usage attribution) decline to guess rather than fabricate.
+    Column("session_name", String, nullable=True),
+    Column("resolved_model", String, nullable=True),
+    Column("resolved_effort", String, nullable=True),
     Column("recorded_at", UtcDateTime, nullable=False),
 )
 

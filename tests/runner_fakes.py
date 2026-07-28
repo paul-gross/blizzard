@@ -39,7 +39,7 @@ from blizzard.runner.transcripts.repository import Transcript
 from blizzard.wire.chunk import ChunkDetail, HubAdvanceResponse, RouteView
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
-from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeConfig, NodeEnvelope
+from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeConfig, NodeEnvelope, RotatePolicyView
 from blizzard.wire.facts import RunnerFact, RunnerFactAck, RunnerFactBatch
 from blizzard.wire.graph import ProducesEntry
 from blizzard.wire.question import QuestionView
@@ -531,6 +531,10 @@ def make_envelope(
     epoch: int = 0,
     session: SessionMode | None = None,
     session_source: str | None = None,
+    session_name: str | None = None,
+    session_model: list[str] | None = None,
+    session_effort: str | None = None,
+    session_rotate: RotatePolicyView | None = None,
     checks: list[str] | None = None,
     checks_cwd: str | None = None,
     checks_timeout: int | None = None,
@@ -546,6 +550,9 @@ def make_envelope(
 
     ``session``/``session_source`` (issue #115) default to ``SessionMode.FRESH``/``None``
     — today's unchanged behavior — unless a resume-mode test overrides them.
+    ``session_name``/``session_model``/``session_effort``/``session_rotate`` (issue #144)
+    are the hub-resolved effective declaration; all absent is a node belonging to no pool
+    and expressing no preference, which is every pre-#144 envelope.
 
     ``produces`` entries are a bare name (``kind=asset``, the pre-#143 shape every
     existing caller passes) or an explicit :class:`~blizzard.wire.graph.ProducesEntry`
@@ -560,6 +567,10 @@ def make_envelope(
         executor=Executor.RUNNER,
         session=session if session is not None else SessionMode.FRESH,
         session_source=session_source,
+        session_name=session_name,
+        session_model=session_model or [],
+        session_effort=session_effort,
+        session_rotate=session_rotate,
         judged_by=JudgedBy.WORKER,
         retries_max=2,
         checks=checks or [],

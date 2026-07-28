@@ -395,7 +395,11 @@ def _record_attempt_usage(
     """
     _record_worker_usage(ctx, lease, bindings)
     generation = ctx.store.lease_generation(lease.lease_id)
-    judge_sample = ctx.harness.parse_usage(judge_output, "judge")
+    # Attribute to the lease's own `resolved_model` stamp (issue #144), not the adapter's
+    # single default: per-session resolution means a judge turn on a sonnet session would
+    # otherwise book its spend against opus. `None` (a lease predating the stamps) leaves
+    # the adapter's default standing — the pre-#144 behavior, unchanged.
+    judge_sample = ctx.harness.parse_usage(judge_output, "judge", model=lease.resolved_model)
     if judge_sample is not None:
         _store_usage(ctx, lease, generation=generation, sample=judge_sample)
 
@@ -423,7 +427,10 @@ def _worker_usage_sample(
     invocation wrote no envelope of its own can never read back a *prior*
     generation's — see :func:`_stdout_path`."""
     output = _read_stdout(_stdout_path(ctx, lease.lease_id, generation))
-    sample = ctx.harness.parse_usage(output, kind) if output else None
+    # Same attribution fallback as the judge fact above (issue #144): the lease's own
+    # stamp, which on a resume is what the session was MINTED with rather than what a
+    # fresh resolution would produce now.
+    sample = ctx.harness.parse_usage(output, kind, model=lease.resolved_model) if output else None
     if sample is not None:
         return sample
     if ctx.transcripts is None or lease.session_id is None:
@@ -433,7 +440,7 @@ def _worker_usage_sample(
     lines = ctx.transcripts.read_raw_lines(lease.session_id, spawn_cwd=spawn_cwd)
     if not lines:
         return None
-    return ctx.harness.sum_transcript_usage(lines, kind)
+    return ctx.harness.sum_transcript_usage(lines, kind, model=lease.resolved_model)
 
 
 # --------------------------------------------------------------------------- #
@@ -876,6 +883,8 @@ def _resume_in_place(ctx: LoopContext, lease: LeaseRecord) -> None:
         stdout_path=_stdout_path(ctx, lease.lease_id, _pending_generation(ctx, lease.lease_id)),
         preamble=_resume_preamble(ctx, lease, bindings),
         chunk_id=lease.chunk_id,
+        # Reasserted, not sticky (issue #144) — see the judge call site's note.
+        effort=lease.resolved_effort,
     )
     ctx.store.record_spawn(
         lease.lease_id,
@@ -1561,7 +1570,12 @@ def _fill_one(ctx: LoopContext) -> bool:
     # reclaim path below shares, and requeue/takeover/retries later re-read the same
     # row rather than re-claiming.
     ctx.store.set_route_token(entry.chunk_id, token=outcome.claimed.route_token, at=ctx.clock.now())
-    resume_from = _resolve_resume_from(ctx, entry.chunk_id, outcome.claimed.envelope.node)
+    resume_from = _resolve_session(
+        ctx,
+        entry.chunk_id,
+        outcome.claimed.envelope.node,
+        resolve_spawn_cwd(ctx.config.workspace_root, acquired[0].workdir if acquired else None),
+    )
     _spawn_attempt(ctx, entry.chunk_id, outcome.claimed.envelope, acquired, via="fill", resume_from=resume_from)
     return True
 
@@ -1811,6 +1825,12 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
         prompt,
         preamble=_resume_preamble(ctx, lease, bindings),
         chunk_id=lease.chunk_id,
+        # Reassert the lease's own stamped effort (issue #144) — effort is NOT
+        # session-sticky, so a resume that omits it silently drops the declared value back
+        # to the operator's ambient default. The model is deliberately absent: it IS
+        # sticky, and the stamp rides along only to attribute this turn's usage.
+        effort=lease.resolved_effort,
+        model=lease.resolved_model,
     )
 
     # 2c. Record this attempt's harness usage (issue #58) — the spawn/resume invocation
@@ -1919,6 +1939,8 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
             _nudge_message(missing),
             preamble=_resume_preamble(ctx, lease, bindings),
             chunk_id=lease.chunk_id,
+            effort=lease.resolved_effort,
+            model=lease.resolved_model,
         )
         _CP_NUDGE_AFTER_RESUME.reached()
         # Record this invocation's own usage (issue #58) — a distinct `nudge` kind so it
@@ -1928,7 +1950,7 @@ def _advance_exited_worker(ctx: LoopContext, lease: LeaseRecord) -> None:
         # call — the pid is unchanged), so it is read fresh here rather than threaded
         # through from `_record_attempt_usage`, but resolves to the same value.
         nudge_generation = ctx.store.lease_generation(lease.lease_id)
-        nudge_sample = ctx.harness.parse_usage(nudge_output, "nudge")
+        nudge_sample = ctx.harness.parse_usage(nudge_output, "nudge", model=lease.resolved_model)
         if nudge_sample is not None:
             _store_usage(ctx, lease, generation=nudge_generation, sample=nudge_sample)
         # Re-read: a worker that attached during the nudge must have its content picked
@@ -2028,7 +2050,12 @@ def _apply_response(
     """Act on the apply-response: continue in place, hold at a hub node, or finish."""
     if outcome == ApplyOutcome.NEXT and next_envelope is not None:
         envs = _bindings_as_environments(bindings)
-        resume_from = _resolve_resume_from(ctx, chunk_id, next_envelope.node)
+        resume_from = _resolve_session(
+            ctx,
+            chunk_id,
+            next_envelope.node,
+            resolve_spawn_cwd(ctx.config.workspace_root, envs[0].workdir if envs else None),
+        )
         _spawn_attempt(ctx, chunk_id, next_envelope, envs, via="apply-response", resume_from=resume_from)
     elif outcome == ApplyOutcome.HUB_NODE_TAKEN:
         _log.info("hub node took over — holding envs until terminal", chunk_id=chunk_id)
@@ -2157,8 +2184,14 @@ def _spawn_into_held_node(ctx: LoopContext, chunk_id: str) -> None:
     except HubClientError:
         return  # hub unreachable — the transition is durable at the hub; retry next tick
     _log.info("hub advanced held chunk into a fresh node — spawning", chunk_id=chunk_id)
-    resume_from = _resolve_resume_from(ctx, chunk_id, envelope.node)
-    _spawn_attempt(ctx, chunk_id, envelope, _bindings_as_environments(bindings), via="advance", resume_from=resume_from)
+    held = _bindings_as_environments(bindings)
+    resume_from = _resolve_session(
+        ctx,
+        chunk_id,
+        envelope.node,
+        resolve_spawn_cwd(ctx.config.workspace_root, held[0].workdir if held else None),
+    )
+    _spawn_attempt(ctx, chunk_id, envelope, held, via="advance", resume_from=resume_from)
 
 
 def _resolve_gate(ctx: LoopContext, chunk_id: str, decision: DecisionView) -> None:
@@ -2235,20 +2268,90 @@ def _spawn_suppressed(ctx: LoopContext, *, via: str, chunk_id: str, lease_id: st
     return True
 
 
-def _resolve_resume_from(ctx: LoopContext, chunk_id: str, node: NodeConfig) -> str | None:
-    """The prior session id a node-entry spawn should resume, or ``None`` for fresh (issue #115).
+def _resolve_session(ctx: LoopContext, chunk_id: str, node: NodeConfig, spawn_cwd: str | None) -> str | None:
+    """The prior session id a node-entry spawn should resume, or ``None`` to mint fresh
+    (issues #115, #144).
+
+    **Only the resume-vs-mint decision.** The model and effort a spawn runs under are
+    resolved unconditionally inside :func:`_spawn_attempt`, which is the sole funnel and
+    so the only place that reaches *every* caller — node entry, retry, adopt, reclaim,
+    and requeue-resume alike. Splitting them that way is what keeps "which session" (a
+    node-entry question) from being confused with "under what configuration" (a question
+    every spawn has).
 
     Reads only ``node.session``/``node.session_source`` — never the retry budget or
-    attempt count, so a within-node retry (which never calls this) stays fresh (Q3). A
-    ``FRESH`` node is always ``None``. A ``RESUME`` node with no ``session_source``
-    resumes the chunk's most-recent session-bearing lease (any node); a targeted
-    ``resume:<node>`` resumes that node's own most-recent session. Either way, no match
-    (``ctx.store.latest_session_id`` returns ``None`` — first arrival at this node) falls
-    back to fresh (AC4) rather than erroring — a resume target is best-effort, not a hard
-    requirement."""
+    attempt count, so a within-node retry (which never calls this) stays fresh (Q3).
+
+    Three cases, in the order the reference vocabulary resolves:
+
+    * ``FRESH`` — always ``None``. ``fresh:<name>`` is a *forced rotation point*: it mints
+      a head that a later ``resume:<name>`` member continues, so a cyclic graph re-entering
+      the node starts each iteration clean.
+    * ``RESUME`` naming a **declared session** (``session_name`` set, #144) — the pool's
+      head, subject to the rotation check.
+    * ``RESUME`` naming a node, or bare (#115) — unchanged: that node's most-recent
+      session, or the chunk's most-recent overall.
+
+    No match anywhere falls back to fresh rather than erroring — a resume target is
+    best-effort, not a hard requirement (AC4).
+
+    ``spawn_cwd`` is threaded from the caller for the rotation check's transcript read: it
+    is the tie-break hint a multi-match transcript glob needs, not the lookup key. Every
+    node-entry site already holds what it needs to compute it.
+    """
     if node.session is SessionMode.FRESH:
         return None
+    if node.session_name is not None:
+        return _resume_pool_head(ctx, chunk_id, node, spawn_cwd)
     return ctx.store.latest_session_id(chunk_id, node.session_source)
+
+
+def _resume_pool_head(ctx: LoopContext, chunk_id: str, node: NodeConfig, spawn_cwd: str | None) -> str | None:
+    """The named pool's head if it is still resumable, else ``None`` to mint a new one.
+
+    Phase 5 resolves the head; the rotation thresholds that can reject it are phase 6's,
+    which lands in :func:`_head_is_resumable`."""
+    head = ctx.store.pool_head(chunk_id, node.session_name or "")
+    if head is None:
+        return None  # an empty pool — this member mints the head
+    return head.session_id
+
+
+def _resolve_model_and_effort(
+    ctx: LoopContext, chunk_id: str, node: NodeConfig, resume_from: str | None
+) -> tuple[str | None, str | None]:
+    """The model and effort this spawn runs under, and stamps (issue #144).
+
+    **The stamp describes the session, not the preference.** On a spawn that *resumes*,
+    both are **inherited** from the resumed session's own most recent stamp rather than
+    freshly resolved — because the running process keeps whatever it was minted with, and
+    recording the fresh preference would make the fact false wherever a node resumes a
+    session it did not mint.
+
+    That is not hypothetical. In the graph this change tunes, `retrospective` carries no
+    `session:` line (bare `resume`) and so is not a pool member. Entering it resumes the
+    `code` pool's sonnet session and passes no `--model`, so the process runs sonnet —
+    while a fresh resolution for that node finds no declaration, no chunk default, and
+    falls to the runner default, opus. Stamping the preference would then book opus spend
+    against a sonnet session, and hand a takeover command that appends `--model opus` to a
+    live sonnet session, flipping it on an operator. That is precisely the outcome
+    mint-only exists to prevent.
+
+    On the pooled path the drift check guarantees stamped == resolved anyway, so inheriting
+    is uniform rather than a special case. A resumed session whose own stamp is ``None`` (a
+    lease predating the stamps) inherits ``None`` — *unknown*, which every consumer
+    declines to guess at rather than substituting a default.
+
+    Effort is inherited alongside model even though it is reasserted on every invocation
+    (it is not sticky): the two describe one session's configuration, and a resume that
+    reasserted a *different* effort than the session was minted with would be the same
+    kind of lie in the other direction.
+    """
+    if resume_from is not None:
+        prior = ctx.store.lease_for_session(resume_from)
+        return (prior.resolved_model, prior.resolved_effort) if prior is not None else (None, None)
+    model = ctx.harness.resolve_model(node.session_model)
+    return (model, ctx.harness.resolve_effort(node.session_effort))
 
 
 def _spawn_attempt(
@@ -2275,8 +2378,21 @@ def _spawn_attempt(
     does (AC5): a suppressed spawn resolves and mutates nothing, resume target included.
     Only node-entry callers (:func:`_fill_one`, :func:`_apply_response`'s ``NEXT``
     branch, :func:`_spawn_into_held_node`) compute a non-default value via
-    :func:`_resolve_resume_from`; every other caller (retry, adopt, reclaim,
-    requeue-resume) leaves it at the default ``None``, i.e. always fresh."""
+    :func:`_resolve_session`; every other caller (retry, adopt, reclaim, requeue-resume)
+    leaves it at the default ``None``, i.e. always fresh.
+
+    **Model and effort are resolved here, unconditionally** (issue #144), because this is
+    the sole funnel and therefore the only place that reaches *every* caller. There is no
+    separate fallback for the non-node-entry paths: a retry spawns under the same declared
+    configuration a node-entry spawn would. Only the resume-vs-mint decision above is
+    node-entry-specific.
+
+    **A re-spawn joins the pool.** A retry/adopt/reclaim/requeue spawn at a node whose
+    ``session:`` names a declared session stamps that ``session_name`` exactly as
+    ``fresh:<name>`` does, so it becomes the pool's head. Without it the retried attempt
+    would be invisible to ``pool_head`` and a later ``resume:<name>`` would resume the
+    **failed first attempt** — a regression against #115's ``resume:<node>``, which
+    already returns the newest lease at that node."""
     if _spawn_suppressed(ctx, via=via, chunk_id=chunk_id):
         return
     now = ctx.clock.now()
@@ -2293,6 +2409,7 @@ def _spawn_attempt(
     lease_id = mint(LEASE_PREFIX, ctx.clock)
     node = envelope.node
     retries_max = node.retries_max if node.retries_max is not None else ctx.config.default_retries_max
+    resolved_model, resolved_effort = _resolve_model_and_effort(ctx, chunk_id, node, resume_from)
     ctx.store.record_lease(
         NewLease(
             lease_id=lease_id,
@@ -2303,6 +2420,9 @@ def _spawn_attempt(
             epoch=epoch,
             runner_id=ctx.config.runner_id,
             retries_max=retries_max,
+            session_name=node.session_name,
+            resolved_model=resolved_model,
+            resolved_effort=resolved_effort,
             created_at=now,
         )
     )
@@ -2374,7 +2494,14 @@ def _spawn_attempt(
         lease_token=lease_token,
     )
     try:
-        handle = ctx.harness.spawn(envelope, preamble, session_hint=str(uuid.uuid4()), resume_from=resume_from)
+        handle = ctx.harness.spawn(
+            envelope,
+            preamble,
+            session_hint=str(uuid.uuid4()),
+            resume_from=resume_from,
+            model=resolved_model,
+            effort=resolved_effort,
+        )
     except HarnessSpawnError as exc:
         # Surface the launch-time spawn failure (issue #125, change L(iii)) then RE-RAISE to
         # preserve today's propagation — no worker started, so the attempt has not been
@@ -2863,6 +2990,8 @@ def _resume_if_answered(ctx: LoopContext, lease: LeaseRecord) -> None:
         stdout_path=_stdout_path(ctx, lease.lease_id, _pending_generation(ctx, lease.lease_id)),
         preamble=_resume_preamble(ctx, lease, bindings),
         chunk_id=lease.chunk_id,
+        # Reasserted, not sticky (issue #144) — see the judge call site's note.
+        effort=lease.resolved_effort,
     )
     now = ctx.clock.now()
     # The resumed worker runs under the same lease and session; record its new pid so the
@@ -2956,6 +3085,8 @@ def _resume_if_unpaused(ctx: LoopContext, lease: LeaseRecord) -> None:
         stdout_path=_stdout_path(ctx, lease.lease_id, _pending_generation(ctx, lease.lease_id)),
         preamble=_resume_preamble(ctx, lease, bindings),
         chunk_id=lease.chunk_id,
+        # Reasserted, not sticky (issue #144) — see the judge call site's note.
+        effort=lease.resolved_effort,
     )
     ctx.store.record_spawn(
         lease.lease_id,

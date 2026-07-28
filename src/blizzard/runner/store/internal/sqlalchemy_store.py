@@ -32,6 +32,7 @@ from blizzard.runner.store.repository import (
     NewLease,
     OutboundFactRecord,
     ParkRecord,
+    PoolHead,
     RunnerStoreError,
     TakeoverRecord,
     UsageTotals,
@@ -219,6 +220,39 @@ class SqlAlchemyRunnerStore:
         stmt = stmt.order_by(leases.c.created_at.desc(), leases.c.lease_id.desc())
         rows = self._all(stmt)
         return str(rows[0].session_id) if rows else None
+
+    def pool_head(self, chunk_id: str, session_name: str) -> PoolHead | None:
+        """The newest session-bearing lease stamping ``session_name`` — the pool's head.
+
+        Same ordering and same session-bearing filter as :meth:`latest_session_id`,
+        keyed on the stamped pool name rather than the node name."""
+        stmt = (
+            self._lease_select()
+            .where(leases.c.chunk_id == chunk_id)
+            .where(leases.c.session_id.is_not(None))
+            .where(lease_context.c.session_name == session_name)
+            .order_by(leases.c.created_at.desc(), leases.c.lease_id.desc())
+        )
+        rows = self._all(stmt)
+        if not rows:
+            return None
+        row = rows[0]
+        return PoolHead(
+            session_id=str(row.session_id),
+            lease_id=str(row.lease_id),
+            resolved_model=row.resolved_model,
+            resolved_effort=row.resolved_effort,
+        )
+
+    def lease_for_session(self, session_id: str) -> LeaseRecord | None:
+        """The newest lease that ran ``session_id`` — same ordering as `pool_head`."""
+        stmt = (
+            self._lease_select()
+            .where(leases.c.session_id == session_id)
+            .order_by(leases.c.created_at.desc(), leases.c.lease_id.desc())
+        )
+        rows = self._all(stmt)
+        return self._row_to_lease(rows[0]) if rows else None
 
     def lease(self, lease_id: str) -> LeaseRecord | None:
         stmt = self._lease_select().where(leases.c.lease_id == lease_id)
@@ -610,6 +644,9 @@ class SqlAlchemyRunnerStore:
                     node_id=lease.node_id,
                     node_name=lease.node_name,
                     retries_max=lease.retries_max,
+                    session_name=lease.session_name,
+                    resolved_model=lease.resolved_model,
+                    resolved_effort=lease.resolved_effort,
                     recorded_at=lease.created_at,
                 )
             )
@@ -1172,6 +1209,12 @@ class SqlAlchemyRunnerStore:
             lease_context.c.node_id,
             lease_context.c.node_name,
             lease_context.c.retries_max,
+            # The session stamps (issue #144) — read by `pool_head` and by the takeover /
+            # usage-attribution consumers. Selected on the shared join rather than a
+            # second query so every lease read carries them.
+            lease_context.c.session_name,
+            lease_context.c.resolved_model,
+            lease_context.c.resolved_effort,
         ).join(lease_context, lease_context.c.lease_id == leases.c.lease_id)
 
     @staticmethod
@@ -1186,6 +1229,9 @@ class SqlAlchemyRunnerStore:
             runner_id=str(r.runner_id),
             retries_max=int(r.retries_max),
             created_at=r.created_at,
+            session_name=r.session_name,
+            resolved_model=r.resolved_model,
+            resolved_effort=r.resolved_effort,
             pid=int(r.pid) if r.pid is not None else None,
             process_start_time=str(r.process_start_time) if r.process_start_time is not None else None,
             session_id=str(r.session_id) if r.session_id is not None else None,

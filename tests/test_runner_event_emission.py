@@ -278,7 +278,7 @@ def test_git_verify_failure_emits_a_command_failed_and_continues(tmp_path):  # t
 class _SpawnFailsHarness(FakeHarness):
     """A harness whose spawn fails to launch — L(iii)'s catch site."""
 
-    def spawn(self, envelope, preamble, session_hint, resume_from=None):  # type: ignore[no-untyped-def]
+    def spawn(self, envelope, preamble, session_hint, resume_from=None, *, model=None, effort=None):  # type: ignore[no-untyped-def]
         raise HarnessSpawnError("failed to spawn claude in /ws/e1: [Errno 2] No such file or directory")
 
 

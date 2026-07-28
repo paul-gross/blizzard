@@ -45,6 +45,32 @@ class NewLease:
     runner_id: str
     retries_max: int
     created_at: datetime
+    # What session this attempt runs, and under what configuration (issue #144) — the
+    # declared pool name, and the model/effort the session ACTUALLY runs under. Stamped
+    # on the one `lease_context` insert the mint already performs, so no new crash
+    # window opens. All three default to `None` — the bare/`resume:<node>` forms belong
+    # to no pool, and a lease minted before #144 reads NULL meaning *unknown*, which
+    # every consumer treats as "decline to guess" rather than as a value.
+    session_name: str | None = None
+    resolved_model: str | None = None
+    resolved_effort: str | None = None
+
+
+@dataclass(frozen=True)
+class PoolHead:
+    """A named session pool's current head (issue #144) — what a ``resume:<name>``
+    member continues and what a rotation check measures.
+
+    ``resolved_model``/``resolved_effort`` are the head's own **stamps** — the
+    configuration that session actually ran under, not a fresh resolution. ``None`` on
+    either means *unknown* (a lease minted before the stamps existed), which the rotation
+    check reads as "cannot compare" rather than as a mismatch.
+    """
+
+    session_id: str
+    lease_id: str
+    resolved_model: str | None
+    resolved_effort: str | None
 
 
 @dataclass(frozen=True)
@@ -64,6 +90,14 @@ class LeaseRecord:
     runner_id: str
     retries_max: int
     created_at: datetime
+    # This attempt's session stamps, read back (issue #144) — see :class:`NewLease`, which
+    # writes them. `None` on any of the three means *unknown*, never a value: a lease
+    # minted before the stamps existed reads NULL, and every consumer (takeover's resume
+    # command, the usage-attribution fallback, the rotation drift check) declines to guess
+    # rather than substituting a default it would then present as fact.
+    session_name: str | None = None
+    resolved_model: str | None = None
+    resolved_effort: str | None = None
     pid: int | None = None
     process_start_time: str | None = None
     session_id: str | None = None
@@ -274,6 +308,45 @@ class IReadRunnerStore(Protocol):
         leases minted at ``node_name`` — any node when ``node_name`` is ``None``.
         ``None`` when no such lease exists is the fresh-fallback signal: the caller
         spawns fresh rather than resuming."""
+        ...
+
+    def pool_head(self, chunk_id: str, session_name: str) -> PoolHead | None:
+        """The named session pool's current head for this chunk, or ``None`` (issue #144).
+
+        The newest session-bearing lease for ``chunk_id`` whose ``lease_context.session_name``
+        matches — the session a ``resume:<name>`` member continues, and the one a rotation
+        check measures. ``None`` (an empty pool: the chunk has never entered this pool, or
+        a second runner reclaimed it and sees none of the first's leases) is the mint-fresh
+        signal.
+
+        Derived, never a ``pool_head`` column (``bzh:facts-not-status``): the head is
+        whichever lease most recently stamped this name, which is exactly what makes
+        ``fresh:<name>`` work — it mints a lease stamping the same name, and thereby
+        becomes the head a later ``resume:<name>`` finds.
+
+        The pool is **runner-local**, the same limitation :meth:`latest_session_id` already
+        has: a chunk reclaimed by a second runner sees an empty pool and mints fresh. Not a
+        regression, but not solved here either.
+
+        Filtered to session-bearing leases because ``leases.session_id`` is filled at
+        spawn-*return*: a crash between the mint and that return leaves a lease that never
+        ran, which must not become a head no session exists for.
+        """
+        ...
+
+    def lease_for_session(self, session_id: str) -> LeaseRecord | None:
+        """The newest lease that ran ``session_id``, or ``None`` (issue #144).
+
+        Keyed on the *session* rather than the lease, because a session outlives the lease
+        that minted it: `--resume` reuses the id in place, so several leases share one
+        session id and the newest is the one whose stamps describe the configuration the
+        process is running under now.
+
+        Its readers are the stamp inheritance at spawn (a resume records what the session
+        actually ran, never the freshly resolved preference) and the resume-path usage
+        attribution. ``None`` — a session this runner never minted a lease for — means
+        *unknown*, and both decline to guess.
+        """
         ...
 
     def lease(self, lease_id: str) -> LeaseRecord | None:
