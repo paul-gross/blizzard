@@ -1,4 +1,4 @@
-"""Node ``session:`` modes end to end — scenario 11 of the standing e2e smoke — issue #115.
+"""Node ``session:`` modes end to end — scenario 11 of the standing e2e smoke — issues #115, #144.
 
 The full-stack proof that a node's authored ``session:`` mode actually governs which
 harness session a node-entry spawn continues, on the real forge + hub + runner +
@@ -7,8 +7,11 @@ continuity across a graph transition*. The sibling ``test_review_cycle_e2e`` dri
 same ``build -> review -> build`` fail-cycle shape but only asserts the work re-runs and
 the findings thread back; it never checks *which session* each spawn ran under.
 
-Here the graph carries the real feature's own modes — ``build`` is ``session: resume:build``
-(the packaged default's setting, plan Q4) and ``review`` is ``session: fresh`` — and a
+Here the graph carries ``build`` on ``session: resume:build`` and ``review`` on
+``session: fresh``. Both were the packaged default's own spellings until #144 moved that
+graph onto a named pool (``resume:code`` / ``fresh:gate``); this scenario deliberately
+keeps the ``resume:<node>`` form, because that form is now exactly the back-compat surface
+nothing else drives end to end. Its named-pool sibling below covers #144's own shape. A
 scripted review **fails once then passes**, so ``build`` is entered twice. The mock
 harness persists each session's state (``turns``, keyed by ``session_id``, under
 ``<workspace>/.blizzard-mock-harness/sessions/``) and the runner store records the
@@ -102,8 +105,9 @@ _REVIEW_JUDGEMENT = (
 def _graph_yaml() -> str:
     """A ``build -> review -> deliver`` graph carrying the real feature's session modes.
 
-    ``build`` is ``session: resume:build`` (the packaged default's own setting) and
-    ``review`` is ``session: fresh`` — the exact shape plan Q4 exists to express.
+    ``build`` is ``session: resume:build`` and ``review`` is ``session: fresh`` — the
+    exact shape plan Q4 exists to express, and (since #144 moved the packaged graphs onto
+    named pools) the standing end-to-end proof that the ``resume:<node>`` form still works.
     """
     import yaml
 
@@ -289,3 +293,137 @@ def test_session_modes_resume_targeted_and_fresh_across_a_cycle(tmp_path: Path) 
     assert chunk_most_recent != build_session, (
         "targeted resume:build must differ from bare resume here — else the scenario proves nothing"
     )
+
+
+# --------------------------------------------------------------------------- #
+# Named session pools end to end (issue #144) — the same live rails, the #144
+# vocabulary. What the sibling above proves for `resume:<node>`, this proves for
+# a declared pool, plus the two things only a pool can express:
+#
+#   * `fresh:<name>` mints a head a LATER, DIFFERENT node's `resume:<name>`
+#     continues — a lineage `resume:<node>` cannot describe at all;
+#   * the mint-only model contract, read off the mock's recorded argv: the mint
+#     carried the resolved model, every resume carried none.
+#
+# The second is a check of the FLAG, not the effective model — the facade sees
+# only argv. That gap is recorded in the verifiability matrix.
+# --------------------------------------------------------------------------- #
+
+
+def _pooled_graph_yaml() -> str:
+    """The same build -> review -> deliver shape, expressed with a named pool.
+
+    `build` is `fresh:code` — a forced rotation point, so each entry mints — and `review`
+    is `resume:code`, so it continues the head `build` just minted. That pairing is the
+    whole point: `review` has never run at its own node when it first resumes, so no
+    `resume:<node>` form could express it.
+    """
+    import yaml
+
+    graph = _yaml_graph_dict()
+    # The name must stay the hub's configured default-graph name: ingest pins a fresh
+    # chunk to the default BY NAME, so a differently-named graph mints fine and is then
+    # never used — the chunk silently runs the packaged default instead, whose prose
+    # prompts the mock cannot exec.
+    graph["sessions"] = {"code": {"model": ["blizzard:basic"], "effort": "medium"}}
+    graph["nodes"]["build"]["session"] = "fresh:code"
+    graph["nodes"]["review"]["session"] = "resume:code"
+    return yaml.safe_dump(graph, sort_keys=False)
+
+
+def _yaml_graph_dict() -> dict:
+    """The graph dict `_graph_yaml` builds, re-parsed — one owner for the shape."""
+    import yaml
+
+    return yaml.safe_load(_graph_yaml())
+
+
+def _session_invocations(workspace: Path, session_id: str) -> list[dict]:
+    """The mock's recorded per-turn `--model`/`--effort` flags for ``session_id``."""
+    state_path = workspace / ".blizzard-mock-harness" / "sessions" / f"{session_id}.json"
+    assert state_path.is_file(), f"no persisted mock session state at {state_path}"
+    return list(json.loads(state_path.read_text())["invocations"])
+
+
+def test_a_named_pool_threads_one_session_across_nodes_and_applies_model_at_mint_only(tmp_path: Path) -> None:
+    """`fresh:code` mints; `resume:code` at a *different* node continues it; the mint
+    carried the resolved model and no resume did."""
+    bin_dir = _mock_bin_dir()
+    if bin_dir is None:
+        pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
+    winter_source = _winter_source()
+    if winter_source is None:
+        pytest.skip("no local winter source (set BLIZZARD_MOCK_WINTER_SOURCE)")
+
+    scratch = tmp_path / "scratch"
+    subprocess.run(
+        [
+            str(bin_dir / "blizzard-mock-fixture"),
+            "reset",
+            "--env",
+            FIXTURE_ENV,
+            "--scratch-root",
+            str(scratch),
+            "--winter-source",
+            str(winter_source),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    fixture_root = scratch / FIXTURE_ENV
+    workspace = fixture_root / "workspace"
+    (workspace / ".blizzard-mock-harness-fence").write_text("e2e fence marker\n")
+
+    forge_port, hub_port = _free_port(), _free_port()
+    runner_dir = tmp_path / "runner"
+    db_url = ""
+    with (
+        _forge(bin_dir, fixture_root / "origins", forge_port) as forge,
+        _hub(tmp_path / "hub", forge_port, hub_port) as hub,
+    ):
+        assert hub.post("/api/graphs", json={"definition_yaml": _pooled_graph_yaml()}).status_code == 201
+
+        issue = forge.post(f"/repos/{REPO}/issues", json={"title": "pooled sessions", "body": "the chunk"})
+        assert issue.status_code == 201, issue.text
+        ingested = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{issue.json()['number']}"]})
+        assert ingested.status_code == 201, ingested.text
+        chunk_id = ingested.json()["chunk_id"]
+        assert hub.post(f"/api/chunks/{chunk_id}/promote").status_code == 202
+
+        config = dataclasses.replace(_runner_config(runner_dir, workspace, bin_dir, hub_port), max_agents=1)
+        db_url = config.db_url
+        fenced = dict(os.environ)
+        fenced["BLIZZARD_MOCK_HARNESS_FENCE"] = "1"
+        status = _drive_until_done(config, hub, chunk_id, fenced)
+
+        assert status == "done", f"chunk did not reach done (last status {status!r})"
+
+    by_node = _sessions_by_node(db_url, chunk_id)
+    build_sessions, review_sessions = by_node.get("build", []), by_node.get("review", [])
+    assert len(build_sessions) == 2, f"build should have been entered twice: {by_node}"
+    assert len(review_sessions) == 2, f"review should have been entered twice: {by_node}"
+
+    # `fresh:code` is a forced rotation point — each build entry MINTS a head.
+    assert len(set(build_sessions)) == 2, f"fresh:code did not mint per entry: {build_sessions}"
+    # …and each `resume:code` review continued the head its own iteration just minted —
+    # a session `review` has never run at its own node, so `resume:<node>` could not do it.
+    assert review_sessions[0] == build_sessions[0], f"review did not continue build's head: {by_node}"
+    assert review_sessions[1] == build_sessions[1], f"review did not continue the NEW head: {by_node}"
+
+    # The pool never forked: one head at a time across the whole traversal (D2).
+    pool_order = [session for node in ("build", "review") for session in by_node.get(node, [])]
+    assert set(pool_order) == set(build_sessions), f"a session appeared outside the pool's heads: {by_node}"
+
+    # The mint-only model contract, off the mock's own recorded argv. Note this asserts
+    # the FLAG, not the effective model — the facade sees argv and nothing else.
+    for head in set(build_sessions):
+        invocations = _session_invocations(workspace, head)
+        mints = [i for i in invocations if i["kind"] == "spawn"]
+        resumes = [i for i in invocations if i["kind"] == "resume"]
+        assert mints, f"session {head} recorded no mint: {invocations}"
+        assert all(i["model"] for i in mints), f"a mint carried no model: {mints}"
+        assert resumes, f"session {head} recorded no resume — the contract would pass vacuously"
+        assert all(i["model"] is None for i in resumes), f"a resume carried a model flag: {resumes}"
+        # Effort IS reasserted on every turn — it is not session-sticky (the D5 probe).
+        assert all(i["effort"] == "medium" for i in invocations), f"effort was not reasserted: {invocations}"

@@ -19,6 +19,24 @@ pytestmark = pytest.mark.component
 
 _POINTER = {"source": "default", "ref": "7"}
 
+# A graph declaring no `sessions:` at all — the pre-#144 shape. Minted explicitly rather
+# than leaning on the packaged default, which phase 8 tuned: what these two tests pin is
+# that a graph declaring nothing keeps behaving as before, not whatever the default
+# happens to be today.
+_NO_SESSIONS_YAML = """
+name: unsessioned
+entry: build
+nodes:
+  build:
+    executor: runner
+    prompt: build it
+    session: resume
+    judgement:
+      prompt: verdict?
+      choices:
+        pass: {description: ok, to: done}
+"""
+
 _SESSIONS_YAML = """
 name: sessioned
 entry: build
@@ -59,9 +77,9 @@ nodes:
 """
 
 
-def _mint_and_pin(hub, chunk_id: str) -> str:  # type: ignore[no-untyped-def]
-    """Mint the sessioned graph and repin ``chunk_id`` to it, returning its id."""
-    resp = hub.client.post("/api/graphs", json={"definition_yaml": _SESSIONS_YAML})
+def _mint_and_pin(hub, chunk_id: str, yaml: str = _SESSIONS_YAML) -> str:  # type: ignore[no-untyped-def]
+    """Mint ``yaml`` and repin ``chunk_id`` to it, returning the new graph's id."""
+    resp = hub.client.post("/api/graphs", json={"definition_yaml": yaml})
     assert resp.status_code == 201, resp.text
     graph_id = resp.json()["graph_id"]
     patched = hub.client.patch(f"/api/chunks/{chunk_id}", json={"graph_id": graph_id})
@@ -118,6 +136,7 @@ def test_a_chunk_default_reaches_a_graph_that_declares_no_sessions(tmp_path: Pat
     defaults."""
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [_POINTER], promote=False)
+    _mint_and_pin(hub, chunk_id, _NO_SESSIONS_YAML)
     patched = hub.client.patch(
         f"/api/chunks/{chunk_id}", json={"default_model": ["blizzard:advanced"], "default_effort": "high"}
     )
@@ -134,6 +153,7 @@ def test_a_chunk_default_reaches_a_graph_that_declares_no_sessions(tmp_path: Pat
 def test_a_chunk_expressing_no_preference_on_a_pre_144_graph_carries_nothing(tmp_path: Path) -> None:
     hub = build_hub(tmp_path)
     chunk_id = ingest(hub, [_POINTER], promote=False)
+    _mint_and_pin(hub, chunk_id, _NO_SESSIONS_YAML)
 
     node = _envelope(hub, chunk_id)["node"]
 
