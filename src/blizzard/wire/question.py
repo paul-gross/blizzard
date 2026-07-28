@@ -52,11 +52,14 @@ class AnswerResult(BaseModel):
 
 
 class QuestionView(BaseModel):
-    """A question row with its derived answer state — the surfacing shape.
+    """A question row with its derived answer *and delivery* state — the surfacing shape.
 
     Behind ``GET /questions`` (open only), ``GET /questions/{id}`` (the runner's answer
-    poll), and the chunk detail's open-questions list. ``answered`` and the answer
-    fields derive from the presence of the answer row."""
+    poll), and the chunk detail's questions list. ``answered`` and the answer fields
+    derive from the presence of the answer row; ``delivered``/``delivered_at`` derive
+    from the ``answer.delivered`` fact the runner mints once the resume-with-answer ran
+    (issue #165) — the return leg that lets the board say *delivered, agent resumed*
+    rather than leaving an answerer guessing whether the answer arrived."""
 
     question_id: str
     chunk_id: str
@@ -71,3 +74,5 @@ class QuestionView(BaseModel):
     answer: str | None = None
     answered_by: str | None = None
     answered_at: str | None = None
+    delivered: bool = False
+    delivered_at: str | None = None

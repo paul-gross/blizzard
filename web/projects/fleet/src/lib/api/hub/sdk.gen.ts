@@ -443,8 +443,10 @@ export const getWorkItemsApiFleetChunksChunkIdWorkItemsGet = <ThrowOnError exten
  * ``question.asked``, and ``answer.delivered`` ride the runner's outbound buffer here. A
  * pushed seq at or below the runner's high-water mark is already-applied and re-acked; a
  * fresh one is applied and advances the mark. Each freshly-applied fact re-broadcasts on
- * the SSE stream so the board refreshes — ``chunk-changed`` for every touched chunk, and
- * ``question-asked`` for a forwarded ask.
+ * the SSE stream so the board refreshes — ``chunk-changed`` for every touched chunk,
+ * ``question-asked`` for a forwarded ask, and ``answer-delivered`` for the resume that
+ * carried an answer back into the dormant session (issue #165; the chunk's derived
+ * status does not move on that one, so nothing else would stale the question's trail).
  */
 export const ingestRunnerFactsApiFleetEventsPost = <ThrowOnError extends boolean = false>(options: Options<IngestRunnerFactsApiFleetEventsPostData, ThrowOnError>): RequestResult<IngestRunnerFactsApiFleetEventsPostResponses, IngestRunnerFactsApiFleetEventsPostErrors, ThrowOnError> => (options.client ?? client).post<IngestRunnerFactsApiFleetEventsPostResponses, IngestRunnerFactsApiFleetEventsPostErrors, ThrowOnError>({
     url: '/api/fleet/events',

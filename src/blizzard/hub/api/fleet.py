@@ -62,6 +62,7 @@ from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeEnvelope
 from blizzard.wire.facts import (
+    ANSWER_DELIVERED,
     EVENT_RECORDED,
     QUESTION_ASKED,
     RUNNER_LOCALLY_PAUSED,
@@ -479,8 +480,10 @@ def ingest_runner_facts(
     ``question.asked``, and ``answer.delivered`` ride the runner's outbound buffer here. A
     pushed seq at or below the runner's high-water mark is already-applied and re-acked; a
     fresh one is applied and advances the mark. Each freshly-applied fact re-broadcasts on
-    the SSE stream so the board refreshes — ``chunk-changed`` for every touched chunk, and
-    ``question-asked`` for a forwarded ask.
+    the SSE stream so the board refreshes — ``chunk-changed`` for every touched chunk,
+    ``question-asked`` for a forwarded ask, and ``answer-delivered`` for the resume that
+    carried an answer back into the dormant session (issue #165; the chunk's derived
+    status does not move on that one, so nothing else would stale the question's trail).
     """
     assert_owns(principal, batch.runner_id, mode=_mode(http_request))
     ack = services.facts.ingest(batch, route_token_mode=_route_token_mode(http_request))
@@ -524,10 +527,11 @@ def ingest_runner_facts(
             chunk_id = fact.payload.get("chunk_id")
             if not isinstance(chunk_id, str):
                 continue
-            if fact.kind == QUESTION_ASKED:
-                question_id = fact.payload.get("question_id")
-                if isinstance(question_id, str):
-                    services.events.publish_question_asked(chunk_id, question_id)
+            question_id = fact.payload.get("question_id")
+            if fact.kind == QUESTION_ASKED and isinstance(question_id, str):
+                services.events.publish_question_asked(chunk_id, question_id)
+            elif fact.kind == ANSWER_DELIVERED and isinstance(question_id, str):
+                services.events.publish_answer_delivered(chunk_id, question_id)
             facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
             services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
     return ack

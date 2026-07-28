@@ -17,11 +17,20 @@ export interface ResolveDecisionEvent {
   readonly chunkId: string;
 }
 
+/** How many recently answered questions the dock keeps a trail for (issue #165). */
+const ANSWERED_TRAIL_LIMIT = 3;
+
 /**
  * The chunk's awaiting-human gate (issue #79) — whatever the chunk waits on
  * a human for: an open **question** with an inline **Answer** action (MVP
  * criterion 7), an open gate **decision** as **choice buttons** (MVP
  * criterion 12), or an **escalation's** copyable **takeover command**.
+ *
+ * Below those, the **answered trail** (issue #165): a recently answered question stays
+ * rendered with who answered it, what they said, and whether the runner has delivered
+ * the answer into the resumed session — the return leg of the rendezvous, so the person
+ * who answered sees it arrive instead of watching the row disappear.
+ *
  * Presentational only: it holds the detail input and emits `answerQuestion`
  * / `resolveDecision`; the mutations those events drive live in the
  * container.
@@ -94,6 +103,24 @@ export interface ResolveDecisionEvent {
       </div>
     }
 
+    @if (answeredQuestions().length > 0) {
+      <div class="answered" data-testid="answered-questions">
+        <div class="s-head"><span class="tag">Answered</span></div>
+        @for (q of answeredQuestions(); track q.question_id) {
+          <div class="trail" data-testid="answered-question">
+            <p class="ask-q" data-testid="answered-question-text">{{ q.question }}</p>
+            <p class="trail-line" data-testid="answered-by">
+              Answered by {{ q.answered_by || 'operator' }}
+              <span class="trail-answer" data-testid="answered-answer">{{ q.answer }}</span>
+            </p>
+            <p class="trail-line delivered" data-testid="answer-delivery">
+              {{ q.delivered ? 'Delivered · agent resumed' : 'Delivering to the agent…' }}
+            </p>
+          </div>
+        }
+      </div>
+    }
+
     @if (escalation(); as esc) {
       <div class="escalation" data-testid="escalation">
         <div class="s-head"><span class="tag">Needs human · takeover</span></div>
@@ -118,6 +145,7 @@ export interface ResolveDecisionEvent {
       color: var(--label);
     }
     .awaiting,
+    .answered,
     .escalation {
       margin-bottom: 8px;
     }
@@ -130,11 +158,36 @@ export interface ResolveDecisionEvent {
       border-left: 2px solid var(--amber);
       padding: 4px 0 4px 8px;
     }
+    /* The settled counterpart of the amber awaiting bar: the ask is over, so it reads
+       cyan (the board's "this resolved" accent) and asks nothing of the operator. */
+    .answered {
+      border-left: 2px solid var(--cyan);
+      padding: 4px 0 4px 8px;
+    }
     .ask,
-    .gate {
+    .gate,
+    .trail {
       border: 1px solid var(--line);
       background: var(--overlay-20);
       padding: 4px 6px;
+    }
+    .trail + .trail {
+      margin-top: 4px;
+    }
+    .trail-line {
+      margin: 0;
+      color: var(--label-dim);
+      font-size: var(--fs-xs);
+    }
+    .trail-answer {
+      color: var(--text);
+    }
+    .trail-answer::before {
+      content: ' · ';
+      color: var(--label-dim);
+    }
+    .delivered {
+      color: var(--cyan);
     }
     .gate {
       margin-top: 4px;
@@ -245,6 +298,25 @@ export class ChunkAwaitingHuman {
   /** The chunk's open (unanswered) questions — the ask a parked chunk waits on. */
   protected readonly openQuestions = computed<readonly QuestionView[]>(() =>
     (this.detail().questions ?? []).filter((q) => !q.answered),
+  );
+
+  /**
+   * The chunk's recently answered questions, newest first — the return trail (issue
+   * #165). Answering used to drop the row from the dock the instant it landed, which
+   * left an operator answering from a phone with no evidence their answer went
+   * anywhere; keeping it renders who answered, what they said, and whether the runner
+   * has delivered it into the resumed session.
+   *
+   * Capped at {@link ANSWERED_TRAIL_LIMIT} because this is a *recency* affordance, not
+   * a history: a chunk that asked its way through a long build would otherwise bury the
+   * live ask under every answer it ever got. The cap is presentational only — the chunk
+   * read carries every question, so nothing here is the record.
+   */
+  protected readonly answeredQuestions = computed<readonly QuestionView[]>(() =>
+    (this.detail().questions ?? [])
+      .filter((q) => q.answered)
+      .slice(-ANSWERED_TRAIL_LIMIT)
+      .reverse(),
   );
 
   /** The chunk's live gate decision while it still awaits the resolving transition. */

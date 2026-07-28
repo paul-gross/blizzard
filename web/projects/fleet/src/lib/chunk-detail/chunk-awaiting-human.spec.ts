@@ -1,7 +1,7 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
-import type { ChunkDetail } from '../api/hub';
+import type { ChunkDetail, QuestionView } from '../api/hub';
 import { ChunkAwaitingHuman } from './chunk-awaiting-human';
 
 const REVIEW_FAIL_DETAIL: ChunkDetail = {
@@ -64,6 +64,39 @@ const WAITING_DECISION_DETAIL: ChunkDetail = {
     ],
     transitioned: false,
   },
+};
+
+/** One answered question in the chunk's list — `delivered` says whether the runner has
+ * carried it back into the resumed session yet (issue #165). */
+function answered(overrides: Partial<QuestionView> & Pick<QuestionView, 'question_id'>): QuestionView {
+  return {
+    chunk_id: 'ch_01trail000000000000000000000',
+    question: 'Which API style should the endpoint use?',
+    options: [],
+    epoch: 1,
+    runner_id: 'rn_01',
+    asked_at: '2026-07-13T00:00:01Z',
+    answered: true,
+    answer: 'rest',
+    answered_by: 'alice',
+    answered_at: '2026-07-13T00:01:00Z',
+    delivered: false,
+    ...overrides,
+  };
+}
+
+/** A chunk whose question has been answered but not yet carried back to the agent. */
+const ANSWERED_UNDELIVERED_DETAIL: ChunkDetail = {
+  chunk_id: 'ch_01trail000000000000000000000',
+  graph_id: 'gr_1',
+  model: 'claude-opus-4-8',
+  status: 'running',
+  current_node_id: 'nd_build',
+  latest_epoch: 1,
+  work_refs: [],
+  history: [],
+  artifacts: [],
+  questions: [answered({ question_id: 'qn_01' })],
 };
 
 const ESCALATED_DETAIL: ChunkDetail = {
@@ -186,6 +219,76 @@ describe('ChunkAwaitingHuman', () => {
       choice: 'reject',
       chunkId: 'ch_01gate0000000000000000000000',
     });
+  });
+
+  it('keeps an answered question visible with its trail instead of dropping it (issue #165)', async () => {
+    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    fixture.componentRef.setInput('detail', ANSWERED_UNDELIVERED_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    // Nothing is awaited any more, but the question has not vanished.
+    expect(el.querySelector('[data-testid="awaiting-human"]')).toBeNull();
+    expect(el.querySelector('[data-testid="answered-question"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="answered-question-text"]')?.textContent).toContain(
+      'Which API style should the endpoint use?',
+    );
+    expect(el.querySelector('[data-testid="answered-by"]')?.textContent).toContain('alice');
+    expect(el.querySelector('[data-testid="answered-answer"]')?.textContent).toContain('rest');
+    // Answered but not yet delivered: the trail says the return trip is still in flight,
+    // never that the agent already resumed.
+    expect(el.querySelector('[data-testid="answer-delivery"]')?.textContent).toContain('Delivering');
+    expect(el.querySelector('[data-testid="answer-delivery"]')?.textContent).not.toContain('resumed');
+  });
+
+  it('reads “agent resumed” once the delivered fact has landed (issue #165)', async () => {
+    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    fixture.componentRef.setInput('detail', ANSWERED_UNDELIVERED_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    // The same row updating in place is the whole point — the SSE re-read swaps the
+    // detail, it does not remount a different component.
+    fixture.componentRef.setInput('detail', {
+      ...ANSWERED_UNDELIVERED_DETAIL,
+      questions: [answered({ question_id: 'qn_01', delivered: true, delivered_at: '2026-07-13T00:01:05Z' })],
+    });
+    await fixture.whenStable();
+
+    expect(el.querySelector('[data-testid="answer-delivery"]')?.textContent).toContain('agent resumed');
+  });
+
+  it('renders an open question and an already-answered one side by side', async () => {
+    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    fixture.componentRef.setInput('detail', {
+      ...ANSWERED_UNDELIVERED_DETAIL,
+      status: 'waiting_on_human',
+      questions: [
+        answered({ question_id: 'qn_01', delivered: true }),
+        { ...answered({ question_id: 'qn_02' }), question: 'Rename the field?', answered: false, answer: null },
+      ],
+    });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    // The live ask keeps its Answer control; the settled one keeps only its trail.
+    expect(el.querySelectorAll('[data-testid="open-question"]').length).toBe(1);
+    expect(el.querySelector('[data-testid="question-text"]')?.textContent).toContain('Rename the field?');
+    expect(el.querySelectorAll('[data-testid="answered-question"]').length).toBe(1);
+  });
+
+  it('caps the answered trail at the three most recent, newest first', async () => {
+    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    fixture.componentRef.setInput('detail', {
+      ...ANSWERED_UNDELIVERED_DETAIL,
+      // Oldest first, the order the hub sends them in (by asked_at).
+      questions: ['q1', 'q2', 'q3', 'q4'].map((id) => answered({ question_id: id, answer: id })),
+    });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const answers = [...el.querySelectorAll('[data-testid="answered-answer"]')].map((n) => n.textContent?.trim());
+    expect(answers).toEqual(['q4', 'q3', 'q2']);
   });
 
   it('surfaces an escalation with its copyable takeover command', async () => {

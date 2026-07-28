@@ -37,7 +37,7 @@ router = APIRouter(prefix="/api", tags=["questions"], dependencies=[Depends(reje
 
 
 def question_view(row: QuestionRow) -> QuestionView:
-    """Render a stored question row as its wire view — derived answer state and all."""
+    """Render a stored question row as its wire view — derived answer + delivery state."""
     return QuestionView(
         question_id=row.question_id,
         chunk_id=row.chunk_id,
@@ -52,6 +52,8 @@ def question_view(row: QuestionRow) -> QuestionView:
         answer=row.answer,
         answered_by=row.answered_by,
         answered_at=iso_utc(row.answered_at) if row.answered_at is not None else None,
+        delivered=row.delivered,
+        delivered_at=iso_utc(row.delivered_at) if row.delivered_at is not None else None,
     )
 
 

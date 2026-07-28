@@ -17,7 +17,7 @@ guarded by a lock; ids are minted under it, so they are strictly monotonic acros
 concurrent publishers.
 
 The event **type** names are the board's live vocabulary (the prompt's ``chunk-changed``,
-``question-asked``/``-answered``, ``decision-opened``/``-resolved``, ``queue-changed``,
+``question-asked``/``-answered``/``answer-delivered``, ``decision-opened``/``-resolved``, ``queue-changed``,
 plus ``runner-changed`` for the fleet's liveness column); each maps to the hub facts it
 is emitted on (see the call sites in ``blizzard.hub.api``). A frame's payload carries only
 what identifies the change — a consumer re-GETs the REST resource for the rest — except
@@ -39,6 +39,7 @@ from typing import Literal
 CHUNK_CHANGED = "chunk-changed"
 QUESTION_ASKED = "question-asked"
 QUESTION_ANSWERED = "question-answered"
+ANSWER_DELIVERED = "answer-delivered"
 DECISION_OPENED = "decision-opened"
 DECISION_RESOLVED = "decision-resolved"
 QUEUE_CHANGED = "queue-changed"
@@ -118,6 +119,18 @@ class EventBroker:
     def publish_question_answered(self, chunk_id: str, question_id: str) -> int:
         """A ``question.answered`` landed — the chunk leaves ``waiting_on_human``."""
         return self.publish(QUESTION_ANSWERED, {"chunk_id": chunk_id, "question_id": question_id})
+
+    def publish_answer_delivered(self, chunk_id: str, question_id: str) -> int:
+        """An ``answer.delivered`` landed — the resume-with-answer ran (issue #165).
+
+        The rendezvous' return leg, and the reason it is a frame of its own rather than
+        folded into the ``chunk-changed`` the same ingest already publishes: delivery
+        changes no derived status (the chunk left ``waiting_on_human`` back at
+        ``question.answered``), so a board keying only off status has nothing to re-read
+        on, and the *delivered, agent resumed* line would sit stale until something
+        unrelated forced a refetch.
+        """
+        return self.publish(ANSWER_DELIVERED, {"chunk_id": chunk_id, "question_id": question_id})
 
     def publish_decision_opened(self, chunk_id: str, decision_id: str) -> int:
         """A gate ``decision.submitted`` opened — a human choice is awaited."""

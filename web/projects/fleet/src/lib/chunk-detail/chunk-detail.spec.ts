@@ -56,6 +56,40 @@ const PAUSED_ASKING_DETAIL: ChunkDetailModel = {
   decision: undefined,
 };
 
+// A chunk parked on an open question — the answer-race surface (issue #165).
+const ASK_DETAIL: ChunkDetailModel = {
+  chunk_id: 'ch_ask',
+  graph_id: 'gr_1',
+  model: 'claude-opus-4-8',
+  status: 'waiting_on_human',
+  current_node_id: 'nd_build',
+  latest_epoch: 1,
+  work_refs: [],
+  history: [],
+  artifacts: [],
+  questions: [
+    {
+      question_id: 'qn_77',
+      chunk_id: 'ch_ask',
+      question: 'Which API style?',
+      options: [],
+      epoch: 1,
+      runner_id: 'rn_01',
+      asked_at: '2026-07-13T00:00:01Z',
+      answered: false,
+    },
+  ],
+};
+
+// The same chunk after somebody else's answer won the CAS — what the re-read returns.
+const ASK_ANSWERED_DETAIL: ChunkDetailModel = {
+  ...ASK_DETAIL,
+  status: 'running',
+  questions: [
+    { ...ASK_DETAIL.questions![0], answered: true, answer: 'rest', answered_by: 'alice', delivered: false },
+  ],
+};
+
 // A not_ready chunk — the one window issue #27's graph/model edit is open.
 const NOT_READY_DETAIL: ChunkDetailModel = {
   chunk_id: 'ch_ready',
@@ -79,17 +113,26 @@ describe('ChunkDetail container', () => {
   // The same, for the graph/model edits (issue #27) — both now collapse onto the one
   // `PATCH /api/chunks/{id}` call (issue #104), so one variable drives it.
   let editPatchResponse: unknown = {};
+  // The same, for the answer verb (issue #165) — 201 winner vs. 409 loser.
+  let answerResponse: unknown = {};
+  // Whether the chunk read for `ch_ask` has been answered yet, so a test can make the
+  // post-answer re-read return the settled row the way the live hub would.
+  let askAnswered = false;
 
   beforeEach(async () => {
     detachResponse = {};
     pauseResponse = {};
     editPatchResponse = {};
+    answerResponse = {};
+    askAnswered = false;
     // The generated client's transport is stubbed so we can assert the exact call the button fires.
     stub = stubRequestClient(hubClient, (method, path) => {
       if (method === 'GET' && path === '/api/chunks/ch_gate') return GATE_DETAIL;
       if (method === 'GET' && path === '/api/chunks/ch_routed') return ROUTED_DETAIL;
       if (method === 'GET' && path === '/api/chunks/ch_paused') return PAUSED_ASKING_DETAIL;
       if (method === 'GET' && path === '/api/chunks/ch_ready') return NOT_READY_DETAIL;
+      if (method === 'GET' && path === '/api/chunks/ch_ask') return askAnswered ? ASK_ANSWERED_DETAIL : ASK_DETAIL;
+      if (method === 'POST' && path === '/api/questions/qn_77/answers') return answerResponse;
       if (method === 'POST' && (path === '/api/chunks/ch_routed/pause' || path === '/api/chunks/ch_paused/resume')) {
         return pauseResponse;
       }
@@ -216,6 +259,78 @@ describe('ChunkDetail container', () => {
     el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('[data-testid="action-error"]')).toBeNull();
     confirmSpy.mockRestore();
+  });
+
+  // --- Answering a question, and losing the race for it (issue #165) ---------
+
+  /** Type an answer into the dock and submit it. */
+  async function answerFrom(fixture: ReturnType<typeof TestBed.createComponent<ChunkDetail>>): Promise<HTMLElement> {
+    const el = fixture.nativeElement as HTMLElement;
+    el.querySelector<HTMLInputElement>('[data-testid="answer-input"]')!.value = 'graphql';
+    el.querySelector<HTMLButtonElement>('[data-testid="answer-submit"]')?.click();
+    await settle(fixture);
+    return el;
+  }
+
+  it('renders the winner’s name and answer as an outcome when the answer race is lost', async () => {
+    // The hub's first-write-wins 409 body is the *winning row*, not a `{detail}` error —
+    // folding it through errorMessage() showed the loser a generic failure instead of the
+    // one thing worth saying: who answered, and what they said.
+    answerResponse = stubError(409, {
+      won: false,
+      question_id: 'qn_77',
+      answer: 'rest',
+      answered_by: 'alice',
+      answered_at: '2026-07-13T00:01:00Z',
+    });
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_ask');
+    await settle(fixture);
+    askAnswered = true; // the race was lost, so the re-read now sees alice's answer
+
+    const el = await answerFrom(fixture);
+
+    const outcome = el.querySelector('[data-testid="action-outcome"]');
+    expect(outcome?.textContent).toContain('alice');
+    expect(outcome?.textContent).toContain('rest');
+    // An outcome, not a failure: the error notice stays empty.
+    expect(el.querySelector('[data-testid="action-error"]')).toBeNull();
+    // And the losing attempt still re-read the chunk, so the question now renders
+    // answered with its trail rather than sitting on the stale open row.
+    expect(el.querySelector('[data-testid="open-question"]')).toBeNull();
+    expect(el.querySelector('[data-testid="answered-by"]')?.textContent).toContain('alice');
+  });
+
+  it('surfaces a genuine answer failure on the error channel, not the outcome one', async () => {
+    answerResponse = stubError(404, { detail: 'unknown question qn_77' });
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_ask');
+    await settle(fixture);
+
+    const el = await answerFrom(fixture);
+
+    expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('unknown question');
+    expect(el.querySelector('[data-testid="action-outcome"]')).toBeNull();
+  });
+
+  it('clears a stale answer outcome when a different chunk is opened', async () => {
+    answerResponse = stubError(409, {
+      won: false,
+      question_id: 'qn_77',
+      answer: 'rest',
+      answered_by: 'alice',
+      answered_at: '2026-07-13T00:01:00Z',
+    });
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_ask');
+    await settle(fixture);
+    let el = await answerFrom(fixture);
+    expect(el.querySelector('[data-testid="action-outcome"]')).not.toBeNull();
+
+    fixture.componentRef.setInput('chunkId', 'ch_gate');
+    await settle(fixture);
+    el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="action-outcome"]')).toBeNull();
   });
 
   // --- Pause / Resume (issue #46) --------------------------------------------

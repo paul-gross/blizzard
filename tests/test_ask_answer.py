@@ -7,16 +7,21 @@ Pins the hub half of the protocol against a fully-wired store:
   derives **waiting_on_human** with the question surfaced on its detail;
 * the answer is **first-write-wins CAS** — a racing second answer loses with 409 and
   is told who already answered — and the winning row flips the chunk back to running;
+* the **return leg** (issue #165): the runner's ``answer.delivered`` fact derives
+  ``delivered``/``delivered_at`` onto every question view and publishes its own
+  ``answer-delivered`` frame, so the board can say the agent actually resumed;
 * ``GET /questions`` lists only the open ones (the ``blizzard hub status`` surface).
 """
 
 from __future__ import annotations
 
+import json
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
 
-from tests.support import assert_all_timestamps_utc, build_hub, pointer_token
+from tests.support import assert_all_timestamps_utc, build_hub, emitted_events, pointer_token
 
 pytestmark = pytest.mark.component
 
@@ -228,14 +233,33 @@ def test_answer_first_write_wins_second_gets_409_with_winner(tmp_path: Path) -> 
     assert body["answered_by"] == "operator"
     assert body["answer"] == "rest"
 
-    # The winning answer flips the chunk back out of waiting_on_human.
+    # The winning answer flips the chunk back out of waiting_on_human. The question row
+    # itself *stays* on the detail carrying its trail (issue #165) — dropping it was what
+    # left an answerer with no evidence their answer went anywhere — but it is answered,
+    # and not yet delivered: no runner has reported the resume.
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "running"
-    assert detail["questions"] == []
+    assert [(q["question_id"], q["answered"], q["answer"], q["delivered"]) for q in detail["questions"]] == [
+        ("qn_1", True, "rest", False)
+    ]
+    assert detail["questions"][0]["delivered_at"] is None
     assert hub.client.get("/api/questions").json() == []
     poll = hub.client.get("/api/fleet/questions/qn_1").json()
     assert poll["answered"] is True
     assert poll["answer"] == "rest"
+
+
+def _deliver(hub, chunk_id: str, *, question_id: str = "qn_1", seq: int = 9):  # type: ignore[no-untyped-def]
+    """Push the runner's ``answer.delivered`` fact — the resume-with-answer ran."""
+    return hub.client.post(
+        "/api/fleet/events",
+        json={
+            "runner_id": "r1",
+            "facts": [
+                {"seq": seq, "kind": "answer.delivered", "payload": {"chunk_id": chunk_id, "question_id": question_id}}
+            ],
+        },
+    )
 
 
 def test_answer_delivered_fact_is_accepted(tmp_path: Path) -> None:
@@ -245,16 +269,73 @@ def test_answer_delivered_fact_is_accepted(tmp_path: Path) -> None:
     chunk_id = _claim(hub)
     _ask(hub, chunk_id)
     hub.client.post("/api/questions/qn_1/answers", json={"answer": "rest"})
-    resp = hub.client.post(
-        "/api/fleet/events",
-        json={
-            "runner_id": "r1",
-            "facts": [{"seq": 9, "kind": "answer.delivered", "payload": {"chunk_id": chunk_id, "question_id": "qn_1"}}],
-        },
-    )
+    resp = _deliver(hub, chunk_id)
     assert resp.status_code == 200, resp.text
     assert resp.json()["applied"] == [9]
     assert resp.json()["rejected"] == []
+
+
+def test_answer_delivered_surfaces_the_return_trip_on_the_question_view(tmp_path: Path) -> None:
+    """The delivered fact is *readable*, not merely stored (issue #165).
+
+    Before this, ``answer.delivered`` landed in ``answer_deliveries`` and went no further
+    — nothing derived it onto the wire, so no client could tell a delivered answer from
+    one still sitting at the hub. Now every question surface carries the pair.
+    """
+    hub = build_hub(tmp_path)
+    chunk_id = _claim(hub)
+    _ask(hub, chunk_id)
+    hub.client.post("/api/questions/qn_1/answers", json={"answer": "rest"})
+    assert _deliver(hub, chunk_id).status_code == 200
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    question = detail["questions"][0]
+    assert question["delivered"] is True
+    assert question["delivered_at"] is not None
+    assert_all_timestamps_utc(detail["questions"])  # bzh:utc-instants — delivered_at
+
+    # The runner's own answer poll renders through the same view, so it carries it too.
+    assert hub.client.get("/api/fleet/questions/qn_1").json()["delivered"] is True
+
+
+def test_a_replayed_delivery_keeps_the_first_delivered_at(tmp_path: Path) -> None:
+    """``answer_deliveries`` is append-only with no per-question uniqueness, so the view
+    reads the **earliest** row: a second delivery is a re-delivery, not a correction of
+    when the agent actually woke."""
+    hub = build_hub(tmp_path)
+    chunk_id = _claim(hub)
+    _ask(hub, chunk_id)
+    hub.client.post("/api/questions/qn_1/answers", json={"answer": "rest"})
+    assert _deliver(hub, chunk_id, seq=9).status_code == 200
+    first = hub.client.get(f"/api/chunks/{chunk_id}").json()["questions"][0]["delivered_at"]
+
+    hub.clock.advance(timedelta(minutes=1))
+    # A fresh seq, so the high-water mark does not dedupe it — a genuine second row.
+    assert _deliver(hub, chunk_id, seq=10).status_code == 200
+
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["questions"][0]["delivered_at"] == first
+
+
+def test_landing_a_delivered_fact_publishes_an_answer_delivered_event(tmp_path: Path) -> None:
+    """AC 2 — the frame the board's live-update spine re-reads on.
+
+    A delivery moves no derived status (the chunk left ``waiting_on_human`` back at the
+    answer), so the ``chunk-changed`` the same ingest publishes says nothing new and a
+    board keying only off status would leave the trail stale. The dedicated frame is what
+    makes *delivered, agent resumed* arrive without a refresh.
+    """
+    hub = build_hub(tmp_path)
+    chunk_id = _claim(hub)
+    _ask(hub, chunk_id)
+    hub.client.post("/api/questions/qn_1/answers", json={"answer": "rest"})
+    before = int(emitted_events(hub)[-1]["id"])  # the last id published before the delivery
+
+    assert _deliver(hub, chunk_id).status_code == 200
+
+    published = emitted_events(hub, since=before)
+    assert "answer-delivered" in [e["event"] for e in published]
+    frame = next(e for e in published if e["event"] == "answer-delivered")
+    assert json.loads(frame["data"]) == {"chunk_id": chunk_id, "question_id": "qn_1"}
 
 
 def test_answer_unknown_question_is_404(tmp_path: Path) -> None:

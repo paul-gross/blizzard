@@ -97,6 +97,22 @@ describe('FleetLiveUpdates', () => {
     expect(keys).toContainEqual(['hub', 'chunk', 'ch_live']);
   });
 
+  it('re-reads the chunk and the ask list on an answer-delivered frame (issue #165)', () => {
+    // The frame exists precisely because a delivery moves no derived status: the hub's
+    // accompanying chunk-changed says nothing new, so without this row the dock's
+    // "delivered · agent resumed" line would sit stale until an unrelated frame arrived.
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());
+
+    const source = FakeEventSource.instances[0];
+    source.open();
+    source.emitNamed('answer-delivered', JSON.stringify({ chunk_id: 'ch_live', question_id: 'qn_1' }), '1');
+
+    const keys = invalidate.mock.calls.map((call) => call[0]?.queryKey);
+    expect(keys).toContainEqual(['hub', 'chunk', 'ch_live']);
+    expect(keys).toContainEqual(['hub', 'questions']);
+  });
+
   it('re-reads the registry on a runner-changed event and the queue on queue-changed', () => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
     TestBed.runInInjectionContext(() => TestBed.inject(FleetLiveUpdates).start());

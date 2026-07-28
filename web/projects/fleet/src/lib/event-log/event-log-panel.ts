@@ -53,6 +53,8 @@ function summarize(event: LoggedEvent): string {
       return `${chunk} asked a question`;
     case 'question-answered':
       return `${chunk} question answered`;
+    case 'answer-delivered':
+      return `${chunk} answer delivered`;
     case 'decision-opened':
       return `${chunk} gate opened`;
     case 'decision-resolved':

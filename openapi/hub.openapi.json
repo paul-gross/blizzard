@@ -2536,7 +2536,7 @@
         "type": "object"
       },
       "QuestionView": {
-        "description": "A question row with its derived answer state \u2014 the surfacing shape.\n\nBehind ``GET /questions`` (open only), ``GET /questions/{id}`` (the runner's answer\npoll), and the chunk detail's open-questions list. ``answered`` and the answer\nfields derive from the presence of the answer row.",
+        "description": "A question row with its derived answer *and delivery* state \u2014 the surfacing shape.\n\nBehind ``GET /questions`` (open only), ``GET /questions/{id}`` (the runner's answer\npoll), and the chunk detail's questions list. ``answered`` and the answer fields\nderive from the presence of the answer row; ``delivered``/``delivered_at`` derive\nfrom the ``answer.delivered`` fact the runner mints once the resume-with-answer ran\n(issue #165) \u2014 the return leg that lets the board say *delivered, agent resumed*\nrather than leaving an answerer guessing whether the answer arrived.",
         "properties": {
           "answer": {
             "anyOf": [
@@ -2583,6 +2583,22 @@
           "chunk_id": {
             "title": "Chunk Id",
             "type": "string"
+          },
+          "delivered": {
+            "default": false,
+            "title": "Delivered",
+            "type": "boolean"
+          },
+          "delivered_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivered At"
           },
           "epoch": {
             "title": "Epoch",
@@ -5303,7 +5319,7 @@
     },
     "/api/fleet/events": {
       "post": {
-        "description": "Land runner-minted facts, idempotent by per-runner seq high-water.\n\nThe store-and-forward ingest: ``lease.minted`` (the fence input), ``escalation.recorded``,\n``question.asked``, and ``answer.delivered`` ride the runner's outbound buffer here. A\npushed seq at or below the runner's high-water mark is already-applied and re-acked; a\nfresh one is applied and advances the mark. Each freshly-applied fact re-broadcasts on\nthe SSE stream so the board refreshes \u2014 ``chunk-changed`` for every touched chunk, and\n``question-asked`` for a forwarded ask.",
+        "description": "Land runner-minted facts, idempotent by per-runner seq high-water.\n\nThe store-and-forward ingest: ``lease.minted`` (the fence input), ``escalation.recorded``,\n``question.asked``, and ``answer.delivered`` ride the runner's outbound buffer here. A\npushed seq at or below the runner's high-water mark is already-applied and re-acked; a\nfresh one is applied and advances the mark. Each freshly-applied fact re-broadcasts on\nthe SSE stream so the board refreshes \u2014 ``chunk-changed`` for every touched chunk,\n``question-asked`` for a forwarded ask, and ``answer-delivered`` for the resume that\ncarried an answer back into the dormant session (issue #165; the chunk's derived\nstatus does not move on that one, so nothing else would stale the question's trail).",
         "operationId": "ingest_runner_facts_api_fleet_events_post",
         "requestBody": {
           "content": {

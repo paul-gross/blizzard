@@ -4,7 +4,11 @@ import { injectHubChunkDetailQuery } from '../chunks/chunk-detail.query';
 import { injectHubChunkWorkItemsQuery } from '../chunks/chunk-work-items.query';
 import { injectDetachChunkMutation } from '../chunks/detach.mutations';
 import { injectSetChunkGraphMutation, injectSetChunkModelMutation } from '../chunks/edit.mutations';
-import { injectAnswerQuestionMutation, injectResolveDecisionMutation } from '../chunks/human.mutations';
+import {
+  injectAnswerQuestionMutation,
+  injectResolveDecisionMutation,
+  readAnswerConflict,
+} from '../chunks/human.mutations';
 import { injectChunkPauseMutation } from '../chunks/pause.mutations';
 import { errorMessage } from '../error-message';
 import {
@@ -44,6 +48,7 @@ import {
         [detail]="d"
         [workItems]="workItems()"
         [actionError]="actionError()"
+        [actionOutcome]="actionOutcome()"
         (dismiss)="dismiss.emit()"
         (answerQuestion)="onAnswer($event)"
         (resolveDecision)="onResolve($event)"
@@ -101,10 +106,19 @@ export class ChunkDetail {
    * in the dock — detach, pause, resume (issue #46). */
   protected readonly actionError = signal<string | null>(null);
 
+  /** The open chunk's last operator-action **outcome** — a non-failure result that still
+   * needs saying (issue #165). Today that is exactly one case: a lost answer race, where
+   * the hub's 409 carries the *winning* answer. It is a channel of its own rather than a
+   * second use of {@link actionError} because the two read differently to an operator —
+   * "someone beat you to it, here is what they said" is news, not a failure to retry —
+   * and it clears on the same two triggers. */
+  protected readonly actionOutcome = signal<string | null>(null);
+
   constructor() {
     effect(() => {
       this.chunkId();
       this.actionError.set(null);
+      this.actionOutcome.set(null);
     });
   }
 
@@ -120,8 +134,27 @@ export class ChunkDetail {
     return { status: 'success', items: this.workItemsQuery.data()?.items ?? [] };
   });
 
+  /** Answer an open question. A lost first-write-wins race comes back as a 409 whose body
+   * is the *winning* answer, so it is reported as an outcome naming the winner rather than
+   * folded through `errorMessage()` into a generic failure (issue #165); any other failure
+   * stays on the error channel. Either way the mutation re-reads the chunk, so the dock
+   * settles showing the question answered with its trail. */
   protected onAnswer(event: AnswerQuestionEvent): void {
-    this.answerMutation.mutate({ questionId: event.questionId, answer: event.answer, chunkId: event.chunkId });
+    this.actionError.set(null);
+    this.actionOutcome.set(null);
+    this.answerMutation.mutate(
+      { questionId: event.questionId, answer: event.answer, chunkId: event.chunkId },
+      {
+        onError: (error) => {
+          const winner = readAnswerConflict(error);
+          if (winner) {
+            this.actionOutcome.set(`${winner.answered_by} answered first: “${winner.answer}”`);
+          } else {
+            this.actionError.set(errorMessage(error, 'Answer failed.'));
+          }
+        },
+      },
+    );
   }
 
   protected onResolve(event: ResolveDecisionEvent): void {

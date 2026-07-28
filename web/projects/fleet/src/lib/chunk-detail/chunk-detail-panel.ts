@@ -62,6 +62,10 @@ export type { WorkItemsState } from './chunk-issue-pane';
         <p class="notice action-notice" data-testid="action-error" role="alert">{{ err }}</p>
       }
 
+      @if (actionOutcome(); as outcome) {
+        <p class="outcome action-notice" data-testid="action-outcome" role="status">{{ outcome }}</p>
+      }
+
       <div class="d-body">
         <section class="d-sec" aria-label="Work item">
           <div class="s-head"><span class="tag">Work item · {{ pointerCount() }}</span></div>
@@ -128,6 +132,18 @@ export type { WorkItemsState } from './chunk-issue-pane';
       color: var(--red);
       font-size: var(--fs-xs);
     }
+    /* An outcome sits in the same slot as the failure notice and carries the same
+       weight, but reads cyan rather than red: a lost answer race is news the operator
+       needs, not something that went wrong or that they should retry. */
+    .outcome {
+      margin: 0;
+      padding: 4px 6px;
+      border: 1px solid var(--line);
+      border-left: 2px solid var(--cyan);
+      background: var(--overlay-20);
+      color: var(--text);
+      font-size: var(--fs-xs);
+    }
     .action-notice {
       margin: 6px;
       flex: none;
@@ -167,6 +183,11 @@ export class ChunkDetailPanel {
    * surfaced, not swallowed — issue #42), or `null` when there is nothing to report.
    * One notice for every action in this dock (detach, pause, resume). */
   readonly actionError = input<string | null>(null);
+
+  /** The container's last operator-action **outcome** for this chunk — a non-failure
+   * result that still needs saying (issue #165), today the winning answer a lost
+   * first-write-wins race returns. Rendered as news, not as a failure. */
+  readonly actionOutcome = input<string | null>(null);
 
   /** Emitted when the operator dismisses the dock. */
   readonly dismiss = output<void>();

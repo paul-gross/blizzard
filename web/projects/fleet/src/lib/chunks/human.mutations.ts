@@ -18,10 +18,33 @@ export interface AnswerVars {
 }
 
 /**
+ * Read a losing answer's 409 body — the winning {@link AnswerResult} (issue #165).
+ *
+ * The hub's first-write-wins arbitration answers a beaten writer with the *winning row*,
+ * not an error message: `{won: false, answer, answered_by, …}` and no `detail` field at
+ * all. That is why this exists rather than the shared `errorMessage()` fold, which reads
+ * only `detail` and so turned the one response carrying real news into a generic
+ * "Answer failed." Returns `null` for anything that is not that shape, so a genuine
+ * transport or 404 failure still falls through to the error path.
+ */
+export function readAnswerConflict(error: unknown): AnswerResult | null {
+  if (!error || typeof error !== 'object') return null;
+  const body = error as Partial<AnswerResult>;
+  return body.won === false && typeof body.answer === 'string' && typeof body.answered_by === 'string'
+    ? (body as AnswerResult)
+    : null;
+}
+
+/**
  * `POST /api/questions/{id}/answers` — first-write-wins CAS answer through the
  * generated client (bzh:generated-client); `POST /api/questions/{id}/answer` is now
- * a deprecated alias this board no longer calls. On success it re-reads the parked
- * chunk's detail and the fleet list (the answer flips it out of `waiting_on_human`).
+ * a deprecated alias this board no longer calls.
+ *
+ * Re-reads the parked chunk's detail and the fleet list on `onSettled`, not `onSuccess`:
+ * a **lost** race (the 409 {@link readAnswerConflict} reads) changed the server state
+ * just as much as a won one — someone else's answer landed — so the dock must re-read to
+ * show the question as answered with the winner's trail rather than sitting on the stale
+ * open row (issue #165).
  */
 export function injectAnswerQuestionMutation() {
   const queryClient = inject(QueryClient);
@@ -35,7 +58,7 @@ export function injectAnswerQuestionMutation() {
       if (error) throw error;
       return data!;
     },
-    onSuccess: (_data, vars) => {
+    onSettled: (_data, _error, vars) => {
       void queryClient.invalidateQueries({ queryKey: hubChunkKey(vars.chunkId) });
       void queryClient.invalidateQueries({ queryKey: hubChunksKey });
     },

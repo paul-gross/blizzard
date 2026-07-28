@@ -519,7 +519,7 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
         history=_history_views(facts, history_graphs),
         migrations=_migration_views(facts, history_graphs),
         artifacts=_artifact_views(artifacts, web_base),
-        questions=[question_view(q) for q in services.chunks.load_questions(chunk_id) if not q.answered],
+        questions=[question_view(q) for q in services.chunks.load_questions(chunk_id)],
         awaiting_external_merge=awaiting_external_merge(facts),
         open_prs=[PrView(repo=pr.repo, number=pr.number, url=pr.url) for pr in facts.pr_opened],
         cost=_usage_total_view(facts),

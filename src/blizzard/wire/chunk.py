@@ -466,8 +466,11 @@ class ChunkDetail(BaseModel):
     # chunk; a migration re-pins the chunk and re-queues it under another graph.
     migrations: list[MigrationView] = []
     artifacts: list[ArtifactView] = []
-    # The chunk's open questions: a ``waiting_on_human``
-    # chunk carries the ask a human answers with ``blizzard hub answer``.
+    # The chunk's questions, oldest first — open *and* answered (issue #165). A
+    # ``waiting_on_human`` chunk carries the ask a human answers with ``blizzard hub
+    # answer``; an already-answered one stays here carrying its return trail (who
+    # answered, and whether the runner has delivered it into the resumed session), which
+    # is what lets an answerer see their answer arrive instead of the row vanishing.
     questions: list[QuestionView] = []
     # Open-pr delivery (pre-#67, kept for back-compat reads of a historical chunk): a
     # ``delivering`` chunk whose deliver node opened a PR instead of merging was

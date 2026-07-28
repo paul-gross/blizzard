@@ -1110,12 +1110,16 @@ def derive_fleet_summary(statuses: Iterable[ChunkStatus]) -> FleetSummary:
 
 @dataclass(frozen=True)
 class QuestionRow:
-    """A durable question row with its derived answer state.
+    """A durable question row with its derived answer *and delivery* state.
 
     The full surfacing shape behind ``blizzard hub status`` and the chunk detail's
-    open-questions list. Open/answered is **derived**: a question is answered
+    questions list. Every state here is **derived**: a question is answered
     exactly while its answer row exists, and ``answered_by``/``answer``/``answered_at``
-    are the winning first-write-wins CAS row (``None`` while open).
+    are the winning first-write-wins CAS row (``None`` while open); it is *delivered*
+    exactly while an ``answer_deliveries`` row exists (issue #165) — the runner ran the
+    resume-with-answer and the dormant session woke around it. Delivery is the return
+    leg of the rendezvous: answered says a human decided, delivered says the agent
+    heard, and only the pair closes the loop for someone answering from a phone.
     """
 
     question_id: str
@@ -1131,6 +1135,8 @@ class QuestionRow:
     answer: str | None = None
     answered_by: str | None = None
     answered_at: datetime | None = None
+    delivered: bool = False
+    delivered_at: datetime | None = None
 
 
 @dataclass(frozen=True)

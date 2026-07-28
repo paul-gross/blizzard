@@ -411,7 +411,7 @@ class ChunkStore:
             answer = conn.execute(
                 select(s.question_answers).where(s.question_answers.c.question_id == question_id)
             ).one_or_none()
-            return self._question_row(q, answer)
+            return self._question_row(q, answer, self._delivered_at(conn, question_id))
 
     def list_open_questions(self) -> list[QuestionRow]:
         with self._engine.connect() as conn:
@@ -420,7 +420,9 @@ class ChunkStore:
                 .where(s.questions.c.question_id.not_in(select(s.question_answers.c.question_id)))
                 .order_by(s.questions.c.asked_at)
             ).all()
-            return [self._question_row(q, None) for q in rows]
+            # Open by construction, so neither an answer nor a delivery can exist: a
+            # delivery is the runner acting on an answer that is not there.
+            return [self._question_row(q, None, None) for q in rows]
 
     def load_questions(self, chunk_id: str) -> list[QuestionRow]:
         with self._engine.connect() as conn:
@@ -432,8 +434,21 @@ class ChunkStore:
                 answer = conn.execute(
                     select(s.question_answers).where(s.question_answers.c.question_id == q.question_id)
                 ).one_or_none()
-                out.append(self._question_row(q, answer))
+                out.append(self._question_row(q, answer, self._delivered_at(conn, q.question_id)))
             return out
+
+    @staticmethod
+    def _delivered_at(conn, question_id: str) -> datetime | None:  # type: ignore[no-untyped-def]
+        """When the resume-with-answer ran, or ``None`` while it has not (issue #165).
+
+        ``answer_deliveries`` carries no uniqueness constraint on ``question_id`` — it is
+        an append-only fact table keyed by a surrogate id — so this reads the **earliest**
+        row rather than assuming one: the first delivery is when the agent actually woke,
+        and any later row is a re-delivery, not a correction of that instant.
+        """
+        return conn.execute(
+            select(func.min(s.answer_deliveries.c.delivered_at)).where(s.answer_deliveries.c.question_id == question_id)
+        ).scalar()
 
     def get_decision(self, decision_id: str) -> DecisionRow | None:
         with self._engine.connect() as conn:
@@ -1485,7 +1500,7 @@ class ChunkStore:
         return max(created_max or 0, released_max or 0, token_max or 0) + 1
 
     @staticmethod
-    def _question_row(q, answer) -> QuestionRow:  # type: ignore[no-untyped-def]
+    def _question_row(q, answer, delivered_at) -> QuestionRow:  # type: ignore[no-untyped-def]
         return QuestionRow(
             question_id=q.question_id,
             chunk_id=q.chunk_id,
@@ -1500,6 +1515,8 @@ class ChunkStore:
             answer=answer.answer if answer is not None else None,
             answered_by=answer.answered_by if answer is not None else None,
             answered_at=answer.answered_at if answer is not None else None,
+            delivered=delivered_at is not None,
+            delivered_at=delivered_at,
         )
 
     def _chunk(self, conn, row) -> Chunk:  # type: ignore[no-untyped-def]

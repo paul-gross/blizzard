@@ -40,6 +40,7 @@ def test_broker_typed_event_vocabulary() -> None:
     broker = EventBroker()
     broker.publish_question_asked("ch_1", "qn_1")
     broker.publish_question_answered("ch_1", "qn_1")
+    broker.publish_answer_delivered("ch_1", "qn_1")
     broker.publish_decision_opened("ch_1", "dec_1")
     broker.publish_decision_resolved("ch_1", "dec_1")
     broker.publish_queue_changed()
@@ -48,11 +49,15 @@ def test_broker_typed_event_vocabulary() -> None:
     assert types == [
         "question-asked",
         "question-answered",
+        "answer-delivered",
         "decision-opened",
         "decision-resolved",
         "queue-changed",
         "runner-changed",
     ]
+    # The delivered frame identifies the question the same way its siblings do — the
+    # board re-reads the chunk for the trail itself (issue #165).
+    assert json.loads(broker.snapshot()[2].data) == {"chunk_id": "ch_1", "question_id": "qn_1"}
 
 
 def test_runner_changed_carries_by_and_reason_only_where_they_apply() -> None:
