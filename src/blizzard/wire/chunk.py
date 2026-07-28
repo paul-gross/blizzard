@@ -150,10 +150,13 @@ class ChunkSummary(BaseModel):
     current_node_id: str | None
     current_node_name: str | None = None
     work_refs: list[WorkRefView] = []
-    # The chunk's model selection (issue #27) — editable while `not_ready` or
-    # `ready`-and-unclaimed (issue #120). Required:
-    # the store column is non-nullable and every mint sets DEFAULT_MODEL.
-    model: str
+    # The chunk's default model preference and effort (issue #144) — what a surface
+    # declaring neither inherits; effective precedence is session declaration > chunk
+    # default > runner default. Editable while `not_ready` or `ready`-and-unclaimed
+    # (issue #120), the window #27's retired `model` field carried. Empty/None is the
+    # minted state and means *express no preference*, not "unknown".
+    default_model: list[str] = []
+    default_effort: str | None = None
     runner_id: str | None = None
     # The count of environments the chunk's live route holds (issue #69) — the board's
     # slot-bar numerator, summed per runner across its chunks. 0 when unrouted. A grouped
@@ -401,18 +404,20 @@ class ChunkPatchRequest(BaseModel):
     fields the request body actually named), not this field's value alone."""
 
     graph_id: str | None = None
-    model: str | None = None
+    default_model: list[str] | None = None
+    default_effort: str | None = None
     intended_migration: IntendedMigrationPatch | None = None
 
 
 class ChunkPatchResponse(BaseModel):
-    """The result of one ``PATCH /chunks/{id}`` (issue #124) — the chunk's three
+    """The result of one ``PATCH /chunks/{id}`` (issues #124, #144) — the chunk's
     editable build properties after the edit, carried together since a PATCH can apply
     more than one at once."""
 
     chunk_id: str
     graph_id: str
-    model: str
+    default_model: list[str] = []
+    default_effort: str | None = None
     intended_migration: IntendedMigrationView | None = None
 
 
@@ -449,10 +454,13 @@ class ChunkDetail(BaseModel):
     current_node_name: str | None = None
     latest_epoch: int | None
     work_refs: list[WorkRefView] = []
-    # The chunk's model selection (issue #27) — editable while `not_ready` or
-    # `ready`-and-unclaimed (issue #120). Required:
-    # the store column is non-nullable and every mint sets DEFAULT_MODEL.
-    model: str
+    # The chunk's default model preference and effort (issue #144) — what a surface
+    # declaring neither inherits; effective precedence is session declaration > chunk
+    # default > runner default. Editable while `not_ready` or `ready`-and-unclaimed
+    # (issue #120), the window #27's retired `model` field carried. Empty/None is the
+    # minted state and means *express no preference*, not "unknown".
+    default_model: list[str] = []
+    default_effort: str | None = None
     # The chunk's standing migration intent (issue #124) — non-None iff an `auto` or
     # `forced` intent is set, consulted (never applied eagerly) at the chunk's next
     # transition. See IntendedMigrationView.

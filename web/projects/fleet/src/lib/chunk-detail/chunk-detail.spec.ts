@@ -90,7 +90,7 @@ const ASK_ANSWERED_DETAIL: ChunkDetailModel = {
   ],
 };
 
-// A not_ready chunk — the one window issue #27's graph/model edit is open.
+// A not_ready chunk — the one window issue #27's graph edit is open.
 const NOT_READY_DETAIL: ChunkDetailModel = {
   chunk_id: 'ch_ready',
   graph_id: 'gr_default',
@@ -110,7 +110,7 @@ describe('ChunkDetail container', () => {
   let detachResponse: unknown = {};
   // The same, for the pause/resume verbs (issue #46).
   let pauseResponse: unknown = {};
-  // The same, for the graph/model edits (issue #27) — both now collapse onto the one
+  // The same, for the graph edit (issue #27) — it collapses onto the one
   // `PATCH /api/chunks/{id}` call (issue #104), so one variable drives it.
   let editPatchResponse: unknown = {};
   // The same, for the answer verb (issue #165) — 201 winner vs. 409 loser.
@@ -411,7 +411,8 @@ describe('ChunkDetail container', () => {
     confirmSpy.mockRestore();
   });
 
-  // --- Graph / model edit (issue #27) -----------------------------------------
+  // --- Graph edit (issue #27; the model edit beside it retired with `Chunk.model`,
+  // issue #144) -------------------------------------------------------------
 
   it('fires the graph edit client call for a not_ready chunk', async () => {
     const fixture = TestBed.createComponent(ChunkDetail);
@@ -429,30 +430,13 @@ describe('ChunkDetail container', () => {
     expect(calls[0].body).toEqual({ graph_id: 'gr_alt' });
   });
 
-  it('fires the model edit client call for a not_ready chunk', async () => {
-    const fixture = TestBed.createComponent(ChunkDetail);
-    fixture.componentRef.setInput('chunkId', 'ch_ready');
-    await settle(fixture);
-    const el = fixture.nativeElement as HTMLElement;
-
-    const input = el.querySelector<HTMLInputElement>('[data-testid="model-input"]')!;
-    input.value = 'claude-sonnet-4-5';
-    el.querySelector<HTMLButtonElement>('[data-testid="model-submit"]')?.click();
-    await settle(fixture);
-
-    const calls = stub.forRoute('/api/chunks/ch_ready', 'PATCH');
-    expect(calls).toHaveLength(1);
-    expect(calls[0].body).toEqual({ model: 'claude-sonnet-4-5' });
-  });
-
-  it('offers no graph/model edit inputs for a chunk that has left not_ready', async () => {
+  it('offers no graph edit input for a chunk that has left not_ready', async () => {
     const fixture = TestBed.createComponent(ChunkDetail);
     fixture.componentRef.setInput('chunkId', 'ch_routed');
     await settle(fixture);
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="graph-input"]')).toBeNull();
-    expect(el.querySelector('[data-testid="model-input"]')).toBeNull();
   });
 
   it('surfaces a 409 refusal from the graph edit rather than swallowing it', async () => {
@@ -468,20 +452,5 @@ describe('ChunkDetail container', () => {
     await settle(fixture);
 
     expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('already ready');
-  });
-
-  it('surfaces a 422 refusal from the model edit rather than swallowing it', async () => {
-    editPatchResponse = stubError(422, { detail: 'model must not be blank' });
-    const fixture = TestBed.createComponent(ChunkDetail);
-    fixture.componentRef.setInput('chunkId', 'ch_ready');
-    await settle(fixture);
-    const el = fixture.nativeElement as HTMLElement;
-
-    const input = el.querySelector<HTMLInputElement>('[data-testid="model-input"]')!;
-    input.value = 'x';
-    el.querySelector<HTMLButtonElement>('[data-testid="model-submit"]')?.click();
-    await settle(fixture);
-
-    expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('must not be blank');
   });
 });

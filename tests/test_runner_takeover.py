@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.work import DEFAULT_MODEL, ChunkStatus
+from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.domain.takeover import (
     ChunkNotTakeable,
@@ -340,7 +340,6 @@ def test_advance_skips_the_held_chunk_gate_hub_node_poll_under_an_open_takeover(
         status=ChunkStatus.DONE,
         current_node_id="deliver",
         latest_epoch=1,
-        model=DEFAULT_MODEL,
     )
     provider = FakeProvider({"e1": "/ws/e1"})
     ctx = make_context(

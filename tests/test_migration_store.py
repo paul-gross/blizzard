@@ -247,7 +247,9 @@ def test_record_migration_repins_releases_and_persists_artifacts_in_one_write(tm
     chunk = hub.services.chunks.get(chunk_id)
     assert chunk is not None
     assert chunk.graph_id == target_graph_id  # re-pinned
-    assert chunk.model == "claude-sonnet-5"  # model re-pin
+    # Issue #144 retargeted the re-pin: the authored choice `model:` is still a single
+    # string, and it lands in the prioritized `default_model` list as its one entry.
+    assert chunk.default_model == ["claude-sonnet-5"]
     assert hub.services.chunks.route_of(chunk_id) is None  # route released
     # MUST-FIX 1: the submitting node-step's artifact is durable, so it carries to the
     # landing claim's envelope.

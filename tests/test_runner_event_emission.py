@@ -22,7 +22,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.work import DEFAULT_MODEL, ChunkStatus
+from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerHandle
 from blizzard.runner.loop.internal.subprocess_worktree_git import WorktreeGitError
@@ -179,7 +179,6 @@ def test_reassign_abandon_branch_emits_an_info_attempt_abandoned(tmp_path):  # t
         status=ChunkStatus.RUNNING,
         current_node_id="nd_build",
         latest_epoch=1,
-        model=DEFAULT_MODEL,
         route=RouteView(runner_id="r2", workspace_id="ws1", environment_ids=["e1"]),
     )
     ctx = make_context(

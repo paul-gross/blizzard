@@ -242,6 +242,14 @@ export type ChunkDetail = {
      */
     current_node_name?: string | null;
     decision?: DecisionView | null;
+    /**
+     * Default Effort
+     */
+    default_effort?: string | null;
+    /**
+     * Default Model
+     */
+    default_model?: Array<string>;
     escalation?: EscalationView | null;
     /**
      * Graph Created At
@@ -272,10 +280,6 @@ export type ChunkDetail = {
      * Migrations
      */
     migrations?: Array<MigrationView>;
-    /**
-     * Model
-     */
-    model: string;
     /**
      * Open Prs
      */
@@ -383,20 +387,24 @@ export type ChunkIngestResponse = {
  */
 export type ChunkPatchRequest = {
     /**
+     * Default Effort
+     */
+    default_effort?: string | null;
+    /**
+     * Default Model
+     */
+    default_model?: Array<string> | null;
+    /**
      * Graph Id
      */
     graph_id?: string | null;
     intended_migration?: IntendedMigrationPatch | null;
-    /**
-     * Model
-     */
-    model?: string | null;
 };
 
 /**
  * ChunkPatchResponse
  *
- * The result of one ``PATCH /chunks/{id}`` (issue #124) — the chunk's three
+ * The result of one ``PATCH /chunks/{id}`` (issues #124, #144) — the chunk's
  * editable build properties after the edit, carried together since a PATCH can apply
  * more than one at once.
  */
@@ -406,14 +414,18 @@ export type ChunkPatchResponse = {
      */
     chunk_id: string;
     /**
+     * Default Effort
+     */
+    default_effort?: string | null;
+    /**
+     * Default Model
+     */
+    default_model?: Array<string>;
+    /**
      * Graph Id
      */
     graph_id: string;
     intended_migration?: IntendedMigrationView | null;
-    /**
-     * Model
-     */
-    model: string;
 };
 
 /**
@@ -495,6 +507,14 @@ export type ChunkSummary = {
      */
     current_node_name?: string | null;
     /**
+     * Default Effort
+     */
+    default_effort?: string | null;
+    /**
+     * Default Model
+     */
+    default_model?: Array<string>;
+    /**
      * Environment Count
      */
     environment_count?: number;
@@ -502,10 +522,6 @@ export type ChunkSummary = {
      * Graph Id
      */
     graph_id: string;
-    /**
-     * Model
-     */
-    model: string;
     /**
      * Runner Id
      */

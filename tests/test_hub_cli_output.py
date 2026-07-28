@@ -35,7 +35,15 @@ pytestmark = pytest.mark.unit
 
 
 def test_json_on_a_read_verb_prints_the_raw_response_body(monkeypatch: pytest.MonkeyPatch) -> None:
-    payload = [{"chunk_id": "ch_1", "status": "ready", "current_node_id": None, "model": "sonnet", "cost": {}}]
+    payload = [
+        {
+            "chunk_id": "ch_1",
+            "status": "ready",
+            "current_node_id": None,
+            "default_model": ["blizzard:basic"],
+            "cost": {},
+        }
+    ]
 
     def fake_get(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(200, payload)
@@ -48,7 +56,7 @@ def test_json_on_a_read_verb_prints_the_raw_response_body(monkeypatch: pytest.Mo
 
 
 def test_json_on_a_write_verb_prints_the_raw_response_body(monkeypatch: pytest.MonkeyPatch) -> None:
-    payload = {"chunk_id": "ch_42", "status": "ready", "graph_id": "gr_1", "model": "sonnet"}
+    payload = {"chunk_id": "ch_42", "status": "ready", "graph_id": "gr_1", "default_model": ["blizzard:basic"]}
 
     def fake_post(url: str, *, timeout: float) -> _FakeResponse:
         return _FakeResponse(202, payload)

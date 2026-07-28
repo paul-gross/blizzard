@@ -11,20 +11,21 @@ export interface EditGraphEvent {
   readonly graphId: string;
 }
 
-/** Emitted when the operator repins a not-ready chunk's model from the dock (issue #27). */
-export interface EditModelEvent {
-  readonly chunkId: string;
-  readonly model: string;
-}
-
 /**
  * The chunk's own facts (issue #79) — the fixed-height glance a long issue
  * body must not scroll away: status, node, runner, attempts, and its pinned
- * **graph** and **model** — each editable inline, text-input-and-Set, while
- * the chunk sits `not_ready` or `ready` with no runner holding it yet (issue
- * #27, widened by #120). The edit row is gated on {@link editable} — the
- * fact, not a confirm — so the control simply disappears once the chunk is
- * actually claimed rather than staying up to fail a 409.
+ * **graph**, editable inline (text-input-and-Set) while the chunk sits
+ * `not_ready` or `ready` with no runner holding it yet (issue #27, widened by
+ * #120). The edit row is gated on {@link editable} — the fact, not a confirm —
+ * so the control simply disappears once the chunk is actually claimed rather
+ * than staying up to fail a 409.
+ *
+ * A **Model** row stood beside Graph with the same inline editor until issue #144
+ * retired `Chunk.model` — a knob that never reached the envelope, so the board offered
+ * an edit that changed nothing about what the fleet ran. Its replacements
+ * (`default_model`/`default_effort`) deliberately have no web surface for now: they are
+ * written with `blizzard hub chunk set --default-model/--default-effort` and read back
+ * with `chunk show`.
  *
  * Projects {@link ChunkTokenBreakdown}'s cost/tokens rows into the `[token-breakdown]`
  * slot between Attempts and Graph, so the two components share one continuous
@@ -45,9 +46,9 @@ export interface EditModelEvent {
       <dt>Attempts</dt>
       <dd data-testid="fact-attempts">{{ attempts() }}</dd>
       <ng-content select="[token-breakdown]" />
-      <!-- Graph and model are always shown; the edit row only while the chunk is
-           still not_ready (issue #27) — the same shape as the open-question
-           answer control, gated on the fact rather than confirmed. -->
+      <!-- Graph is always shown; the edit row only while the chunk is still
+           not_ready (issue #27) — the same shape as the open-question answer
+           control, gated on the fact rather than confirmed. -->
       <dt>Graph</dt>
       <dd data-testid="fact-graph">
         <span data-testid="graph-value" [title]="detail().graph_id">{{ graphLabel() }}</span>
@@ -62,25 +63,6 @@ export interface EditModelEvent {
               [attr.aria-label]="'Set graph for chunk ' + detail().chunk_id"
             />
             <fleet-kit-button testid="graph-submit" (click)="submitGraph(graphInput.value); graphInput.value = ''">
-              Set
-            </fleet-kit-button>
-          </span>
-        }
-      </dd>
-      <dt>Model</dt>
-      <dd data-testid="fact-model">
-        <span data-testid="model-value">{{ detail().model }}</span>
-        @if (editable()) {
-          <span class="edit-row">
-            <input
-              #modelInput
-              class="edit-input"
-              type="text"
-              data-testid="model-input"
-              placeholder="New model…"
-              [attr.aria-label]="'Set model for chunk ' + detail().chunk_id"
-            />
-            <fleet-kit-button testid="model-submit" (click)="submitModel(modelInput.value); modelInput.value = ''">
               Set
             </fleet-kit-button>
           </span>
@@ -113,7 +95,7 @@ export interface EditModelEvent {
       color: var(--amber);
       overflow-wrap: anywhere;
     }
-    /* The graph/model edit row (issue #27) — the same input-plus-act shape as the
+    /* The graph edit row (issue #27) — the same input-plus-act shape as the
        awaiting-human answer row, scaled down to sit inside a .kv fact cell. */
     .edit-row {
       display: flex;
@@ -137,15 +119,12 @@ export interface EditModelEvent {
   `,
 })
 export class ChunkFacts {
-  /** The chunk aggregate to render (status, node, route, epoch, graph, model). */
+  /** The chunk aggregate to render (status, node, route, epoch, graph). */
   readonly detail = input.required<ChunkDetail>();
 
   /** Emitted when the operator sets a not-ready chunk's graph (issue #27). No
    * confirm — repinning either before the chunk has run costs nothing to undo. */
   readonly editGraph = output<EditGraphEvent>();
-
-  /** Emitted when the operator sets a not-ready chunk's model (issue #27). */
-  readonly editModel = output<EditModelEvent>();
 
   /** The chunk's live route, read here as a plain fact — the same route the
    * header's Detach control acts on. */
@@ -179,9 +158,9 @@ export class ChunkFacts {
     return `${ref}#${detail.graph_name}-${ymd}`;
   });
 
-  /** Whether the chunk's graph and model may be edited — `not_ready` or `ready` with
-   * no runner holding it yet (issue #27, widened by #120): `EditService` refuses both
-   * edits 409 the moment a chunk is actually claimed (`running`, `delivering`,
+  /** Whether the chunk's graph may be edited — `not_ready` or `ready` with no runner
+   * holding it yet (issue #27, widened by #120): `EditService` refuses the
+   * edit 409 the moment a chunk is actually claimed (`running`, `delivering`,
    * `waiting_on_human`, `needs_human`, `paused` post-claim, `done`, `stopped`), so the
    * facts column withholds the edit row rather than let an operator hit that refusal. */
   protected readonly editable = computed<boolean>(() => {
@@ -194,12 +173,5 @@ export class ChunkFacts {
     const trimmed = graphId.trim();
     if (!trimmed) return;
     this.editGraph.emit({ chunkId: this.detail().chunk_id, graphId: trimmed });
-  }
-
-  /** Emit a model repin — no-op on a blank name (issue #27). */
-  protected submitModel(model: string): void {
-    const trimmed = model.trim();
-    if (!trimmed) return;
-    this.editModel.emit({ chunkId: this.detail().chunk_id, model: trimmed });
   }
 }

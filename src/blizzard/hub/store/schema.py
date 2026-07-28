@@ -187,16 +187,28 @@ chunks = Table(
     Column("chunk_id", String, primary_key=True),  # ch_<ulid>
     Column("graph_id", String, ForeignKey("graphs.graph_id"), nullable=False),  # pinned at mint
     Column("minted_at", UtcDateTime, nullable=False),
-    # The model selection — pinned at mint, editable while the chunk rests `not_ready`
-    # or sits `ready` unclaimed (issue #27, #120, domain/edit.py). A plain mutable
-    # column, not a fact log — mirrors `graph_id` above, which was already
-    # mutable-at-mint with no fact table behind it.
+    # #27's model selection — RETAINED AND UNREAD since issue #144, and meaningful only
+    # for a row minted before it. #144 replaced the field with the `default_model` /
+    # `default_effort` pair below and stopped the domain reading this column; ingest also
+    # stopped writing it, so every post-#144 row takes the migration's `server_default`
+    # (a literal `claude-opus-4-8`) regardless of what its sessions actually ran under.
+    # It is kept only so the pre-#144 rows keep their historical record — do not read it
+    # as a current fact, and do not trust it on a new row.
     Column("model", String, nullable=False),
+    # The chunk's **default** model preference and effort (issue #144) — what a surface
+    # declaring neither inherits, sitting between a graph's `sessions:` declaration and the
+    # runner's own default. `default_model` is a JSON `list[str]` of opaque preference
+    # strings (a `blizzard:` tier alias or a harness-native name), `default_effort` a single
+    # aliased value. Both nullable and both minted empty: an empty preference means
+    # *express none*, which is what lets a runner's own `[models.aliases]` default apply.
+    # Plain mutable columns editable pre-claim, the same shape `graph_id` carries.
+    Column("default_model", Text, nullable=True),
+    Column("default_effort", String, nullable=True),
     # The chunk's standing intent to migrate onto another graph at its next transition
     # (issue #124) — nullable, NULL while no intent is set. A single JSON `Text` column
     # (`{"mode", "graph_id", "node_name"}`) rather than a fact table: it is a plain
     # mutable property read whole at consult time, the same `bzh:facts-not-status` shape
-    # `graph_id`/`model` already carry, and nothing filters on its contents
+    # `graph_id`/`default_model` already carry, and nothing filters on its contents
     # (`bzh:sql-portable`).
     Column("intended_migration", Text, nullable=True),
 )

@@ -198,10 +198,11 @@ describe('Mobile chunk drill-down', () => {
     await settle(harness.fixture);
 
     // Fire the edit the facts pane exposes for a not-ready chunk, through the
-    // same handler its output is bound to.
-    (page as unknown as { onEditModel(e: { chunkId: string; model: string }): void }).onEditModel({
+    // same handler its output is bound to. The graph edit since issue #144 — the model
+    // edit that stood beside it went with `Chunk.model`.
+    (page as unknown as { onEditGraph(e: { chunkId: string; graphId: string }): void }).onEditGraph({
       chunkId: CHUNK_ID,
-      model: 'claude-opus-5',
+      graphId: 'gr_alt',
     });
     await settle(harness.fixture);
 

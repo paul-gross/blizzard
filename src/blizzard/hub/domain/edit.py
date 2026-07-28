@@ -1,23 +1,25 @@
-"""Chunk build-property edits — graph, model, and intended migration
-(issue #27, widened by issue #120, per-field redesign by issue #124).
+"""Chunk build-property edits — graph, default model/effort, and intended migration
+(issue #27, widened by issue #120, per-field redesign by issue #124, model/effort
+defaults by issue #144).
 
-Ingest pins a chunk's workflow graph and model at mint (``ingest.py``); the not-ready
-resting state issue #26 opens was the first window to change either before an agent
-picks the chunk up. Issue #120 widens that window through promote: a chunk that has
-left ``not_ready`` but sits ``ready`` with no live route is still editable — the wrong
-graph is often noticed only after promote, with no runner anywhere near the chunk yet.
-Issue #124 adds a third editable field, ``intended_migration``, whose window does not
-match ``graph_id``/``model`` at all: it is editable at any non-terminal status,
-``not_ready``/``ready`` included, not just once a chunk is claimed. It is *consulted*
-only when a transition applies — which implies a claimed, progressing chunk — which is
-why it complements rather than replaces the pre-claim ``graph_id``/``model`` repin.
-Because the three fields no longer share one admit set, editability is validated **per
-field** rather than once for the whole request — see :data:`_FIELD_WINDOW` and
+Ingest pins a chunk's workflow graph at mint (``ingest.py``); the not-ready resting
+state issue #26 opens was the first window to change it before an agent picks the chunk
+up. Issue #120 widens that window through promote: a chunk that has left ``not_ready``
+but sits ``ready`` with no live route is still editable — the wrong graph is often
+noticed only after promote, with no runner anywhere near the chunk yet. Issue #124 adds
+``intended_migration``, whose window does not match ``graph_id``'s at all: it is editable
+at any non-terminal status, ``not_ready``/``ready`` included, not just once a chunk is
+claimed. It is *consulted* only when a transition applies — which implies a claimed,
+progressing chunk — which is why it complements rather than replaces the pre-claim
+``graph_id`` repin. Issue #144 replaces #27's ``model`` field with the
+``default_model``/``default_effort`` pair, which keeps that field's pre-claim window.
+Because the fields no longer share one admit set, editability is validated **per field**
+rather than once for the whole request — see :data:`_FIELD_WINDOW` and
 :meth:`EditService.edit`.
 
-All three edits are plain column overwrites, not append-only facts —
+Every edit here is a plain column overwrite, not an append-only fact —
 ``bzh:facts-not-status`` governs *status derivation*, not every mutable field, and
-``graph_id`` was already a mint-time column with no fact log behind it; ``model`` and
+``graph_id`` was already a mint-time column with no fact log behind it; the defaults and
 ``intended_migration`` follow the same shape.
 
 Widening the admit set to ``ready`` opens the edit window onto the same chunk a
@@ -96,7 +98,8 @@ _INTENDED_MIGRATION_WINDOW = frozenset(ChunkStatus) - frozenset({ChunkStatus.DON
 #: describes. Keyed by the same field names :class:`ChunkEdit` carries.
 _FIELD_WINDOW: Final[dict[str, frozenset[ChunkStatus]]] = {
     "graph_id": _PRE_CLAIM_WINDOW,
-    "model": _PRE_CLAIM_WINDOW,
+    "default_model": _PRE_CLAIM_WINDOW,
+    "default_effort": _PRE_CLAIM_WINDOW,
     "intended_migration": _INTENDED_MIGRATION_WINDOW,
 }
 
@@ -152,17 +155,20 @@ class ChunkEdit:
     """The fields a single edit request supplies (issue #124).
 
     Each field defaults to :data:`UNSET` — "not supplied, leave unchanged" — so a
-    caller can request one field, two, or all three in a single all-or-nothing
-    :meth:`EditService.edit` call. ``intended_migration`` additionally accepts
-    ``None`` (distinct from ``UNSET``) to mean "clear the standing intent"."""
+    caller can request one field or every one of them in a single all-or-nothing
+    :meth:`EditService.edit` call. ``intended_migration`` and ``default_effort``
+    additionally accept ``None`` (distinct from ``UNSET``) to mean "clear it"; an empty
+    ``default_model`` list is the same "express no preference" clear."""
 
     graph_id: str | _UnsetType = field(default=UNSET)
-    model: str | _UnsetType = field(default=UNSET)
+    default_model: list[str] | _UnsetType = field(default=UNSET)
+    default_effort: str | None | _UnsetType = field(default=UNSET)
     intended_migration: IntendedMigration | None | _UnsetType = field(default=UNSET)
 
 
 class EditService:
-    """Edit a chunk's graph, model, or intended-migration selection (issue #27, #120, #124)."""
+    """Edit a chunk's graph, default model/effort, or intended-migration selection
+    (issues #27, #120, #124, #144)."""
 
     def __init__(
         self,
@@ -181,9 +187,10 @@ class EditService:
         """Repin the chunk to ``graph`` — a thin wrapper over :meth:`edit` (issue #124)."""
         self.edit(chunk, ChunkEdit(graph_id=graph.graph_id), graph_target=graph)
 
-    def set_model(self, chunk: Chunk, *, model: str) -> None:
-        """Repin the chunk's model — a thin wrapper over :meth:`edit` (issue #124)."""
-        self.edit(chunk, ChunkEdit(model=model))
+    def set_defaults(self, chunk: Chunk, *, default_model: list[str], default_effort: str | None) -> None:
+        """Repin the chunk's default model/effort — a thin wrapper over :meth:`edit`
+        (issues #124, #144)."""
+        self.edit(chunk, ChunkEdit(default_model=default_model, default_effort=default_effort))
 
     def edit(
         self,
@@ -215,7 +222,8 @@ class EditService:
         repository beyond the retirement check it already held.
         """
         graph_id = edit.graph_id
-        model = edit.model
+        default_model = edit.default_model
+        default_effort = edit.default_effort
         intended_migration = edit.intended_migration
 
         with self._claim_lock:
@@ -227,8 +235,11 @@ class EditService:
                 if graph_target is not None and self._graphs.is_retired(graph_target.graph_id):
                     raise TargetGraphRetired(graph_target.graph_id)
 
-            if model is not UNSET:
-                self._require_editable(chunk.chunk_id, status, "model")
+            if default_model is not UNSET:
+                self._require_editable(chunk.chunk_id, status, "default_model")
+
+            if default_effort is not UNSET:
+                self._require_editable(chunk.chunk_id, status, "default_effort")
 
             if intended_migration is not UNSET:
                 self._require_editable(chunk.chunk_id, status, "intended_migration")
@@ -237,8 +248,16 @@ class EditService:
 
             if graph_id is not UNSET:
                 self._chunks.set_graph(chunk.chunk_id, graph_id=graph_id)
-            if model is not UNSET:
-                self._chunks.set_model(chunk.chunk_id, model=model)
+            if default_model is not UNSET or default_effort is not UNSET:
+                # One write for the pair (``set_defaults`` takes both), so an edit naming
+                # only one of them carries the chunk's *current* value for the other
+                # rather than clearing it — "not supplied" stays "leave unchanged" even
+                # though the two share a write.
+                self._chunks.set_defaults(
+                    chunk.chunk_id,
+                    default_model=list(chunk.default_model) if default_model is UNSET else default_model,
+                    default_effort=chunk.default_effort if default_effort is UNSET else default_effort,
+                )
             if intended_migration is not UNSET:
                 self._chunks.set_intended_migration(chunk.chunk_id, intended=intended_migration)
 

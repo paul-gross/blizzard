@@ -767,24 +767,44 @@ landed on a live tick; only a chunk that was *not* paused resumes in place on re
 ### Editing an unclaimed chunk's build config
 
 While a chunk sits **unclaimed** — resting `not_ready` (minted but not yet promoted)
-or promoted to `ready` with no runner holding it yet — its pinned **graph** and
-**model** are editable, both from the chunk detail dock and via `POST
-/api/chunks/{id}/graph` / `POST /api/chunks/{id}/model`, or together via `PATCH
-/api/chunks/{id}` (below). Issue #120 widened this past its original `not_ready`-only
-window (issue #27): the wrong graph is often noticed only after promote, with no
-runner anywhere near the chunk yet, so a promoted-but-unclaimed chunk stays
-repinnable. Once the chunk is **claimed or later** — `running`, `delivering`,
-`waiting_on_human`, `needs_human`, `paused` (post-claim), `done`, or `stopped` — both
-edits are refused with `409`.
+or promoted to `ready` with no runner holding it yet — its pinned **graph** and its
+**default model/effort** are editable via `PATCH /api/chunks/{id}` (below). Issue #120
+widened this past its original `not_ready`-only window (issue #27): the wrong graph is
+often noticed only after promote, with no runner anywhere near the chunk yet, so a
+promoted-but-unclaimed chunk stays repinnable. Once the chunk is **claimed or later** —
+`running`, `delivering`, `waiting_on_human`, `needs_human`, `paused` (post-claim),
+`done`, or `stopped` — these edits are refused with `409`.
 
-`PATCH /api/chunks/{id}` (issue #124) applies any of `graph_id`, `model`, and
-`intended_migration` in one request, all-or-nothing: if any supplied field is outside
-*its own* editable window, the whole request is refused (`409`, naming the field) and
-nothing in the body is applied. `graph_id`/`model` share the unclaimed-only window
-above; `intended_migration` — see "Migrating a claimed chunk to another graph" below —
-is different: it is editable at **any non-terminal status**, claimed or not, so a
-`PATCH` naming it alongside a claimed chunk's now-sealed `graph_id` still refuses the
-whole request on `graph_id`.
+`PATCH /api/chunks/{id}` (issue #124) applies any of `graph_id`, `default_model`,
+`default_effort`, and `intended_migration` in one request, all-or-nothing: if any
+supplied field is outside *its own* editable window, the whole request is refused
+(`409`, naming the field) and nothing in the body is applied. `graph_id` and the two
+defaults share the unclaimed-only window above; `intended_migration` — see "Migrating a
+claimed chunk to another graph" below — is different: it is editable at **any
+non-terminal status**, claimed or not, so a `PATCH` naming it alongside a claimed
+chunk's now-sealed `graph_id` still refuses the whole request on `graph_id`.
+
+**The two defaults** (issue #144) are what a surface declaring neither inherits:
+effective precedence is a graph `sessions:` declaration > the chunk default > the
+runner's own default. `default_model` is a **prioritized preference list** in the same
+vocabulary a session declaration uses — a `blizzard:` tier alias or a harness-native
+model name, resolved left-to-right at session mint; `default_effort` is a single value.
+Neither vocabulary is validated hub-side: the alias tables live in each runner's own
+config, so both are opaque preference strings here. A
+blank entry is `422`; an empty list and an explicit `null` effort are real values —
+*express no preference*, the state ingest mints — not "leave unchanged".
+
+From the CLI, `--default-model` is repeatable and **ordered**:
+
+```
+blizzard hub chunk set ch_… --default-model blizzard:advanced --default-model blizzard:basic \
+  --default-effort high
+blizzard hub chunk show ch_…     # reads both back
+```
+
+There is deliberately **no web editing surface** for either — the chunk detail dock's
+model editor was removed with `Chunk.model`, and is not replaced. `chunk show` (or the
+detail payload's `default_model`/`default_effort` fields) is the read-back.
 
 A graph edit has a second, distinct `409`: targeting a graph that has been
 **retired** (see "Graph lifecycle — retire and re-enable" below) is refused even on an

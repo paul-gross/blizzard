@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.clock import FixedClock
-from blizzard.hub.domain.work import DEFAULT_MODEL, ChunkStatus
+from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.domain.requeue import ChunkNotRequeueable, RequeueBlockedByOpenTakeover, RequeueService
 from blizzard.runner.harness.adapter import WorkerHandle
 from blizzard.runner.loop.steps import fill
@@ -205,7 +205,6 @@ def test_fill_releases_the_binding_when_a_requeued_chunk_is_no_longer_routed_her
         status=ChunkStatus.NEEDS_HUMAN,
         current_node_id="nd_build",
         latest_epoch=1,
-        model=DEFAULT_MODEL,
         route=RouteView(runner_id="some-other-runner", workspace_id="ws1", environment_ids=["e1"]),
     )
     harness = FakeHarness(handle=_HANDLE, verdict=None)

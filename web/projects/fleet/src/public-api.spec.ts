@@ -1,4 +1,4 @@
-import { injectHubChunkWorkItemsQuery, injectSetChunkGraphMutation, injectSetChunkModelMutation } from 'fleet';
+import { injectHubChunkWorkItemsQuery, injectSetChunkGraphMutation } from 'fleet';
 
 /**
  * The two exports #82's sub-barrel rewrite adds (AC): `chunk-work-items.query.ts` and
@@ -12,8 +12,9 @@ describe('fleet public API — the previously-missing chunk exports (issue #82)'
     expect(typeof injectHubChunkWorkItemsQuery).toBe('function');
   });
 
-  it('reaches the chunk edit mutations from the fleet barrel', () => {
+  it('reaches the chunk graph edit mutation from the fleet barrel', () => {
+    // The model edit mutation stood beside it until issue #144 retired `Chunk.model`
+    // and left the replacing defaults with no web editing surface.
     expect(typeof injectSetChunkGraphMutation).toBe('function');
-    expect(typeof injectSetChunkModelMutation).toBe('function');
   });
 });

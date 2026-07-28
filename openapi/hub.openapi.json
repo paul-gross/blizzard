@@ -321,6 +321,25 @@
               }
             ]
           },
+          "default_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Effort"
+          },
+          "default_model": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Default Model",
+            "type": "array"
+          },
           "escalation": {
             "anyOf": [
               {
@@ -399,10 +418,6 @@
             "title": "Migrations",
             "type": "array"
           },
-          "model": {
-            "title": "Model",
-            "type": "string"
-          },
           "open_prs": {
             "default": [],
             "items": {
@@ -474,8 +489,7 @@
           "graph_id",
           "status",
           "current_node_id",
-          "latest_epoch",
-          "model"
+          "latest_epoch"
         ],
         "title": "ChunkDetail",
         "type": "object"
@@ -561,6 +575,31 @@
       "ChunkPatchRequest": {
         "description": "The multi-field ``PATCH /chunks/{id}`` body (issue #124, in #104's shape) \u2014 every\nfield independently optional, applied all-or-nothing by ``EditService.edit``.\n\n``graph_id``/``model`` mean \"leave unchanged\" whether omitted or sent explicit\n``null`` \u2014 neither is a nullable chunk property, so there is no \"clear\" state to\ndistinguish. ``intended_migration`` is different: it *is* nullable (clearing a\nstanding intent is a real operation, the CLI's ``--cancel``), so **omitted** (\"leave\nthe intent unchanged\") must be distinguishable from **explicit ``null``** (\"clear\nit\") \u2014 a plain ``Optional`` default cannot tell those apart, since both decode to\n``None`` on this model. The controller resolves the distinction via\n``\"intended_migration\" in request.model_fields_set`` (pydantic's own record of which\nfields the request body actually named), not this field's value alone.",
         "properties": {
+          "default_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Effort"
+          },
+          "default_model": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Model"
+          },
           "graph_id": {
             "anyOf": [
               {
@@ -581,8 +620,19 @@
                 "type": "null"
               }
             ]
+          }
+        },
+        "title": "ChunkPatchRequest",
+        "type": "object"
+      },
+      "ChunkPatchResponse": {
+        "description": "The result of one ``PATCH /chunks/{id}`` (issues #124, #144) \u2014 the chunk's\neditable build properties after the edit, carried together since a PATCH can apply\nmore than one at once.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
           },
-          "model": {
+          "default_effort": {
             "anyOf": [
               {
                 "type": "string"
@@ -591,18 +641,15 @@
                 "type": "null"
               }
             ],
-            "title": "Model"
-          }
-        },
-        "title": "ChunkPatchRequest",
-        "type": "object"
-      },
-      "ChunkPatchResponse": {
-        "description": "The result of one ``PATCH /chunks/{id}`` (issue #124) \u2014 the chunk's three\neditable build properties after the edit, carried together since a PATCH can apply\nmore than one at once.",
-        "properties": {
-          "chunk_id": {
-            "title": "Chunk Id",
-            "type": "string"
+            "title": "Default Effort"
+          },
+          "default_model": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Default Model",
+            "type": "array"
           },
           "graph_id": {
             "title": "Graph Id",
@@ -617,16 +664,11 @@
                 "type": "null"
               }
             ]
-          },
-          "model": {
-            "title": "Model",
-            "type": "string"
           }
         },
         "required": [
           "chunk_id",
-          "graph_id",
-          "model"
+          "graph_id"
         ],
         "title": "ChunkPatchResponse",
         "type": "object"
@@ -703,6 +745,25 @@
             ],
             "title": "Current Node Name"
           },
+          "default_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Effort"
+          },
+          "default_model": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Default Model",
+            "type": "array"
+          },
           "environment_count": {
             "default": 0,
             "title": "Environment Count",
@@ -710,10 +771,6 @@
           },
           "graph_id": {
             "title": "Graph Id",
-            "type": "string"
-          },
-          "model": {
-            "title": "Model",
             "type": "string"
           },
           "runner_id": {
@@ -743,8 +800,7 @@
           "chunk_id",
           "graph_id",
           "status",
-          "current_node_id",
-          "model"
+          "current_node_id"
         ],
         "title": "ChunkSummary",
         "type": "object"
@@ -4304,7 +4360,7 @@
         ]
       },
       "patch": {
-        "description": "Apply any of ``graph_id``, ``model``, ``intended_migration`` in one all-or-nothing\nedit (issue #124, in #104's shape) \u2014 the claimed-chunk counterpart to\n``POST .../graph``/``POST .../model``, which stay refused past ``ready``.\n\n``graph_id``/``model`` behave exactly as their single-field POST siblings (404 on an\nunknown chunk or graph, 422 on a blank model). ``intended_migration``, present only\nonce the request body actually names it (``model_fields_set`` \u2014 see\n``ChunkPatchRequest``), sets or overwrites the standing intent when it carries a\nvalue, or clears it on explicit ``null``; its ``to_graph`` resolves by id or name to\nthe newest enabled graph (404 unresolvable), and a blank ``to_graph``/``node`` is\n422. Each field's own editable-status window (409, naming the field) and the\nintended-migration semantic refusals \u2014 a retired target, a target equal to the\nchunk's current pin, or a ``forced`` node absent from the target (all 409) \u2014 are\n``EditService.edit``'s (``domain/edit.py``); a refused field means **nothing** in the\nbody is applied.",
+        "description": "Apply any of ``graph_id``, ``default_model``, ``default_effort``,\n``intended_migration`` in one all-or-nothing edit (issue #124, in #104's shape;\nthe two defaults replace #27's ``model`` field per issue #144).\n\n``graph_id`` 404s on an unknown chunk or graph. ``default_model`` is a prioritized\npreference list \u2014 a blank entry is 422, and an empty list is a legitimate \"express no\npreference\" clear; ``default_effort`` is 422 when blank and cleared by explicit\n``null``. Neither value's *vocabulary* is checked here: a ``blizzard:`` tier alias and\na harness-native name are both opaque preference strings to the hub, resolved by the\nrunner's adapter against its own config. ``intended_migration``, present only\nonce the request body actually names it (``model_fields_set`` \u2014 see\n``ChunkPatchRequest``), sets or overwrites the standing intent when it carries a\nvalue, or clears it on explicit ``null``; its ``to_graph`` resolves by id or name to\nthe newest enabled graph (404 unresolvable), and a blank ``to_graph``/``node`` is\n422. Each field's own editable-status window (409, naming the field) and the\nintended-migration semantic refusals \u2014 a retired target, a target equal to the\nchunk's current pin, or a ``forced`` node absent from the target (all 409) \u2014 are\n``EditService.edit``'s (``domain/edit.py``); a refused field means **nothing** in the\nbody is applied.",
         "operationId": "patch_chunk_api_chunks__chunk_id__patch",
         "parameters": [
           {

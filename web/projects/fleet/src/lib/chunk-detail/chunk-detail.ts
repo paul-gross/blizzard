@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, effect, input, output, si
 import { injectHubChunkDetailQuery } from '../chunks/chunk-detail.query';
 import { injectHubChunkWorkItemsQuery } from '../chunks/chunk-work-items.query';
 import { injectDetachChunkMutation } from '../chunks/detach.mutations';
-import { injectSetChunkGraphMutation, injectSetChunkModelMutation } from '../chunks/edit.mutations';
+import { injectSetChunkGraphMutation } from '../chunks/edit.mutations';
 import {
   injectAnswerQuestionMutation,
   injectResolveDecisionMutation,
@@ -15,7 +15,6 @@ import {
   type AnswerQuestionEvent,
   ChunkDetailPanel,
   type EditGraphEvent,
-  type EditModelEvent,
   type WorkItemsState,
   type ResolveDecisionEvent,
 } from './chunk-detail-panel';
@@ -59,7 +58,6 @@ import {
         (pauseChunk)="onPause($event)"
         (resumeChunk)="onResume($event)"
         (editGraph)="onEditGraph($event)"
-        (editModel)="onEditModel($event)"
       />
     } @else {
       <p class="rest" data-testid="chunk-detail-empty">
@@ -102,7 +100,6 @@ export class ChunkDetail {
   private readonly detachMutation = injectDetachChunkMutation();
   private readonly pauseMutation = injectChunkPauseMutation();
   private readonly editGraphMutation = injectSetChunkGraphMutation();
-  private readonly editModelMutation = injectSetChunkModelMutation();
 
   /** The open chunk's last operator-action failure, or `null`. Reset on every new
    * attempt and whenever a different chunk opens (issue #42). Shared by every action
@@ -199,14 +196,6 @@ export class ChunkDetail {
     this.editGraphMutation.mutate(
       { chunkId: event.chunkId, graphId: event.graphId },
       { onError: (error) => this.actionError.set(errorMessage(error, 'Set graph failed.')) },
-    );
-  }
-
-  protected onEditModel(event: EditModelEvent): void {
-    this.beginAction();
-    this.editModelMutation.mutate(
-      { chunkId: event.chunkId, model: event.model },
-      { onError: (error) => this.actionError.set(errorMessage(error, 'Set model failed.')) },
     );
   }
 }

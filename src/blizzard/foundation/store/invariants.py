@@ -27,7 +27,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.hub.domain.graph import RESERVED_TERMINAL, Executor
 from blizzard.hub.domain.work import derive_chunk_status, newest_live_route, newest_live_route_token
 from blizzard.hub.store import schema as hub
-from blizzard.hub.store.internal.chunk_store import ChunkStore
+from blizzard.hub.store.internal.chunk_store import ChunkStore, _deserialize_default_model
 from blizzard.runner.store import schema as runner
 
 
@@ -440,11 +440,29 @@ def _check_migrations(engine: Engine) -> list[Violation]:
                         f"chunk {chunk_id} pinned {chunk.graph_id} but its newest migration targets {m.to_graph_id}",  # type: ignore[attr-defined]
                     )
                 )
-            elif m.model_after is not None and chunk.model != m.model_after:  # type: ignore[attr-defined]
+            # Issue #144 retargeted the migration's model re-pin from `chunks.model` (now
+            # retained-and-unread) to `chunks.default_model`, so this comparison moves with
+            # the write — left pointing at `chunks.model`, it would fire on EVERY
+            # model-carrying migration, and the crash sweep runs this checker after every
+            # recovery.
+            #
+            # **Membership**, not equality against `[model_after]`. `model_after` is a single
+            # string and `default_model` a prioritized list, and the two shapes admit a
+            # legitimate divergence the old scalar field barely did: a migration re-queues the
+            # chunk to `ready`, which reopens the pre-claim edit window, so an operator can
+            # then add a fallback entry or reorder the list without undoing the re-pin. What
+            # this invariant is actually for is catching a **torn write** — the durable
+            # migration fact with the pin never applied — and a torn write leaves
+            # `default_model` empty or at its pre-migration value, which fails membership
+            # exactly as it fails equality. Membership therefore detects the same tear with a
+            # strictly narrower false-positive surface. Removing `model_after` from the list
+            # outright still trips it, which is the residual, deliberate limitation.
+            elif m.model_after is not None and m.model_after not in _deserialize_default_model(chunk.default_model):  # type: ignore[attr-defined]
                 violations.append(
                     Violation(
                         "hub:migration-pin-consistent",
-                        f"chunk {chunk_id} model {chunk.model} but its newest migration re-pinned {m.model_after}",  # type: ignore[attr-defined]
+                        f"chunk {chunk_id} default_model {chunk.default_model!r} does not carry "  # type: ignore[attr-defined]
+                        f"{m.model_after}, which its newest migration re-pinned",  # type: ignore[attr-defined]
                     )
                 )
             # A hub-landing migration (issue #111) retains the route by design — it is not a
