@@ -26,6 +26,7 @@ import {
   injectResolveDecisionMutation,
   injectSetChunkGraphMutation,
   injectSetChunkModelMutation,
+  readAnswerFailure,
 } from 'fleet';
 
 import { ArtifactLinks } from './artifact-links';
@@ -84,6 +85,9 @@ import { ArtifactLinks } from './artifact-links';
       </a>
       @if (actionError(); as err) {
         <p class="notice" data-testid="mobile-chunk-action-error" role="alert">{{ err }}</p>
+      }
+      @if (actionOutcome(); as outcome) {
+        <p class="outcome" data-testid="mobile-chunk-action-outcome" role="status">{{ outcome }}</p>
       }
       @if (detail(); as d) {
         <div class="cp-sections" data-testid="board-chunk-detail">
@@ -164,6 +168,19 @@ import { ArtifactLinks } from './artifact-links';
       color: var(--red);
       font-size: var(--fs-xs);
     }
+    /* An outcome sits in the same slot but reads cyan, not red: losing an answer race
+       is news — the question *is* answered — not something to retry. The desktop dock
+       renders the same distinction the same way. */
+    .outcome {
+      flex: none;
+      margin: 6px;
+      padding: 4px 6px;
+      border: 1px solid var(--line);
+      border-left: 2px solid var(--cyan);
+      background: var(--overlay-20);
+      color: var(--text);
+      font-size: var(--fs-xs);
+    }
     .cp-sections {
       display: flex;
       flex-direction: column;
@@ -231,6 +248,14 @@ export class ChunkPage {
    * attempt. */
   protected readonly actionError = signal<string | null>(null);
 
+  /** The last operator-action **outcome** — a non-failure result that still needs saying
+   * (issue #165): today, the winning answer a lost first-write-wins race returns. This
+   * page needs it at least as much as the desktop dock does — answering from a phone is
+   * what it exists for, so it is the surface most likely to *lose* a race, and folding
+   * that 409 through `errorMessage()` told the answerer their action failed while the
+   * question was in fact answered. Cleared alongside {@link actionError}. */
+  protected readonly actionOutcome = signal<string | null>(null);
+
   /** The chunk's related work-source items, in the shape the issue pane reads.
    * Mirrors the desktop container's own fold (`fleet`'s `chunk-detail.ts`). */
   protected readonly workItems = computed<WorkItemsState>(() => {
@@ -248,16 +273,33 @@ export class ChunkPage {
   protected readonly pointerCount = computed(() => this.detail()?.work_refs?.length ?? 0);
   protected readonly artifactCount = computed(() => this.detail()?.artifacts?.length ?? 0);
 
-  protected onAnswer(event: AnswerQuestionEvent): void {
+  /** Clear both report channels — every action on this page starts here. Kept as one
+   * method for the same reason the desktop container does: a stale outcome left up while
+   * another action reports a failure reads as though the two are related. */
+  private beginAction(): void {
     this.actionError.set(null);
+    this.actionOutcome.set(null);
+  }
+
+  /** Answer an open question. A lost first-write-wins race returns a 409 carrying the
+   * *winning* answer, which reads as an outcome naming the winner rather than a failure;
+   * `readAnswerFailure` owns that fold so this page and the desktop dock cannot drift. */
+  protected onAnswer(event: AnswerQuestionEvent): void {
+    this.beginAction();
     this.answerMutation.mutate(
       { questionId: event.questionId, answer: event.answer, chunkId: event.chunkId },
-      { onError: (error) => this.actionError.set(errorMessage(error, 'Answer failed.')) },
+      {
+        onError: (error) => {
+          const failure = readAnswerFailure(error);
+          if (failure.kind === 'outcome') this.actionOutcome.set(failure.message);
+          else this.actionError.set(failure.message);
+        },
+      },
     );
   }
 
   protected onResolve(event: ResolveDecisionEvent): void {
-    this.actionError.set(null);
+    this.beginAction();
     this.resolveMutation.mutate(
       { decisionId: event.decisionId, choice: event.choice, chunkId: event.chunkId },
       { onError: (error) => this.actionError.set(errorMessage(error, 'Resolve failed.')) },
@@ -265,7 +307,7 @@ export class ChunkPage {
   }
 
   protected onEditGraph(event: EditGraphEvent): void {
-    this.actionError.set(null);
+    this.beginAction();
     this.editGraphMutation.mutate(
       { chunkId: event.chunkId, graphId: event.graphId },
       { onError: (error) => this.actionError.set(errorMessage(error, 'Set graph failed.')) },
@@ -273,7 +315,7 @@ export class ChunkPage {
   }
 
   protected onEditModel(event: EditModelEvent): void {
-    this.actionError.set(null);
+    this.beginAction();
     this.editModelMutation.mutate(
       { chunkId: event.chunkId, model: event.model },
       { onError: (error) => this.actionError.set(errorMessage(error, 'Set model failed.')) },

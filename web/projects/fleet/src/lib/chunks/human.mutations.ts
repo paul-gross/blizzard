@@ -7,6 +7,7 @@ import {
   answerQuestionApiQuestionsQuestionIdAnswersPost,
   resolveDecisionApiDecisionsDecisionIdResolutionsPost,
 } from '../api/hub';
+import { errorMessage } from '../error-message';
 import { hubChunkKey, hubChunksKey } from '../query-keys';
 
 /** Answer a chunk's open question — the board's counterpart of `blizzard hub answer`. */
@@ -27,7 +28,7 @@ export interface AnswerVars {
  * "Answer failed." Returns `null` for anything that is not that shape, so a genuine
  * transport or 404 failure still falls through to the error path.
  */
-export function readAnswerConflict(error: unknown): AnswerResult | null {
+function readAnswerConflict(error: unknown): AnswerResult | null {
   if (!error || typeof error !== 'object') return null;
   const body = error as Partial<AnswerResult>;
   return body.won === false && typeof body.answer === 'string' && typeof body.answered_by === 'string'
@@ -36,15 +37,39 @@ export function readAnswerConflict(error: unknown): AnswerResult | null {
 }
 
 /**
+ * How a failed answer should read to the operator: `outcome` for a lost first-write-wins
+ * race — news, not a failure — and `error` for everything else.
+ */
+export interface AnswerFailure {
+  readonly kind: 'outcome' | 'error';
+  readonly message: string;
+}
+
+/**
+ * Fold an answer mutation's `onError` into the channel it belongs on (issue #165).
+ *
+ * The one owner of both the branch and the sentence, because **two** surfaces answer a
+ * question — the desktop dock and the mobile chunk page — and a board that got only half
+ * of this is worse than one that got none: it would render the return trail while still
+ * reporting the race it is most likely to lose as "Answer failed."
+ */
+export function readAnswerFailure(error: unknown): AnswerFailure {
+  const winner = readAnswerConflict(error);
+  return winner
+    ? { kind: 'outcome', message: `${winner.answered_by} answered first: “${winner.answer}”` }
+    : { kind: 'error', message: errorMessage(error, 'Answer failed.') };
+}
+
+/**
  * `POST /api/questions/{id}/answers` — first-write-wins CAS answer through the
  * generated client (bzh:generated-client); `POST /api/questions/{id}/answer` is now
  * a deprecated alias this board no longer calls.
  *
  * Re-reads the parked chunk's detail and the fleet list on `onSettled`, not `onSuccess`:
- * a **lost** race (the 409 {@link readAnswerConflict} reads) changed the server state
- * just as much as a won one — someone else's answer landed — so the dock must re-read to
- * show the question as answered with the winner's trail rather than sitting on the stale
- * open row (issue #165).
+ * a **lost** race (the 409 {@link readAnswerFailure} folds) changed the server state just
+ * as much as a won one — someone else's answer landed — so the board must re-read to show
+ * the question as answered with the winner's trail rather than sitting on the stale open
+ * row (issue #165).
  */
 export function injectAnswerQuestionMutation() {
   const queryClient = inject(QueryClient);

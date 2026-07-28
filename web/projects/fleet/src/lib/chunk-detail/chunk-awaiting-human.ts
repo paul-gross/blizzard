@@ -301,11 +301,17 @@ export class ChunkAwaitingHuman {
   );
 
   /**
-   * The chunk's recently answered questions, newest first — the return trail (issue
-   * #165). Answering used to drop the row from the dock the instant it landed, which
-   * left an operator answering from a phone with no evidence their answer went
-   * anywhere; keeping it renders who answered, what they said, and whether the runner
-   * has delivered it into the resumed session.
+   * The chunk's recently answered questions, most recently **answered** first — the
+   * return trail (issue #165). Answering used to drop the row from the dock the instant
+   * it landed, which left an operator answering from a phone with no evidence their
+   * answer went anywhere; keeping it renders who answered, what they said, and whether
+   * the runner has delivered it into the resumed session.
+   *
+   * Sorted on `answered_at`, not on the hub's own order — that list is by `asked_at`
+   * (`chunk_store.load_questions`), and the two disagree whenever asks and answers
+   * interleave. Since the whole question this panel answers is "did *my* answer just
+   * land", ordering by when it was *asked* can push the row the operator is looking for
+   * out of the cap entirely.
    *
    * Capped at {@link ANSWERED_TRAIL_LIMIT} because this is a *recency* affordance, not
    * a history: a chunk that asked its way through a long build would otherwise bury the
@@ -313,10 +319,11 @@ export class ChunkAwaitingHuman {
    * read carries every question, so nothing here is the record.
    */
   protected readonly answeredQuestions = computed<readonly QuestionView[]>(() =>
+    // `filter` already copied, so sorting in place does not mutate the query's data.
     (this.detail().questions ?? [])
       .filter((q) => q.answered)
-      .slice(-ANSWERED_TRAIL_LIMIT)
-      .reverse(),
+      .sort((a, b) => (b.answered_at ?? '').localeCompare(a.answered_at ?? ''))
+      .slice(0, ANSWERED_TRAIL_LIMIT),
   );
 
   /** The chunk's live gate decision while it still awaits the resolving transition. */

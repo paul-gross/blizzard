@@ -10,8 +10,8 @@ import { hubQuestionsKey } from '../query-keys';
  * shows, distinct from a single chunk's `questions` in its detail aggregate: the
  * rail must surface an ask on a chunk nobody has selected.
  *
- * The live-update service re-reads this on `question-asked` / `question-answered`;
- * the poll is the floor.
+ * The live-update service re-reads this on `question-asked` / `question-answered` /
+ * `answer-delivered`; the poll is the floor.
  */
 export function injectHubQuestionsQuery() {
   return injectQuery(() => ({

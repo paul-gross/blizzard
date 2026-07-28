@@ -7,7 +7,7 @@ import { injectSetChunkGraphMutation, injectSetChunkModelMutation } from '../chu
 import {
   injectAnswerQuestionMutation,
   injectResolveDecisionMutation,
-  readAnswerConflict,
+  readAnswerFailure,
 } from '../chunks/human.mutations';
 import { injectChunkPauseMutation } from '../chunks/pause.mutations';
 import { errorMessage } from '../error-message';
@@ -36,7 +36,10 @@ import {
  * `actionError` for the panel to show — issue #42's "report, don't swallow"
  * requirement, which issue #46's pause/resume and issue #27's graph/model edits both
  * follow rather than reinvent — and clears on the next attempt or the moment a
- * different chunk opens.
+ * different chunk opens. Answering has a **second** channel alongside it,
+ * `actionOutcome` (issue #165): a lost first-write-wins race is not a failure to retry
+ * but news — someone else's answer landed — so it reads as an outcome naming the winner.
+ * Both clear together in `beginAction`.
  */
 @Component({
   selector: 'fleet-chunk-detail',
@@ -110,16 +113,24 @@ export class ChunkDetail {
    * needs saying (issue #165). Today that is exactly one case: a lost answer race, where
    * the hub's 409 carries the *winning* answer. It is a channel of its own rather than a
    * second use of {@link actionError} because the two read differently to an operator —
-   * "someone beat you to it, here is what they said" is news, not a failure to retry —
-   * and it clears on the same two triggers. */
+   * "someone beat you to it, here is what they said" is news, not a failure to retry. */
   protected readonly actionOutcome = signal<string | null>(null);
 
   constructor() {
     effect(() => {
       this.chunkId();
-      this.actionError.set(null);
-      this.actionOutcome.set(null);
+      this.beginAction();
     });
+  }
+
+  /** Clear both report channels — every action in the dock starts here, and so does
+   * opening a different chunk. One method rather than a reset per handler because the
+   * two channels have to move together: leaving a stale outcome up while a *different*
+   * action reports a failure renders the cyan "alice answered first" and a red notice
+   * side by side, reading as though the two are about the same thing. */
+  private beginAction(): void {
+    this.actionError.set(null);
+    this.actionOutcome.set(null);
   }
 
   /** The open chunk's aggregate, or `undefined` while closed / still loading. */
@@ -140,21 +151,19 @@ export class ChunkDetail {
    * stays on the error channel. Either way the mutation re-reads the chunk, so the dock
    * settles showing the question answered with its trail. */
   protected onAnswer(event: AnswerQuestionEvent): void {
-    this.actionError.set(null);
-    this.actionOutcome.set(null);
+    this.beginAction();
     this.answerMutation.mutate(
       { questionId: event.questionId, answer: event.answer, chunkId: event.chunkId },
-      {
-        onError: (error) => {
-          const winner = readAnswerConflict(error);
-          if (winner) {
-            this.actionOutcome.set(`${winner.answered_by} answered first: “${winner.answer}”`);
-          } else {
-            this.actionError.set(errorMessage(error, 'Answer failed.'));
-          }
-        },
-      },
+      { onError: (error) => this.reportAnswerFailure(error) },
     );
+  }
+
+  /** Route an answer failure to the outcome or error channel — the fold is
+   * `readAnswerFailure`'s, shared with the mobile board so both read the same. */
+  private reportAnswerFailure(error: unknown): void {
+    const failure = readAnswerFailure(error);
+    if (failure.kind === 'outcome') this.actionOutcome.set(failure.message);
+    else this.actionError.set(failure.message);
   }
 
   protected onResolve(event: ResolveDecisionEvent): void {
@@ -162,7 +171,7 @@ export class ChunkDetail {
   }
 
   protected onDetach(chunkId: string): void {
-    this.actionError.set(null);
+    this.beginAction();
     this.detachMutation.mutate(
       { chunkId },
       { onError: (error) => this.actionError.set(errorMessage(error, 'Detach failed.')) },
@@ -170,7 +179,7 @@ export class ChunkDetail {
   }
 
   protected onPause(chunkId: string): void {
-    this.actionError.set(null);
+    this.beginAction();
     this.pauseMutation.mutate(
       { chunkId, paused: true },
       { onError: (error) => this.actionError.set(errorMessage(error, 'Pause failed.')) },
@@ -178,7 +187,7 @@ export class ChunkDetail {
   }
 
   protected onResume(chunkId: string): void {
-    this.actionError.set(null);
+    this.beginAction();
     this.pauseMutation.mutate(
       { chunkId, paused: false },
       { onError: (error) => this.actionError.set(errorMessage(error, 'Resume failed.')) },
@@ -186,7 +195,7 @@ export class ChunkDetail {
   }
 
   protected onEditGraph(event: EditGraphEvent): void {
-    this.actionError.set(null);
+    this.beginAction();
     this.editGraphMutation.mutate(
       { chunkId: event.chunkId, graphId: event.graphId },
       { onError: (error) => this.actionError.set(errorMessage(error, 'Set graph failed.')) },
@@ -194,7 +203,7 @@ export class ChunkDetail {
   }
 
   protected onEditModel(event: EditModelEvent): void {
-    this.actionError.set(null);
+    this.beginAction();
     this.editModelMutation.mutate(
       { chunkId: event.chunkId, model: event.model },
       { onError: (error) => this.actionError.set(errorMessage(error, 'Set model failed.')) },

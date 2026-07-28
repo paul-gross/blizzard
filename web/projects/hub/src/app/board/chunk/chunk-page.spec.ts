@@ -209,6 +209,88 @@ describe('Mobile chunk drill-down', () => {
     expect(el.querySelector('[data-testid="mobile-chunk-action-error"]')?.textContent).toContain('chunk is not ready');
   });
 
+  // --- Answering from a phone (issue #165) ----------------------------------
+  //
+  // The mobile board exists so an ask can be answered from a phone, which makes this
+  // the surface most likely to *lose* a first-write-wins race — and the one where a
+  // misreported race costs the most, since the notice is the only feedback there is.
+
+  const OPEN_QUESTION = {
+    question_id: 'qn_77',
+    chunk_id: CHUNK_ID,
+    question: 'Which API style?',
+    options: [],
+    epoch: 1,
+    runner_id: 'rn_01',
+    asked_at: '2026-07-16T11:20:00.000Z',
+    answered: false,
+  };
+
+  /** Open the chunk page on a chunk parked on `OPEN_QUESTION`, with the answer POST
+   * answering `answerResponse`, and submit an answer through the rendered controls. */
+  async function answerOnMobile(answerResponse: unknown): Promise<HTMLElement> {
+    stub.restore();
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'POST' && path === '/api/questions/qn_77/answers') return answerResponse;
+      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
+      return { ...DETAIL, status: 'waiting_on_human', questions: [OPEN_QUESTION] };
+    });
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}`, ChunkPage);
+    await settle(harness.fixture);
+    const el = harness.fixture.nativeElement as HTMLElement;
+
+    // Driven through the mounted ChunkAwaitingHuman's own controls, not the handler
+    // directly — the wiring from that reused component up to this page is the point.
+    el.querySelector<HTMLInputElement>('[data-testid="answer-input"]')!.value = 'graphql';
+    el.querySelector<HTMLButtonElement>('[data-testid="answer-submit"]')?.click();
+    await settle(harness.fixture);
+    return el;
+  }
+
+  it('renders a lost answer race as an outcome naming the winner, not "Answer failed."', async () => {
+    const el = await answerOnMobile(
+      stubError(409, {
+        won: false,
+        question_id: 'qn_77',
+        answer: 'rest',
+        answered_by: 'alice',
+        answered_at: '2026-07-16T11:21:00.000Z',
+      }),
+    );
+
+    const outcome = el.querySelector('[data-testid="mobile-chunk-action-outcome"]');
+    expect(outcome?.textContent).toContain('alice');
+    expect(outcome?.textContent).toContain('rest');
+    expect(el.querySelector('[data-testid="mobile-chunk-action-error"]')).toBeNull();
+  });
+
+  it('still reports a genuine answer failure on the error channel', async () => {
+    const el = await answerOnMobile(stubError(404, { detail: 'unknown question qn_77' }));
+
+    expect(el.querySelector('[data-testid="mobile-chunk-action-error"]')?.textContent).toContain('unknown question');
+    expect(el.querySelector('[data-testid="mobile-chunk-action-outcome"]')).toBeNull();
+  });
+
+  it('shows an answered question’s delivery trail on the phone too', async () => {
+    // AC 3 on mobile, which rides on ChunkAwaitingHuman being reused verbatim — pinned
+    // here so a future mobile-only fork of the asks region cannot drop it silently.
+    stub.restore();
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
+      return {
+        ...DETAIL,
+        questions: [
+          { ...OPEN_QUESTION, answered: true, answer: 'rest', answered_by: 'alice', delivered: true },
+        ],
+      };
+    });
+    const el = await open(`/board/chunk/${CHUNK_ID}`);
+
+    expect(el.querySelector('[data-testid="answered-by"]')?.textContent).toContain('alice');
+    expect(el.querySelector('[data-testid="answer-delivery"]')?.textContent).toContain('agent resumed');
+  });
+
   it('gives the artifact page a back link to its chunk', async () => {
     const el = await open(`/board/chunk/${CHUNK_ID}/artifact/review.findings.2`);
 

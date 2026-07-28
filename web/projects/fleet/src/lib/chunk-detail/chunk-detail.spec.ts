@@ -333,6 +333,32 @@ describe('ChunkDetail container', () => {
     expect(el.querySelector('[data-testid="action-outcome"]')).toBeNull();
   });
 
+  it('clears a stale answer outcome when any other dock action fires', async () => {
+    // Otherwise a later action's failure renders the red notice *beside* the leftover
+    // cyan "alice answered first", which reads as though the two are about each other.
+    answerResponse = stubError(409, {
+      won: false,
+      question_id: 'qn_77',
+      answer: 'rest',
+      answered_by: 'alice',
+      answered_at: '2026-07-13T00:01:00Z',
+    });
+    pauseResponse = stubError(409, { detail: 'chunk is already paused' });
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_ask');
+    await settle(fixture);
+    const el = await answerFrom(fixture);
+    expect(el.querySelector('[data-testid="action-outcome"]')).not.toBeNull();
+
+    // A sibling action on the same chunk — fired through its handler, since the dock's
+    // pause control is not rendered for a waiting_on_human chunk.
+    (fixture.componentInstance as unknown as { onPause(id: string): void }).onPause('ch_routed');
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="action-outcome"]')).toBeNull();
+    expect(el.querySelector('[data-testid="action-error"]')?.textContent).toContain('already paused');
+  });
+
   // --- Pause / Resume (issue #46) --------------------------------------------
 
   it('fires the pause client call for a running chunk once the operator confirms', async () => {

@@ -277,18 +277,43 @@ describe('ChunkAwaitingHuman', () => {
     expect(el.querySelectorAll('[data-testid="answered-question"]').length).toBe(1);
   });
 
-  it('caps the answered trail at the three most recent, newest first', async () => {
+  it('caps the answered trail at the three most recently answered, newest first', async () => {
     const fixture = TestBed.createComponent(ChunkAwaitingHuman);
     fixture.componentRef.setInput('detail', {
       ...ANSWERED_UNDELIVERED_DETAIL,
-      // Oldest first, the order the hub sends them in (by asked_at).
-      questions: ['q1', 'q2', 'q3', 'q4'].map((id) => answered({ question_id: id, answer: id })),
+      // Oldest first, the order the hub sends them in (by asked_at), answered in the
+      // same order — so ask order and answer order agree.
+      questions: ['q1', 'q2', 'q3', 'q4'].map((id, i) =>
+        answered({ question_id: id, answer: id, answered_at: `2026-07-13T00:0${i + 1}:00Z` }),
+      ),
     });
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
     const answers = [...el.querySelectorAll('[data-testid="answered-answer"]')].map((n) => n.textContent?.trim());
     expect(answers).toEqual(['q4', 'q3', 'q2']);
+  });
+
+  it('orders the trail by when each was answered, not by when it was asked', async () => {
+    // The hub sends questions ordered by `asked_at` (chunk_store.load_questions), which
+    // is a different order from `answered_at` whenever asks and answers interleave. The
+    // panel answers "did *my* answer just land", so sorting on the ask would push the row
+    // the operator is looking for out of the cap — q1 here, answered last of all.
+    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    fixture.componentRef.setInput('detail', {
+      ...ANSWERED_UNDELIVERED_DETAIL,
+      questions: [
+        answered({ question_id: 'q1', answer: 'q1', answered_at: '2026-07-13T00:09:00Z' }),
+        answered({ question_id: 'q2', answer: 'q2', answered_at: '2026-07-13T00:02:00Z' }),
+        answered({ question_id: 'q3', answer: 'q3', answered_at: '2026-07-13T00:03:00Z' }),
+        answered({ question_id: 'q4', answer: 'q4', answered_at: '2026-07-13T00:01:00Z' }),
+      ],
+    });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const answers = [...el.querySelectorAll('[data-testid="answered-answer"]')].map((n) => n.textContent?.trim());
+    expect(answers).toEqual(['q1', 'q3', 'q2']);
   });
 
   it('surfaces an escalation with its copyable takeover command', async () => {

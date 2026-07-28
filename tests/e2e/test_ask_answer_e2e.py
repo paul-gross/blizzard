@@ -298,8 +298,15 @@ def test_ask_parks_then_answer_resumes_session_to_done(tmp_path: Path) -> None:
             status = _tick_until(config, hub, chunk_id, fenced, {"done", "needs_human", "stopped"}, 120.0)
             assert status == "done", f"chunk did not reach done after the answer (last status {status!r})"
 
-        # Fleet truth: the answered question is closed.
-        assert hub.get(f"/api/fleet/questions/{question_id}").json()["answered"] is True
+        # Fleet truth: the answered question is closed, and the return leg landed —
+        # `delivered` derives from the `answer.delivered` fact the **real** runner minted
+        # on resume (issue #165). This is the only tier that sees that fact produced by
+        # production code rather than hand-pushed, so it is the only place a regression in
+        # the runner's payload would surface: `fleet.py`'s publish silently skips a fact
+        # whose `question_id` is absent, which every component test would still pass.
+        closed = hub.get(f"/api/fleet/questions/{question_id}").json()
+        assert closed["answered"] is True
+        assert closed["delivered"] is True, f"the resume-with-answer left no delivery fact: {closed}"
         pulls = forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json()
         assert any(p.get("merged") for p in pulls), f"no PR merged at the forge: {pulls}"
 
