@@ -1197,8 +1197,18 @@ class SqlAlchemyRunnerStore:
                 lease_closures.c.closed_at,
                 leases.c.epoch,
                 leases.c.session_id,
+                # The escalated lease's session stamps (issue #144) — joined here so the
+                # escalation view can name the pool and its configuration without a
+                # second read per row.
+                lease_context.c.session_name,
+                lease_context.c.resolved_model,
+                lease_context.c.resolved_effort,
             )
-            .select_from(lease_closures.join(leases, leases.c.lease_id == lease_closures.c.lease_id))
+            .select_from(
+                lease_closures.join(leases, leases.c.lease_id == lease_closures.c.lease_id).join(
+                    lease_context, lease_context.c.lease_id == leases.c.lease_id
+                )
+            )
             .where(lease_closures.c.reason == _ESCALATED_REASON)
         )
 
@@ -1211,6 +1221,9 @@ class SqlAlchemyRunnerStore:
             epoch=int(r.epoch),
             session_id=str(r.session_id) if r.session_id is not None else None,
             closed_at=r.closed_at,
+            session_name=r.session_name,
+            resolved_model=r.resolved_model,
+            resolved_effort=r.resolved_effort,
         )
 
     @staticmethod

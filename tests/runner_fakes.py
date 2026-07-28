@@ -311,6 +311,8 @@ class FakeHarness:
         self.judge_model_effort: list[tuple[str | None, str | None]] = []
         self.resume_efforts: list[str | None] = []
         self.usage_models: list[str | None] = []
+        # The (model, effort) each `resume_command` composition was handed (issue #144).
+        self.resume_command_config: list[tuple[str | None, str | None]] = []
         # Scripted `resolve_model`/`resolve_effort` replies (issue #144). The default
         # echoes the first preference / the value verbatim, so a test that does not care
         # about resolution sees what it passed in.
@@ -374,8 +376,12 @@ class FakeHarness:
         self.resumed_identity.append((preamble, chunk_id))
         return self.resume_pid
 
-    def resume_command(self, workdir: str, session_id: str) -> str:
-        return f"cd {workdir} && claude --resume {session_id}"
+    def resume_command(
+        self, workdir: str, session_id: str, *, model: str | None = None, effort: str | None = None
+    ) -> str:
+        self.resume_command_config.append((model, effort))
+        flags = "".join(f" --{name} {value}" for name, value in (("model", model), ("effort", effort)) if value)
+        return f"cd {workdir} && claude --resume {session_id}{flags}"
 
     def resolve_model(self, preferences: Sequence[str]) -> str:
         return self.resolved_model

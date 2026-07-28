@@ -52,9 +52,23 @@ def _service(store, *, clock=None, harness=None, probe=None):  # type: ignore[no
 
 
 def _seed_lease(
-    store, *, chunk="ch_1", lease="lease_1", node_id="nd_build", node_name="build", epoch=1, pid=100, session="sess-a"
+    store,
+    *,
+    chunk="ch_1",
+    lease="lease_1",
+    node_id="nd_build",
+    node_name="build",
+    epoch=1,
+    pid=100,
+    session="sess-a",
+    session_name=None,
+    resolved_model=None,
+    resolved_effort=None,
 ):  # type: ignore[no-untyped-def]
-    """A build lease, spawned and bound — the shape every scenario below starts from."""
+    """A build lease, spawned and bound — the shape every scenario below starts from.
+
+    The session stamps (issue #144) default to unset, i.e. the pre-#144 shape: every
+    scenario that says nothing about them asserts today's bare resume command."""
     store.record_lease(
         NewLease(
             lease_id=lease,
@@ -65,6 +79,9 @@ def _seed_lease(
             epoch=epoch,
             runner_id="r1",
             retries_max=2,
+            session_name=session_name,
+            resolved_model=resolved_model,
+            resolved_effort=resolved_effort,
             created_at=_NOW,
         )
     )
@@ -355,3 +372,35 @@ def test_advance_skips_the_held_chunk_gate_hub_node_poll_under_an_open_takeover(
 
     assert provider.released == []
     assert store.held_environment_ids() == ["e1"]
+
+
+# --------------------------------------------------------------------------- #
+# The takeover reads the session's stamps (D4, issue #144).
+# --------------------------------------------------------------------------- #
+
+
+def test_takeover_composes_its_command_from_the_sessions_own_stamps(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """A read, not a re-resolution: the operator continues under exactly the
+    configuration the session ran with. This is the deliberate exception to mint-only —
+    that rule exists for prompt-cache efficiency on *runner-driven* resumes, and an
+    interactive takeover is neither cache-sensitive nor implicit."""
+    store = _store(tmp_path)
+    _seed_lease(store, session_name="code", resolved_model="opus", resolved_effort="high")
+    store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
+
+    opened = _service(store).open("ch_1", force=False)
+
+    assert opened.command == "cd /ws/e1 && claude --resume sess-a --model opus --effort high"
+    # And it names WHICH lineage is being taken over, not just an opaque session id.
+    assert opened.session_name == "code"
+
+
+def test_takeover_of_a_session_predating_the_stamps_renders_the_bare_command(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    store = _store(tmp_path)
+    _seed_lease(store)  # no stamps — *unknown*
+    store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
+
+    opened = _service(store).open("ch_1", force=False)
+
+    assert opened.command == "cd /ws/e1 && claude --resume sess-a"
+    assert opened.session_name is None

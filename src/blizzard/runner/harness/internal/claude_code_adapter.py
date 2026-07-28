@@ -458,8 +458,11 @@ class ClaudeCodeAdapter:
             proc = subprocess.Popen(cmd, cwd=workdir, env=env, stdout=stdout_file)
         return proc.pid
 
-    def resume_command(self, workdir: str, session_id: str) -> str:
-        return f"cd {workdir} && {self._binary} --resume {session_id}"
+    def resume_command(
+        self, workdir: str, session_id: str, *, model: str | None = None, effort: str | None = None
+    ) -> str:
+        flags = "".join(f" --{name} {value}" for name, value in (("model", model), ("effort", effort)) if value)
+        return f"cd {workdir} && {self._binary} --resume {session_id}{flags}"
 
     def parse_verdict(self, output: str) -> str | None:
         text = self._result_text(output)

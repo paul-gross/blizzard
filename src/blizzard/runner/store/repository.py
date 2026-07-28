@@ -210,7 +210,15 @@ class EscalationRecord:
     chunk (a requeue) — the highest ``epoch`` for the chunk still being this one's is
     exactly that "no later mint" fact (``bzh:facts-not-status``), so no separate
     resolution flag is stored. ``session_id`` is the dormant session a resume command
-    is built around; ``None`` only if the escalated lease never reached spawn-return."""
+    is built around; ``None`` only if the escalated lease never reached spawn-return.
+
+    ``session_name``/``resolved_model``/``resolved_effort`` are the escalated lease's own
+    stamps (issue #144) — what the parked session actually ran under, so the escalation can
+    name it ("take over the `code` session (opus, high)") and its resume command can land
+    the operator in the same configuration rather than whatever a fresh resolution would
+    produce now. ``None`` on any of them means *unknown* (a lease predating the stamps) or,
+    for ``session_name``, a session on the bare vocabulary that belongs to no pool; every
+    consumer declines to guess."""
 
     lease_id: str
     chunk_id: str
@@ -218,6 +226,9 @@ class EscalationRecord:
     epoch: int
     session_id: str | None
     closed_at: datetime
+    session_name: str | None = None
+    resolved_model: str | None = None
+    resolved_effort: str | None = None
 
 
 @dataclass(frozen=True)

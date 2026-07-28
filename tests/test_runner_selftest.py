@@ -295,7 +295,9 @@ class _HangingAdapter:
     ) -> int:
         raise AssertionError("unreachable — spawn never returns")
 
-    def resume_command(self, workdir: str, session_id: str) -> str:
+    def resume_command(
+        self, workdir: str, session_id: str, *, model: str | None = None, effort: str | None = None
+    ) -> str:
         raise AssertionError("unreachable — spawn never returns")
 
     def judge(
@@ -386,7 +388,9 @@ class _FixedPidAdapter:
     ) -> int:
         return self.resume_pid
 
-    def resume_command(self, workdir: str, session_id: str) -> str:
+    def resume_command(
+        self, workdir: str, session_id: str, *, model: str | None = None, effort: str | None = None
+    ) -> str:
         return f"cd {workdir} && fake --resume {session_id}"
 
     def judge(

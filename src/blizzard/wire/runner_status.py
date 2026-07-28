@@ -98,6 +98,13 @@ class EscalationView(BaseModel):
     epoch: int
     closed_at: str
     resume_command: str
+    # The parked session's own configuration (issue #144) — the declared pool it belongs
+    # to and the model/effort it actually ran under, read off the lease's stamps rather
+    # than re-resolved. All `None` for a session on the bare vocabulary or one predating
+    # the stamps (*unknown*).
+    session_name: str | None = None
+    model: str | None = None
+    effort: str | None = None
 
 
 class EscalationListResponse(BaseModel):

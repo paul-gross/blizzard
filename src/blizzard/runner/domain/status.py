@@ -110,7 +110,13 @@ class EnvironmentSlot:
 
 @dataclass(frozen=True)
 class EscalationView:
-    """One parked escalation with its literal, ready-to-paste resume command."""
+    """One parked escalation with its literal, ready-to-paste resume command.
+
+    Since issue #144 the session's own configuration rides beside that command — the
+    declared pool it belongs to, and the model/effort it actually ran under — so an
+    operator reads "take over the `code` session (opus, high)" rather than an opaque id.
+    All three are ``None`` for a session on the bare vocabulary (which belongs to no pool)
+    or one predating the stamps (*unknown*)."""
 
     chunk_id: str
     lease_id: str
@@ -118,6 +124,9 @@ class EscalationView:
     epoch: int
     closed_at: datetime
     resume_command: str
+    session_name: str | None = None
+    model: str | None = None
+    effort: str | None = None
 
 
 @dataclass(frozen=True)
@@ -250,7 +259,15 @@ class RunnerStatusService:
             if escalation.session_id is not None:
                 bindings = self._store.bindings_for_chunk(escalation.chunk_id)
                 if bindings:
-                    resume_command = self._harness.resume_command(bindings[0].workdir, escalation.session_id)
+                    # Composed from the escalation's own stamps (issue #144), not a fresh
+                    # resolution: the operator lands in the configuration the parked
+                    # session ran with.
+                    resume_command = self._harness.resume_command(
+                        bindings[0].workdir,
+                        escalation.session_id,
+                        model=escalation.resolved_model,
+                        effort=escalation.resolved_effort,
+                    )
             views.append(
                 EscalationView(
                     chunk_id=escalation.chunk_id,
@@ -259,6 +276,9 @@ class RunnerStatusService:
                     epoch=escalation.epoch,
                     closed_at=escalation.closed_at,
                     resume_command=resume_command,
+                    session_name=escalation.session_name,
+                    model=escalation.resolved_model,
+                    effort=escalation.resolved_effort,
                 )
             )
         return views

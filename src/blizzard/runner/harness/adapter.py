@@ -217,8 +217,22 @@ class IHarnessAdapter(Protocol):
         """
         ...
 
-    def resume_command(self, workdir: str, session_id: str) -> str:
-        """The literal interactive-takeover shell command for the escalation record."""
+    def resume_command(
+        self, workdir: str, session_id: str, *, model: str | None = None, effort: str | None = None
+    ) -> str:
+        """The literal interactive-takeover shell command for the escalation record.
+
+        ``model``/``effort`` (issue #144) are the session's **stamped** values — what it
+        actually ran under, read back rather than re-resolved — and are appended to the
+        command when given. This is a deliberate exception to the mint-only model contract
+        above, which exists for prompt-cache efficiency on *runner-driven* resumes: an
+        operator's interactive takeover is neither cache-sensitive nor implicit, and
+        landing them in a session whose configuration silently differs from the one the
+        fleet ran is the worse failure.
+
+        Both ``None`` — a session predating the stamps, so *unknown* — renders today's
+        bare command rather than guessing at a default and presenting it as fact.
+        """
         ...
 
     def resolve_model(self, preferences: Sequence[str]) -> str:

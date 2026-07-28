@@ -341,6 +341,17 @@
             "title": "Closed At",
             "type": "string"
           },
+          "effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effort"
+          },
           "epoch": {
             "title": "Epoch",
             "type": "integer"
@@ -349,6 +360,17 @@
             "title": "Lease Id",
             "type": "string"
           },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
           "node_id": {
             "title": "Node Id",
             "type": "string"
@@ -356,6 +378,17 @@
           "resume_command": {
             "title": "Resume Command",
             "type": "string"
+          },
+          "session_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Name"
           }
         },
         "required": [

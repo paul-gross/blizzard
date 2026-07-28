@@ -1158,3 +1158,40 @@ def test_the_base_allowlist_carries_no_anthropic_model_override(monkeypatch: pyt
     env = allowlisted_env(())
 
     assert not [name for name in env if name.startswith("ANTHROPIC_")]
+
+
+# --------------------------------------------------------------------------- #
+# resume_command (D4, issue #144). The one deliberate exception to mint-only:
+# mint-only exists for prompt-cache efficiency on RUNNER-driven resumes, and an
+# operator's interactive takeover is neither cache-sensitive nor implicit.
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.unit
+def test_resume_command_appends_the_sessions_stamped_model_and_effort() -> None:
+    adapter = ClaudeCodeAdapter(binary="claude")
+
+    command = adapter.resume_command("/ws/e1", "sess-a", model="opus", effort="high")
+
+    assert command == "cd /ws/e1 && claude --resume sess-a --model opus --effort high"
+
+
+@pytest.mark.unit
+def test_resume_command_with_no_stamps_renders_todays_bare_command() -> None:
+    # A session predating the stamps reads *unknown*: render the bare command rather than
+    # guessing at a default and presenting it as what the session ran.
+    adapter = ClaudeCodeAdapter(binary="claude")
+
+    assert adapter.resume_command("/ws/e1", "sess-a") == "cd /ws/e1 && claude --resume sess-a"
+
+
+@pytest.mark.unit
+def test_resume_command_appends_only_the_stamp_it_has() -> None:
+    adapter = ClaudeCodeAdapter(binary="claude")
+
+    assert (
+        adapter.resume_command("/ws/e1", "sess-a", model="opus") == "cd /ws/e1 && claude --resume sess-a --model opus"
+    )
+    assert (
+        adapter.resume_command("/ws/e1", "sess-a", effort="high") == "cd /ws/e1 && claude --resume sess-a --effort high"
+    )

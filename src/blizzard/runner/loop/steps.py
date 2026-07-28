@@ -2951,7 +2951,15 @@ def _escalate(ctx: LoopContext, lease: LeaseRecord, *, reason: str = "retries ex
     bindings = ctx.store.bindings_for_chunk(lease.chunk_id)
     takeover = ""
     if lease.session_id is not None and bindings:
-        takeover = ctx.harness.resume_command(bindings[0].workdir, lease.session_id)
+        # Composed from the lease's own stamps (issue #144), so the operator who takes
+        # this escalation over lands in exactly the configuration the parked session ran
+        # with — never a fresh resolution that could flip a live session's model.
+        takeover = ctx.harness.resume_command(
+            bindings[0].workdir,
+            lease.session_id,
+            model=lease.resolved_model,
+            effort=lease.resolved_effort,
+        )
     payload = json.dumps(
         {
             "chunk_id": lease.chunk_id,

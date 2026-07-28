@@ -128,6 +128,11 @@ def test_status_renders_the_full_view_with_the_hub_unreachable(tmp_path: Path, m
             epoch=1,
             runner_id="runner-local",
             retries_max=2,
+            # The session stamps (issue #144) — so `status` renders which lineage parked
+            # and the resume command an operator can paste lands in its configuration.
+            session_name="code",
+            resolved_model="opus",
+            resolved_effort="high",
             created_at=_NOW,
         )
     )
@@ -170,7 +175,10 @@ def test_status_renders_the_full_view_with_the_hub_unreachable(tmp_path: Path, m
     assert "which branch?" in out
     assert "escalations (1):" in out
     assert "ch_2" in out
-    assert "resume: cd /ws/e2 && claude --resume sess-b" in out  # the literal takeover command
+    # The literal takeover command, carrying the parked session's own configuration
+    # (issue #144) rather than whatever a fresh resolution would produce now.
+    assert "resume: cd /ws/e2 && claude --resume sess-b --model opus --effort high" in out
+    assert "session=code (opus, high)" in out  # which lineage parked, not just its id
     assert "open takeovers (1):" in out
     assert "chunk ch_3" in out and "takeover=tko_1" in out
 
