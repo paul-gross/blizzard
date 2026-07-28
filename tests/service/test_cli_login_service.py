@@ -35,6 +35,7 @@ from blizzard.hub.auth.pkce import challenge_from_verifier
 from blizzard.hub.config import AuthConfig, HubConfig, OAuthProviderConfig
 from tests.e2e.test_acceptance_loop import _await_http, _free_port, _terminate
 from tests.service.support import require_stub_idp, service_gate, stub_idp
+from tests.support import daemon_log_sink
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -55,16 +56,17 @@ def _oauth_hub(hub_dir: Path, port: int, *, providers: tuple[OAuthProviderConfig
     config = HubConfig.load(hub_dir)
     config = dataclasses.replace(config, auth=AuthConfig(mode="oauth", oauth_providers=providers))
     config.config_path.write_text(config.to_toml())
+    log = hub_dir / "daemon.log"
     proc = subprocess.Popen(
         [hub_bin, "host", "--dir", str(hub_dir), "--host", "127.0.0.1", "--port", str(port)],
         env=env,
-        stdout=subprocess.PIPE,
+        stdout=daemon_log_sink(log),
         stderr=subprocess.STDOUT,
         text=True,
     )
     client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
     try:
-        _await_http(proc, client, "/api/health")
+        _await_http(proc, client, "/api/health", log=log)
         yield client
     finally:
         client.close()

@@ -57,6 +57,7 @@ import pytest
 from blizzard.hub.config import AuthConfig, HubConfig, OAuthProviderConfig
 from tests.e2e.test_acceptance_loop import _await_http, _free_port, _terminate
 from tests.service.support import require_stub_idp, stub_idp
+from tests.support import daemon_log_sink
 
 pytestmark = [
     pytest.mark.e2e,
@@ -93,16 +94,17 @@ def _init_oauth_hub(hub_dir: Path, idp_port: int) -> None:
 
 def _start_hub(hub_dir: Path, port: int) -> subprocess.Popen[str]:
     env = {**os.environ, _SECRET_ENV: _SECRET}
+    log = hub_dir / "daemon.log"
     proc = subprocess.Popen(
         [_hub_bin(), "host", "--dir", str(hub_dir), "--host", "127.0.0.1", "--port", str(port)],
         env=env,
-        stdout=subprocess.PIPE,
+        stdout=daemon_log_sink(log),
         stderr=subprocess.STDOUT,
         text=True,
     )
     client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
     try:
-        _await_http(proc, client, "/api/health")
+        _await_http(proc, client, "/api/health", log=log)
     finally:
         client.close()
     return proc

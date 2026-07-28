@@ -36,6 +36,7 @@ from tests.e2e.test_acceptance_loop import (
     _terminate,
     _winter_source,
 )
+from tests.support import daemon_log_sink, shared_daemon_log_dir
 
 
 def mint_fixture(bin_dir: Path, winter_source: Path, scratch: Path) -> tuple[Path, Path, Path]:
@@ -107,18 +108,30 @@ def require_stub_idp() -> Path:
     return bin_dir
 
 
+def _mock_daemon_log(name: str, port: int, log_dir: Path | None) -> Path:
+    """Where one mock daemon's merged output goes (issue #145, ``bzh:daemon-stdout-to-file``).
+
+    The mock fleet's daemons own no runtime directory of their own, so ``log_dir``
+    defaults to the per-process :func:`~tests.support.shared_daemon_log_dir`; a caller
+    with a natural home for the log (its ``tmp_path``) passes one. Named by daemon and
+    port so several concurrent instances of the same mock never share a file.
+    """
+    return (log_dir or shared_daemon_log_dir()) / f"{name}-{port}.log"
+
+
 @contextlib.contextmanager
-def stub_idp(bin_dir: Path, port: int) -> Iterator[httpx.Client]:
+def stub_idp(bin_dir: Path, port: int, *, log_dir: Path | None = None) -> Iterator[httpx.Client]:
     """Run ``blizzard-mock-idp`` as a real subprocess and yield a client to it."""
+    log = _mock_daemon_log("mock-idp", port, log_dir)
     proc = subprocess.Popen(
         [str(bin_dir / "blizzard-mock-idp"), "--host", "127.0.0.1", "--port", str(port)],
-        stdout=subprocess.PIPE,
+        stdout=daemon_log_sink(log),
         stderr=subprocess.STDOUT,
         text=True,
     )
     client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
     try:
-        _await_http(proc, client, "/healthz")
+        _await_http(proc, client, "/healthz", log=log)
         yield client
     finally:
         client.close()
@@ -187,17 +200,18 @@ def mock_hub_chunk_spec(work_ref: str) -> dict:
 
 
 @contextlib.contextmanager
-def mock_hub(bin_dir: Path, port: int) -> Iterator[httpx.Client]:
+def mock_hub(bin_dir: Path, port: int, *, log_dir: Path | None = None) -> Iterator[httpx.Client]:
     """Run ``blizzard-mock-hub`` as a real subprocess and yield a client to it."""
+    log = _mock_daemon_log("mock-hub", port, log_dir)
     proc = subprocess.Popen(
         [str(bin_dir / "blizzard-mock-hub"), "--host", "127.0.0.1", "--port", str(port)],
-        stdout=subprocess.PIPE,
+        stdout=daemon_log_sink(log),
         stderr=subprocess.STDOUT,
         text=True,
     )
     client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
     try:
-        _await_http(proc, client, "/api/health")
+        _await_http(proc, client, "/api/health", log=log)
         yield client
     finally:
         client.close()
@@ -205,9 +219,12 @@ def mock_hub(bin_dir: Path, port: int) -> Iterator[httpx.Client]:
 
 
 @contextlib.contextmanager
-def mock_runner(bin_dir: Path, port: int, hub_port: int, *, runner_id: str = "runner-mock") -> Iterator[httpx.Client]:
+def mock_runner(
+    bin_dir: Path, port: int, hub_port: int, *, runner_id: str = "runner-mock", log_dir: Path | None = None
+) -> Iterator[httpx.Client]:
     """Run ``blizzard-mock-runner`` (a driver) pointed at a hub, and yield a client to it."""
     env = {**os.environ, "BZ_HUB_URL": f"http://127.0.0.1:{hub_port}"}
+    log = _mock_daemon_log("mock-runner", port, log_dir)
     proc = subprocess.Popen(
         [
             str(bin_dir / "blizzard-mock-runner"),
@@ -221,13 +238,13 @@ def mock_runner(bin_dir: Path, port: int, hub_port: int, *, runner_id: str = "ru
             runner_id,
         ],
         env=env,
-        stdout=subprocess.PIPE,
+        stdout=daemon_log_sink(log),
         stderr=subprocess.STDOUT,
         text=True,
     )
     client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
     try:
-        _await_http(proc, client, "/api/health")
+        _await_http(proc, client, "/api/health", log=log)
         yield client
     finally:
         client.close()

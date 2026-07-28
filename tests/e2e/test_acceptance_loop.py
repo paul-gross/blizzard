@@ -62,7 +62,7 @@ from blizzard.runner.app import build_hosted_app
 from blizzard.runner.config import ENV_TRANSCRIPTS_ROOT, RunnerConfig
 from blizzard.runner.loop.build import run_single_tick
 from blizzard.runner.runtime import init_environment as init_runner_environment
-from tests.support import write_work_sources
+from tests.support import daemon_log_sink, read_daemon_log, write_work_sources
 
 pytestmark = [
     pytest.mark.e2e,
@@ -296,12 +296,21 @@ def _git_bare(bare: Path, *args: str) -> str:
     return subprocess.run(["git", "--git-dir", str(bare), *args], check=True, capture_output=True, text=True).stdout
 
 
-def _await_http(proc: subprocess.Popen[str], client: httpx.Client, path: str, *, timeout: float = 40.0) -> None:
+def _await_http(
+    proc: subprocess.Popen[str], client: httpx.Client, path: str, *, log: Path | None = None, timeout: float = 40.0
+) -> None:
+    """Block until ``path`` answers 200, or fail naming why.
+
+    ``log`` is the daemon's own log file (issue #145) — every spawn site here writes its
+    merged output to one rather than to a pipe nothing drains, so the early-exit
+    diagnostic reads the FILE, not ``proc.stdout`` (which is now ``None``). The exit code
+    is named either way, so a daemon that died before writing anything still reports
+    something actionable.
+    """
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if proc.poll() is not None:
-            out = proc.stdout.read() if proc.stdout else ""
-            raise AssertionError(f"process exited early ({proc.returncode}):\n{out}")
+            raise AssertionError(f"process exited early ({proc.returncode}):\n{read_daemon_log(log)}")
         with contextlib.suppress(httpx.HTTPError):
             if client.get(path).status_code == 200:
                 return
@@ -311,15 +320,16 @@ def _await_http(proc: subprocess.Popen[str], client: httpx.Client, path: str, *,
 
 @contextlib.contextmanager
 def _forge(bin_dir: Path, origins: Path, port: int) -> Iterator[httpx.Client]:
+    log = origins.parent / "forge.log"
     proc = subprocess.Popen(
         [str(bin_dir / "blizzard-mock-forge"), "--repos-dir", str(origins), "--host", "127.0.0.1", "--port", str(port)],
-        stdout=subprocess.PIPE,
+        stdout=daemon_log_sink(log),
         stderr=subprocess.STDOUT,
         text=True,
     )
     client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=15.0)
     try:
-        _await_http(proc, client, "/healthz")
+        _await_http(proc, client, "/healthz", log=log)
         yield client
     finally:
         client.close()
@@ -370,16 +380,17 @@ def _hub(
             overrides["produces_mode"] = produces_mode
         config = dataclasses.replace(config, **overrides)
         config.config_path.write_text(config.to_toml())
+    log = hub_dir / "daemon.log"
     proc = subprocess.Popen(
         [hub_bin, "host", "--dir", str(hub_dir), "--host", "127.0.0.1", "--port", str(port)],
         env=env,
-        stdout=subprocess.PIPE,
+        stdout=daemon_log_sink(log),
         stderr=subprocess.STDOUT,
         text=True,
     )
     client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
     try:
-        _await_http(proc, client, "/api/health")
+        _await_http(proc, client, "/api/health", log=log)
         yield client
     finally:
         client.close()

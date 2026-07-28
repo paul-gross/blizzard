@@ -36,6 +36,7 @@ from blizzard.hub.config import AuthConfig, HubConfig, OAuthProviderConfig
 from blizzard.runner.config import RunnerConfig
 from tests.e2e.test_acceptance_loop import _await_http, _free_port, _terminate
 from tests.service.support import require_stub_idp, service_gate, stub_idp
+from tests.support import daemon_log_sink
 
 pytestmark = [pytest.mark.service, service_gate]
 
@@ -56,16 +57,17 @@ def _oauth_hub(
     config = HubConfig.load(hub_dir)
     config = dataclasses.replace(config, auth=AuthConfig(mode="oauth", oauth_providers=providers, superuser=superuser))
     config.config_path.write_text(config.to_toml())
+    log = hub_dir / "daemon.log"
     proc = subprocess.Popen(
         [hub_bin, "host", "--dir", str(hub_dir), "--host", "127.0.0.1", "--port", str(port)],
         env=env,
-        stdout=subprocess.PIPE,
+        stdout=daemon_log_sink(log),
         stderr=subprocess.STDOUT,
         text=True,
     )
     client = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=30.0)
     try:
-        _await_http(proc, client, "/api/health")
+        _await_http(proc, client, "/api/health", log=log)
         yield client
     finally:
         client.close()
@@ -109,15 +111,16 @@ def _federated_runner(
     finally:
         reg_client.close()
 
+    log = runner_dir / "daemon.log"
     proc = subprocess.Popen(
         [runner_bin, "host", "--dir", str(runner_dir), "--host", "127.0.0.1", "--port", str(port)],
-        stdout=subprocess.PIPE,
+        stdout=daemon_log_sink(log),
         stderr=subprocess.STDOUT,
         text=True,
     )
     client = httpx.Client(base_url=public_url, timeout=15.0)
     try:
-        _await_http(proc, client, "/api/health")
+        _await_http(proc, client, "/api/health", log=log)
         yield client
     finally:
         client.close()

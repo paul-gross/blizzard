@@ -13,10 +13,13 @@ no forge seam is wired here — a test that reaches a deliver hub node arms
 
 from __future__ import annotations
 
+import functools
+import tempfile
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import IO
 
 import sqlalchemy as sa
 from fastapi import FastAPI
@@ -440,6 +443,60 @@ def write_work_sources(hub_dir: Path, sources: Sequence[WorkSourceConfig]) -> Hu
     config = replace(config, work_sources=tuple(sources))
     config.config_path.write_text(config.to_toml())
     return config
+
+
+def daemon_log_sink(path: Path) -> IO[str]:
+    """An append-mode file for a spawned daemon's merged stdout/stderr.
+
+    A long-lived daemon must NEVER be given ``stdout=PIPE`` by a test
+    (``bzh:daemon-stdout-to-file``). Nothing in these suites drains those pipes, so the
+    daemon runs only until its output fills the ~64 KiB pipe buffer and then blocks in
+    ``write`` forever — wedged mid-tick, HTTP included, with every subsequent wait timing
+    out against a process that still looks alive (``poll()`` says running, the port still
+    accepts ``connect``). The deadlock is latent in output *volume* rather than in
+    anything the test does, so it surfaces as an unrelated-looking assertion far from its
+    cause — it first bit the journey's escalate chunk, and any change that adds daemon
+    logging shortens the fuse for every other suite without touching them. A file has no
+    such ceiling, and it makes the daemon's log readable after a failure instead of
+    discarded with the pipe.
+
+    One owner for all four daemon-running tiers (issue #145): ``tests/crash``,
+    ``tests/service``, ``tests/e2e``, and ``tests/journey`` all spawn through this rather
+    than copy-pasting the rule per file. Short-lived ``subprocess.run(...,
+    capture_output=True)`` calls are unaffected — they drain by construction.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path.open("a", buffering=1)
+
+
+def read_daemon_log(path: Path | None) -> str:
+    """A spawned daemon's log text, or a legible stand-in — the early-exit diagnostic.
+
+    Total by design: a daemon that died before its log file was ever created (a bad
+    binary path, an immediate ``exec`` failure) must still produce an assertion message
+    naming what happened, so a missing/unreadable file degrades to a note rather than
+    masking the real failure with an :class:`OSError` of its own.
+    """
+    if path is None:
+        return "<no log file>"
+    try:
+        return path.read_text()
+    except OSError as exc:  # pragma: no cover - defensive, see docstring
+        return f"<log {path} unreadable: {exc}>"
+
+
+@functools.lru_cache(maxsize=1)
+def shared_daemon_log_dir() -> Path:
+    """The per-process fallback log directory for daemons spawned with no runtime dir.
+
+    The hub and runner launchers each own a runtime dir (``hub init`` / ``runner init``)
+    and put their log beside it; the **mock** fleet's daemons (mock hub, mock runner,
+    stub IdP) own no directory at all, and threading one through their ~40 call sites
+    would buy nothing a single well-named directory does not. Created once per pytest
+    process and reused, so a whole session's mock-daemon logs land together and are still
+    on disk after a failure.
+    """
+    return Path(tempfile.mkdtemp(prefix="blizzard-daemon-logs-"))
 
 
 def parse_sse_frames(text: str) -> list[dict[str, str]]:
