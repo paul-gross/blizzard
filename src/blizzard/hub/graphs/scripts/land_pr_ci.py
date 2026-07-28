@@ -3,7 +3,7 @@
 This alternative delivery policy backs the `advanced-development-workflow` graph's
 `deliver` node (`hub/graphs/advanced-development-workflow/graph.yaml`), proving delivery
 policy lives in YAML. It honors the same hub-command-node authoring contract as the default land script
-(``blizzard-harness:/standards/hub-nodes.md``): pure stdlib against the forge, env
+(``blizzard-context:/standards/hub-nodes.md``): pure stdlib against the forge, env
 injected by the executor, the authored choice (``landed``/``conflict``) or the reserved
 ``pending`` printed as the LAST stdout line, diagnostics to stderr, exit 0 for every
 outcome the policy can express — an EMPTY commit set from a graph that declared a

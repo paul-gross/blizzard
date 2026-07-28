@@ -1,12 +1,12 @@
 // @ts-check
 /*
  * The structural gate (issue #78) — the tooled half of
- * `blizzard-harness:/verification/blizzard.md`'s `web:structural-gate`
+ * `blizzard-context:/verification/blizzard.md`'s `web:structural-gate`
  * method.
  *
  * Two halves, both live:
  *
- *   1. The chrome-duplication sweep (blizzard-harness bzh:frontend-kit): the
+ *   1. The chrome-duplication sweep (blizzard-context bzh:frontend-kit): the
  *      retired `.panel`/`.p-hdr`/`.p-body`/`.status`/`.lbl` chrome-class
  *      blocks — the copy-pasted panel shell and async-state styling the
  *      `fleet/lib/kit/` components now own — come up empty in every
@@ -14,7 +14,7 @@
  *      inline `styles: \`...\`` template literals (the codebase uses inline
  *      component styles exclusively); a separate `styleUrls` file would be
  *      outside this coverage.
- *   2. A `max-lines` ceiling (the ~400-line cap, blizzard-harness
+ *   2. A `max-lines` ceiling (the ~400-line cap, blizzard-context
  *      bzh:frontend-container-presentational) over every Angular component
  *      file (one declaring `@Component(`) — armed in phase 3 (#80) now that
  *      the chunk-detail decomposition (#79) and the panel splits (#80) have
@@ -58,7 +58,7 @@ const EXEMPT_FILES = [
 ];
 
 /** The `max-lines` ceiling every Angular component file is held to (the
- * ~400-line cap, blizzard-harness `bzh:frontend-container-presentational`). */
+ * ~400-line cap, blizzard-context `bzh:frontend-container-presentational`). */
 const MAX_LINES = 400;
 
 /**
@@ -75,7 +75,7 @@ const MAX_LINES = 400;
  */
 const MAX_LINES_EXEMPT_FILES = [path.join('fleet', 'src', 'lib', 'board-shell', 'board-shell.ts')];
 
-// The retired chrome-class blocks (blizzard-harness bzh:frontend-kit Detect).
+// The retired chrome-class blocks (blizzard-context bzh:frontend-kit Detect).
 // Matched as a CSS class selector opener — the name as a whole word, directly
 // followed by a compound-selector continuation (`.other`), a combinator, or
 // the rule's opening brace — so `.status-icon` or `.panel-head` (a distinct,
@@ -162,7 +162,7 @@ function main() {
     for (const v of chromeViolations) console.error(`  ${v.file}: .${v.className}`);
     console.error(
       '\nAdopt the shared kit (fleet/lib/kit/ — KitPanel, KitAsyncState) instead of a local copy of this chrome, ' +
-        'per blizzard-harness:/standards/frontend.md bzh:frontend-kit.',
+        'per blizzard-context:/standards/frontend.md bzh:frontend-kit.',
     );
     process.exitCode = 1;
     return;
@@ -173,7 +173,7 @@ function main() {
     for (const v of lineViolations) console.error(`  ${v.file}: ${v.lines} lines`);
     console.error(
       '\nDecompose into container + presentational siblings built from the kit, ' +
-        'per blizzard-harness:/architecture/frontend-structure.md bzh:frontend-container-presentational.',
+        'per blizzard-context:/architecture/frontend-structure.md bzh:frontend-container-presentational.',
     );
     process.exitCode = 1;
     return;

@@ -2,7 +2,7 @@
 
 Honors the same hub-command-node authoring contract as
 :mod:`~blizzard.hub.graphs.scripts.land_default`
-(``blizzard-harness:/standards/hub-nodes.md``: ``bzh:hub-node-run-shape``,
+(``blizzard-context:/standards/hub-nodes.md``: ``bzh:hub-node-run-shape``,
 ``bzh:hub-node-env-contract``, ``bzh:hub-node-outcome-protocol``,
 ``bzh:hub-node-step-idempotence``) but a different delivery *policy*: where
 ``land_default`` opens a PR per repo and merges it (producing a merge commit),

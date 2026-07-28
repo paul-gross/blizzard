@@ -1,7 +1,7 @@
 """Derived lease state — ``derive_lease_state`` and ``LocalLeaseService`` (issue #28).
 
 Two tiers: the pure precedence tests (``derive_lease_state``, no store, no I/O) and
-the staleness-boundary pin sit at the **unit** tier ([tiers], `blizzard-harness:/
+the staleness-boundary pin sit at the **unit** tier ([tiers], `blizzard-context:/
 verification/blizzard.md`); ``LocalLeaseService.list_active()`` — wired against a real
 tmp sqlite runner store with the fake process probe (``bzh:pluggable-seams``) — sits at
 the **component** tier, mirroring ``test_runner_loop.py``'s own store-backed unit tests

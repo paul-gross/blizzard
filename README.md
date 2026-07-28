@@ -16,7 +16,7 @@ That absence is a design position, not a gap. Blizzard assumes a **competent age
 
 Two things follow, and they explain features you might otherwise expect to find:
 
-- **Workflow graphs are application-agnostic.** A graph declares the shape of the work — node roles, what each node produces, how a verdict is rendered — never a toolchain. The same graph drives twenty unrelated applications unchanged. The enforceable form of this is `bzh:app-agnostic-graphs` in the harness ([`architecture/system-shape.md`](https://github.com/paul-gross/blizzard-harness/blob/master/architecture/system-shape.md)).
+- **Workflow graphs are application-agnostic.** A graph declares the shape of the work — node roles, what each node produces, how a verdict is rendered — never a toolchain. The same graph drives twenty unrelated applications unchanged. The enforceable form of this is `bzh:app-agnostic-graphs` in the harness ([`architecture/system-shape.md`](https://github.com/paul-gross/blizzard-context/blob/master/architecture/system-shape.md)).
 - **There is no per-application configuration.** No repo-convention registry, no per-app graph variants, no place to tell Blizzard how your project is tested. If that seems missing, it is because the answer belongs in your repo, where your agents will read it.
 
 What Blizzard does own is everything an agent cannot be trusted to do by being competent: exactly-once delivery, crash recovery at any step boundary, fencing a zombie worker out of the merge queue, metering spend, and keeping a truthful account of what happened.
@@ -100,7 +100,7 @@ Each holds at **both ends** — git truth on the bare origin and the hub's deriv
 ## The service tier (`mise run service-test`)
 
 `mise run service-test` (`BLIZZARD_SERVICE=1 uv run pytest tests/service/`) is the
-**service tier** (`blizzard-harness` `verification/blizzard.md`): one **running daemon's
+**service tier** (`blizzard-context` `verification/blizzard.md`): one **running daemon's
 HTTP API exercised from outside the process** with its counterpart bound to the mock
 fleet — distinct from the e2e tier, which drives the whole loop with every seam real. It
 lives in its own `tests/service/` package and, like e2e, is **skipped unless

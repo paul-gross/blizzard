@@ -216,7 +216,7 @@ _CP_SPAWN_AFTER_SPAWN = crashpoint("spawn.after-spawn", "worker spawned; pid rec
 # window this used to open (`advance.before-artifact-push` / `.after-artifact-push.
 # before-judgement`) is gone; a read-only re-derivation needs no crash point of its own
 # (`bzh:crash-correctness` — recorded as a removed exemption in
-# `blizzard-harness:/architecture/crash-correctness.md`).
+# `blizzard-context:/architecture/crash-correctness.md`).
 _CP_ADV_AFTER_JUDGE = crashpoint("advance.after-judgement.before-buffer", "verdict parsed; completion not buffered")
 # Usage recording (issue #58) sits between the verdict and the completion buffer: a crash
 # here either finds this attempt's usage facts already durable (idempotent re-run, keyed
@@ -2397,7 +2397,7 @@ def _spawn_attempt(
     # lands after the spawn returns, so a durable fingerprint always implies the prose
     # reached the process, and a kill that loses it leaves the next resume rendering in
     # full (pre-change behavior). Recorded as an exemption in
-    # `blizzard-harness:/architecture/crash-correctness.md`. Placed before the checkpoint
+    # `blizzard-context:/architecture/crash-correctness.md`. Placed before the checkpoint
     # below so that point keeps meaning "every fact about this spawn is durable".
     ctx.store.record_session_preamble(handle.session_id, fingerprint=rendered.fingerprint, at=now)
     _CP_SPAWN_AFTER_SPAWN.reached()

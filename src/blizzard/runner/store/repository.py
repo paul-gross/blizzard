@@ -937,5 +937,5 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         after ``record_spawn`` — the write lands after the spawn returns, so a durable
         fingerprint always implies the prose reached the process, and a crash that loses
         it leaves the next resume rendering in full (pre-change behaviour). See the
-        recorded exemption in ``blizzard-harness:/architecture/crash-correctness.md``."""
+        recorded exemption in ``blizzard-context:/architecture/crash-correctness.md``."""
         ...

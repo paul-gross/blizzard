@@ -1,7 +1,7 @@
 """The default graph's `deliver` node script — fetch, check-all, push-all.
 
 The reference hub-command-node `run:` script; it honors the authoring contract owned by
-``blizzard-harness:/standards/hub-nodes.md`` (``bzh:hub-node-run-shape``,
+``blizzard-context:/standards/hub-nodes.md`` (``bzh:hub-node-run-shape``,
 ``bzh:hub-node-env-contract``, ``bzh:hub-node-outcome-protocol``,
 ``bzh:hub-node-step-idempotence``).
 

@@ -1,7 +1,7 @@
 """Shared scaffolding for the service tier — the mock-fleet launchers and gate.
 
 The service tier exercises **one running daemon's HTTP API from outside the process**
-with its counterpart bound to the mock fleet (blizzard-harness ``verification/blizzard.md``
+with its counterpart bound to the mock fleet (blizzard-context ``verification/blizzard.md``
 test tiers): the runner against the **mock hub**, the hub against the **mock runner** +
 the **mock forge**. Like the e2e tier it needs the sibling provisioned ``blizzard-mock``
 worktree (whose venv ships ``blizzard-mock-hub`` / ``blizzard-mock-runner`` / ``-forge`` /

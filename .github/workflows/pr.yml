@@ -2,7 +2,7 @@
 #
 # ruff + pyright + eslint + client-drift check + the unit and component tiers,
 # then the SERVICE tier and the kill-9 CRASH SWEEP as REAL gates too
-# (blizzard-harness verification/blizzard.md: blizzard:service-test,
+# (blizzard-context verification/blizzard.md: blizzard:service-test,
 # blizzard:crash-sweep) — a subset of the `push` workflow's jobs (everything but
 # the dev-build wheel artifact), so a PR that breaks either upper tier fails its
 # own check instead of only breaking master after merge.

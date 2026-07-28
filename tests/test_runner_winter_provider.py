@@ -349,22 +349,22 @@ def test_repos_narrows_to_the_named_env_and_drops_standalone_clones() -> None:
     standalone entry must not leak into the manifest."""
     winter = _FakeWinter()
     winter.worktrees = [
-        _worktree_entry("e1", "blizzard-harness", "/ws"),
-        _worktree_entry("e2", "blizzard-harness", "/ws"),
+        _worktree_entry("e1", "blizzard-context", "/ws"),
+        _worktree_entry("e2", "blizzard-context", "/ws"),
         {
             "kind": "standalone",
             "env": None,
             "repo": None,
-            "name": "blizzard-harness",
-            "label": "blizzard-harness",
+            "name": "blizzard-context",
+            "label": "blizzard-context",
             "path": "/ws/.winter/ext/harness",
         },
         {"kind": "workspace", "env": None, "repo": None, "name": "ws", "label": "<workspace>", "path": "/ws"},
     ]
     provider = WinterWorkspaceProvider("/ws", env_pool=["e1", "e2"], winter=winter, git=_FakeGit())
 
-    assert [(b.environment_id, b.relpath) for b in provider.repos("e1")] == [("e1", "blizzard-harness")]
-    assert [(b.environment_id, b.relpath) for b in provider.repos("e2")] == [("e2", "blizzard-harness")]
+    assert [(b.environment_id, b.relpath) for b in provider.repos("e1")] == [("e1", "blizzard-context")]
+    assert [(b.environment_id, b.relpath) for b in provider.repos("e2")] == [("e2", "blizzard-context")]
 
 
 @pytest.mark.unit

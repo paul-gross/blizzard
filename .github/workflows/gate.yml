@@ -6,7 +6,7 @@
 #
 # Every check here is seams-mocked and token-free: it installs dependencies and
 # runs, needing no real forge, no tokens, and no network beyond the package
-# installs (blizzard-harness verification/blizzard.md, tier rules).
+# installs (blizzard-context verification/blizzard.md, tier rules).
 name: gate
 
 on:

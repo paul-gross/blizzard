@@ -1,7 +1,7 @@
 """The injected error-wrapping seam for the identity repositories (issue #91).
 
 Follows the exemplar's ``RepoErrorFactory`` shape
-(``../../../../blizzard-harness/exemplars/python/repo_pattern.py``): a library
+(``blizzard-context:/exemplars/python/repo_pattern.py``): a library
 exception (a SQLAlchemy ``IntegrityError`` — a username/email/provider-subject
 collision race, or a session-id-hash collision) is translated into the domain
 :class:`RepoError` at the one site it is caught, logged once at ERROR

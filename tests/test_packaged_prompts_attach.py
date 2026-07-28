@@ -21,7 +21,7 @@ and never the deprecated ``attach`` alias. A future prompt edit that drops, mist
 reverts to the deprecated verb fails here rather than shipping green.
 
 Runs under the ``blizzard:unit-test`` tier (``uv run pytest -m unit``); cited in that row
-of ``blizzard-harness:/verification/blizzard.md`` as the criterion-7 prompt-content guard.
+of ``blizzard-context:/verification/blizzard.md`` as the criterion-7 prompt-content guard.
 """
 
 from __future__ import annotations

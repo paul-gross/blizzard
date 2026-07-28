@@ -1,7 +1,7 @@
 """Blizzard — hub, runner, and CLI for orchestrating fleets of coding agents.
 
 One repo, one wheel: this package ships both daemons, the CLI, and the
-embedded frontend. See the per-package READMEs and blizzard-harness for the rules
+embedded frontend. See the per-package READMEs and blizzard-context for the rules
 this code is held to.
 """
 

@@ -1,6 +1,6 @@
 """``transcripts/`` — locator, parser, and the filesystem repository (issue #29).
 
-All unit tier (`blizzard-harness:/verification/blizzard.md`): the parser takes an
+All unit tier (`blizzard-context:/verification/blizzard.md`): the parser takes an
 iterable of strings and needs no filesystem; the repository is exercised with
 ``tmp_path`` as ``projects_root`` (``bzh:dependency-injection`` is what makes this
 hermetic — no ``HOME`` monkey-patching).

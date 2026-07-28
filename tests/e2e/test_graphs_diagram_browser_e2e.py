@@ -1,6 +1,6 @@
 """Graph-explorer diagram browser e2e — scenario 7 of the standing e2e smoke.
 
-The browser half of the e2e tier (blizzard-harness ``verification/blizzard.md`` test
+The browser half of the e2e tier (blizzard-context ``verification/blizzard.md`` test
 tiers) for the **graph explorer's static DAG diagram** (issue #75 phase 4). A **real
 Chromium**, driven by Playwright, over the **served mission-control board**
 (``blizzard hub host`` mounts the built Angular app at ``/``, deep routes falling back

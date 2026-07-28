@@ -16,7 +16,7 @@
 # agent, ever (`bzh:deterministic-shell`). Its `run:` step invokes
 # `hub/graphs/scripts/land_default.py`, which owns the check-all-then-push-all mechanics
 # and the `merged/<repo>` marker convention; the hub-command-node authoring contract
-# both scripts honor lives in `blizzard-harness:/standards/hub-nodes.md`. A conflict at
+# both scripts honor lives in `blizzard-context:/standards/hub-nodes.md`. A conflict at
 # the check stage routes `conflict -> build` (nothing pushed); a clean land routes
 # `landed -> done`. See `tests/e2e/test_delivery_pr_ci_e2e.py` and the
 # `advanced-development-workflow` graph's own `deliver` node for the alternative PR +
@@ -28,7 +28,7 @@
 # name-matched landing node (else the target's entry), recording a migration fact rather
 # than a transition; an optional per-choice `model:` re-pins the chunk's model on the
 # hop. The target binds by name when taken, so a target not yet minted warns at mint, not
-# errors. The full authoring contract lives in `blizzard-harness:/domain/graphs.md`. This
+# errors. The full authoring contract lives in `blizzard-context:/domain/graphs.md`. This
 # default graph uses no cross-graph targets.
 #
 # Operational metadata is NOT authored here. The retire/re-enable lifecycle (issue

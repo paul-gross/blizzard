@@ -1,6 +1,6 @@
 """Board browser e2e — scenario 6 of the standing e2e smoke.
 
-The browser half of the e2e tier (blizzard-harness ``verification/blizzard.md`` test
+The browser half of the e2e tier (blizzard-context ``verification/blizzard.md`` test
 tiers): a **real Chromium**, driven by Playwright, over the **served mission-control
 board** (``blizzard hub host`` mounts the built Angular app at ``/``) wired to
 the same live stack the sibling in-process scenarios drive — the real forge, the real

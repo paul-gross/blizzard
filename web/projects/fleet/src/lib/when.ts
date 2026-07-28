@@ -8,7 +8,7 @@
  * server, via a server-derived state field the caller already renders. Every
  * function below is *decoration* against the *browser's* clock, and a
  * browser's clock must never make a correctness call (`bzh:utc-instants`,
- * `blizzard-harness:/standards/wire.md`): a bounded negative delta (up to
+ * `blizzard-context:/standards/wire.md`): a bounded negative delta (up to
  * {@link SKEW_TOLERANCE_MS}) is benign browser-vs-server skew and floors at
  * zero; past that bound the caller renders `—` and lets the server-derived
  * state carry the meaning.
