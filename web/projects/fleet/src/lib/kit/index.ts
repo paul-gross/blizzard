@@ -14,4 +14,5 @@ export { KitChip, KitChips, type KitChipOption } from './kit-chips';
 export { KitMenu, KitMenuPanel } from './kit-menu';
 export { KitMenuItem, KitMenuItemRadio } from './kit-menu-item';
 export { KitSlotBar } from './kit-slot-bar';
+export { KitTabs, type KitTabOption } from './kit-tabs';
 export type { Tone } from './tone';
