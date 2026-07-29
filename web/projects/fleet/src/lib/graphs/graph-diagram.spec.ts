@@ -49,13 +49,18 @@ const LAID_OUT: LaidOutGraph = {
       kind: 'advance',
       path: 'M 95 80 L 95 120',
       label: { text: 'pass', x: 95, y: 100, width: 40, height: 20 },
+      fromNodeId: 'n_build',
+      toNodeId: 'n_deliver',
+      choiceId: 'c_pass',
     },
   ],
   selfLoops: [
     {
+      id: 'e1',
       nodeId: 'n_build',
       path: 'M 170 8 C 214 -2, 214 32, 174 20',
       label: { text: 'fail', x: 216, y: 20, width: 36, height: 20 },
+      choiceId: 'c_fail',
     },
   ],
   done: { x: 95, y: 220, r: 24 },
