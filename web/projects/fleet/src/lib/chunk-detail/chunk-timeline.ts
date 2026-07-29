@@ -2,14 +2,16 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 
 import type { ChunkDetail, ChunkStatus } from '../api/hub';
 import { formatCost, formatTokens } from '../cost-format';
-import { formatWhen } from '../when';
+import { formatAbsolute, formatWhen } from '../when';
 
 /** One judged node on the timeline: the node, the verdict that closed it, and where
  * that verdict routed the chunk — a transition re-read node-first for display. A
  * `migration` step (issue #90) is the same shape re-read as a graph-to-graph hop: its
  * `toName` is `to_graph/landed_node`, and `graphName` labels the graph the step happened
  * in so a two-graph history is legible. `sortKey` is the raw `recorded_at` used to weave
- * transitions and migrations into one chronological timeline. */
+ * transitions and migrations into one chronological timeline. {@link when}'s full-datetime
+ * tooltip text lives beside it as {@link whenTitle} (issue #175) — the row computes the
+ * view-model text once rather than the template re-deriving it from a raw instant. */
 interface HistoryRow {
   readonly kind: 'transition' | 'migration';
   readonly epoch: number;
@@ -20,6 +22,7 @@ interface HistoryRow {
   readonly toId: string;
   readonly toName: string;
   readonly when: string;
+  readonly whenTitle: string;
   readonly sortKey: string;
 }
 
@@ -90,7 +93,7 @@ interface StepUsageTotal {
               <span class="verdict" data-testid="history-choice">{{ row.verdict ?? '·' }}</span>
               <span class="jg-to" [attr.title]="row.toId">→ {{ row.toName }}</span>
             </span>
-            <span class="ts" data-testid="history-when">{{ row.when }}</span>
+            <span class="ts" data-testid="history-when" [attr.title]="row.whenTitle || null">{{ row.when }}</span>
             <!-- That node-step's own usage (issue #60) — every invocation recorded at
                  this step's (node, epoch) summed inline, so a review-fail cycle visibly
                  shows what each lap cost. Absent when no usage fact landed for it yet. -->
@@ -263,6 +266,7 @@ export class ChunkTimeline {
         toId: t.to_node_id,
         toName: t.to_node_name ?? t.to_node_id,
         when: formatWhen(t.recorded_at),
+        whenTitle: formatAbsolute(t.recorded_at),
         sortKey: t.recorded_at,
       }));
     // Cross-graph migration steps (issue #90) — the chunk left `from_graph/from_node`
@@ -277,6 +281,7 @@ export class ChunkTimeline {
       toId: m.landed_node_id ?? m.to_graph_id,
       toName: `${m.to_graph_name ?? m.to_graph_id}/${m.landed_node_name ?? m.landed_node_id ?? 'entry'}`,
       when: formatWhen(m.recorded_at),
+      whenTitle: formatAbsolute(m.recorded_at),
       sortKey: m.recorded_at,
     }));
     return [...transitions, ...migrations].sort((a, b) => a.sortKey.localeCompare(b.sortKey));

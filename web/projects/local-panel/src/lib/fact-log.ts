@@ -1,5 +1,13 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
-import { compactRef, formatLocalClockWithDay, KitAsyncState, type KitAsyncStateValue, type LocalClockWithDay, type runnerApi } from 'fleet';
+import {
+  compactRef,
+  formatAbsolute,
+  formatLocalClockWithDay,
+  KitAsyncState,
+  type KitAsyncStateValue,
+  type LocalClockWithDay,
+  type runnerApi,
+} from 'fleet';
 
 import { injectRunnerFactsQuery } from './status.query';
 
@@ -25,7 +33,7 @@ import { injectRunnerFactsQuery } from './status.query';
       >
         @for (fact of facts(); track fact.seq) {
           <div class="ev" data-testid="fact-row" [attr.data-seq]="fact.seq">
-            <span class="t">
+            <span class="t" [attr.title]="clockInfo(fact) ? absolute(fact) : null">
               @if (clockInfo(fact); as info) {
                 @if (info.day) {
                   <span class="day">{{ info.day }}</span>
@@ -126,5 +134,11 @@ export class FactLog {
    * today — the ledger reads as a tail -f, but an operator can be anywhere. */
   protected clockInfo(fact: runnerApi.FactView): LocalClockWithDay | null {
     return formatLocalClockWithDay(fact.created_at);
+  }
+
+  /** {@link clockInfo}'s full local date + time, for the stamp's hover tooltip
+   * (issue #175). */
+  protected absolute(fact: runnerApi.FactView): string {
+    return formatAbsolute(fact.created_at);
   }
 }

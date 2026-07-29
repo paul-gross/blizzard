@@ -102,3 +102,54 @@ def test_fleet_spend_rejects_a_malformed_since(tmp_path: Path) -> None:
     resp = hub.client.get("/api/spend", params={"since": "not-a-timestamp"})
 
     assert resp.status_code == 422, resp.text
+
+
+def test_fleet_spend_omitting_until_is_byte_identical_to_before(tmp_path: Path) -> None:
+    # Same shape as test_fleet_spend_sums_usage_across_every_chunk_since_the_cutoff
+    # above, pinned again here beside the new `until` field so a regression that
+    # narrows the default (unbounded) window shows up next to the tests that would
+    # otherwise carry that proof alone.
+    hub = build_hub(tmp_path)
+    chunk_id, node_id = _claim(hub, _POINTER_A)
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+    cutoff = iso_utc(hub.clock.now())
+    _push_usage(hub, chunk_id=chunk_id, node_id=node_id, epoch=1, seq=2, cost_usd=0.10)
+    hub.clock.advance(timedelta(hours=1))
+    _push_usage(hub, chunk_id=chunk_id, node_id=node_id, epoch=1, seq=3, cost_usd=0.20)
+
+    body = hub.client.get("/api/spend", params={"since": cutoff}).json()
+
+    assert body["until"] is None
+    assert body["input_tokens"] == 200  # both rows, no upper bound to exclude the later one
+    assert body["cost_usd"] == pytest.approx(0.30)
+
+
+def test_fleet_spend_until_excludes_a_fact_recorded_at_or_after_it(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+    chunk_id, node_id = _claim(hub, _POINTER_A)
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+    since = iso_utc(hub.clock.now())
+    _push_usage(hub, chunk_id=chunk_id, node_id=node_id, epoch=1, seq=2, cost_usd=0.10)
+
+    hub.clock.advance(timedelta(hours=1))
+    until = iso_utc(hub.clock.now())
+
+    # Recorded exactly at `until` — excluded, the same boundary rule `since` gets
+    # the inclusive half of.
+    _push_usage(hub, chunk_id=chunk_id, node_id=node_id, epoch=1, seq=3, cost_usd=0.20)
+
+    resp = hub.client.get("/api/spend", params={"since": since, "until": until})
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["until"] == until
+    assert body["input_tokens"] == 100  # one row, not the one recorded at `until`
+    assert body["cost_usd"] == pytest.approx(0.10)
+
+
+def test_fleet_spend_rejects_a_malformed_until(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path)
+
+    resp = hub.client.get("/api/spend", params={"since": iso_utc(hub.clock.now()), "until": "not-a-timestamp"})
+
+    assert resp.status_code == 422, resp.text
+    assert "until" in resp.json()["detail"]

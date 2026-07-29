@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
-import { formatLocalClockWithDay, KitAsyncState, type LocalClockWithDay, type runnerApi } from 'fleet';
+import { formatAbsolute, formatLocalClockWithDay, KitAsyncState, type LocalClockWithDay, type runnerApi } from 'fleet';
 
 import { injectTranscriptQuery } from './transcript.query';
 
@@ -83,7 +83,7 @@ import { injectTranscriptQuery } from './transcript.query';
         }
         @for (turn of transcript()?.turns ?? []; track turn.index) {
           <div class="turn" [class]="'k-' + turn.kind" data-testid="transcript-turn">
-            <span class="t">
+            <span class="t" [attr.title]="turnClockInfo(turn.timestamp) ? turnAbsolute(turn.timestamp) : null">
               @if (turnClockInfo(turn.timestamp); as info) {
                 @if (info.day) {
                   <span class="day">{{ info.day }}</span>
@@ -275,5 +275,11 @@ export class TranscriptPanel {
    */
   protected turnClockInfo(iso: string | null): LocalClockWithDay | null {
     return formatLocalClockWithDay(iso);
+  }
+
+  /** {@link turnClockInfo}'s full local date + time, for the stamp's hover tooltip
+   * (issue #175). */
+  protected turnAbsolute(iso: string | null): string {
+    return formatAbsolute(iso);
   }
 }

@@ -172,6 +172,7 @@ export class BoardShell {
           .join(' '),
         costUsd: chunk.cost?.cost_usd ?? 0,
         costPartial: chunk.cost?.cost_partial ?? false,
+        completedAt: chunk.completed_at ?? null,
       });
     }
     // READY alone is ordered rather than listed: it is a queue, so its rank comes
@@ -185,6 +186,19 @@ export class BoardShell {
       const [left, right] = [rankOf(a), rankOf(b)];
       if (left === right) return 0;
       return left < right ? -1 : 1;
+    });
+    // DONE alone is ordered newest-first (issue #173) — a second lane-scoped
+    // ordering, same shape as READY's above. A `null` completedAt (shouldn't happen
+    // for a done-lane card, but not fabricated if it does) sorts last rather than
+    // jumping to the top, and ties keep their relative order (stable sort).
+    const completedRank = (card: BoardCard): number => {
+      const ms = card.completedAt === null ? null : Date.parse(card.completedAt);
+      return ms === null || Number.isNaN(ms) ? Number.NEGATIVE_INFINITY : ms;
+    };
+    grouped.get('done')?.sort((a, b) => {
+      const [left, right] = [completedRank(a), completedRank(b)];
+      if (left === right) return 0;
+      return left > right ? -1 : 1;
     });
     return grouped;
   });

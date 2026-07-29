@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
-import { ageMs, formatAge } from 'fleet';
+import { ageMs, formatAge, injectNowSignal } from 'fleet';
 
 /**
  * How stale a heartbeat may read before REAP calls it dead — mirrors the
@@ -96,11 +96,11 @@ export class HeartbeatFreshness {
   /** Whether the server already derived this lease `stale` — colors the bar red. */
   readonly stale = input(false);
 
-  /**
-   * Recomputes when the inputs change — the 5s leases poll hands every row a
-   * fresh object, so the bar ticks at the poll cadence without its own timer.
-   */
-  protected readonly freshAgeMs = computed(() => ageMs(this.lastHeartbeatAt(), Date.now()));
+  /** Ticks once a second (issue #178) so the bar drains between polls, not just
+   * when the 5s leases poll hands this row a fresh object. */
+  private readonly now = injectNowSignal(1000);
+
+  protected readonly freshAgeMs = computed(() => ageMs(this.lastHeartbeatAt(), this.now()));
 
   protected readonly percent = computed<number>(() => {
     const age = this.freshAgeMs();

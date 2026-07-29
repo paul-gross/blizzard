@@ -15,6 +15,18 @@ export interface StatCell {
   readonly capacity?: number;
 }
 
+/** One spend cell — today's or yesterday's (issue #183) — folded into one shape
+ * so the template renders both from a single `@for` rather than a duplicated
+ * `@if` block per window. `spend` is `null` while its own read is unresolved;
+ * the template withholds the cell entirely rather than show a misleading `$0.00`. */
+interface SpendCellView {
+  readonly key: 'today' | 'yesterday';
+  readonly label: string;
+  readonly testid: string;
+  readonly valueTestid: string;
+  readonly spend: FleetSpendView | null;
+}
+
 /**
  * The mission-control titlebar — the brand, a fleet's live counts, and a
  * connection state. Shared by the hub board (its own chunk-derived lane counts,
@@ -73,14 +85,17 @@ export interface StatCell {
         }
       </div>
       <div class="spacer"></div>
-      @if (spendToday(); as spend) {
-        <!-- The fleet-wide spend-since read (issue #60) — "today" is whatever local
-             start-of-day instant the caller passed as since; the cost-absent lower
-             bound is marked, never presented as exact (a leading tilde, formatCost). -->
-        <div class="cell spend" data-testid="spend-today">
-          <span class="stat-lbl">Spend today</span>
-          <span class="v" data-testid="spend-today-value">{{ formatCost(spend.cost_usd, spend.cost_partial) }}</span>
-        </div>
+      <!-- The fleet-wide spend-since reads (issue #60; yesterday added issue #183) —
+           each cell withholds itself until its own read resolves, independently, so
+           neither ever shows a misleading $0.00; the cost-absent lower bound is
+           marked, never presented as exact (a leading tilde, formatCost). -->
+      @for (cell of spendCells(); track cell.key) {
+        @if (cell.spend; as spend) {
+          <div class="cell spend" [class.spend-yesterday]="cell.key === 'yesterday'" [attr.data-testid]="cell.testid">
+            <span class="stat-lbl">{{ cell.label }}</span>
+            <span class="v" [attr.data-testid]="cell.valueTestid">{{ formatCost(spend.cost_usd, spend.cost_partial) }}</span>
+          </div>
+        }
       }
       <div class="cell conn" data-testid="conn">
         <span class="stat-lbl">{{ connectionLabel() }}</span>
@@ -234,6 +249,12 @@ export interface StatCell {
       .stats {
         display: none;
       }
+      /* Yesterday's cell — a comparison figure — drops one tier earlier than
+         today's own, the same tier the per-lane stat strip yields at (issue
+         #183; a judgment call, flagged here so review can overrule it cheaply). */
+      .spend-yesterday {
+        display: none;
+      }
     }
     @container board-header (max-width: 699px) {
       .spend {
@@ -265,6 +286,12 @@ export class BoardHeader {
   /** The fleet-wide spend-since read (issue #60), or `null` before the first read
    * resolves — the cell withholds itself rather than show a misleading `$0.00`. */
   readonly spendToday = input<FleetSpendView | null>(null);
+
+  /** The fleet-wide spend-yesterday read (issue #183) — `[yesterday-midnight,
+   * today-midnight)`, or `null` before the first read resolves (withheld the same
+   * way as {@link spendToday}) and for every consumer that never passes one, e.g.
+   * the runner's local panel (`local-panel-layout.ts`), which has no such read. */
+  readonly spendYesterday = input<FleetSpendView | null>(null);
 
   /** Explicit stat cells, e.g. the runner's envs/agents capacity cells (issue
    * #131) — when given, these render in place of {@link chunkStats} below, so a
@@ -305,4 +332,17 @@ export class BoardHeader {
   /** The cells the template renders — {@link stats} when the caller supplied one,
    * else {@link chunkStats}. */
   protected readonly cells = computed<readonly StatCell[]>(() => this.stats() ?? this.chunkStats());
+
+  /** Today's and yesterday's spend cells (issue #183), folded into one list the
+   * template renders with a single `@for` — see {@link SpendCellView}. */
+  protected readonly spendCells = computed<readonly SpendCellView[]>(() => [
+    { key: 'today', label: 'TODAY', testid: 'spend-today', valueTestid: 'spend-today-value', spend: this.spendToday() },
+    {
+      key: 'yesterday',
+      label: 'YESTERDAY',
+      testid: 'spend-yesterday',
+      valueTestid: 'spend-yesterday-value',
+      spend: this.spendYesterday(),
+    },
+  ]);
 }

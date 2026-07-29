@@ -21,6 +21,7 @@ from blizzard.hub.domain.work import (
     DecisionFact,
     EscalationFact,
     LeaseFact,
+    MigrationFact,
     PauseFact,
     PrOpenedFact,
     QuestionFact,
@@ -33,6 +34,7 @@ from blizzard.hub.domain.work import (
     bounces_over_cap,
     current_node_id,
     derive_chunk_status,
+    derive_completed_at,
     has_landed_repos,
     latest_epoch,
     newest_live_route_token,
@@ -678,3 +680,102 @@ def test_open_pause_reads_the_fact_on_a_done_chunk() -> None:
     )
     assert derive_chunk_status(facts) is ChunkStatus.DONE
     assert open_pause(facts) is not None
+
+
+# --------------------------------------------------------------------------- #
+# derive_completed_at (issue #173) — the render-only completion instant, mirroring
+# derive_chunk_status's own branch order so the two never disagree.
+# --------------------------------------------------------------------------- #
+
+
+def test_completed_at_is_none_for_every_non_terminal_status() -> None:
+    assert derive_completed_at(ChunkFacts(minted=True)) is None
+    facts = ChunkFacts(minted=True, routes_created=[RouteCreatedFact(created_at=_at(1))])
+    assert derive_chunk_status(facts) is ChunkStatus.RUNNING
+    assert derive_completed_at(facts) is None
+
+
+def test_completed_at_is_the_stop_instant_for_stopped() -> None:
+    facts = ChunkFacts(minted=True, stopped=True, stopped_at=_at(9))
+    assert derive_chunk_status(facts) is ChunkStatus.STOPPED
+    assert derive_completed_at(facts) == _at(9)
+
+
+def test_completed_at_is_the_terminal_transitions_instant_for_done() -> None:
+    facts = ChunkFacts(
+        minted=True,
+        transitions=[
+            TransitionFact(to_node_id=RESERVED_TERMINAL, to_node_executor=Executor.HUB, epoch=1, recorded_at=_at(5)),
+        ],
+    )
+    assert derive_chunk_status(facts) is ChunkStatus.DONE
+    assert derive_completed_at(facts) == _at(5)
+
+
+def test_completed_at_in_open_pr_mode_with_no_terminal_transition_is_the_newest_pr_closed() -> None:
+    # Open-pr mode's own terminal fact, standing alone (no terminal transition at all —
+    # the deliver hub node's own transition targets the hub node itself, never `done`).
+    facts = _parked_on_open_pr(pr_closed=True, pr_closed_at=_at(6))
+    assert derive_chunk_status(facts) is ChunkStatus.DONE
+    assert derive_completed_at(facts) == _at(6)
+
+
+def test_completed_at_in_open_pr_mode_takes_the_later_of_transition_and_pr_closed() -> None:
+    # A multi-repo chunk whose deliver hub node's terminal transition landed before every
+    # repo's PR closed — the newest pr_closed_at, not the earlier transition instant.
+    facts = ChunkFacts(
+        minted=True,
+        transitions=[
+            TransitionFact(to_node_id=RESERVED_TERMINAL, to_node_executor=Executor.HUB, epoch=1, recorded_at=_at(5)),
+        ],
+        pr_closed=True,
+        pr_closed_at=_at(9),
+    )
+    assert derive_chunk_status(facts) is ChunkStatus.DONE
+    assert derive_completed_at(facts) == _at(9)
+
+
+def test_completed_at_in_open_pr_mode_keeps_the_transition_instant_when_it_is_later() -> None:
+    facts = ChunkFacts(
+        minted=True,
+        transitions=[
+            TransitionFact(to_node_id=RESERVED_TERMINAL, to_node_executor=Executor.HUB, epoch=1, recorded_at=_at(9)),
+        ],
+        pr_closed=True,
+        pr_closed_at=_at(5),
+    )
+    assert derive_chunk_status(facts) is ChunkStatus.DONE
+    assert derive_completed_at(facts) == _at(9)
+
+
+def test_completed_at_is_none_for_a_chunk_that_migrated_after_reaching_terminal() -> None:
+    # The newest movement is a migration recorded *after* the terminal transition, so
+    # `newest_transition_is_terminal` returns False (superseded) and the chunk is not, in
+    # fact, done — `derive_completed_at` must not report the superseded transition's instant.
+    facts = ChunkFacts(
+        minted=True,
+        promoted=True,
+        transitions=[
+            TransitionFact(
+                to_node_id=RESERVED_TERMINAL,
+                to_node_executor=Executor.HUB,
+                epoch=1,
+                recorded_at=_at(5),
+                graph_id="gr_a",
+            ),
+        ],
+        migrations=[
+            MigrationFact(
+                from_node_id=RESERVED_TERMINAL,
+                from_graph_id="gr_a",
+                to_graph_id="gr_b",
+                landed_node_id="nd_landed",
+                choice_name="migrate",
+                model=None,
+                epoch=1,
+                recorded_at=_at(6),
+            ),
+        ],
+    )
+    assert derive_chunk_status(facts) is not ChunkStatus.DONE
+    assert derive_completed_at(facts) is None

@@ -144,6 +144,57 @@ describe('BoardHeader', () => {
     expect(el.querySelector('.brand-text')?.textContent).toContain('runner · machine panel');
   });
 
+  it('shows no spend-yesterday cell before its own read resolves, independent of today (issue #183)', async () => {
+    const fixture = TestBed.createComponent(BoardHeader);
+    fixture.componentRef.setInput('chunks', []);
+    fixture.componentRef.setInput('spendToday', {
+      since: '2026-07-17T00:00:00Z',
+      input_tokens: 100,
+      output_tokens: 50,
+      cache_read_tokens: 0,
+      cache_create_tokens: 0,
+      cost_usd: 3.5,
+      cost_partial: false,
+    });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    // Today's cell is up; yesterday's own read has not resolved, so it stays withheld.
+    expect(el.querySelector('[data-testid="spend-today"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="spend-yesterday"]')).toBeNull();
+  });
+
+  it('shows two spend cells labeled TODAY and YESTERDAY, each its own value handle (issue #183)', async () => {
+    const fixture = TestBed.createComponent(BoardHeader);
+    fixture.componentRef.setInput('chunks', []);
+    fixture.componentRef.setInput('spendToday', {
+      since: '2026-07-17T00:00:00Z',
+      input_tokens: 100,
+      output_tokens: 50,
+      cache_read_tokens: 0,
+      cache_create_tokens: 0,
+      cost_usd: 3.5,
+      cost_partial: false,
+    });
+    fixture.componentRef.setInput('spendYesterday', {
+      since: '2026-07-16T00:00:00Z',
+      until: '2026-07-17T00:00:00Z',
+      input_tokens: 80,
+      output_tokens: 40,
+      cache_read_tokens: 0,
+      cache_create_tokens: 0,
+      cost_usd: 1.25,
+      cost_partial: false,
+    });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="spend-today"] .stat-lbl')?.textContent?.trim()).toBe('TODAY');
+    expect(el.querySelector('[data-testid="spend-yesterday"] .stat-lbl')?.textContent?.trim()).toBe('YESTERDAY');
+    expect(el.querySelector('[data-testid="spend-today-value"]')?.textContent).toContain('$3.50');
+    expect(el.querySelector('[data-testid="spend-yesterday-value"]')?.textContent).toContain('$1.25');
+  });
+
   it('marks the spend-today figure with the lower-bound prefix when PARTIAL (issue #60)', async () => {
     const fixture = TestBed.createComponent(BoardHeader);
     fixture.componentRef.setInput('chunks', []);
@@ -184,6 +235,16 @@ describe('BoardHeader', () => {
         cost_usd: 3.5,
         cost_partial: false,
       });
+      fixture.componentRef.setInput('spendYesterday', {
+        since: '2026-07-16T00:00:00Z',
+        until: '2026-07-17T00:00:00Z',
+        input_tokens: 80,
+        output_tokens: 40,
+        cache_read_tokens: 0,
+        cache_create_tokens: 0,
+        cost_usd: 1.25,
+        cost_partial: false,
+      });
       await fixture.whenStable();
       return fixture.nativeElement as HTMLElement;
     };
@@ -199,6 +260,7 @@ describe('BoardHeader', () => {
       const el = await spendRender();
       expect(at(el, '[data-testid="board-header-stats"]', 1200)).toBe(false);
       expect(at(el, '[data-testid="spend-today"]', 1200)).toBe(false);
+      expect(at(el, '[data-testid="spend-yesterday"]', 1200)).toBe(false);
       expect(at(el, '.brand-text', 1200)).toBe(false);
       expect(at(el, '[data-testid="conn"]', 1200)).toBe(false);
       expect(at(el, '.trailing', 1200)).toBe(false);
@@ -213,10 +275,19 @@ describe('BoardHeader', () => {
       expect(at(el, '.trailing', 1000)).toBe(false);
     });
 
+    it('drops yesterday one tier earlier than today — a comparison figure yielding before the primary one (issue #183)', async () => {
+      const el = await spendRender();
+      // At the mid tier (stat strip already gone) today's spend is still up, but
+      // yesterday's — the secondary, comparison figure — has already dropped.
+      expect(at(el, '[data-testid="spend-today"]', 1000)).toBe(false);
+      expect(at(el, '[data-testid="spend-yesterday"]', 1000)).toBe(true);
+    });
+
     it('drops spend and the whole brand text at the narrow tier — never the mark, connection cell, or menu slot', async () => {
       const el = await spendRender();
       expect(at(el, '[data-testid="board-header-stats"]', 420)).toBe(true);
       expect(at(el, '[data-testid="spend-today"]', 420)).toBe(true);
+      expect(at(el, '[data-testid="spend-yesterday"]', 420)).toBe(true);
       // The whole text block, tagline included — the tagline now goes with its
       // parent rather than by a rule of its own, which is why this asserts the
       // block: `hiddenAtContainerWidth` answers for one element's own resolved

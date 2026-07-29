@@ -1,4 +1,5 @@
 import {
+  formatAbsolute,
   formatAge,
   formatClockTime,
   formatHeldFor,
@@ -11,6 +12,23 @@ import {
 
 // A fixed local "now" — mid-afternoon so same-day boundaries sit inside one date.
 const NOW = new Date(2026, 6, 18, 15, 30);
+
+describe('formatAbsolute', () => {
+  it('renders the full local date + time, zero-padded', () => {
+    expect(formatAbsolute(new Date(2026, 6, 18, 9, 5, 3).toISOString())).toBe('2026/07/18 09:05:03');
+  });
+
+  it('renders a date further back the same way as today — nothing is dropped', () => {
+    expect(formatAbsolute(new Date(2026, 6, 16, 0, 0, 0).toISOString())).toBe('2026/07/16 00:00:00');
+  });
+
+  it('returns an empty string for an absent or unparseable input', () => {
+    expect(formatAbsolute(null)).toBe('');
+    expect(formatAbsolute(undefined)).toBe('');
+    expect(formatAbsolute('not-a-date')).toBe('');
+    expect(formatAbsolute('')).toBe('');
+  });
+});
 
 describe('formatWhen', () => {
   it('renders a same-day instant as the bare local HH:MM, zero-padded', () => {

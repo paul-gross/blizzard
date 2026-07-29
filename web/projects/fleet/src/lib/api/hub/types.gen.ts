@@ -488,15 +488,25 @@ export type ChunkStopRequest = {
  * route fact is unfiltered on :class:`ChunkDetail.route`, which is where a "where was
  * this worked" read belongs.
  *
- * ``cost`` is the one exception (issue #59): the derived
- * spend total is cheap to carry on every card and is not itself an operator fact, so it
- * rides the summary rather than waiting for the detail fetch.
+ * ``cost`` and ``completed_at`` are the two exceptions (issues #59, #173): both are
+ * cheap, passive derived instants — not an operator fact — so they ride the summary
+ * rather than waiting for the detail fetch.
+ *
+ * ``completed_at`` (issue #173) is the terminal instant — see
+ * :func:`~blizzard.hub.domain.work.derive_completed_at` — null for every non-terminal
+ * status. Like every wire instant it is a ``str``, populated via
+ * :func:`~blizzard.foundation.clock.iso_utc` at the serialization edge, never a bare
+ * ``datetime`` (``bzh:utc-instants``).
  */
 export type ChunkSummary = {
     /**
      * Chunk Id
      */
     chunk_id: string;
+    /**
+     * Completed At
+     */
+    completed_at?: string | null;
     cost?: ChunkUsageTotalView;
     /**
      * Current Node Id
@@ -1013,9 +1023,10 @@ export type Executor = 'runner' | 'hub';
 /**
  * FleetSpendView
  *
- * The fleet's usage/cost total since ``since``. ``cost_partial`` carries the
- * lower-bound + PARTIAL contract on ``cost_usd`` — see
- * :class:`~blizzard.hub.domain.work.UsageTotal` for the one canonical statement of
+ * The fleet's usage/cost total since ``since`` — and, when the caller bounded the
+ * window, strictly before ``until`` (issue #183; ``None`` for the original open-ended
+ * tail). ``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd`` —
+ * see :class:`~blizzard.hub.domain.work.UsageTotal` for the one canonical statement of
  * it, which this view's fields mirror verbatim.
  */
 export type FleetSpendView = {
@@ -1047,6 +1058,10 @@ export type FleetSpendView = {
      * Since
      */
     since: string;
+    /**
+     * Until
+     */
+    until?: string | null;
 };
 
 /**
@@ -4559,6 +4574,10 @@ export type FleetSpendApiSpendGetData = {
          * Since
          */
         since: string;
+        /**
+         * Until
+         */
+        until?: string | null;
     };
     url: '/api/spend';
 };

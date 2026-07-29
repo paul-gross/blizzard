@@ -305,13 +305,24 @@ class ChunkStore:
                 HubNodePollFact(node_id=p.node_id, epoch=p.epoch, polled_at=p.polled_at)
                 for p in conn.execute(select(s.hub_node_poll).where(s.hub_node_poll.c.chunk_id == chunk_id)).all()
             ]
+            stopped_rows = conn.execute(
+                select(s.chunk_stopped.c.stopped_at).where(s.chunk_stopped.c.chunk_id == chunk_id)
+            ).all()
+            pr_closed_rows = conn.execute(
+                select(s.delivery_pr_closed.c.closed_at).where(s.delivery_pr_closed.c.chunk_id == chunk_id)
+            ).all()
             return ChunkFacts(
                 minted=True,
                 promoted=self._exists(conn, s.chunk_promoted, chunk_id),
-                stopped=self._exists(conn, s.chunk_stopped, chunk_id),
+                stopped=bool(stopped_rows),
+                stopped_at=max((r.stopped_at for r in stopped_rows), default=None),
                 delivery_landed=self._exists(conn, s.delivery_landed, chunk_id),
                 landed_repos=landed_repos,
-                pr_closed=self._exists(conn, s.delivery_pr_closed, chunk_id),
+                pr_closed=bool(pr_closed_rows),
+                # Newest across every repo's row (issue #175/#173) — a multi-repo chunk in
+                # open-PR mode carries one row per repo (`delivery_pr_closed` has no
+                # chunk_id-unique constraint, unlike `delivery_pr_opened`).
+                pr_closed_at=max((r.closed_at for r in pr_closed_rows), default=None),
                 escalations=escalations,
                 leases=leases,
                 transitions=transitions,
@@ -527,8 +538,11 @@ class ChunkStore:
             decisions = [self._decision_row(conn, row) for row in rows]
             return [d for d in decisions if not d.resolved]
 
-    def usage_since(self, since: datetime) -> list[UsageFact]:
+    def usage_since(self, since: datetime, *, until: datetime | None = None) -> list[UsageFact]:
         with self._engine.connect() as conn:
+            query = select(s.usage_facts).where(s.usage_facts.c.recorded_at >= since)
+            if until is not None:
+                query = query.where(s.usage_facts.c.recorded_at < until)
             return [
                 UsageFact(
                     node_id=u.node_id,
@@ -542,7 +556,7 @@ class ChunkStore:
                     cost_usd=u.cost_usd,
                     recorded_at=u.recorded_at,
                 )
-                for u in conn.execute(select(s.usage_facts).where(s.usage_facts.c.recorded_at >= since)).all()
+                for u in conn.execute(query).all()
             ]
 
     def list_events(

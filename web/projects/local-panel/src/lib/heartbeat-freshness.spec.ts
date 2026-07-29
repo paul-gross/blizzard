@@ -74,3 +74,51 @@ describe('HeartbeatFreshness', () => {
     expect(el.querySelector('[data-testid="hb-fill"]')?.classList.contains('stale')).toBe(true);
   });
 });
+
+describe('HeartbeatFreshness ticking (issue #178)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(REF);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('drains the bar on the tick alone, with no new lastHeartbeatAt input', async () => {
+    await TestBed.configureTestingModule({
+      imports: [HeartbeatFreshness],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(HeartbeatFreshness);
+    fixture.componentRef.setInput('lastHeartbeatAt', '2026-07-16T12:00:00.000Z');
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(percentOf(el)).toBe(100);
+
+    vi.setSystemTime(REF + 60_000);
+    await vi.advanceTimersByTimeAsync(1000);
+    fixture.detectChanges();
+
+    expect(percentOf(el)).toBeLessThan(100);
+    expect(el.querySelector('[data-testid="hb-age"]')?.textContent).toContain('-1m');
+  });
+
+  it('still resets immediately when a fresh lastHeartbeatAt input lands', async () => {
+    await TestBed.configureTestingModule({
+      imports: [HeartbeatFreshness],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(HeartbeatFreshness);
+    fixture.componentRef.setInput('lastHeartbeatAt', '2026-07-16T11:59:00.000Z');
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(percentOf(el)).toBeLessThan(100);
+
+    vi.setSystemTime(REF + 60_000);
+    fixture.componentRef.setInput('lastHeartbeatAt', '2026-07-16T12:01:00.000Z');
+    fixture.detectChanges();
+
+    expect(percentOf(el)).toBe(100);
+  });
+});
