@@ -1,5 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
 
@@ -159,6 +160,7 @@ describe('ChunkDetail container', () => {
       imports: [ChunkDetail],
       providers: [
         provideZonelessChangeDetection(),
+        provideRouter([]),
         provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       ],
     }).compileComponents();

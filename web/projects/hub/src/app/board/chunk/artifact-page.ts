@@ -6,8 +6,10 @@ import { type ArtifactView as ArtifactModel, type KitAsyncStateValue, compactRef
 import { ArtifactView } from './artifact-view';
 
 /**
- * One artifact, full (`/board/chunk/:chunkId/artifact/:artifactKey`) — the level
- * {@link ArtifactLinks} drills into. The route **container**
+ * One artifact, full (`/board/chunk/:chunkId/artifact/:artifactKey`) — out of
+ * scope for the chunk detail page's Artifacts tab (issue #160), which shows
+ * the same artifacts without leaving the page; this route stays live so an
+ * already-shared URL keeps resolving. The route **container**
  * (`bzh:frontend-container-presentational`): it resolves the route params and the
  * read, and hands {@link ArtifactView} the artifact plus a settled async state.
  *

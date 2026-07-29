@@ -3,17 +3,13 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import {
   type AnswerQuestionEvent,
-  ChunkAwaitingHuman,
-  ChunkFacts,
-  ChunkIssuePane,
-  ChunkTimeline,
-  ChunkTokenBreakdown,
   type EditGraphEvent,
   KitAsyncState,
   type KitAsyncStateValue,
   KitBackBar,
   KitBadge,
-  KitPanel,
+  KitTabs,
+  type KitTabOption,
   type WorkItemsState,
   type ResolveDecisionEvent,
   STATUS_TONE,
@@ -27,55 +23,48 @@ import {
   readAnswerFailure,
 } from 'fleet';
 
-import { ArtifactLinks } from './artifact-links';
+import { ChunkArtifactsTab } from './chunk-artifacts-tab';
+import { type ChunkDetailTab, injectChunkDetailSelection } from './chunk-detail-selection';
+import { ChunkGeneralTab } from './chunk-general-tab';
 
 /**
- * The mobile chunk detail page (`/board/chunk/:chunkId`) — everything the
- * desktop dock shows, **stacked** in one scrolling column instead of three
- * side-by-side sections.
+ * The chunk detail page (`/board/chunk/:chunkId`, issue #160) — reached from
+ * both the mobile board's rows and the desktop dock's artifact links, on
+ * desktop as well as mobile. One shell serves both widths: `app.routes.ts`
+ * forks the mobile/desktop board shell in the route table, and only there —
+ * so this page stays a single component tree, with the narrow case handled
+ * entirely in the tab bodies' own CSS rather than a second viewport-scoped
+ * page.
  *
- * A routed page reached from the glance board's rows, not a dock: the mobile
- * board is already a single column, so a detail region below it would push the
- * board off-screen. Reading a chunk is a drill-down on a phone, and a route
- * makes it deep-linkable and back-button-navigable for free.
+ * Two tabs, selected through {@link injectChunkDetailSelection} (`?tab`, so
+ * the choice is a URL-held state of this one page, not a different page):
+ * **General** — {@link ChunkGeneralTab}, everything this page showed before it
+ * grew a second tab — and **Artifacts**. A route makes either deep-linkable
+ * and back-button-navigable for free.
  *
- * Every region is a `fleet` presentational sibling reused verbatim
- * (`bzh:frontend-kit`) — the same {@link ChunkFacts} + {@link ChunkTokenBreakdown},
- * {@link ChunkIssuePane}, {@link ChunkTimeline} and {@link ChunkAwaitingHuman} the
- * desktop {@link ChunkDetailPanel} composes. This page only picks the order the
- * mock's attention model wants — what the work *is* (facts, then the work-source
- * issues), then the path it took (node history), then what it is waiting on, then
- * what it produced — and wraps each in a `KitPanel` so the column reads as
- * sections rather than one undifferentiated scroll.
+ * This container keeps the back bar, the shared action-error/outcome
+ * channels, the identity header, the tab strip, and the queries and three
+ * operator mutations every tab shares; each tab's own layout is its own
+ * presentational component's job.
  *
- * **Artifacts are the one region not reused**: their bodies are long enough to
- * bury everything above them in a single column, so {@link ArtifactLinks} renders
- * an index and each row opens {@link ArtifactPage} one level deeper.
- *
- * Scope note, deliberate rather than an oversight: the dock's **destructive and
- * structural** operator actions — detach, pause/resume, close — are not mounted
- * here (they need the confirm affordances {@link ChunkDetailHeader} carries, and a
- * phone is a poor place to fire them). The **human-loop** actions are, because
- * answering an ask from a phone is the whole point of a mobile board: answer,
- * resolve, and the not-ready graph/model edits {@link ChunkFacts} exposes all
- * write through the same mutations the desktop container uses.
+ * Scope note, deliberate rather than an oversight: the dock's **destructive
+ * and structural** operator actions — detach, pause/resume, close — are not
+ * mounted here (they need the confirm affordances {@link ChunkDetailHeader}
+ * carries, and a phone is a poor place to fire them). The **human-loop**
+ * actions are, because answering an ask from here is the whole point of a
+ * mobile board: answer, resolve, and the not-ready graph edit
+ * {@link ChunkFacts} exposes all write through the same mutations the desktop
+ * container uses.
  */
+const TAB_OPTIONS: readonly KitTabOption[] = [
+  { value: 'general', label: 'General', testid: 'tab-general' },
+  { value: 'artifacts', label: 'Artifacts', testid: 'tab-artifacts' },
+];
+
 @Component({
   selector: 'app-chunk-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [
-    ArtifactLinks,
-    ChunkAwaitingHuman,
-    ChunkFacts,
-    ChunkIssuePane,
-    ChunkTimeline,
-    ChunkTokenBreakdown,
-    KitAsyncState,
-    KitBackBar,
-    KitBadge,
-    KitPanel,
-    RouterLink,
-  ],
+  imports: [ChunkArtifactsTab, ChunkGeneralTab, KitAsyncState, KitBackBar, KitBadge, KitTabs, RouterLink],
   template: `
     <div class="cp">
       <a class="back-row" routerLink="/board" data-testid="mobile-chunk-back">
@@ -88,33 +77,31 @@ import { ArtifactLinks } from './artifact-links';
         <p class="outcome" data-testid="mobile-chunk-action-outcome" role="status">{{ outcome }}</p>
       }
       @if (detail(); as d) {
-        <div class="cp-sections" data-testid="board-chunk-detail">
+        <div class="cp-body" data-testid="board-chunk-detail">
           <header class="cp-hdr">
             <span class="cid" data-testid="mobile-chunk-ref">{{ shortId() }}</span>
             <fleet-kit-badge [tone]="tone()" variant="soft" data-testid="mobile-chunk-status">{{ d.status }}</fleet-kit-badge>
             <span class="node" data-testid="mobile-chunk-node">{{ nodeLabel() }}</span>
           </header>
-          <fleet-kit-panel class="section" data-testid="section-work-item" label="work item" [count]="pointerCount() || null">
-            <fleet-chunk-detail-facts [detail]="d" (editGraph)="onEditGraph($event)">
-              <fleet-chunk-detail-token-breakdown token-breakdown [detail]="d" />
-            </fleet-chunk-detail-facts>
-          </fleet-kit-panel>
-          <fleet-kit-panel class="section" data-testid="section-issues" label="issues">
-            <fleet-chunk-detail-issue-pane [workItems]="workItems()" />
-          </fleet-kit-panel>
-          <fleet-kit-panel class="section" data-testid="section-node-history" label="node history">
-            <fleet-chunk-detail-timeline [detail]="d" />
-          </fleet-kit-panel>
-          <fleet-kit-panel class="section" data-testid="section-asks" label="asks · decisions">
-            <fleet-chunk-detail-awaiting-human
-              [detail]="d"
-              (answerQuestion)="onAnswer($event)"
-              (resolveDecision)="onResolve($event)"
-            />
-          </fleet-kit-panel>
-          <fleet-kit-panel class="section" data-testid="section-artifacts" label="artifacts" [count]="artifactCount() || null">
-            <app-artifact-links [chunkId]="d.chunk_id" [artifacts]="d.artifacts ?? []" />
-          </fleet-kit-panel>
+          <fleet-kit-tabs [options]="tabOptions" [activeValue]="tab()" (choose)="onChooseTab($event)" />
+          @switch (tab()) {
+            @case ('general') {
+              <app-chunk-general-tab
+                [detail]="d"
+                [workItems]="workItems()"
+                (answerQuestion)="onAnswer($event)"
+                (resolveDecision)="onResolve($event)"
+                (editGraph)="onEditGraph($event)"
+              />
+            }
+            @case ('artifacts') {
+              <app-chunk-artifacts-tab
+                [artifacts]="d.artifacts ?? []"
+                [selectedKey]="selection.artifactKey()"
+                (pickArtifact)="onSelectArtifact($event)"
+              />
+            }
+          }
         </div>
       } @else {
         <div class="rest">
@@ -179,14 +166,11 @@ import { ArtifactLinks } from './artifact-links';
       color: var(--text);
       font-size: var(--fs-xs);
     }
-    .cp-sections {
+    .cp-body {
       display: flex;
       flex-direction: column;
       flex: 1;
       min-height: 0;
-      overflow-y: auto;
-      gap: 8px;
-      padding: 8px;
     }
     .cp-hdr {
       display: flex;
@@ -194,6 +178,7 @@ import { ArtifactLinks } from './artifact-links';
       align-items: baseline;
       gap: 8px;
       flex: none;
+      padding: 0 8px;
     }
     .cid {
       color: var(--amber);
@@ -203,8 +188,17 @@ import { ArtifactLinks } from './artifact-links';
       color: var(--label);
       font-size: var(--fs-xs);
     }
-    fleet-kit-panel.section {
+    fleet-kit-tabs {
       flex: none;
+      padding: 6px 8px 0;
+    }
+    app-chunk-general-tab {
+      flex: 1;
+      min-height: 0;
+    }
+    app-chunk-artifacts-tab {
+      flex: 1;
+      min-height: 0;
     }
     /* Positioned and height-bearing so KitAsyncState's absolutely centered
        status line has a box to center in. */
@@ -223,6 +217,22 @@ export class ChunkPage {
   private readonly params = toSignal(this.route.paramMap, { initialValue: this.route.snapshot.paramMap });
 
   private readonly id = computed<string | null>(() => this.params().get('chunkId'));
+
+  protected readonly selection = injectChunkDetailSelection();
+
+  protected readonly tabOptions = TAB_OPTIONS;
+  protected readonly tab = this.selection.tab;
+
+  protected onChooseTab(tab: string): void {
+    this.selection.select(tab as ChunkDetailTab, this.selection.artifactKey());
+  }
+
+  /** A nav row picked in the Artifacts tab writes its key back to the URL —
+   * {@link ChunkArtifactsTab}'s viewer is a pure function of that param, never
+   * its own selection state. */
+  protected onSelectArtifact(key: string): void {
+    this.selection.select('artifacts', key);
+  }
 
   private readonly detailQuery = injectHubChunkDetailQuery(() => this.id());
   private readonly workItemsQuery = injectHubChunkWorkItemsQuery(() => this.id());
@@ -267,8 +277,6 @@ export class ChunkPage {
     const d = this.detail();
     return d?.current_node_name ?? d?.current_node_id ?? '—';
   });
-  protected readonly pointerCount = computed(() => this.detail()?.work_refs?.length ?? 0);
-  protected readonly artifactCount = computed(() => this.detail()?.artifacts?.length ?? 0);
 
   /** Clear both report channels — every action on this page starts here. Kept as one
    * method for the same reason the desktop container does: a stale outcome left up while
