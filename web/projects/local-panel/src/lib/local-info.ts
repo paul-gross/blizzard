@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
-import { ageMs, formatAge, KitAsyncState, type KitAsyncStateValue } from 'fleet';
+import { ageMs, formatAge, injectNowSignal, KitAsyncState, type KitAsyncStateValue } from 'fleet';
 
 import { injectRunnerFleetSummaryQuery, injectRunnerStatusQuery } from './status.query';
 
@@ -219,18 +219,22 @@ export class LocalInfo {
     return 'ready';
   });
 
+  /** Ticks once a second (issue #178) so `lastFlushLabel`/`lastTickLabel` advance
+   * between polls instead of sitting frozen at whatever age the last read carried. */
+  private readonly now = injectNowSignal(1000);
+
   /** `-34s` since the last successful PULL, or `never` before first contact. */
   protected readonly lastFlushLabel = computed<string>(() => {
     const contactAt = this.view()?.hub.last_contact_at ?? null;
     if (contactAt === null) return 'never';
-    const age = ageMs(contactAt, Date.now());
+    const age = ageMs(contactAt, this.now());
     return age === null ? '—' : formatAge(age);
   });
 
   protected readonly lastTickLabel = computed<string>(() => {
     const tickAt = this.view()?.last_tick_at ?? null;
     if (tickAt === null) return '—';
-    const age = ageMs(tickAt, Date.now());
+    const age = ageMs(tickAt, this.now());
     return age === null ? '—' : formatAge(age);
   });
 }

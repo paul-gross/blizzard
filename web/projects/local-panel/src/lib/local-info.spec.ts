@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { runnerClient } from 'fleet';
 import { type RequestClientStub, settle, stubError, stubRequestClient } from 'fleet/testing';
+import { vi } from 'vitest';
 
 import { LocalInfo } from './local-info';
 
@@ -90,4 +91,36 @@ describe('LocalInfo fleet-summary strip', () => {
     // The rest of the panel stays lit — the hub-link facts still render.
     expect(el.querySelector('[data-testid="hub-endpoint"]')?.textContent).toContain('http://127.0.0.1:8421');
   });
+});
+
+describe('LocalInfo last-flush/tick ticking (issue #178)', () => {
+  let stub: RequestClientStub;
+
+  afterEach(() => {
+    stub.restore();
+    vi.restoreAllMocks();
+  });
+
+  // Real setInterval, mocked Date.now — settle() needs a real macrotask to
+  // resolve the stubbed query, so fake timers (which would also freeze that
+  // macrotask) aren't usable here; the interval is instead let run for real.
+  it(
+    're-renders last flush and tick at least once a second with no new data',
+    { timeout: 10_000 },
+    async () => {
+      const dateNow = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-07-16T12:00:00.000Z'));
+      const { fixture, stub: s } = await render(() => COUNTS);
+      stub = s;
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.querySelector('[data-testid="hub-last-flush"]')?.textContent).toContain('-30s');
+      expect(el.querySelector('.tick')?.textContent).toContain('-15s');
+
+      dateNow.mockReturnValue(Date.parse('2026-07-16T12:01:00.000Z'));
+      await new Promise((resolve) => setTimeout(resolve, 1100));
+      fixture.detectChanges();
+
+      expect(el.querySelector('[data-testid="hub-last-flush"]')?.textContent).toContain('-1m');
+      expect(el.querySelector('.tick')?.textContent).toContain('-1m');
+    },
+  );
 });
