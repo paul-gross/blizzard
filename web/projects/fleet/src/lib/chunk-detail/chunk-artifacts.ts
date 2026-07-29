@@ -36,6 +36,8 @@ import { sortArtifacts } from './sort-artifacts';
             <li class="artifact" data-testid="artifact" [attr.data-kind]="art.kind">
               <a
                 class="artifact-link"
+                data-testid="artifact-link"
+                [attr.data-artifact-key]="art.key"
                 [routerLink]="[...linkBase(), chunkId()]"
                 [queryParams]="{ tab: 'artifacts', artifact: art.key }"
               >

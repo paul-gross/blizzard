@@ -21,10 +21,14 @@ every seam real, no tokens and no network. It proves the operator surface end to
    liveness heartbeat).
 2. **Detail dock.** Selecting a card fills the bottom chunk-detail dock, which renders
    the **node history** (the edges the chunk took) and the **artifact store** (the
-   build's ``git_commit`` reference and the review's findings asset). The dock is
-   permanently mounted at a fixed height, so filling or clearing it leaves the board's
-   geometry **pixel-identical** — issue #21's criteria, and the one claim in this file
-   that only a laying-out browser can prove.
+   build's ``git_commit`` reference and the review's findings asset, each a **link** —
+   issue #160 — rather than inline content). The dock is permanently mounted at a fixed
+   height, so filling or clearing it leaves the board's geometry **pixel-identical** —
+   issue #21's criteria, and the one claim in this file that only a laying-out browser
+   can prove. A dock artifact link is followed to the routed chunk detail page
+   (``/board/chunk/:chunkId``), landing on its **Artifacts tab** with that artifact
+   pre-selected in the nav-beside-viewer split — the one tier proving the link, the
+   route, and the built bundle together, before returning to the board.
 3. **Queue shaping honored by FILL.** The READY column *is* the ready queue (issue
    #137): it renders top-to-bottom in the hub's dispatch order and is reshaped in
    place. Two ready chunks are **grouped** into one from their cards' own select
@@ -509,6 +513,37 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 assert page.get_by_test_id("history-step").count() >= 1, "detail shows no node history"
                 assert page.get_by_test_id("artifact").count() >= 1, "detail shows no artifacts"
                 expect(page.get_by_test_id("artifact-ref").first).to_be_visible()  # the build git_commit
+
+                # --- Dock link → chunk detail page, Artifacts tab, pre-selected (#160) --
+                # The dock no longer renders artifact bodies inline; each row is a link to
+                # the routed chunk detail page's Artifacts tab, that artifact pre-selected.
+                # This is the one tier that proves the link, the route, and the built
+                # bundle together — the component tier proves each half in isolation.
+                first_link = page.get_by_test_id("artifact-link").first
+                target_key = first_link.get_attribute("data-artifact-key")
+                assert target_key, "dock artifact link carries no key"
+                first_link.click()
+                expect(page).to_have_url(
+                    f"http://127.0.0.1:{hub_port}/board/chunk/{chunk_b}?tab=artifacts&artifact={target_key}"
+                )
+                expect(page.get_by_test_id("tab-artifacts")).to_have_attribute("aria-selected", "true")
+                active_row = page.locator(f'[data-testid="artifacts-tab-nav-item"][data-artifact-key="{target_key}"]')
+                expect(active_row).to_have_class(re.compile(r"\bactive\b"))
+                target_artifact = next(
+                    art for art in hub.get(f"/api/chunks/{chunk_b}").json()["artifacts"] if art["key"] == target_key
+                )
+                viewer = page.get_by_test_id("artifacts-tab-artifact")
+                expect(viewer).to_be_visible()
+                if target_artifact["kind"] == "asset":
+                    expect(viewer).to_contain_text(target_artifact["content"][:40])
+                else:
+                    expect(viewer).to_contain_text(target_artifact["commit_hash"])
+
+                # Back to the board on the same dock link the click left — a fresh mount of
+                # the URL contract the dock's own selection relies on (issue #162).
+                page.goto(f"http://127.0.0.1:{hub_port}/board?chunk={chunk_b}", wait_until="load")
+                expect(page.get_by_test_id("chunk-detail")).to_be_visible()
+                expect(page.get_by_test_id("detail-status")).to_have_text("done")
 
                 # Dismissing clears the dock back to its rest state, and the board still
                 # has not moved — the round trip is geometry-neutral (issue #21).
