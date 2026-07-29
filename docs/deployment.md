@@ -226,6 +226,7 @@ name = "blizzard"                                  # source id — ingest tokens
 provider = "github"                                # the only adapter grammar today
 repo = "paul-gross/blizzard"                       # the "owner/repo" this source is pinned to
 token_env = "BZ_WORK_SOURCE_TOKEN"                          # names an env var — see credentials below
+annotate = false                                   # opt into the forge-status label sweep — see below
 # api_base = "https://ghe.example.internal/api/v3" # optional: override the provider's API origin
 # web_base = "https://ghe.example.internal"         # optional: override the web origin
 ```
@@ -238,6 +239,7 @@ Every field:
 | `provider` | yes | The adapter grammar this source speaks. Only `"github"` exists today; an unknown provider fails at config load, not at first use. |
 | `repo` | yes | The `owner/name` coordinate this source is pinned to. Each `(provider, repo)` pair may appear under only one `name` — two names for the same repo would let one item be ingested twice under two identities. |
 | `token_env` | yes | Names an environment variable — **not the secret itself**. See "Credential indirection" below. |
+| `annotate` | no, default `false` | Opts this source into the forge-status label sweep. See "The forge-status label projection" below — **do not set this on more than one hub against the same forge repo.** |
 | `api_base` | no | Overrides the provider's default API origin. Required to reach a self-hosted forge (e.g. GitHub Enterprise). |
 | `web_base` | no | Overrides the provider's default web origin, used for the item's browsable URL. Derived from `api_base` when omitted, so a self-hosted GHE source only needs to set `api_base`. |
 
@@ -269,6 +271,32 @@ file (`/etc/blizzard/hub.env` under the systemd layout above), never in
 `blizzard-hub.toml` — the same separation the delivery forge's `BZ_FORGE_TOKEN`
 already follows. An unset `token_env` fails at boot, naming the missing
 variable rather than silently ingesting unauthenticated.
+
+### The forge-status label projection
+
+Per source with `annotate = true`, the hub runs a periodic background sweep that
+projects every live chunk's status onto its forge issue as one of two labels:
+
+- `blizzard:ingested` — the chunk is minted but not yet claimed (`not_ready`/`ready`).
+- `blizzard:in-progress` — a runner or the hub is actively working it (`running`,
+  `paused`, `waiting_on_human`, `needs_human`, `delivering`).
+
+A chunk with no live holder, or one that has reached `stopped`/`done`, carries neither
+label. The sweep runs every `annotation_interval_seconds` seconds — a top-level
+`blizzard-hub.toml` key, default `120`, consulted only when at least one source opts
+in — and holds **no state of its own**: each
+pass discovers the forge's actual labels afresh (listing issues per label, not reading
+back what a prior sweep wrote) and writes only the difference from desired state. That
+statelessness is what makes the projection self-healing: a label removed by hand, a
+crash mid-sweep, or a forge outage all resolve themselves on the next pass, with no
+hub-side record to repair. A forge that is down, slow, or rate-limiting degrades to a
+logged skip — it never blocks a chunk transition, an ingest, or any other hub request.
+
+**Set `annotate = true` on at most one hub per forge repo.** Two writers sweeping the
+same repo will fight over the same labels — each pass "correcting" what the other just
+wrote — with no coordination between them. Only the canonical instance for a given
+forge repo should opt in; every dev/staging/snapshot hub pointed at that same repo
+must leave it `false`.
 
 ### The upgrade note
 
