@@ -455,6 +455,22 @@ class ChunkStore:
                 return chunk_id
         return None
 
+    def live_work_refs(self) -> dict[WorkRef, ChunkStatus]:
+        with self._engine.connect() as conn:
+            grouped = self._grouped_ids(conn)
+            rows = conn.execute(
+                select(s.chunk_work_refs.c.chunk_id, s.chunk_work_refs.c.source, s.chunk_work_refs.c.ref)
+            ).all()
+        result: dict[WorkRef, ChunkStatus] = {}
+        for row in rows:
+            if row.chunk_id in grouped:
+                continue  # the pointer moved to the survivor; the grouped chunk is gone
+            status = self._status(row.chunk_id)
+            if status in TERMINAL_STATUSES:
+                continue
+            result[WorkRef(source=row.source, ref=row.ref)] = status
+        return result
+
     def accepted_transition_target(self, chunk_id: str, *, from_node_id: str, epoch: int) -> str | None:
         with self._engine.connect() as conn:
             row = conn.execute(

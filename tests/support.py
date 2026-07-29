@@ -55,6 +55,7 @@ from blizzard.hub.domain.work import WorkRef
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema
+from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
 from blizzard.hub.work_sources.registry import WorkSourceRegistry
 from blizzard.hub.work_sources.source import IWorkSource, WorkItem, WorkSourceError
 
@@ -204,6 +205,46 @@ class FakeWorkSource:
 
 
 def _conforms_fake_work_source(x: FakeWorkSource) -> IWorkSource:
+    return x
+
+
+class FakeAnnotator:
+    """An in-process :class:`IWorkAnnotator` — an in-memory ``{ref: {markers}}`` map,
+    plus call logs a test asserts against. ``fail_refs`` raises
+    :class:`WorkAnnotateError` for a ref's own :meth:`set_status`/:meth:`clear_status`,
+    mirroring :class:`FakeWorkSource`'s own per-pointer failure knob — the reconciler's
+    per-item degradation test drives this rather than the real GitHub adapter."""
+
+    def __init__(
+        self,
+        *,
+        initial: dict[WorkRef, set[WorkStatusMarker]] | None = None,
+        fail_refs: set[str] | None = None,
+    ) -> None:
+        self._marks: dict[WorkRef, set[WorkStatusMarker]] = {
+            ref: set(markers) for ref, markers in (initial or {}).items()
+        }
+        self.fail_refs = fail_refs or set()
+        self.set_calls: list[tuple[WorkRef, WorkStatusMarker]] = []
+        self.clear_calls: list[WorkRef] = []
+
+    def set_status(self, pointer: WorkRef, marker: WorkStatusMarker) -> None:
+        if pointer.ref in self.fail_refs:
+            raise WorkAnnotateError(f"boom setting {marker.value} on {pointer.ref}")
+        self.set_calls.append((pointer, marker))
+        self._marks[pointer] = {marker}
+
+    def clear_status(self, pointer: WorkRef) -> None:
+        if pointer.ref in self.fail_refs:
+            raise WorkAnnotateError(f"boom clearing {pointer.ref}")
+        self.clear_calls.append(pointer)
+        self._marks.pop(pointer, None)
+
+    def marked_refs(self) -> dict[WorkRef, frozenset[WorkStatusMarker]]:
+        return {ref: frozenset(markers) for ref, markers in self._marks.items() if markers}
+
+
+def _conforms_fake_annotator(x: FakeAnnotator) -> IWorkAnnotator:
     return x
 
 
