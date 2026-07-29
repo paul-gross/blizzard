@@ -15,12 +15,42 @@ reference for running it.
 | [`.github/workflows/upper-tiers.yml`](../.github/workflows/upper-tiers.yml) | reusable (`workflow_call`) | The service tier (`blizzard:service-test`) and the kill-9 crash sweep's bounded CI profile (`blizzard:crash-sweep`), over a multi-repo checkout (`blizzard` + `blizzard-mock` + `blizzard-workspace`). Defined once; `pr.yml` and `push.yml` both call it. |
 | [`.github/workflows/pr.yml`](../.github/workflows/pr.yml) | PR to `master` | The gate, plus the service tier and crash sweep (CI profile) as real gate jobs. |
 | [`.github/workflows/push.yml`](../.github/workflows/push.yml) | push to `master` | The gate, plus the service tier and crash sweep (CI profile) as real gate jobs, plus a **dev-build wheel** (`0.<milestone>.0.dev<run>`) uploaded as a workflow artifact. |
-| [`.github/workflows/release.yml`](../.github/workflows/release.yml) | tag `v*` | The full suite (gate, service tier, the FULL crash sweep, and e2e), a wheel built with the embedded frontend, and a **GitHub Release** with the wheel attached. |
+| [`.github/workflows/release.yml`](../.github/workflows/release.yml) | tag `v*` | The full suite (gate, service tier, the FULL crash sweep, and e2e), a wheel built with the embedded frontend, a **multi-arch hub container image** (`linux/amd64`+`linux/arm64`) pushed to GHCR, and a **GitHub Release** with the wheel attached. |
 
 All gate checks are seams-mocked and token-free — they install dependencies and
 run, needing no real forge, no tokens, and no network beyond package installs.
 The GitHub Release step uses the workflow's built-in `GITHUB_TOKEN`; there is no
 external package-index publish.
+
+### The image publish (tag `release` only)
+
+The `release` job's own `permissions:` block declares both `contents: write` (for
+`gh release create`) and `packages: write` (for the GHCR push) — the repo's first
+job-level `permissions:` block, since a job-level block replaces the
+workflow-level one rather than merging with it
+(`tests/test_release_workflow.py` pins both scopes and that the image build-push
+step runs before `gh release create`, per decision 5 in the DISTRIB plan: a
+failed image build must never leave a published Release advertising an image
+that does not exist). The tag fan-out (`vX.Y.Z` → exact + minor + `latest`;
+`vX.Y.Z-rc.*` → exact only) is `scripts/image-tags.sh`
+(`tests/test_image_tags.py`), not workflow-inline logic.
+
+**Operator step, one-time:** GHCR package visibility (public vs. private) is a
+repository setting a workflow cannot assert — after the first tag cut, confirm
+`ghcr.io/paul-gross/blizzard-hub`'s package visibility is **public** (repo →
+Packages → package settings), then confirm an anonymous pull succeeds:
+
+```bash
+docker pull ghcr.io/paul-gross/blizzard-hub:latest
+```
+
+**What is not proven by any local method:** whether the GHCR push itself
+succeeds — no `docker buildx` plugin is available on the local dev machine, so
+`blizzard:image-smoke` builds and boots the image locally but never pushes it
+multi-arch. This is a documented gap, the same shape `bzh:release` already
+carries for the release cut generally: proven by the next real tag cut
+(`blizzard:ci` watching the `release` run, then the anonymous pull above), not
+invented around.
 
 ### Pending pieces, named not hidden
 

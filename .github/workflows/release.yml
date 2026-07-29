@@ -93,9 +93,18 @@ jobs:
         run: cd blizzard && uv run pytest tests/e2e/ -v
 
   release:
-    name: build wheel and publish release
+    name: build wheel + image, publish release
     needs: [gate]
     runs-on: ubuntu-latest
+    # A job-level `permissions:` block REPLACES the workflow-level one rather than
+    # merging with it — every unlisted scope becomes `none`. `packages: write`
+    # (the GHCR push below) must therefore be declared *alongside* `contents:
+    # write` (the `gh release create` step already here), not instead of it — the
+    # repo's first job-level permissions block, no local precedent to copy from.
+    # tests/test_release_workflow.py pins both scopes stay present.
+    permissions:
+      contents: write
+      packages: write
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -122,6 +131,45 @@ jobs:
         env:
           BLIZZARD_VERSION: ${{ steps.ver.outputs.version }}
         run: ./scripts/build-wheel.sh
+      - name: derive the GHCR tag fan-out (scripts/image-tags.sh) and OCI annotations
+        id: image_meta
+        run: |
+          TAGS_RAW="$(./scripts/image-tags.sh "${GITHUB_REF_NAME}")"
+          echo "Image tag fan-out for ${GITHUB_REF_NAME}: $TAGS_RAW"
+          {
+            echo "tags<<IMAGE_TAGS_EOF"
+            while IFS= read -r t; do echo "ghcr.io/paul-gross/blizzard-hub:$t"; done <<< "$TAGS_RAW"
+            echo "IMAGE_TAGS_EOF"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "annotations<<IMAGE_ANNOTATIONS_EOF"
+            echo "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}"
+            echo "org.opencontainers.image.version=${{ steps.ver.outputs.version }}"
+            echo "org.opencontainers.image.revision=${GITHUB_SHA}"
+            echo "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "IMAGE_ANNOTATIONS_EOF"
+          } >> "$GITHUB_OUTPUT"
+      - name: set up QEMU (multi-arch emulation)
+        uses: docker/setup-qemu-action@v3
+      - name: set up buildx
+        uses: docker/setup-buildx-action@v3
+      - name: log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: build and push the hub image (linux/amd64, linux/arm64)
+        # Before `gh release create` (decision 5) — a failed image build must never
+        # leave a published Release advertising an image that does not exist.
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packaging/docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.image_meta.outputs.tags }}
+          annotations: ${{ steps.image_meta.outputs.annotations }}
       - name: publish GitHub Release with the wheel attached
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
