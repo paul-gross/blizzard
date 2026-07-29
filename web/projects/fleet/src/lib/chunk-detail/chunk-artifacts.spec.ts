@@ -1,5 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 
 import type { ChunkDetail } from '../api/hub';
 import { ChunkArtifacts } from './chunk-artifacts';
@@ -77,22 +78,56 @@ describe('ChunkArtifacts', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [ChunkArtifacts],
-      providers: [provideZonelessChangeDetection()],
+      providers: [provideZonelessChangeDetection(), provideRouter([])],
     }).compileComponents();
   });
 
-  it('shows the review-findings asset content and the git-commit artifact reference', async () => {
+  it('renders no asset content inline — only a summary head — while keeping the git-commit reference (issue #160)', async () => {
     const fixture = TestBed.createComponent(ChunkArtifacts);
     fixture.componentRef.setInput('detail', REVIEW_FAIL_DETAIL);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    const findings = el.querySelector('[data-kind="asset"] [data-testid="artifact-content"]');
-    expect(findings?.textContent).toContain('BLOCKING: the widget endpoint returns 500');
+    expect(el.querySelector('[data-kind="asset"] [data-testid="artifact-content"]')).toBeNull();
+    expect(el.querySelector('[data-kind="asset"] [data-testid="artifact-key"]')?.textContent).toContain(
+      'review.review-findings.2',
+    );
 
     const commitRef = el.querySelector('[data-kind="git_commit"] [data-testid="artifact-ref"]');
     expect(commitRef?.textContent).toContain('acme/widget');
     expect(commitRef?.textContent).toContain('c1');
+  });
+
+  it('renders each row as a link to the chunk detail page’s Artifacts tab, that artifact pre-selected', async () => {
+    const fixture = TestBed.createComponent(ChunkArtifacts);
+    fixture.componentRef.setInput('detail', REVIEW_FAIL_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const links = [...el.querySelectorAll<HTMLAnchorElement>('[data-testid="artifact"] a.artifact-link')];
+    expect(links).toHaveLength(2);
+    // Sorted oldest-first (recorded_at is absent on both fixtures here, so store order):
+    // the git_commit row links with its own key.
+    const commitLink = links.find((a) => a.getAttribute('href')?.includes('build.widget.1'));
+    expect(commitLink?.getAttribute('href')).toBe(
+      `/board/chunk/${REVIEW_FAIL_DETAIL.chunk_id}?tab=artifacts&artifact=build.widget.1`,
+    );
+    const assetLink = links.find((a) => a.getAttribute('href')?.includes('review.review-findings.2'));
+    expect(assetLink?.getAttribute('href')).toBe(
+      `/board/chunk/${REVIEW_FAIL_DETAIL.chunk_id}?tab=artifacts&artifact=review.review-findings.2`,
+    );
+  });
+
+  it('orders rows by recorded_at, oldest first', async () => {
+    const older = { ...REVIEW_FAIL_DETAIL.artifacts![0], key: 'older', recorded_at: '2026-07-13T00:00:01Z' };
+    const newer = { ...REVIEW_FAIL_DETAIL.artifacts![1], key: 'newer', recorded_at: '2026-07-13T00:00:02Z' };
+    const fixture = TestBed.createComponent(ChunkArtifacts);
+    fixture.componentRef.setInput('detail', { ...REVIEW_FAIL_DETAIL, artifacts: [newer, older] });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const keys = [...el.querySelectorAll('[data-testid="artifact-key"]')].map((k) => k.textContent?.trim());
+    expect(keys).toEqual(['older', 'newer']);
   });
 
   it('shows the artifact branch name and links it to the forge, degrading when no url (issue #23)', async () => {

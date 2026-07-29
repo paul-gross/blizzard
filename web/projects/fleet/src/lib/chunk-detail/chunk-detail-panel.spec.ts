@@ -1,5 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { vi } from 'vitest';
 
 import type { ChunkDetail } from '../api/hub';
@@ -59,7 +60,7 @@ describe('ChunkDetailPanel', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [ChunkDetailPanel],
-      providers: [provideZonelessChangeDetection()],
+      providers: [provideZonelessChangeDetection(), provideRouter([])],
     }).compileComponents();
   });
 

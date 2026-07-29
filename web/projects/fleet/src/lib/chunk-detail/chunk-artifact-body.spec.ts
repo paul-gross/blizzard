@@ -43,4 +43,45 @@ describe('ChunkArtifactBody', () => {
 
     expect(el.querySelector('.a-when')).toBeNull();
   });
+
+  it('omits an asset’s content in summary mode, keeping the head (issue #160)', async () => {
+    const fixture = TestBed.createComponent(ChunkArtifactBody);
+    fixture.componentRef.setInput('artifact', ASSET);
+    fixture.componentRef.setInput('body', 'summary');
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="artifact-content"]')).toBeNull();
+    expect(el.querySelector('[data-testid="artifact-key"]')?.textContent).toBe('plan');
+  });
+
+  it('renders the full asset content by default', async () => {
+    const fixture = TestBed.createComponent(ChunkArtifactBody);
+    fixture.componentRef.setInput('artifact', ASSET);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="artifact-content"]')?.textContent).toBe('the plan');
+  });
+
+  it('keeps a git_commit’s ref line in summary mode', async () => {
+    const commit: ArtifactView = {
+      epoch: 1,
+      key: 'deliver.commit',
+      kind: 'git_commit',
+      name: 'commit',
+      node_id: 'nd_deliver',
+      node_name: 'deliver',
+      repo: 'acme/widget',
+      branch_name: 'feat/widget',
+      commit_hash: 'c1',
+    };
+    const fixture = TestBed.createComponent(ChunkArtifactBody);
+    fixture.componentRef.setInput('artifact', commit);
+    fixture.componentRef.setInput('body', 'summary');
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="artifact-ref"]')?.textContent).toContain('acme/widget');
+  });
 });

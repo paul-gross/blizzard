@@ -6,6 +6,7 @@ export { ChunkDetail } from './chunk-detail';
 // hub's mobile chunk page composes exactly these, in one column instead of three.
 export { ChunkArtifactBody } from './chunk-artifact-body';
 export { ChunkArtifacts } from './chunk-artifacts';
+export { sortArtifacts } from './sort-artifacts';
 export { ChunkAwaitingHuman } from './chunk-awaiting-human';
 export { ChunkFacts } from './chunk-facts';
 export type { EditGraphEvent } from './chunk-facts';

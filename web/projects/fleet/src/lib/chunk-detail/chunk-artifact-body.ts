@@ -8,11 +8,18 @@ import { formatAbsolute, formatWhen } from '../when';
  * body: an **asset**'s content verbatim, a **git_commit**'s pinned `repo @ commit`
  * with its branch link.
  *
- * The single owner of that rendering. Two shells show an artifact —
- * {@link ChunkArtifacts} stacks every entry of the store inline in the desktop
- * dock, and the hub's mobile shell opens one per page behind a link — and both
- * compose this rather than re-typing the kind branch, so a new field or a third
- * `kind` lands once (`canon:one-owner`).
+ * The single owner of that rendering. Three shells show an artifact —
+ * the desktop dock's link row (`summary`), the chunk detail page's Artifacts tab
+ * viewer (`full`), and the hub's mobile shell's single-artifact page (`full`) —
+ * and all three compose this rather than re-typing the kind branch, so a new
+ * field or a third `kind` lands once (`canon:one-owner`).
+ *
+ * `body` chooses how much of an asset renders: `full` (the default) is the
+ * content verbatim; `summary` renders only the head — and, for a `git_commit`,
+ * the ref line too, since that line is already a one-liner with nothing to
+ * summarize away. A row that only ever links elsewhere (the dock) has no use
+ * for a findings transcript's hundreds of lines; a page whose whole job is
+ * showing one artifact wants the content.
  *
  * `testid` roots every handle this component renders, the same convention
  * {@link MobileTitlebar} uses, so two mounts never collide on one
@@ -37,7 +44,9 @@ import { formatAbsolute, formatWhen } from '../when';
       <span class="a-kind">{{ artifact().kind }}</span>
     </div>
     @if (artifact().kind === 'asset') {
-      <pre class="a-content" [attr.data-testid]="contentTestid()">{{ artifact().content }}</pre>
+      @if (body() === 'full') {
+        <pre class="a-content" [attr.data-testid]="contentTestid()">{{ artifact().content }}</pre>
+      }
     } @else {
       <div class="a-ref" [attr.data-testid]="refTestid()">
         <span class="a-repo">{{ artifact().repo }}</span>
@@ -139,6 +148,11 @@ import { formatAbsolute, formatWhen } from '../when';
 export class ChunkArtifactBody {
   /** The artifact to render. */
   readonly artifact = input.required<ArtifactView>();
+
+  /** `full` (default) renders an asset's content verbatim; `summary` omits it —
+   * a `git_commit`'s ref line renders either way, since it carries nothing to
+   * summarize away. */
+  readonly body = input<'full' | 'summary'>('full');
 
   /** The root every handle this component renders derives from. Defaults to the
    * desktop dock's existing `artifact-*` handles. */
