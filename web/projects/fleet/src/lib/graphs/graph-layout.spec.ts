@@ -114,6 +114,31 @@ describe('layoutGraph', () => {
     expect(byId('e5')?.kind).toBe('retry'); // deliver -> build (back edge)
   });
 
+  it('carries edge identity — endpoints and choiceId — for a forward edge, a back edge, and a done-terminal edge', () => {
+    const outcome = layoutGraph(DEFAULT_LIKE, measure);
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+
+    const byId = (id: string) => outcome.graph.edges.find((e) => e.id === id);
+
+    // e0: build -c_pass-> review (forward edge)
+    expect(byId('e0')).toMatchObject({ fromNodeId: 'n_build', toNodeId: 'n_review', choiceId: 'c_pass' });
+    // e3: review -c_fail2-> build (back edge)
+    expect(byId('e3')).toMatchObject({ fromNodeId: 'n_review', toNodeId: 'n_build', choiceId: 'c_fail2' });
+    // e4: deliver -c_landed-> done (done-terminal edge)
+    expect(byId('e4')).toMatchObject({ fromNodeId: 'n_deliver', toNodeId: null, choiceId: 'c_landed' });
+  });
+
+  it("carries the self-loop's id in the same `e<i>` space as `edges`, plus its choiceId", () => {
+    const outcome = layoutGraph(DEFAULT_LIKE, measure);
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+
+    // e1: build -c_fail-> build (self-loop, filtered out of `edges`)
+    expect(outcome.graph.selfLoops[0]).toMatchObject({ id: 'e1', nodeId: 'n_build', choiceId: 'c_fail' });
+    expect(outcome.graph.edges.some((e) => e.id === 'e1')).toBe(false);
+  });
+
   it('reserves edge-label space sized to the resolved choice name, not a fixed width', () => {
     const outcome = layoutGraph(DEFAULT_LIKE, measure);
     expect(outcome.ok).toBe(true);

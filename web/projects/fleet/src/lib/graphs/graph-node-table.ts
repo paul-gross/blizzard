@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
 import type { GraphNodeView } from '../api/hub';
-import { producesNames, sessionLabel } from './graph-node';
+import { listOrDash, producesNames, retriesLabel, sessionLabel } from './graph-node';
 
 /**
  * The graph detail's node table (executor, session, judged-by, retries, mode,
@@ -84,16 +84,8 @@ export class GraphNodeTable {
   readonly nodes = input.required<readonly GraphNodeView[]>();
   readonly entryNodeId = input.required<string>();
 
-  protected retriesLabel(node: GraphNodeView): string {
-    if (node.retries_max === undefined || node.retries_max === null) return '—';
-    const exhausted = node.retries_exhausted ? ` → ${node.retries_exhausted}` : '';
-    return `${node.retries_max}${exhausted}`;
-  }
-
-  protected listOrDash(values: readonly string[] | undefined): string {
-    return values && values.length > 0 ? values.join(', ') : '—';
-  }
-
+  protected readonly retriesLabel = retriesLabel;
+  protected readonly listOrDash = listOrDash;
   protected readonly producesNames = producesNames;
   protected readonly sessionLabel = sessionLabel;
 }

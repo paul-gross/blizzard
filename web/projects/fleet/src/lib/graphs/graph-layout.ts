@@ -19,6 +19,13 @@ import { producesNames, sessionLabel } from './graph-node';
  * review's fail-back into build). dagre's internal cycle-breaking handles back
  * edges; self-loops are filtered out of the dagre input and drawn separately by
  * {@link LaidOutGraph.selfLoops} as manual side arcs, per the spike.
+ *
+ * `LaidOutEdge` and `LaidOutSelfLoop` carry identity — endpoints and `choiceId` —
+ * alongside their geometry: the component's selection feature needs to highlight a
+ * node's incident edges and render an edge's source/target, and `resolveEdges`
+ * already computes exactly that internally. Surfacing it as additive readonly
+ * fields keeps this module the single owner of edge resolution (`canon:one-owner`)
+ * instead of forking the rule into the component.
  */
 
 /** A node's declaration in `graph.nodes` names the terminal a choice can point at
@@ -92,12 +99,20 @@ export interface LaidOutEdge {
   /** An SVG path `d` attribute, already routed through dagre's control points. */
   readonly path: string;
   readonly label: LaidOutLabel | null;
+  readonly fromNodeId: string;
+  /** `null` when the edge targets the reserved `done` terminal. */
+  readonly toNodeId: string | null;
+  readonly choiceId: string;
 }
 
 export interface LaidOutSelfLoop {
+  /** Shares the `e<i>` id space with {@link LaidOutGraph.edges} — a self-loop is a
+   * `ResolvedEdge` like any other, just routed through this side arc instead of dagre. */
+  readonly id: string;
   readonly nodeId: string;
   readonly path: string;
   readonly label: LaidOutLabel;
+  readonly choiceId: string;
 }
 
 export interface LaidOutDone {
@@ -201,6 +216,7 @@ interface ResolvedEdge {
   readonly toId: string | null;
   readonly kind: EdgeKind;
   readonly label: string;
+  readonly choiceId: string;
 }
 
 /** Resolves every edge's target node id (or `null` for the reserved `done`
@@ -223,7 +239,7 @@ function resolveEdges(graph: GraphView, nameToId: ReadonlyMap<string, string>): 
     const choice = nodeById.get(edge.from_node_id)?.choices?.find((c) => c.choice_id === edge.choice_id);
     const label = choice?.name ?? edge.choice_id;
     if (edge.to_node_name === DONE_TERMINAL) {
-      resolved.push({ id: `e${i}`, fromId: edge.from_node_id, toId: null, kind: 'advance', label });
+      resolved.push({ id: `e${i}`, fromId: edge.from_node_id, toId: null, kind: 'advance', label, choiceId: edge.choice_id });
       continue;
     }
     const toId = nameToId.get(edge.to_node_name);
@@ -234,7 +250,7 @@ function resolveEdges(graph: GraphView, nameToId: ReadonlyMap<string, string>): 
     const isSelfLoop = toId === edge.from_node_id;
     const isBackEdge = !isSelfLoop && toIndex <= fromIndex;
     const kind: EdgeKind = isSelfLoop || isBackEdge ? 'retry' : 'advance';
-    resolved.push({ id: `e${i}`, fromId: edge.from_node_id, toId, kind, label });
+    resolved.push({ id: `e${i}`, fromId: edge.from_node_id, toId, kind, label, choiceId: edge.choice_id });
   }
   return resolved;
 }
@@ -324,7 +340,7 @@ export function layoutGraph(graph: GraphView, measure: TextMeasurer): LayoutOutc
         labelX !== undefined && labelY !== undefined
           ? { text: edge.label, x: labelX, y: labelY, width: labelBoxWidth(edge.label, measure), height: LABEL_HEIGHT }
           : null;
-      return { id: edge.id, kind: edge.kind, path: d, label };
+      return { id: edge.id, kind: edge.kind, path: d, label, fromNodeId: edge.fromId, toNodeId: edge.toId, choiceId: edge.choiceId };
     });
 
     const selfLoops: LaidOutSelfLoop[] = [...selfLoopsByNode.values()].map((edge) => {
@@ -335,9 +351,11 @@ export function layoutGraph(graph: GraphView, measure: TextMeasurer): LayoutOutc
       const bulge = 44;
       const labelW = labelBoxWidth(edge.label, measure);
       return {
+        id: edge.id,
         nodeId: edge.fromId,
         path: selfLoopPath(x0, y0, y1, bulge),
         label: { text: edge.label, x: x0 + bulge + 2, y: n.y, width: labelW, height: LABEL_HEIGHT },
+        choiceId: edge.choiceId,
       };
     });
 

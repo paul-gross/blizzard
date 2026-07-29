@@ -4,7 +4,7 @@ import type { GraphEdgeView, GraphNodeView, GraphSessionView } from '../api/hub'
 import { hasPermission, injectMeQuery } from '../auth/me.query';
 import { errorMessage } from '../error-message';
 import { KitButton } from '../kit/kit-button';
-import { GraphDiagram } from './graph-diagram';
+import { GraphDiagramView } from './graph-diagram-view';
 import { injectGraphLifecycleMutation } from './graph-lifecycle.mutations';
 import { GraphNodeTable } from './graph-node-table';
 import { GraphSessionTable } from './graph-session-table';
@@ -28,14 +28,15 @@ interface ResolvedEdge {
  * binds to the `/graphs/:graphId` route param — refresh-safe and deep-linkable by
  * construction (`bzh:generated-client`; no hand-written fetch).
  *
- * Mounts `<fleet-graph-diagram>` above the node table — the static DAG render of
- * the same `GraphView` (no re-fetch); the table stays the ever-present fallback
- * surface, unaffected by a diagram-layout failure.
+ * Mounts `<fleet-graph-diagram-view>` above the node table — the selectable DAG
+ * render of the same `GraphView` plus its detail pane (blizzard#159), no re-fetch;
+ * the table stays the ever-present fallback surface, unaffected by a diagram-layout
+ * failure.
  */
 @Component({
   selector: 'fleet-graph-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [GraphDiagram, GraphNodeTable, GraphSessionTable, KitButton],
+  imports: [GraphDiagramView, GraphNodeTable, GraphSessionTable, KitButton],
   template: `
     <section class="gd-panel graph-detail" aria-label="Graph detail" data-testid="graph-detail">
       @if (graphQuery.isPending()) {
@@ -77,7 +78,7 @@ interface ResolvedEdge {
             Entry node: <strong>{{ entryNodeName() }}</strong>
           </p>
 
-          <fleet-graph-diagram [graph]="g" data-testid="graph-detail-diagram" />
+          <fleet-graph-diagram-view [graph]="g" data-testid="graph-detail-diagram" />
 
           <fleet-graph-node-table [nodes]="nodes()" [entryNodeId]="g.entry_node_id" />
 
