@@ -594,6 +594,11 @@ class ChunkFacts:
     minted: bool
     promoted: bool = False
     stopped: bool = False
+    # ``chunk.stopped``'s own instant (issue #173) — kept alongside ``stopped`` rather
+    # than replacing it: the status derivation keeps reading the boolean, so no existing
+    # derivation unit test changes, and this stays render-only (:func:`derive_completed_at`).
+    # ``None`` exactly when ``stopped`` is False.
+    stopped_at: datetime | None = None
     # ``delivery.landed`` — the whole-chunk terminal fact ``finalize_delivery`` writes
     # atomically with the terminal transition (merge-to-main). Informational only
     # (``bzh:facts-not-status``): it no longer drives DONE (:func:`newest_transition_is_terminal`
@@ -607,6 +612,11 @@ class ChunkFacts:
     # Feeds :func:`has_landed_repos`; the derivation reads only non-emptiness.
     landed_repos: frozenset[str] = field(default_factory=frozenset)
     pr_closed: bool = False
+    # The newest ``delivery_pr_closed.closed_at`` across every repo's row (issue #173) —
+    # kept alongside ``pr_closed`` for the same reason as ``stopped_at`` above. A
+    # multi-repo chunk in open-PR mode can carry several rows (no chunk_id-unique
+    # constraint, unlike ``delivery_pr_opened``); this is the newest one.
+    pr_closed_at: datetime | None = None
     escalations: list[EscalationFact] = field(default_factory=list)
     leases: list[LeaseFact] = field(default_factory=list)
     transitions: list[TransitionFact] = field(default_factory=list)
@@ -673,6 +683,31 @@ def derive_chunk_status(facts: ChunkFacts) -> ChunkStatus:
         # a fresh, un-promoted chunk with no live route lands here.
         return ChunkStatus.NOT_READY
     return ChunkStatus.READY
+
+
+def derive_completed_at(facts: ChunkFacts) -> datetime | None:
+    """The instant a terminal chunk finished, or ``None`` (issue #173) — render-only,
+    never a status: :func:`derive_chunk_status` alone still decides ``stopped``/``done``.
+
+    Mirrors that function's own branch order so the two never disagree: ``stopped``
+    reads :attr:`ChunkFacts.stopped_at`; ``done`` via the terminal transition reads
+    that transition's instant, or — in open-PR mode, where ``pr.closed`` can also
+    stand alone as the terminal fact — the **later** of the terminal transition and
+    the newest :attr:`ChunkFacts.pr_closed_at` across a multi-repo chunk's rows
+    (closing every repo's PR can lag the transition that already reached the
+    terminal). Every other status, including a chunk whose newest movement is a
+    **migration** that superseded an earlier terminal transition
+    (:func:`newest_transition_is_terminal` returns False for it) — not done, so this
+    reports ``None`` rather than a stale instant from the superseded transition.
+    """
+    if facts.stopped:
+        return facts.stopped_at
+    terminal_transition = newest_transition(facts) if newest_transition_is_terminal(facts) else None
+    if terminal_transition is None:
+        return facts.pr_closed_at if facts.pr_closed else None
+    if facts.pr_closed_at is not None:
+        return max(terminal_transition.recorded_at, facts.pr_closed_at)
+    return terminal_transition.recorded_at
 
 
 def _has_open_escalation(facts: ChunkFacts) -> bool:

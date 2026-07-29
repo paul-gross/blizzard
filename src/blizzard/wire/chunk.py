@@ -140,9 +140,15 @@ class ChunkSummary(BaseModel):
     route fact is unfiltered on :class:`ChunkDetail.route`, which is where a "where was
     this worked" read belongs.
 
-    ``cost`` is the one exception (issue #59): the derived
-    spend total is cheap to carry on every card and is not itself an operator fact, so it
-    rides the summary rather than waiting for the detail fetch."""
+    ``cost`` and ``completed_at`` are the two exceptions (issues #59, #173): both are
+    cheap, passive derived instants — not an operator fact — so they ride the summary
+    rather than waiting for the detail fetch.
+
+    ``completed_at`` (issue #173) is the terminal instant — see
+    :func:`~blizzard.hub.domain.work.derive_completed_at` — null for every non-terminal
+    status. Like every wire instant it is a ``str``, populated via
+    :func:`~blizzard.foundation.clock.iso_utc` at the serialization edge, never a bare
+    ``datetime`` (``bzh:utc-instants``)."""
 
     chunk_id: str
     graph_id: str
@@ -164,6 +170,9 @@ class ChunkSummary(BaseModel):
     environment_count: int = 0
     # The chunk's derived usage/cost total (issue #59) — see ChunkUsageTotalView.
     cost: ChunkUsageTotalView = Field(default_factory=_zero_usage_total)
+    # The chunk's derived completion instant (issue #173) — null for every non-terminal
+    # status. See derive_completed_at.
+    completed_at: str | None = None
 
 
 class RouteView(BaseModel):

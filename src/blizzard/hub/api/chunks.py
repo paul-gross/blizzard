@@ -72,6 +72,7 @@ from blizzard.hub.domain.work import (
     current_node_id,
     derive_chunk_status,
     derive_chunk_usage,
+    derive_completed_at,
     derive_fleet_summary,
     has_landed_repos,
     holds_claim,
@@ -426,6 +427,7 @@ def _summary_view(
     # `holds_claim`'s, in the domain. Asked before the read, not after, so a terminal
     # chunk costs no `route_of` query at all; on a long-lived board they are most of the list.
     route = services.chunks.route_of(chunk.chunk_id) if holds_claim(status) else None
+    completed_at = derive_completed_at(facts)
     return ChunkSummary(
         chunk_id=chunk.chunk_id,
         graph_id=chunk.graph_id,
@@ -438,6 +440,7 @@ def _summary_view(
         runner_id=route.runner_id if route is not None else None,
         environment_count=len(route.environment_ids) if route is not None else 0,
         cost=_usage_total_view(facts),
+        completed_at=iso_utc(completed_at) if completed_at is not None else None,
     )
 
 
