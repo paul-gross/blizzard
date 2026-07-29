@@ -809,7 +809,8 @@ export const resumeRunnerApiRunnersRunnerIdResumePost = <ThrowOnError extends bo
  * Fleet Spend
  *
  * The fleet's total usage/cost since ``since`` (an ISO-8601 instant) — summed
- * over every usage fact recorded at or after it, across every chunk.
+ * over every usage fact recorded at or after it, across every chunk. An optional
+ * ``until`` bounds the window's other edge, exclusive.
  */
 export const fleetSpendApiSpendGet = <ThrowOnError extends boolean = false>(options: Options<FleetSpendApiSpendGetData, ThrowOnError>): RequestResult<FleetSpendApiSpendGetResponses, FleetSpendApiSpendGetErrors, ThrowOnError> => (options.client ?? client).get<FleetSpendApiSpendGetResponses, FleetSpendApiSpendGetErrors, ThrowOnError>({ url: '/api/spend', ...options });
 

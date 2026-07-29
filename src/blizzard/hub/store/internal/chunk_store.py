@@ -538,8 +538,11 @@ class ChunkStore:
             decisions = [self._decision_row(conn, row) for row in rows]
             return [d for d in decisions if not d.resolved]
 
-    def usage_since(self, since: datetime) -> list[UsageFact]:
+    def usage_since(self, since: datetime, *, until: datetime | None = None) -> list[UsageFact]:
         with self._engine.connect() as conn:
+            query = select(s.usage_facts).where(s.usage_facts.c.recorded_at >= since)
+            if until is not None:
+                query = query.where(s.usage_facts.c.recorded_at < until)
             return [
                 UsageFact(
                     node_id=u.node_id,
@@ -553,7 +556,7 @@ class ChunkStore:
                     cost_usd=u.cost_usd,
                     recorded_at=u.recorded_at,
                 )
-                for u in conn.execute(select(s.usage_facts).where(s.usage_facts.c.recorded_at >= since)).all()
+                for u in conn.execute(query).all()
             ]
 
     def list_events(

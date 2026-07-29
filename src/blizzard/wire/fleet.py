@@ -22,12 +22,14 @@ from pydantic import BaseModel
 
 
 class FleetSpendView(BaseModel):
-    """The fleet's usage/cost total since ``since``. ``cost_partial`` carries the
-    lower-bound + PARTIAL contract on ``cost_usd`` — see
-    :class:`~blizzard.hub.domain.work.UsageTotal` for the one canonical statement of
+    """The fleet's usage/cost total since ``since`` — and, when the caller bounded the
+    window, strictly before ``until`` (issue #183; ``None`` for the original open-ended
+    tail). ``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd`` —
+    see :class:`~blizzard.hub.domain.work.UsageTotal` for the one canonical statement of
     it, which this view's fields mirror verbatim."""
 
     since: str
+    until: str | None = None
     input_tokens: int
     output_tokens: int
     cache_read_tokens: int

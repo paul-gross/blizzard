@@ -1307,10 +1307,12 @@ class IReadChunkRepository(Protocol):
         """Every unresolved decision across the fleet — the ``blizzard hub decisions`` view."""
         ...
 
-    def usage_since(self, since: datetime) -> list[UsageFact]:
-        """Every usage fact recorded at or after ``since``, across every chunk — the
-        fleet spend-since read's input (issue #60); the caller derives the total via
-        :func:`derive_fleet_usage`."""
+    def usage_since(self, since: datetime, *, until: datetime | None = None) -> list[UsageFact]:
+        """Every usage fact recorded at or after ``since`` — and, when ``until`` is given,
+        strictly before it — across every chunk (issue #60, issue #183). ``since`` is
+        inclusive and ``until`` exclusive, so adjacent windows sharing a boundary instant
+        neither double-count nor drop a fact at it. Omitting ``until`` is the original
+        open-ended tail. The caller derives the total via :func:`derive_fleet_usage`."""
         ...
 
     def list_events(

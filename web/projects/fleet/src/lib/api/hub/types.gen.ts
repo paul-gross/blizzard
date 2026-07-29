@@ -1023,9 +1023,10 @@ export type Executor = 'runner' | 'hub';
 /**
  * FleetSpendView
  *
- * The fleet's usage/cost total since ``since``. ``cost_partial`` carries the
- * lower-bound + PARTIAL contract on ``cost_usd`` — see
- * :class:`~blizzard.hub.domain.work.UsageTotal` for the one canonical statement of
+ * The fleet's usage/cost total since ``since`` — and, when the caller bounded the
+ * window, strictly before ``until`` (issue #183; ``None`` for the original open-ended
+ * tail). ``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd`` —
+ * see :class:`~blizzard.hub.domain.work.UsageTotal` for the one canonical statement of
  * it, which this view's fields mirror verbatim.
  */
 export type FleetSpendView = {
@@ -1057,6 +1058,10 @@ export type FleetSpendView = {
      * Since
      */
     since: string;
+    /**
+     * Until
+     */
+    until?: string | null;
 };
 
 /**
@@ -4569,6 +4574,10 @@ export type FleetSpendApiSpendGetData = {
          * Since
          */
         since: string;
+        /**
+         * Until
+         */
+        until?: string | null;
     };
     url: '/api/spend';
 };

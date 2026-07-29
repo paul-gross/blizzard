@@ -1470,7 +1470,7 @@
         "type": "string"
       },
       "FleetSpendView": {
-        "description": "The fleet's usage/cost total since ``since``. ``cost_partial`` carries the\nlower-bound + PARTIAL contract on ``cost_usd`` \u2014 see\n:class:`~blizzard.hub.domain.work.UsageTotal` for the one canonical statement of\nit, which this view's fields mirror verbatim.",
+        "description": "The fleet's usage/cost total since ``since`` \u2014 and, when the caller bounded the\nwindow, strictly before ``until`` (issue #183; ``None`` for the original open-ended\ntail). ``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd`` \u2014\nsee :class:`~blizzard.hub.domain.work.UsageTotal` for the one canonical statement of\nit, which this view's fields mirror verbatim.",
         "properties": {
           "cache_create_tokens": {
             "title": "Cache Create Tokens",
@@ -1499,6 +1499,17 @@
           "since": {
             "title": "Since",
             "type": "string"
+          },
+          "until": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Until"
           }
         },
         "required": [
@@ -6785,7 +6796,7 @@
     },
     "/api/spend": {
       "get": {
-        "description": "The fleet's total usage/cost since ``since`` (an ISO-8601 instant) \u2014 summed\nover every usage fact recorded at or after it, across every chunk.",
+        "description": "The fleet's total usage/cost since ``since`` (an ISO-8601 instant) \u2014 summed\nover every usage fact recorded at or after it, across every chunk. An optional\n``until`` bounds the window's other edge, exclusive.",
         "operationId": "fleet_spend_api_spend_get",
         "parameters": [
           {
@@ -6795,6 +6806,22 @@
             "schema": {
               "title": "Since",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
             }
           }
         ],
