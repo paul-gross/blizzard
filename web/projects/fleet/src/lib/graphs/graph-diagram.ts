@@ -1,14 +1,9 @@
-import { ChangeDetectionStrategy, Component, InjectionToken, computed, inject, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, InjectionToken, computed, inject, input, output } from '@angular/core';
 
 import type { GraphView } from '../api/hub';
-import {
-  META_FIRST_LINE_Y,
-  META_LINE_HEIGHT,
-  type LaidOutNode,
-  type LayoutOutcome,
-  type TextMeasurer,
-  layoutGraph,
-} from './graph-layout';
+import { type DiagramSelection, endpointNodeIds, incidentEdgeIds } from './graph-diagram-selection';
+import { GraphDiagramNodeShape } from './graph-diagram-node-shape';
+import { type LaidOutEdge, type LaidOutSelfLoop, type LayoutOutcome, type TextMeasurer, layoutGraph } from './graph-layout';
 import { GRAPH_TEXT_MEASURER } from './graph-text-measurer';
 
 /** Layout seam: defaults to the real dagre-backed {@link layoutGraph}, overridable
@@ -38,15 +33,38 @@ export const GRAPH_LAYOUT = new InjectionToken<(graph: GraphView, measure: TextM
  * the spike explicitly calls out the prototype's re-render-on-theme bug
  * (`spike71/part2.html`) as the thing to avoid: a theme switch here re-styles
  * without recomputing layout.
+ *
+ * Selectable and **fully controlled**: `selection` in, `selectionChange` out. This
+ * component never holds its own copy of "what is selected" — `graph-diagram-view.ts`
+ * is the sole owner, so the diagram and the detail pane beside it can't drift. Each
+ * edge and self-loop carries an invisible companion `.edge-hit` path (same `d`, a
+ * fat transparent stroke, `pointer-events: stroke`) so a click registers near the
+ * curve rather than only exactly on its 2px visible stroke; the visible path is
+ * `pointer-events: none` so it never steals the hit. The `<svg>` root's own click
+ * clears the selection — every node/edge click stops propagation before it gets
+ * there.
+ *
+ * The `<svg>` keeps `role="img"`, so its subtree is presentational to assistive
+ * tech and the click targets here are a pointer affordance only — a deliberate
+ * choice, not an oversight: `graph-detail.ts`'s ever-present structured table
+ * (edges/choices list, prompts section) is the keyboard- and screen-reader-
+ * accessible path to the same data. Making the diagram a focusable widget tree
+ * (roving tabindex, `role="application"`, Enter/Space) is real work the issue this
+ * shipped under did not ask for.
  */
 @Component({
   selector: 'fleet-graph-diagram',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [GraphDiagramNodeShape],
   template: `
     <div class="diagram-root" data-testid="graph-diagram">
       @if (outcome(); as o) {
         @if (o.ok) {
           <div class="diagram-scroll" data-testid="graph-diagram-scroll">
+            <!-- role="img" keeps this subtree presentational to assistive tech (see the
+                 class doc's a11y section) — a pointer-only clear affordance, not a
+                 keyboard gap; the structured table below is the accessible path. -->
+            <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -->
             <svg
               [attr.viewBox]="'0 0 ' + o.graph.width + ' ' + o.graph.height"
               [attr.width]="o.graph.width"
@@ -54,6 +72,7 @@ export const GRAPH_LAYOUT = new InjectionToken<(graph: GraphView, measure: TextM
               role="img"
               [attr.aria-label]="'Diagram of graph ' + graph().graph_id"
               data-testid="graph-diagram-svg"
+              (click)="clearSelection()"
             >
               <defs>
                 <marker
@@ -81,12 +100,22 @@ export const GRAPH_LAYOUT = new InjectionToken<(graph: GraphView, measure: TextM
               </defs>
 
               @for (edge of o.graph.edges; track edge.id) {
-                <g data-testid="graph-diagram-edge" [attr.data-edge-kind]="edge.kind">
+                <g
+                  class="edge-group"
+                  data-testid="graph-diagram-edge"
+                  [attr.data-edge-kind]="edge.kind"
+                  [attr.data-selected]="isEdgeSelected(edge.id) ? 'true' : null"
+                  [attr.data-incident]="isEdgeIncident(edge.id) ? 'true' : null"
+                  [class.selected]="isEdgeSelected(edge.id)"
+                  [class.incident]="isEdgeIncident(edge.id)"
+                  (click)="selectEdge(edge, $event)"
+                >
                   <path
                     [attr.d]="edge.path"
                     [class]="'edge edge-' + edge.kind"
                     [attr.marker-end]="'url(#graph-diagram-arrow-' + edge.kind + ')'"
                   />
+                  <path [attr.d]="edge.path" class="edge-hit" data-testid="graph-diagram-edge-hit" />
                   @if (edge.label; as label) {
                     <rect
                       class="edge-label-bg"
@@ -109,9 +138,19 @@ export const GRAPH_LAYOUT = new InjectionToken<(graph: GraphView, measure: TextM
                 </g>
               }
 
-              @for (loop of o.graph.selfLoops; track loop.nodeId) {
-                <g data-testid="graph-diagram-self-loop" [attr.data-node-id]="loop.nodeId">
+              @for (loop of o.graph.selfLoops; track loop.id) {
+                <g
+                  class="edge-group"
+                  data-testid="graph-diagram-self-loop"
+                  [attr.data-node-id]="loop.nodeId"
+                  [attr.data-selected]="isEdgeSelected(loop.id) ? 'true' : null"
+                  [attr.data-incident]="isEdgeIncident(loop.id) ? 'true' : null"
+                  [class.selected]="isEdgeSelected(loop.id)"
+                  [class.incident]="isEdgeIncident(loop.id)"
+                  (click)="selectSelfLoop(loop, $event)"
+                >
                   <path [attr.d]="loop.path" class="edge edge-retry" marker-end="url(#graph-diagram-arrow-retry)" />
+                  <path [attr.d]="loop.path" class="edge-hit" data-testid="graph-diagram-edge-hit" />
                   <rect
                     class="edge-label-bg"
                     [attr.x]="loop.label.x - loop.label.width / 2"
@@ -134,48 +173,12 @@ export const GRAPH_LAYOUT = new InjectionToken<(graph: GraphView, measure: TextM
 
               @for (node of o.graph.nodes; track node.id) {
                 <g
-                  data-testid="graph-diagram-node"
-                  [attr.data-node-id]="node.id"
-                  [class.entry]="node.isEntry"
-                  [class.exec-hub]="node.executor === 'hub'"
-                  [class.exec-runner]="node.executor !== 'hub'"
-                >
-                  @if (node.isEntry) {
-                    <rect
-                      class="entry-ring"
-                      [attr.x]="node.x - 4"
-                      [attr.y]="node.y - 4"
-                      [attr.width]="node.width + 8"
-                      [attr.height]="node.height + 8"
-                      rx="12"
-                      data-testid="graph-diagram-entry-ring"
-                    />
-                  }
-                  <rect
-                    class="node-box"
-                    [attr.x]="node.x"
-                    [attr.y]="node.y"
-                    [attr.width]="node.width"
-                    [attr.height]="node.height"
-                    rx="9"
-                  />
-                  <rect class="node-stripe" [attr.x]="node.x" [attr.y]="node.y" width="4" [attr.height]="node.height" />
-                  <text class="node-name" [attr.x]="node.x + 14" [attr.y]="node.y + 24" data-testid="graph-diagram-node-name">
-                    {{ node.name }}
-                  </text>
-                  <text
-                    class="node-badge"
-                    [attr.x]="node.x + node.width - 8"
-                    [attr.y]="node.y + 20"
-                    text-anchor="end"
-                    data-testid="graph-diagram-node-badge"
-                  >
-                    {{ node.executor.toUpperCase() }}
-                  </text>
-                  @for (line of node.metaLines; track $index) {
-                    <text class="node-meta" [attr.x]="node.x + 14" [attr.y]="metaLineY(node, $index)">{{ line }}</text>
-                  }
-                </g>
+                  fleetGraphDiagramNode
+                  [node]="node"
+                  [selected]="isNodeSelected(node.id)"
+                  [incident]="isNodeIncident(node.id)"
+                  (click)="selectNode(node.id, $event)"
+                ></g>
               }
 
               @if (o.graph.done; as done) {
@@ -218,52 +221,29 @@ export const GRAPH_LAYOUT = new InjectionToken<(graph: GraphView, measure: TextM
       font-size: var(--fs-xs);
       border: 1px dashed var(--bezel);
     }
-    .node-box {
-      fill: var(--panel);
-      stroke: var(--bezel-hi);
-      stroke-width: 1.25;
-    }
-    .node-stripe {
-      fill: var(--label-dim);
-    }
-    .exec-runner .node-stripe {
-      fill: var(--cyan);
-    }
-    .exec-hub .node-stripe {
-      fill: var(--amber);
-    }
-    .entry-ring {
-      fill: none;
-      stroke: var(--amber-hi);
-      stroke-width: 2;
-    }
-    .node-name {
-      fill: var(--text);
-      font-family: var(--mono);
-      font-size: 13px;
-      font-weight: 600;
-    }
-    .node-badge {
-      fill: var(--label-dim);
-      font-family: var(--mono);
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 0.06em;
-    }
-    .exec-runner .node-badge {
-      fill: var(--cyan);
-    }
-    .exec-hub .node-badge {
-      fill: var(--amber);
-    }
-    .node-meta {
-      fill: var(--label);
-      font-family: var(--mono);
-      font-size: 11px;
+    .edge-group {
+      cursor: pointer;
     }
     .edge {
       fill: none;
       stroke-width: 2.25;
+      /* Hit-testing goes through the companion .edge-hit path below — the visible
+         stroke never intercepts a click, so a thin curve doesn't force pixel-exact
+         clicks. */
+      pointer-events: none;
+    }
+    .edge-hit {
+      fill: none;
+      stroke: transparent;
+      stroke-width: 14px;
+      pointer-events: stroke;
+    }
+    .edge-group:hover .edge,
+    .edge-group.selected .edge {
+      stroke-width: 3.5;
+    }
+    .edge-group.incident .edge {
+      stroke-width: 3;
     }
     .edge-advance {
       stroke: var(--green);
@@ -312,14 +292,75 @@ export class GraphDiagram {
    * holds. */
   readonly graph = input.required<GraphView>();
 
+  /** The current selection, fully controlled by the parent — this component never
+   * mutates its own copy, only renders whichever selection it is handed. */
+  readonly selection = input<DiagramSelection | null>(null);
+  /** Emits what the user clicked: a node, an edge (or self-loop), or `null` on an
+   * empty-canvas click. The parent owns applying it back via `selection`. */
+  readonly selectionChange = output<DiagramSelection | null>();
+
   private readonly layoutFn = inject(GRAPH_LAYOUT);
   private readonly measure = inject(GRAPH_TEXT_MEASURER);
 
   protected readonly outcome = computed<LayoutOutcome>(() => this.layoutFn(this.graph(), this.measure));
 
-  /** Baseline y of the node's `index`-th wrapped meta line — the same step
-   * `graph-layout.ts` grew the box height by, so the lines land inside it. */
-  protected metaLineY(node: LaidOutNode, index: number): number {
-    return node.y + META_FIRST_LINE_Y + index * META_LINE_HEIGHT;
+  protected isNodeSelected(nodeId: string): boolean {
+    const s = this.selection();
+    return s !== null && s.kind === 'node' && s.nodeId === nodeId;
+  }
+
+  /** Whether `nodeId` is an endpoint of the currently selected edge. */
+  protected isNodeIncident(nodeId: string): boolean {
+    return endpointNodeIds(this.selection()).includes(nodeId);
+  }
+
+  protected isEdgeSelected(edgeId: string): boolean {
+    const s = this.selection();
+    return s !== null && s.kind === 'edge' && s.edgeId === edgeId;
+  }
+
+  /** Whether `edgeId` (or self-loop id) is incident to the currently selected node. */
+  protected isEdgeIncident(edgeId: string): boolean {
+    const s = this.selection();
+    if (s === null || s.kind !== 'node') return false;
+    const o = this.outcome();
+    if (!o.ok) return false;
+    return incidentEdgeIds(o.graph, s.nodeId).includes(edgeId);
+  }
+
+  protected selectNode(nodeId: string, event: MouseEvent): void {
+    event.stopPropagation();
+    this.selectionChange.emit({ kind: 'node', nodeId });
+  }
+
+  protected selectEdge(edge: LaidOutEdge, event: MouseEvent): void {
+    event.stopPropagation();
+    this.selectionChange.emit({
+      kind: 'edge',
+      edgeId: edge.id,
+      fromNodeId: edge.fromNodeId,
+      toNodeId: edge.toNodeId,
+      choiceId: edge.choiceId,
+      edgeKind: edge.kind,
+    });
+  }
+
+  /** A self-loop is a retry edge from a node to itself — its `kind` is always
+   * `'retry'` by construction ({@link resolveEdges} in `graph-layout.ts`), so unlike
+   * {@link selectEdge} there is no `kind` field on {@link LaidOutSelfLoop} to read. */
+  protected selectSelfLoop(loop: LaidOutSelfLoop, event: MouseEvent): void {
+    event.stopPropagation();
+    this.selectionChange.emit({
+      kind: 'edge',
+      edgeId: loop.id,
+      fromNodeId: loop.nodeId,
+      toNodeId: loop.nodeId,
+      choiceId: loop.choiceId,
+      edgeKind: 'retry',
+    });
+  }
+
+  protected clearSelection(): void {
+    this.selectionChange.emit(null);
   }
 }

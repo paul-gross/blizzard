@@ -2,6 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
 import type { GraphView } from '../api/hub';
+import type { DiagramSelection } from './graph-diagram-selection';
 import { GRAPH_LAYOUT, GraphDiagram } from './graph-diagram';
 import type { LaidOutGraph, LayoutOutcome } from './graph-layout';
 import { GRAPH_TEXT_MEASURER } from './graph-text-measurer';
@@ -66,7 +67,7 @@ const LAID_OUT: LaidOutGraph = {
   done: { x: 95, y: 220, r: 24 },
 };
 
-function mount(outcome: LayoutOutcome) {
+function mount(outcome: LayoutOutcome, selection?: DiagramSelection | null) {
   TestBed.configureTestingModule({
     imports: [GraphDiagram],
     providers: [
@@ -77,6 +78,7 @@ function mount(outcome: LayoutOutcome) {
   });
   const fixture = TestBed.createComponent(GraphDiagram);
   fixture.componentRef.setInput('graph', GRAPH);
+  if (selection !== undefined) fixture.componentRef.setInput('selection', selection);
   fixture.detectChanges();
   return fixture;
 }
@@ -140,5 +142,129 @@ describe('GraphDiagram', () => {
     // and the last baseline stays inside the box (y 20, height 75 -> bottom 95).
     expect(metas[0].getAttribute('y')).toBe('64');
     expect(metas[1].getAttribute('y')).toBe('79');
+  });
+
+  describe('selection', () => {
+    it('emits a node selection on click and marks the node data-selected with its incident edges data-incident', () => {
+      const fixture = mount({ ok: true, graph: LAID_OUT });
+      let received: DiagramSelection | null | undefined;
+      fixture.componentInstance.selectionChange.subscribe((v) => (received = v));
+
+      const el = fixture.nativeElement as HTMLElement;
+      const buildNode = el.querySelector('[data-testid="graph-diagram-node"][data-node-id="n_build"]') as HTMLElement;
+      buildNode.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(received).toEqual({ kind: 'node', nodeId: 'n_build' });
+
+      fixture.componentRef.setInput('selection', received);
+      fixture.detectChanges();
+      expect(buildNode.getAttribute('data-selected')).toBe('true');
+      const edge = el.querySelector('[data-testid="graph-diagram-edge"]') as HTMLElement;
+      const selfLoop = el.querySelector('[data-testid="graph-diagram-self-loop"]') as HTMLElement;
+      expect(edge.getAttribute('data-incident')).toBe('true');
+      expect(selfLoop.getAttribute('data-incident')).toBe('true');
+    });
+
+    it("emits an edge selection carrying its endpoints and choiceId on the companion hit path's click", () => {
+      const fixture = mount({ ok: true, graph: LAID_OUT });
+      const el = fixture.nativeElement as HTMLElement;
+      const hitPath = el.querySelector('[data-testid="graph-diagram-edge"] [data-testid="graph-diagram-edge-hit"]') as HTMLElement;
+
+      let received: DiagramSelection | null | undefined;
+      fixture.componentInstance.selectionChange.subscribe((v) => (received = v));
+      hitPath.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(received).toEqual({
+        kind: 'edge',
+        edgeId: 'e0',
+        fromNodeId: 'n_build',
+        toNodeId: 'n_deliver',
+        choiceId: 'c_pass',
+        edgeKind: 'advance',
+      });
+    });
+
+    it('emits the same edge selection when the label pill is clicked instead of the hit path', () => {
+      const fixture = mount({ ok: true, graph: LAID_OUT });
+      const el = fixture.nativeElement as HTMLElement;
+      const labelText = el.querySelector('[data-testid="graph-diagram-edge"] [data-testid="graph-diagram-edge-label"]') as HTMLElement;
+
+      let received: DiagramSelection | null | undefined;
+      fixture.componentInstance.selectionChange.subscribe((v) => (received = v));
+      labelText.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(received).toEqual({
+        kind: 'edge',
+        edgeId: 'e0',
+        fromNodeId: 'n_build',
+        toNodeId: 'n_deliver',
+        choiceId: 'c_pass',
+        edgeKind: 'advance',
+      });
+    });
+
+    it('emits an edge selection carrying the self-loop id when the self-loop group is clicked', () => {
+      const fixture = mount({ ok: true, graph: LAID_OUT });
+      const el = fixture.nativeElement as HTMLElement;
+      const selfLoop = el.querySelector('[data-testid="graph-diagram-self-loop"]') as HTMLElement;
+
+      let received: DiagramSelection | null | undefined;
+      fixture.componentInstance.selectionChange.subscribe((v) => (received = v));
+      selfLoop.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(received).toEqual({
+        kind: 'edge',
+        edgeId: 'e1',
+        fromNodeId: 'n_build',
+        toNodeId: 'n_build',
+        choiceId: 'c_fail',
+        edgeKind: 'retry',
+      });
+    });
+
+    it('emits null when the svg (empty canvas) is clicked', () => {
+      const fixture = mount({ ok: true, graph: LAID_OUT }, { kind: 'node', nodeId: 'n_build' });
+      const el = fixture.nativeElement as HTMLElement;
+      const svg = el.querySelector('[data-testid="graph-diagram-svg"]') as HTMLElement;
+
+      let received: DiagramSelection | null | undefined = 'unset' as unknown as DiagramSelection;
+      fixture.componentInstance.selectionChange.subscribe((v) => (received = v));
+      svg.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      expect(received).toBeNull();
+    });
+
+    it('gives every edge and self-loop exactly one companion hit path with an identical d and a fat transparent stroke', () => {
+      const fixture = mount({ ok: true, graph: LAID_OUT });
+      const el = fixture.nativeElement as HTMLElement;
+
+      const edgeGroup = el.querySelector('[data-testid="graph-diagram-edge"]') as HTMLElement;
+      const edgeHits = edgeGroup.querySelectorAll('[data-testid="graph-diagram-edge-hit"]');
+      expect(edgeHits).toHaveLength(1);
+      const visiblePath = edgeGroup.querySelector('path.edge') as SVGPathElement;
+      expect(edgeHits[0].getAttribute('d')).toBe(visiblePath.getAttribute('d'));
+      expect(getComputedStyle(edgeHits[0]).strokeWidth).toBe('14px');
+
+      const selfLoopGroup = el.querySelector('[data-testid="graph-diagram-self-loop"]') as HTMLElement;
+      const loopHits = selfLoopGroup.querySelectorAll('[data-testid="graph-diagram-edge-hit"]');
+      expect(loopHits).toHaveLength(1);
+      const visibleLoopPath = selfLoopGroup.querySelector('path.edge') as SVGPathElement;
+      expect(loopHits[0].getAttribute('d')).toBe(visibleLoopPath.getAttribute('d'));
+    });
+
+    it('renders a selection passed in from outside highlighted with no click at all (the controlled contract)', () => {
+      const fixture = mount(
+        { ok: true, graph: LAID_OUT },
+        { kind: 'edge', edgeId: 'e0', fromNodeId: 'n_build', toNodeId: 'n_deliver', choiceId: 'c_pass', edgeKind: 'advance' },
+      );
+      const el = fixture.nativeElement as HTMLElement;
+
+      const edge = el.querySelector('[data-testid="graph-diagram-edge"]') as HTMLElement;
+      expect(edge.getAttribute('data-selected')).toBe('true');
+      const buildNode = el.querySelector('[data-testid="graph-diagram-node"][data-node-id="n_build"]') as HTMLElement;
+      const deliverNode = el.querySelector('[data-testid="graph-diagram-node"][data-node-id="n_deliver"]') as HTMLElement;
+      expect(buildNode.getAttribute('data-incident')).toBe('true');
+      expect(deliverNode.getAttribute('data-incident')).toBe('true');
+    });
   });
 });
