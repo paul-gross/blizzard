@@ -23,3 +23,20 @@ export function producesNames(node: GraphNodeView): readonly string[] | undefine
 export function sessionLabel(node: GraphNodeView): string {
   return node.session_source ? `${node.session}:${node.session_source}` : node.session;
 }
+
+/** A node's retries in `max → exhausted` form (the `→ exhausted` suffix only when
+ * set), or `—` when the node declares no retry limit at all. Shared so the detail
+ * table's Retries column (`graph-node-table.ts`) and the diagram's detail pane
+ * (`graph-diagram-detail.ts`) can't drift on how the two fields combine. */
+export function retriesLabel(node: GraphNodeView): string {
+  if (node.retries_max === undefined || node.retries_max === null) return '—';
+  const exhausted = node.retries_exhausted ? ` → ${node.retries_exhausted}` : '';
+  return `${node.retries_max}${exhausted}`;
+}
+
+/** A list column's display form — comma-joined, or `—` when empty/absent.
+ * Shared so `checks`/`produces` render identically in the node table and the
+ * diagram's detail pane. */
+export function listOrDash(values: readonly string[] | undefined): string {
+  return values && values.length > 0 ? values.join(', ') : '—';
+}
