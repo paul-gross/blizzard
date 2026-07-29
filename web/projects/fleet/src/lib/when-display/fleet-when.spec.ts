@@ -56,3 +56,34 @@ describe('FleetWhen', () => {
     expect(el.hasAttribute('title')).toBe(false);
   });
 });
+
+describe('FleetWhen day-boundary rollover (review gate finding)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 6, 18, 23, 45));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('rolls a mounted stamp from today into "Yesterday" once the clock crosses midnight, with no new `iso` input', async () => {
+    await TestBed.configureTestingModule({
+      imports: [TestHost],
+      providers: [provideZonelessChangeDetection()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(TestHost);
+    fixture.componentInstance.iso.set(new Date(2026, 6, 18, 23, 45).toISOString());
+    fixture.detectChanges();
+    const el = (fixture.nativeElement as HTMLElement).querySelector('[data-testid="stamp"]') as HTMLElement;
+    expect(el.textContent?.trim()).toBe('23:45');
+
+    vi.setSystemTime(new Date(2026, 6, 19, 0, 5));
+    await vi.advanceTimersByTimeAsync(60_000);
+    fixture.detectChanges();
+
+    expect(el.textContent?.trim()).toBe('Yesterday 23:45');
+    // The tooltip is time-independent for a fixed `iso` — unaffected by the tick.
+    expect(el.getAttribute('title')).toBe('2026/07/18 23:45:00');
+  });
+});

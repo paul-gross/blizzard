@@ -94,8 +94,12 @@ describe('injectHubFleetSpendQuery (issue #183)', () => {
     yesterday.componentInstance.until.set('2026-07-16T00:00:00+00:00');
     await settle(yesterday);
 
-    // Both fired — a colliding cache key would have left the second a no-op reuse
-    // of the first's (still-fresh) result, one fetch instead of two.
+    // The key assertion: two distinct cache entries. `staleTime` defaults to 0, so
+    // a `stub.urls` fetch-count assertion alone would pass even on a colliding key
+    // — a stale-on-arrival query refetches on a second mount regardless of whether
+    // it shares a cache entry with the first (that fetch-count check still holds
+    // below, but only as a secondary signal).
+    expect(queryClient.getQueryCache().getAll()).toHaveLength(2);
     expect(stub.urls).toHaveLength(2);
   });
 });
