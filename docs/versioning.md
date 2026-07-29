@@ -6,9 +6,9 @@ until the project reaches 1.0, per semver's own pre-release carve-out. Prereleas
 candidates are tagged `vX.Y.Z-rc.N` and publish only their exact version (never
 `latest`, never move the `X.Y` line — see the tag fan-out below).
 
-This document is the single owner of the versioning scheme —
-[`blizzard-context:/workflows/release.md`](../../.winter/ext/context/workflows/release.md)
-(`bzh:release`) routes here rather than restating it.
+This document is the single owner of the versioning scheme — the
+`blizzard-context` repo's `blizzard-context:/workflows/release.md` (`bzh:release`)
+routes here rather than restating it.
 
 ## What counts as breaking
 

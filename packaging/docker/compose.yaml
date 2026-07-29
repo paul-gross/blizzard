@@ -10,6 +10,13 @@
 # subnet. All durable state — the hub runtime dir, the postgres data dir, and
 # Caddy's certificate/config state — lives on named volumes: `docker compose
 # down` (without `-v`) followed by `up` loses nothing.
+#
+# `name:` pins the compose project name so the derived volume names
+# (`blizzard_hub-data`, `blizzard_postgres-data`, …) are a documentable
+# literal (docs/backup.md) instead of varying with the directory this file
+# happens to be invoked from. `-p`/`COMPOSE_PROJECT_NAME` (scripts/*-smoke.sh's
+# per-run isolation) still overrides this default.
+name: blizzard
 
 services:
   postgres:

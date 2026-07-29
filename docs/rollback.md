@@ -7,9 +7,10 @@ things a breaking release is not allowed to violate. This walks that promise
 against a live compose deployment ([`docs/install.md`](./install.md)): the
 previous image tag, plus a `migrate --down` to the matching revision.
 
-Registered as the manual method `blizzard:rollback-drill` in the [verification
-matrix](../../.winter/ext/context/verification/blizzard.md) — run this
-end to end at least once against the compose stack, not just read.
+Registered as the manual method `blizzard:manual-rollback-drill` in the
+`blizzard-context` repo's verification matrix
+(`blizzard-context:/verification/blizzard.md`) — run this end to end at least
+once against the compose stack, not just read.
 
 ## Why the downgrade runs on the *new* image, not the old one
 

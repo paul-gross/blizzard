@@ -1,8 +1,9 @@
 # Docs
 
-The operator- and developer-facing documentation tree. Route from here — each
+The operator- and release-facing prose docs under `docs/` — route from here. Each
 file below is a single owner; a fact stated in one is linked from the others,
-never restated.
+never restated. (`designs/` and `identity/` are visual-asset directories, not
+prose documentation, and aren't routed here.)
 
 | File | Read when… |
 |------|-------------|
@@ -18,7 +19,7 @@ never restated.
 
 - [`packaging/docker/README.md`](../packaging/docker/README.md) — the container
   image's own mount and environment-variable reference.
-- The harness's [verification matrix](../../.winter/ext/context/verification/blizzard.md)
-  and [`bzh:release`](../../.winter/ext/context/workflows/release.md) — how a
-  change is proven, and the release-cut sequence these documents are the
-  operator-facing half of.
+- The `blizzard-context` repo's verification matrix (`blizzard-context:/verification/blizzard.md`)
+  and `bzh:release` (`blizzard-context:/workflows/release.md`) — how a change is
+  proven, and the release-cut sequence these documents are the operator-facing
+  half of.

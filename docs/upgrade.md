@@ -30,10 +30,10 @@ on purpose instead of by accident.
 ## Before you upgrade
 
 **Read the release's Upgrade notes first** — every GitHub Release's notes lead
-with an **Upgrade notes** section (placeholder when the release asks nothing of
-the operator, hand-written prose when it does — a required config change, a
-volume that moved, a shift in the supported hub↔runner skew). Check it before
-pulling:
+with an **Upgrade notes** section (after any **Breaking changes** section, when
+the release has one), placeholder when the release asks nothing of the
+operator, hand-written prose when it does (`docs/versioning.md`). Check it
+before pulling:
 
 ```bash
 gh release view v0.2.0 --repo paul-gross/blizzard
