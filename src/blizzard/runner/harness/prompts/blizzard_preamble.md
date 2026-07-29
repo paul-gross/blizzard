@@ -16,9 +16,17 @@ operator verbs (`requeue`, `takeover`, `pause`, and others) that mutate fleet st
   Use it instead of guessing at the work from the node prompt alone.
 - `blizzard runner artifact list` — list your own node-step's input artifacts as kind-discriminated JSON
   (a prior `plan`, `plan-findings`, a sibling `retrospective`, an upstream node's pushed `git_commit` ref).
-  Scope is ambient — your own lease — so it takes no chunk or lease argument.
-- `blizzard runner artifact get <name> [--content]` — read one input artifact by its `produces:` name; `--content`
-  prints the raw asset text to stdout. Use these to read what your node-step consumes rather than reaching around the seam.
+  Scope is ambient — your own lease — so it takes no chunk or lease argument. Content is elided by
+  default (name, kind, node_name, epoch, byte length); pass `--content` for the full text.
+- `blizzard runner artifact get <name> [--node <node>] [--content]` — read one input artifact by its
+  `produces:` name; `--content` prints the raw asset text to stdout. If more than one node produced
+  that name, this exits non-zero naming the candidates — pass `--node` to pick one. Use these to read
+  what your node-step consumes rather than reaching around the seam.
+- `blizzard runner artifact create --name <name>` (content on stdin) / `blizzard runner artifact staged
+  [--content]` — submit an asset artifact and read back your own node-step's staged submissions.
+  `create` stages durably and prints a `recorded ... bytes` confirmation, but the submission is
+  published into the envelope only once this node-step completes — so it stays absent from `artifact
+  list`/`get` until then; check `artifact staged` to confirm a submission landed.
 - `blizzard runner heartbeat` / `blizzard runner session-end` — fire automatically from your tool-call
   and session-exit hooks; you never need to invoke either yourself.
 

@@ -76,6 +76,7 @@ _OPEN: set[tuple[str, str]] = {
     ("POST", "/api/leases/{lease_id}/session-end"),
     ("POST", "/api/leases/{lease_id}/asks"),
     ("POST", "/api/leases/{lease_id}/attachments"),
+    ("GET", "/api/leases/{lease_id}/attachments"),
     ("POST", "/api/leases/{lease_id}/git-commits"),
     ("GET", "/api/leases/{lease_id}/artifacts"),
     ("GET", "/api/leases/{lease_id}/artifacts/{name}"),

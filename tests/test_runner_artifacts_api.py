@@ -258,6 +258,66 @@ def test_get_404_for_an_unknown_artifact_name(tmp_path: Path, monkeypatch: pytes
     assert "ghost" in resp.json()["detail"]
 
 
+# The envelope shape a chunk with several node-steps producing the same `produces:`
+# name looks like on the wire (issue #169) — two `retrospective` entries, one per
+# producing node.
+_ENVELOPE_WITH_DUPLICATE_NAME: dict[str, object] = {
+    **_ENVELOPE,
+    "artifacts": [
+        {"name": "retrospective", "kind": "asset", "node_name": "plan", "epoch": 1, "content": "plan's take"},
+        {"name": "retrospective", "kind": "asset", "node_name": "build", "epoch": 2, "content": "build's take"},
+    ],
+}
+
+
+@pytest.mark.component
+def test_get_409_when_a_bare_name_resolves_to_more_than_one_node(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    _stub_hub(monkeypatch, _FakeHubResponse(200, _ENVELOPE_WITH_DUPLICATE_NAME))
+    with TestClient(app) as client:
+        resp = client.get("/api/leases/lease_1/artifacts/retrospective", headers={"X-Blizzard-Lease-Token": _TOKEN})
+    assert resp.status_code == 409, resp.text
+    detail = resp.json()["detail"]
+    assert "retrospective" in detail
+    assert "build" in detail and "plan" in detail
+
+
+@pytest.mark.component
+def test_get_node_query_param_disambiguates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    _stub_hub(monkeypatch, _FakeHubResponse(200, _ENVELOPE_WITH_DUPLICATE_NAME))
+    with TestClient(app) as client:
+        resp = client.get(
+            "/api/leases/lease_1/artifacts/retrospective",
+            params={"node": "build"},
+            headers={"X-Blizzard-Lease-Token": _TOKEN},
+        )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["node_name"] == "build"
+    assert resp.json()["content"] == "build's take"
+
+
+@pytest.mark.component
+def test_get_node_query_param_404_when_that_node_never_produced_the_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    _stub_hub(monkeypatch, _FakeHubResponse(200, _ENVELOPE_WITH_DUPLICATE_NAME))
+    with TestClient(app) as client:
+        resp = client.get(
+            "/api/leases/lease_1/artifacts/retrospective",
+            params={"node": "review"},
+            headers={"X-Blizzard-Lease-Token": _TOKEN},
+        )
+    assert resp.status_code == 404
+    assert "review" in resp.json()["detail"]
+
+
 @pytest.mark.component
 def test_passes_through_the_hub_status(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A hub 404 (unknown chunk) surfaces as a 404 with the hub's detail."""

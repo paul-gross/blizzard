@@ -1,4 +1,5 @@
-"""``POST /api/leases/{id}/attachments`` (issue #113, Phase 2).
+"""``POST /api/leases/{id}/attachments`` (issue #113, Phase 2) and its read-back
+counterpart ``GET /api/leases/{id}/attachments`` (issue #169).
 
 Exercised over a real store via TestClient, mirroring
 ``tests/test_runner_takeover_api.py``'s convention: the route's shape, its
@@ -120,7 +121,7 @@ def test_200_records_the_attachment_with_the_dedicated_header(tmp_path: Path) ->
             headers={"X-Blizzard-Lease-Token": _TOKEN},
         )
     assert resp.status_code == 200, resp.text
-    assert resp.json() == {"recorded": True, "lease_id": "lease_1", "name": "review-findings"}
+    assert resp.json() == {"recorded": True, "lease_id": "lease_1", "name": "review-findings", "bytes": 10}
     assert store.attachments_for_lease("lease_1") == {"review-findings": "looks good"}
 
 
@@ -172,3 +173,99 @@ def test_a_closed_lease_is_404_not_403(tmp_path: Path) -> None:
             headers={"X-Blizzard-Lease-Token": _TOKEN},
         )
     assert resp.status_code == 404
+
+
+# --------------------------------------------------------------------------- #
+# GET /api/leases/{id}/attachments — a worker's read-back of its own staged
+# (not-yet-published) submissions (issue #169)
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.component
+def test_get_503_when_store_unwired(tmp_path: Path) -> None:
+    config = RunnerConfig(root=tmp_path, db_url="sqlite://")
+    with TestClient(create_app(config)) as client:
+        resp = client.get("/api/leases/lease_1/attachments", headers={"X-Blizzard-Lease-Token": _TOKEN})
+    assert resp.status_code == 503
+
+
+@pytest.mark.component
+def test_get_404_for_an_unknown_lease(tmp_path: Path) -> None:
+    app, _store = _app_with_attachments(tmp_path)
+    with TestClient(app) as client:
+        resp = client.get("/api/leases/lease_ghost/attachments", headers={"X-Blizzard-Lease-Token": _TOKEN})
+    assert resp.status_code == 404
+
+
+@pytest.mark.component
+def test_get_403_for_a_missing_token(tmp_path: Path) -> None:
+    app, store = _app_with_attachments(tmp_path)
+    _seed_lease(store)
+    with TestClient(app) as client:
+        resp = client.get("/api/leases/lease_1/attachments")
+    assert resp.status_code == 403
+
+
+@pytest.mark.component
+def test_get_403_for_a_wrong_token(tmp_path: Path) -> None:
+    app, store = _app_with_attachments(tmp_path)
+    _seed_lease(store)
+    with TestClient(app) as client:
+        resp = client.get("/api/leases/lease_1/attachments", headers={"X-Blizzard-Lease-Token": "nope"})
+    assert resp.status_code == 403
+
+
+@pytest.mark.component
+def test_get_returns_an_empty_list_when_nothing_is_staged(tmp_path: Path) -> None:
+    app, store = _app_with_attachments(tmp_path)
+    _seed_lease(store)
+    with TestClient(app) as client:
+        resp = client.get("/api/leases/lease_1/attachments", headers={"X-Blizzard-Lease-Token": _TOKEN})
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == []
+
+
+@pytest.mark.component
+def test_get_reads_back_a_just_staged_submission_immediately(tmp_path: Path) -> None:
+    """The point of the route: a fresh ``create`` is visible here even though it will
+    not show up in ``artifact list``/``get`` (the envelope-backed reads) until the
+    node-step completes and publishes it."""
+    app, store = _app_with_attachments(tmp_path)
+    _seed_lease(store)
+    with TestClient(app) as client:
+        client.post(
+            "/api/leases/lease_1/attachments",
+            json={"name": "review-findings", "content": "looks good"},
+            headers={"X-Blizzard-Lease-Token": _TOKEN},
+        )
+        resp = client.get("/api/leases/lease_1/attachments", headers={"X-Blizzard-Lease-Token": _TOKEN})
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == [{"name": "review-findings", "content": "looks good"}]
+
+
+@pytest.mark.component
+def test_get_returns_newest_content_per_name_sorted_by_name(tmp_path: Path) -> None:
+    app, store = _app_with_attachments(tmp_path)
+    _seed_lease(store)
+    with TestClient(app) as client:
+        client.post(
+            "/api/leases/lease_1/attachments",
+            json={"name": "z-name", "content": "z"},
+            headers={"X-Blizzard-Lease-Token": _TOKEN},
+        )
+        client.post(
+            "/api/leases/lease_1/attachments",
+            json={"name": "a-name", "content": "first"},
+            headers={"X-Blizzard-Lease-Token": _TOKEN},
+        )
+        client.post(
+            "/api/leases/lease_1/attachments",
+            json={"name": "a-name", "content": "second"},
+            headers={"X-Blizzard-Lease-Token": _TOKEN},
+        )
+        resp = client.get("/api/leases/lease_1/attachments", headers={"X-Blizzard-Lease-Token": _TOKEN})
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == [
+        {"name": "a-name", "content": "second"},
+        {"name": "z-name", "content": "z"},
+    ]

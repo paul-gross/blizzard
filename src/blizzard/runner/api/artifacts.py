@@ -20,8 +20,10 @@ new runner-store persistence, and nothing is cached — the read is live each ca
 
 Status map (attach's, plus the proxy's): ``503`` when the store or the hub wiring is
 absent (the store-free app), ``404`` for an unknown/closed lease, ``403`` for a
-missing/mismatched token, ``404`` for an unknown artifact name on ``get``, and a ``502``
-(or the hub's own status verbatim) when the envelope forward fails. Authorization is
+missing/mismatched token, ``404`` for an unknown artifact name on ``get``, ``409`` when
+a bare NAME resolves to more than one producing node (issue #169 — pass ``?node=`` to
+disambiguate), and a ``502`` (or the hub's own status verbatim) when the envelope
+forward fails. Authorization is
 resolved before the hub is consulted, so an unauthorized caller never learns the fleet's
 hub-wiring state.
 """
@@ -95,14 +97,31 @@ def list_artifacts(lease_id: str, request: Request) -> list[EnvelopeArtifact]:
 
 
 @router.get("/leases/{lease_id}/artifacts/{name}", response_model=EnvelopeArtifact)
-def get_artifact(lease_id: str, name: str, request: Request) -> EnvelopeArtifact:
+def get_artifact(lease_id: str, name: str, request: Request, node: str | None = None) -> EnvelopeArtifact:
     """One artifact by ``produces:`` name; ``404`` when this node-step has none by that
-    name."""
+    name (optionally narrowed to one from ``node``, the producing node's name).
+
+    More than one upstream node can emit the same ``produces:`` name (issue #169) — a
+    bare NAME that resolves to more than one candidate is ``409``, naming the
+    producing nodes, rather than silently returning an arbitrary one; ``?node=`` picks
+    a specific one."""
     lease = _authorized_lease(lease_id, request)
-    for artifact in _envelope_artifacts(lease.chunk_id, request):
-        if artifact.name == name:
-            return artifact
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"no artifact {name!r} for this node-step")
+    matches = [a for a in _envelope_artifacts(lease.chunk_id, request) if a.name == name]
+    if node is not None:
+        matches = [a for a in matches if a.node_name == node]
+    if not matches:
+        qualifier = f" from node {node!r}" if node is not None else ""
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"no artifact {name!r}{qualifier} for this node-step"
+        )
+    if len(matches) > 1:
+        candidates = sorted({a.node_name for a in matches})
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"artifact {name!r} is ambiguous — produced by nodes: {', '.join(candidates)} "
+            "(pass --node to disambiguate)",
+        )
+    return matches[0]
 
 
 def _upstream_detail(response: httpx.Response) -> str:

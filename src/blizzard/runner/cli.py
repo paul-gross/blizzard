@@ -10,6 +10,7 @@ no identity arguments.
 
 from __future__ import annotations
 
+import json
 import os
 import signal
 import subprocess
@@ -403,19 +404,47 @@ def artifact_group() -> None:
     from ``BLIZZARD_LEASE_ID``/``BLIZZARD_LEASE_TOKEN``/``BLIZZARD_RUNNER_URL`` (all
     inherited at spawn) — so no verb takes a ``--lease``/``--chunk`` flag by which a worker
     could name another chunk.
+
+    Lifecycle (issue #169): ``create`` *stages* a submission — durable immediately, but
+    visible only to this node-step, via ``staged``. It is *published* into the envelope
+    only when the node-step completes, at which point it starts showing up in ``list``/
+    ``get`` for downstream nodes. So a fresh ``create`` being absent from this node-step's
+    own ``list``/``get`` is expected, not a lost write — check ``staged`` instead.
     """
 
 
+def _artifact_summary(artifact: dict) -> dict:
+    """One ``list``-view entry: every field but ``content``, which collapses to its
+    ``bytes`` length (``None`` when the artifact carries no content, i.e. ``git_commit``)
+    — issue #169's fix for a full-content ``list`` overflowing tool output."""
+    content = artifact.get("content")
+    summary = {k: v for k, v in artifact.items() if k != "content"}
+    summary["bytes"] = len(content.encode("utf-8")) if content is not None else None
+    return summary
+
+
 @artifact_group.command("list")
-def artifact_list() -> None:
+@click.option(
+    "--content",
+    "content",
+    is_flag=True,
+    default=False,
+    help="Include each artifact's full content instead of just its byte length.",
+)
+def artifact_list(content: bool) -> None:
     """Worker: list this node-step's artifacts as kind-discriminated JSON.
 
     A pure client of the runner's local API: the runner resolves the lease in
     ``BLIZZARD_LEASE_ID`` to its chunk, proxies to the hub's envelope (runner principal),
     and returns every artifact resolved latest-by-epoch, both kinds — each entry
-    ``{name, kind, node_name, epoch, content?, repo?, branch_name?, commit_hash?}``
-    (``content`` set for the ``asset`` kind; ``repo``/``branch_name``/``commit_hash`` for
-    ``git_commit``). The worker holds no hub credential.
+    ``{name, kind, node_name, epoch, bytes, repo?, branch_name?, commit_hash?}`` by
+    default, ``content`` in place of ``bytes`` with ``--content``. The worker holds no
+    hub credential.
+
+    Content is elided by default (issue #169): a late node in a large chunk otherwise
+    gets every upstream asset's full text inlined, which has overflowed tool output.
+    Pass ``--content`` to restore it, or read one artifact's content directly via
+    ``artifact get NAME --content``.
     """
     lease_id, runner_url, lease_token = _worker_lease_identity("artifact list")
     try:
@@ -427,11 +456,20 @@ def artifact_list() -> None:
         resp.raise_for_status()
     except httpx.HTTPError as exc:
         raise click.ClickException(f"artifact list: could not read the artifacts ({exc})") from exc
-    click.echo(resp.text)
+    if content:
+        click.echo(resp.text)
+        return
+    click.echo(json.dumps([_artifact_summary(a) for a in resp.json()]))
 
 
 @artifact_group.command("get")
 @click.argument("name")
+@click.option(
+    "--node",
+    "node",
+    default=None,
+    help="The producing node's name, to disambiguate a NAME more than one node emits.",
+)
 @click.option(
     "--content",
     "content",
@@ -439,11 +477,14 @@ def artifact_list() -> None:
     default=False,
     help="Print the raw asset text to stdout instead of JSON (errors on a git-commit artifact).",
 )
-def artifact_get(name: str, content: bool) -> None:
+def artifact_get(name: str, node: str | None, content: bool) -> None:
     """Worker: read one artifact by NAME as kind-discriminated JSON.
 
     The same lease-scoped, hub-proxied read as ``list``, narrowed to one ``produces:``
-    name — an unknown name is a ``404``. ``--content`` prints the raw asset text to stdout
+    name — an unknown name is a ``404``. More than one upstream node can emit the same
+    name (issue #169): a bare NAME that resolves to more than one candidate exits
+    non-zero naming the producing nodes, rather than silently returning an arbitrary
+    one — pass ``--node`` to pick one. ``--content`` prints the raw asset text to stdout
     instead of the JSON object, and errors when NAME is the ``git_commit`` kind: a commit
     ref carries no content to emit (drop ``--content`` to read its ref).
     """
@@ -452,9 +493,13 @@ def artifact_get(name: str, content: bool) -> None:
         resp = httpx.get(
             f"{runner_url.rstrip('/')}/api/leases/{lease_id}/artifacts/{name}",
             headers={"X-Blizzard-Lease-Token": lease_token} if lease_token else {},
+            params={"node": node} if node else None,
             timeout=_WORK_ITEMS_TIMEOUT,
         )
         resp.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        detail = _problem_detail(exc.response) or str(exc)
+        raise click.ClickException(f"artifact get: could not read {name!r} ({detail})") from exc
     except httpx.HTTPError as exc:
         raise click.ClickException(f"artifact get: could not read {name!r} ({exc})") from exc
     if not content:
@@ -482,9 +527,22 @@ def artifact_create(name: str) -> None:
     worktree, which the runner discovers and pushes — not through this verb. A rejection (a
     wrong/missing token, an unknown lease, an unreachable runner) exits non-zero so the
     worker learns it rather than silently losing the submission.
+
+    Staged, not published (issue #169): a successful submission durably *stages* this
+    content under NAME for this node-step, printing a ``recorded ... bytes`` confirmation
+    — but it is only *published* into the envelope when the node-step completes, so it
+    stays absent from this node-step's own ``artifact list``/``get`` until then. Read a
+    just-staged submission back with ``artifact staged``. Empty stdin is refused
+    (exits non-zero, nothing sent) rather than staging an empty artifact and silently
+    replacing whatever was staged before.
     """
     lease_id, runner_url, lease_token = _worker_lease_identity("artifact create")
     content = click.get_text_stream("stdin").read()
+    if not content:
+        raise click.ClickException(
+            "artifact create: empty stdin — refusing to submit an empty artifact "
+            "(any previously staged submission for this name is untouched)"
+        )
     try:
         resp = httpx.post(
             f"{runner_url.rstrip('/')}/api/leases/{lease_id}/attachments",
@@ -495,6 +553,43 @@ def artifact_create(name: str) -> None:
         resp.raise_for_status()
     except httpx.HTTPError as exc:
         raise click.ClickException(f"artifact create: could not record {name!r} ({exc})") from exc
+    body = resp.json()
+    click.echo(f"recorded {body.get('name', name)!r} ({body.get('bytes', len(content.encode('utf-8')))} bytes)")
+
+
+@artifact_group.command("staged")
+@click.option(
+    "--content",
+    "content",
+    is_flag=True,
+    default=False,
+    help="Include each staged submission's full content instead of just its byte length.",
+)
+def artifact_staged(content: bool) -> None:
+    """Worker: list this node-step's own staged (not-yet-published) submissions.
+
+    A pure client of the runner's local API, reading straight off the runner's
+    ``attachments`` record rather than the hub envelope (issue #169) — so a submission
+    made via ``artifact create`` shows up here immediately, before the node-step
+    completes and publishes it (at which point it starts showing up in ``list``/``get``
+    instead). Content is elided by default, same as ``list``; pass ``--content`` for
+    the full text.
+    """
+    lease_id, runner_url, lease_token = _worker_lease_identity("artifact staged")
+    try:
+        resp = httpx.get(
+            f"{runner_url.rstrip('/')}/api/leases/{lease_id}/attachments",
+            headers={"X-Blizzard-Lease-Token": lease_token} if lease_token else {},
+            timeout=_WORK_ITEMS_TIMEOUT,
+        )
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise click.ClickException(f"artifact staged: could not read the staged artifacts ({exc})") from exc
+    if content:
+        click.echo(resp.text)
+        return
+    staged = resp.json()
+    click.echo(json.dumps([{"name": a["name"], "bytes": len(a["content"].encode("utf-8"))} for a in staged]))
 
 
 def _session_label(escalation: dict) -> str:

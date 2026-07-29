@@ -26,6 +26,9 @@ class _FakeResponse:
     def raise_for_status(self) -> None:
         return None
 
+    def json(self) -> dict:
+        return {"recorded": True, "lease_id": "lease_9", "name": "n", "bytes": 1}
+
 
 def test_attach_verb_posts_inherited_identity_stdin_content_and_token_header(
     monkeypatch: pytest.MonkeyPatch,
