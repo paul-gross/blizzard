@@ -23,7 +23,7 @@ What Blizzard does own is everything an agent cannot be trusted to do by being c
 
 ## Install
 
-Milestone builds are published as [GitHub Releases](https://github.com/paul-gross/blizzard/releases) with the wheel attached — no package index. Prerelease candidates are tagged `v0.1.0-rc.N`. Grab the wheel and install it into any Python ≥ 3.12 environment (no Node needed at install or runtime):
+Milestone builds are published as [GitHub Releases](https://github.com/paul-gross/blizzard/releases) with the wheel attached — no package index. Prerelease candidates are tagged `v0.1.0-rc.N`. Grab the wheel and install it into any Python ≥ 3.12 environment (no Node needed at install or runtime). See [`docs/versioning.md`](docs/versioning.md) for what a version number promises and the supported hub↔runner skew.
 
 ```bash
 gh release download v0.1.0-rc.1 --repo paul-gross/blizzard --pattern '*.whl'

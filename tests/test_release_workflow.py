@@ -82,6 +82,29 @@ def test_job_permissions_declare_both_contents_and_packages_write() -> None:
     assert permissions.get("packages") == "write"
 
 
+def test_version_tag_check_runs_before_anything_is_built() -> None:
+    """The version/tag agreement check (issue #190) must fail fast, before the
+    wheel or image build spends any CI time on a release that can't publish."""
+    steps = _release_job()["steps"]
+    check_idx = _step_index(steps, lambda s: "check-version-tag.sh" in str(s.get("run", "")))
+    wheel_build_idx = _step_index(steps, lambda s: "build-wheel.sh" in str(s.get("run", "")))
+    assert check_idx < wheel_build_idx
+
+
+def test_release_notes_are_generated_not_auto_generated() -> None:
+    """`gh release create` must consume the commit-type-grouped notes
+    (scripts/release-notes.sh, tests/test_release_notes.py), not GitHub's own
+    `--generate-notes` — the plan's whole point is grouped, breaking-changes-first
+    notes with a leading Upgrade notes placeholder."""
+    steps = _release_job()["steps"]
+    notes_gen_idx = _step_index(steps, lambda s: "release-notes.sh" in str(s.get("run", "")))
+    publish_idx = _step_index(steps, lambda s: "gh release create" in str(s.get("run", "")))
+    assert notes_gen_idx < publish_idx
+    publish_run = str(steps[publish_idx].get("run", ""))
+    assert "--notes-file" in publish_run
+    assert "--generate-notes" not in publish_run
+
+
 def test_tags_are_derived_from_the_image_tags_script_not_hardcoded() -> None:
     """The semver fan-out logic lives in scripts/image-tags.sh (unit-tested in
     tests/test_image_tags.py) — the workflow step must consume its output, not

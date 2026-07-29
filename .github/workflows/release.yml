@@ -107,6 +107,11 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          # release-notes.sh needs the commit range since the previous tag, and
+          # `git describe` needs every tag reachable — a shallow (depth-1)
+          # checkout would see neither.
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
@@ -114,6 +119,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: check pyproject.toml's version agrees with the tag (fail before building anything)
+        run: ./scripts/check-version-tag.sh "${GITHUB_REF_NAME}"
       - name: derive version from tag
         id: ver
         run: |
@@ -131,6 +138,17 @@ jobs:
         env:
           BLIZZARD_VERSION: ${{ steps.ver.outputs.version }}
         run: ./scripts/build-wheel.sh
+      - name: generate release notes (scripts/release-notes.sh)
+        run: |
+          PREV_TAG="$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)"
+          if [ -n "$PREV_TAG" ]; then
+            echo "Notes range: $PREV_TAG..${GITHUB_REF_NAME}"
+            ./scripts/release-notes.sh --range "$PREV_TAG..${GITHUB_REF_NAME}" > release-notes.md
+          else
+            echo "No previous tag found — first release, an empty commit range."
+            ./scripts/release-notes.sh --from-stdin < /dev/null > release-notes.md
+          fi
+          cat release-notes.md
       - name: derive the GHCR tag fan-out (scripts/image-tags.sh) and OCI annotations
         id: image_meta
         run: |
@@ -174,7 +192,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          FLAGS=(--generate-notes --title "${GITHUB_REF_NAME}")
+          FLAGS=(--notes-file release-notes.md --title "${GITHUB_REF_NAME}")
           if [ "${{ steps.ver.outputs.prerelease }}" = "true" ]; then
             FLAGS+=(--prerelease)
           fi
