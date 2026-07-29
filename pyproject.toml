@@ -40,6 +40,15 @@ dependencies = [
     "platformdirs>=4.0.0",
 ]
 
+# The sqlite/systemd path stays lean by default (`bzh:sql-portable`) — the postgres
+# driver is an opt-in extra, installed as `blizzard[postgres]` by the container image
+# (packaging/docker/Dockerfile), which is the deployment shape that actually varies
+# the store backend.
+[project.optional-dependencies]
+postgres = [
+    "psycopg[binary]>=3.2.0",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
