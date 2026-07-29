@@ -7,3 +7,14 @@ export function startOfLocalDayIso(): string {
   const now = new Date();
   return new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
 }
+
+/** The local midnight *before* {@link startOfLocalDayIso}'s — "yesterday"'s own
+ * start (issue #183). The two share one owner of the day boundary so yesterday
+ * rolls over with today by construction: the header's yesterday window is
+ * `[startOfPreviousLocalDayIso(), startOfLocalDayIso())`, and a caller reading
+ * both a tick apart either side of midnight can never see them disagree about
+ * where today starts. */
+export function startOfPreviousLocalDayIso(): string {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).toISOString();
+}

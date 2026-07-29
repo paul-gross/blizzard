@@ -20,6 +20,7 @@ import { vi } from 'vitest';
 import { App } from './app';
 import { routes } from './app.routes';
 import { BoardPage } from './board/board-page';
+import { startOfLocalDayIso, startOfPreviousLocalDayIso } from './local-day';
 
 /** A do-nothing EventSource so the live-update spine can open without a real stream. */
 class FakeEventSource {
@@ -53,6 +54,36 @@ function stubAuth(me: MeResponse | null = OPERATOR_ME_RESPONSE, providers: reado
     if (path === '/api/spend') return { cost_usd: 0, cost_partial: false };
     return {};
   });
+}
+
+/** Same shape as {@link stubAuth}, but also captures each `/api/spend` request's
+ * full URL (query string included) — unlike `stubRequestClient`'s `CapturedRequest`,
+ * which drops it, this spec needs the raw `since`/`until` params to prove the
+ * yesterday window reaches the request (issue #183). Conforms to
+ * {@link RequestClientStub} (`requests`/`forRoute` unused, kept trivial) so it can
+ * stand in for `authStub` in this file's shared `afterEach`. */
+function stubAuthCapturingSpendUrls(): RequestClientStub & { spendUrls: string[] } {
+  const spendUrls: string[] = [];
+  const previousFetch = globalThis.fetch;
+  const fakeFetch = async (input: Request): Promise<Response> => {
+    const url = new URL(input.url);
+    let body: unknown = {};
+    if (url.pathname === '/api/me') body = OPERATOR_ME_RESPONSE;
+    else if (url.pathname === '/api/chunks' || url.pathname === '/api/questions' || url.pathname === '/api/graphs')
+      body = [];
+    else if (url.pathname === '/api/spend') {
+      spendUrls.push(input.url);
+      body = { cost_usd: 0, cost_partial: false };
+    }
+    return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  hubClient.setConfig({ baseUrl: 'http://localhost', fetch: fakeFetch as typeof fetch });
+  return {
+    spendUrls,
+    requests: [],
+    forRoute: () => [],
+    restore: () => hubClient.setConfig({ baseUrl: '', fetch: previousFetch }),
+  };
 }
 
 describe('hub App', () => {
@@ -165,6 +196,35 @@ describe('hub App', () => {
 
     const boardAfter = fixture.debugElement.query(By.directive(BoardPage));
     expect(boardAfter.injector.get(QueryClient)).toBe(queryClient);
+  });
+
+  describe('the yesterday spend window (issue #183)', () => {
+    it('opens spendYesterday as [yesterday-midnight, today-midnight), both from the local-day boundary helper', async () => {
+      authStub.restore();
+      const capture = stubAuthCapturingSpendUrls();
+      authStub = capture;
+
+      const fixture = TestBed.createComponent(App);
+      const router = TestBed.inject(Router);
+      await router.navigateByUrl('/');
+      await settle(fixture);
+
+      const todayMidnight = startOfLocalDayIso();
+      const yesterdayMidnight = startOfPreviousLocalDayIso();
+      const withUntil = capture.spendUrls.filter((u) => u.includes('until='));
+      const withoutUntil = capture.spendUrls.filter((u) => !u.includes('until='));
+
+      // spendToday: since alone, the original open-ended tail.
+      expect(withoutUntil.some((u) => u.includes(`since=${encodeURIComponent(todayMidnight)}`))).toBe(true);
+      // spendYesterday: both bounds, excluding today's own spend by construction.
+      expect(
+        withUntil.some(
+          (u) =>
+            u.includes(`since=${encodeURIComponent(yesterdayMidnight)}`) &&
+            u.includes(`until=${encodeURIComponent(todayMidnight)}`),
+        ),
+      ).toBe(true);
+    });
   });
 
   describe('the mobile shell fork (ViewportService)', () => {

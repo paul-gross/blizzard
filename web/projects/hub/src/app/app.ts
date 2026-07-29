@@ -17,7 +17,7 @@ import {
   redirectToLogin,
 } from 'fleet';
 
-import { startOfLocalDayIso } from './local-day';
+import { startOfLocalDayIso, startOfPreviousLocalDayIso } from './local-day';
 import { AppNav } from './nav/app-nav';
 import { AppNavMenu } from './nav/app-nav-menu';
 import { MobileTabBar } from './nav/mobile-tab-bar';
@@ -99,6 +99,7 @@ import { MobileTitlebar } from './nav/mobile-titlebar';
               [connection]="connection()"
               [chunks]="chunks()"
               [spendToday]="spendToday.data() ?? null"
+              [spendYesterday]="spendYesterday.data() ?? null"
             >
               <app-nav-menu header-trailing (logout)="onLogout()" />
             </fleet-board-header>
@@ -158,6 +159,17 @@ export class App {
    * recomputed each time the query re-derives its key (a day rollover moves the
    * window forward, same as any other calendar-relative read). */
   protected readonly spendToday = injectHubFleetSpendQuery(() => startOfLocalDayIso());
+
+  /** The fleet's spend-yesterday read (issue #183) — `[startOfPreviousLocalDayIso(),
+   * startOfLocalDayIso())`, both derived from the one local-day boundary helper so
+   * the window rolls over with today by construction and never includes today's
+   * own spend. A second, independent `injectHubFleetSpendQuery` entry — distinct
+   * from {@link spendToday}'s in both `since` and `until`, so it is its own cache
+   * entry rather than colliding on one. */
+  protected readonly spendYesterday = injectHubFleetSpendQuery(
+    () => startOfPreviousLocalDayIso(),
+    () => startOfLocalDayIso(),
+  );
 
   /** The app-root-level shell fork (`../docs/designs/mobile/README.md`'s
    * "adaptive shells over shared guts") — picked once here, mirroring the
