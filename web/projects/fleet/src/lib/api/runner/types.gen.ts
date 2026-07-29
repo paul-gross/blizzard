@@ -118,6 +118,10 @@ export type AttachmentRequest = {
  */
 export type AttachmentResponse = {
     /**
+     * Bytes
+     */
+    bytes: number;
+    /**
      * Lease Id
      */
     lease_id: string;
@@ -824,6 +828,23 @@ export type SessionEndResponse = {
 };
 
 /**
+ * StagedAttachment
+ *
+ * One of the lease's currently staged (not-yet-published) submissions —
+ * ``GET /api/leases/{lease_id}/attachments`` (issue #169).
+ */
+export type StagedAttachment = {
+    /**
+     * Content
+     */
+    content: string;
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
  * TakeoverEndResponse
  *
  * ``PATCH /chunks/{id}/takeovers/{tid}`` — the CLI calls this once its child exits.
@@ -1504,7 +1525,12 @@ export type GetArtifactApiLeasesLeaseIdArtifactsNameGetData = {
          */
         name: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Node
+         */
+        node?: string | null;
+    };
     url: '/api/leases/{lease_id}/artifacts/{name}';
 };
 
@@ -1555,6 +1581,38 @@ export type RecordAskApiLeasesLeaseIdAsksPostResponses = {
 };
 
 export type RecordAskApiLeasesLeaseIdAsksPostResponse = RecordAskApiLeasesLeaseIdAsksPostResponses[keyof RecordAskApiLeasesLeaseIdAsksPostResponses];
+
+export type ListStagedAttachmentsApiLeasesLeaseIdAttachmentsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+    };
+    query?: never;
+    url: '/api/leases/{lease_id}/attachments';
+};
+
+export type ListStagedAttachmentsApiLeasesLeaseIdAttachmentsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListStagedAttachmentsApiLeasesLeaseIdAttachmentsGetError = ListStagedAttachmentsApiLeasesLeaseIdAttachmentsGetErrors[keyof ListStagedAttachmentsApiLeasesLeaseIdAttachmentsGetErrors];
+
+export type ListStagedAttachmentsApiLeasesLeaseIdAttachmentsGetResponses = {
+    /**
+     * Response List Staged Attachments Api Leases  Lease Id  Attachments Get
+     *
+     * Successful Response
+     */
+    200: Array<StagedAttachment>;
+};
+
+export type ListStagedAttachmentsApiLeasesLeaseIdAttachmentsGetResponse = ListStagedAttachmentsApiLeasesLeaseIdAttachmentsGetResponses[keyof ListStagedAttachmentsApiLeasesLeaseIdAttachmentsGetResponses];
 
 export type RecordAttachmentApiLeasesLeaseIdAttachmentsPostData = {
     body: AttachmentRequest;

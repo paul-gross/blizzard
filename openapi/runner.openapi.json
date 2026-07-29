@@ -147,6 +147,10 @@
       "AttachmentResponse": {
         "description": "``POST /api/leases/{lease_id}/attachments`` \u2014 the submission landed durably.",
         "properties": {
+          "bytes": {
+            "title": "Bytes",
+            "type": "integer"
+          },
           "lease_id": {
             "title": "Lease Id",
             "type": "string"
@@ -163,7 +167,8 @@
         "required": [
           "recorded",
           "lease_id",
-          "name"
+          "name",
+          "bytes"
         ],
         "title": "AttachmentResponse",
         "type": "object"
@@ -1153,6 +1158,25 @@
           "lease_id"
         ],
         "title": "SessionEndResponse",
+        "type": "object"
+      },
+      "StagedAttachment": {
+        "description": "One of the lease's currently staged (not-yet-published) submissions \u2014\n``GET /api/leases/{lease_id}/attachments`` (issue #169).",
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "content"
+        ],
+        "title": "StagedAttachment",
         "type": "object"
       },
       "TakeoverEndResponse": {
@@ -2157,7 +2181,7 @@
     },
     "/api/leases/{lease_id}/artifacts/{name}": {
       "get": {
-        "description": "One artifact by ``produces:`` name; ``404`` when this node-step has none by that\nname.",
+        "description": "One artifact by ``produces:`` name; ``404`` when this node-step has none by that\nname (optionally narrowed to one from ``node``, the producing node's name).\n\nMore than one upstream node can emit the same ``produces:`` name (issue #169) \u2014 a\nbare NAME that resolves to more than one candidate is ``409``, naming the\nproducing nodes, rather than silently returning an arbitrary one; ``?node=`` picks\na specific one.",
         "operationId": "get_artifact_api_leases__lease_id__artifacts__name__get",
         "parameters": [
           {
@@ -2176,6 +2200,22 @@
             "schema": {
               "title": "Name",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "node",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Node"
             }
           }
         ],
@@ -2261,6 +2301,51 @@
       }
     },
     "/api/leases/{lease_id}/attachments": {
+      "get": {
+        "description": "The lease's currently staged submissions \u2014 newest content per ``name``, not yet\npublished into any envelope (issue #169).",
+        "operationId": "list_staged_attachments_api_leases__lease_id__attachments_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "title": "Lease Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/StagedAttachment"
+                  },
+                  "title": "Response List Staged Attachments Api Leases  Lease Id  Attachments Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Staged Attachments",
+        "tags": [
+          "runner"
+        ]
+      },
       "post": {
         "description": "Record a worker's explicit artifact for ``request_body.name`` against its lease.",
         "operationId": "record_attachment_api_leases__lease_id__attachments_post",
