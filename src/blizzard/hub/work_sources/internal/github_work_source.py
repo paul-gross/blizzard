@@ -26,6 +26,7 @@ import httpx
 
 from blizzard.foundation.logging import get_logger
 from blizzard.hub.domain.work import WorkRef
+from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
 from blizzard.hub.work_sources.source import IWorkSource, WorkItem, WorkSourceError
 
 _log = get_logger("blizzard.hub.work_sources")
@@ -36,14 +37,31 @@ _log = get_logger("blizzard.hub.work_sources")
 _ISSUE_URL_RE = re.compile(r"(?:^|/)(?:repos/)?(?P<owner>[^/:#]+)/(?P<repo>[^/:#]+)/issues/(?P<number>\d+)/?$")
 
 
+def _label_name(marker: WorkStatusMarker) -> str:
+    """The rendered GitHub label for ``marker`` — ``blizzard:ingested`` /
+    ``blizzard:in-progress`` (the wire form dashes what the domain enum spells
+    with an underscore)."""
+    return f"blizzard:{marker.value.replace('_', '-')}"
+
+
+def _other_marker(marker: WorkStatusMarker) -> WorkStatusMarker:
+    return WorkStatusMarker.IN_PROGRESS if marker is WorkStatusMarker.INGESTED else WorkStatusMarker.INGESTED
+
+
 class GitHubWorkSource:
-    """Vendor-native issue reader over a GitHub-shaped forge, pinned to one repo."""
+    """Vendor-native issue reader over a GitHub-shaped forge, pinned to one repo.
+
+    Also implements :class:`~blizzard.hub.work_sources.annotator.IWorkAnnotator` —
+    one instance, one client, one credential, both Protocols — bound into the
+    registry's annotator map only for a source configured to opt in.
+    """
 
     def __init__(self, client: httpx.Client, *, name: str, repo: str, web_base: str) -> None:
         self._client = client
         self._name = name
         self._repo = repo
         self._web_base = web_base.rstrip("/")
+        self._labels_bootstrapped = False
 
     def parse(self, token: str) -> WorkRef | None:
         """This source's own ingest-token forms into a pointer, or
@@ -96,6 +114,87 @@ class GitHubWorkSource:
     def _owner(self) -> str:
         return self._repo.split("/", 1)[0]
 
+    # -- IWorkAnnotator ------------------------------------------------------
+
+    def _ensure_labels_bootstrapped(self) -> None:
+        """Create both marker labels on this repo before the first write of the
+        process, tolerating GitHub's 422 for an already-existing label. Cached
+        per instance — every subsequent write skips straight to the issue call."""
+        if self._labels_bootstrapped:
+            return
+        for marker in WorkStatusMarker:
+            name = _label_name(marker)
+            try:
+                resp = self._client.post(f"/repos/{self._repo}/labels", json={"name": name})
+                if resp.status_code != 422:
+                    resp.raise_for_status()
+            except httpx.HTTPError as exc:
+                _log.error("label bootstrap failed", source=self._name, label=name, error=str(exc))
+                raise WorkAnnotateError(f"failed to bootstrap label {name!r} for {self._name}: {exc}") from exc
+        self._labels_bootstrapped = True
+
+    def set_status(self, pointer: WorkRef, marker: WorkStatusMarker) -> None:
+        """Add ``marker``'s label and remove the other one if present — exclusive
+        and idempotent, mirroring GitHub's own idempotent label add/remove."""
+        self._ensure_labels_bootstrapped()
+        try:
+            self._client.post(f"/repos/{self._repo}/issues/{pointer.ref}/labels", json=[_label_name(marker)])
+            other = _label_name(_other_marker(marker))
+            resp = self._client.delete(f"/repos/{self._repo}/issues/{pointer.ref}/labels/{other}")
+            if resp.status_code != 404:
+                resp.raise_for_status()
+        except httpx.HTTPError as exc:
+            _log.error("set-status failed", source=self._name, ref=pointer.ref, marker=marker.value, error=str(exc))
+            raise WorkAnnotateError(f"failed to set {marker.value} on {self._name}#{pointer.ref}: {exc}") from exc
+
+    def clear_status(self, pointer: WorkRef) -> None:
+        """Remove every marker label from ``pointer`` — a 404 (label already
+        absent) is the expected steady state, not a failure."""
+        self._ensure_labels_bootstrapped()
+        try:
+            for marker in WorkStatusMarker:
+                resp = self._client.delete(f"/repos/{self._repo}/issues/{pointer.ref}/labels/{_label_name(marker)}")
+                if resp.status_code != 404:
+                    resp.raise_for_status()
+        except httpx.HTTPError as exc:
+            _log.error("clear-status failed", source=self._name, ref=pointer.ref, error=str(exc))
+            raise WorkAnnotateError(f"failed to clear status on {self._name}#{pointer.ref}: {exc}") from exc
+
+    def marked_refs(self) -> dict[WorkRef, frozenset[WorkStatusMarker]]:
+        """Every ref this repo currently labels, discovered per marker via a
+        paginated, ``state=all`` issue listing — closed issues can still carry a
+        stale label, and GitHub's default page size would silently strand labels
+        past the first page. Pull-request entries (GitHub's issue-list endpoint
+        returns both) are filtered out."""
+        found: dict[WorkRef, set[WorkStatusMarker]] = {}
+        try:
+            for marker in WorkStatusMarker:
+                url: str | None = f"/repos/{self._repo}/issues"
+                params: dict[str, str | int] | None = {
+                    "labels": _label_name(marker),
+                    "state": "all",
+                    "per_page": 100,
+                }
+                while url is not None:
+                    resp = self._client.get(url, params=params)
+                    resp.raise_for_status()
+                    for item in resp.json():
+                        if "pull_request" in item:
+                            continue
+                        ref = WorkRef(source=self._name, ref=str(item["number"]))
+                        found.setdefault(ref, set()).add(marker)
+                    next_link = resp.links.get("next")
+                    url = next_link["url"] if next_link else None
+                    params = None  # the Link header's next URL already carries the query
+        except httpx.HTTPError as exc:
+            _log.error("marked-refs discovery failed", source=self._name, error=str(exc))
+            raise WorkAnnotateError(f"failed to discover marked refs for {self._name}: {exc}") from exc
+        return {ref: frozenset(markers) for ref, markers in found.items()}
+
 
 def _conforms_work_source(x: GitHubWorkSource) -> IWorkSource:
+    return x
+
+
+def _conforms_work_annotator(x: GitHubWorkSource) -> IWorkAnnotator:
     return x

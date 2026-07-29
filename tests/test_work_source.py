@@ -14,10 +14,11 @@ import pytest
 
 from blizzard.hub.config import WorkSourceConfig
 from blizzard.hub.domain.work import WorkRef
+from blizzard.hub.work_sources.annotator import WorkAnnotateError, WorkStatusMarker
 from blizzard.hub.work_sources.internal.factory import build_work_source_registry
 from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSource
 from blizzard.hub.work_sources.registry import WorkSourceRegistry
-from tests.support import OMIT_TITLE, github_double
+from tests.support import OMIT_TITLE, forge_state, github_double
 
 pytestmark = pytest.mark.component
 
@@ -253,3 +254,162 @@ def test_resolve_over_an_empty_registry_is_none() -> None:
 
 def test_registry_get_over_an_empty_registry_is_none() -> None:
     assert WorkSourceRegistry({}).get("widget") is None
+
+
+# --------------------------------------------------------------------------- #
+# IWorkAnnotator — the write half (forge-status projection, issue #177)
+# --------------------------------------------------------------------------- #
+
+
+def test_set_status_adds_the_desired_label_and_removes_the_other() -> None:
+    double = github_double()
+    source = GitHubWorkSource(double, name="widget", repo="acme/widget", web_base="https://x")
+    pointer = WorkRef(source="widget", ref="1")
+
+    source.set_status(pointer, WorkStatusMarker.INGESTED)
+    assert forge_state(double)["issue_labels"]["acme/widget#1"] == {"blizzard:ingested"}  # type: ignore[index]
+
+    source.set_status(pointer, WorkStatusMarker.IN_PROGRESS)
+    assert forge_state(double)["issue_labels"]["acme/widget#1"] == {"blizzard:in-progress"}  # type: ignore[index]
+
+
+def test_set_status_is_idempotent() -> None:
+    double = github_double()
+    source = GitHubWorkSource(double, name="widget", repo="acme/widget", web_base="https://x")
+    pointer = WorkRef(source="widget", ref="1")
+
+    source.set_status(pointer, WorkStatusMarker.INGESTED)
+    source.set_status(pointer, WorkStatusMarker.INGESTED)
+
+    assert forge_state(double)["issue_labels"]["acme/widget#1"] == {"blizzard:ingested"}  # type: ignore[index]
+
+
+def test_clear_status_removes_every_marker() -> None:
+    double = github_double()
+    source = GitHubWorkSource(double, name="widget", repo="acme/widget", web_base="https://x")
+    pointer = WorkRef(source="widget", ref="1")
+    source.set_status(pointer, WorkStatusMarker.INGESTED)
+
+    source.clear_status(pointer)
+
+    assert forge_state(double)["issue_labels"]["acme/widget#1"] == set()  # type: ignore[index]
+
+
+def test_clear_status_over_an_unlabelled_ref_is_a_no_op() -> None:
+    source = GitHubWorkSource(github_double(), name="widget", repo="acme/widget", web_base="https://x")
+    source.clear_status(WorkRef(source="widget", ref="1"))  # must not raise
+
+
+def test_label_bootstrap_creates_both_markers_before_the_first_write() -> None:
+    double = github_double()
+    source = GitHubWorkSource(double, name="widget", repo="acme/widget", web_base="https://x")
+
+    source.set_status(WorkRef(source="widget", ref="1"), WorkStatusMarker.INGESTED)
+
+    assert forge_state(double)["repo_labels"]["acme/widget"] == {  # type: ignore[index]
+        "blizzard:ingested",
+        "blizzard:in-progress",
+    }
+
+
+def test_label_bootstrap_tolerates_an_already_existing_label() -> None:
+    """Two annotator instances against the same repo each bootstrap independently;
+    the second's 422 (label already exists) must not surface as a failure."""
+    double = github_double()
+    first = GitHubWorkSource(double, name="widget", repo="acme/widget", web_base="https://x")
+    second = GitHubWorkSource(double, name="widget", repo="acme/widget", web_base="https://x")
+
+    first.set_status(WorkRef(source="widget", ref="1"), WorkStatusMarker.INGESTED)
+    second.set_status(WorkRef(source="widget", ref="2"), WorkStatusMarker.INGESTED)  # must not raise
+
+
+def test_marked_refs_lists_every_marker() -> None:
+    double = github_double()
+    source = GitHubWorkSource(double, name="widget", repo="acme/widget", web_base="https://x")
+    source.set_status(WorkRef(source="widget", ref="1"), WorkStatusMarker.INGESTED)
+    source.set_status(WorkRef(source="widget", ref="2"), WorkStatusMarker.IN_PROGRESS)
+
+    result = source.marked_refs()
+
+    assert result == {
+        WorkRef(source="widget", ref="1"): frozenset({WorkStatusMarker.INGESTED}),
+        WorkRef(source="widget", ref="2"): frozenset({WorkStatusMarker.IN_PROGRESS}),
+    }
+
+
+def test_marked_refs_reports_a_doubly_labelled_ref_as_carrying_both_markers() -> None:
+    """A ref that has somehow acquired both markers reads as *wrong* to the
+    reconciler's diff, not as already-correct — ``marked_refs`` must surface it."""
+    double = github_double()
+    forge_state(double)["issue_labels"]["acme/widget#3"] = {"blizzard:ingested", "blizzard:in-progress"}  # type: ignore[index]
+    source = GitHubWorkSource(double, name="widget", repo="acme/widget", web_base="https://x")
+
+    result = source.marked_refs()
+
+    assert result[WorkRef(source="widget", ref="3")] == frozenset(
+        {WorkStatusMarker.INGESTED, WorkStatusMarker.IN_PROGRESS}
+    )
+
+
+def test_marked_refs_paginates_past_the_first_page() -> None:
+    """101 marked issues, a 100-per-page adapter: real pagination, not a stub —
+    GitHub's default page size would otherwise silently strand the 101st."""
+    double = github_double()
+    forge_state(double)["issue_labels"] = {f"acme/widget#{n}": {"blizzard:ingested"} for n in range(1, 102)}
+    source = GitHubWorkSource(double, name="widget", repo="acme/widget", web_base="https://x")
+
+    result = source.marked_refs()
+
+    assert len(result) == 101
+    assert WorkRef(source="widget", ref="101") in result
+
+
+def test_marked_refs_excludes_pull_request_entries() -> None:
+    """GitHub's issue-list endpoint returns PRs too; a PR entry must not be
+    mistaken for a marked work-item ref."""
+    double = github_double(pull_numbers={2})
+    forge_state(double)["issue_labels"] = {
+        "acme/widget#1": {"blizzard:ingested"},
+        "acme/widget#2": {"blizzard:ingested"},
+    }
+    source = GitHubWorkSource(double, name="widget", repo="acme/widget", web_base="https://x")
+
+    result = source.marked_refs()
+
+    assert set(result) == {WorkRef(source="widget", ref="1")}
+
+
+def test_marked_refs_scope_failure_degrades_to_work_annotate_error() -> None:
+    double = github_double()
+    forge_state(double)["forbidden"] = True
+    source = GitHubWorkSource(double, name="widget", repo="acme/widget", web_base="https://x")
+
+    with pytest.raises(WorkAnnotateError):
+        source.marked_refs()
+
+
+def test_set_status_scope_failure_degrades_to_work_annotate_error() -> None:
+    double = github_double()
+    forge_state(double)["forbidden"] = True
+    source = GitHubWorkSource(double, name="widget", repo="acme/widget", web_base="https://x")
+
+    with pytest.raises(WorkAnnotateError):
+        source.set_status(WorkRef(source="widget", ref="1"), WorkStatusMarker.INGESTED)
+
+
+def test_registry_annotator_is_none_for_a_source_not_opted_in() -> None:
+    """A source configured but not bound into the annotator map — the structural
+    ``registry.annotator(name) is None`` a non-opted-in ``[[work_source]]`` gets."""
+    widget = GitHubWorkSource(github_double(), name="widget", repo="acme/widget", web_base="https://x")
+    registry = WorkSourceRegistry({"widget": widget})
+
+    assert registry.annotator("widget") is None
+    assert registry.annotating_names() == []
+
+
+def test_registry_annotator_returns_the_bound_annotator() -> None:
+    widget = GitHubWorkSource(github_double(), name="widget", repo="acme/widget", web_base="https://x")
+    registry = WorkSourceRegistry({"widget": widget}, {"widget": widget})
+
+    assert registry.annotator("widget") is widget
+    assert registry.annotating_names() == ["widget"]

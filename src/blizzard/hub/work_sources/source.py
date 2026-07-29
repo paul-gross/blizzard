@@ -37,6 +37,7 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from blizzard.hub.domain.work import WorkRef
+from blizzard.hub.work_sources.annotator import IWorkAnnotator
 
 
 @dataclass(frozen=True)
@@ -89,6 +90,17 @@ class IWorkSourceRegistry(Protocol):
 
     def names(self) -> list[str]:
         """Every configured source's name."""
+        ...
+
+    def annotator(self, name: str) -> IWorkAnnotator | None:
+        """The binding declared under ``name``'s write half, or ``None`` when
+        that source is unconfigured or not opted into annotation — the
+        structural "never written to" a non-opted source gets."""
+        ...
+
+    def annotating_names(self) -> list[str]:
+        """Every source name with an annotator built — the opted-in subset of
+        :meth:`names`."""
         ...
 
     def resolve(self, token: str) -> WorkRef | None:
