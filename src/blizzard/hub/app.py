@@ -22,6 +22,7 @@ import asyncio
 import contextlib
 import os
 from collections.abc import AsyncIterator
+from typing import Protocol
 
 from fastapi import FastAPI
 
@@ -50,6 +51,7 @@ from blizzard.hub.api.users import router as users_router
 from blizzard.hub.auth.bootstrap import ensure_superuser_bootstrap
 from blizzard.hub.composition import HubServices, build_services
 from blizzard.hub.config import AUTH_MODE_OAUTH, ConfigError, HubConfig
+from blizzard.hub.domain.forge_status import AnnotationReconciler
 from blizzard.hub.domain.readiness import ReadinessService
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
@@ -71,9 +73,35 @@ ENV_FORGE_BASE_BRANCH = "BZ_FORGE_BASE_BRANCH"
 DEFAULT_FORGE_BASE_BRANCH = "main"
 
 
+class _Sweepable(Protocol):
+    """The one capability :func:`_run_annotation_loop` needs — structural, so a test's
+    counting fake stands in for :class:`~blizzard.hub.domain.forge_status.AnnotationReconciler`
+    with no inheritance."""
+
+    def sweep(self) -> None: ...
+
+
+async def _run_annotation_loop(reconciler: _Sweepable, interval_seconds: int, shutdown: asyncio.Event) -> None:
+    """A thin sleep-and-call wrapper around one steppable :meth:`AnnotationReconciler.sweep`
+    per interval (``bzh:steppable-loop`` — the reconciler itself has no opinion about
+    scheduling). Races ``shutdown`` exactly like the runner's own ``PeriodicDriver._run``
+    (``runner/loop/build.py``), so it wakes immediately on shutdown instead of holding a
+    graceful drain for up to the interval. A sweep that raises is logged and swallowed —
+    a bad tick must never kill the loop, only skip a cycle."""
+    log = get_logger("blizzard.hub.forge_status")
+    while not shutdown.is_set():
+        try:
+            await asyncio.to_thread(reconciler.sweep)
+        except Exception:
+            log.exception("annotation sweep failed")
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(shutdown.wait(), timeout=interval_seconds)
+
+
 @contextlib.asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Set ``app.state.shutdown`` on the ASGI ``lifespan`` "shutdown" message (issue #47).
+    """Set ``app.state.shutdown`` on the ASGI ``lifespan`` "shutdown" message (issue #47),
+    and drive the forge-status annotation loop (issue #179) across the app's lifetime.
 
     ``app.state.shutdown`` (an ``asyncio.Event``, created eagerly in :func:`create_app` so
     it exists before the first subscriber connects) is what every ``/api/events/stream``
@@ -87,9 +115,23 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     already be blocking or timing out before this fires. The real signal path there is
     ``blizzard.hub.cli._EarlyShutdownServer.handle_exit``, which sets the same event
     synchronously the instant SIGTERM/SIGINT is caught, well before uvicorn's drain begins.
+
+    The annotation task is created here — not in :func:`build_hosted_app` — because this
+    is the one place that runs for every app the ``lifespan`` fires for, and only when
+    ``app.state.services`` names at least one opted-in source: the store-free path
+    (``create_app_for_export``, unit tests) sets ``services`` to ``None`` and starts
+    nothing, exactly like a hosted hub with no ``annotate = true`` source starts nothing.
     """
+    services: HubServices | None = app.state.services
+    task: asyncio.Task[None] | None = None
+    if services is not None and services.work_sources.annotating_names():
+        reconciler = AnnotationReconciler(chunks=services.chunks, work_sources=services.work_sources)
+        interval = app.state.config.annotation_interval_seconds
+        task = asyncio.create_task(_run_annotation_loop(reconciler, interval, app.state.shutdown))
     yield
     app.state.shutdown.set()
+    if task is not None:
+        await task
 
 
 def create_app(

@@ -113,6 +113,9 @@ _WORK_SOURCE_EXAMPLE_COMMENT = """
 # repo = "owner/name"        # the "owner/repo" this source is pinned to
 # token_env = "BZ_WORK_SOURCE_TOKEN"  # names an env var — the secret itself lives in this
 #                                      # runtime's env file (e.g. /etc/blizzard/hub.env), never here
+# annotate = false            # opt into the forge-status label sweep; only the canonical
+#                              # instance for a repo should ever set this to true — two
+#                              # writers against the same forge repo will fight
 # api_base = "https://ghe.example.internal/api/v3"  # optional: override the API origin (e.g. GHE)
 # web_base = "https://ghe.example.internal"          # optional: override the web origin; derives from api_base
 """
@@ -160,6 +163,11 @@ class WorkSourceConfig:
     provider: str
     repo: str
     token_env: str
+    #: Opt this source into the forge-status label sweep (issue #179) — default off,
+    #: because dev/snapshot hubs in this workspace run against real forges and two
+    #: writers must never fight over the same issues. Only the canonical instance for
+    #: a repo should ever set this.
+    annotate: bool = False
     api_base: str | None = None
     web_base: str | None = None
 
@@ -220,6 +228,11 @@ class HubConfig:
     #: (off/warn/enforce), while this is a plain on/off with no intermediate state to
     #: warn about.
     follow_latest: bool = False
+    #: The forge-status reconciler's sweep cadence, in seconds (issue #179) — a flat
+    #: scalar following ``follow_latest``'s own precedent rather than a dedicated
+    #: table. Only consulted when at least one ``[[work_source]]`` opts into
+    #: ``annotate``; a hub with none starts no sweep loop regardless of this value.
+    annotation_interval_seconds: int = 120
     auth: AuthConfig = field(default_factory=AuthConfig)
     #: The reverse-proxy trust set (issue #130) — proxy addresses or CIDRs whose
     #: ``X-Forwarded-Proto``/``X-Forwarded-For`` headers are honored (cookie ``Secure``
@@ -265,6 +278,10 @@ class HubConfig:
             "# in-flight work without migrating each chunk by hand. A graph's own follow_latest\n"
             "# overrides this; false (the default) keeps every chunk on the mint it started on.\n",
             f"follow_latest = {str(self.follow_latest).lower()}\n",
+            "\n# Forge-status sweep cadence (issue #179), in seconds. Only consulted when at\n"
+            "# least one [[work_source]] below sets annotate = true; a hub with none starts\n"
+            "# no sweep loop regardless of this value.\n",
+            f"annotation_interval_seconds = {self.annotation_interval_seconds}\n",
             "\n# Reverse-proxy trust set (issue #130): proxy IPs/CIDRs whose forwarded\n"
             "# X-Forwarded-Proto/-For headers are honored (cookie Secure flag, login-throttle\n"
             "# key, auth-fact actor IP). Empty = ignore those headers from every peer.\n",
@@ -278,6 +295,7 @@ class HubConfig:
             lines.append(f'provider = "{source.provider}"\n')
             lines.append(f'repo = "{source.repo}"\n')
             lines.append(f'token_env = "{source.token_env}"\n')
+            lines.append(f"annotate = {str(source.annotate).lower()}\n")
             if source.api_base is not None:
                 lines.append(f'api_base = "{source.api_base}"\n')
             if source.web_base is not None:
@@ -350,6 +368,7 @@ class HubConfig:
             route_token_mode=route_token_mode,
             produces_mode=produces_mode,
             follow_latest=follow_latest,
+            annotation_interval_seconds=int(raw.get("annotation_interval_seconds", 120)),
             auth=_parse_auth(raw.get("auth", {})),
             trusted_proxies=_parse_trusted_proxies(raw.get("trusted_proxies", ())),
         )
@@ -405,11 +424,22 @@ def _parse_work_sources(raw_sources: object) -> tuple[WorkSourceConfig, ...]:
                 f"[[work_source]] {name!r} has unknown provider {provider!r} "
                 f"(known: {sorted(_KNOWN_WORK_SOURCE_PROVIDERS)})"
             )
+        annotate = entry.get("annotate", False)
+        if not isinstance(annotate, bool):
+            # Validated rather than coerced, mirroring `follow_latest`: a source that opts
+            # into writing to a shared forge deserves an explicit boolean, not a truthy guess.
+            raise ConfigError(f"[[work_source]] {name!r} has annotate={annotate!r}, must be a boolean")
         api_base = str(entry["api_base"]) if entry.get("api_base") else None
         web_base = str(entry["web_base"]) if entry.get("web_base") else None
         sources.append(
             WorkSourceConfig(
-                name=name, provider=provider, repo=repo, token_env=token_env, api_base=api_base, web_base=web_base
+                name=name,
+                provider=provider,
+                repo=repo,
+                token_env=token_env,
+                annotate=annotate,
+                api_base=api_base,
+                web_base=web_base,
             )
         )
     return tuple(sources)

@@ -11,10 +11,12 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable, Sequence
+from typing import cast
 
 import httpx
 
 from blizzard.hub.config import ConfigError, WorkSourceConfig
+from blizzard.hub.work_sources.annotator import IWorkAnnotator
 from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSource
 from blizzard.hub.work_sources.registry import WorkSourceRegistry
 from blizzard.hub.work_sources.source import IWorkSource
@@ -52,8 +54,15 @@ def build_work_source_registry(sources: Sequence[WorkSourceConfig]) -> WorkSourc
 
     A source whose ``token_env`` names an unset variable fails here, at boot, naming
     the variable — not at first fetch. An empty ``sources`` is a legal, work-source-free
-    hub."""
+    hub. Only a source with ``annotate = true`` gets an entry in the registry's
+    annotator map — every binding this factory builds today (the only provider,
+    ``github``) implements :class:`~blizzard.hub.work_sources.annotator.IWorkAnnotator`
+    on the same instance, so opting in is a matter of *exposing* the capability, not
+    building a second object. This is what makes a non-opted source structurally
+    never written to (``registry.annotator(name) is None``) rather than a runtime
+    branch someone has to remember."""
     built: dict[str, IWorkSource] = {}
+    annotators: dict[str, IWorkAnnotator] = {}
     for source in sources:
         builder = _BUILDERS.get(source.provider)
         if builder is None:
@@ -66,5 +75,8 @@ def build_work_source_registry(sources: Sequence[WorkSourceConfig]) -> WorkSourc
             headers={"Authorization": f"token {os.environ[source.token_env]}"},
             timeout=30.0,
         )
-        built[source.name] = builder(source, client, api_base)
-    return WorkSourceRegistry(built)
+        adapter = builder(source, client, api_base)
+        built[source.name] = adapter
+        if source.annotate:
+            annotators[source.name] = cast(IWorkAnnotator, adapter)
+    return WorkSourceRegistry(built, annotators)

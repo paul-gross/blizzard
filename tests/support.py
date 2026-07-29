@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import IO
 
 import sqlalchemy as sa
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine
 from sqlalchemy import insert as sa_insert
@@ -55,6 +55,7 @@ from blizzard.hub.domain.work import WorkRef
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema
+from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
 from blizzard.hub.work_sources.registry import WorkSourceRegistry
 from blizzard.hub.work_sources.source import IWorkSource, WorkItem, WorkSourceError
 
@@ -207,6 +208,46 @@ def _conforms_fake_work_source(x: FakeWorkSource) -> IWorkSource:
     return x
 
 
+class FakeAnnotator:
+    """An in-process :class:`IWorkAnnotator` — an in-memory ``{ref: {markers}}`` map,
+    plus call logs a test asserts against. ``fail_refs`` raises
+    :class:`WorkAnnotateError` for a ref's own :meth:`set_status`/:meth:`clear_status`,
+    mirroring :class:`FakeWorkSource`'s own per-pointer failure knob — the reconciler's
+    per-item degradation test drives this rather than the real GitHub adapter."""
+
+    def __init__(
+        self,
+        *,
+        initial: dict[WorkRef, set[WorkStatusMarker]] | None = None,
+        fail_refs: set[str] | None = None,
+    ) -> None:
+        self._marks: dict[WorkRef, set[WorkStatusMarker]] = {
+            ref: set(markers) for ref, markers in (initial or {}).items()
+        }
+        self.fail_refs = fail_refs or set()
+        self.set_calls: list[tuple[WorkRef, WorkStatusMarker]] = []
+        self.clear_calls: list[WorkRef] = []
+
+    def set_status(self, pointer: WorkRef, marker: WorkStatusMarker) -> None:
+        if pointer.ref in self.fail_refs:
+            raise WorkAnnotateError(f"boom setting {marker.value} on {pointer.ref}")
+        self.set_calls.append((pointer, marker))
+        self._marks[pointer] = {marker}
+
+    def clear_status(self, pointer: WorkRef) -> None:
+        if pointer.ref in self.fail_refs:
+            raise WorkAnnotateError(f"boom clearing {pointer.ref}")
+        self.clear_calls.append(pointer)
+        self._marks.pop(pointer, None)
+
+    def marked_refs(self) -> dict[WorkRef, frozenset[WorkStatusMarker]]:
+        return {ref: frozenset(markers) for ref, markers in self._marks.items() if markers}
+
+
+def _conforms_fake_annotator(x: FakeAnnotator) -> IWorkAnnotator:
+    return x
+
+
 class _OmitTitle:
     """The sentinel a test uses to make :func:`github_double` omit ``title`` from the payload."""
 
@@ -218,20 +259,38 @@ OMIT_TITLE = _OmitTitle()
 """Sentinel — a forge payload with no ``title`` key at all (real GitHub never sends this)."""
 
 
-def github_double(*, conflict_branches: set[str] | None = None, issues: dict[str, dict] | None = None) -> TestClient:
+def github_double(
+    *,
+    conflict_branches: set[str] | None = None,
+    issues: dict[str, dict] | None = None,
+    pull_numbers: set[int] | None = None,
+) -> TestClient:
     """A tiny GitHub-shaped forge double for the real HTTP adapters.
 
     Rather than couple this repo to ``blizzard-mock`` as a dev dependency (a separate
     uv project), the adapter HTTP shaping is exercised against this minimal
-    GitHub-REST-v3 surface — issue read + comments, PR create + merge. Wrapped in a
-    ``TestClient`` (itself an ``httpx.Client``) so the sync adapters drive it directly.
+    GitHub-REST-v3 surface — issue read + comments, PR create + merge, plus the
+    label routes the annotator seam needs: repo-level label create (422 on
+    duplicate), issue-level label add/remove, and a real ``Link``-header-paginated,
+    ``labels=`` filtered issue listing (so ``GitHubWorkSource.marked_refs``'s
+    pagination and PR-filtering run against genuine pagination, not a stub).
+    ``pull_numbers`` marks which issue numbers the listing renders with a
+    ``pull_request`` key, mirroring GitHub's issue-list endpoint returning PRs too.
+    Wrapped in a ``TestClient`` (itself an ``httpx.Client``) so the sync adapters
+    drive it directly.
     """
     from fastapi.responses import JSONResponse
 
     conflict = conflict_branches or set()
     issue_store = issues or {}
     app = FastAPI()
-    state: dict[str, object] = {"next_pull": 1, "pulls": {}}
+    state: dict[str, object] = {
+        "next_pull": 1,
+        "pulls": {},
+        "repo_labels": {},
+        "issue_labels": {},
+        "pr_numbers": set(pull_numbers or set()),
+    }
 
     @app.get("/repos/{owner}/{repo}/issues/{number}")
     def get_issue(owner: str, repo: str, number: int) -> dict:
@@ -310,9 +369,94 @@ def github_double(*, conflict_branches: set[str] | None = None, issues: dict[str
         pull.update({"merged": True, "state": "closed", "merge_commit_sha": merge_sha})
         return JSONResponse(status_code=200, content={"sha": merge_sha, "merged": True, "message": "ok"})
 
+    def _forbidden_if_armed() -> JSONResponse | None:
+        """The ``forbidden`` lever a test arms via ``client.forge_state["forbidden"]
+        = True`` — an insufficient-scope token, mirroring GitHub's 403 (not the
+        rate-limit 403 the delivery-seam tests don't model here)."""
+        if state.get("forbidden"):
+            return JSONResponse(status_code=403, content={"message": "Resource not accessible by integration"})
+        return None
+
+    @app.post("/repos/{owner}/{repo}/labels")
+    def create_repo_label(owner: str, repo: str, body: dict) -> JSONResponse:
+        if (forbidden := _forbidden_if_armed()) is not None:
+            return forbidden
+        repo_labels = state["repo_labels"].setdefault(f"{owner}/{repo}", set())  # type: ignore[union-attr]
+        name = body["name"]
+        if name in repo_labels:
+            return JSONResponse(status_code=422, content={"message": "already_exists"})
+        repo_labels.add(name)
+        return JSONResponse(status_code=201, content={"name": name})
+
+    @app.post("/repos/{owner}/{repo}/issues/{number}/labels")
+    def add_issue_labels(owner: str, repo: str, number: int, body: list[str]) -> JSONResponse:
+        if (forbidden := _forbidden_if_armed()) is not None:
+            return forbidden
+        # The narrower `label_add_forbidden` lever fails *only* this route, leaving the
+        # repo-label bootstrap and the paired remove-label call working. The broad
+        # `forbidden` lever cannot isolate an add failure: it trips the bootstrap POST
+        # first, so `set_status` raises before it ever reaches this route.
+        if state.get("label_add_forbidden"):
+            return JSONResponse(status_code=403, content={"message": "Resource not accessible by integration"})
+        key = f"{owner}/{repo}#{number}"
+        issue_labels = state["issue_labels"].setdefault(key, set())  # type: ignore[union-attr]
+        issue_labels.update(body)
+        return JSONResponse(status_code=200, content=[{"name": name} for name in sorted(issue_labels)])
+
+    @app.delete("/repos/{owner}/{repo}/issues/{number}/labels/{name}")
+    def remove_issue_label(owner: str, repo: str, number: int, name: str) -> JSONResponse:
+        if (forbidden := _forbidden_if_armed()) is not None:
+            return forbidden
+        key = f"{owner}/{repo}#{number}"
+        issue_labels = state["issue_labels"].setdefault(key, set())  # type: ignore[union-attr]
+        if name not in issue_labels:
+            return JSONResponse(status_code=404, content={"message": "Label does not exist"})
+        issue_labels.discard(name)
+        return JSONResponse(status_code=200, content=[{"name": n} for n in sorted(issue_labels)])
+
+    @app.get("/repos/{owner}/{repo}/issues")
+    def list_issues(
+        owner: str, repo: str, request: Request, labels: str | None = None, per_page: int = 30, page: int = 1
+    ) -> JSONResponse:
+        if (forbidden := _forbidden_if_armed()) is not None:
+            return forbidden
+        repo_key = f"{owner}/{repo}"
+        wanted = set(labels.split(",")) if labels else None
+        issue_labels_map: dict[str, set[str]] = state["issue_labels"]  # type: ignore[assignment]
+        pr_numbers: set[int] = state["pr_numbers"]  # type: ignore[assignment]
+        numbers = sorted(
+            int(key.rpartition("#")[2])
+            for key, names in issue_labels_map.items()
+            if key.startswith(f"{repo_key}#") and (wanted is None or wanted <= names)
+        )
+        start = (page - 1) * per_page
+        page_numbers = numbers[start : start + per_page]
+        items: list[dict] = []
+        for n in page_numbers:
+            item: dict[str, object] = {
+                "number": n,
+                "labels": [{"name": name} for name in sorted(issue_labels_map.get(f"{repo_key}#{n}", set()))],
+            }
+            if n in pr_numbers:
+                item["pull_request"] = {"url": f"http://forge/{repo_key}/pulls/{n}"}
+            items.append(item)
+        headers = {}
+        if start + per_page < len(numbers):
+            next_url = str(request.url.include_query_params(page=page + 1))
+            headers["Link"] = f'<{next_url}>; rel="next"'
+        return JSONResponse(status_code=200, content=items, headers=headers)
+
     client = TestClient(app)
     client.forge_state = state  # type: ignore[attr-defined]  # tests flip PR fate (e.g. close-without-merge)
     return client
+
+
+def forge_state(double: TestClient) -> dict[str, object]:
+    """Typed accessor for a :func:`github_double`'s mutable state dict — a test
+    seeds/reads ``issue_labels``/``repo_labels``/``pr_numbers``/``forbidden``/
+    ``label_add_forbidden`` directly rather than driving every scenario through the
+    adapter's own HTTP calls."""
+    return double.forge_state  # type: ignore[attr-defined]
 
 
 @dataclass

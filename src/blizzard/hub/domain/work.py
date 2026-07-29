@@ -1270,6 +1270,12 @@ class IReadChunkRepository(Protocol):
         """The chunk_id of a live (non-terminal) chunk holding ``pointer``, or None."""
         ...
 
+    def live_work_refs(self) -> dict[WorkRef, ChunkStatus]:
+        """Every work ref held by a live (non-terminal) chunk, with that chunk's
+        derived status — the inverse of :meth:`find_live_holder`, for the
+        forge-status reconciler's desired-state sweep (issue #179)."""
+        ...
+
     def accepted_transition_target(self, chunk_id: str, *, from_node_id: str, epoch: int) -> str | None:
         """The ``to_node_id`` of an already-accepted transition out of ``from_node_id`` at
         ``epoch`` — the idempotency probe for a re-applied completion, or None."""
