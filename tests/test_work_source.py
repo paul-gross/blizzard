@@ -413,3 +413,36 @@ def test_registry_annotator_returns_the_bound_annotator() -> None:
 
     assert registry.annotator("widget") is widget
     assert registry.annotating_names() == ["widget"]
+
+
+# --------------------------------------------------------------------------- #
+# The factory's opt-in wiring (issue #179 Phase 3) — an annotator is built
+# only for a source configured with annotate=True.
+# --------------------------------------------------------------------------- #
+
+
+def test_factory_builds_no_annotator_for_a_non_opted_in_source(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The structural "never written to" property: a configured-but-not-opted
+    source has no entry in the annotator map at all."""
+    monkeypatch.setenv("_TEST_TOKEN_NOT_OPTED", "token")
+    registry = build_work_source_registry(
+        [WorkSourceConfig(name="widget", provider="github", repo="acme/widget", token_env="_TEST_TOKEN_NOT_OPTED")]
+    )
+    assert registry.get("widget") is not None
+    assert registry.annotator("widget") is None
+    assert registry.annotating_names() == []
+
+
+def test_factory_builds_an_annotator_for_an_opted_in_source(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("_TEST_TOKEN_OPTED", "token")
+    registry = build_work_source_registry(
+        [
+            WorkSourceConfig(
+                name="widget", provider="github", repo="acme/widget", token_env="_TEST_TOKEN_OPTED", annotate=True
+            )
+        ]
+    )
+    annotator = registry.annotator("widget")
+    assert annotator is not None
+    assert annotator is registry.get("widget")  # one instance, both Protocols
+    assert registry.annotating_names() == ["widget"]
