@@ -392,6 +392,12 @@ def github_double(
     def add_issue_labels(owner: str, repo: str, number: int, body: list[str]) -> JSONResponse:
         if (forbidden := _forbidden_if_armed()) is not None:
             return forbidden
+        # The narrower `label_add_forbidden` lever fails *only* this route, leaving the
+        # repo-label bootstrap and the paired remove-label call working. The broad
+        # `forbidden` lever cannot isolate an add failure: it trips the bootstrap POST
+        # first, so `set_status` raises before it ever reaches this route.
+        if state.get("label_add_forbidden"):
+            return JSONResponse(status_code=403, content={"message": "Resource not accessible by integration"})
         key = f"{owner}/{repo}#{number}"
         issue_labels = state["issue_labels"].setdefault(key, set())  # type: ignore[union-attr]
         issue_labels.update(body)
@@ -447,8 +453,9 @@ def github_double(
 
 def forge_state(double: TestClient) -> dict[str, object]:
     """Typed accessor for a :func:`github_double`'s mutable state dict — a test
-    seeds/reads ``issue_labels``/``repo_labels``/``pr_numbers``/``forbidden``
-    directly rather than driving every scenario through the adapter's own HTTP calls."""
+    seeds/reads ``issue_labels``/``repo_labels``/``pr_numbers``/``forbidden``/
+    ``label_add_forbidden`` directly rather than driving every scenario through the
+    adapter's own HTTP calls."""
     return double.forge_state  # type: ignore[attr-defined]
 
 

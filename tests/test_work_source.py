@@ -397,6 +397,27 @@ def test_set_status_scope_failure_degrades_to_work_annotate_error() -> None:
         source.set_status(WorkRef(source="widget", ref="1"), WorkStatusMarker.INGESTED)
 
 
+def test_set_status_add_label_failure_degrades_to_work_annotate_error() -> None:
+    """A failing *add* must surface, not be swallowed.
+
+    The sibling test above arms the broad ``forbidden`` lever, which trips the
+    repo-label bootstrap first — so it never reaches the add call and cannot fence
+    it. This one fails only the add: the paired remove that follows 404s (the other
+    marker is not present), which the adapter deliberately tolerates, so nothing
+    else in the call raises on the add's behalf. Without the add's own status check
+    ``set_status`` returns cleanly, and the reconciler counts a write that never
+    landed — ``written=1 failed=0`` in the sweep log while the forge is unchanged.
+    """
+    double = github_double()
+    source = GitHubWorkSource(double, name="widget", repo="acme/widget", web_base="https://x")
+    forge_state(double)["label_add_forbidden"] = True
+
+    with pytest.raises(WorkAnnotateError):
+        source.set_status(WorkRef(source="widget", ref="1"), WorkStatusMarker.INGESTED)
+
+    assert forge_state(double)["issue_labels"] == {}, "nothing should have been recorded on the forge"
+
+
 def test_registry_annotator_is_none_for_a_source_not_opted_in() -> None:
     """A source configured but not bound into the annotator map — the structural
     ``registry.annotator(name) is None`` a non-opted-in ``[[work_source]]`` gets."""

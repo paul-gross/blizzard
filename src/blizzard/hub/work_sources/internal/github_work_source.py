@@ -138,7 +138,8 @@ class GitHubWorkSource:
         and idempotent, mirroring GitHub's own idempotent label add/remove."""
         self._ensure_labels_bootstrapped()
         try:
-            self._client.post(f"/repos/{self._repo}/issues/{pointer.ref}/labels", json=[_label_name(marker)])
+            added = self._client.post(f"/repos/{self._repo}/issues/{pointer.ref}/labels", json=[_label_name(marker)])
+            added.raise_for_status()
             other = _label_name(_other_marker(marker))
             resp = self._client.delete(f"/repos/{self._repo}/issues/{pointer.ref}/labels/{other}")
             if resp.status_code != 404:
