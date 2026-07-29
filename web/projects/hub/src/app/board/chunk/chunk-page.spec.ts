@@ -1,6 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { hubClient } from 'fleet';
@@ -11,11 +11,13 @@ import { ArtifactPage } from './artifact-page';
 import { ChunkPage } from './chunk-page';
 
 /**
- * The mobile chunk drill-down (`/board/chunk/:chunkId`) and its deeper
- * single-artifact page. Driven through a real router (`RouterTestingHarness`)
- * rather than a stubbed `ActivatedRoute`: both pages read their own route params
- * *and* render `routerLink`s, so the route table is part of what is under test —
- * a chunk row's link must actually resolve to the artifact page.
+ * The chunk detail page (`/board/chunk/:chunkId`, its General and Artifacts
+ * tabs) and its deeper single-artifact page. Driven through a real router
+ * (`RouterTestingHarness`) rather than a stubbed `ActivatedRoute`: the page
+ * reads its own route params *and* query params (the tab selection) *and*
+ * renders `routerLink`s, so the route table and the URL round trip are part
+ * of what is under test — a chunk row's link must actually resolve to the
+ * artifact page, and a tab click must actually write the URL.
  *
  * The hub client's transport is stubbed, so this asserts what the pages compose
  * off a known aggregate, not the queries themselves (those have their own specs).
@@ -95,20 +97,26 @@ describe('Mobile chunk drill-down', () => {
     return harness.fixture.nativeElement as HTMLElement;
   }
 
-  it('stacks the regions in attention order — work item, issues, node history, asks, artifacts', async () => {
+  /** Click a tab button by its `KitTabs` testid and let the resulting
+   * client-side navigation settle. */
+  async function chooseTab(harness: RouterTestingHarness, testid: 'tab-general' | 'tab-artifacts'): Promise<HTMLElement> {
+    const el = harness.fixture.nativeElement as HTMLElement;
+    el.querySelector<HTMLButtonElement>(`[data-testid="${testid}"]`)?.click();
+    await settle(harness.fixture);
+    return harness.fixture.nativeElement as HTMLElement;
+  }
+
+  it('renders the General tab active by default, stacking its sections in attention order', async () => {
     const el = await open(`/board/chunk/${CHUNK_ID}`);
 
     expect(el.querySelector('[data-testid="board-chunk-detail"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="tab-general"]')?.getAttribute('aria-selected')).toBe('true');
+    expect(el.querySelector('[data-testid="tab-artifacts"]')?.getAttribute('aria-selected')).toBe('false');
+
     const sections = Array.from(el.querySelectorAll('[data-testid^="section-"]')).map((node) =>
       node.getAttribute('data-testid'),
     );
-    expect(sections).toEqual([
-      'section-work-item',
-      'section-issues',
-      'section-node-history',
-      'section-asks',
-      'section-artifacts',
-    ]);
+    expect(sections).toEqual(['section-work-item', 'section-issues', 'section-node-history', 'section-asks']);
   });
 
   it('renders the fleet detail regions verbatim rather than forking them', async () => {
@@ -118,12 +126,40 @@ describe('Mobile chunk drill-down', () => {
     expect(el.querySelector('fleet-chunk-detail-issue-pane')).not.toBeNull();
     expect(el.querySelector('fleet-chunk-detail-timeline')).not.toBeNull();
     expect(el.querySelector('fleet-chunk-detail-awaiting-human')).not.toBeNull();
-    // …except artifacts, which are links here, never the desktop dock's inline bodies.
+    // Artifacts render as links here, never the desktop dock's inline bodies.
     expect(el.querySelector('fleet-chunk-detail-artifacts')).toBeNull();
   });
 
-  it('lists artifacts as links and never inlines their bodies', async () => {
+  it('switches to the Artifacts tab on click, writing ?tab=artifacts with no full reload, and back again', async () => {
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}`);
+    await settle(harness.fixture);
+
+    let el = await chooseTab(harness, 'tab-artifacts');
+    expect(TestBed.inject(Router).url).toBe(`/board/chunk/${CHUNK_ID}?tab=artifacts`);
+    expect(el.querySelector('[data-testid="tab-artifacts"]')?.getAttribute('aria-selected')).toBe('true');
+    expect(el.querySelector('[data-testid="mobile-artifacts"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="section-work-item"]')).toBeNull();
+
+    el = await chooseTab(harness, 'tab-general');
+    expect(TestBed.inject(Router).url).toBe(`/board/chunk/${CHUNK_ID}?tab=general`);
+    expect(el.querySelector('[data-testid="section-work-item"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="mobile-artifacts"]')).toBeNull();
+  });
+
+  it('defaults to the General tab for an absent ?tab value', async () => {
     const el = await open(`/board/chunk/${CHUNK_ID}`);
+    expect(el.querySelector('[data-testid="tab-general"]')?.getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('defaults to the General tab for a garbage ?tab value', async () => {
+    const el = await open(`/board/chunk/${CHUNK_ID}?tab=not-a-real-tab`);
+    expect(el.querySelector('[data-testid="tab-general"]')?.getAttribute('aria-selected')).toBe('true');
+    expect(el.querySelector('[data-testid="section-work-item"]')).not.toBeNull();
+  });
+
+  it('lists artifacts as links under the Artifacts tab and never inlines their bodies', async () => {
+    const el = await open(`/board/chunk/${CHUNK_ID}?tab=artifacts`);
 
     const links = Array.from(el.querySelectorAll<HTMLAnchorElement>('[data-testid="mobile-artifact-link"]'));
     expect(links.map((a) => a.getAttribute('data-artifact-key'))).toEqual(['review.findings.2', 'build.branch.1']);
@@ -171,7 +207,7 @@ describe('Mobile chunk drill-down', () => {
       if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
       return { ...DETAIL, artifacts: [] };
     });
-    const el = await open(`/board/chunk/${CHUNK_ID}`);
+    const el = await open(`/board/chunk/${CHUNK_ID}?tab=artifacts`);
 
     expect(el.querySelector('[data-testid="mobile-artifacts-empty"]')?.textContent).toContain('No artifacts yet');
     expect(el.querySelector('[data-testid="mobile-artifact-link"]')).toBeNull();
