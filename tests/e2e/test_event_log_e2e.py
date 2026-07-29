@@ -279,3 +279,70 @@ def test_the_events_tab_renders_filters_and_updates_live_in_the_browser(
                 expect(page.get_by_test_id("board-shell")).to_be_visible()
             finally:
                 browser.close()
+
+
+def test_the_events_grid_does_not_collapse_at_a_narrow_viewport(
+    tmp_path: Path, chromium_available: bool, narrow_viewport: dict[str, int]
+) -> None:
+    """The Events tab's time-first grid (issue #153/#154) has a narrow-viewport fallback
+    (issue #155) — below the board's own mobile cutoff the fixed grid tracks would
+    otherwise leave the message column at ~0px, and `overflow-wrap: anywhere` wraps it one
+    character per line, ballooning a single row to hundreds of pixels tall (measured 848px
+    pre-fix, over 100,000px of scroll across a real feed). This proves the fallback holds at
+    a real ~390px phone width, the narrow end of the range the mobile shell's bottom nav
+    (`tab-events`) actually routes to: a row with a long message stays a bounded height and
+    the page never gains horizontal scroll (issue #171's narrow-viewport tier rule).
+
+    Fails against 9a27f0e (the grid before its narrow-viewport fallback landed); passes on
+    master. Release-only tier — skips cleanly without Chromium or a built bundle, runs in
+    the tag `release` full e2e tier.
+    """
+    if not chromium_available:
+        pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")
+    if not _HUB_BUNDLE.is_file():
+        pytest.skip("no built hub bundle (run the web build — release tier drives `mise run e2e`)")
+    bin_dir = _mock_bin_dir()
+    if bin_dir is None:
+        pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
+    winter_source = _winter_source()
+    if winter_source is None:
+        pytest.skip("no local winter source (set BLIZZARD_MOCK_WINTER_SOURCE)")
+
+    from playwright.sync_api import expect, sync_playwright
+
+    _workspace, origins = _reset_fixture(bin_dir, winter_source, tmp_path / "scratch")
+    forge_port, hub_port = _free_port(), _free_port()
+    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+        issue = forge.post(f"/repos/{REPO}/issues", json={"title": "narrow events", "body": "the chunk"})
+        chunk_id = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{issue.json()['number']}"]}).json()[
+            "chunk_id"
+        ]
+        _push_event(
+            hub,
+            seq=1,
+            severity="warning",
+            kind="attempt-failed",
+            chunk_id=chunk_id,
+            message="retry budget exhausted after the third consecutive verdict-less attempt in a row",
+        )
+
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(headless=True)
+            page = browser.new_page(viewport=narrow_viewport)
+            try:
+                page.goto(f"http://127.0.0.1:{hub_port}/events", wait_until="load")
+                expect(page.get_by_test_id("events-row")).to_have_count(1)
+
+                box = page.get_by_test_id("events-row").first.bounding_box()
+                assert box is not None, "the events row has no layout box"
+                # A broken grid measured ~848px for one row pre-fix; the flex fallback
+                # measured 74px. A generous ceiling catches the collapse class of defect
+                # without pinning an exact pixel height.
+                assert box["height"] < 200, f"row height {box['height']}px — the grid collapsed at a narrow width"
+
+                no_overflow = page.evaluate(
+                    "document.documentElement.scrollWidth <= document.documentElement.clientWidth"
+                )
+                assert no_overflow, "the page gained horizontal scroll at a narrow viewport"
+            finally:
+                browser.close()

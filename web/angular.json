@@ -76,7 +76,12 @@
           "defaultConfiguration": "development"
         },
         "test": {
-          "builder": "@angular/build:unit-test"
+          "builder": "@angular/build:unit-test",
+          "options": {
+            "exclude": [
+              "**/*.shell-sweep.spec.ts"
+            ]
+          }
         },
         "lint": {
           "builder": "@angular-eslint/builder:lint",
@@ -230,7 +235,10 @@
         "test": {
           "builder": "@angular/build:unit-test",
           "options": {
-            "tsConfig": "projects/local-panel/tsconfig.spec.json"
+            "tsConfig": "projects/local-panel/tsconfig.spec.json",
+            "exclude": [
+              "**/*.shell-sweep.spec.ts"
+            ]
           }
         },
         "lint": {

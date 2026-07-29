@@ -149,14 +149,26 @@ interface SpendCellView {
       border-right: 1px solid var(--line);
       white-space: nowrap;
     }
-    /* The one shrinkable region. Everything else is pinned flex: none, so an
-       overfull header eats into the stat strip — which then clips — instead of
-       pushing the connection cell and the profile menu past the clipped right
-       edge of a viewport-locked, scrollbar-less shell. */
+    /* The primary shrinkable region. The brand and the connection cell are
+       pinned flex: none, so an overfull header eats into the stat strip —
+       which then clips via overflow: hidden — instead of pushing them past
+       the clipped right edge of a viewport-locked, scrollbar-less shell.
+       .trailing (below) is also shrinkable, for the consumer whose projected
+       content is itself content-sized (a long username), but its flex-shrink
+       is nowhere near this one: at equal shrink factors the two would split
+       a deficit in proportion to their own widths, and a shell whose
+       trailing content can't itself give way (the hub's menu-only cluster)
+       would then take a real, if small, share of it — with no overflow:
+       hidden of its own, that share spills past the header's own right edge
+       into genuine page-level horizontal scroll (issue #171's shell sweep
+       caught this a few px wide, right above this strip's own 1150px
+       breakpoint). The lopsided factor makes the strip absorb a shrinking
+       header almost entirely by itself while it still has any width left to
+       give. */
     .stats {
       display: flex;
       align-items: stretch;
-      flex: 0 1 auto;
+      flex: 0 999 auto;
       min-width: 0;
       overflow: hidden;
     }

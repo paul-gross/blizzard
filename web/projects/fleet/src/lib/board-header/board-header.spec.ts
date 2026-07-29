@@ -304,10 +304,19 @@ describe('BoardHeader', () => {
       const el = await render([]);
       const strip = el.querySelector<HTMLElement>('[data-testid="board-header-stats"]')!;
       // `min-width: 0` + `overflow: hidden` is what lets the strip clip instead
-      // of forcing the row wider than the viewport-locked shell.
+      // of forcing the row wider than the viewport-locked shell. The outsized
+      // `flexShrink` (issue #171's shell sweep) makes the strip absorb the
+      // *entire* deficit against `.trailing` before it gives up a pixel: at
+      // equal shrink factors the two split it in proportion to their own
+      // widths, and `.trailing`'s share — a handful of px in the narrow band
+      // just above the strip's own 1150px breakpoint, real content, both
+      // spend cells shown — has nowhere to clip to, so it spilled past the
+      // header's own right edge into real page overflow. The strip, already
+      // built to clip via `overflow: hidden`, is the side that can safely
+      // absorb it instead.
       expect(getComputedStyle(strip).minWidth).toBe('0px');
       expect(getComputedStyle(strip).overflow).toBe('hidden');
-      expect(getComputedStyle(strip).flexShrink).toBe('1');
+      expect(getComputedStyle(strip).flexShrink).toBe('999');
 
       // The brand and the connection cell are fixed-width chrome and never give.
       for (const selector of ['.brand', '[data-testid="conn"]']) {
