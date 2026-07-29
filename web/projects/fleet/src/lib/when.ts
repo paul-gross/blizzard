@@ -44,6 +44,19 @@ export function formatWhen(iso: string, now: Date = new Date()): string {
   return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())}`;
 }
 
+/** The full local date + time behind a short {@link formatWhen}/
+ * {@link formatLocalClockWithDay} stamp (issue #175) — a hover tooltip's text, so a
+ * board reader can always reach the precise instant a short form necessarily drops.
+ * Local time, 24-hour clock, empty string for an absent or unparseable input — never
+ * a caller-visible `title="Invalid Date"`. */
+export function formatAbsolute(iso: string | null | undefined): string {
+  if (iso === null || iso === undefined) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n: number): string => `${n}`.padStart(2, '0');
+  return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${formatClockTime(d.getTime())}`;
+}
+
 /** Local `HH:MM:SS` plus day context, as returned by {@link formatLocalClockWithDay} —
  * `day` is `null` when the instant's local date is today. */
 export interface LocalClockWithDay {

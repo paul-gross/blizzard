@@ -247,6 +247,7 @@ describe('TranscriptPanel', () => {
       expect(turn?.querySelector('.t .day')).toBeNull();
       expect(turn?.querySelector('.t .time')?.textContent).toBe('07:00:00');
       expect(turn?.textContent).not.toContain('UTC');
+      expect(turn?.querySelector('.t')?.getAttribute('title')).toBe('2026/07/16 07:00:00');
     });
 
     it("renders yesterday's turn as \"Yesterday\" above the local time", async () => {

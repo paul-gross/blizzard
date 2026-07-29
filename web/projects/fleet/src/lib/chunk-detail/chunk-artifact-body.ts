@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
 import type { ArtifactView } from '../api/hub';
-import { formatWhen } from '../when';
+import { formatAbsolute, formatWhen } from '../when';
 
 /**
  * One artifact, rendered — the head (key, recency, kind) over a kind-dependent
@@ -32,7 +32,7 @@ import { formatWhen } from '../when';
     <div class="a-head">
       <span class="a-key" [attr.data-testid]="keyTestid()">{{ artifact().key }}</span>
       @if (when(); as w) {
-        <span class="a-when" [attr.data-testid]="whenTestid()" [attr.title]="artifact().recorded_at">{{ w }}</span>
+        <span class="a-when" [attr.data-testid]="whenTestid()" [attr.title]="whenTitle() || null">{{ w }}</span>
       }
       <span class="a-kind">{{ artifact().kind }}</span>
     </div>
@@ -155,4 +155,8 @@ export class ChunkArtifactBody {
     const at = this.artifact().recorded_at;
     return at ? formatWhen(at) : null;
   });
+
+  /** {@link when}'s full local date + time, for the stamp's hover tooltip (issue #175) —
+   * replaces the raw-ISO `title` this span carried before, which didn't localize. */
+  protected readonly whenTitle = computed(() => formatAbsolute(this.artifact().recorded_at));
 }

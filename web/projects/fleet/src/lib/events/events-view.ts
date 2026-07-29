@@ -6,7 +6,7 @@ import { KitBadge } from '../kit/kit-badge';
 import { KitChips, type KitChipOption } from '../kit/kit-chips';
 import { KitPanel } from '../kit/kit-panel';
 import type { Tone } from '../kit/tone';
-import { formatWhen } from '../when';
+import { FleetWhen } from '../when-display';
 
 /** The severity filter row's options — `''` reads as "no filter" (every event). A
  * fixed closed set (unlike the runner/chunk axes, whose values are open and so are
@@ -56,7 +56,7 @@ const SEVERITY_TONE: Readonly<Record<string, Tone>> = {
 @Component({
   selector: 'fleet-events-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitPanel, KitBadge, KitChips],
+  imports: [KitPanel, KitBadge, KitChips, FleetWhen],
   template: `
     <fleet-kit-panel
       class="fill"
@@ -95,7 +95,7 @@ const SEVERITY_TONE: Readonly<Record<string, Tone>> = {
         <div class="rows" data-testid="events-rows">
           @for (ev of events(); track ev.id) {
             <div class="ev" data-testid="events-row" [attr.data-severity]="ev.severity">
-              <span class="time" data-testid="events-time">{{ formatWhen(ev.recorded_at) }}</span>
+              <fleet-when class="time" data-testid="events-time" [iso]="ev.recorded_at" />
               @if (ev.chunk_id; as chunkId) {
                 <button
                   type="button"
@@ -341,10 +341,6 @@ export class EventsView {
 
   protected shortId(id: string): string {
     return compactRef(id);
-  }
-
-  protected formatWhen(iso: string): string {
-    return formatWhen(iso);
   }
 
   protected onChoose(value: string): void {

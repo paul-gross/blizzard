@@ -2,6 +2,7 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
 import type { ChunkDetail } from '../api/hub';
+import { formatAbsolute } from '../when';
 import { ChunkTimeline } from './chunk-timeline';
 
 const REVIEW_FAIL_DETAIL: ChunkDetail = {
@@ -163,6 +164,16 @@ describe('ChunkTimeline', () => {
     expect(active?.getAttribute('data-choice')).toBe('run');
     expect(active?.querySelector('.nd')?.textContent).toContain('nd_build');
     expect(active?.querySelector('[data-testid="history-active-verb"]')?.textContent).toContain('run');
+  });
+
+  it('carries the full local datetime as the recency stamp\'s tooltip (issue #175)', async () => {
+    const fixture = TestBed.createComponent(ChunkTimeline);
+    fixture.componentRef.setInput('detail', REVIEW_FAIL_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const stamp = el.querySelector('[data-testid="history-when"]');
+    expect(stamp?.getAttribute('title')).toBe(formatAbsolute('2026-07-13T00:00:01Z'));
   });
 
   it('weaves a cross-graph migration into the timeline, resolving names on both graphs (issue #90)', async () => {

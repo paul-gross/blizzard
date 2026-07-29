@@ -60,6 +60,7 @@ describe('FactLog', () => {
       const row = el.querySelector('[data-testid="fact-row"]');
       expect(row?.querySelector('.t .day')).toBeNull();
       expect(row?.querySelector('.t .time')?.textContent).toBe('07:00:00');
+      expect(row?.querySelector('.t')?.getAttribute('title')).toBe('2026/07/16 07:00:00');
     });
 
     it("renders yesterday's fact as \"Yesterday\" above the local time", async () => {
