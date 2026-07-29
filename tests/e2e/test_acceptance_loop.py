@@ -344,6 +344,8 @@ def _hub(
     *,
     route_token_mode: str | None = None,
     produces_mode: str | None = None,
+    annotate: bool = False,
+    annotation_interval_seconds: int | None = None,
 ) -> Iterator[httpx.Client]:
     env = {
         **os.environ,
@@ -354,7 +356,8 @@ def _hub(
     hub_bin = str(Path(sys.executable).parent / "blizzard-hub")
     subprocess.run([hub_bin, "init", str(hub_dir)], check=True, capture_output=True, text=True)
     # Declare the one work source every scenario ingests against — since
-    # Phase 2, ingest 422s a pointer no configured source claims.
+    # Phase 2, ingest 422s a pointer no configured source claims. `annotate` opts
+    # this source into the forge-status label sweep (issue #179).
     write_work_sources(
         hub_dir,
         [
@@ -364,20 +367,21 @@ def _hub(
                 repo=REPO,
                 token_env=WORK_SOURCE_TOKEN_ENV,
                 api_base=f"http://127.0.0.1:{forge_port}",
+                annotate=annotate,
             )
         ],
     )
-    if route_token_mode is not None or produces_mode is not None:
-        # issue #84b / #113 — the route-token and produces-artifact enforcement brakes,
-        # each a separate flag from runner_auth_mode; a service-tier scenario proving
-        # `enforce` end to end sets these before the daemon starts (the config is read
-        # once, at `host` startup).
+    if route_token_mode is not None or produces_mode is not None or annotation_interval_seconds is not None:
+        # issue #84b / #113 / #179 — flags read once, at `host` startup: set before the
+        # daemon starts, not mutable afterward.
         config = HubConfig.load(hub_dir)
-        overrides: dict[str, str] = {}
+        overrides: dict[str, object] = {}
         if route_token_mode is not None:
             overrides["route_token_mode"] = route_token_mode
         if produces_mode is not None:
             overrides["produces_mode"] = produces_mode
+        if annotation_interval_seconds is not None:
+            overrides["annotation_interval_seconds"] = annotation_interval_seconds
         config = dataclasses.replace(config, **overrides)
         config.config_path.write_text(config.to_toml())
     log = hub_dir / "daemon.log"
