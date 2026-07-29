@@ -188,6 +188,25 @@ shared runtime dir during an exclusive handoff.
 > risks lock contention and corruption — this variable chooses a root, it does not make
 > one safe to share.
 
+### Overriding config values from the environment
+
+A container image cannot reasonably bake a `blizzard-hub.toml` per deployment, so the hub's
+deployment-varying config values — the store URL, the bind host and port — also resolve from
+the environment, at load time. Precedence, highest to lowest: **CLI flag > environment
+variable > toml value > built-in default**. `blizzard hub host` and `blizzard hub migrate`
+resolve identically, since both read through `HubConfig.load`.
+
+| Value | Variable | CLI flag |
+|-------|----------|----------|
+| `db_url` | `BZ_HUB_DB_URL` | *(none)* |
+| `host` | `BZ_HUB_HOST` | `--host` (`hub host` only) |
+| `port` | `BZ_HUB_PORT` | `--port` (`hub host` only) |
+
+Every variable unset leaves a deployment's resolved config byte-identical to a toml-only
+load. A malformed `BZ_HUB_PORT` fails with a `ConfigError` naming the variable — from both
+`blizzard hub init` (which scaffolds a config on a fresh runtime dir) and every later
+`load`, so a container's very first boot fails the same named way as any later one.
+
 ## Configuring work sources
 
 The hub's work-item pass-through reads every chunk's work item through a

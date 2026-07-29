@@ -23,7 +23,14 @@ What Blizzard does own is everything an agent cannot be trusted to do by being c
 
 ## Install
 
-Milestone builds are published as [GitHub Releases](https://github.com/paul-gross/blizzard/releases) with the wheel attached — no package index. Prerelease candidates are tagged `v0.1.0-rc.N`. Grab the wheel and install it into any Python ≥ 3.12 environment (no Node needed at install or runtime):
+Two ways to run blizzard: a public **container image** (`docker compose up` — see
+[docs/install.md](docs/install.md), start there), or the raw wheel below into any
+Python ≥ 3.12 environment (no Node needed at install or runtime). Milestone
+builds are published as [GitHub Releases](https://github.com/paul-gross/blizzard/releases)
+with both the wheel and the image attached/pushed — no package index for the
+wheel. Prerelease candidates are tagged `v0.1.0-rc.N`. See
+[`docs/versioning.md`](docs/versioning.md) for what a version number promises
+and the supported hub↔runner skew.
 
 ```bash
 gh release download v0.1.0-rc.1 --repo paul-gross/blizzard --pattern '*.whl'
@@ -139,10 +146,11 @@ The GitHub Actions workflows (PR gate, push-to-master dev build, tag-`v*`
 release) and the exact local commands equal to the gate are documented in
 [docs/ci.md](./docs/ci.md).
 
-## Deployment (colocated, under systemd)
+## Deployment
 
-A single machine runs both daemons — the hub and the supervisor (runner) side by
-side. The systemd units live in [`packaging/systemd/`](./packaging/systemd/); the
-install steps and the boot/crash recovery contract (how a reboot or a `kill -9`
-comes back under systemd, reaps stale leases, and resumes each chunk at its
-last-recorded node) are in [docs/deployment.md](./docs/deployment.md).
+Two shapes: a public **container image** (`docker compose up` — the hub, postgres,
+and a TLS-terminating proxy), or a **colocated wheel + systemd** install (a single
+machine running both daemons — the hub and the supervisor/runner — side by side,
+including the boot/crash recovery contract for how a reboot or a `kill -9` comes
+back and resumes each chunk at its last-recorded node). Operator docs for both,
+plus upgrade/rollback/backup, are routed from [docs/index.md](./docs/index.md).

@@ -30,6 +30,11 @@ DEFAULT_PORT = 8421
 
 ENV_HOST = "BZ_HUB_HOST"
 ENV_PORT = "BZ_HUB_PORT"
+# The container image (`bzh:manual-migrations`'s entrypoint) is the first consumer:
+# a deployment varies the store URL by environment rather than baking one per image.
+# Honored at load time identically by `hub host` and `hub migrate` — both resolve
+# through `HubConfig.load`, so there is no per-verb wiring (`bzh:sql-portable`).
+ENV_DB_URL = "BZ_HUB_DB_URL"
 
 # The runner-authentication rollout brake (issue #86a) — `warn` logs a missing/invalid/
 # mismatched bearer token and lets the request proceed; `enforce` rejects it. Ship
@@ -241,9 +246,9 @@ class HubConfig:
         """The default config for a fresh runtime root (used by ``init``)."""
         return cls(
             root=root,
-            db_url=cls.default_db_url(root),
+            db_url=os.environ.get(ENV_DB_URL, cls.default_db_url(root)),
             host=os.environ.get(ENV_HOST, DEFAULT_HOST),
-            port=int(os.environ.get(ENV_PORT, DEFAULT_PORT)),
+            port=_resolve_port_env(os.environ.get(ENV_PORT), DEFAULT_PORT),
         )
 
     def to_toml(self) -> str:
@@ -298,7 +303,13 @@ class HubConfig:
 
     @classmethod
     def load(cls, root: Path, *, host: str | None = None, port: int | None = None) -> HubConfig:
-        """Read a runtime root's config file; overlay CLI host/port when given."""
+        """Read a runtime root's config file; overlay CLI host/port when given.
+
+        ``db_url``/``host``/``port`` each resolve **CLI flag > environment > toml >
+        default** (no CLI flag exists for ``db_url``) — see :data:`ENV_DB_URL`,
+        :data:`ENV_HOST`, :data:`ENV_PORT`. Every variable unset leaves the resolved
+        config byte-identical to a toml-only load.
+        """
         root = root.resolve()
         path = root / CONFIG_FILENAME
         if not path.exists():
@@ -328,11 +339,12 @@ class HubConfig:
                 f"{path}. Leaving the old key would configure zero work sources: "
                 "`work-items` would 503 and every board label would render null."
             )
+        toml_port = int(raw.get("port", DEFAULT_PORT))
         return cls(
             root=root,
-            db_url=str(raw["db_url"]),
-            host=host or str(raw.get("host", DEFAULT_HOST)),
-            port=port if port is not None else int(raw.get("port", DEFAULT_PORT)),
+            db_url=os.environ.get(ENV_DB_URL) or str(raw["db_url"]),
+            host=host or os.environ.get(ENV_HOST) or str(raw.get("host", DEFAULT_HOST)),
+            port=port if port is not None else _resolve_port_env(os.environ.get(ENV_PORT), toml_port),
             work_sources=_parse_work_sources(raw.get("work_source", [])),
             runner_auth_mode=runner_auth_mode,
             route_token_mode=route_token_mode,
@@ -341,6 +353,19 @@ class HubConfig:
             auth=_parse_auth(raw.get("auth", {})),
             trusted_proxies=_parse_trusted_proxies(raw.get("trusted_proxies", ())),
         )
+
+
+def _resolve_port_env(raw: str | None, fallback: int) -> int:
+    """Parse ``BZ_HUB_PORT`` when set, naming the variable on a malformed value —
+    shared by :meth:`HubConfig.scaffold` and :meth:`HubConfig.load` so a container's
+    very first boot (``init``, which scaffolds) and every later boot (``load``) fail
+    identically instead of ``scaffold`` raising a raw ``ValueError``."""
+    if raw is None:
+        return fallback
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise ConfigError(f"{ENV_PORT} must be an integer, got {raw!r}") from exc
 
 
 def _parse_work_sources(raw_sources: object) -> tuple[WorkSourceConfig, ...]:

@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pytest
 
+from blizzard.hub.config import ENV_DB_URL as HUB_ENV_DB_URL
+from blizzard.hub.config import ENV_HOST as HUB_ENV_HOST
 from blizzard.hub.config import ENV_PORT as HUB_ENV_PORT
 from blizzard.hub.config import PRODUCES_ENFORCE, HubConfig, WorkSourceConfig
 from blizzard.hub.config import ConfigError as HubConfigError
@@ -800,3 +802,120 @@ def test_follow_latest_non_boolean_raises(tmp_path: Path, value: str) -> None:
     (root / "blizzard-hub.toml").write_text(f'db_url = "sqlite:///x"\nfollow_latest = {value}\n')
     with pytest.raises(HubConfigError, match="follow_latest"):
         HubConfig.load(root)
+
+
+# --------------------------------------------------------------------------- #
+# `BZ_HUB_DB_URL` / `BZ_HUB_HOST` / `BZ_HUB_PORT` — load-time env overrides
+# (issue #187). Precedence: CLI flag > environment > toml > default.
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.unit
+def test_hub_db_url_env_overrides_toml_at_load(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///toml-value.db"\n')
+    override = "postgresql+psycopg://blizzard:secret@localhost:5432/hub"
+    monkeypatch.setenv(HUB_ENV_DB_URL, override)
+    assert HubConfig.load(root).db_url == override
+
+
+@pytest.mark.unit
+def test_hub_db_url_env_overrides_default_at_scaffold(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    override = "postgresql+psycopg://blizzard:secret@localhost:5432/hub"
+    monkeypatch.setenv(HUB_ENV_DB_URL, override)
+    assert HubConfig.scaffold(tmp_path).db_url == override
+
+
+@pytest.mark.unit
+def test_hub_host_env_honored_at_load_time(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Previously only `scaffold` read BZ_HUB_HOST — a value set at `host` time on an
+    # already-scaffolded config (e.g. a container re-created against an existing volume)
+    # was ignored. `load` now honors it too.
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///x"\nhost = "127.0.0.1"\n')
+    monkeypatch.setenv(HUB_ENV_HOST, "0.0.0.0")
+    assert HubConfig.load(root).host == "0.0.0.0"
+
+
+@pytest.mark.unit
+def test_hub_host_cli_flag_wins_over_env_at_load(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///x"\nhost = "127.0.0.1"\n')
+    monkeypatch.setenv(HUB_ENV_HOST, "0.0.0.0")
+    assert HubConfig.load(root, host="10.0.0.5").host == "10.0.0.5"
+
+
+@pytest.mark.unit
+def test_hub_port_env_honored_at_load_time(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///x"\nport = 8421\n')
+    monkeypatch.setenv(HUB_ENV_PORT, "9999")
+    assert HubConfig.load(root).port == 9999
+
+
+@pytest.mark.unit
+def test_hub_port_cli_flag_wins_over_env_at_load(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///x"\nport = 8421\n')
+    monkeypatch.setenv(HUB_ENV_PORT, "9999")
+    assert HubConfig.load(root, port=1234).port == 1234
+
+
+@pytest.mark.unit
+def test_hub_config_byte_identical_when_env_unset(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every variable unset leaves parsed values byte-identical to today — the
+    regression case pinning that this change is additive, not a behavior shift."""
+    for var in (HUB_ENV_DB_URL, HUB_ENV_HOST, HUB_ENV_PORT):
+        monkeypatch.delenv(var, raising=False)
+    root = tmp_path / "hub"
+    root.mkdir()
+    pg = "postgresql+psycopg://blizzard:secret@localhost:5432/hub"
+    (root / "blizzard-hub.toml").write_text(f'db_url = "{pg}"\nhost = "0.0.0.0"\nport = 9001\n')
+    config = HubConfig.load(root)
+    assert config.db_url == pg
+    assert config.host == "0.0.0.0"
+    assert config.port == 9001
+
+
+@pytest.mark.unit
+def test_hub_malformed_port_env_raises_from_scaffold(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # A container's very first boot (`hub init` on an empty volume) scaffolds — it must
+    # fail the same named way as any later `load`, not with a raw ValueError.
+    monkeypatch.setenv(HUB_ENV_PORT, "not-a-port")
+    with pytest.raises(HubConfigError, match=HUB_ENV_PORT):
+        HubConfig.scaffold(tmp_path)
+
+
+@pytest.mark.unit
+def test_hub_malformed_port_env_raises_from_load(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///x"\n')
+    monkeypatch.setenv(HUB_ENV_PORT, "not-a-port")
+    with pytest.raises(HubConfigError, match=HUB_ENV_PORT):
+        HubConfig.load(root)
+
+
+@pytest.mark.unit
+def test_hub_db_url_honored_identically_by_host_and_migrate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`blizzard hub host` and `blizzard hub migrate` both resolve through
+    `HubConfig.load`/`scaffold` — the override needs no per-verb wiring."""
+    from blizzard.hub.runtime import init_environment, migrate, migration_runner
+
+    root = tmp_path / "hub"
+    init_environment(root)  # scaffolds + migrates the default sqlite store
+
+    override_url = f"sqlite:///{tmp_path / 'override.db'}"
+    monkeypatch.setenv(HUB_ENV_DB_URL, override_url)
+
+    migrate(root)  # resolves through HubConfig.load — migrates the overridden store
+    config = HubConfig.load(root)
+    assert config.db_url == override_url
+    assert (tmp_path / "override.db").exists()
+    # what the daemon's own revision-mismatch guard reads at startup is the same store
+    assert migration_runner(config).current_revision() is not None

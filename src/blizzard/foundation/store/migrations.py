@@ -17,8 +17,31 @@ from alembic import command
 from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
+from sqlalchemy import Column, MetaData, String, Table
 
 from blizzard.foundation.store.engine import create_engine_from_url
+
+# Alembic's own auto-created `alembic_version` table hardcodes `version_num
+# String(32)` (`alembic.ddl.impl.DefaultImpl.version_table_impl`) — this project's
+# revision ids (`YYYYMMDD_HHMM_slug`) already exceed 32 chars, which sqlite's
+# typeless storage silently tolerates but postgres enforces
+# (`StringDataRightTruncation`, caught by `blizzard:compose-smoke`, issue #191).
+# Alembic's per-dialect `version_table_impl` hook is the sanctioned override point
+# but needs a registered `DefaultImpl` subclass per dialect; pre-creating the
+# table ourselves — a no-op once it exists — is the one portable fix that needs
+# no per-dialect code (`bzh:sql-portable`).
+_VERSION_TABLE_COLUMN_LENGTH = 255
+
+
+def _ensure_wide_version_table(url: str) -> None:
+    engine = create_engine_from_url(url)
+    try:
+        metadata = MetaData()
+        version_num = Column("version_num", String(_VERSION_TABLE_COLUMN_LENGTH), primary_key=True)
+        Table("alembic_version", metadata, version_num)
+        metadata.create_all(engine, checkfirst=True)
+    finally:
+        engine.dispose()
 
 
 class RevisionMismatchError(RuntimeError):
@@ -55,6 +78,7 @@ class MigrationRunner:
 
     def upgrade(self, revision: str = "head") -> None:
         """Apply pending revisions up to ``revision`` (idempotent — a no-op when current)."""
+        _ensure_wide_version_table(self.url)
         command.upgrade(self._config(), revision)
 
     def downgrade(self, revision: str) -> None:
