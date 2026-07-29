@@ -23,7 +23,7 @@ import {
   readAnswerFailure,
 } from 'fleet';
 
-import { ArtifactLinks } from './artifact-links';
+import { ChunkArtifactsTab } from './chunk-artifacts-tab';
 import { type ChunkDetailTab, injectChunkDetailSelection } from './chunk-detail-selection';
 import { ChunkGeneralTab } from './chunk-general-tab';
 
@@ -64,7 +64,7 @@ const TAB_OPTIONS: readonly KitTabOption[] = [
 @Component({
   selector: 'app-chunk-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ArtifactLinks, ChunkGeneralTab, KitAsyncState, KitBackBar, KitBadge, KitTabs, RouterLink],
+  imports: [ChunkArtifactsTab, ChunkGeneralTab, KitAsyncState, KitBackBar, KitBadge, KitTabs, RouterLink],
   template: `
     <div class="cp">
       <a class="back-row" routerLink="/board" data-testid="mobile-chunk-back">
@@ -95,7 +95,11 @@ const TAB_OPTIONS: readonly KitTabOption[] = [
               />
             }
             @case ('artifacts') {
-              <app-artifact-links [chunkId]="d.chunk_id" [artifacts]="d.artifacts ?? []" />
+              <app-chunk-artifacts-tab
+                [artifacts]="d.artifacts ?? []"
+                [selectedKey]="selection.artifactKey()"
+                (pickArtifact)="onSelectArtifact($event)"
+              />
             }
           }
         </div>
@@ -192,15 +196,9 @@ const TAB_OPTIONS: readonly KitTabOption[] = [
       flex: 1;
       min-height: 0;
     }
-    /* Transitional (issue #160 Phase 3→4): the Artifacts tab still renders the
-       plain link index here — {@link ArtifactLinks} owns no scroll region of
-       its own, so this container gives it one until Phase 4 replaces it with
-       the nav-beside-viewer split, which owns its own scrolling. */
-    app-artifact-links {
+    app-chunk-artifacts-tab {
       flex: 1;
       min-height: 0;
-      overflow-y: auto;
-      display: block;
     }
     /* Positioned and height-bearing so KitAsyncState's absolutely centered
        status line has a box to center in. */
@@ -220,13 +218,20 @@ export class ChunkPage {
 
   private readonly id = computed<string | null>(() => this.params().get('chunkId'));
 
-  private readonly selection = injectChunkDetailSelection();
+  protected readonly selection = injectChunkDetailSelection();
 
   protected readonly tabOptions = TAB_OPTIONS;
   protected readonly tab = this.selection.tab;
 
   protected onChooseTab(tab: string): void {
     this.selection.select(tab as ChunkDetailTab, this.selection.artifactKey());
+  }
+
+  /** A nav row picked in the Artifacts tab writes its key back to the URL —
+   * {@link ChunkArtifactsTab}'s viewer is a pure function of that param, never
+   * its own selection state. */
+  protected onSelectArtifact(key: string): void {
+    this.selection.select('artifacts', key);
   }
 
   private readonly detailQuery = injectHubChunkDetailQuery(() => this.id());

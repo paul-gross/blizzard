@@ -138,13 +138,13 @@ describe('Mobile chunk drill-down', () => {
     let el = await chooseTab(harness, 'tab-artifacts');
     expect(TestBed.inject(Router).url).toBe(`/board/chunk/${CHUNK_ID}?tab=artifacts`);
     expect(el.querySelector('[data-testid="tab-artifacts"]')?.getAttribute('aria-selected')).toBe('true');
-    expect(el.querySelector('[data-testid="mobile-artifacts"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="artifacts-tab-nav"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="section-work-item"]')).toBeNull();
 
     el = await chooseTab(harness, 'tab-general');
     expect(TestBed.inject(Router).url).toBe(`/board/chunk/${CHUNK_ID}?tab=general`);
     expect(el.querySelector('[data-testid="section-work-item"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="mobile-artifacts"]')).toBeNull();
+    expect(el.querySelector('[data-testid="artifacts-tab-nav"]')).toBeNull();
   });
 
   it('defaults to the General tab for an absent ?tab value', async () => {
@@ -158,13 +158,44 @@ describe('Mobile chunk drill-down', () => {
     expect(el.querySelector('[data-testid="section-work-item"]')).not.toBeNull();
   });
 
-  it('lists artifacts as links under the Artifacts tab and never inlines their bodies', async () => {
+  it('lists every artifact in the Artifacts tab nav, oldest first, defaulting the viewer to the most recent', async () => {
     const el = await open(`/board/chunk/${CHUNK_ID}?tab=artifacts`);
 
-    const links = Array.from(el.querySelectorAll<HTMLAnchorElement>('[data-testid="mobile-artifact-link"]'));
-    expect(links.map((a) => a.getAttribute('data-artifact-key'))).toEqual(['review.findings.2', 'build.branch.1']);
-    expect(el.textContent).not.toContain('THE FINDINGS BODY');
-    expect(links[0].getAttribute('href')).toBe(`/board/chunk/${CHUNK_ID}/artifact/review.findings.2`);
+    const rows = Array.from(el.querySelectorAll<HTMLButtonElement>('[data-testid="artifacts-tab-nav-item"]'));
+    expect(rows.map((r) => r.getAttribute('data-artifact-key'))).toEqual(['build.branch.1', 'review.findings.2']);
+    // review.findings.2 (11:30) is the more recent of the two (build.branch.1 is 11:10).
+    expect(el.querySelector('[data-testid="artifacts-tab-artifact"]')?.textContent).toContain('THE FINDINGS BODY');
+  });
+
+  it('deep-links a specific artifact pre-selected — the dock link’s own contract', async () => {
+    const el = await open(`/board/chunk/${CHUNK_ID}?tab=artifacts&artifact=build.branch.1`);
+
+    const active = el.querySelector('[data-testid="artifacts-tab-nav-item"].active');
+    expect(active?.getAttribute('data-artifact-key')).toBe('build.branch.1');
+    expect(el.querySelector('[data-testid="artifacts-tab-artifact"]')?.textContent).toContain('paul-gross/blizzard');
+    expect(el.querySelector('[data-testid="artifacts-tab-artifact"]')?.textContent).not.toContain('THE FINDINGS BODY');
+  });
+
+  it('switches the viewer on a nav click, writing the key to the URL with no reload', async () => {
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}?tab=artifacts`);
+    await settle(harness.fixture);
+    let el = harness.fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[data-testid="artifacts-tab-artifact"]')?.textContent).toContain('THE FINDINGS BODY');
+
+    el.querySelector<HTMLButtonElement>('[data-testid="artifacts-tab-nav-item"][data-artifact-key="build.branch.1"]')?.click();
+    await settle(harness.fixture);
+    el = harness.fixture.nativeElement as HTMLElement;
+
+    expect(TestBed.inject(Router).url).toBe(`/board/chunk/${CHUNK_ID}?tab=artifacts&artifact=build.branch.1`);
+    expect(el.querySelector('[data-testid="artifacts-tab-artifact"]')?.textContent).toContain('paul-gross/blizzard');
+  });
+
+  it('resolves a stale artifact key to the dead-link empty state rather than a silent fallback', async () => {
+    const el = await open(`/board/chunk/${CHUNK_ID}?tab=artifacts&artifact=gone.missing.9`);
+
+    expect(el.querySelector('[data-testid="artifacts-tab-empty"]')?.textContent).toContain('NO SUCH ARTIFACT');
+    expect(el.querySelector('[data-testid="artifacts-tab-artifact"]')).toBeNull();
   });
 
   it('opens one asset artifact in full, one level deeper', async () => {
@@ -209,8 +240,9 @@ describe('Mobile chunk drill-down', () => {
     });
     const el = await open(`/board/chunk/${CHUNK_ID}?tab=artifacts`);
 
-    expect(el.querySelector('[data-testid="mobile-artifacts-empty"]')?.textContent).toContain('No artifacts yet');
-    expect(el.querySelector('[data-testid="mobile-artifact-link"]')).toBeNull();
+    expect(el.querySelector('[data-testid="artifacts-tab-nav-empty"]')?.textContent).toContain('No artifacts yet');
+    expect(el.querySelector('[data-testid="artifacts-tab-empty"]')?.textContent).toContain('No artifacts yet');
+    expect(el.querySelector('[data-testid="artifacts-tab-nav-item"]')).toBeNull();
   });
 
   it('reports a failed chunk read rather than spinning on LOADING', async () => {
