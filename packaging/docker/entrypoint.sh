@@ -9,7 +9,18 @@
 # re-created container against an already-initialized volume never re-scaffolds —
 # an unconditional `init` would migrate twice and blur the ordering this
 # entrypoint exists to keep literal.
+#
+# An explicit command (`docker run <image> <cmd>...` / `docker compose run
+# hub <cmd>...`) bypasses the default boot sequence entirely and execs that
+# command instead — the standard entrypoint escape hatch, and what
+# `docs/rollback.md` uses to run a one-off `migrate --down` without booting the
+# daemon. No args (the normal `docker compose up` path) keeps the three-step
+# ordering exactly as before.
 set -eu
+
+if [ "$#" -gt 0 ]; then
+    exec "$@"
+fi
 
 : "${BZ_HUB_DIR:=/var/lib/blizzard/hub}"
 
