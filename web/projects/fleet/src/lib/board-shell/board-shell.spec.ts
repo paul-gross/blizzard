@@ -413,4 +413,57 @@ describe('BoardShell', () => {
       expect(moves).toEqual([]);
     });
   });
+
+  /*
+   * The DONE lane's newest-first order (issue #173) — a second lane-scoped ordering,
+   * the same shape as READY's own above but keyed on the completion instant instead
+   * of the hub's dispatch order.
+   */
+  describe('the DONE lane', () => {
+    const done = (idSuffix: string, completedAt: string | null): ChunkSummary => ({
+      chunk_id: `ch_01done${idSuffix}`,
+      graph_id: 'gr_1',
+      status: 'done',
+      current_node_id: 'done',
+      work_refs: [],
+      completed_at: completedAt,
+    });
+
+    it('orders newest completed_at first', async () => {
+      const oldest = done('aaaaaaaaaaaaaaaaaaaa', '2026-07-01T00:00:00+00:00');
+      const newest = done('bbbbbbbbbbbbbbbbbbbb', '2026-07-03T00:00:00+00:00');
+      const middle = done('cccccccccccccccccccc', '2026-07-02T00:00:00+00:00');
+      const fixture = await render([oldest, newest, middle]);
+
+      expect(laneIds(fixture.nativeElement as HTMLElement, 'done')).toEqual([
+        newest.chunk_id,
+        middle.chunk_id,
+        oldest.chunk_id,
+      ]);
+    });
+
+    it('sorts a null completed_at last, keeping its relative order rather than jumping to the top', async () => {
+      const noInstant = done('aaaaaaaaaaaaaaaaaaaa', null);
+      const dated = done('bbbbbbbbbbbbbbbbbbbb', '2026-07-01T00:00:00+00:00');
+      const alsoNoInstant = done('cccccccccccccccccccc', null);
+      const fixture = await render([noInstant, dated, alsoNoInstant]);
+
+      expect(laneIds(fixture.nativeElement as HTMLElement, 'done')).toEqual([
+        dated.chunk_id,
+        noInstant.chunk_id,
+        alsoNoInstant.chunk_id,
+      ]);
+    });
+
+    it("does not disturb READY's dispatch order or any other lane's order", async () => {
+      const A = READY('aaaaaaaaaaaaaaaaaaaa');
+      const B = READY('bbbbbbbbbbbbbbbbbbbb');
+      const oldest = done('cccccccccccccccccccc', '2026-07-01T00:00:00+00:00');
+      const newest = done('dddddddddddddddddddd', '2026-07-02T00:00:00+00:00');
+      const fixture = await render([oldest, newest, A, B], [B.chunk_id, A.chunk_id]);
+
+      expect(laneIds(fixture.nativeElement as HTMLElement, 'ready')).toEqual([B.chunk_id, A.chunk_id]);
+      expect(laneIds(fixture.nativeElement as HTMLElement, 'done')).toEqual([newest.chunk_id, oldest.chunk_id]);
+    });
+  });
 });

@@ -1,7 +1,9 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
 import type { ChunkStatus } from '../api/hub';
+import { STATUS_LANE } from '../chunk-lanes';
 import { formatCost } from '../cost-format';
+import { FleetWhen } from '../when-display';
 
 /** One rendered board card — the derived-status view of a chunk. */
 export interface BoardCard {
@@ -20,6 +22,11 @@ export interface BoardCard {
   /** Whether {@link costUsd} is a lower bound — a summed invocation's envelope-less
    * cost was absent (crash/reap path); never presented as exact. */
   readonly costPartial: boolean;
+  /** The chunk's derived completion instant (issue #173), from `ChunkSummary.completed_at`
+   * — null for every non-terminal status. Rendered only on a done-lane card
+   * ({@link BoardCardComponent.isDoneLane}): a status this field's own null-ness doesn't
+   * already rule out, but the lane a defensive belt-and-suspenders check still asks for. */
+  readonly completedAt: string | null;
 }
 
 /**
@@ -51,6 +58,7 @@ export interface BoardCard {
 @Component({
   selector: 'fleet-board-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [FleetWhen],
   template: `
     <div
       class="card"
@@ -82,6 +90,9 @@ export interface BoardCard {
         }
         <span class="st-row">
           <span class="st" data-testid="chunk-status" [title]="card().status">{{ card().status }}</span>
+          @if (isDoneLane(card().status) && card().completedAt; as completedAt) {
+            <fleet-when class="done-at" data-testid="chunk-done-at" [iso]="completedAt" />
+          }
           @if (card().costUsd > 0 || card().costPartial) {
             <span class="cost" data-testid="card-cost">{{
               formatCost(card().costUsd, card().costPartial)
@@ -226,6 +237,13 @@ export interface BoardCard {
       font-size: var(--fs-xs);
       white-space: nowrap;
     }
+    /* The done-lane completion stamp (issue #173) — dim like the status label it
+       sits beside, not a separate accent; it is a timestamp, not a state. */
+    .done-at {
+      color: var(--label-dim);
+      font-size: var(--fs-xs);
+      white-space: nowrap;
+    }
     .card-promote {
       align-self: flex-start;
       border: 1px solid var(--amber-dim);
@@ -259,4 +277,12 @@ export class BoardCardComponent {
 
   /** Emitted with the chunk id when a not-ready card's Promote is clicked. */
   readonly promote = output<string>();
+
+  /** Whether `status` belongs to the DONE column — the completion stamp's render
+   * gate. Checked against the lane rather than {@link BoardCard.completedAt}'s own
+   * null-ness alone, so a card outside the done lane never renders a stamp even if
+   * it somehow carried one (issue #173). */
+  protected isDoneLane(status: ChunkStatus): boolean {
+    return STATUS_LANE[status] === 'done';
+  }
 }
