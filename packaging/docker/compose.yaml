@@ -1,0 +1,81 @@
+# The reference compose deployment — the adopter quickstart and the shape this
+# project runs off-machine: the hub image, postgres, and a Caddy front
+# terminating TLS. Walked end to end in docs/install.md.
+#
+#   cp .env.example .env   # then edit BLIZZARD_SITE_ADDRESS + postgres creds
+#   docker compose -f packaging/docker/compose.yaml up -d
+#
+# TLS terminates at Caddy, never in the hub (packaging/docker/Caddyfile);
+# `trusted_proxies` in blizzard-hub.toml trusts exactly this network's declared
+# subnet. All durable state — the hub runtime dir, the postgres data dir, and
+# Caddy's certificate/config state — lives on named volumes: `docker compose
+# down` (without `-v`) followed by `up` loses nothing.
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-blizzard}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-blizzard}
+      POSTGRES_DB: ${POSTGRES_DB:-blizzard}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-blizzard} -d ${POSTGRES_DB:-blizzard}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - blizzard
+
+  hub:
+    image: ${BLIZZARD_HUB_IMAGE:-ghcr.io/paul-gross/blizzard-hub:latest}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        # Never migrate against a database that isn't up yet.
+        condition: service_healthy
+    environment:
+      BZ_HUB_DB_URL: postgresql+psycopg://${POSTGRES_USER:-blizzard}:${POSTGRES_PASSWORD:-blizzard}@postgres:5432/${POSTGRES_DB:-blizzard}
+    volumes:
+      - hub-data:/var/lib/blizzard/hub
+      # trusted_proxies (the compose network's subnet) is a mount, not an env
+      # override — #187 fixed the override set at the three values a container
+      # genuinely varies; this is the shape #188 already documents as a mount.
+      - ./blizzard-hub.toml:/var/lib/blizzard/hub/blizzard-hub.toml:ro
+    expose:
+      - "8421"
+    networks:
+      - blizzard
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - hub
+    environment:
+      BLIZZARD_SITE_ADDRESS: ${BLIZZARD_SITE_ADDRESS:-:80}
+    ports:
+      - "${BLIZZARD_HTTP_PORT:-80}:80"
+      - "${BLIZZARD_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - blizzard
+
+volumes:
+  postgres-data:
+  hub-data:
+  caddy-data:
+  caddy-config:
+
+networks:
+  # An explicit subnet, not a docker-assigned range — blizzard-hub.toml's
+  # trusted_proxies names this literal, so the trust set is deterministic.
+  blizzard:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24

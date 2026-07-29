@@ -63,6 +63,10 @@ run = "./scripts/build-wheel.sh"
 description = "blizzard:image-smoke — build the hub container image and boot it on an empty data volume: non-root uid, git + psycopg present, store at head before serving, GET /api/health and /api/ready live. Local-only, needs a reachable docker daemon."
 run = "./scripts/image-smoke.sh"
 
+[tasks.compose-smoke]
+description = "blizzard:compose-smoke — stand up the reference compose deployment (packaging/docker/compose.yaml) against a locally-built image on the localhost http-only profile: served through the Caddy proxy, the hub resolving a postgres BZ_HUB_DB_URL, and durability across a down (no -v) + up. Local-only, needs a reachable docker daemon and the docker compose plugin."
+run = "./scripts/compose-smoke.sh"
+
 # Frontend (Angular workspace under web/). Mirror of the web/package.json scripts
 # CI invokes; namespaced `web-*` so they don't collide with the Python tasks.
 [tasks.web-install]

@@ -1,0 +1,11 @@
+# Terminates TLS (or plain HTTP for the localhost evaluation profile) and
+# reverse-proxies to the hub. `BLIZZARD_SITE_ADDRESS` names the site: a real DNS
+# name gets Caddy's automatic HTTPS (a cert minted and renewed with no extra
+# config); `:80` serves plain HTTP for local evaluation with no domain.
+#
+# TLS terminates here, not in the hub — the hub's `trusted_proxies`
+# (blizzard-hub.toml) trusts this container's network so the forwarded
+# X-Forwarded-Proto/-For headers it sends are honored for cookies and throttling.
+{$BLIZZARD_SITE_ADDRESS} {
+	reverse_proxy hub:8421
+}

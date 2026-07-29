@@ -1,0 +1,19 @@
+# The reference compose deployment's hub config (packaging/docker/compose.yaml),
+# bind-mounted read-only. Declarative rather than scaffolded — the entrypoint's
+# scaffold-if-absent step never fires for a mounted file — so this carries what
+# `blizzard hub init` would otherwise produce, plus the two values this
+# deployment shape needs pinned: a working postgres fallback and the trust set
+# for the compose network's proxy.
+#
+# `BZ_HUB_DB_URL` (compose.yaml's hub service `environment:`, derived from
+# `.env`'s postgres credentials) overrides `db_url` below at load time
+# (issue #187) — the value here is a working fallback if that env var is ever
+# unset, not the value actually used in a normal `docker compose up`.
+db_url = "postgresql+psycopg://blizzard:blizzard@postgres:5432/blizzard"
+
+# The compose network's declared subnet (compose.yaml `networks.blizzard.ipam`) —
+# a deterministic literal rather than a docker-assigned range, so Caddy's
+# forwarded X-Forwarded-Proto/-For headers (cookie Secure flag, login-throttle
+# key, auth-fact actor IP) are honored only from the proxy this deployment ships
+# (issue #130).
+trusted_proxies = ["172.28.0.0/24"]
