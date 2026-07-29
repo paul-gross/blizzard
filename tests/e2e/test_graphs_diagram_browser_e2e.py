@@ -69,10 +69,11 @@ def _graph_yaml() -> str:
 
     It gives the diagram everything the render exercises: an **entry** node (build), an
     **advance** edge (build -> review, review -> deliver), a **retry** back-edge
-    (review -> build, whose target is declared no later than its source), and **mixed
-    executors** (runner build/review, hub deliver) that drive the two stripe/badge
-    colour classes. A known-valid shape dagre lays out cleanly — the diagram, not the
-    fallback, is the expected render here.
+    (review -> build, whose target is declared no later than its source), a **self-loop**
+    retry edge (build's own ``retry`` choice targeting itself, blizzard#159's selection
+    scenario needs one exercised for real), and **mixed executors** (runner build/review,
+    hub deliver) that drive the two stripe/badge colour classes. A known-valid shape
+    dagre lays out cleanly — the diagram, not the fallback, is the expected render here.
 
     ``review`` additionally carries a **targeted resume** (``session: resume:build``,
     issue #115) and a **three-name ``produces``** list, so its meta line is both long
@@ -90,7 +91,10 @@ def _graph_yaml() -> str:
                 "prompt": "build the change\n",
                 "judgement": {
                     "prompt": "judge the build\n",
-                    "choices": {"pass": {"description": "Committed and green.", "to": "review"}},
+                    "choices": {
+                        "pass": {"description": "Committed and green.", "to": "review"},
+                        "retry": {"description": "Needs another pass.", "to": "build"},
+                    },
                 },
                 "retries": {"max": 1, "exhausted": "escalate"},
             },
@@ -195,6 +199,100 @@ def test_graphs_diagram_renders_in_the_browser(tmp_path: Path, chromium_availabl
                 assert retry_edges.count() >= 1, "the review -> build back-edge was not derived as a retry edge"
                 # Node names are legible text, not char-count-estimated boxes.
                 expect(svg.get_by_test_id("graph-diagram-node-name").first).to_contain_text("build")
+            finally:
+                browser.close()
+
+
+# The point along a path's own curve `getPointAtLength` samples, offset from the
+# midpoint — the label pill and its background sit near the midpoint, so a genuine
+# hit-testing proof has to click somewhere the visible glyphs can't be mistaken for
+# the cause of the hit. Returns viewport (client) coordinates via `getScreenCTM()`,
+# so the result is a real `page.mouse.click` target regardless of the `.diagram-scroll`
+# container's current scroll position.
+_OFFSET_POINT_ON_PATH_JS = """
+(el) => {
+  const path = el.querySelector('path.edge');
+  const len = path.getTotalLength();
+  const pt = path.getPointAtLength(len * 0.2);
+  const ctm = path.getScreenCTM();
+  return { x: ctm.a * pt.x + ctm.c * pt.y + ctm.e, y: ctm.b * pt.x + ctm.d * pt.y + ctm.f };
+}
+"""
+
+
+def test_graphs_diagram_selection_in_the_browser(tmp_path: Path, chromium_available: bool) -> None:
+    """Node/edge/self-loop selection and the detail pane, in a real browser (blizzard#159).
+
+    The unit tier (`graph-diagram.spec.ts`) proves the *mechanism* — a companion path per
+    edge carrying the visible path's own `d`, a transparent 14px stroke, `pointer-events:
+    stroke` — but jsdom does no geometry or hit-testing, so it cannot prove a click merely
+    *near* a curve actually selects it. This is the tier that can: it clicks a point on the
+    rendered curve derived from the path's own `getPointAtLength`, offset from the midpoint
+    the label pill sits near, and asserts the edge selects.
+    """
+    if not chromium_available:
+        pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")
+    from playwright.sync_api import expect, sync_playwright
+
+    forge_port, hub_port = _free_port(), _free_port()
+    with _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+        created = hub.post("/api/graphs", json={"definition_yaml": _graph_yaml()})
+        assert created.status_code == 201, created.text
+        graph_id = created.json()["graph_id"]
+
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(headless=True)
+            page = browser.new_page()
+            expect.set_options(timeout=20_000)
+            try:
+                page.goto(f"http://127.0.0.1:{hub_port}/graphs/{graph_id}", wait_until="load")
+                svg = page.get_by_test_id("graph-diagram-svg")
+                expect(svg).to_be_visible()
+                pane = page.get_by_test_id("graph-diagram-detail")
+                expect(pane.get_by_test_id("graph-diagram-detail-empty")).to_be_visible()
+
+                # --- Click the build node: selects it, marks incident edges, fills the pane
+                # The wire node id is opaque (a ULID); resolve the node by its rendered
+                # name instead — "build" alone, not `review`'s "resume:build" meta text —
+                # then climb from the name text to its enclosing node group.
+                build_name = svg.get_by_test_id("graph-diagram-node-name").get_by_text("build", exact=True)
+                build_node = build_name.locator("xpath=ancestor::*[@data-testid='graph-diagram-node']")
+                build_node.click()
+                expect(build_node).to_have_attribute("data-selected", "true")
+                # build's incident geometry: the build->review advance edge, the
+                # review->build and deliver->build back-edges, and build's own
+                # self-loop retry — four distinct incident groups (three
+                # `graph-diagram-edge`, one self-loop).
+                expect(svg.locator('[data-testid="graph-diagram-edge"][data-incident="true"]')).to_have_count(3)
+                expect(svg.locator('[data-testid="graph-diagram-self-loop"][data-incident="true"]')).to_have_count(1)
+
+                node_pane = pane.get_by_test_id("graph-diagram-detail-node")
+                expect(node_pane).to_be_visible()
+                expect(node_pane).to_contain_text("build")
+                expect(pane.get_by_test_id("graph-diagram-detail-prompt")).to_contain_text("build the change")
+
+                # --- Click a point on the advance edge's curve, off its midpoint -----------
+                advance_edge = svg.locator('[data-testid="graph-diagram-edge"][data-edge-kind="advance"]').first
+                point = advance_edge.evaluate(_OFFSET_POINT_ON_PATH_JS)
+                page.mouse.click(point["x"], point["y"])
+                expect(advance_edge).to_have_attribute("data-selected", "true")
+                expect(pane.get_by_test_id("graph-diagram-detail-edge")).to_be_visible()
+
+                # --- Click the self-loop: selects it on the same terms as a regular edge ---
+                self_loop = svg.get_by_test_id("graph-diagram-self-loop")
+                expect(self_loop).to_have_count(1)
+                loop_point = self_loop.evaluate(_OFFSET_POINT_ON_PATH_JS)
+                page.mouse.click(loop_point["x"], loop_point["y"])
+                expect(self_loop).to_have_attribute("data-selected", "true")
+                expect(pane.get_by_test_id("graph-diagram-detail-edge")).to_be_visible()
+                expect(pane.get_by_test_id("graph-diagram-detail-edge")).to_contain_text("retry")
+
+                # --- Click empty canvas: clears the selection, restores the neutral hint ---
+                box = svg.bounding_box()
+                assert box is not None
+                page.mouse.click(box["x"] + 5, box["y"] + 5)
+                expect(self_loop).not_to_have_attribute("data-selected", "true")
+                expect(pane.get_by_test_id("graph-diagram-detail-empty")).to_be_visible()
             finally:
                 browser.close()
 
