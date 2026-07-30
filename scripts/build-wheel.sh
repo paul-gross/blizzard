@@ -53,10 +53,35 @@ else
   log "PENDING (P5 frontend builder): no $WEB_DIR/package.json — shipping the committed placeholder frontend assets. Real Angular bundles embed here once the web workspace lands."
 fi
 
-# --- version override (dev builds / tag releases) ---------------------------
+# --- version override (dev builds / tag releases / local builds) ------------
+#
+# With BLIZZARD_VERSION set, the caller owns the version — that is how CI stamps
+# `0.<milestone>.0.dev<run>` and how a tag release stamps the tag. Both workflow
+# callers always set it.
+#
+# With it unset — a local `mise run build` — derive one instead of shipping
+# pyproject's bare version. A local build otherwise produces a wheel whose
+# version is identical to every other local build, so the daemon it installs
+# cannot say which commit it is running and a redeploy is indistinguishable from
+# a no-op at every HTTP surface. The dogfood runner is installed exactly this
+# way. A PEP 440 local segment (`+<sha>`) carries the commit without disturbing
+# the release version it is built from, and `.dirty` marks a tree with
+# uncommitted changes so a stamp never claims a commit it is not.
+EFFECTIVE_VERSION="${BLIZZARD_VERSION:-}"
+if [ -z "$EFFECTIVE_VERSION" ] && git rev-parse --git-dir >/dev/null 2>&1; then
+  BASE_VERSION="$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
+  LOCAL_SEGMENT="$(git rev-parse --short=9 HEAD 2>/dev/null || echo unknown)"
+  if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
+    LOCAL_SEGMENT="${LOCAL_SEGMENT}.dirty"
+  fi
+  EFFECTIVE_VERSION="${BASE_VERSION}+${LOCAL_SEGMENT}"
+  log "Local build — deriving wheel version -> $EFFECTIVE_VERSION"
+fi
+
 restore_version() { :; }
 trap 'restore_version' EXIT
-if [ -n "${BLIZZARD_VERSION:-}" ]; then
+if [ -n "$EFFECTIVE_VERSION" ]; then
+  BLIZZARD_VERSION="$EFFECTIVE_VERSION"
   log "Overriding wheel version -> $BLIZZARD_VERSION"
   cp pyproject.toml pyproject.toml.bak
   restore_version() { mv -f pyproject.toml.bak pyproject.toml 2>/dev/null || true; }
