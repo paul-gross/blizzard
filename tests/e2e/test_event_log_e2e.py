@@ -18,9 +18,13 @@ from __future__ import annotations
 import os
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import httpx
 import pytest
+
+if TYPE_CHECKING:
+    from playwright.sync_api import ViewportSize
 
 from blizzard.hub.events.broker import EVENT_LOGGED
 from tests.e2e.test_acceptance_loop import (
@@ -282,7 +286,7 @@ def test_the_events_tab_renders_filters_and_updates_live_in_the_browser(
 
 
 def test_the_events_grid_does_not_collapse_at_a_narrow_viewport(
-    tmp_path: Path, chromium_available: bool, narrow_viewport: dict[str, int]
+    tmp_path: Path, chromium_available: bool, narrow_viewport: ViewportSize
 ) -> None:
     """The Events tab's time-first grid (issue #153/#154) has a narrow-viewport fallback
     (issue #155) — below the board's own mobile cutoff the fixed grid tracks would

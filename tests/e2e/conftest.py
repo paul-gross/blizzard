@@ -9,8 +9,14 @@ runs the in-process scenarios on a machine that has never installed the browser.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    # Annotation-only: the module must stay importable on a machine that has never
+    # installed Playwright (see the module docstring's clean-skip contract).
+    from playwright.sync_api import ViewportSize
 
 
 @pytest.fixture(scope="session")
@@ -31,18 +37,18 @@ def chromium_available() -> bool:
 # web:shell-sweep — see blizzard-context:/verification/blizzard.md): a wide desktop
 # monitor, and a ~390px phone width, the narrow end of the range the mobile shell's
 # bottom nav actually routes to.
-_WIDE_VIEWPORT = {"width": 1400, "height": 900}
-_NARROW_VIEWPORT = {"width": 390, "height": 844}
+_WIDE_VIEWPORT: ViewportSize = {"width": 1400, "height": 900}
+_NARROW_VIEWPORT: ViewportSize = {"width": 390, "height": 844}
 
 
 @pytest.fixture(scope="session")
-def wide_viewport() -> dict[str, int]:
+def wide_viewport() -> ViewportSize:
     """A desktop-width `Page` viewport — the wide end of the narrow-viewport tier rule."""
-    return dict(_WIDE_VIEWPORT)
+    return _WIDE_VIEWPORT.copy()
 
 
 @pytest.fixture(scope="session")
-def narrow_viewport() -> dict[str, int]:
+def narrow_viewport() -> ViewportSize:
     """A ~390px phone-width `Page` viewport — the narrow end of the tier rule every
     component reachable from the mobile shell's bottom nav is held to (issue #171)."""
-    return dict(_NARROW_VIEWPORT)
+    return _NARROW_VIEWPORT.copy()

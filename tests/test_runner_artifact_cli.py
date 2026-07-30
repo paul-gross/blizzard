@@ -148,7 +148,7 @@ def test_list_errors_without_identity(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_get_gets_the_named_route_and_prints_json(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[tuple[str, dict]] = []
+    calls: list[tuple[str, dict | None]] = []
 
     def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float) -> _FakeResponse:
         calls.append((url, params))
