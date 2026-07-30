@@ -19,6 +19,13 @@ export type KitAsyncStateValue = 'loading' | 'error' | 'empty' | 'ready';
  * `tone` covers a state that reads with a variant color, distinct from the
  * plain default (dim) and `'error'` (red) — e.g. a "not available yet, but
  * that's expected" message in the accent color rather than the alarm color.
+ *
+ * `placement` picks the status line's layout: `'center'` (default) keeps the
+ * original `position: absolute` centering, right for a panel-sized void
+ * (board, chunk dock); `'inline'` renders the same states in normal flow with
+ * left-aligned padding, right for a list panel whose existing `.none` copy sat
+ * as a padded top-left line — adopting the kit there is not a silent visual
+ * regression.
  */
 @Component({
   selector: 'fleet-kit-async-state',
@@ -29,13 +36,18 @@ export type KitAsyncStateValue = 'loading' | 'error' | 'empty' | 'ready';
         <ng-content />
       }
       @case ('loading') {
-        <p class="status" [attr.data-testid]="loadingTestid()">{{ loadingText() }}</p>
+        <p class="status" [class.inline]="placement() === 'inline'" [attr.data-testid]="loadingTestid()">{{ loadingText() }}</p>
       }
       @case ('error') {
-        <p class="status error" [attr.data-testid]="errorTestid()">{{ errorText() }}</p>
+        <p class="status error" [class.inline]="placement() === 'inline'" [attr.data-testid]="errorTestid()">{{ errorText() }}</p>
       }
       @case ('empty') {
-        <p class="status" [class.accent]="tone() === 'accent'" [attr.data-testid]="emptyTestid()">{{ emptyText() }}</p>
+        <p
+          class="status"
+          [class.inline]="placement() === 'inline'"
+          [class.accent]="tone() === 'accent'"
+          [attr.data-testid]="emptyTestid()"
+        >{{ emptyText() }}</p>
       }
     }
   `,
@@ -52,6 +64,18 @@ export type KitAsyncStateValue = 'loading' | 'error' | 'empty' | 'ready';
       color: var(--label-dim);
       font-size: var(--fs-sm);
       letter-spacing: 0.12em;
+    }
+    .status.inline {
+      position: static;
+      left: auto;
+      top: auto;
+      transform: none;
+      display: block;
+      padding: 10px 8px;
+      margin: 0;
+      font-size: var(--fs-sm);
+      letter-spacing: 0.08em;
+      white-space: normal;
     }
     .status.error {
       color: var(--red);
@@ -73,6 +97,11 @@ export class KitAsyncState {
    * default dim label color — for an expected, in-progress "not here yet"
    * reading distinct from both the default empty state and a fault. */
   readonly tone = input<'default' | 'accent'>('default');
+
+  /** `'center'` (default) keeps the status line absolutely centered in a
+   * positioned ancestor; `'inline'` renders it left-aligned in normal flow,
+   * padded like the list-panel `.none` copy it replaces. */
+  readonly placement = input<'center' | 'inline'>('center');
 
   /** Each state's rendered `data-testid`, or `null` for none — every consumer
    * names its own (they differ per caller, and only one state is ever
