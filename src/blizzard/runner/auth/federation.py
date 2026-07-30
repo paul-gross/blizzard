@@ -16,7 +16,9 @@ raises :class:`NeedsFederationBounce`, caught by the app-level exception handler
 browser therefore completes the whole round trip with no manual navigation (issue #95's
 own AC). ``login`` mints a random ``state``, stashes it (and the original
 ``return_to``) in two short-lived cookies (a double-submit pattern — no server-side
-state needed for this leg), and redirects to the hub's own
+state needed for this leg; :func:`_bounce_cookie_policy` owns the ``SameSite``/``Secure``
+they must carry to survive a hub that does not share this runner's site), and redirects
+to the hub's own
 ``GET /api/auth/authorize?client=<runner_id>&redirect_uri=<this runner's own
 /api/auth/callback>&state=...&response_mode=form_post``. ``callback`` receives the
 hub's auto-submitting form POST, validates the round-tripped ``state`` against the
@@ -36,7 +38,7 @@ from __future__ import annotations
 
 import secrets
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 from urllib.parse import parse_qs, quote
 
 import httpx
@@ -212,12 +214,21 @@ def login(request: Request, return_to: str = "/") -> Response:
         "&response_mode=form_post"
     )
     response = RedirectResponse(target)
-    response.set_cookie(_BOUNCE_STATE_COOKIE, state, httponly=True, samesite="lax", max_age=_BOUNCE_COOKIE_MAX_AGE)
+    samesite, secure = _bounce_cookie_policy(request)
+    response.set_cookie(
+        _BOUNCE_STATE_COOKIE,
+        state,
+        httponly=True,
+        samesite=samesite,
+        secure=secure,
+        max_age=_BOUNCE_COOKIE_MAX_AGE,
+    )
     response.set_cookie(
         _BOUNCE_RETURN_COOKIE,
         _safe_return_to(return_to),
         httponly=True,
-        samesite="lax",
+        samesite=samesite,
+        secure=secure,
         max_age=_BOUNCE_COOKIE_MAX_AGE,
     )
     return response
@@ -309,6 +320,38 @@ def read_session(request: Request) -> RunnerAuthSessionView:
         return RunnerAuthSessionView(auth_enabled=False, username=None)
     session = _resolve_human_session(request)
     return RunnerAuthSessionView(auth_enabled=True, username=session.username if session is not None else None)
+
+
+#: Origins a browser treats as *potentially trustworthy* regardless of scheme, so a
+#: ``Secure`` cookie is both settable and sent back over plain ``http`` there.
+_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+
+def _bounce_cookie_policy(request: Request) -> tuple[Literal["lax", "none"], bool]:
+    """``SameSite``/``Secure`` for the two short-lived bounce cookies.
+
+    The hub returns the federation token by ``response_mode=form_post`` — a POST issued
+    from the *hub's* origin to this runner's callback. When the hub does not share a
+    site with the runner (a hosted hub against a loopback runner, say), that POST is
+    **cross-site**, and a ``SameSite=Lax`` cookie is not sent on it: the callback then
+    sees no state and refuses the login as "bad or expired state". Surviving that POST
+    requires ``SameSite=None``, which browsers only honor together with ``Secure``.
+
+    ``Secure`` is minted only where a browser will actually accept it — an https origin,
+    or a loopback one (potentially trustworthy by definition, which is what makes this
+    work for a plain-http ``127.0.0.1`` runner). Anywhere else, fall back to ``Lax``:
+    a plain-http non-loopback runner cannot hold a ``Secure`` cookie at all, so claiming
+    ``None`` there would drop the cookie outright and break the same-site deployment
+    that works today.
+
+    Relaxing to ``None`` does not weaken the CSRF property this cookie exists for. It
+    stays ``HttpOnly`` and short-lived, and the callback still requires a posted
+    ``state`` that matches it — which an attacker who cannot read the cookie cannot
+    produce.
+    """
+    if _cookie_is_secure(request) or (request.url.hostname or "").lower() in _LOOPBACK_HOSTS:
+        return "none", True
+    return "lax", False
 
 
 def _cookie_is_secure(request: Request) -> bool:

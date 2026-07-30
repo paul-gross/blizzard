@@ -72,6 +72,7 @@ def _build_app(
     jwk: dict[str, str] | None = None,
     trusted_proxies: tuple[str, ...] = (),
     client_host: str | None = None,
+    base_url: str | None = None,
 ) -> TestClient:
     engine = create_engine_from_url(f"sqlite:///{tmp_path / 'runner.db'}")
     metadata.create_all(engine)
@@ -101,9 +102,12 @@ def _build_app(
         hub_http_client=_hub_client(oauth_enabled=oauth_enabled, jwk=jwk),
         jti_cache=JtiCacheRepository(engine),
     )
+    kwargs: dict[str, object] = {}
     if client_host is not None:
-        return TestClient(app, client=(client_host, 41000))
-    return TestClient(app)
+        kwargs["client"] = (client_host, 41000)
+    if base_url is not None:
+        kwargs["base_url"] = base_url
+    return TestClient(app, **kwargs)  # type: ignore[arg-type]
 
 
 def test_the_web_surface_is_reachable_with_no_session_when_the_hub_runs_no_idp_surface(tmp_path: Path) -> None:
@@ -355,3 +359,52 @@ def test_callback_ignores_forwarded_proto_with_no_trusted_proxies_configured(tmp
     resp = _bounce_callback(client, private_key, headers={"x-forwarded-proto": "https"})
     assert resp.status_code == 303
     assert "Secure" not in resp.headers["set-cookie"]
+
+
+# --- the bounce cookies' SameSite/Secure policy (a hub off this runner's site) ------
+#
+# The hub returns the federation token by `response_mode=form_post` — a POST from the
+# HUB's origin to this runner's callback. A hub that does not share a site with the
+# runner makes that POST cross-site, where a `SameSite=Lax` cookie is not sent at all,
+# so the callback sees no state and refuses the login. These pin that the bounce
+# cookies are minted to survive it wherever a browser will accept `Secure`, and that a
+# plain-http non-loopback runner (which cannot hold a `Secure` cookie) still gets `Lax`
+# rather than a cookie the browser drops outright.
+
+
+def _bounce_set_cookie_headers(resp) -> str:
+    return " | ".join(v for k, v in resp.headers.items() if k.lower() == "set-cookie")
+
+
+def test_bounce_cookies_are_samesite_none_secure_on_a_loopback_runner(tmp_path: Path) -> None:
+    """A loopback origin is potentially trustworthy, so `Secure` is honored over plain
+    http — which is what lets a 127.0.0.1 runner federate against a hosted hub."""
+    _private_key, jwk = _keypair()
+    client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk, base_url="http://127.0.0.1:8431")
+    resp = client.get("/api/auth/login", follow_redirects=False)
+    header = _bounce_set_cookie_headers(resp)
+    assert "bz_runner_bounce_state" in header
+    assert "samesite=none" in header.lower()
+    assert "secure" in header.lower()
+
+
+def test_bounce_cookies_are_samesite_none_secure_over_https(tmp_path: Path) -> None:
+    _private_key, jwk = _keypair()
+    client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk, base_url="https://runner-a.example")
+    resp = client.get("/api/auth/login", follow_redirects=False)
+    header = _bounce_set_cookie_headers(resp)
+    assert "samesite=none" in header.lower()
+    assert "secure" in header.lower()
+
+
+def test_bounce_cookies_stay_lax_on_a_plain_http_non_loopback_runner(tmp_path: Path) -> None:
+    """No regression for the same-site plain-http deployment: a browser drops a `Secure`
+    cookie on such an origin, so claiming `SameSite=None` there would lose the cookie
+    entirely rather than merely restrict it."""
+    _private_key, jwk = _keypair()
+    client = _build_app(tmp_path, oauth_enabled=True, jwk=jwk, base_url="http://runner-a.example")
+    resp = client.get("/api/auth/login", follow_redirects=False)
+    header = _bounce_set_cookie_headers(resp).lower()
+    assert "bz_runner_bounce_state" in header
+    assert "samesite=lax" in header
+    assert "secure" not in header
