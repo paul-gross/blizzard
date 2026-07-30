@@ -79,6 +79,11 @@ from blizzard.hub.domain.work import (
 from blizzard.hub.work_sources.source import IWorkSourceRegistry
 
 _HUB_RUNNER_ID = "hub"
+# What a hub node writes when its outcome has no authored edge (see `_route`). The
+# artifact is both the operator-visible record in chunk detail and the
+# once-per-(node, epoch) dedupe key gating the event_log row beside it.
+_UNROUTABLE_ARTIFACT_NAME = "hub-unroutable-outcome"
+_EVENT_UNROUTABLE_OUTCOME = "hub-node-unroutable-outcome"
 
 # The staleness window a live hub-execution slot is reclaimed after (#65's ``TTL
 # against the injected clock`` — never wall time, so tests under a
@@ -597,12 +602,54 @@ class HubNodeExecutor:
         edge = graph.edge_for_choice(node.node_id, choice)
         if edge is None:
             # No authored edge for this outcome — a graph-authoring gap, not a crash;
-            # nothing is written, so this is safely re-polled once the graph is fixed.
+            # nothing is routed, so this is safely re-polled once the graph is fixed.
+            #
+            # "Safely re-polled" means re-polled *forever*, though: the node keeps its
+            # epoch, so no retry budget, no bounce budget and no escalation ever moves.
+            # Left mute that is invisible — a `deliver` whose land script died on a
+            # missing env var re-ran the identical crash every ~31s for 34 minutes in
+            # production (2026-07-30) while `docker logs` stayed clean, because a step's
+            # own log artifact is idempotent per (chunk, node, name, epoch) and so only
+            # the very first attempt ever wrote one.
+            #
+            # So announce it once per (node, epoch): the artifact is the operator-visible
+            # record in chunk detail AND the dedupe key gating one error-severity
+            # event_log row, which surfaces the gap wherever events are watched without
+            # writing a row per poll.
+            now = self._clock.now()
+            detail = f"no authored edge for choice `{choice}` on hub node `{node.name}`"
+            authored = sorted(c.name for c in node.choices)
+            announced = self._chunks.record_hub_artifact(
+                chunk.chunk_id,
+                node_id=node.node_id,
+                node_name=node.name,
+                epoch=epoch,
+                name=_UNROUTABLE_ARTIFACT_NAME,
+                content=(
+                    f"{detail}\n\n"
+                    f"authored choices: {', '.join(authored) or '<none>'}\n"
+                    "This node will re-poll the same outcome until the graph authors an "
+                    "edge for it — nothing else will move it.\n"
+                ),
+                at=now,
+            )
+            if announced:
+                self._chunks.record_event(
+                    severity="error",
+                    kind=_EVENT_UNROUTABLE_OUTCOME,
+                    runner_id=_HUB_RUNNER_ID,
+                    chunk_id=chunk.chunk_id,
+                    lease_id=None,
+                    node_name=node.name,
+                    message=detail,
+                    detail={"choice": choice, "epoch": epoch, "authored_choices": authored},
+                    at=now,
+                )
             return HubRunResult(
                 outcome_choice=choice,
                 to_node_name="",
                 wrote_transition=False,
-                detail=f"no authored edge for choice `{choice}` on hub node `{node.name}`",
+                detail=detail,
             )
         to_node_id = RESERVED_TERMINAL if edge.to_node_name == RESERVED_TERMINAL else _resolve(graph, edge.to_node_name)
         if to_node_id is None:

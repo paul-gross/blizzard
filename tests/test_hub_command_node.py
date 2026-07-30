@@ -716,6 +716,69 @@ def test_nonzero_exit_maps_to_default_failure_edge(tmp_path: Path) -> None:
     assert detail["current_node_name"] == "build"
 
 
+#: `merge` authors only `success` — the shape every stock delivery graph has, where
+#: `deliver` offers `landed`/`conflict` and nothing for a step that simply died. A
+#: non-zero exit here defaults to `failure`, which no edge names.
+_UNROUTABLE_GRAPH_YAML = _HUB_CMD_GRAPH_YAML.replace(
+    """        failure:
+          description: Failed to land.
+          to: build
+""",
+    "",
+)
+
+
+@pytest.mark.component
+def test_an_unroutable_outcome_is_announced_once_per_epoch(tmp_path: Path) -> None:
+    """A step exiting non-zero into an outcome the graph never authored strands the
+    node — it re-polls the identical failure forever, consuming no retry or bounce
+    budget. That is safe for the store but was historically silent, which is how a
+    `deliver` crashing on a missing env var burned 34 minutes in production unnoticed.
+
+    It must announce itself exactly once per (node, epoch): once so an operator sees
+    it, only once so a 31-second poll loop does not flood the event feed.
+    """
+    runner = FakeHubCommandRunner()
+    runner.arm("land-the-repo", CommandResult(exit_code=1, stdout="", stderr="boom"))
+    hub = build_hub(tmp_path, hub_command_runner=runner, hub_workdir=FakeHubWorkdir())
+    chunk_id, build_node_id, _graph = _to_merge_node(hub, graph_yaml=_UNROUTABLE_GRAPH_YAML)
+
+    apply = _submit_build_pass(hub, chunk_id, build_node_id, 1)
+    assert apply.json()["outcome"] == "hub_node_taken"
+
+    # Stranded on `merge`: nothing routed, so the node still holds the chunk — and it
+    # reads as a healthy `delivering`, which is exactly why the announcement matters.
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["status"] == "delivering"
+    assert detail["current_node_name"] == "merge"
+
+    def _announcements() -> tuple[list[dict], list]:
+        art = [
+            a
+            for a in hub.client.get(f"/api/chunks/{chunk_id}").json()["artifacts"]
+            if a["name"] == "hub-unroutable-outcome"
+        ]
+        ev = [e for e in hub.services.chunks.list_events(chunk_id=chunk_id) if e.kind == "hub-node-unroutable-outcome"]
+        return art, ev
+
+    artifacts, events = _announcements()
+    assert len(artifacts) == 1, "the gap must surface in chunk detail"
+    assert len(events) == 1, "and once in the operational event feed"
+    assert events[0].severity == "error"
+    assert "no authored edge for choice `failure`" in events[0].message
+    assert events[0].detail["authored_choices"] == ["success"]
+
+    # Re-poll: the node re-runs and fails identically. Still exactly one of each —
+    # the artifact's (chunk, node, name, epoch) idempotency is what gates the event.
+    again = hub.client.post(f"/api/fleet/chunks/{chunk_id}/hub-advance")
+    assert again.json()["ran"] is True
+    assert len(runner.calls) == 2
+
+    artifacts, events = _announcements()
+    assert len(artifacts) == 1, "a poll loop must not write an artifact per attempt"
+    assert len(events) == 1, "nor an event per attempt"
+
+
 @pytest.mark.component
 def test_a_printed_choice_overrides_the_exit_code_default(tmp_path: Path) -> None:
     """Exit 0 but the command prints `failure` on its last stdout line: the printed
