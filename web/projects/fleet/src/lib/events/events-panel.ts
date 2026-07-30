@@ -1,5 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, output, signal } from '@angular/core';
 
+import type { KitAsyncStateValue } from '../kit/kit-async-state';
+import { asyncState } from '../query-state';
 import { EventsView } from './events-view';
 import { injectHubEventsQuery } from './events.query';
 
@@ -36,8 +38,7 @@ import { injectHubEventsQuery } from './events.query';
       [chunk]="chunkId()"
       [runnerIds]="runnerIds()"
       [chunkIds]="chunkIds()"
-      [loading]="query.isPending()"
-      [error]="query.isError()"
+      [state]="state()"
       (selectChunk)="selectChunk.emit($event)"
       (filterChange)="onFilterChange($event)"
       (runnerFilterChange)="onRunnerFilterChange($event)"
@@ -68,6 +69,10 @@ export class EventsPanel {
 
   /** The filtered event feed; empty until the first read resolves. */
   protected readonly events = computed(() => this.query.data() ?? []);
+
+  /** The feed's async state (AC 5) — derived from the filtered read alone; the
+   * severity-only {@link optionsQuery} only supplies the filter chip universe. */
+  protected readonly state = computed<KitAsyncStateValue>(() => asyncState(this.query, this.events().length === 0));
 
   /** The runner-id universe for the filter chips: the distinct runners in the
    * severity-scoped feed, plus the active runner so its chip never disappears, sorted.
