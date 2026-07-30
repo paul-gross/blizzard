@@ -140,6 +140,22 @@ describe('BoardPage', () => {
     await settle(harness.fixture);
   }
 
+  it('shows the board loading state before the chunks read resolves, then the populated board', async () => {
+    const harness = await RouterTestingHarness.create();
+    TestBed.inject(Router).setUpLocationChangeListener();
+    await harness.navigateByUrl('/board');
+    harness.fixture.detectChanges();
+    const el = harness.fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="board-loading"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="empty-state"]')).toBeNull();
+
+    await settle(harness.fixture);
+
+    expect(el.querySelector('[data-testid="board-loading"]')).toBeNull();
+    expect(el.querySelectorAll('[data-testid="chunk-card"]').length).toBeGreaterThan(0);
+  });
+
   it('renders the shared fleet board shell and the operator controls', async () => {
     const { el } = await open();
 

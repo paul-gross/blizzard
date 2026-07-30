@@ -5,6 +5,7 @@ import type { BoardCard } from '../board-card/board-card';
 import { BoardColumn, type BoardReposition } from './board-column';
 import { compactRef } from '../compact-ref';
 import { LANES, STATUS_LANE } from '../chunk-lanes';
+import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
 import { KitPanel } from '../kit/kit-panel';
 
 export type { BoardCard, BoardReposition };
@@ -30,7 +31,7 @@ export type { BoardCard, BoardReposition };
 @Component({
   selector: 'fleet-board-shell',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BoardColumn, KitPanel],
+  imports: [BoardColumn, KitPanel, KitAsyncState],
   template: `
     <div class="mc" data-testid="board-shell">
       <fleet-kit-panel
@@ -54,9 +55,15 @@ export type { BoardCard, BoardReposition };
             />
           }
         </div>
-        @if (total() === 0) {
-          <p class="empty" data-testid="empty-state">NO CHUNKS — FLEET IDLE</p>
-        }
+        <fleet-kit-async-state
+          [state]="state()"
+          loadingText="LOADING…"
+          loadingTestid="board-loading"
+          errorText="FAILED TO LOAD FLEET"
+          errorTestid="board-error"
+          emptyText="NO CHUNKS — FLEET IDLE"
+          emptyTestid="empty-state"
+        />
       </fleet-kit-panel>
     </div>
   `,
@@ -107,16 +114,6 @@ export type { BoardCard, BoardReposition };
       flex: 1;
       min-height: 0;
     }
-    .empty {
-      position: absolute;
-      left: 50%;
-      top: 55%;
-      transform: translate(-50%, -50%);
-      color: var(--label-dim);
-      font-size: var(--fs-sm);
-      letter-spacing: 0.12em;
-      pointer-events: none;
-    }
   `,
 })
 export class BoardShell {
@@ -131,6 +128,11 @@ export class BoardShell {
    * than jumping the queue or vanishing.
    */
   readonly readyOrder = input<readonly string[]>([]);
+
+  /** The chunks read's async state, derived by the container from its query
+   * (`asyncState(chunksQuery, chunks().length === 0)`) — the queue read supplies
+   * only the READY lane's order, so it never gates the board's emptiness. */
+  readonly state = input.required<KitAsyncStateValue>();
 
   /** Emitted with a chunk id when its card is activated — fills the detail dock. */
   readonly selectChunk = output<string>();
@@ -202,8 +204,6 @@ export class BoardShell {
     });
     return grouped;
   });
-
-  protected readonly total = computed(() => this.chunks().length);
 
   protected cardsFor(columnKey: string): readonly BoardCard[] {
     return this.cards().get(columnKey) ?? [];

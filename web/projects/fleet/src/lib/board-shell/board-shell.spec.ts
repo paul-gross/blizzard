@@ -5,6 +5,7 @@ import { By } from '@angular/platform-browser';
 
 import type { ChunkSummary } from '../api/hub';
 import { compactRef } from '../compact-ref';
+import type { KitAsyncStateValue } from '../kit/kit-async-state';
 import { BoardShell } from './board-shell';
 
 const READY = (suffix: string): ChunkSummary => ({
@@ -24,11 +25,13 @@ describe('BoardShell', () => {
   });
 
   /** Render the board off a chunk list (and, when the READY lane is under test,
-   * the hub's dispatch order for it), settled. */
-  const render = async (chunks: ChunkSummary[], readyOrder: string[] = []) => {
+   * the hub's dispatch order for it), settled. Defaults to `'ready'` — most of
+   * this spec is exercising populated-board behavior, not the triad itself. */
+  const render = async (chunks: ChunkSummary[], readyOrder: string[] = [], state: KitAsyncStateValue = 'ready') => {
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('chunks', chunks);
     fixture.componentRef.setInput('readyOrder', readyOrder);
+    fixture.componentRef.setInput('state', state);
     await fixture.whenStable();
     return fixture;
   };
@@ -41,6 +44,7 @@ describe('BoardShell', () => {
 
   it('renders the board shell with all six columns and an empty state', async () => {
     const fixture = TestBed.createComponent(BoardShell);
+    fixture.componentRef.setInput('state', 'empty');
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -54,8 +58,38 @@ describe('BoardShell', () => {
     expect(el.querySelector('[data-testid="empty-state"]')?.textContent).toContain('NO CHUNKS');
   });
 
+  it('shows a loading indicator instead of the empty state while the chunks read is pending (AC 1)', async () => {
+    const fixture = TestBed.createComponent(BoardShell);
+    fixture.componentRef.setInput('state', 'loading');
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="board-loading"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="empty-state"]')).toBeNull();
+  });
+
+  it('shows an error indicator when the chunks read fails', async () => {
+    const fixture = TestBed.createComponent(BoardShell);
+    fixture.componentRef.setInput('state', 'error');
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="board-error"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="empty-state"]')).toBeNull();
+  });
+
+  it('still renders the lane grid while loading — the board keeps its shape', async () => {
+    const fixture = TestBed.createComponent(BoardShell);
+    fixture.componentRef.setInput('state', 'loading');
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelectorAll('[data-col]')).toHaveLength(6);
+  });
+
   it('engraves the backlog column BACKLOG and the queue column READY, in dispatch order', async () => {
     const fixture = TestBed.createComponent(BoardShell);
+    fixture.componentRef.setInput('state', 'ready');
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -70,6 +104,7 @@ describe('BoardShell', () => {
     ];
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('chunks', chunks);
+    fixture.componentRef.setInput('state', 'ready');
     let promoted: string | undefined;
     fixture.componentInstance.promote.subscribe((id) => (promoted = id));
     await fixture.whenStable();
@@ -117,6 +152,7 @@ describe('BoardShell', () => {
     ];
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('chunks', chunks);
+    fixture.componentRef.setInput('state', 'ready');
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -131,6 +167,7 @@ describe('BoardShell', () => {
     ];
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('chunks', chunks);
+    fixture.componentRef.setInput('state', 'ready');
     let selected: string | undefined;
     fixture.componentInstance.selectChunk.subscribe((id) => (selected = id));
     await fixture.whenStable();
@@ -153,6 +190,7 @@ describe('BoardShell', () => {
     ];
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('chunks', chunks);
+    fixture.componentRef.setInput('state', 'ready');
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -177,6 +215,7 @@ describe('BoardShell', () => {
     ];
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('chunks', chunks);
+    fixture.componentRef.setInput('state', 'ready');
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -205,6 +244,7 @@ describe('BoardShell', () => {
     ];
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('chunks', chunks);
+    fixture.componentRef.setInput('state', 'ready');
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -241,6 +281,7 @@ describe('BoardShell', () => {
     ];
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('chunks', chunks);
+    fixture.componentRef.setInput('state', 'ready');
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -267,6 +308,7 @@ describe('BoardShell', () => {
     ];
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('chunks', chunks);
+    fixture.componentRef.setInput('state', 'ready');
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -279,6 +321,7 @@ describe('BoardShell', () => {
     ];
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('chunks', chunks);
+    fixture.componentRef.setInput('state', 'ready');
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 

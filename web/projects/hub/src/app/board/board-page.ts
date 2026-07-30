@@ -6,6 +6,8 @@ import {
   EventLogPanel,
   QuestionsPanel,
   RunnerPanel,
+  asyncState,
+  type KitAsyncStateValue,
   injectGroupChunksMutation,
   injectHubChunksQuery,
   injectHubQueueQuery,
@@ -58,6 +60,7 @@ import { injectBoardSelection } from './board-selection';
           class="board"
           [chunks]="chunks()"
           [readyOrder]="readyOrder()"
+          [state]="boardState()"
           [selectedChunkId]="selected()"
           (selectChunk)="select($event)"
           (promote)="promoteChunk.mutate({ chunkId: $event })"
@@ -133,6 +136,13 @@ export class BoardPage {
 
   /** The live fleet chunk list; empty until the first read resolves. */
   protected readonly chunks = computed(() => this.chunksQuery.data() ?? []);
+
+  /** The board's async state (AC 1, AC 2) — derived from the chunks query
+   * alone: the queue read only supplies the READY lane's order, so it never
+   * gates the board's emptiness. */
+  protected readonly boardState = computed<KitAsyncStateValue>(() =>
+    asyncState(this.chunksQuery, this.chunks().length === 0),
+  );
 
   /**
    * The ready queue in the hub's own dispatch order, as bare ids — the READY
