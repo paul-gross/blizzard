@@ -4,7 +4,7 @@
  * `blizzard-context:/verification/blizzard.md`'s `web:structural-gate`
  * method.
  *
- * Two halves, both live:
+ * Three checks, all live:
  *
  *   1. The chrome-duplication sweep (blizzard-context bzh:frontend-kit): the
  *      retired `.panel`/`.p-hdr`/`.p-body`/`.status`/`.lbl` chrome-class
@@ -23,6 +23,16 @@
  *      extraction (issue #137) — `MAX_LINES_EXEMPT_FILES` is empty again, so a
  *      *new* oversized file still fails the gate rather than being silently
  *      exempted by precedent.
+ *   3. An empty-state-without-the-kit sweep (blizzard#181, blizzard-context
+ *      the new rule sibling to bzh:frontend-kit-floor in
+ *      architecture/frontend-structure.md): a component outside
+ *      `fleet/lib/kit/` that renders a `data-testid` matching `*-empty` must
+ *      also reference `fleet-kit-async-state` somewhere in the same file —
+ *      the file-level signal that its empty copy is gated by the triad
+ *      rather than a bare length check — unless it is named in
+ *      `EMPTY_STATE_EXEMPT_FILES`, each entry a view the blizzard#181 sweep
+ *      confirmed is reachable only once its *parent* has already resolved
+ *      (so the view's own empty copy can never render mid-load).
  *
  * Run from `web/`: `npm run structural-gate` (`node scripts/structural-gate.js`).
  */
@@ -73,6 +83,35 @@ const MAX_LINES = 400;
  */
 const MAX_LINES_EXEMPT_FILES = [];
 
+/**
+ * `EMPTY_STATE_EXEMPT_FILES` — files carrying a `*-empty` `data-testid` with
+ * no `fleet-kit-async-state` reference of their own, each confirmed by the
+ * blizzard#181 sweep to be reachable only after a *parent* container's own
+ * triad has already resolved (so the empty copy here can never render before
+ * its data is known) — a rest state, not an unmediated query result.
+ */
+const EMPTY_STATE_EXEMPT_FILES = [
+  // Children of `chunk-detail.ts`, itself gated by `ChunkDetailPanel`'s
+  // `[detail]` input never arriving until the container's own detail query
+  // resolves — these two render only once that happened.
+  path.join('fleet', 'src', 'lib', 'chunk-detail', 'chunk-timeline.ts'),
+  path.join('fleet', 'src', 'lib', 'chunk-detail', 'chunk-artifacts.ts'),
+  // The routed chunk page's Artifacts tab — reachable only once `ChunkPage`'s
+  // own detail read has resolved and handed it a `detail` input.
+  path.join('hub', 'src', 'app', 'board', 'chunk', 'chunk-artifacts-tab.ts'),
+  // The admin table — `admin-page.ts` wraps it in `fleet-kit-async-state`
+  // itself; the table is the presentational leaf, not the container
+  // (`bzh:frontend-container-presentational`), so it owns no triad of its own.
+  path.join('fleet', 'src', 'lib', 'admin', 'users-table.ts'),
+  // The diagram's node/edge inspector — its `*-empty` is a "nothing selected"
+  // rest state inside a diagram `graph-detail.ts` already renders behind its
+  // own triad, not a second query result.
+  path.join('fleet', 'src', 'lib', 'graphs', 'graph-diagram-detail.ts'),
+  // local-panel's chunk-detail counterpart — same reasoning as the fleet pair
+  // above; deferred to issue #83's rename per this file's other exemption.
+  path.join('local-panel', 'src', 'lib', 'chunk-detail.ts'),
+];
+
 // The retired chrome-class blocks (blizzard-context bzh:frontend-kit Detect).
 // Matched as a CSS class selector opener — the name as a whole word, directly
 // followed by a compound-selector continuation (`.other`), a combinator, or
@@ -80,6 +119,10 @@ const MAX_LINES_EXEMPT_FILES = [];
 // still-legitimate local class) don't false-positive.
 const RETIRED_CLASSES = ['panel', 'p-hdr', 'p-body', 'status', 'lbl'];
 const RETIRED_PATTERN = new RegExp(`\\.(${RETIRED_CLASSES.join('|')})(?![\\w-])\\s*[.,{]`, 'g');
+
+// A `data-testid` naming an empty-state handle (blizzard#181's own naming
+// convention throughout this sweep: `*-empty`).
+const EMPTY_STATE_TESTID_PATTERN = /data-testid="[\w-]*-empty"/;
 
 /** @param {string} dir */
 function walk(dir) {
@@ -134,6 +177,8 @@ function main() {
   const chromeViolations = [];
   /** @type {{ file: string, lines: number }[]} */
   const lineViolations = [];
+  /** @type {string[]} */
+  const emptyStateViolations = [];
 
   for (const file of files) {
     const rel = path.relative(PROJECTS_DIR, file);
@@ -152,6 +197,15 @@ function main() {
     if (isComponentFile(source) && !MAX_LINES_EXEMPT_FILES.includes(rel)) {
       const lines = countLines(source);
       if (lines > MAX_LINES) lineViolations.push({ file: rel, lines });
+    }
+
+    if (
+      !isExempt(rel) &&
+      !EMPTY_STATE_EXEMPT_FILES.includes(rel) &&
+      EMPTY_STATE_TESTID_PATTERN.test(source) &&
+      !source.includes('fleet-kit-async-state')
+    ) {
+      emptyStateViolations.push(rel);
     }
   }
 
@@ -177,7 +231,19 @@ function main() {
     return;
   }
 
-  console.log('structural-gate: chrome-duplication sweep and max-lines ceiling both clean.');
+  if (emptyStateViolations.length > 0) {
+    console.error('structural-gate: *-empty data-testid rendered without fleet-kit-async-state:\n');
+    for (const rel of emptyStateViolations) console.error(`  ${rel}`);
+    console.error(
+      '\nGate the empty copy behind fleet-kit-async-state (query-state.ts derives the state), or — if this ' +
+        'view is reachable only after a parent has already resolved — add it to EMPTY_STATE_EXEMPT_FILES with ' +
+        'a one-line reason, per blizzard-context:/architecture/frontend-structure.md.',
+    );
+    process.exitCode = 1;
+    return;
+  }
+
+  console.log('structural-gate: chrome-duplication sweep, max-lines ceiling, and empty-state sweep all clean.');
 }
 
 main();
