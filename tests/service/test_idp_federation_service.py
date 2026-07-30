@@ -44,6 +44,36 @@ _SECRET_ENV = "BZ_OAUTH_TEST_SECRET"
 _SECRET = "test-secret"
 _RUNNER_ID = "runner-svc-a"
 
+_BOUNCE_COOKIES = ("bz_runner_bounce_state", "bz_runner_bounce_return")
+
+
+def _replay_bounce_cookies(runner: httpx.Client, login_resp: httpx.Response) -> None:
+    """Re-set the bounce cookies on ``runner`` so the callback POST carries them, as a
+    browser's would.
+
+    The runner mints these two ``SameSite=None; Secure`` on any origin a browser counts
+    as *potentially trustworthy*, loopback included, which is what lets a plain-``http``
+    ``127.0.0.1`` runner hold them at all
+    (``blizzard.runner.auth.federation._bounce_cookie_policy``). A browser applies that
+    same loopback exception on the way back out and returns them on the hub's cross-site
+    form POST. ``http.cookiejar`` — what backs an ``httpx`` client's jar — implements the
+    bare RFC 6265 rule with no such exception and withholds *any* ``Secure`` cookie from
+    an ``http`` request, so the jar alone never returns them here and every callback
+    fails as "bad or expired state". That is an artifact of the stand-in client, not of
+    the wire leg under test, so replay them as plain (non-``Secure``) cookies — one
+    header entry each, since the jar still withholds the ``Secure`` originals.
+
+    Installing a jar policy instead does not work, and fails *silently*: ``httpx``'s
+    ``_merge_cookies`` rebuilds a default-policy ``CookieJar`` on every single request,
+    so a policy set on the client is discarded before the cookie header is ever built.
+
+    This tier owns the JWT/JWKS wire leg; the browser's own cookie handling is pinned by
+    ``tests/test_runner_federation.py`` (the attributes actually minted) and by the
+    real-browser e2e bounce scenario.
+    """
+    for name in _BOUNCE_COOKIES:
+        runner.cookies.set(name, login_resp.cookies[name])
+
 
 @contextlib.contextmanager
 def _oauth_hub(
@@ -144,6 +174,7 @@ def _bounce_once(hub: httpx.Client, runner: httpx.Client) -> None:
     assert token_match is not None and state_match is not None
     assert state_match.group(1) == state  # round-tripped intact
 
+    _replay_bounce_cookies(runner, login_resp)
     callback_resp = runner.post(
         "/api/auth/callback",
         content=f"token={token_match.group(1)}&state={state_match.group(1)}",
@@ -305,6 +336,7 @@ def test_a_two_provider_bounce_resumes_through_the_login_chooser(tmp_path: Path)
 
                 # 4. Hand the delivered token to the runner's own callback: it ends in a
                 #    runner-domain session with no manual re-visit of the runner.
+                _replay_bounce_cookies(runner, login_resp)
                 callback_resp = runner.post(
                     "/api/auth/callback",
                     content=f"token={token_match.group(1)}&state={state_match.group(1)}",
