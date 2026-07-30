@@ -101,6 +101,17 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+      # packaging/docker/Dockerfile does `COPY dist/blizzard-*.whl` — it installs a
+      # wheel from the build context rather than building one itself. The tag
+      # `release` job satisfies that by running build-wheel.sh earlier in its OWN
+      # job; here the wheel already exists as dev-build's uploaded artifact, so
+      # download it into dist/ instead of building a second one. That also makes
+      # the image carry byte-identical the wheel published for this commit.
+      - name: fetch the dev wheel dev-build produced (the Dockerfile's build context)
+        uses: actions/download-artifact@v4
+        with:
+          name: blizzard-dev-wheel-${{ needs.dev-build.outputs.version }}
+          path: dist
       - name: derive dev image tags (edge + sha-<full-git-sha>) and OCI annotations
         id: image_meta
         run: |

@@ -58,6 +58,19 @@ def test_dev_build_job_exposes_its_version_as_an_output() -> None:
     assert dev_build.get("outputs", {}).get("version")
 
 
+def test_dev_image_puts_a_wheel_in_dist_before_building() -> None:
+    """packaging/docker/Dockerfile does `COPY dist/blizzard-*.whl` — it installs a
+    wheel from the build context rather than building one. A bare checkout has no
+    `dist/`, so the build fails at `lstat /dist`; the job must stage the wheel into
+    `dist/` first, and must do so BEFORE the build-push step.
+    """
+    steps = _dev_image_job()["steps"]
+    fetch = _step_index(steps, lambda s: "download-artifact" in str(s.get("uses", "")))
+    build = _step_index(steps, lambda s: "build-push-action" in str(s.get("uses", "")))
+    assert fetch < build, "the wheel must be staged before the image build consumes it"
+    assert steps[fetch].get("with", {}).get("path") == "dist"
+
+
 def test_dev_image_job_declares_packages_write() -> None:
     permissions = _dev_image_job().get("permissions")
     assert permissions, "dev-image must declare its own job-level permissions block to push to GHCR"
