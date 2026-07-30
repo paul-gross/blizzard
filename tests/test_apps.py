@@ -6,6 +6,7 @@ serves the embedded frontend placeholder at ``/`` through the SPA mount seam.
 
 from __future__ import annotations
 
+import importlib.metadata
 from pathlib import Path
 
 import pytest
@@ -27,6 +28,23 @@ def test_health_endpoint(daemon: Daemon) -> None:
     body = response.json()
     assert body["status"] == "ok"
     assert body["service"] == f"blizzard-{daemon.name}"
+
+
+def test_health_reports_the_installed_version_not_a_literal(daemon: Daemon) -> None:
+    """``/api/health`` must answer with the version this process is actually running.
+
+    ``scripts/build-wheel.sh`` stamps a build's version into ``pyproject.toml`` and never
+    into the source tree, so a ``__version__`` written as a literal drifts silently the
+    moment an artifact is built — reporting ``0.1.0`` out of every dev build and every
+    release. Pin it to installed package metadata, which is the one value that tracks the
+    stamp. The end-to-end proof that a *stamped* build reports its stamp belongs to
+    ``scripts/build-wheel.sh``, which asserts it against a real wheel.
+    """
+    app = daemon.build_app()
+    with TestClient(app) as client:
+        body = client.get("/api/health").json()
+    assert body["version"] == importlib.metadata.version("blizzard")
+    assert app.version == body["version"], "the OpenAPI document and /api/health must agree"
 
 
 def test_frontend_mount_serves_placeholder(daemon: Daemon, tmp_path: Path) -> None:

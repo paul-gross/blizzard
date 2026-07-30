@@ -27,6 +27,7 @@ HUB_ASSETS="src/blizzard/static/hub"
 RUNNER_ASSETS="src/blizzard/static/runner"
 
 log() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
+fail() { printf '\n\033[1;31m==> FAIL: %s\033[0m\n' "$*" >&2; exit 1; }
 
 # --- 1. build the two Angular apps into the wheel-embed assets dir -----------
 #
@@ -108,7 +109,20 @@ VENV="$(mktemp -d)/venv"
 python3 -m venv "$VENV"
 "$VENV/bin/pip" install --quiet --upgrade pip
 "$VENV/bin/pip" install --quiet "$WHEEL"
-"$VENV/bin/blizzard" --version
+# Assert, don't just print: the binary must report the version this wheel was built
+# as. `blizzard.__version__` reads installed package metadata, so a build that stamps
+# pyproject.toml and a binary that answers with something else means the two have come
+# apart — which is exactly how a hardcoded `__version__ = "0.1.0"` went unnoticed
+# through every dev build and every release, misreporting `blizzard --version`, both
+# daemons' /api/health, and both OpenAPI documents.
+# From the wheel's own filename, not from $BLIZZARD_VERSION: the filename carries the
+# PEP 427-normalized version, which is what package metadata — and so the binary —
+# reports back.
+WHEEL_VERSION="$(basename "$WHEEL" | cut -d- -f2)"
+REPORTED="$("$VENV/bin/blizzard" --version)"
+EXPECTED="blizzard, version $WHEEL_VERSION"
+log "$REPORTED"
+[ "$REPORTED" = "$EXPECTED" ] || fail "wheel reports '$REPORTED', expected '$EXPECTED'"
 # The daemon aliases must be installed console scripts too.
 test -x "$VENV/bin/blizzard-hub"
 test -x "$VENV/bin/blizzard-runner"
