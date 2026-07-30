@@ -11,6 +11,8 @@ import {
 } from '../chunks/human.mutations';
 import { injectChunkPauseMutation } from '../chunks/pause.mutations';
 import { errorMessage } from '../error-message';
+import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
+import { asyncState } from '../query-state';
 import {
   type AnswerQuestionEvent,
   ChunkDetailPanel,
@@ -43,26 +45,34 @@ import {
 @Component({
   selector: 'fleet-chunk-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ChunkDetailPanel],
+  imports: [ChunkDetailPanel, KitAsyncState],
   template: `
-    @if (detail(); as d) {
-      <fleet-chunk-detail-panel
-        [detail]="d"
-        [workItems]="workItems()"
-        [actionError]="actionError()"
-        [actionOutcome]="actionOutcome()"
-        (dismiss)="dismiss.emit()"
-        (answerQuestion)="onAnswer($event)"
-        (resolveDecision)="onResolve($event)"
-        (detach)="onDetach($event)"
-        (pauseChunk)="onPause($event)"
-        (resumeChunk)="onResume($event)"
-        (editGraph)="onEditGraph($event)"
-      />
+    @if (chunkId() === null) {
+      <p class="rest" data-testid="chunk-detail-empty">SELECT A CHUNK TO SEE ITS HISTORY &amp; ARTIFACTS</p>
     } @else {
-      <p class="rest" data-testid="chunk-detail-empty">
-        {{ chunkId() === null ? 'SELECT A CHUNK TO SEE ITS HISTORY & ARTIFACTS' : 'LOADING…' }}
-      </p>
+      <fleet-kit-async-state
+        [state]="state()"
+        loadingText="LOADING…"
+        loadingTestid="chunk-detail-loading"
+        errorText="FAILED TO LOAD CHUNK"
+        errorTestid="chunk-detail-error"
+      >
+        @if (detail(); as d) {
+          <fleet-chunk-detail-panel
+            [detail]="d"
+            [workItems]="workItems()"
+            [actionError]="actionError()"
+            [actionOutcome]="actionOutcome()"
+            (dismiss)="dismiss.emit()"
+            (answerQuestion)="onAnswer($event)"
+            (resolveDecision)="onResolve($event)"
+            (detach)="onDetach($event)"
+            (pauseChunk)="onPause($event)"
+            (resumeChunk)="onResume($event)"
+            (editGraph)="onEditGraph($event)"
+          />
+        }
+      </fleet-kit-async-state>
     }
   `,
   styles: `
@@ -132,6 +142,19 @@ export class ChunkDetail {
 
   /** The open chunk's aggregate, or `undefined` while closed / still loading. */
   protected readonly detail = computed(() => (this.chunkId() === null ? undefined : this.detailQuery.data()));
+
+  /**
+   * The detail read's async state (AC 5) — consulted only once the template's
+   * own "nothing selected" branch has already ruled that case out. This
+   * matters because the query is `enabled: false` while `chunkId()` is
+   * `null` (`bzh:frontend-container-presentational`'s conditional-query
+   * shape), and a disabled query reports `isPending()` as permanently `true`
+   * — reading this triad before that branch would render the rest state as
+   * an endless spinner instead. Never `'empty'`: a single chunk aggregate
+   * either resolves or the read errors, the same reasoning `graph-detail.ts`
+   * documents for its own single-resource read.
+   */
+  protected readonly state = computed<KitAsyncStateValue>(() => asyncState(this.detailQuery, false));
 
   /** The open chunk's related work items + fetch state for the Issue tab (issue #24). A failed
    * read (unreachable hub / no work-source) becomes `error` so the tab shows a visible notice. */

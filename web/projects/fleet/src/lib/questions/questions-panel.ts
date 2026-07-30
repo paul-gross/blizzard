@@ -1,5 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, output } from '@angular/core';
 
+import type { KitAsyncStateValue } from '../kit/kit-async-state';
+import { asyncState } from '../query-state';
 import { QuestionsPanelView } from './questions-view';
 import { injectHubQuestionsQuery } from './questions.query';
 
@@ -19,7 +21,7 @@ import { injectHubQuestionsQuery } from './questions.query';
   selector: 'fleet-questions-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [QuestionsPanelView],
-  template: `<fleet-questions-view [questions]="questions()" (selectChunk)="selectChunk.emit($event)" />`,
+  template: `<fleet-questions-view [questions]="questions()" [state]="state()" (selectChunk)="selectChunk.emit($event)" />`,
 })
 export class QuestionsPanel {
   private readonly query = injectHubQuestionsQuery();
@@ -29,4 +31,7 @@ export class QuestionsPanel {
 
   /** Every open ask across the fleet; empty until the first read resolves. */
   protected readonly questions = computed(() => this.query.data() ?? []);
+
+  /** The questions query's async state (AC 3). */
+  protected readonly state = computed<KitAsyncStateValue>(() => asyncState(this.query, this.questions().length === 0));
 }

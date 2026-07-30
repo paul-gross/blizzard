@@ -4,6 +4,8 @@ import type { ChunkStatus, RunnerView } from '../api/hub';
 import { hasPermission, injectMeQuery } from '../auth/me.query';
 import { compactRef } from '../compact-ref';
 import { injectHubChunksQuery } from '../chunks/chunks.query';
+import type { KitAsyncStateValue } from '../kit/kit-async-state';
+import { asyncState } from '../query-state';
 import { RunnerPanelView } from './runner-view';
 import { injectHubRunnersQuery } from './runners.query';
 import { injectRunnerPauseMutation } from './runners.mutations';
@@ -42,7 +44,7 @@ export interface RunnerRow extends RunnerView {
   selector: 'fleet-runner-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [RunnerPanelView],
-  template: `<fleet-runner-view [rows]="rows()" [canPause]="canPause()" (togglePause)="toggle($event)" />`,
+  template: `<fleet-runner-view [rows]="rows()" [state]="state()" [canPause]="canPause()" (togglePause)="toggle($event)" />`,
 })
 export class RunnerPanel {
   private readonly runnersQuery = injectHubRunnersQuery();
@@ -58,6 +60,12 @@ export class RunnerPanel {
 
   /** The fleet registry; empty until the first read resolves. */
   private readonly runners = computed<readonly RunnerView[]>(() => this.runnersQuery.data() ?? []);
+
+  /** The registry's async state (AC 3) — derived from the runners query alone;
+   * the chunks query only folds claims onto rows already known to exist. */
+  protected readonly state = computed<KitAsyncStateValue>(() =>
+    asyncState(this.runnersQuery, this.runners().length === 0),
+  );
 
   /** Every routed chunk grouped by the runner holding it — each as a claim line
    * (short name + current node + status) for the registry rows.

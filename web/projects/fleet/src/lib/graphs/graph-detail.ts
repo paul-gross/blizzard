@@ -3,7 +3,9 @@ import { ChangeDetectionStrategy, Component, computed, input, signal } from '@an
 import type { GraphEdgeView, GraphNodeView, GraphSessionView } from '../api/hub';
 import { hasPermission, injectMeQuery } from '../auth/me.query';
 import { errorMessage } from '../error-message';
+import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
 import { KitButton } from '../kit/kit-button';
+import { asyncState } from '../query-state';
 import { GraphDiagramView } from './graph-diagram-view';
 import { injectGraphLifecycleMutation } from './graph-lifecycle.mutations';
 import { GraphNodeTable } from './graph-node-table';
@@ -36,14 +38,17 @@ interface ResolvedEdge {
 @Component({
   selector: 'fleet-graph-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [GraphDiagramView, GraphNodeTable, GraphSessionTable, KitButton],
+  imports: [GraphDiagramView, GraphNodeTable, GraphSessionTable, KitAsyncState, KitButton],
   template: `
     <section class="gd-panel graph-detail" aria-label="Graph detail" data-testid="graph-detail">
-      @if (graphQuery.isPending()) {
-        <p class="none" data-testid="graph-detail-loading">Loading graph…</p>
-      } @else if (graphQuery.isError()) {
-        <p class="none" data-testid="graph-detail-error">Unknown graph: {{ graphId() }}</p>
-      } @else if (graph(); as g) {
+      <fleet-kit-async-state
+        [state]="state()"
+        loadingText="Loading graph…"
+        loadingTestid="graph-detail-loading"
+        [errorText]="'Unknown graph: ' + graphId()"
+        errorTestid="graph-detail-error"
+      >
+      @if (graph(); as g) {
         <div class="body" data-testid="graph-detail-body">
           <div class="gd-hdr">
             <span class="gd-lbl">{{ g.name }}</span>
@@ -122,6 +127,7 @@ interface ResolvedEdge {
           </div>
         </div>
       }
+      </fleet-kit-async-state>
     </section>
   `,
   styles: `
@@ -143,11 +149,6 @@ interface ResolvedEdge {
       background: linear-gradient(180deg, var(--panel) 0%, var(--panel-deep) 100%);
       border: 1px solid var(--bezel);
       min-height: 0;
-    }
-    .none {
-      color: var(--label-dim);
-      font-size: var(--fs-xs);
-      padding: 6px 8px;
     }
     .gd-hdr {
       display: flex;
@@ -261,6 +262,11 @@ export class GraphDetail {
   private readonly meQuery = injectMeQuery();
 
   protected readonly graph = computed(() => this.graphQuery.data());
+
+  /** This detail's async state — a single-resource read never reaches `'empty'`
+   * (a graph either resolves or the read errors), so `isEmpty` is always
+   * `false`, the same reasoning `admin-page.ts`'s `triadState` documents. */
+  protected readonly state = computed<KitAsyncStateValue>(() => asyncState(this.graphQuery, false));
 
   /** Whether the current identity may author graphs (`graph:edit`, admin-tier — issue
    * #93) — gates the retire/re-enable controls; `null`/pending resolves to `false`. */

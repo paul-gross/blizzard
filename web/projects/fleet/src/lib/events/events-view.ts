@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 
 import type { EventView } from '../api/hub';
 import { compactRef } from '../compact-ref';
+import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
 import { KitBadge } from '../kit/kit-badge';
 import { KitChips, type KitChipOption } from '../kit/kit-chips';
 import { KitPanel } from '../kit/kit-panel';
@@ -56,7 +57,7 @@ const SEVERITY_TONE: Readonly<Record<string, Tone>> = {
 @Component({
   selector: 'fleet-events-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitPanel, KitBadge, KitChips, FleetWhen],
+  imports: [KitAsyncState, KitPanel, KitBadge, KitChips, FleetWhen],
   template: `
     <fleet-kit-panel
       class="fill"
@@ -85,13 +86,15 @@ const SEVERITY_TONE: Readonly<Record<string, Tone>> = {
           />
         }
       </div>
-      @if (loading()) {
-        <p class="none" data-testid="events-loading">LOADING…</p>
-      } @else if (error()) {
-        <p class="none" data-testid="events-error">FAILED TO LOAD EVENTS</p>
-      } @else if (events().length === 0) {
-        <p class="none" data-testid="events-empty">NO EVENTS</p>
-      } @else {
+      <fleet-kit-async-state
+        [state]="state()"
+        loadingText="LOADING…"
+        loadingTestid="events-loading"
+        errorText="FAILED TO LOAD EVENTS"
+        errorTestid="events-error"
+        emptyText="NO EVENTS"
+        emptyTestid="events-empty"
+      >
         <div class="rows" data-testid="events-rows">
           @for (ev of events(); track ev.id) {
             <div class="ev" data-testid="events-row" [attr.data-severity]="ev.severity">
@@ -125,7 +128,7 @@ const SEVERITY_TONE: Readonly<Record<string, Tone>> = {
             </div>
           }
         </div>
-      }
+      </fleet-kit-async-state>
     </fleet-kit-panel>
   `,
   styles: `
@@ -149,13 +152,6 @@ const SEVERITY_TONE: Readonly<Record<string, Tone>> = {
       padding: 6px 8px;
       border-bottom: 1px solid var(--line);
       flex: none;
-    }
-    .none {
-      color: var(--label-dim);
-      padding: 10px 8px;
-      margin: 0;
-      font-size: var(--fs-sm);
-      letter-spacing: 0.08em;
     }
     .rows {
       overflow-y: auto;
@@ -292,11 +288,9 @@ export class EventsView {
   /** The chunk-id universe for the chunk filter chips — same contract as {@link runnerIds}. */
   readonly chunkIds = input<readonly string[]>([]);
 
-  /** Whether the feed's first read is still in flight. */
-  readonly loading = input(false);
-
-  /** Whether the feed's read failed. */
-  readonly error = input(false);
+  /** The feed's async state (AC 5) — loading/error withhold the empty copy
+   * until the read resolves. */
+  readonly state = input.required<KitAsyncStateValue>();
 
   /** Emitted with a chunk id when its row's chunk button is activated. */
   readonly selectChunk = output<string>();

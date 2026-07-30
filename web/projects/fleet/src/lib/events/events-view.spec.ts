@@ -37,8 +37,9 @@ describe('EventsView', () => {
   function render(overrides: Record<string, unknown> = {}) {
     const fixture = TestBed.createComponent(EventsView);
     fixture.componentRef.setInput('events', overrides['events'] ?? EVENTS);
+    fixture.componentRef.setInput('state', overrides['state'] ?? 'ready');
     for (const [key, value] of Object.entries(overrides)) {
-      if (key === 'events') continue;
+      if (key === 'events' || key === 'state') continue;
       fixture.componentRef.setInput(key, value);
     }
     return fixture;
@@ -251,7 +252,7 @@ describe('EventsView', () => {
   });
 
   it('shows a loading state, distinct from empty', async () => {
-    const fixture = render({ events: [], loading: true });
+    const fixture = render({ events: [], state: 'loading' });
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -260,7 +261,7 @@ describe('EventsView', () => {
   });
 
   it('shows an error state, distinct from empty', async () => {
-    const fixture = render({ events: [], error: true });
+    const fixture = render({ events: [], state: 'error' });
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -269,7 +270,7 @@ describe('EventsView', () => {
   });
 
   it('rests on an empty state with no events, once loaded', async () => {
-    const fixture = render({ events: [] });
+    const fixture = render({ events: [], state: 'empty' });
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 

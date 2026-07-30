@@ -35,6 +35,7 @@ describe('QuestionsPanelView', () => {
 
   it('lists every question it is handed — off plain inputs alone', async () => {
     const fixture = TestBed.createComponent(QuestionsPanelView);
+    fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('questions', QUESTIONS);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -48,6 +49,7 @@ describe('QuestionsPanelView', () => {
 
   it('omits the options line for an ask that offers none', async () => {
     const fixture = TestBed.createComponent(QuestionsPanelView);
+    fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('questions', QUESTIONS);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -58,6 +60,7 @@ describe('QuestionsPanelView', () => {
 
   it('emits selectChunk when an ask is activated', async () => {
     const fixture = TestBed.createComponent(QuestionsPanelView);
+    fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('questions', QUESTIONS);
     let selected: string | undefined;
     fixture.componentInstance.selectChunk.subscribe((id) => (selected = id));
@@ -68,13 +71,35 @@ describe('QuestionsPanelView', () => {
     expect(selected).toBe('ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9');
   });
 
-  it('rests on an empty state with no questions', async () => {
+  it('rests on an empty state with no questions once loaded', async () => {
     const fixture = TestBed.createComponent(QuestionsPanelView);
+    fixture.componentRef.setInput('state', 'empty');
     fixture.componentRef.setInput('questions', []);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="questions-empty"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="questions-count"]')).toBeNull();
+  });
+
+  it('withholds the empty copy while the questions read is pending (AC 3)', async () => {
+    const fixture = TestBed.createComponent(QuestionsPanelView);
+    fixture.componentRef.setInput('state', 'loading');
+    fixture.componentRef.setInput('questions', []);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="questions-loading"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="questions-empty"]')).toBeNull();
+  });
+
+  it('shows an error state when the questions read fails', async () => {
+    const fixture = TestBed.createComponent(QuestionsPanelView);
+    fixture.componentRef.setInput('state', 'error');
+    fixture.componentRef.setInput('questions', []);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="questions-error"]')).not.toBeNull();
   });
 });

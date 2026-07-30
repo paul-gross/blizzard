@@ -1,7 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 
 import type { GraphSummaryView } from '../api/hub';
+import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
 import { KitPanel } from '../kit/kit-panel';
+import { asyncState } from '../query-state';
 import { injectHubGraphsQuery } from './graphs.query';
 
 /** One graph name's lineage, grouped client-side from the flat `GraphSummaryView[]`
@@ -39,16 +41,18 @@ interface ExpansionOverride {
 @Component({
   selector: 'fleet-graph-explorer',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitPanel],
+  imports: [KitAsyncState, KitPanel],
   template: `
     <fleet-kit-panel class="graph-explorer" aria-label="Graphs" data-testid="graph-explorer" label="Graphs · by name">
-      @if (graphsQuery.isPending()) {
-        <p class="none" data-testid="graph-explorer-loading">Loading graphs…</p>
-      } @else if (graphsQuery.isError()) {
-        <p class="none" data-testid="graph-explorer-error">Failed to load graphs.</p>
-      } @else if (groups().length === 0) {
-        <p class="none" data-testid="graph-explorer-empty">No graphs minted yet.</p>
-      } @else {
+      <fleet-kit-async-state
+        [state]="state()"
+        loadingText="Loading graphs…"
+        loadingTestid="graph-explorer-loading"
+        errorText="Failed to load graphs."
+        errorTestid="graph-explorer-error"
+        emptyText="No graphs minted yet."
+        emptyTestid="graph-explorer-empty"
+      >
         <ul class="groups" data-testid="graph-explorer-groups">
           @for (group of groups(); track group.name) {
             <li class="group" data-testid="graph-explorer-group" [attr.data-name]="group.name">
@@ -96,7 +100,7 @@ interface ExpansionOverride {
             </li>
           }
         </ul>
-      }
+      </fleet-kit-async-state>
     </fleet-kit-panel>
   `,
   styles: `
@@ -105,11 +109,6 @@ interface ExpansionOverride {
       font-family: var(--mono);
       font-size: var(--fs-base);
       color: var(--text);
-    }
-    .none {
-      color: var(--label-dim);
-      font-size: var(--fs-xs);
-      padding: 6px 8px;
     }
     .groups {
       list-style: none;
@@ -244,6 +243,12 @@ export class GraphExplorer {
       effective: versions.find((v) => v.effective) ?? versions[0],
     }));
   });
+
+  /** This list's async state — derived straight from its own query, since it
+   * has no container/presentational split of its own. */
+  protected readonly state = computed<KitAsyncStateValue>(() =>
+    asyncState(this.graphsQuery, this.groups().length === 0),
+  );
 
   /** A header click expands the group **and** opens its effective version (issue #152)
    * — the header already displays that id, so requiring a second click on the version

@@ -129,6 +129,7 @@ describe('ChunkDetail container', () => {
       if (method === 'GET' && path === '/api/chunks/ch_paused') return PAUSED_ASKING_DETAIL;
       if (method === 'GET' && path === '/api/chunks/ch_ready') return NOT_READY_DETAIL;
       if (method === 'GET' && path === '/api/chunks/ch_ask') return askAnswered ? ASK_ANSWERED_DETAIL : ASK_DETAIL;
+      if (method === 'GET' && path === '/api/chunks/ch_missing') return stubError(404, { detail: 'unknown chunk' });
       if (method === 'POST' && path === '/api/questions/qn_77/answers') return answerResponse;
       if (method === 'POST' && (path === '/api/chunks/ch_routed/pause' || path === '/api/chunks/ch_paused/resume')) {
         return pauseResponse;
@@ -177,6 +178,17 @@ describe('ChunkDetail container', () => {
     expect(el.querySelector('fleet-chunk-detail-panel')).toBeNull();
     const rest = el.querySelector('[data-testid="chunk-detail-empty"]');
     expect(rest?.textContent).toContain('SELECT');
+  });
+
+  it('renders an error state, not an endless LOADING…, when the detail read fails', async () => {
+    const fixture = TestBed.createComponent(ChunkDetail);
+    fixture.componentRef.setInput('chunkId', 'ch_missing');
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="chunk-detail-error"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="chunk-detail-loading"]')).toBeNull();
+    expect(el.querySelector('fleet-chunk-detail-panel')).toBeNull();
   });
 
   it('fires the resolve-decision client call when a gate choice button is clicked', async () => {
