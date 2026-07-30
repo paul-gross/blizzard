@@ -2,22 +2,31 @@ import { type WritableSignal, provideZonelessChangeDetection, signal } from '@an
 import { TestBed } from '@angular/core/testing';
 
 import { FleetLiveUpdates, type LoggedEvent } from '../sse/fleet-live';
+import type { SseStatus } from '../sse/sse.service';
 import { EventLogPanel } from './event-log-panel';
 
 describe('EventLogPanel', () => {
   let log: WritableSignal<readonly LoggedEvent[]>;
+  let status: WritableSignal<SseStatus>;
+  let authFailed: WritableSignal<boolean>;
 
   beforeEach(async () => {
     log = signal<readonly LoggedEvent[]>([]);
-    // A stub live-update spine exposing just the feed the panel reads.
-    const fakeLive = { log: () => log() } as unknown as FleetLiveUpdates;
+    status = signal<SseStatus>('open');
+    authFailed = signal(false);
+    // A stub live-update spine exposing just what the panel reads.
+    const fakeLive = {
+      log: () => log(),
+      status: () => status(),
+      authFailed: () => authFailed(),
+    } as unknown as FleetLiveUpdates;
     await TestBed.configureTestingModule({
       imports: [EventLogPanel],
       providers: [provideZonelessChangeDetection(), { provide: FleetLiveUpdates, useValue: fakeLive }],
     }).compileComponents();
   });
 
-  it('shows an empty state before any event', () => {
+  it('shows an empty state before any event, once connected', () => {
     const fixture = TestBed.createComponent(EventLogPanel);
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
@@ -25,6 +34,39 @@ describe('EventLogPanel', () => {
     expect(el.querySelector('[data-testid="event-log-empty"]')).toBeTruthy();
     // The panel header carries no running event count (issue #139).
     expect(el.querySelector('[data-testid="event-log-count"]')).toBeNull();
+  });
+
+  it('withholds the empty copy while the stream has never yet connected (AC 3)', () => {
+    status.set('idle');
+    const fixture = TestBed.createComponent(EventLogPanel);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="event-log-loading"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="event-log-empty"]')).toBeNull();
+  });
+
+  it('shows an error state on a terminal auth failure', () => {
+    status.set('closed');
+    authFailed.set(true);
+    const fixture = TestBed.createComponent(EventLogPanel);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="event-log-error"]')).toBeTruthy();
+  });
+
+  it('does not regress an already-rendered feed to loading on a reconnect (AC 6)', () => {
+    log.set([{ seq: 1, type: 'chunk-changed', data: { chunk_id: 'ch_alpha', status: 'running' }, at: 0 }]);
+    const fixture = TestBed.createComponent(EventLogPanel);
+    fixture.detectChanges();
+
+    status.set('reconnecting');
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelectorAll('[data-testid="event-log-row"]')).toHaveLength(1);
+    expect(el.querySelector('[data-testid="event-log-loading"]')).toBeNull();
   });
 
   it('renders newest-first rows with human-readable summaries', () => {

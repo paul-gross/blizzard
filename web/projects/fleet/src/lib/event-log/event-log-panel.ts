@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 
 import { compactRef } from '../compact-ref';
+import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
 import { KitPanel } from '../kit/kit-panel';
 import { FleetLiveUpdates, type LoggedEvent, type RunnerChangeKind } from '../sse/fleet-live';
 import { formatClockTime } from '../when';
@@ -81,7 +82,7 @@ function summarize(event: LoggedEvent): string {
 @Component({
   selector: 'fleet-event-log-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitPanel],
+  imports: [KitAsyncState, KitPanel],
   template: `
     <fleet-kit-panel
       class="fill"
@@ -89,9 +90,16 @@ function summarize(event: LoggedEvent): string {
       data-testid="event-log-panel"
       label="Event log"
     >
-      @if (rows().length === 0) {
-        <p class="none" data-testid="event-log-empty">No events yet.</p>
-      } @else {
+      <fleet-kit-async-state
+        [state]="state()"
+        placement="inline"
+        loadingText="CONNECTING…"
+        loadingTestid="event-log-loading"
+        errorText="EVENT STREAM UNAVAILABLE"
+        errorTestid="event-log-error"
+        emptyText="No events yet."
+        emptyTestid="event-log-empty"
+      >
         <div class="rows" data-testid="event-log-rows">
           @for (row of rows(); track row.seq) {
             <div class="ev" data-testid="event-log-row" [attr.data-kind]="row.type">
@@ -100,7 +108,7 @@ function summarize(event: LoggedEvent): string {
             </div>
           }
         </div>
-      }
+      </fleet-kit-async-state>
     </fleet-kit-panel>
   `,
   styles: `
@@ -115,11 +123,6 @@ function summarize(event: LoggedEvent): string {
     }
     fleet-kit-panel.fill {
       flex: 1;
-    }
-    .none {
-      color: var(--label-dim);
-      font-size: var(--fs-xs);
-      padding: 6px 8px;
     }
     .rows {
       overflow-y: auto;
@@ -159,4 +162,22 @@ export class EventLogPanel {
       }))
       .reverse(),
   );
+
+  /**
+   * This panel has no query — its read is a client-side ring fed by
+   * {@link FleetLiveUpdates}'s SSE handle, so its own connection status stands
+   * in for a query's pending/error (AC 3). `'idle'` is the one status that
+   * means "never yet connected" (`SseService.connect`'s initial value, before
+   * the stream's first `onopen`), so it alone maps to `'loading'` — a
+   * `'reconnecting'` blip after data has already arrived must not regress an
+   * already-rendered feed back to a loading state (the same AC 6 guarantee
+   * {@link asyncState} gives a query-backed read). A hard auth failure
+   * (`authFailed`, `'closed'` with no reconnect scheduled) is the one case
+   * that reads as an error rather than an empty, still-live feed.
+   */
+  protected readonly state = computed<KitAsyncStateValue>(() => {
+    if (this.live.status() === 'idle') return 'loading';
+    if (this.live.status() === 'closed' && this.live.authFailed()) return 'error';
+    return this.rows().length === 0 ? 'empty' : 'ready';
+  });
 }

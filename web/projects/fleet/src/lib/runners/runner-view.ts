@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 
 import type { ChunkStatus } from '../api/hub';
 import { STATUS_TONE } from '../chunk-lanes';
+import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
 import { KitBadge } from '../kit/kit-badge';
 import { KitPanel } from '../kit/kit-panel';
 import { KitSlotBar } from '../kit/kit-slot-bar';
@@ -18,7 +19,7 @@ import type { RunnerRow } from './runner-panel';
 @Component({
   selector: 'fleet-runner-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitBadge, KitPanel, KitSlotBar],
+  imports: [KitAsyncState, KitBadge, KitPanel, KitSlotBar],
   template: `
     <fleet-kit-panel
       aria-label="Runner registry"
@@ -27,9 +28,16 @@ import type { RunnerRow } from './runner-panel';
       [count]="rows().length || null"
       countTestid="runners-count"
     >
-      @if (rows().length === 0) {
-        <p class="none" data-testid="runners-empty">NO RUNNERS REGISTERED</p>
-      } @else {
+      <fleet-kit-async-state
+        [state]="state()"
+        placement="inline"
+        loadingText="LOADING…"
+        loadingTestid="runners-loading"
+        errorText="FAILED TO LOAD RUNNERS"
+        errorTestid="runners-error"
+        emptyText="NO RUNNERS REGISTERED"
+        emptyTestid="runners-empty"
+      >
         <ul class="runners" data-testid="runner-list">
             @for (row of rows(); track row.runner_id) {
               <li
@@ -128,7 +136,7 @@ import type { RunnerRow } from './runner-panel';
               </li>
             }
           </ul>
-        }
+      </fleet-kit-async-state>
     </fleet-kit-panel>
   `,
   styles: `
@@ -141,13 +149,6 @@ import type { RunnerRow } from './runner-panel';
       font-size: var(--fs-base);
       font-variant-numeric: tabular-nums;
       color: var(--text);
-    }
-    .none {
-      color: var(--label-dim);
-      padding: 10px 8px;
-      margin: 0;
-      font-size: var(--fs-sm);
-      letter-spacing: 0.08em;
     }
     .runners {
       list-style: none;
@@ -279,6 +280,10 @@ import type { RunnerRow } from './runner-panel';
 export class RunnerPanelView {
   /** The registry rows to render — each runner plus its pre-folded claims. */
   readonly rows = input.required<readonly RunnerRow[]>();
+
+  /** The registry query's async state (AC 3) — loading/error withhold the empty
+   * copy until the read resolves. */
+  readonly state = input.required<KitAsyncStateValue>();
 
   /** Whether to render the hub pause/resume brake (issue #93) — the container passes
    * `hasPermission(me, 'runner:pause')`. Admin-tier: a `contributor` sees the registry

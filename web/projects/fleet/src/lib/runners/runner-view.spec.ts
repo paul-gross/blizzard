@@ -30,6 +30,7 @@ describe('RunnerPanelView', () => {
 
   it('renders each row with its liveness, paused state, and claims — off plain inputs alone', async () => {
     const fixture = TestBed.createComponent(RunnerPanelView);
+    fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('rows', [
       row('rn_online', { claims: [{ chunkId: 'ch_01', shortId: 'C-01', node: 'build', status: 'running' }] }),
       row('rn_paused', { hub_paused: true }),
@@ -47,8 +48,9 @@ describe('RunnerPanelView', () => {
     expect(el.querySelector('[data-runner="rn_paused"] [data-testid="runner-hub-paused"]')).not.toBeNull();
   });
 
-  it('shows the empty state for no rows', async () => {
+  it('shows the empty state for no rows once loaded', async () => {
     const fixture = TestBed.createComponent(RunnerPanelView);
+    fixture.componentRef.setInput('state', 'empty');
     fixture.componentRef.setInput('rows', []);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -56,8 +58,30 @@ describe('RunnerPanelView', () => {
     expect(el.querySelector('[data-testid="runners-empty"]')).not.toBeNull();
   });
 
+  it('withholds the empty copy while the registry read is pending (AC 3)', async () => {
+    const fixture = TestBed.createComponent(RunnerPanelView);
+    fixture.componentRef.setInput('state', 'loading');
+    fixture.componentRef.setInput('rows', []);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="runners-loading"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="runners-empty"]')).toBeNull();
+  });
+
+  it('shows an error state when the registry read fails', async () => {
+    const fixture = TestBed.createComponent(RunnerPanelView);
+    fixture.componentRef.setInput('state', 'error');
+    fixture.componentRef.setInput('rows', []);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="runners-error"]')).not.toBeNull();
+  });
+
   it('names a spend-ceiling escalation reason on the locally-paused badge (#61)', async () => {
     const fixture = TestBed.createComponent(RunnerPanelView);
+    fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('rows', [
       row('rn_ceiling', { locally_paused: true, locally_paused_reason: 'spend ceiling $5.00 reached' }),
     ]);
@@ -71,6 +95,7 @@ describe('RunnerPanelView', () => {
 
   it('renders a slot bar for a reported capacity, with used filled of total (#69)', async () => {
     const fixture = TestBed.createComponent(RunnerPanelView);
+    fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('rows', [row('rn_cap', { env_capacity: 4, used: 2 })]);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -84,6 +109,7 @@ describe('RunnerPanelView', () => {
 
   it('omits the slot bar for a runner whose capacity is null (older client) (#69)', async () => {
     const fixture = TestBed.createComponent(RunnerPanelView);
+    fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('rows', [row('rn_nocap', { env_capacity: null, used: 0 })]);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -93,6 +119,7 @@ describe('RunnerPanelView', () => {
 
   it('emits togglePause with the row when the pause/resume button is activated', async () => {
     const fixture = TestBed.createComponent(RunnerPanelView);
+    fixture.componentRef.setInput('state', 'ready');
     const target = row('rn_online');
     fixture.componentRef.setInput('rows', [target]);
     fixture.componentRef.setInput('canPause', true);
@@ -109,6 +136,7 @@ describe('RunnerPanelView', () => {
     // `runner:pause` is admin-tier: a contributor still reads the registry and its live
     // liveness/paused state, but is not offered the brake it could only 403 on.
     const fixture = TestBed.createComponent(RunnerPanelView);
+    fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('rows', [row('rn_paused', { hub_paused: true })]);
     fixture.componentRef.setInput('canPause', false);
     await fixture.whenStable();
@@ -122,6 +150,7 @@ describe('RunnerPanelView', () => {
 
   it('defaults to withholding the brake when canPause is unset', async () => {
     const fixture = TestBed.createComponent(RunnerPanelView);
+    fixture.componentRef.setInput('state', 'ready');
     fixture.componentRef.setInput('rows', [row('rn_online')]);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
@@ -137,6 +166,7 @@ describe('RunnerPanelView', () => {
 
     it('reads a fresh heartbeat as "seen Ns ago"', async () => {
       const fixture = TestBed.createComponent(RunnerPanelView);
+    fixture.componentRef.setInput('state', 'ready');
       fixture.componentRef.setInput('rows', [row('r1', { last_seen_at: '2026-07-16T11:59:55.000Z' })]);
       await fixture.whenStable();
       const el = fixture.nativeElement as HTMLElement;
@@ -145,6 +175,7 @@ describe('RunnerPanelView', () => {
 
     it('does not render a confident 0s for a stamp hours in the future — falls through to online/offline', async () => {
       const fixture = TestBed.createComponent(RunnerPanelView);
+    fixture.componentRef.setInput('state', 'ready');
       fixture.componentRef.setInput('rows', [
         row('r1', { last_seen_at: '2026-07-16T17:00:00.000Z', online: false }),
       ]);

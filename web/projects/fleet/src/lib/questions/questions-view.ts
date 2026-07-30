@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 
 import type { QuestionView } from '../api/hub';
 import { compactRef } from '../compact-ref';
+import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
 import { KitPanel } from '../kit/kit-panel';
 
 /**
@@ -17,7 +18,7 @@ import { KitPanel } from '../kit/kit-panel';
 @Component({
   selector: 'fleet-questions-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitPanel],
+  imports: [KitAsyncState, KitPanel],
   template: `
     <fleet-kit-panel
       class="fill"
@@ -27,9 +28,16 @@ import { KitPanel } from '../kit/kit-panel';
       [count]="questions().length || null"
       countTestid="questions-count"
     >
-        @if (questions().length === 0) {
-          <p class="none" data-testid="questions-empty">NO OPEN QUESTIONS</p>
-        } @else {
+        <fleet-kit-async-state
+          [state]="state()"
+          placement="inline"
+          loadingText="LOADING…"
+          loadingTestid="questions-loading"
+          errorText="FAILED TO LOAD QUESTIONS"
+          errorTestid="questions-error"
+          emptyText="NO OPEN QUESTIONS"
+          emptyTestid="questions-empty"
+        >
           @for (q of questions(); track q.question_id) {
             <button
               type="button"
@@ -49,7 +57,7 @@ import { KitPanel } from '../kit/kit-panel';
               }
             </button>
           }
-        }
+        </fleet-kit-async-state>
     </fleet-kit-panel>
   `,
   styles: `
@@ -113,18 +121,14 @@ import { KitPanel } from '../kit/kit-panel';
       font-size: var(--fs-xs);
       overflow-wrap: anywhere;
     }
-    .none {
-      color: var(--label-dim);
-      padding: 10px 8px;
-      margin: 0;
-      font-size: var(--fs-sm);
-      letter-spacing: 0.08em;
-    }
   `,
 })
 export class QuestionsPanelView {
   /** Every open ask across the fleet. */
   readonly questions = input.required<readonly QuestionView[]>();
+
+  /** The questions query's async state (AC 3). */
+  readonly state = input.required<KitAsyncStateValue>();
 
   /** Emitted with a chunk id when an ask is activated — opens it in the detail panel. */
   readonly selectChunk = output<string>();
