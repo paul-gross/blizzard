@@ -1,7 +1,16 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { KitBadge, KitPanel, formatCost, formatTokens, type FleetSpendView, type Tone } from 'fleet';
+import {
+  KitAsyncState,
+  KitBadge,
+  KitPanel,
+  formatCost,
+  formatTokens,
+  type FleetSpendView,
+  type KitAsyncStateValue,
+  type Tone,
+} from 'fleet';
 
 /** One "Needs you" row — an open ask (the more specific reason) or a chunk
  * whose derived tone is `waiting`/`needs` with no open ask of its own. */
@@ -64,7 +73,7 @@ export interface Vitals {
 @Component({
   selector: 'app-glance-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitBadge, KitPanel, RouterLink],
+  imports: [KitAsyncState, KitBadge, KitPanel, RouterLink],
   template: `
     <div class="glance" data-testid="glance-board">
       <div class="vitals" data-testid="glance-vitals">
@@ -94,9 +103,15 @@ export interface Vitals {
         [count]="needsYou().length || null"
         countTestid="needs-you-count"
       >
-        @if (needsYou().length === 0) {
-          <p class="empty" data-testid="needs-you-empty">NOTHING NEEDS YOU</p>
-        } @else {
+        <fleet-kit-async-state
+          [state]="needsYouState()"
+          loadingText="LOADING…"
+          loadingTestid="needs-you-loading"
+          errorText="FAILED TO LOAD"
+          errorTestid="needs-you-error"
+          emptyText="NOTHING NEEDS YOU"
+          emptyTestid="needs-you-empty"
+        >
           <ul class="rows">
             @for (row of needsYou(); track row.chunkId) {
               <li class="row" data-testid="needs-you-row" [attr.data-chunk]="row.chunkId">
@@ -112,7 +127,7 @@ export interface Vitals {
               </li>
             }
           </ul>
-        }
+        </fleet-kit-async-state>
       </fleet-kit-panel>
 
       <fleet-kit-panel
@@ -123,9 +138,15 @@ export interface Vitals {
         [count]="inMotion().length || null"
         countTestid="in-motion-count"
       >
-        @if (inMotion().length === 0) {
-          <p class="empty" data-testid="in-motion-empty">NOTHING IN MOTION</p>
-        } @else {
+        <fleet-kit-async-state
+          [state]="inMotionState()"
+          loadingText="LOADING…"
+          loadingTestid="in-motion-loading"
+          errorText="FAILED TO LOAD"
+          errorTestid="in-motion-error"
+          emptyText="NOTHING IN MOTION"
+          emptyTestid="in-motion-empty"
+        >
           <ul class="rows">
             @for (row of inMotion(); track row.chunkId) {
               <li class="row" data-testid="in-motion-row" [attr.data-chunk]="row.chunkId">
@@ -141,7 +162,7 @@ export interface Vitals {
               </li>
             }
           </ul>
-        }
+        </fleet-kit-async-state>
       </fleet-kit-panel>
 
       <fleet-kit-panel
@@ -152,9 +173,15 @@ export interface Vitals {
         [count]="doneToday().length || null"
         countTestid="done-today-count"
       >
-        @if (doneToday().length === 0) {
-          <p class="empty" data-testid="done-today-empty">NOTHING DONE YET</p>
-        } @else {
+        <fleet-kit-async-state
+          [state]="doneTodayState()"
+          loadingText="LOADING…"
+          loadingTestid="done-today-loading"
+          errorText="FAILED TO LOAD"
+          errorTestid="done-today-error"
+          emptyText="NOTHING DONE YET"
+          emptyTestid="done-today-empty"
+        >
           <ul class="rows">
             @for (row of doneToday(); track row.chunkId) {
               <li class="row" data-testid="done-today-row" [attr.data-chunk]="row.chunkId">
@@ -169,18 +196,26 @@ export interface Vitals {
               </li>
             }
           </ul>
-        }
+        </fleet-kit-async-state>
       </fleet-kit-panel>
 
       <fleet-kit-panel aria-label="Fleet spend today" data-testid="glance-spend-panel" label="Fleet spend · today">
-        @if (spend(); as s) {
-          <div class="row" data-testid="glance-spend-row">
-            <span class="cid">{{ formatCost(s.cost_usd, s.cost_partial) }}</span>
-            <span class="sub">{{ formatTokens(totalTokens(s)) }} tok</span>
-          </div>
-        } @else {
-          <p class="empty" data-testid="glance-spend-empty">—</p>
-        }
+        <fleet-kit-async-state
+          [state]="spendState()"
+          loadingText="—"
+          loadingTestid="glance-spend-loading"
+          errorText="FAILED TO LOAD"
+          errorTestid="glance-spend-error"
+        >
+          @if (spend(); as s) {
+            <div class="row" data-testid="glance-spend-row">
+              <span class="cid">{{ formatCost(s.cost_usd, s.cost_partial) }}</span>
+              <span class="sub">{{ formatTokens(totalTokens(s)) }} tok</span>
+            </div>
+          } @else {
+            <p class="empty" data-testid="glance-spend-empty">—</p>
+          }
+        </fleet-kit-async-state>
       </fleet-kit-panel>
     </div>
   `,
@@ -336,9 +371,13 @@ export class GlanceView {
 
   readonly vitals = input.required<Vitals>();
   readonly needsYou = input<readonly AttentionRow[]>([]);
+  readonly needsYouState = input.required<KitAsyncStateValue>();
   readonly inMotion = input<readonly MotionRow[]>([]);
+  readonly inMotionState = input.required<KitAsyncStateValue>();
   readonly doneToday = input<readonly DoneRow[]>([]);
+  readonly doneTodayState = input.required<KitAsyncStateValue>();
   readonly spend = input<FleetSpendView | null>(null);
+  readonly spendState = input.required<KitAsyncStateValue>();
 
   /** A spend total's full token count — every class summed (issue #59's
    * `ChunkUsageTotalView`/`FleetSpendView` both carry the same four fields),

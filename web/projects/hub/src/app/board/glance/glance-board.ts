@@ -2,6 +2,8 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 import {
   FleetLiveUpdates,
   STATUS_TONE,
+  asyncState,
+  asyncStateOf,
   compactRef,
   injectHubChunksQuery,
   injectHubFleetSpendQuery,
@@ -9,6 +11,7 @@ import {
   injectHubQuestionsQuery,
   injectHubRunnersQuery,
   type ChunkSummary,
+  type KitAsyncStateValue,
 } from 'fleet';
 
 import { startOfLocalDayIso } from '../../local-day';
@@ -50,9 +53,13 @@ import { GlanceView, type AttentionRow, type DoneRow, type MotionRow, type Vital
     <app-glance-view
       [vitals]="vitals()"
       [needsYou]="needsYou()"
+      [needsYouState]="needsYouState()"
       [inMotion]="inMotion()"
+      [inMotionState]="inMotionState()"
       [doneToday]="doneToday()"
+      [doneTodayState]="doneTodayState()"
       [spend]="spendToday.data() ?? null"
+      [spendState]="spendState()"
     />
   `,
   // A routed page fills the router outlet area, same as `BoardPage`'s own
@@ -145,6 +152,29 @@ export class GlanceBoard {
         pointerLabel: (chunk.work_refs ?? []).flatMap((p) => (p.label ? [p.label] : [])).join(' '),
       })),
   );
+
+  /** Each panel's async state, derived independently (AC 4) — a panel withholds
+   * its empty copy on its own reads' loading/error, regardless of the other
+   * three. "Needs you" folds in the questions read (an ask can arrive before
+   * or after the chunk list settles); "In motion" and "Done today" are both
+   * slices of the same chunks read alone; spend is its own query. */
+  protected readonly needsYouState = computed<KitAsyncStateValue>(() =>
+    asyncStateOf([this.chunksQuery, this.questionsQuery], this.needsYou().length === 0),
+  );
+
+  protected readonly inMotionState = computed<KitAsyncStateValue>(() =>
+    asyncState(this.chunksQuery, this.inMotion().length === 0),
+  );
+
+  protected readonly doneTodayState = computed<KitAsyncStateValue>(() =>
+    asyncState(this.chunksQuery, this.doneToday().length === 0),
+  );
+
+  /** Never `'empty'`: the spend endpoint returns a zeroed aggregate rather than
+   * no row, so the "—" placeholder is only ever the pre-resolution rest state
+   * the query-less `@if` used to show — a single-resource read, same reasoning
+   * as `graph-detail.ts`'s own `state`. */
+  protected readonly spendState = computed<KitAsyncStateValue>(() => asyncState(this.spendToday, false));
 
   /** The vitals strip's four numbers: the two attention/motion counts above,
    * the fleet registry's online fraction, and the live spine's connection —
