@@ -66,15 +66,30 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: compute dev version 0.<milestone>.0.dev<run>
+      - name: compute dev version 0.<milestone>.0.dev<run>+<sha>
         id: ver
         run: |
           # The version scheme is 0.<milestone>.<patch> pre-1.0. A dev build off
           # master targets the milestone in progress at patch 0, tagged with the
           # run number: 0.<milestone>.0.dev<run>.
+          #
+          # Plus a PEP 440 local segment carrying the commit. A deployment that
+          # follows the edge channel updates itself, so "what is this hub
+          # running" is a question asked of the running daemon rather than of
+          # whoever deployed it — and the run number alone answers it only via a
+          # lookup in this repo's Actions history. The OCI image annotations do
+          # carry the revision, but they are *manifest* annotations: they are not
+          # in `.Config.Labels`, so they are unreadable from the running
+          # container and resolvable only back at the registry.
+          #
+          # Carrying it in the version means the answer arrives in the reply the
+          # operator already has (`GET /api/health`), and it matches what
+          # scripts/build-wheel.sh stamps onto a local build, so both kinds of
+          # build name their commit the same way. Tag releases deliberately do
+          # NOT get this — a release version is the tag, exactly.
           BASE=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
           MINOR=$(echo "$BASE" | cut -d. -f2)
-          DEV="0.${MINOR}.0.dev${{ github.run_number }}"
+          DEV="0.${MINOR}.0.dev${{ github.run_number }}+${GITHUB_SHA:0:9}"
           echo "version=$DEV" >> "$GITHUB_OUTPUT"
           echo "Dev build version: $DEV"
       - name: build the dev wheel (embedded frontend + node-free install proof)

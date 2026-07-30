@@ -58,6 +58,26 @@ def test_dev_build_job_exposes_its_version_as_an_output() -> None:
     assert dev_build.get("outputs", {}).get("version")
 
 
+def test_the_dev_version_carries_the_commit_it_was_built_from() -> None:
+    """A hub following the edge channel updates itself, so "what is this build"
+    is asked of the running daemon — and the version string is the only answer
+    it can give. The run number alone needs a lookup in this repo's Actions
+    history, and the OCI revision annotation is a *manifest* annotation, absent
+    from ``.Config.Labels`` and so unreadable from the running container.
+
+    Pinned because it is one interpolation in a shell line: easy to drop while
+    tidying, and nothing else fails when it goes — the build still succeeds, the
+    image still publishes, and every deployed hub quietly stops being able to
+    name its own commit.
+    """
+    steps = _jobs()["dev-build"]["steps"]
+    compute = next(s for s in steps if s.get("id") == "ver")
+    assert "GITHUB_SHA" in compute["run"], (
+        "the dev version must embed the commit sha as a PEP 440 local segment "
+        "(0.<minor>.0.dev<run>+<sha>) — see the step's own comment for why"
+    )
+
+
 def test_dev_image_puts_a_wheel_in_dist_before_building() -> None:
     """packaging/docker/Dockerfile does `COPY dist/blizzard-*.whl` — it installs a
     wheel from the build context rather than building one. A bare checkout has no
