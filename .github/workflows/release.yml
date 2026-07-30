@@ -94,7 +94,7 @@ jobs:
 
   release:
     name: build wheel + image, publish release
-    needs: [gate]
+    needs: [gate, full-suite-tiers]
     runs-on: ubuntu-latest
     # A job-level `permissions:` block REPLACES the workflow-level one rather than
     # merging with it — every unlisted scope becomes `none`. `packages: write`

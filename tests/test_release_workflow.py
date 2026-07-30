@@ -105,6 +105,13 @@ def test_release_notes_are_generated_not_auto_generated() -> None:
     assert "--generate-notes" not in publish_run
 
 
+def test_release_job_waits_for_the_full_suite_tiers() -> None:
+    """A tag release must not publish ahead of the full suite (service tier,
+    FULL crash sweep, e2e) — `gate` alone isn't sufficient for a release the
+    way it is for the master dev channel (issue #200)."""
+    assert "full-suite-tiers" in _release_job()["needs"]
+
+
 def test_tags_are_derived_from_the_image_tags_script_not_hardcoded() -> None:
     """The semver fan-out logic lives in scripts/image-tags.sh (unit-tested in
     tests/test_image_tags.py) — the workflow step must consume its output, not

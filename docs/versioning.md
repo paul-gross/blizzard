@@ -63,6 +63,18 @@ a stable release; a prerelease (`vX.Y.Z-rc.N`) publishes its exact version alone
 [`scripts/image-tags.sh`](../scripts/image-tags.sh) is the pure function
 implementing this fan-out (`tests/test_image_tags.py`).
 
+## The dev channel — `edge` and `sha-<sha>`
+
+Alongside the tag-triggered release channel above, every green push to
+`master` publishes the same `ghcr.io/paul-gross/blizzard-hub` image under two
+development tags: `edge`, a mutable pointer that always names the newest
+proven `master` commit, and `sha-<full-git-sha>`, an immutable tag pinned to
+that exact commit. **`latest` never follows `master`** — it moves only on a
+stable release tag, per the fan-out above, so a stable pull and a dogfood pull
+never collide on the same tag meaning two different things. See
+`docs/ci.md`'s dev image publish section for the workflow contract
+(`tests/test_push_workflow.py`).
+
 ## Version ⇄ tag agreement
 
 `pyproject.toml`'s `[project] version` must equal the tag being cut (`v1.2.3` ⇔

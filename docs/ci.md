@@ -14,7 +14,7 @@ reference for running it.
 | [`.github/workflows/gate.yml`](../.github/workflows/gate.yml) | reusable (`workflow_call`) | The merge gate: ruff format+check, pyright, pytest (unit + component), OpenAPI spec drift, and — once the `web/` workspace lands — eslint, vitest, and generated-client drift. Defined once; every trigger below calls it. |
 | [`.github/workflows/upper-tiers.yml`](../.github/workflows/upper-tiers.yml) | reusable (`workflow_call`) | The service tier (`blizzard:service-test`) and the kill-9 crash sweep's bounded CI profile (`blizzard:crash-sweep`), over a multi-repo checkout (`blizzard` + `blizzard-mock` + `blizzard-workspace`). Defined once; `pr.yml` and `push.yml` both call it. |
 | [`.github/workflows/pr.yml`](../.github/workflows/pr.yml) | PR to `master` | The gate, plus the service tier and crash sweep (CI profile) as real gate jobs. |
-| [`.github/workflows/push.yml`](../.github/workflows/push.yml) | push to `master` | The gate, plus the service tier and crash sweep (CI profile) as real gate jobs, plus a **dev-build wheel** (`0.<milestone>.0.dev<run>`) uploaded as a workflow artifact. |
+| [`.github/workflows/push.yml`](../.github/workflows/push.yml) | push to `master` | The gate, plus the service tier and crash sweep (CI profile) as real gate jobs, plus a **dev-build wheel** (`0.<milestone>.0.dev<run>`) uploaded as a workflow artifact, plus a **multi-arch dev hub image** (`edge` + `sha-<full-git-sha>`) pushed to GHCR. |
 | [`.github/workflows/release.yml`](../.github/workflows/release.yml) | tag `v*` | The full suite (gate, service tier, the FULL crash sweep, and e2e), a wheel built with the embedded frontend, a **multi-arch hub container image** (`linux/amd64`+`linux/arm64`) pushed to GHCR, and a **GitHub Release** with the wheel attached. |
 
 All gate checks are seams-mocked and token-free — they install dependencies and
@@ -51,6 +51,30 @@ multi-arch. This is a documented gap, the same shape `bzh:release` already
 carries for the release cut generally: proven by the next real tag cut
 (`blizzard:ci` watching the `release` run, then the anonymous pull above), not
 invented around.
+
+### The dev image publish (push to `master`)
+
+Every green `master` commit publishes `ghcr.io/paul-gross/blizzard-hub` with two
+mutable-vs-immutable dev tags — `edge` (always the newest proven `master`
+image) and `sha-<full-git-sha>` (the exact commit, never reused) — built for
+both `linux/amd64` and `linux/arm64` the same way the release image is. This
+is a continuous, self-hostable artifact channel: no deployment, webhook, or
+installation-specific behavior is triggered by publishing it. It carries no
+branching logic (unlike the release fan-out, `scripts/image-tags.sh`), so the
+two tags and the OCI annotations are inlined directly in the `dev-image` job
+rather than farmed out to a script (`tests/test_push_workflow.py`).
+
+`dev-image` needs `[gate, upper-tiers, dev-build]` — the first two so the
+channel only ever advances on a commit that has cleared the merge gate and the
+service/crash-sweep tiers, and `dev-build` (not just `gate`) purely so the
+image's `org.opencontainers.image.version` annotation can reuse `dev-build`'s
+already-computed `0.<milestone>.0.dev<run>` string instead of recomputing it a
+second time.
+
+**`latest` never follows `master`** — that tag stays reserved for a stable
+release cut (see `docs/versioning.md`'s dev channel section). `edge` is the
+mutable pointer for dogfooding; `latest` is the mutable pointer for the public,
+stable channel, and the two must not be confused.
 
 ### Pending pieces, named not hidden
 
