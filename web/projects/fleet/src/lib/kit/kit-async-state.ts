@@ -26,6 +26,12 @@ export type KitAsyncStateValue = 'loading' | 'error' | 'empty' | 'ready';
  * left-aligned padding, right for a list panel whose existing `.none` copy sat
  * as a padded top-left line — adopting the kit there is not a silent visual
  * regression.
+ *
+ * `loadingMode` picks what the `loading` state renders: `'text'` (default)
+ * keeps the status line; `'content'` instead projects the `[loading]`-slotted
+ * content the caller supplies (typically a `KitSkeleton`) — a shape-of-what's-
+ * coming placeholder rather than a status line, purely a polish increment
+ * over the text every acceptance criterion is already met by.
  */
 @Component({
   selector: 'fleet-kit-async-state',
@@ -36,7 +42,11 @@ export type KitAsyncStateValue = 'loading' | 'error' | 'empty' | 'ready';
         <ng-content />
       }
       @case ('loading') {
-        <p class="status" [class.inline]="placement() === 'inline'" [attr.data-testid]="loadingTestid()">{{ loadingText() }}</p>
+        @if (loadingMode() === 'content') {
+          <ng-content select="[loading]" />
+        } @else {
+          <p class="status" [class.inline]="placement() === 'inline'" [attr.data-testid]="loadingTestid()">{{ loadingText() }}</p>
+        }
       }
       @case ('error') {
         <p class="status error" [class.inline]="placement() === 'inline'" [attr.data-testid]="errorTestid()">{{ errorText() }}</p>
@@ -102,6 +112,10 @@ export class KitAsyncState {
    * positioned ancestor; `'inline'` renders it left-aligned in normal flow,
    * padded like the list-panel `.none` copy it replaces. */
   readonly placement = input<'center' | 'inline'>('center');
+
+  /** `'text'` (default) renders `loadingText()`; `'content'` projects the
+   * caller's `[loading]`-slotted content instead. */
+  readonly loadingMode = input<'text' | 'content'>('text');
 
   /** Each state's rendered `data-testid`, or `null` for none — every consumer
    * names its own (they differ per caller, and only one state is ever

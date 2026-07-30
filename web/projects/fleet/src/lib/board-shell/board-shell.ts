@@ -7,6 +7,7 @@ import { compactRef } from '../compact-ref';
 import { LANES, STATUS_LANE } from '../chunk-lanes';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
 import { KitPanel } from '../kit/kit-panel';
+import { KitSkeleton } from '../kit/kit-skeleton';
 
 export type { BoardCard, BoardReposition };
 
@@ -31,7 +32,7 @@ export type { BoardCard, BoardReposition };
 @Component({
   selector: 'fleet-board-shell',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BoardColumn, KitPanel, KitAsyncState],
+  imports: [BoardColumn, KitPanel, KitAsyncState, KitSkeleton],
   template: `
     <div class="mc" data-testid="board-shell">
       <fleet-kit-panel
@@ -57,13 +58,16 @@ export type { BoardCard, BoardReposition };
         </div>
         <fleet-kit-async-state
           [state]="state()"
-          loadingText="LOADING…"
-          loadingTestid="board-loading"
+          loadingMode="content"
           errorText="FAILED TO LOAD FLEET"
           errorTestid="board-error"
           emptyText="NO CHUNKS — FLEET IDLE"
           emptyTestid="empty-state"
-        />
+        >
+          <div loading class="board-skeleton" data-testid="board-loading">
+            <fleet-kit-skeleton variant="card" [rows]="4" />
+          </div>
+        </fleet-kit-async-state>
       </fleet-kit-panel>
     </div>
   `,
@@ -101,6 +105,16 @@ export type { BoardCard, BoardReposition };
     fleet-kit-panel.board-panel {
       flex: 1;
       position: relative;
+    }
+    /* Overlaid centered, same footprint as the status line it replaces in
+       loadingMode="content" — a handful of card-shaped placeholders standing
+       in for the lane grid's still-loading cards, not a status message. */
+    .board-skeleton {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: min(320px, 80%);
     }
     /* One equal track per lane, laid out by flow rather than a repeat() count —
        LANES is the single owner of how many lanes there are (issue #137 added

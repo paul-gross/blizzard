@@ -5,6 +5,7 @@ import {
   KitAsyncState,
   KitBadge,
   KitPanel,
+  KitSkeleton,
   formatCost,
   formatTokens,
   type FleetSpendView,
@@ -73,7 +74,7 @@ export interface Vitals {
 @Component({
   selector: 'app-glance-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitBadge, KitPanel, RouterLink],
+  imports: [KitAsyncState, KitBadge, KitPanel, KitSkeleton, RouterLink],
   template: `
     <div class="glance" data-testid="glance-board">
       <div class="vitals" data-testid="glance-vitals">
@@ -105,13 +106,13 @@ export interface Vitals {
       >
         <fleet-kit-async-state
           [state]="needsYouState()"
-          loadingText="LOADING…"
-          loadingTestid="needs-you-loading"
+          loadingMode="content"
           errorText="FAILED TO LOAD"
           errorTestid="needs-you-error"
           emptyText="NOTHING NEEDS YOU"
           emptyTestid="needs-you-empty"
         >
+          <div loading data-testid="needs-you-loading"><fleet-kit-skeleton [rows]="2" /></div>
           <ul class="rows">
             @for (row of needsYou(); track row.chunkId) {
               <li class="row" data-testid="needs-you-row" [attr.data-chunk]="row.chunkId">
@@ -140,13 +141,13 @@ export interface Vitals {
       >
         <fleet-kit-async-state
           [state]="inMotionState()"
-          loadingText="LOADING…"
-          loadingTestid="in-motion-loading"
+          loadingMode="content"
           errorText="FAILED TO LOAD"
           errorTestid="in-motion-error"
           emptyText="NOTHING IN MOTION"
           emptyTestid="in-motion-empty"
         >
+          <div loading data-testid="in-motion-loading"><fleet-kit-skeleton [rows]="2" /></div>
           <ul class="rows">
             @for (row of inMotion(); track row.chunkId) {
               <li class="row" data-testid="in-motion-row" [attr.data-chunk]="row.chunkId">
@@ -175,13 +176,13 @@ export interface Vitals {
       >
         <fleet-kit-async-state
           [state]="doneTodayState()"
-          loadingText="LOADING…"
-          loadingTestid="done-today-loading"
+          loadingMode="content"
           errorText="FAILED TO LOAD"
           errorTestid="done-today-error"
           emptyText="NOTHING DONE YET"
           emptyTestid="done-today-empty"
         >
+          <div loading data-testid="done-today-loading"><fleet-kit-skeleton [rows]="2" /></div>
           <ul class="rows">
             @for (row of doneToday(); track row.chunkId) {
               <li class="row" data-testid="done-today-row" [attr.data-chunk]="row.chunkId">

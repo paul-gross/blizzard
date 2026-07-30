@@ -17,8 +17,10 @@ import { KitAsyncState, type KitAsyncStateValue } from './kit-async-state';
       [emptyTestid]="'triad'"
       [tone]="tone()"
       [placement]="placement()"
+      [loadingMode]="loadingMode()"
     >
       <p data-testid="ready-content">populated</p>
+      <p loading data-testid="skeleton-content">skeleton</p>
     </fleet-kit-async-state>
   `,
 })
@@ -26,6 +28,7 @@ class TestHost {
   readonly state = signal<KitAsyncStateValue>('loading');
   readonly tone = signal<'default' | 'accent'>('default');
   readonly placement = signal<'center' | 'inline'>('center');
+  readonly loadingMode = signal<'text' | 'content'>('text');
 }
 
 describe('KitAsyncState', () => {
@@ -94,5 +97,24 @@ describe('KitAsyncState', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="triad"]')?.classList.contains('inline')).toBe(true);
+  });
+
+  it('projects the [loading] slot instead of the text line when loadingMode is content', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    fixture.componentInstance.loadingMode.set('content');
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="skeleton-content"]')?.textContent).toBe('skeleton');
+    expect(el.querySelector('[data-testid="triad"]')).toBeNull();
+  });
+
+  it('still renders the text line when loadingMode stays text (the default)', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="triad"]')?.textContent).toBe('LOADING…');
+    expect(el.querySelector('[data-testid="skeleton-content"]')).toBeNull();
   });
 });
