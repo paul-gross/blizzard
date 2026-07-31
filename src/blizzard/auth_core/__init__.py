@@ -8,8 +8,8 @@ slice (#95) *imports* this exact module rather than reforking a copy — the epi
 invariant that reshaping a role touches only :data:`ROLE_PERMISSIONS`, never a call
 site on either daemon.
 
-:class:`Role` is a total order — ``superuser > admin > contributor > guest`` — carried
-declaratively as :data:`ROLE_PERMISSIONS`, a **static, code-only map**
+:class:`Role` is a total order — ``superuser > admin > contributor > guest > pending`` —
+carried declaratively as :data:`ROLE_PERMISSIONS`, a **static, code-only map**
 (never DB-stored — the epic's out-of-scope guardrail). :class:`Permission` is a
 string-newtype (``NewType("Permission", str)``) rather than an enum: the wire and the
 route dependency (``hub/api/auth_session.py``'s ``require(<permission>)``) both want a
@@ -24,8 +24,9 @@ from typing import NewType
 
 
 class Role(StrEnum):
-    """A hub-local user's coarse capability tier — superuser > admin > contributor > guest."""
+    """A hub-local user's coarse capability tier — superuser > admin > contributor > guest > pending."""
 
+    PENDING = "pending"
     GUEST = "guest"
     CONTRIBUTOR = "contributor"
     ADMIN = "admin"
@@ -35,7 +36,8 @@ class Role(StrEnum):
 Permission = NewType("Permission", str)
 
 #: All board reads, including the SSE stream (``GET /api/events/stream``) — belongs to
-#: ``contributor``+ (issue #91: reads are gated exactly like writes).
+#: ``guest``+. Reads are gated one tier below writes (superseding issue #91's "reads are
+#: gated exactly like writes": ``guest`` now reads everything and mutates nothing).
 FLEET_VIEW = Permission("fleet:view")
 #: Ingest a chunk (``POST /chunks``).
 CHUNK_INGEST = Permission("chunk:ingest")
@@ -59,12 +61,16 @@ GRAPH_EDIT = Permission("graph:edit")
 #: (landing with the role-assignment route in #94), not the tier of this permission.
 USER_MANAGE = Permission("user:manage")
 
+#: ``guest`` — read everything, mutate nothing. The whole "read-only" story is this one
+#: permission: every board read route is gated on ``FLEET_VIEW`` and nothing else in this
+#: module is.
+_GUEST_PERMISSIONS: frozenset[Permission] = frozenset({FLEET_VIEW})
+
 #: Every permission a ``contributor`` (or higher) holds — the fleet's day-to-day
 #: operating surface: reads, ingest, chunk control, the ask/answer and gate
 #: rendezvous, and queue shaping.
-_CONTRIBUTOR_PERMISSIONS: frozenset[Permission] = frozenset(
+_CONTRIBUTOR_PERMISSIONS: frozenset[Permission] = _GUEST_PERMISSIONS | frozenset(
     {
-        FLEET_VIEW,
         CHUNK_INGEST,
         CHUNK_CONTROL,
         QUESTION_ANSWER,
@@ -87,11 +93,13 @@ _ADMIN_PERMISSIONS: frozenset[Permission] = _CONTRIBUTOR_PERMISSIONS | frozenset
 _SUPERUSER_PERMISSIONS: frozenset[Permission] = _ADMIN_PERMISSIONS
 
 #: The static role -> permission-bundle map (``bzh:domain-core``) — code, never DB.
-#: ``guest`` holds no permissions at all (the lobby: only ``GET /api/me``, logout, and
+#: ``pending`` holds no permissions at all (the lobby: only ``GET /api/me``, logout, and
 #: the login surface are reachable, and those are public/self routes, not
-#: permission-gated).
+#: permission-gated). ``guest`` holds exactly :data:`FLEET_VIEW` — read everything,
+#: mutate nothing.
 ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
-    Role.GUEST: frozenset(),
+    Role.PENDING: frozenset(),
+    Role.GUEST: _GUEST_PERMISSIONS,
     Role.CONTRIBUTOR: _CONTRIBUTOR_PERMISSIONS,
     Role.ADMIN: _ADMIN_PERMISSIONS,
     Role.SUPERUSER: _SUPERUSER_PERMISSIONS,

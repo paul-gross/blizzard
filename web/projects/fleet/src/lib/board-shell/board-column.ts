@@ -45,7 +45,7 @@ export interface BoardReposition {
   template: `
     <div class="b-col-head">
       <span class="col-lbl">{{ column().label }}</span>
-      @if (queueControls()) {
+      @if (queueControls() && canReorder()) {
         <fleet-kit-button
           variant="primary"
           testid="group-selected"
@@ -65,7 +65,11 @@ export interface BoardReposition {
         {{ cards().length }}
       </span>
     </div>
-    @if (queueControls()) {
+    <!-- The drag-and-drop drop list is only *armed* when the identity actually holds
+         queue:reorder — a read-only board must not offer a drag it would then
+         refuse, not merely hide a button (issue #210). A guest on the READY lane
+         falls to the plain, undraggable branch below, same as every non-READY lane. -->
+    @if (queueControls() && canReorder()) {
       <div class="b-col-body" cdkDropList (cdkDropListDropped)="dropped($event)">
         @for (card of cards(); track card.chunkId; let i = $index) {
           <div class="q-card" cdkDrag>
@@ -90,6 +94,7 @@ export interface BoardReposition {
             <fleet-board-card
               [card]="card"
               [selected]="card.chunkId === selectedChunkId()"
+              [canControl]="canControl()"
               (selectChunk)="selectChunk.emit($event)"
               (promote)="promote.emit($event)"
             />
@@ -102,6 +107,7 @@ export interface BoardReposition {
           <fleet-board-card
             [card]="card"
             [selected]="card.chunkId === selectedChunkId()"
+            [canControl]="canControl()"
             (selectChunk)="selectChunk.emit($event)"
             (promote)="promote.emit($event)"
           />
@@ -222,6 +228,15 @@ export class BoardColumn {
 
   /** Whether this lane carries the queue-shaping affordances — set only for READY. */
   readonly queueControls = input(false);
+
+  /** Whether the current identity may promote a backlog chunk (`chunk:control` —
+   * issue #210), forwarded to each {@link BoardCardComponent}. */
+  readonly canControl = input(false);
+
+  /** Whether the current identity may reorder or group the ready queue
+   * (`queue:reorder` — issue #210) — gates the Group button and, combined with
+   * {@link queueControls}, whether the READY lane's drag-and-drop is armed at all. */
+  readonly canReorder = input(false);
 
   /** Emitted with a chunk id when its card is activated — fills the detail dock. */
   readonly selectChunk = output<string>();

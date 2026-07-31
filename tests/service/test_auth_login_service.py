@@ -99,7 +99,7 @@ def test_oidc_login_dance_against_the_stub_idp_ends_authenticated(tmp_path: Path
             assert me_resp.status_code == 200
             body = me_resp.json()
             assert body["username"] == "octocat"
-            assert body["role"] == "guest"
+            assert body["role"] == "pending"
 
 
 def test_github_login_dance_against_the_stub_idp_ends_authenticated(tmp_path: Path) -> None:

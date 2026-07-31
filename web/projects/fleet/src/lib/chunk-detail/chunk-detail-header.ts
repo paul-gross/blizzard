@@ -76,22 +76,24 @@ const NOT_PAUSABLE = new Set<ChunkStatus>(['done', 'stopped', 'delivering']);
              detach gives the claim away, pause keeps it. Unlike Detach it does not hang
              off the route, so it renders whether or not a route is live (issue #46). -->
         <div class="d-actions">
-          @if (pause()) {
-            <fleet-kit-button
-              testid="resume-chunk"
-              [ariaLabel]="'Resume chunk ' + detail().chunk_id"
-              (click)="onResume()"
-            >
-              Resume
-            </fleet-kit-button>
-          } @else if (pausable()) {
-            <fleet-kit-button
-              testid="pause-chunk"
-              [ariaLabel]="'Pause chunk ' + detail().chunk_id"
-              (click)="onPause()"
-            >
-              Pause
-            </fleet-kit-button>
+          @if (canControl()) {
+            @if (pause()) {
+              <fleet-kit-button
+                testid="resume-chunk"
+                [ariaLabel]="'Resume chunk ' + detail().chunk_id"
+                (click)="onResume()"
+              >
+                Resume
+              </fleet-kit-button>
+            } @else if (pausable()) {
+              <fleet-kit-button
+                testid="pause-chunk"
+                [ariaLabel]="'Pause chunk ' + detail().chunk_id"
+                (click)="onPause()"
+              >
+                Pause
+              </fleet-kit-button>
+            }
           }
         </div>
         <!-- The route rides in the header beside Detach, not down in the facts, because
@@ -101,14 +103,16 @@ const NOT_PAUSABLE = new Set<ChunkStatus>(['done', 'stopped', 'delivering']);
           <div class="d-route" data-testid="route-info">
             <span class="tag">Route</span>
             <span class="rn" data-testid="route-runner" [attr.title]="r.runner_id">{{ r.runner_id }}</span>
-            <fleet-kit-button
-              variant="danger"
-              testid="detach-chunk"
-              [ariaLabel]="'Detach chunk ' + detail().chunk_id + ' from its runner'"
-              (click)="onDetach()"
-            >
-              Detach
-            </fleet-kit-button>
+            @if (canControl()) {
+              <fleet-kit-button
+                variant="danger"
+                testid="detach-chunk"
+                [ariaLabel]="'Detach chunk ' + detail().chunk_id + ' from its runner'"
+                (click)="onDetach()"
+              >
+                Detach
+              </fleet-kit-button>
+            }
           </div>
         }
         <span class="nd" data-testid="detail-node" [attr.title]="detail().current_node_id">{{
@@ -231,6 +235,12 @@ const NOT_PAUSABLE = new Set<ChunkStatus>(['done', 'stopped', 'delivering']);
 export class ChunkDetailHeader {
   /** The chunk aggregate to render (identity, status, current node, pause, route). */
   readonly detail = input.required<ChunkDetail>();
+
+  /** Whether the current identity may operate Pause/Resume/Detach (`chunk:control` —
+   * issue #210). Withholds every one of those controls when `false` so a `guest`
+   * never sees a write it cannot make; `null`/pending resolves to `false` (hidden
+   * until confirmed), the same convention `RunnerPanel`'s `canPause` set. */
+  readonly canControl = input(false);
 
   /** Emitted when the operator dismisses the dock. */
   readonly dismiss = output<void>();

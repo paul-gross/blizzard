@@ -48,6 +48,8 @@ export type { BoardCard, BoardReposition };
               [cards]="cardsFor(col.key)"
               [selectedChunkId]="selectedChunkId()"
               [queueControls]="col.key === 'ready'"
+              [canControl]="canControl()"
+              [canReorder]="canReorder()"
               (selectChunk)="selectChunk.emit($event)"
               (promote)="promote.emit($event)"
               (reposition)="reposition.emit($event)"
@@ -168,6 +170,15 @@ export class BoardShell {
   /** Emitted with the READY lane's multi-selection, in lane order (the top-most
    * is the group survivor), when the operator activates Group. */
   readonly group = output<readonly string[]>();
+
+  /** Whether the current identity may promote a backlog chunk (`chunk:control` —
+   * issue #210), forwarded to every {@link BoardColumn}. `null`/pending resolves to
+   * `false` (hidden until confirmed). */
+  readonly canControl = input(false);
+
+  /** Whether the current identity may reorder or group the ready queue
+   * (`queue:reorder` — issue #210), forwarded to the READY {@link BoardColumn}. */
+  readonly canReorder = input(false);
 
   protected readonly columns = LANES;
 

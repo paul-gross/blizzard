@@ -36,7 +36,7 @@ import {
   template: `
     <div class="general" data-testid="chunk-general-tab">
       <fleet-kit-panel class="section" data-testid="section-work-item" label="work item" [count]="pointerCount() || null">
-        <fleet-chunk-detail-facts [detail]="detail()" (editGraph)="editGraph.emit($event)">
+        <fleet-chunk-detail-facts [detail]="detail()" [canControl]="canControl()" (editGraph)="editGraph.emit($event)">
           <fleet-chunk-detail-token-breakdown token-breakdown [detail]="detail()" />
         </fleet-chunk-detail-facts>
       </fleet-kit-panel>
@@ -49,6 +49,8 @@ import {
       <fleet-kit-panel class="section" data-testid="section-asks" label="asks · decisions">
         <fleet-chunk-detail-awaiting-human
           [detail]="detail()"
+          [canAnswer]="canAnswer()"
+          [canResolve]="canResolve()"
           (answerQuestion)="answerQuestion.emit($event)"
           (resolveDecision)="resolveDecision.emit($event)"
         />
@@ -106,6 +108,18 @@ export class ChunkGeneralTab {
 
   /** The chunk's related work-source items + fetch state. */
   readonly workItems = input<WorkItemsState>({ status: 'loading', items: [] });
+
+  /** Whether the current identity may set the chunk's graph (`chunk:control` —
+   * issue #210), forwarded to {@link ChunkFacts}. */
+  readonly canControl = input(false);
+
+  /** Whether the current identity may answer an open question (`question:answer` —
+   * issue #210), forwarded to {@link ChunkAwaitingHuman}. */
+  readonly canAnswer = input(false);
+
+  /** Whether the current identity may resolve an open gate decision (`gate:resolve` —
+   * issue #210), forwarded to {@link ChunkAwaitingHuman}. */
+  readonly canResolve = input(false);
 
   /** Emitted when the operator answers an open question. */
   readonly answerQuestion = output<AnswerQuestionEvent>();

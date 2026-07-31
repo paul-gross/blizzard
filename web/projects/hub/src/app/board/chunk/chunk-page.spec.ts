@@ -5,7 +5,7 @@ import { RouterTestingHarness } from '@angular/router/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { hubClient } from 'fleet';
 import { stubError } from 'fleet/testing';
-import { type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
+import { OPERATOR_ME_RESPONSE, type RequestClientStub, settle, stubRequestClient } from 'fleet/testing';
 
 import { ArtifactPage } from './artifact-page';
 import { ChunkPage } from './chunk-page';
@@ -80,6 +80,7 @@ describe('Mobile chunk drill-down', () => {
 
   beforeEach(() => {
     stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
       if (method === 'GET' && path.endsWith('/work-items')) {
         return { items: [{ ref: 'blizzard#26', title: 'Make the board mobile', state: 'open', web_url: null }] };
       }
@@ -257,6 +258,7 @@ describe('Mobile chunk drill-down', () => {
     // status that also reads "done".
     stub.restore();
     stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
       if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
       return { ...DETAIL, status: 'done', current_node_id: 'done', current_node_name: null };
     });
@@ -271,6 +273,7 @@ describe('Mobile chunk drill-down', () => {
   it('says so when the chunk has no artifacts at all', async () => {
     stub.restore();
     stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
       if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
       return { ...DETAIL, artifacts: [] };
     });
@@ -293,6 +296,7 @@ describe('Mobile chunk drill-down', () => {
   it('surfaces an operator action failure instead of swallowing it', async () => {
     stub.restore();
     stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
       if (method === 'PATCH') return stubError(409, { detail: 'chunk is not ready' });
       if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
       return { ...DETAIL, status: 'not_ready' };
@@ -336,6 +340,7 @@ describe('Mobile chunk drill-down', () => {
   async function answerOnMobile(answerResponse: unknown): Promise<HTMLElement> {
     stub.restore();
     stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
       if (method === 'POST' && path === '/api/questions/qn_77/answers') return answerResponse;
       if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
       return { ...DETAIL, status: 'waiting_on_human', questions: [OPEN_QUESTION] };
@@ -382,6 +387,7 @@ describe('Mobile chunk drill-down', () => {
     // here so a future mobile-only fork of the asks region cannot drop it silently.
     stub.restore();
     stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
       if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
       return {
         ...DETAIL,

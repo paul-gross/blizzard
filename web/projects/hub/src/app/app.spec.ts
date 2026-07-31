@@ -276,16 +276,16 @@ describe('hub App', () => {
       expect(el.querySelector('[data-testid="app-nav"]')).toBeNull();
     });
 
-    it('renders the guest lobby for an authenticated, permissionless identity', async () => {
+    it('renders the pending lobby for an authenticated, permissionless identity', async () => {
       authStub.restore();
-      const guest: MeResponse = {
+      const pending: MeResponse = {
         user_id: 'usr_1',
         username: 'newcomer',
         display_name: 'Newcomer',
-        role: 'guest',
+        role: 'pending',
         permissions: [],
       };
-      authStub = stubAuth(guest, [{ name: 'oidc-co', display_name: 'Stub SSO', type: 'oidc' }]);
+      authStub = stubAuth(pending, [{ name: 'oidc-co', display_name: 'Stub SSO', type: 'oidc' }]);
 
       const fixture = TestBed.createComponent(App);
       const router = TestBed.inject(Router);
@@ -293,23 +293,23 @@ describe('hub App', () => {
       await settle(fixture);
       const el = fixture.nativeElement as HTMLElement;
 
-      expect(el.querySelector('[data-testid="guest-lobby"]')).toBeTruthy();
+      expect(el.querySelector('[data-testid="pending-lobby"]')).toBeTruthy();
       expect(el.querySelector('[data-testid="board-header"]')).toBeNull();
-      expect(el.querySelector('[data-testid="guest-lobby-username"]')?.textContent).toContain('newcomer');
+      expect(el.querySelector('[data-testid="pending-lobby-username"]')?.textContent).toContain('newcomer');
     });
 
-    it('logs out from the guest lobby and lands back on /login', async () => {
+    it('logs out from the pending lobby and lands back on /login', async () => {
       authStub.restore();
-      const guest: MeResponse = {
+      const pending: MeResponse = {
         user_id: 'usr_1',
         username: 'newcomer',
         display_name: 'Newcomer',
-        role: 'guest',
+        role: 'pending',
         permissions: [],
       };
       let loggedOut = false;
       authStub = stubRequestClient(hubClient, (method, path) => {
-        if (path === '/api/me') return loggedOut ? stubError(401, { detail: 'not authenticated' }) : guest;
+        if (path === '/api/me') return loggedOut ? stubError(401, { detail: 'not authenticated' }) : pending;
         if (path === '/api/auth/providers') return [];
         if (path === '/api/auth/logout' && method === 'POST') {
           loggedOut = true;
@@ -328,7 +328,7 @@ describe('hub App', () => {
       await settle(fixture);
       const el = fixture.nativeElement as HTMLElement;
 
-      el.querySelector<HTMLElement>('[data-testid="guest-lobby-logout"]')?.click();
+      el.querySelector<HTMLElement>('[data-testid="pending-lobby-logout"]')?.click();
       await settle(fixture);
 
       expect(router.url).toBe('/login');

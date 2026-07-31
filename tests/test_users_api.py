@@ -91,19 +91,19 @@ def test_admin_promotes_a_guest_to_contributor(tmp_path: Path) -> None:
 def test_role_change_takes_effect_on_the_subjects_next_request_without_re_login(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, auth_mode="oauth")
     admin = seed_user(hub, username="ada", role=Role.ADMIN)
-    guest = seed_user(hub, username="grace", role=Role.GUEST)
+    pending = seed_user(hub, username="newcomer", role=Role.PENDING)
     admin_token = seed_session(hub, admin)
-    guest_token = seed_session(hub, guest)
+    pending_token = seed_session(hub, pending)
 
-    assert hub.client.get("/api/chunks", headers=_cookie(guest_token)).status_code == 403
+    assert hub.client.get("/api/chunks", headers=_cookie(pending_token)).status_code == 403
 
     promote = hub.client.post(
-        f"/api/users/{guest.user_id}/role", json={"role": "contributor"}, headers=_cookie(admin_token)
+        f"/api/users/{pending.user_id}/role", json={"role": "guest"}, headers=_cookie(admin_token)
     )
     assert promote.status_code == 200
 
     # Same session token, no re-login — the resolver reads `users.role` live.
-    assert hub.client.get("/api/chunks", headers=_cookie(guest_token)).status_code == 200
+    assert hub.client.get("/api/chunks", headers=_cookie(pending_token)).status_code == 200
 
 
 def test_admin_granting_admin_is_refused(tmp_path: Path) -> None:
@@ -144,6 +144,76 @@ def test_superuser_is_not_assignable_through_the_api(tmp_path: Path) -> None:
 
     resp = hub.client.post(f"/api/users/{guest.user_id}/role", json={"role": "superuser"}, headers=_cookie(token))
     assert resp.status_code == 403
+
+
+def test_admin_promotes_a_pending_user_to_guest(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    admin = seed_user(hub, username="ada", role=Role.ADMIN)
+    pending = seed_user(hub, username="newcomer", role=Role.PENDING)
+    token = seed_session(hub, admin)
+
+    resp = hub.client.post(f"/api/users/{pending.user_id}/role", json={"role": "guest"}, headers=_cookie(token))
+    assert resp.status_code == 200
+    assert resp.json()["role"] == "guest"
+
+
+def test_admin_promotes_a_pending_user_to_contributor(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    admin = seed_user(hub, username="ada", role=Role.ADMIN)
+    pending = seed_user(hub, username="newcomer", role=Role.PENDING)
+    token = seed_session(hub, admin)
+
+    resp = hub.client.post(f"/api/users/{pending.user_id}/role", json={"role": "contributor"}, headers=_cookie(token))
+    assert resp.status_code == 200
+    assert resp.json()["role"] == "contributor"
+
+
+def test_admin_demotes_a_guest_to_pending(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    admin = seed_user(hub, username="ada", role=Role.ADMIN)
+    guest = seed_user(hub, username="grace", role=Role.GUEST)
+    token = seed_session(hub, admin)
+
+    resp = hub.client.post(f"/api/users/{guest.user_id}/role", json={"role": "pending"}, headers=_cookie(token))
+    assert resp.status_code == 200
+    assert resp.json()["role"] == "pending"
+
+
+def test_admin_granting_admin_from_pending_is_refused(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    admin = seed_user(hub, username="ada", role=Role.ADMIN)
+    pending = seed_user(hub, username="newcomer", role=Role.PENDING)
+    token = seed_session(hub, admin)
+
+    resp = hub.client.post(f"/api/users/{pending.user_id}/role", json={"role": "admin"}, headers=_cookie(token))
+    assert resp.status_code == 403
+
+
+def test_superuser_granting_admin_from_pending_succeeds(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    superuser = seed_user(hub, username="root", role=Role.SUPERUSER)
+    pending = seed_user(hub, username="newcomer", role=Role.PENDING)
+    token = seed_session(hub, superuser)
+
+    resp = hub.client.post(f"/api/users/{pending.user_id}/role", json={"role": "admin"}, headers=_cookie(token))
+    assert resp.status_code == 200
+    assert resp.json()["role"] == "admin"
+
+
+def test_each_pending_role_change_emits_one_user_role_changed_fact(tmp_path: Path) -> None:
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    admin = seed_user(hub, username="ada", role=Role.ADMIN)
+    pending = seed_user(hub, username="newcomer", role=Role.PENDING)
+    token = seed_session(hub, admin)
+
+    hub.client.post(f"/api/users/{pending.user_id}/role", json={"role": "guest"}, headers=_cookie(token))
+
+    facts = hub.services.auth_facts.list_recent()
+    assert len(facts) == 1
+    assert facts[0].kind == "user_role_changed"
+    assert facts[0].actor == "ada"
+    assert facts[0].subject == "newcomer"
+    assert facts[0].detail == "pending -> guest"
 
 
 def test_assign_role_404s_for_an_unknown_user(tmp_path: Path) -> None:

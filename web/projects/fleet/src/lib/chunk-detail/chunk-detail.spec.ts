@@ -7,6 +7,7 @@ import { vi } from 'vitest';
 import type { ChunkDetail as ChunkDetailModel } from '../api/hub';
 import { settle } from '../testing/settle';
 import { client as hubClient } from '../api/hub/client.gen';
+import { OPERATOR_ME_RESPONSE } from '../testing/auth-fixtures';
 import { type RequestClientStub, stubError, stubRequestClient } from '../testing/stub-request-client';
 import { ChunkDetail } from './chunk-detail';
 
@@ -124,6 +125,7 @@ describe('ChunkDetail container', () => {
     askAnswered = false;
     // The generated client's transport is stubbed so we can assert the exact call the button fires.
     stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
       if (method === 'GET' && path === '/api/chunks/ch_gate') return GATE_DETAIL;
       if (method === 'GET' && path === '/api/chunks/ch_routed') return ROUTED_DETAIL;
       if (method === 'GET' && path === '/api/chunks/ch_paused') return PAUSED_ASKING_DETAIL;

@@ -101,7 +101,7 @@ export interface BoardCard {
           }
         </span>
       </button>
-      @if (card().status === 'not_ready') {
+      @if (card().status === 'not_ready' && canControl()) {
         <button
           type="button"
           class="card-promote"
@@ -280,6 +280,11 @@ export class BoardCardComponent {
   /** Whether the container considers this card the current selection — its
    * card carries the selection highlight so the board says which one is open. */
   readonly selected = input(false);
+
+  /** Whether the current identity may promote a backlog chunk (`chunk:control` —
+   * issue #210). Withholds the Promote control when `false`; `null`/pending resolves
+   * to `false` (hidden until confirmed). */
+  readonly canControl = input(false);
 
   /** Emitted with the chunk id when the card is activated — fills the detail dock. */
   readonly selectChunk = output<string>();

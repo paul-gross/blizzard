@@ -5,7 +5,7 @@ import { filter, map } from 'rxjs';
 import {
   BoardHeader,
   FleetLiveUpdates,
-  GuestLobby,
+  PendingLobby,
   ViewportService,
   hasPermission,
   injectAuthProvidersQuery,
@@ -58,23 +58,24 @@ import { MobileTitlebar } from './nav/mobile-titlebar';
  *   withholds the outlet for that one tick rather than let it re-activate the
  *   previous, now-ungated route. `/login` carries its own full-page chrome, so the
  *   header/nav/tab-bar are withheld here regardless;
- * - **`lobby`** (a resolved identity with an **empty** permission set — `guest`,
- *   before an admin grants anything, #94) renders {@link GuestLobby} instead of the
+ * - **`lobby`** (a resolved identity with an **empty** permission set — `pending`,
+ *   before an admin grants a role, #94) renders {@link PendingLobby} instead of the
  *   board — "signed in, awaiting access", never a board silently 403ing every read;
  * - **`ready`** (at least one permission) renders the shell exactly as before. Under
  *   `auth.mode = "none"` `/api/me` always resolves the implicit operator (every
  *   permission), so this is the only branch that mode ever reaches — unchanged
  *   behavior, no login page, admin nav hidden (below).
  *
- * The SSE spine only starts once `ready` (a `guest`/unauthenticated stream would
- * just 401/403 immediately), and its {@link FleetLiveUpdates.authFailed} channel — a
- * session that expired mid-stream — routes back to `/login` the same way the
- * interceptor does, within the one reconnect cycle that surfaces it.
+ * The SSE spine only starts once `ready` (a `pending`/unauthenticated stream would
+ * just 401/403 immediately; `guest`, since issue #210, is `ready` and reads the
+ * stream like any other board reader), and its {@link FleetLiveUpdates.authFailed}
+ * channel — a session that expired mid-stream — routes back to `/login` the same way
+ * the interceptor does, within the one reconnect cycle that surfaces it.
  */
 @Component({
   selector: 'app-root',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BoardHeader, AppNav, AppNavMenu, MobileTitlebar, MobileTabBar, RouterOutlet, GuestLobby],
+  imports: [BoardHeader, AppNav, AppNavMenu, MobileTitlebar, MobileTabBar, RouterOutlet, PendingLobby],
   template: `
     @switch (authState()) {
       @case ('unauthenticated') {
@@ -89,7 +90,7 @@ import { MobileTitlebar } from './nav/mobile-titlebar';
         }
       }
       @case ('lobby') {
-        <fleet-guest-lobby [me]="me()" (logout)="onLogout()" />
+        <fleet-pending-lobby [me]="me()" (logout)="onLogout()" />
       }
       @case ('ready') {
         <div class="layout">

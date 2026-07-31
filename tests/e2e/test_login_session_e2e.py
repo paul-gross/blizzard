@@ -1,5 +1,5 @@
 """Browser login dance + mid-stream session-expiry redirect — e2e scenario 12
-(issue #93, the plan's phase-3 matrix gap).
+(issue #93, the plan's phase-3 matrix gap; the role ladder reshaped by issue #210).
 
 The browser tier's login coverage: a real Chromium, driven by Playwright, over the
 **served** board (``blizzard hub host`` mounts the built Angular app at ``/``,
@@ -7,29 +7,33 @@ exactly as scenario 6, ``test_board_browser_e2e.py``), under ``auth.mode = "oaut
 against the real ``blizzard-mock`` stub IdP — every seam real, no tokens, no network
 beyond the two local subprocesses:
 
-1. **Unauthenticated -> login -> provider dance -> authenticated.** The board is hit
+1. **Unauthenticated -> login -> provider dance -> pending.** The board is hit
    with no session; the app's own 401 gate lands it on ``/login``, rendering the
    configured provider's button (never an auto-redirect). Clicking it drives the real
    OAuth dance against the stub IdP and lands back on the hub authenticated — as a
-   freshly-minted ``guest`` (role assignment is #94; no admin surface exists yet to
-   grant more), it lands on the **guest lobby** ("signed in, awaiting access"), not a
+   freshly-minted ``pending`` identity (the bottom, no-access role; role assignment
+   is #94), it lands on the **pending lobby** ("signed in, awaiting access"), not a
    broken board — itself proof the dance produced a real, working session cookie.
-2. **A session expiring mid-SSE-stream surfaces as a login redirect within one
-   reconnect cycle.** Reaching the live board (not just the lobby) needs a
-   permission-bearing role, and #93 lands no role-assignment surface (#94's own
-   slice) — so the guest's role is promoted directly in the hub's sqlite store, the
-   one seam available before #94 exists, exactly as this suite already mints fixture
-   state no API yet exposes. The hub is stopped, ``users.role`` is set to
-   ``contributor`` for the logged-in user, and the hub is restarted on the same
-   store/port; the browser (still holding its session cookie) reloads and reaches the
-   real board with its SSE stream open. The hub is then stopped again, the session
-   row is deleted (an unambiguous stand-in for "expired" — the resolve path treats a
-   missing/expired session identically, ``hub/api/auth_session.py``), and restarted.
-   Killing the hub process force-drops the open stream; the client's own reconnect
-   (the fetch-based transport's one seam that can see a status code at all,
-   ``sse.service.ts``) lands on the new hub with an invalid session, receives ``401``
-   on that **one reconnect attempt**, and the app routes to ``/login`` — proving the
-   auth-failure channel end to end rather than an unbounded retry loop.
+2. **Promoted to `guest`, the board is reachable read-only.** #93 lands no
+   role-assignment surface (#94's own slice), so the role is set directly in the
+   hub's sqlite store, the one seam available before #94 exists, exactly as this
+   suite already mints fixture state no API yet exposes. A `guest` reads everything
+   and mutates nothing (issue #210): the browser reloads (same session cookie, no
+   re-login) and reaches the real board — the pending lobby gone — but a seeded
+   not-ready chunk's card renders with **no Promote control**, the end-to-end proof
+   that "read-only" is not merely a unit-tier claim.
+3. **Promoted to `contributor`, the write control appears.** The same reload, the
+   same card, now with its Promote control back — the control's presence is a
+   function of the resolved permission, not of anything else that changed.
+4. **A session expiring mid-SSE-stream surfaces as a login redirect within one
+   reconnect cycle.** The hub is stopped, the session row is deleted (an
+   unambiguous stand-in for "expired" — the resolve path treats a missing/expired
+   session identically, ``hub/api/auth_session.py``), and restarted. Killing the hub
+   process force-drops the open stream; the client's own reconnect (the fetch-based
+   transport's one seam that can see a status code at all, ``sse.service.ts``) lands
+   on the new hub with an invalid session, receives ``401`` on that **one reconnect
+   attempt**, and the app routes to ``/login`` — proving the auth-failure channel end
+   to end rather than an unbounded retry loop.
 
 It is the **e2e tier**: it needs the full live stack, the sibling ``blizzard-mock``
 worktree, and an installed Chromium, so it is **skipped unless ``BLIZZARD_E2E=1``**
@@ -114,13 +118,32 @@ def _db_path(hub_dir: Path) -> Path:
     return hub_dir / "data" / "hub.db"
 
 
-def _promote_to_contributor(hub_dir: Path, username: str) -> None:
+def _set_role(hub_dir: Path, username: str, role: str) -> None:
     """The stand-in for #94's not-yet-landed role-assignment API — direct store
     access, the same "mint what the API cannot yet" pattern this suite already uses
     for fixture state (``mint_fixture``, forge seeding)."""
     con = sqlite3.connect(_db_path(hub_dir))
     try:
-        con.execute("UPDATE users SET role = 'contributor' WHERE username = ?", (username,))
+        con.execute("UPDATE users SET role = ? WHERE username = ?", (role, username))
+        con.commit()
+    finally:
+        con.close()
+
+
+def _seed_not_ready_chunk(hub_dir: Path, *, chunk_id: str, graph_id: str) -> None:
+    """One bare fixture chunk — no route, no facts — so the read-only board claim
+    (Phase 5's Promote control) has a concrete card to assert against. Derives
+    ``not_ready`` by construction: a chunk with no promote fact rests there."""
+    con = sqlite3.connect(_db_path(hub_dir))
+    try:
+        con.execute(
+            "INSERT INTO graphs (graph_id, name, entry_node_id, definition_yaml, created_at) VALUES (?, ?, ?, ?, ?)",
+            (graph_id, "g", "nd_1", "", "2026-07-13 00:00:00.000000"),
+        )
+        con.execute(
+            "INSERT INTO chunks (chunk_id, graph_id, minted_at) VALUES (?, ?, ?)",
+            (chunk_id, graph_id, "2026-07-13 00:00:00.000000"),
+        )
         con.commit()
     finally:
         con.close()
@@ -139,8 +162,10 @@ def _expire_session(hub_dir: Path) -> None:
 
 
 def test_browser_login_dance_and_mid_stream_session_expiry(tmp_path: Path) -> None:
-    """Scenario 12: the browser login dance to a working session, then a session
-    expiring mid-SSE-stream surfacing as a login redirect within one reconnect cycle."""
+    """Scenario 12: the browser login dance lands `pending`, promoted to `guest` it
+    reaches the board read-only, promoted to `contributor` its write control appears,
+    then a session expiring mid-SSE-stream surfaces as a login redirect within one
+    reconnect cycle."""
     from playwright.sync_api import expect, sync_playwright
 
     bin_dir = require_stub_idp()
@@ -148,6 +173,8 @@ def test_browser_login_dance_and_mid_stream_session_expiry(tmp_path: Path) -> No
     idp_port = _free_port()
     hub_port = _free_port()
     hub_dir = tmp_path / "hub"
+    chunk_id = "ch_01e2eloginchunk00000000000"
+    graph_id = "gr_01e2eloginchunk00000000000"
 
     with sync_playwright() as pw, stub_idp(bin_dir, idp_port) as idp:
         idp.put(
@@ -171,22 +198,37 @@ def test_browser_login_dance_and_mid_stream_session_expiry(tmp_path: Path) -> No
             # --- The real OAuth dance against the stub IdP -----------------------
             page.get_by_test_id(f"login-provider-{_PROVIDER_NAME}").click()
 
-            # A fresh identity mints as `guest` (no role-assignment surface exists
-            # yet, #94) — the lobby is the authenticated proof the dance worked.
-            expect(page.get_by_test_id("guest-lobby")).to_be_visible()
-            expect(page.get_by_test_id("guest-lobby-username")).to_contain_text("octocat")
+            # A fresh identity mints as `pending` — the bottom, no-access role (#210)
+            # — the lobby is the authenticated proof the dance worked.
+            expect(page.get_by_test_id("pending-lobby")).to_be_visible()
+            expect(page.get_by_test_id("pending-lobby-username")).to_contain_text("octocat")
 
-            # --- 2a. Promote to contributor (the #94 stand-in) and reach the board
+            # --- 2. Promoted to `guest`, the board is reachable read-only (#210) ---
             _terminate(proc)
-            _promote_to_contributor(hub_dir, "octocat")
+            _set_role(hub_dir, "octocat", "guest")
+            _seed_not_ready_chunk(hub_dir, chunk_id=chunk_id, graph_id=graph_id)
             proc = _start_hub(hub_dir, hub_port)
 
             page.reload(wait_until="load")
             expect(page.get_by_test_id("board-header")).to_be_visible()
             expect(page.get_by_test_id("board-shell")).to_be_visible()
-            expect(page.get_by_test_id("guest-lobby")).to_have_count(0)
+            expect(page.get_by_test_id("pending-lobby")).to_have_count(0)
+            # The seeded chunk's card is visible — a guest reads everything — but its
+            # Promote control is not: the end-to-end proof of "read-only", not merely
+            # a unit-tier claim.
+            expect(page.locator(f'[data-chunk="{chunk_id}"]')).to_be_visible()
+            expect(page.get_by_test_id("promote-chunk")).to_have_count(0)
 
-            # --- 2b. Expire the session mid-stream; the hub restart force-drops the
+            # --- 3. Promoted to `contributor`, the write control appears -----------
+            _terminate(proc)
+            _set_role(hub_dir, "octocat", "contributor")
+            proc = _start_hub(hub_dir, hub_port)
+
+            page.reload(wait_until="load")
+            expect(page.get_by_test_id("board-shell")).to_be_visible()
+            expect(page.get_by_test_id("promote-chunk")).to_be_visible()
+
+            # --- 4. Expire the session mid-stream; the hub restart force-drops the
             # open SSE connection, and the client's own reconnect is the "one
             # reconnect cycle" that discovers the now-invalid session.
             _terminate(proc)

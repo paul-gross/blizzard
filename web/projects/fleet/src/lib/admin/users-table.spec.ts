@@ -24,6 +24,15 @@ const USERS: readonly UserView[] = [
     identities: [],
   },
   {
+    user_id: 'usr_pending',
+    username: 'newcomer',
+    display_name: 'Newcomer',
+    email: null,
+    role: 'pending',
+    created_at: '2026-07-21T00:00:00Z',
+    identities: [],
+  },
+  {
     user_id: 'usr_root',
     username: 'root',
     display_name: 'Root',
@@ -55,7 +64,7 @@ describe('UsersTable', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     const rows = el.querySelectorAll('[data-testid="users-table-row"]');
-    expect(rows).toHaveLength(3);
+    expect(rows).toHaveLength(4);
     const adaRow = el.querySelector('[data-user-id="usr_admin"]');
     expect(adaRow?.querySelector('[data-testid="users-table-username"]')?.textContent).toContain('ada');
     expect(adaRow?.querySelector('[data-testid="users-table-email"]')?.textContent).toContain('ada@example.com');
@@ -88,6 +97,44 @@ describe('UsersTable', () => {
     const adaRow = el.querySelector('[data-user-id="usr_admin"]');
     expect(adaRow?.querySelector('[data-testid="users-table-role-static"]')?.textContent).toContain('(you)');
     expect(adaRow?.querySelector('[data-testid="users-table-role-select"]')).toBeNull();
+  });
+
+  it('renders four role options in order for an ordinary row', async () => {
+    const fixture = mount({ currentUserId: 'usr_other', isSuperuser: true });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const guestRow = el.querySelector('[data-user-id="usr_guest"]');
+    const options = guestRow?.querySelectorAll<HTMLOptionElement>('option');
+    expect(Array.from(options ?? []).map((o) => o.value)).toEqual(['pending', 'guest', 'contributor', 'admin']);
+  });
+
+  it("selects the row's current role by default, for every assignable role", async () => {
+    const fixture = mount({ currentUserId: 'usr_other', isSuperuser: true });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const guestSelect = el.querySelector<HTMLSelectElement>('[data-user-id="usr_guest"] [data-testid="users-table-role-select"]');
+    expect(guestSelect?.value).toBe('guest');
+    const pendingSelect = el.querySelector<HTMLSelectElement>(
+      '[data-user-id="usr_pending"] [data-testid="users-table-role-select"]',
+    );
+    expect(pendingSelect?.value).toBe('pending');
+  });
+
+  it('renders a pending row with an enabled selector, not as static text', async () => {
+    const fixture = mount({ currentUserId: 'usr_other', isSuperuser: true });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const pendingRow = el.querySelector('[data-user-id="usr_pending"]');
+    const select = pendingRow?.querySelector<HTMLSelectElement>('[data-testid="users-table-role-select"]');
+    expect(select).toBeTruthy();
+    expect(select?.disabled).toBe(false);
+    expect(pendingRow?.querySelector('[data-testid="users-table-role-static"]')).toBeNull();
+
+    const adminOption = pendingRow?.querySelector<HTMLOptionElement>('option[value="admin"]');
+    expect(adminOption?.disabled).toBe(false);
   });
 
   it('disables the admin option for a non-superuser actor', async () => {

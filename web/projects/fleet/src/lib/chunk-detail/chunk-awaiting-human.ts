@@ -51,37 +51,39 @@ const TERMINAL_STATUSES: ReadonlySet<string> = new Set<ChunkStatus>(['done', 'st
         @for (q of openQuestions(); track q.question_id) {
           <div class="ask" data-testid="open-question">
             <p class="ask-q" data-testid="question-text">{{ q.question }}</p>
-            @if (q.options && q.options.length > 0) {
-              <div class="chips">
-                @for (opt of q.options; track opt) {
-                  <button
-                    type="button"
-                    class="chip"
-                    data-testid="question-option"
-                    (click)="submitAnswer(q.question_id, opt)"
-                  >
-                    {{ opt }}
-                  </button>
-                }
+            @if (canAnswer()) {
+              @if (q.options && q.options.length > 0) {
+                <div class="chips">
+                  @for (opt of q.options; track opt) {
+                    <button
+                      type="button"
+                      class="chip"
+                      data-testid="question-option"
+                      (click)="submitAnswer(q.question_id, opt)"
+                    >
+                      {{ opt }}
+                    </button>
+                  }
+                </div>
+              }
+              <div class="answer-row">
+                <input
+                  #answerInput
+                  class="answer-input"
+                  type="text"
+                  data-testid="answer-input"
+                  placeholder="Type an answer…"
+                  [attr.aria-label]="'Answer question ' + q.question_id"
+                />
+                <fleet-kit-button
+                  variant="primary"
+                  testid="answer-submit"
+                  (click)="submitAnswer(q.question_id, answerInput.value); answerInput.value = ''"
+                >
+                  Answer
+                </fleet-kit-button>
               </div>
             }
-            <div class="answer-row">
-              <input
-                #answerInput
-                class="answer-input"
-                type="text"
-                data-testid="answer-input"
-                placeholder="Type an answer…"
-                [attr.aria-label]="'Answer question ' + q.question_id"
-              />
-              <fleet-kit-button
-                variant="primary"
-                testid="answer-submit"
-                (click)="submitAnswer(q.question_id, answerInput.value); answerInput.value = ''"
-              >
-                Answer
-              </fleet-kit-button>
-            </div>
           </div>
         }
         @if (openDecision(); as d) {
@@ -90,19 +92,21 @@ const TERMINAL_STATUSES: ReadonlySet<string> = new Set<ChunkStatus>(['done', 'st
               <span class="tag">Gate</span>
               <span class="gate-node" data-testid="decision-node">{{ d.node_name }}</span>
             </div>
-            <div class="chips">
-              @for (c of d.choices ?? []; track c.name) {
-                <button
-                  type="button"
-                  class="chip primary"
-                  data-testid="decision-choice"
-                  [title]="c.description"
-                  (click)="resolve(d.decision_id, c.name)"
-                >
-                  {{ c.name }}
-                </button>
-              }
-            </div>
+            @if (canResolve()) {
+              <div class="chips">
+                @for (c of d.choices ?? []; track c.name) {
+                  <button
+                    type="button"
+                    class="chip primary"
+                    data-testid="decision-choice"
+                    [title]="c.description"
+                    (click)="resolve(d.decision_id, c.name)"
+                  >
+                    {{ c.name }}
+                  </button>
+                }
+              </div>
+            }
           </div>
         }
       </div>
@@ -290,6 +294,17 @@ const TERMINAL_STATUSES: ReadonlySet<string> = new Set<ChunkStatus>(['done', 'st
 export class ChunkAwaitingHuman {
   /** The chunk aggregate to render (open questions, gate decision, escalation). */
   readonly detail = input.required<ChunkDetail>();
+
+  /** Whether the current identity may answer an open question (`question:answer` —
+   * issue #210). Withholds the answer input/chips when `false`, though the question
+   * text itself still shows — a `guest` reads that a chunk is waiting, just cannot
+   * act on it. `null`/pending resolves to `false` (hidden until confirmed). */
+  readonly canAnswer = input(false);
+
+  /** Whether the current identity may resolve an open gate decision (`gate:resolve` —
+   * issue #210). Withholds the choice chips when `false`; `null`/pending resolves to
+   * `false`. */
+  readonly canResolve = input(false);
 
   /** Emitted when the operator answers an open question (MVP criterion 7). */
   readonly answerQuestion = output<AnswerQuestionEvent>();

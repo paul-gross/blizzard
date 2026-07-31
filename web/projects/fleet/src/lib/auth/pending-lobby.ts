@@ -4,27 +4,28 @@ import type { MeResponse } from '../api/hub';
 import { KitButton } from '../kit';
 
 /**
- * The `guest` lobby (issue #93) — an authenticated user resolved with an **empty**
- * permission set (a freshly-linked account, `role = "guest"`, before an admin grants
- * anything — #94's role assignment) sees this instead of the board: "signed in,
- * awaiting access", not a board silently failing every gated read with `403`s.
- * Presentational: the app root decides *when* to render this (an `authState` of
- * `'lobby'`) and hands down the resolved identity; logout is a working control here
- * too (the AC: "a guest can log out from the lobby") — this only emits the intent,
- * the container owns the mutation.
+ * The `pending` lobby (issue #93; renamed from the `guest` lobby by issue #210) — an
+ * authenticated user resolved with an **empty** permission set (a freshly-linked
+ * account, `role = "pending"`, before an admin grants a role — #94's role
+ * assignment) sees this instead of the board: "signed in, awaiting access", not a
+ * board silently failing every gated read with `403`s. Presentational: the app root
+ * decides *when* to render this (an `authState` of `'lobby'`) and hands down the
+ * resolved identity; logout is a working control here too (the AC: "a pending
+ * account can log out from the lobby") — this only emits the intent, the container
+ * owns the mutation.
  */
 @Component({
-  selector: 'fleet-guest-lobby',
+  selector: 'fleet-pending-lobby',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [KitButton],
   template: `
-    <div class="lobby" data-testid="guest-lobby">
+    <div class="lobby" data-testid="pending-lobby">
       <p class="headline">Signed in, awaiting access</p>
       @if (me(); as identity) {
-        <p class="detail" data-testid="guest-lobby-username">{{ identity.display_name }} ({{ identity.username }})</p>
+        <p class="detail" data-testid="pending-lobby-username">{{ identity.display_name }} ({{ identity.username }})</p>
       }
       <p class="detail">An admin has not granted you any permissions yet.</p>
-      <fleet-kit-button testid="guest-lobby-logout" (click)="logout.emit()">Log out</fleet-kit-button>
+      <fleet-kit-button testid="pending-lobby-logout" (click)="logout.emit()">Log out</fleet-kit-button>
     </div>
   `,
   styles: `
@@ -58,7 +59,7 @@ import { KitButton } from '../kit';
     }
   `,
 })
-export class GuestLobby {
+export class PendingLobby {
   /** The resolved identity — always non-`null` while this renders (the app root only
    * shows the lobby once `/api/me` resolved authenticated-but-permissionless). */
   readonly me = input<MeResponse | null>(null);

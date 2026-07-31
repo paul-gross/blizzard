@@ -52,6 +52,7 @@ export type { WorkItemsState } from './chunk-issue-pane';
     <aside class="dock" data-testid="chunk-detail" role="region" aria-label="Chunk detail">
       <fleet-chunk-detail-header
         [detail]="detail()"
+        [canControl]="canControl()"
         (dismiss)="dismiss.emit()"
         (detach)="detach.emit($event)"
         (pauseChunk)="pauseChunk.emit($event)"
@@ -71,6 +72,7 @@ export type { WorkItemsState } from './chunk-issue-pane';
           <div class="s-head"><span class="tag">Work item · {{ pointerCount() }}</span></div>
           <fleet-chunk-detail-facts
             [detail]="detail()"
+            [canControl]="canControl()"
             (editGraph)="editGraph.emit($event)"
           >
             <fleet-chunk-detail-token-breakdown token-breakdown [detail]="detail()" />
@@ -83,6 +85,8 @@ export type { WorkItemsState } from './chunk-issue-pane';
         <section class="d-sec" aria-label="Artifacts and asks">
           <fleet-chunk-detail-awaiting-human
             [detail]="detail()"
+            [canAnswer]="canAnswer()"
+            [canResolve]="canResolve()"
             (answerQuestion)="answerQuestion.emit($event)"
             (resolveDecision)="resolveDecision.emit($event)"
           />
@@ -187,6 +191,19 @@ export class ChunkDetailPanel {
    * result that still needs saying (issue #165), today the winning answer a lost
    * first-write-wins race returns. Rendered as news, not as a failure. */
   readonly actionOutcome = input<string | null>(null);
+
+  /** Whether the current identity may pause/resume/detach or set the chunk's graph
+   * (`chunk:control` — issue #210), forwarded to {@link ChunkDetailHeader} and
+   * {@link ChunkFacts}. `null`/pending resolves to `false`. */
+  readonly canControl = input(false);
+
+  /** Whether the current identity may answer an open question (`question:answer` —
+   * issue #210), forwarded to {@link ChunkAwaitingHuman}. */
+  readonly canAnswer = input(false);
+
+  /** Whether the current identity may resolve an open gate decision (`gate:resolve` —
+   * issue #210), forwarded to {@link ChunkAwaitingHuman}. */
+  readonly canResolve = input(false);
 
   /** Emitted when the operator dismisses the dock. */
   readonly dismiss = output<void>();

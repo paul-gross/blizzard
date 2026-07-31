@@ -1,14 +1,16 @@
 """Session-cookie/bearer resolution + ``require(<permission>)`` gating under
-``auth.mode = "oauth"`` (component tier, issue #91).
+``auth.mode = "oauth"`` (component tier, issue #91; roles reshaped by issue #210).
 
 ``auth.mode = "none"`` (the default) is exercised implicitly by the whole rest of the
 suite — every pre-#91 test builds a hub with no ``auth_mode`` override and keeps
 passing unchanged. This file is the ``oauth``-mode half of the AC: ``require()``
-grants/denies per the static role map, a ``guest`` reaches only ``GET /api/me`` (and,
-per the route table, the not-yet-landed login surface), a ``guest`` is refused on the
-SSE stream, an expired/absent session is 401, and the attribution overwrite lands the
-*session* identity even under real gating (not just the ``none``-mode implicit
-"operator" case ``test_ask_answer.py``/``test_decisions_api.py`` already cover).
+grants/denies per the static role map, a ``pending`` identity reaches only
+``GET /api/me`` (and, per the route table, the not-yet-landed login surface) and is
+refused on the SSE stream, a ``guest`` reaches every ``fleet:view`` read (including the
+SSE stream) but is refused every mutation, an expired/absent session is 401, and the
+attribution overwrite lands the *session* identity even under real gating (not just the
+``none``-mode implicit "operator" case ``test_ask_answer.py``/``test_decisions_api.py``
+already cover).
 """
 
 from __future__ import annotations
@@ -66,39 +68,64 @@ def test_no_session_is_401_on_the_me_route(tmp_path: Path) -> None:
     assert resp.status_code == 401
 
 
-# --- guest: only /api/me (and the not-yet-landed login/logout surface) --------
+# --- pending: only /api/me (and the not-yet-landed login/logout surface) ------
 
 
-def test_guest_reaches_me_but_is_refused_a_fleet_view_read(tmp_path: Path) -> None:
+def test_pending_reaches_me_but_is_refused_a_fleet_view_read(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, auth_mode="oauth")
-    guest = seed_user(hub, username="newcomer", role=Role.GUEST)
-    token = seed_session(hub, guest)
+    pending = seed_user(hub, username="newcomer", role=Role.PENDING)
+    token = seed_session(hub, pending)
 
     me = hub.client.get("/api/me", headers=_cookie(token))
     assert me.status_code == 200, me.text
-    assert me.json()["role"] == "guest"
+    assert me.json()["role"] == "pending"
     assert me.json()["permissions"] == []
 
     denied = hub.client.get("/api/chunks", headers=_cookie(token))
     assert denied.status_code == 403
 
 
-def test_guest_is_refused_on_the_sse_stream(tmp_path: Path) -> None:
+def test_pending_is_refused_on_the_sse_stream(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, auth_mode="oauth")
-    guest = seed_user(hub, username="newcomer", role=Role.GUEST)
-    token = seed_session(hub, guest)
+    pending = seed_user(hub, username="newcomer", role=Role.PENDING)
+    token = seed_session(hub, pending)
 
     resp = hub.client.get("/api/events/stream", headers=_cookie(token))
     assert resp.status_code == 403
 
 
-def test_guest_is_refused_ingest(tmp_path: Path) -> None:
+def test_pending_is_refused_ingest(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, auth_mode="oauth")
-    guest = seed_user(hub, username="newcomer", role=Role.GUEST)
-    token = seed_session(hub, guest)
+    pending = seed_user(hub, username="newcomer", role=Role.PENDING)
+    token = seed_session(hub, pending)
 
     resp = hub.client.post("/api/chunks", json={"tokens": ["default:1"]}, headers=_cookie(token))
     assert resp.status_code == 403
+
+
+# --- guest: every fleet:view read, refused on every mutation -------------------
+
+
+def test_guest_reads_chunks_and_events_but_is_refused_ingest(tmp_path: Path) -> None:
+    """The SSE stream (``GET /api/events/stream``) is gated on the same ``FLEET_VIEW``
+    permission (proven by introspection in ``test_route_classification.py`` and by the
+    route-permission matrix), so it is not separately live-called here: its handler
+    streams indefinitely and a bounded read like this one is not the seam that proves
+    gating — ``GET /api/events`` (the bounded read off the same permission) is."""
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    guest = seed_user(hub, username="reader", role=Role.GUEST)
+    token = seed_session(hub, guest)
+
+    me = hub.client.get("/api/me", headers=_cookie(token))
+    assert me.status_code == 200, me.text
+    assert me.json()["role"] == "guest"
+    assert me.json()["permissions"] == ["fleet:view"]
+
+    assert hub.client.get("/api/chunks", headers=_cookie(token)).status_code == 200
+    assert hub.client.get("/api/events", headers=_cookie(token)).status_code == 200
+
+    denied = hub.client.post("/api/chunks", json={"tokens": ["default:1"]}, headers=_cookie(token))
+    assert denied.status_code == 403
 
 
 # --- contributor: the operating surface, denied admin-tier writes -------------

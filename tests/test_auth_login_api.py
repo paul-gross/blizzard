@@ -118,7 +118,7 @@ def test_full_dance_ends_with_a_session_cookie_and_a_working_me(tmp_path: Path) 
     assert me_resp.status_code == 200
     body = me_resp.json()
     assert body["username"] == "ada"
-    assert body["role"] == "guest"
+    assert body["role"] == "pending"
 
 
 def test_no_provider_token_is_ever_set_as_a_cookie(tmp_path: Path) -> None:

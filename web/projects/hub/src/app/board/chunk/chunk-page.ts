@@ -15,9 +15,11 @@ import {
   STATUS_TONE,
   compactRef,
   errorMessage,
+  hasPermission,
   injectAnswerQuestionMutation,
   injectHubChunkDetailQuery,
   injectHubChunkWorkItemsQuery,
+  injectMeQuery,
   injectResolveDecisionMutation,
   injectSetChunkGraphMutation,
   readAnswerFailure,
@@ -88,6 +90,9 @@ const TAB_OPTIONS: readonly KitTabOption[] = [
               <app-chunk-general-tab
                 [detail]="d"
                 [workItems]="workItems()"
+                [canControl]="canControl()"
+                [canAnswer]="canAnswer()"
+                [canResolve]="canResolve()"
                 (answerQuestion)="onAnswer($event)"
                 (resolveDecision)="onResolve($event)"
                 (editGraph)="onEditGraph($event)"
@@ -237,6 +242,17 @@ export class ChunkPage {
   private readonly answerMutation = injectAnswerQuestionMutation();
   private readonly resolveMutation = injectResolveDecisionMutation();
   private readonly editGraphMutation = injectSetChunkGraphMutation();
+  private readonly meQuery = injectMeQuery();
+
+  /** Whether the current identity may set the chunk's graph (`chunk:control` —
+   * issue #210). `null`/pending resolves to `false` (hidden until confirmed). */
+  protected readonly canControl = computed(() => hasPermission(this.meQuery.data(), 'chunk:control'));
+
+  /** Whether the current identity may answer an open question (`question:answer`). */
+  protected readonly canAnswer = computed(() => hasPermission(this.meQuery.data(), 'question:answer'));
+
+  /** Whether the current identity may resolve an open gate decision (`gate:resolve`). */
+  protected readonly canResolve = computed(() => hasPermission(this.meQuery.data(), 'gate:resolve'));
 
   /** The chunk aggregate, or `undefined` while the first read is in flight. */
   protected readonly detail = computed(() => this.detailQuery.data());

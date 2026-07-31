@@ -9,5 +9,5 @@ export { injectLogoutMutation } from './logout.mutation';
 export { redirectToLogin, consumeReturnUrl, safeAuthorizeReturnTo } from './auth-redirect';
 export { provideAuthInterceptor } from './auth.interceptor';
 export { LoginButtons } from './login-buttons';
-export { GuestLobby } from './guest-lobby';
+export { PendingLobby } from './pending-lobby';
 export type { MeResponse, ProviderSummary } from '../api/hub';

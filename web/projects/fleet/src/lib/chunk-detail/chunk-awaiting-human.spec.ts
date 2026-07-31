@@ -121,6 +121,7 @@ describe('ChunkAwaitingHuman', () => {
   it('surfaces a waiting_on_human chunk’s open question and its options (MVP criterion 7)', async () => {
     const fixture = TestBed.createComponent(ChunkAwaitingHuman);
     fixture.componentRef.setInput('detail', WAITING_QUESTION_DETAIL);
+    fixture.componentRef.setInput('canAnswer', true);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -137,6 +138,7 @@ describe('ChunkAwaitingHuman', () => {
   it('surfaces a waiting_on_human chunk’s open gate decision and its choices (MVP criterion 12)', async () => {
     const fixture = TestBed.createComponent(ChunkAwaitingHuman);
     fixture.componentRef.setInput('detail', WAITING_DECISION_DETAIL);
+    fixture.componentRef.setInput('canResolve', true);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -145,6 +147,28 @@ describe('ChunkAwaitingHuman', () => {
     const choices = [...el.querySelectorAll('[data-testid="decision-choice"]')].map((c) => c.textContent?.trim());
     expect(choices).toEqual(['approve', 'reject']);
     expect(el.querySelector('[data-testid="open-question"]')).toBeNull();
+  });
+
+  it('withholds the answer input and option chips without question:answer', async () => {
+    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    fixture.componentRef.setInput('detail', WAITING_QUESTION_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="awaiting-human"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="question-text"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="answer-input"]')).toBeNull();
+    expect(el.querySelector('[data-testid="question-option"]')).toBeNull();
+  });
+
+  it('withholds the gate choice chips without gate:resolve', async () => {
+    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    fixture.componentRef.setInput('detail', WAITING_DECISION_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="decision-node"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="decision-choice"]')).toBeNull();
   });
 
   it('shows no awaiting-human section when the chunk is not parked', async () => {
@@ -158,6 +182,7 @@ describe('ChunkAwaitingHuman', () => {
   it('emits answerQuestion with the typed answer when Answer is activated (MVP criterion 7)', async () => {
     const fixture = TestBed.createComponent(ChunkAwaitingHuman);
     fixture.componentRef.setInput('detail', WAITING_QUESTION_DETAIL);
+    fixture.componentRef.setInput('canAnswer', true);
     let emitted: { questionId: string; answer: string; chunkId: string } | undefined;
     fixture.componentInstance.answerQuestion.subscribe((event) => (emitted = event));
     await fixture.whenStable();
@@ -177,6 +202,7 @@ describe('ChunkAwaitingHuman', () => {
   it('emits answerQuestion when an option chip is clicked', async () => {
     const fixture = TestBed.createComponent(ChunkAwaitingHuman);
     fixture.componentRef.setInput('detail', WAITING_QUESTION_DETAIL);
+    fixture.componentRef.setInput('canAnswer', true);
     let emitted: { questionId: string; answer: string } | undefined;
     fixture.componentInstance.answerQuestion.subscribe((event) => (emitted = event));
     await fixture.whenStable();
@@ -189,6 +215,7 @@ describe('ChunkAwaitingHuman', () => {
   it('does not emit answerQuestion for a blank answer', async () => {
     const fixture = TestBed.createComponent(ChunkAwaitingHuman);
     fixture.componentRef.setInput('detail', WAITING_QUESTION_DETAIL);
+    fixture.componentRef.setInput('canAnswer', true);
     let emitted = false;
     fixture.componentInstance.answerQuestion.subscribe(() => (emitted = true));
     await fixture.whenStable();
@@ -201,6 +228,7 @@ describe('ChunkAwaitingHuman', () => {
   it('emits resolveDecision with the chosen gate choice when a choice button is clicked', async () => {
     const fixture = TestBed.createComponent(ChunkAwaitingHuman);
     fixture.componentRef.setInput('detail', WAITING_DECISION_DETAIL);
+    fixture.componentRef.setInput('canResolve', true);
     let emitted: { decisionId: string; choice: string; chunkId: string } | undefined;
     fixture.componentInstance.resolveDecision.subscribe((event) => (emitted = event));
     await fixture.whenStable();

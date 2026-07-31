@@ -3,26 +3,27 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 import type { UserView } from '../api/hub';
 import { KitPanel } from '../kit/kit-panel';
 
-/** The three roles ever assignable through this page's own mutation — `superuser` is
+/** The four roles ever assignable through this page's own mutation — `superuser` is
  * bootstrap-only (never offered as a select option, `hub/auth/service.py`'s own
  * `assign_role` refuses it outright). */
-const ASSIGNABLE_ROLES: readonly string[] = ['guest', 'contributor', 'admin'];
+const ASSIGNABLE_ROLES: readonly string[] = ['pending', 'guest', 'contributor', 'admin'];
 
 /**
- * The admin page's user table (issue #94) — presentational: renders `users()` with a
- * role selector per row, gated by the two hub-side rules a `superuser`-tiered actor
- * clears and an `admin`-tiered one does not (`AuthService.assign_role`'s own rules,
- * mirrored here so a disabled control never invites a refused request rather than
- * catching the 403 after the fact):
+ * The admin page's user table (issue #94; `pending` added by issue #210) —
+ * presentational: renders `users()` with a role selector per row, gated by the two
+ * hub-side rules a `superuser`-tiered actor clears and an `admin`-tiered one does not
+ * (`AuthService.assign_role`'s own rules, mirrored here so a disabled control never
+ * invites a refused request rather than catching the 403 after the fact):
  *
  * - a row naming the signed-in actor (`currentUserId()`) renders its role as plain
  *   text, not a selector — self-role-change is refused;
  * - a row already `superuser` renders its role as plain text too — `superuser` is
  *   bootstrap-only, never touched through this page;
- * - every other row's selector offers `guest`/`contributor`/`admin`; the `admin`
- *   option is disabled, and the whole selector is disabled when the row is *already*
- *   `admin`, unless `isSuperuser()` — only a `superuser` actor may grant or revoke
- *   `admin`.
+ * - every other row's selector offers `pending`/`guest`/`contributor`/`admin` (a
+ *   `pending` row selects and behaves exactly like any other non-`superuser` row —
+ *   it is not treated as static); the `admin` option is disabled, and the whole
+ *   selector is disabled when the row is *already* `admin`, unless `isSuperuser()` —
+ *   only a `superuser` actor may grant or revoke `admin`.
  *
  * A `403` the mutation still surfaces despite this (a stale permission between page
  * load and submit) is the container's own error state, not this component's concern.
@@ -62,12 +63,13 @@ const ASSIGNABLE_ROLES: readonly string[] = ['guest', 'contributor', 'admin'];
                   } @else {
                     <select
                       data-testid="users-table-role-select"
-                      [value]="user.role"
                       [disabled]="user.role === 'admin' && !isSuperuser()"
                       (change)="onRoleChange(user.user_id, $event)"
                     >
                       @for (role of assignableRoles; track role) {
-                        <option [value]="role" [disabled]="role === 'admin' && !isSuperuser()">{{ role }}</option>
+                        <option [value]="role" [selected]="role === user.role" [disabled]="role === 'admin' && !isSuperuser()">
+                          {{ role }}
+                        </option>
                       }
                     </select>
                   }

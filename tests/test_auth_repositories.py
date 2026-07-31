@@ -65,6 +65,23 @@ def test_user_create_and_get_round_trip(engine, errors: RepoErrorFactory) -> Non
     assert repo.get("usr_missing") is None
 
 
+def test_user_role_round_trips_for_every_role_member(engine, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
+    """A stored row's ``role`` string reads back as the same :class:`Role` member for
+    every declared role — including a row written as ``"guest"`` before this change,
+    which must read back as ``Role.GUEST`` rather than being silently demoted (issue
+    #210's "no user is silently demoted" AC — there is no migration to prove this
+    against, so the round trip itself is the proof)."""
+    repo = UserRepository(engine, errors)
+    for i, role in enumerate(Role):
+        user = User(
+            user_id=f"usr_{i}", username=f"user{i}", display_name=f"User {i}", email=None, role=role, created_at=_T0
+        )
+        repo.create(user)
+        fetched = repo.get(user.user_id)
+        assert fetched is not None
+        assert fetched.role is role
+
+
 def test_user_create_rejects_a_duplicate_username(engine, errors: RepoErrorFactory) -> None:  # type: ignore[no-untyped-def]
     repo = UserRepository(engine, errors)
     repo.create(User(user_id="usr_1", username="ada", display_name="Ada", email=None, role=Role.GUEST, created_at=_T0))

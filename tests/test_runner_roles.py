@@ -32,6 +32,14 @@ def test_mirror_reproduces_the_hub_role() -> None:
     assert resolve_local_role(config, username="carol", hub_role="contributor") is Role.CONTRIBUTOR
 
 
+def test_mirror_reproduces_a_hub_pending_role() -> None:
+    """A hub identity still `pending` (no role granted yet, issue #210) mirrors to the
+    runner as `pending` too — the fixed-cap floor and the mirror default both accept
+    every :class:`Role` member, `pending` included, with no special-casing needed."""
+    config = _config(auth_hub_role_default="mirror")
+    assert resolve_local_role(config, username="erin", hub_role="pending") is Role.PENDING
+
+
 def test_a_hub_guest_with_a_local_override_operates_the_runner() -> None:
     config = _config(auth_users=(("dave", "contributor"),))
     assert resolve_local_role(config, username="dave", hub_role="guest") is Role.CONTRIBUTOR

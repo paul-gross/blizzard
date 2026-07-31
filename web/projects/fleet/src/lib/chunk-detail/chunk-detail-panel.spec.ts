@@ -128,6 +128,7 @@ describe('ChunkDetailPanel', () => {
     const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('canControl', true);
     let emitted: string | undefined;
     fixture.componentInstance.detach.subscribe((chunkId) => (emitted = chunkId));
     await fixture.whenStable();
@@ -143,6 +144,7 @@ describe('ChunkDetailPanel', () => {
     const notReady: ChunkDetail = { ...ROUTED_DETAIL, status: 'not_ready', route: null };
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', notReady);
+    fixture.componentRef.setInput('canControl', true);
     let emitted: { chunkId: string; graphId: string } | undefined;
     fixture.componentInstance.editGraph.subscribe((event) => (emitted = event));
     await fixture.whenStable();
@@ -158,6 +160,7 @@ describe('ChunkDetailPanel', () => {
   it('emits answerQuestion from the awaiting-human column', async () => {
     const fixture = TestBed.createComponent(ChunkDetailPanel);
     fixture.componentRef.setInput('detail', WAITING_QUESTION_DETAIL);
+    fixture.componentRef.setInput('canAnswer', true);
     let emitted: { questionId: string; answer: string; chunkId: string } | undefined;
     fixture.componentInstance.answerQuestion.subscribe((event) => (emitted = event));
     await fixture.whenStable();

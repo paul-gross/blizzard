@@ -47,6 +47,7 @@ describe('ChunkGeneralTab', () => {
   it('re-emits editGraph from the facts section', async () => {
     const fixture = TestBed.createComponent(ChunkGeneralTab);
     fixture.componentRef.setInput('detail', DETAIL);
+    fixture.componentRef.setInput('canControl', true);
     let emitted: { chunkId: string; graphId: string } | undefined;
     fixture.componentInstance.editGraph.subscribe((event) => (emitted = event));
     await fixture.whenStable();
@@ -79,6 +80,7 @@ describe('ChunkGeneralTab', () => {
     };
     const fixture = TestBed.createComponent(ChunkGeneralTab);
     fixture.componentRef.setInput('detail', waiting);
+    fixture.componentRef.setInput('canAnswer', true);
     let emitted: { questionId: string; answer: string; chunkId: string } | undefined;
     fixture.componentInstance.answerQuestion.subscribe((event) => (emitted = event));
     await fixture.whenStable();
