@@ -310,6 +310,12 @@ def test_label_bootstrap_creates_both_markers_before_the_first_write() -> None:
         "blizzard:ingested",
         "blizzard:in-progress",
     }
+    # Blizzard cyan variants, hashless per the API: at-rest ingested in the board's
+    # light `--cyan` token, active in-progress in the darker `--cyan-dim`.
+    assert forge_state(double)["repo_label_colors"] == {  # type: ignore[index]
+        "blizzard:ingested": "5cd1e5",
+        "blizzard:in-progress": "2b6675",
+    }
 
 
 def test_label_bootstrap_tolerates_an_already_existing_label() -> None:

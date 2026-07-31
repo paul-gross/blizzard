@@ -386,6 +386,7 @@ def github_double(
         if name in repo_labels:
             return JSONResponse(status_code=422, content={"message": "already_exists"})
         repo_labels.add(name)
+        state.setdefault("repo_label_colors", {})[name] = body.get("color")  # type: ignore[union-attr]
         return JSONResponse(status_code=201, content={"name": name})
 
     @app.post("/repos/{owner}/{repo}/issues/{number}/labels")

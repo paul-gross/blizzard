@@ -37,6 +37,15 @@ _log = get_logger("blizzard.hub.work_sources")
 _ISSUE_URL_RE = re.compile(r"(?:^|/)(?:repos/)?(?P<owner>[^/:#]+)/(?P<repo>[^/:#]+)/issues/(?P<number>\d+)/?$")
 
 
+# Blizzard cyan, hex-without-hash as GitHub's label API spells colors: at-rest ingested
+# wears the web board's light `--cyan` token (#5cd1e5), active in-progress the darker
+# `--cyan-dim` (#2b6675).
+_LABEL_COLORS = {
+    WorkStatusMarker.INGESTED: "5cd1e5",
+    WorkStatusMarker.IN_PROGRESS: "2b6675",
+}
+
+
 def _label_name(marker: WorkStatusMarker) -> str:
     """The rendered GitHub label for ``marker`` — ``blizzard:ingested`` /
     ``blizzard:in-progress`` (the wire form dashes what the domain enum spells
@@ -125,7 +134,9 @@ class GitHubWorkSource:
         for marker in WorkStatusMarker:
             name = _label_name(marker)
             try:
-                resp = self._client.post(f"/repos/{self._repo}/labels", json={"name": name})
+                resp = self._client.post(
+                    f"/repos/{self._repo}/labels", json={"name": name, "color": _LABEL_COLORS[marker]}
+                )
                 if resp.status_code != 422:
                     resp.raise_for_status()
             except httpx.HTTPError as exc:
