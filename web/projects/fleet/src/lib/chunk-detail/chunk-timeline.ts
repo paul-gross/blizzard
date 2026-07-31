@@ -99,8 +99,8 @@ interface StepUsageTotal {
                  shows what each lap cost. Absent when no usage fact landed for it yet. -->
             @if (usageForStep(row); as u) {
               <span class="step-usage" data-testid="history-step-usage">
-                <span data-testid="history-step-tokens">{{ formatTokens(u.tokens) }} tok</span>
-                <span data-testid="history-step-cost">{{ formatCost(u.costUsd, u.costPartial) }}</span>
+                <span class="tok" data-testid="history-step-tokens">{{ formatTokens(u.tokens) }} tok</span>
+                <span class="cost" data-testid="history-step-cost">{{ formatCost(u.costUsd, u.costPartial) }}</span>
                 @if (u.costPartial) {
                   <span
                     class="partial-badge"
@@ -153,7 +153,10 @@ interface StepUsageTotal {
     }
     .step {
       display: grid;
-      grid-template-columns: 16px 84px 1fr auto;
+      /* A fifth, fixed track for .step-usage (issue #182) — without it, that cell has
+         no track of its own and wraps onto a new implicit row sized to the 16px first
+         column, which is what forced "31.6M tok" and the cost onto their own lines. */
+      grid-template-columns: 16px 84px 1fr auto 132px;
       gap: 6px;
       align-items: baseline;
       padding: 3px 0;
@@ -225,12 +228,24 @@ interface StepUsageTotal {
       font-size: var(--fs-label);
       white-space: nowrap;
     }
-    /* A history step's own usage — tucked onto the same line as its judgement choice. */
+    /* A history step's own usage — tucked onto the same line as its judgement choice.
+       Its own dedicated grid track (above) is only wide enough once each cell inside
+       it has a fixed width too — otherwise the flex row still overflows unpredictably
+       and the cost never lines up decimal-to-decimal down the column. */
     .step-usage {
       display: flex;
       gap: 6px;
       color: var(--label);
       font-size: var(--fs-xs);
+    }
+    .step-usage .tok {
+      flex: 0 0 70px;
+      white-space: nowrap;
+    }
+    .step-usage .cost {
+      flex: 0 0 56px;
+      text-align: right;
+      white-space: nowrap;
     }
     /* The PARTIAL badge marks a cost total whose sum is a lower bound (issue #60). */
     .partial-badge {

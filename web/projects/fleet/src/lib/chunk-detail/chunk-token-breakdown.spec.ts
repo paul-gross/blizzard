@@ -44,7 +44,7 @@ describe('ChunkTokenBreakdown', () => {
     }).compileComponents();
   });
 
-  it('renders the chunk-total cost and expands the token total into its per-class breakdown (issue #60)', async () => {
+  it('renders the chunk-total cost and all four token counts inline, with no expand toggle (issue #182)', async () => {
     const fixture = TestBed.createComponent(ChunkTokenBreakdown);
     fixture.componentRef.setInput('detail', COST_DETAIL);
     await fixture.whenStable();
@@ -53,19 +53,14 @@ describe('ChunkTokenBreakdown', () => {
     expect(el.querySelector('[data-testid="cost-total-usd"]')?.textContent).toContain('$0.42');
     expect(el.querySelector('[data-testid="cost-partial-badge"]')).toBeNull();
 
-    // Collapsed by default: the chunk-total token count, not the per-class breakdown.
-    expect(el.querySelector('[data-testid="tokens-total"]')?.textContent).toContain('2.4k');
+    // Every token count is visible without interaction — no expand toggle left to click.
+    const tokens = el.querySelector('[data-testid="fact-tokens"]')?.textContent ?? '';
+    expect(tokens).toContain('1.2k I');
+    expect(tokens).toContain('800 O');
+    expect(tokens).toContain('300 CR');
+    expect(tokens).toContain('100 CC');
+    expect(el.querySelector('[data-testid="tokens-expand-toggle"]')).toBeNull();
     expect(el.querySelector('[data-testid="tokens-breakdown"]')).toBeNull();
-
-    el.querySelector<HTMLButtonElement>('[data-testid="tokens-expand-toggle"]')?.click();
-    await fixture.whenStable();
-
-    const breakdown = el.querySelector('[data-testid="tokens-breakdown"]');
-    expect(breakdown).not.toBeNull();
-    expect(el.querySelector('[data-testid="tokens-input"]')?.textContent).toContain('1.2k');
-    expect(el.querySelector('[data-testid="tokens-output"]')?.textContent).toContain('800');
-    expect(el.querySelector('[data-testid="tokens-cache-read"]')?.textContent).toContain('300');
-    expect(el.querySelector('[data-testid="tokens-cache-create"]')?.textContent).toContain('100');
   });
 
   it('marks the chunk-total cost as PARTIAL when the derived total is a lower bound (issue #60)', async () => {
@@ -86,6 +81,6 @@ describe('ChunkTokenBreakdown', () => {
 
     expect(el.querySelector('[data-testid="cost-total-usd"]')?.textContent).toContain('$0.00');
     expect(el.querySelector('[data-testid="cost-partial-badge"]')).toBeNull();
-    expect(el.querySelector('[data-testid="tokens-total"]')?.textContent).toContain('0');
+    expect(el.querySelector('[data-testid="fact-tokens"]')?.textContent).toContain('0 I');
   });
 });

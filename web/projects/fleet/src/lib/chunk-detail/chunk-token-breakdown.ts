@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
 import type { ChunkDetail, ChunkUsageTotalView } from '../api/hub';
 import { formatCost, formatTokens } from '../cost-format';
@@ -15,16 +15,21 @@ const ZERO_USAGE_TOTAL: ChunkUsageTotalView = {
 };
 
 /**
- * The chunk's cost + token-usage breakdown (issue #79, issue #60) — the
+ * The chunk's cost + token-usage breakdown (issue #79, issue #60, issue #182) — the
  * derived total cost (visibly marked PARTIAL when any summed invocation's
- * envelope-less cost was absent — never silently understated) and the
- * chunk-total token count, expandable into its per-class breakdown.
+ * envelope-less cost was absent — never silently understated) and the chunk's
+ * token counts by class, always visible inline (no expand toggle, issue #182).
  *
  * Content-projected into {@link ChunkFacts}'s `[token-breakdown]` slot, so
  * these two `<dt>`/`<dd>` pairs render as rows of the same `<dl class="kv">`
  * the facts component owns — `:host { display: contents }` keeps this
  * component out of the grid's box tree so its `dt`/`dd` children are direct
- * grid items, exactly as the monolith rendered them.
+ * grid items, exactly as the monolith rendered them. Angular's emulated style
+ * encapsulation does not reach across that projection boundary — the `dt`/`dd`
+ * elements below are this component's own template output, so `ChunkFacts`'s
+ * `.kv dt`/`.kv dd` rules never match them. This component keeps its own copy
+ * of those rules (issue #182) so the projected rows read identically to their
+ * siblings instead of falling back to the browser's default `dt`/`dd` styling.
  */
 @Component({
   selector: 'fleet-chunk-detail-token-breakdown',
@@ -43,34 +48,25 @@ const ZERO_USAGE_TOTAL: ChunkUsageTotalView = {
       }
     </dd>
     <dt>Tokens</dt>
-    <dd data-testid="fact-tokens">
-      <button
-        type="button"
-        class="tok-toggle"
-        data-testid="tokens-expand-toggle"
-        [attr.aria-label]="(tokensExpanded() ? 'Collapse' : 'Expand') + ' token breakdown'"
-        (click)="tokensExpanded.set(!tokensExpanded())"
-      >
-        <span class="caret">{{ tokensExpanded() ? '▾' : '▸' }}</span>
-        <span data-testid="tokens-total">{{ formatTokens(totalTokens()) }}</span>
-      </button>
-      @if (tokensExpanded()) {
-        <dl class="kv tok-breakdown" data-testid="tokens-breakdown">
-          <dt>Input</dt>
-          <dd data-testid="tokens-input">{{ formatTokens(cost().input_tokens) }}</dd>
-          <dt>Output</dt>
-          <dd data-testid="tokens-output">{{ formatTokens(cost().output_tokens) }}</dd>
-          <dt>Cache read</dt>
-          <dd data-testid="tokens-cache-read">{{ formatTokens(cost().cache_read_tokens) }}</dd>
-          <dt>Cache create</dt>
-          <dd data-testid="tokens-cache-create">{{ formatTokens(cost().cache_create_tokens) }}</dd>
-        </dl>
-      }
-    </dd>
+    <dd data-testid="fact-tokens">{{ tokensLine() }}</dd>
   `,
   styles: `
     :host {
       display: contents;
+    }
+    /* This component's own copy of ChunkFacts's .kv dt/.kv dd rules (chunk-facts.ts)
+       — see the class doc comment for why the parent's rules can't reach these rows. */
+    dt {
+      color: var(--label);
+      font-size: var(--fs-label);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      align-self: center;
+    }
+    dd {
+      margin: 0;
+      color: var(--amber);
+      overflow-wrap: anywhere;
     }
     /* The PARTIAL badge marks a cost total whose sum is a lower bound (issue #60) —
        never silently understated. */
@@ -83,42 +79,6 @@ const ZERO_USAGE_TOTAL: ChunkUsageTotalView = {
       letter-spacing: 0.1em;
       cursor: help;
     }
-    .tok-toggle {
-      border: 0;
-      background: transparent;
-      padding: 0;
-      color: var(--amber);
-      font: inherit;
-      cursor: pointer;
-    }
-    .tok-toggle .caret {
-      color: var(--label-dim);
-      margin-right: 3px;
-    }
-    /* A nested "dl.kv" — this component's own style scope needs its own copy of
-       the grid rules ChunkFacts owns for the outer one. */
-    .kv {
-      display: grid;
-      grid-template-columns: 74px 1fr;
-      gap: 2px 8px;
-      font-size: var(--fs-sm);
-    }
-    .kv dt {
-      color: var(--label);
-      font-size: var(--fs-label);
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      align-self: center;
-    }
-    .kv dd {
-      margin: 0;
-      color: var(--amber);
-      overflow-wrap: anywhere;
-    }
-    .tok-breakdown {
-      margin-top: 3px;
-      grid-template-columns: 84px 1fr;
-    }
   `,
 })
 export class ChunkTokenBreakdown {
@@ -126,20 +86,19 @@ export class ChunkTokenBreakdown {
   readonly detail = input.required<ChunkDetail>();
 
   protected readonly formatCost = formatCost;
-  protected readonly formatTokens = formatTokens;
 
   /** The chunk's derived usage/cost total (issue #60) — never absent: the hub API
    * always populates `cost`, and {@link ZERO_USAGE_TOTAL} covers a construction-site
    * fixture that predates it. */
   protected readonly cost = computed<ChunkUsageTotalView>(() => this.detail().cost ?? ZERO_USAGE_TOTAL);
 
-  /** The chunk-total token count across every class — the collapsed reading. */
-  protected readonly totalTokens = computed<number>(() => {
+  /** The chunk's token counts by class, always visible inline (issue #182) — no
+   * expand toggle standing between the operator and any of the four figures. */
+  protected readonly tokensLine = computed<string>(() => {
     const c = this.cost();
-    return c.input_tokens + c.output_tokens + c.cache_read_tokens + c.cache_create_tokens;
+    return (
+      `${formatTokens(c.input_tokens)} I, ${formatTokens(c.output_tokens)} O, ` +
+      `${formatTokens(c.cache_read_tokens)} CR, ${formatTokens(c.cache_create_tokens)} CC`
+    );
   });
-
-  /** Whether the token total is broken out by class. Collapsed by default — the
-   * chunk-facts column stays scannable until the operator asks for the detail. */
-  protected readonly tokensExpanded = signal(false);
 }
