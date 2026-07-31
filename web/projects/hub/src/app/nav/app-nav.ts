@@ -1,10 +1,14 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 
+import { KitTab, KitTabStrip } from 'fleet';
+
 /**
  * The top nav's tab strip — one `routerLink` per top-level route, with
  * `routerLinkActive` marking the tab for the route currently rendered in the
- * root {@link App}'s `<router-outlet>`.
+ * root {@link App}'s `<router-outlet>`. Wears the same {@link KitTabStrip}/
+ * {@link KitTab} chrome {@link KitTabs} wears (blizzard#203) — one tab
+ * treatment, not two.
  *
  * The `Admin` tab (issue #93) is nav-*gating* only — `showAdmin` (`user:manage`,
  * computed by the app root against the resolved identity) decides whether the tab
@@ -20,14 +24,14 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
 @Component({
   selector: 'app-nav',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, RouterLinkActive],
+  imports: [KitTab, KitTabStrip, RouterLink, RouterLinkActive],
   template: `
-    <nav class="nav" data-testid="app-nav">
-      <a routerLink="/board" routerLinkActive="active" data-testid="nav-board">Board</a>
-      <a routerLink="/graphs" routerLinkActive="active" data-testid="nav-graphs">Graphs</a>
-      <a routerLink="/events" routerLinkActive="active" data-testid="nav-events">Events</a>
+    <nav fleetKitTabStrip data-testid="app-nav">
+      <a fleetKitTab routerLink="/board" routerLinkActive="active" data-testid="nav-board">Board</a>
+      <a fleetKitTab routerLink="/graphs" routerLinkActive="active" data-testid="nav-graphs">Graphs</a>
+      <a fleetKitTab routerLink="/events" routerLinkActive="active" data-testid="nav-events">Events</a>
       @if (showAdmin()) {
-        <a routerLink="/admin" routerLinkActive="active" data-testid="nav-admin">Admin</a>
+        <a fleetKitTab routerLink="/admin" routerLinkActive="active" data-testid="nav-admin">Admin</a>
       }
     </nav>
   `,
@@ -35,29 +39,6 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
     :host {
       display: block;
       flex: none;
-    }
-    .nav {
-      display: flex;
-      align-items: stretch;
-      height: 32px;
-      border-bottom: 1px solid var(--bezel);
-      background: var(--header-lo);
-      font-family: var(--mono);
-      font-size: var(--fs-label);
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-    }
-    .nav a {
-      display: flex;
-      align-items: center;
-      padding: 0 16px;
-      color: var(--label);
-      text-decoration: none;
-      border-right: 1px solid var(--line);
-    }
-    .nav a.active {
-      color: var(--amber-hi);
-      background: var(--header-hi);
     }
   `,
 })

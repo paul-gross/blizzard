@@ -22,10 +22,12 @@ import {
  * Every section is the same `fleet` presentational sibling the desktop dock
  * composes (`bzh:frontend-kit`) — {@link ChunkFacts} + {@link ChunkTokenBreakdown},
  * {@link ChunkIssuePane}, {@link ChunkTimeline}, {@link ChunkAwaitingHuman} — this
- * component only picks the arrangement: a two-column grid at ≥720px (the
- * mockup's General tab), one column below it, with node history spanning
- * both columns either way. Presentational only: inputs in, the three
- * operator-action outputs back out, no injection.
+ * component only picks the arrangement: a two-column grid at ≥720px
+ * (blizzard#203) — work item and issues stacked in the left column, node
+ * history beside them spanning both rows, asks · decisions spanning the full
+ * width below — collapsing to one stacked column, DOM order, below it.
+ * Presentational only: inputs in, the three operator-action outputs back
+ * out, no injection.
  */
 @Component({
   selector: 'app-chunk-general-tab',
@@ -41,10 +43,10 @@ import {
       <fleet-kit-panel class="section" data-testid="section-issues" label="issues">
         <fleet-chunk-detail-issue-pane [workItems]="workItems()" />
       </fleet-kit-panel>
-      <fleet-kit-panel class="section span" data-testid="section-node-history" label="node history">
+      <fleet-kit-panel class="section" data-testid="section-node-history" label="node history">
         <fleet-chunk-detail-timeline [detail]="detail()" />
       </fleet-kit-panel>
-      <fleet-kit-panel class="section span" data-testid="section-asks" label="asks · decisions">
+      <fleet-kit-panel class="section" data-testid="section-asks" label="asks · decisions">
         <fleet-chunk-detail-awaiting-human
           [detail]="detail()"
           (answerQuestion)="answerQuestion.emit($event)"
@@ -70,16 +72,30 @@ import {
       flex: none;
     }
     /* The mockup's two-column General tab, at the same 720px breakpoint the
-       Artifacts tab's nav-beside-viewer split uses — node history and asks ·
-       decisions still span the full width either way. */
+       Artifacts tab's nav-beside-viewer split uses — work item and issues
+       stacked in the left column, node history beside them spanning both
+       rows, asks · decisions spanning the full width below. */
     @media (min-width: 720px) {
       .general {
         display: grid;
         grid-template-columns: 1fr 1fr;
         align-content: start;
       }
-      .section.span {
+      fleet-kit-panel[data-testid='section-work-item'] {
+        grid-column: 1;
+        grid-row: 1;
+      }
+      fleet-kit-panel[data-testid='section-issues'] {
+        grid-column: 1;
+        grid-row: 2;
+      }
+      fleet-kit-panel[data-testid='section-node-history'] {
+        grid-column: 2;
+        grid-row: 1 / 3;
+      }
+      fleet-kit-panel[data-testid='section-asks'] {
         grid-column: 1 / -1;
+        grid-row: 3;
       }
     }
   `,

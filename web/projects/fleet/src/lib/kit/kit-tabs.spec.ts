@@ -71,4 +71,13 @@ describe('KitTabs', () => {
     expect(el.querySelector('[data-testid="tab-general"]')?.textContent?.trim()).toBe('General');
     expect(el.querySelector('[data-testid="tab-artifacts"]')?.textContent?.trim()).toBe('Artifacts');
   });
+
+  it('shares the nav tab strip chrome (blizzard#203)', async () => {
+    const fixture = TestBed.createComponent(TestHost);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[role="tablist"][fleetKitTabStrip]')).not.toBeNull();
+    expect(el.querySelectorAll('.tab[fleetKitTab]')).toHaveLength(2);
+  });
 });

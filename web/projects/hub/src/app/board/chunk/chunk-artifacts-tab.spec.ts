@@ -125,4 +125,13 @@ describe('ChunkArtifactsTab', () => {
     expect(el.querySelector('[data-testid="artifacts-tab-nav-empty"]')?.textContent).toContain('No artifacts yet');
     expect(el.querySelector('[data-testid="artifacts-tab-empty"]')?.textContent).toContain('No artifacts yet');
   });
+
+  it('renders no "Artifact store" header above the nav list (blizzard#203)', async () => {
+    const fixture = TestBed.createComponent(ChunkArtifactsTab);
+    fixture.componentRef.setInput('artifacts', [OLDER, NEWER]);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('nav')?.textContent).not.toContain('Artifact store');
+  });
 });

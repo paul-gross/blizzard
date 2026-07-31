@@ -67,7 +67,7 @@ const TAB_OPTIONS: readonly KitTabOption[] = [
   imports: [ChunkArtifactsTab, ChunkGeneralTab, KitAsyncState, KitBackBar, KitBadge, KitTabs, RouterLink],
   template: `
     <div class="cp">
-      <a class="back-row" routerLink="/board" data-testid="mobile-chunk-back">
+      <a class="back-row" routerLink="/board" [queryParams]="{ chunk: chunkId() }" data-testid="mobile-chunk-back">
         <fleet-kit-back-bar label="Board" />
       </a>
       @if (actionError(); as err) {
@@ -81,7 +81,6 @@ const TAB_OPTIONS: readonly KitTabOption[] = [
           <header class="cp-hdr">
             <span class="cid" data-testid="mobile-chunk-ref">{{ shortId() }}</span>
             <fleet-kit-badge [tone]="tone()" variant="soft" data-testid="mobile-chunk-status">{{ d.status }}</fleet-kit-badge>
-            <span class="node" data-testid="mobile-chunk-node">{{ nodeLabel() }}</span>
           </header>
           <fleet-kit-tabs [options]="tabOptions" [activeValue]="tab()" (choose)="onChooseTab($event)" />
           @switch (tab()) {
@@ -178,19 +177,15 @@ const TAB_OPTIONS: readonly KitTabOption[] = [
       align-items: baseline;
       gap: 8px;
       flex: none;
+      margin: 8px;
       padding: 0 8px;
     }
     .cid {
       color: var(--amber);
       font-size: var(--fs-md);
     }
-    .node {
-      color: var(--label);
-      font-size: var(--fs-xs);
-    }
     fleet-kit-tabs {
       flex: none;
-      padding: 6px 8px 0;
     }
     app-chunk-general-tab {
       flex: 1;
@@ -216,7 +211,10 @@ export class ChunkPage {
    * seeded from the snapshot so the first render already keys the reads. */
   private readonly params = toSignal(this.route.paramMap, { initialValue: this.route.snapshot.paramMap });
 
-  private readonly id = computed<string | null>(() => this.params().get('chunkId'));
+  /** Off the route's own `:chunkId` segment — the `?chunk` param the back link
+   * writes is a different, board-owned selection ({@link BoardSelection}),
+   * never read from here. */
+  protected readonly chunkId = computed<string | null>(() => this.params().get('chunkId'));
 
   protected readonly selection = injectChunkDetailSelection();
 
@@ -234,8 +232,8 @@ export class ChunkPage {
     this.selection.select('artifacts', key);
   }
 
-  private readonly detailQuery = injectHubChunkDetailQuery(() => this.id());
-  private readonly workItemsQuery = injectHubChunkWorkItemsQuery(() => this.id());
+  private readonly detailQuery = injectHubChunkDetailQuery(() => this.chunkId());
+  private readonly workItemsQuery = injectHubChunkWorkItemsQuery(() => this.chunkId());
   private readonly answerMutation = injectAnswerQuestionMutation();
   private readonly resolveMutation = injectResolveDecisionMutation();
   private readonly editGraphMutation = injectSetChunkGraphMutation();
@@ -271,12 +269,8 @@ export class ChunkPage {
     return { status: 'success', items: this.workItemsQuery.data()?.items ?? [] };
   });
 
-  protected readonly shortId = computed(() => compactRef(this.id() ?? ''));
+  protected readonly shortId = computed(() => compactRef(this.chunkId() ?? ''));
   protected readonly tone = computed(() => STATUS_TONE[this.detail()?.status ?? 'ready']);
-  protected readonly nodeLabel = computed(() => {
-    const d = this.detail();
-    return d?.current_node_name ?? d?.current_node_id ?? '—';
-  });
 
   /** Clear both report channels — every action on this page starts here. Kept as one
    * method for the same reason the desktop container does: a stale outcome left up while

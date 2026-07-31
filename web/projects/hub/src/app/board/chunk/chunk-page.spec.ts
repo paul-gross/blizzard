@@ -1,4 +1,4 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { Component, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
@@ -64,7 +64,13 @@ const DETAIL = {
   ],
 };
 
+/** Stands in for the real board page — only its route resolving matters here,
+ * so the back link's `/board?chunk=…` navigation actually lands. */
+@Component({ selector: 'app-board-stub', template: '' })
+class BoardStub {}
+
 const ROUTES = [
+  { path: 'board', component: BoardStub },
   { path: 'board/chunk/:chunkId', component: ChunkPage },
   { path: 'board/chunk/:chunkId/artifact/:artifactKey', component: ArtifactPage },
 ];
@@ -224,12 +230,42 @@ describe('Mobile chunk drill-down', () => {
     expect(el.querySelector('[data-testid="mobile-artifact-error"]')).toBeNull();
   });
 
-  it('gives the chunk page a back link to the board', async () => {
+  it('gives the chunk page a back link to the board, with the originating chunk selected', async () => {
     const el = await open(`/board/chunk/${CHUNK_ID}`);
 
     expect(el.querySelector<HTMLAnchorElement>('[data-testid="mobile-chunk-back"]')?.getAttribute('href')).toBe(
-      '/board',
+      `/board?chunk=${CHUNK_ID}`,
     );
+  });
+
+  it('navigates back to the board with the chunk selected on a back-link click', async () => {
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl(`/board/chunk/${CHUNK_ID}`);
+    await settle(harness.fixture);
+    const el = harness.fixture.nativeElement as HTMLElement;
+
+    el.querySelector<HTMLAnchorElement>('[data-testid="mobile-chunk-back"]')?.click();
+    await settle(harness.fixture);
+
+    expect(TestBed.inject(Router).url).toBe(`/board?chunk=${CHUNK_ID}`);
+  });
+
+  it('states a terminal chunk\'s status once, not doubled with the unresolvable node sentinel', async () => {
+    // A finished chunk's newest transition targets the graph's terminal `done`
+    // sentinel, which `current_node_name` cannot resolve (blizzard#203) — the
+    // header used to fall back to rendering the literal id "done" beside a
+    // status that also reads "done".
+    stub.restore();
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path.endsWith('/work-items')) return { items: [] };
+      return { ...DETAIL, status: 'done', current_node_id: 'done', current_node_name: null };
+    });
+    const el = await open(`/board/chunk/${CHUNK_ID}`);
+
+    const header = el.querySelector('[data-testid="board-chunk-detail"] header');
+    const occurrences = (header?.textContent ?? '').toLowerCase().match(/done/g) ?? [];
+    expect(occurrences).toHaveLength(1);
+    expect(el.querySelector('[data-testid="mobile-chunk-node"]')).toBeNull();
   });
 
   it('says so when the chunk has no artifacts at all', async () => {
