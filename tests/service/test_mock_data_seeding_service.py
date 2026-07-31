@@ -1,5 +1,5 @@
 """``blizzard-mock-data`` as a live hub-board seeder — the fact-composition/drift proof
-(``tool:mock-data``, blizzard-product ``plans/`` Phase 5).
+(``tool:mock-data``, issue ``blizzard-mock#5``).
 
 The sibling ``blizzard-mock`` repo's mock-data CLI composes fact rows purely offline
 (unit/component-tested there, zero store). What only a **real, migrated** hub can prove:
