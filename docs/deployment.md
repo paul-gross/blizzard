@@ -16,10 +16,11 @@ The two units live in [`packaging/systemd/`](../packaging/systemd/):
 
 ## The colocated topology
 
-One machine runs both daemons of a single-runner deployment (the MVP shape — a
-remote hub and multiple runner machines are on the cut list). They are two
-personalities of the one `blizzard` wheel, so there is no version skew
-between them and no Node at install or runtime:
+One machine runs both daemons. Colocation is a choice, not a constraint — a
+runner on another machine points at the hub the same way, and
+[`docs/remote-runner.md`](./remote-runner.md) walks that shape. Side by side
+they are two personalities of the one `blizzard` wheel, so there is no version
+skew between them and no Node at install or runtime:
 
 - **hub** — `blizzard-hub host`: the fleet's HTTP API, SSE, and the embedded
   mission-control board. Holds the forge base URL and work-source credentials
@@ -54,7 +55,7 @@ sudo -u blizzard /opt/blizzard/venv/bin/blizzard-runner init /var/lib/blizzard/r
 #    delivery credentials go in /etc/blizzard/hub.env (BZ_FORGE_URL, BZ_FORGE_TOKEN, …);
 #    its work sources are declared in blizzard-hub.toml's [[work_source]] blocks
 #    (init scaffolds a commented-out example — see "Configuring work sources"
-#    below); the runner's workspace/harness bindings live in its own config.toml,
+#    below); the runner's workspace/harness bindings live in its own blizzard-runner.toml,
 #    written by `init` and edited in place (no credentials).
 
 # 5. Install and enable both units. `enable` is what starts them at boot; `--now`

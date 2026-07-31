@@ -96,6 +96,8 @@ config values from the environment" for the override precedence
 
 ## Next
 
+- **Adding a runner** against this hub, from any machine:
+  [`docs/remote-runner.md`](./remote-runner.md).
 - **Upgrading**: [`docs/upgrade.md`](./upgrade.md).
 - **Rolling back**: [`docs/rollback.md`](./rollback.md).
 - **Backing up**: [`docs/backup.md`](./backup.md).
