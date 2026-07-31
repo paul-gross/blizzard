@@ -14,9 +14,10 @@ export interface BoardCard {
   readonly node: string;
   /** The raw `nd_` ULID, kept reachable as the node label's tooltip. */
   readonly nodeId: string;
-  /** The chunk's work item — the server-derived `{source}#{ref}` label,
-   * empty when no pointer names a configured source. Plural pointers join with a space. */
-  readonly pointerLabel: string;
+  /** The chunk's work items — each entry the server-derived `{source}#{ref}`
+   * label for one pointer, empty when no pointer names a configured source.
+   * Rendered one per line, not joined. */
+  readonly pointerLabels: readonly string[];
   /** The chunk's derived spend total (issue #60), from `ChunkSummary.cost`. */
   readonly costUsd: number;
   /** Whether {@link costUsd} is a lower bound — a summed invocation's envelope-less
@@ -80,14 +81,14 @@ export interface BoardCard {
             card().node
           }}</span>
         </span>
-        <!-- The pointer label is plain text here, not a link: a card is a
+        <!-- Pointer labels are plain text here, not links: a card is a
              target for opening the chunk, and an anchor inside it competes
              for the same click. The detail panel owns the link out to the work source. -->
-        @if (card().pointerLabel) {
-          <span class="iss" data-testid="work-ref-chip" [title]="card().pointerLabel">{{
-            card().pointerLabel
-          }}</span>
-        }
+        <span class="iss-list">
+          @for (label of card().pointerLabels; track label) {
+            <span class="iss" data-testid="work-ref-chip" [title]="label">{{ label }}</span>
+          }
+        </span>
         <span class="st-row">
           <span class="st" data-testid="chunk-status" [title]="card().status">{{ card().status }}</span>
           @if (isDoneLane(card().status) && card().completedAt; as completedAt) {
@@ -205,6 +206,14 @@ export interface BoardCard {
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+    }
+    /* One label per line: a column, not the wrapping single line every other
+       card row uses. Each line still clips on its own rather than wrapping
+       (the file's standing rule, restated here since the container is new). */
+    .iss-list {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
     }
     .iss,
     .st {

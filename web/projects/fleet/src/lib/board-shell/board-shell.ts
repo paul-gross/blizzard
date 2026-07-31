@@ -183,9 +183,7 @@ export class BoardShell {
         nodeId: chunk.current_node_id ?? '',
         // Only labeled pointers show — a pointer naming no configured source has a
         // null label and the card leans on the short id instead.
-        pointerLabel: (chunk.work_refs ?? [])
-          .flatMap((p) => (p.label ? [p.label] : []))
-          .join(' '),
+        pointerLabels: (chunk.work_refs ?? []).flatMap((p) => (p.label ? [p.label] : [])),
         costUsd: chunk.cost?.cost_usd ?? 0,
         costPartial: chunk.cost?.cost_partial ?? false,
         completedAt: chunk.completed_at ?? null,
