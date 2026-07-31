@@ -18,10 +18,11 @@ import type { MachineChunkStatus } from './chunk-status';
  * Line 1 is the compact ref plus the derived status as a soft pill
  * (mock screen C's pill vocabulary,
  * `../../../docs/designs/mobile/core-flows.html`), right-aligned. Line 2 is
- * the work-item chips inline with the title, wrapped to two lines rather than
- * ellipsized — a mobile card has the vertical room a desktop row doesn't.
- * Line 3 is the node + attempt epoch, in the same quiet label tone
- * {@link ChunkRow}'s own `.node` cell uses.
+ * one work-item line per item — that item's own chip plus its own title —
+ * each clamped to two lines rather than ellipsized, since a mobile card has
+ * the vertical room a desktop row doesn't. Line 3 is the node + attempt
+ * epoch, in the same quiet label tone {@link ChunkRow}'s own `.node` cell
+ * uses.
  *
  * A tap emits `selectChunk`, which `LocalPanelMobile` drills down on — the
  * card's own `selected` state stays unbound there, since the mobile shell
@@ -56,15 +57,17 @@ import type { MachineChunkStatus } from './chunk-status';
       </div>
       <div class="line2" data-testid="local-chunk-card-title">
         @for (item of linkedItems(); track item.ref) {
-          @if (item.web_url) {
-            <a class="chip" [href]="item.web_url" target="_blank" rel="noopener" (click)="$event.stopPropagation()">{{
-              item.label
-            }}</a>
-          } @else if (item.label) {
-            <span class="chip">{{ item.label }}</span>
-          }
+          <div class="wi">
+            @if (item.web_url) {
+              <a class="chip" [href]="item.web_url" target="_blank" rel="noopener" (click)="$event.stopPropagation()">{{
+                item.label
+              }}</a>
+            } @else if (item.label) {
+              <span class="chip">{{ item.label }}</span>
+            }
+            {{ item.title }}
+          </div>
         }
-        {{ titleText() }}
       </div>
       <div class="line3" data-testid="local-chunk-card-node">{{ lease().node_name }} · a{{ lease().epoch }}</div>
     </div>
@@ -110,8 +113,12 @@ import type { MachineChunkStatus } from './chunk-status';
       flex: none;
     }
     .line2 {
+      display: flex;
+      flex-direction: column;
       color: var(--text);
       font-size: var(--fs-sm);
+    }
+    .wi {
       overflow-wrap: anywhere;
       display: -webkit-box;
       -webkit-line-clamp: 2;
@@ -157,7 +164,4 @@ export class ChunkCard {
   protected readonly titleQuery = injectChunkTitleQuery(() => this.chunkId());
 
   protected readonly linkedItems = computed(() => this.titleQuery.data()?.items ?? []);
-
-  /** The first work-item's title, or empty when unresolved/failed/absent. */
-  protected readonly titleText = computed<string>(() => this.titleQuery.data()?.items?.[0]?.title ?? '');
 }

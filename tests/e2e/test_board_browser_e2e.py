@@ -424,12 +424,19 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 page.get_by_test_id("group-selected").click()
 
                 # C is merged away (ephemeral) — it vanishes from the board live — and B
-                # survives carrying the union of work refs, which the card shows as its
-                # two space-joined pointer labels rather than one.
+                # survives carrying the union of work refs, which the card shows as one
+                # chip per pointer label rather than one joined line.
                 expect(col_cards("ready")).to_have_count(2)
                 expect(page.get_by_test_id("chunk-card")).to_have_count(2)
                 expect(ready_card(chunk_c)).to_have_count(0)
-                expect(ready_card(chunk_b).get_by_test_id("work-ref-chip")).to_have_text(re.compile(r"^\S+\s+\S+$"))
+                grouped_labels = sorted(
+                    wr["label"] for wr in hub.get(f"/api/chunks/{chunk_b}").json()["work_refs"] if wr.get("label")
+                )
+                survivor_chips = ready_card(chunk_b).get_by_test_id("work-ref-chip")
+                expect(survivor_chips).to_have_count(2)
+                assert sorted(survivor_chips.all_text_contents()) == grouped_labels, (
+                    f"survivor's chips don't match its union of pointer labels: {grouped_labels}"
+                )
 
                 # --- Reorder from the UI: drag the grouped survivor to the top ---------
                 # Promote stamped B at the tail, so A leads the lane; B is dragged over it

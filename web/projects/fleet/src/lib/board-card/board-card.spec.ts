@@ -10,7 +10,7 @@ const BASE: BoardCard = {
   status: 'done',
   node: 'done',
   nodeId: 'nd_done',
-  pointerLabel: '',
+  pointerLabels: [],
   costUsd: 0,
   costPartial: false,
   completedAt: '2026-07-13T00:00:01+00:00',
@@ -62,5 +62,40 @@ describe('BoardCardComponent completion stamp (issue #173)', () => {
     const el = await render(BASE);
 
     expect(el.querySelector('[data-testid="chunk-status"]')?.textContent?.trim()).toBe('done');
+  });
+});
+
+describe('BoardCardComponent work-ref chips (issue #176)', () => {
+  it('renders one chip per pointer label, in order, each carrying its own title', async () => {
+    const el = await render({
+      ...BASE,
+      pointerLabels: ['blizzard#146', 'blizzard#164', 'widget#9'],
+    });
+
+    const chips = el.querySelectorAll('[data-testid="work-ref-chip"]');
+    expect(Array.from(chips).map((c) => c.textContent?.trim())).toEqual([
+      'blizzard#146',
+      'blizzard#164',
+      'widget#9',
+    ]);
+    expect(Array.from(chips).map((c) => c.getAttribute('title'))).toEqual([
+      'blizzard#146',
+      'blizzard#164',
+      'widget#9',
+    ]);
+  });
+
+  it('renders exactly one chip for a single pointer label', async () => {
+    const el = await render({ ...BASE, pointerLabels: ['blizzard#146'] });
+
+    const chips = el.querySelectorAll('[data-testid="work-ref-chip"]');
+    expect(chips).toHaveLength(1);
+    expect(chips[0].textContent?.trim()).toBe('blizzard#146');
+  });
+
+  it('renders no chip when there are no pointer labels', async () => {
+    const el = await render({ ...BASE, pointerLabels: [] });
+
+    expect(el.querySelectorAll('[data-testid="work-ref-chip"]')).toHaveLength(0);
   });
 });

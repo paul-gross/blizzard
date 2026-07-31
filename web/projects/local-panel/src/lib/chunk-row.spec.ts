@@ -81,7 +81,7 @@ describe('ChunkRow', () => {
     expect(el.querySelector('[data-testid="chunk-row-title"]')?.textContent?.trim()).toBe('');
   });
 
-  it('renders the work-item chip inline with the title', async () => {
+  it('renders one line per work item, each with its own chip and its own title', async () => {
     const result = await render(() => ({
       items: [
         {
@@ -92,15 +92,66 @@ describe('ChunkRow', () => {
           fetched_at: '2026-07-16T11:00:00.000Z',
           title: 'runner machine panel',
         },
+        {
+          source: 'blizzard',
+          ref: '62',
+          label: 'blizzard#62',
+          web_url: 'https://github.com/paul-gross/blizzard/issues/62',
+          fetched_at: '2026-07-16T11:00:00.000Z',
+          title: 'mobile chunk card',
+        },
       ],
     }));
     const el = result.fixture.nativeElement as HTMLElement;
 
     const title = el.querySelector('[data-testid="chunk-row-title"]');
-    const link = title?.querySelector<HTMLAnchorElement>('a.chip');
-    expect(link?.textContent).toContain('blizzard#61');
-    expect(link?.href).toBe('https://github.com/paul-gross/blizzard/issues/61');
-    expect(title?.textContent).toContain('runner machine panel');
+    const lines = title?.querySelectorAll('.wi') ?? [];
+    expect(lines).toHaveLength(2);
+
+    const link1 = lines[0].querySelector<HTMLAnchorElement>('a.chip');
+    expect(link1?.textContent).toContain('blizzard#61');
+    expect(link1?.href).toBe('https://github.com/paul-gross/blizzard/issues/61');
+    expect(lines[0].textContent).toContain('runner machine panel');
+
+    const link2 = lines[1].querySelector<HTMLAnchorElement>('a.chip');
+    expect(link2?.textContent).toContain('blizzard#62');
+    expect(link2?.href).toBe('https://github.com/paul-gross/blizzard/issues/62');
+    expect(lines[1].textContent).toContain('mobile chunk card');
+  });
+
+  it('renders a chip alone when title is missing, and a title alone when the chip is missing', async () => {
+    const result = await render(() => ({
+      items: [
+        {
+          source: 'blizzard',
+          ref: '61',
+          label: 'blizzard#61',
+          web_url: null,
+          fetched_at: '2026-07-16T11:00:00.000Z',
+          title: null,
+          error: 'not found',
+        },
+        {
+          source: 'blizzard',
+          ref: '62',
+          label: null,
+          web_url: null,
+          fetched_at: '2026-07-16T11:00:00.000Z',
+          title: 'mobile chunk card',
+        },
+      ],
+    }));
+    const el = result.fixture.nativeElement as HTMLElement;
+
+    const title = el.querySelector('[data-testid="chunk-row-title"]');
+    const lines = title?.querySelectorAll('.wi') ?? [];
+    expect(lines).toHaveLength(2);
+
+    expect(lines[0].querySelector('.chip')?.textContent).toContain('blizzard#61');
+    expect(lines[0].textContent?.trim()).toBe('blizzard#61');
+
+    expect(lines[1].querySelector('.chip')).toBeNull();
+    expect(lines[1].textContent?.trim()).toBe('mobile chunk card');
   });
 
   it('emits selectChunk on click, Enter, and Space', async () => {

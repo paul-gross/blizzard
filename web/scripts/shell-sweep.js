@@ -3,15 +3,13 @@
  * The shell sweep (issue #171) — the tooled half of
  * `blizzard-context:/verification/blizzard.md`'s `web:shell-sweep` method.
  *
- * A real, headless-Chromium proof that the two shared shells — the hub board
- * and the runner's local panel — never let their header's profile menu drift
- * off-viewport as the window narrows, at every combination of shell, username
- * length, and viewport width the two specs below sweep. jsdom (this repo's
- * default unit-test environment) parses `@container` rules but never
- * evaluates them, so no jsdom spec can prove this; these two specs run
- * instead under `@angular/build:unit-test`'s real-browser mode
- * (`--browsers=ChromiumHeadless`, backed by `@vitest/browser-playwright`),
- * where layout, `@container` collapse, and hit-testing are all genuine.
+ * A real, headless-Chromium proof of layout claims jsdom (this repo's default
+ * unit-test environment) cannot make good on: it parses `@container` rules
+ * but never evaluates them, and it never actually lays out or clamps text.
+ * These specs run instead under `@angular/build:unit-test`'s real-browser
+ * mode (`--browsers=ChromiumHeadless`, backed by `@vitest/browser-playwright`),
+ * where layout, `@container` collapse, line-clamping, and hit-testing are all
+ * genuine.
  *
  * Named `*.shell-sweep.spec.ts` and excluded from each project's default
  * `ng test` run (`angular.json`'s per-project `test.exclude`) because they
@@ -20,14 +18,22 @@
  *
  *   npm run shell-sweep   (from web/)
  *
- * The two specs:
+ * The three specs:
  *   - projects/hub/src/app/nav/app-nav-menu.shell-sweep.spec.ts — the hub
  *     board shell (BoardHeader + AppNavMenu), swept over width only (no
- *     username is ever shown there).
+ *     username is ever shown there): never lets the profile menu drift
+ *     off-viewport as the window narrows.
  *   - projects/local-panel/src/lib/local-panel-layout.shell-sweep.spec.ts —
  *     the runner's local-panel shell (LocalPanelLayout), swept over width ×
  *     signed-in username length — the axis issue #163's actual defect lived
- *     on.
+ *     on: same profile-menu-drift proof.
+ *   - projects/local-panel/src/lib/local-panel-mobile.shell-sweep.spec.ts —
+ *     the runner's mobile chunk list (`LocalPanelMobile` → `ChunkCard`,
+ *     issue #176): a five-work-item chunk card's per-line
+ *     `-webkit-line-clamp: 2` lines genuinely stack (distinct
+ *     `getBoundingClientRect().top`s) with no horizontal overflow, at the
+ *     narrow phone widths this component — unlike `ChunkRow` — is actually
+ *     reached at, beneath the persistent mobile bottom tab bar.
  */
 
 const { spawnSync } = require('node:child_process');
@@ -35,6 +41,7 @@ const { spawnSync } = require('node:child_process');
 const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/nav/app-nav-menu.shell-sweep.spec.ts' },
   { project: 'local-panel', spec: 'projects/local-panel/src/lib/local-panel-layout.shell-sweep.spec.ts' },
+  { project: 'local-panel', spec: 'projects/local-panel/src/lib/local-panel-mobile.shell-sweep.spec.ts' },
 ];
 
 function runSweep({ project, spec }) {
@@ -57,7 +64,7 @@ function main() {
     return;
   }
 
-  console.log('\nshell-sweep: both shells clean at every width/identity-length combination.\n');
+  console.log('\nshell-sweep: all three specs clean.\n');
 }
 
 main();

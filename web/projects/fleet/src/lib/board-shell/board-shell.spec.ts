@@ -199,7 +199,7 @@ describe('BoardShell', () => {
     expect(node?.getAttribute('title')).toBe('nd_01KXHKVCWZ1000000000000000');
   });
 
-  it('names the work item as plain text — a card carries no competing link', async () => {
+  it('names each work item as plain text, one chip per line — a card carries no competing link', async () => {
     const chunks: ChunkSummary[] = [
       {
         chunk_id: 'ch_01running000000000000000000',
@@ -219,11 +219,11 @@ describe('BoardShell', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    // Both pointers read on the one work-item line; the whole card is a single click
+    // Each pointer gets its own work-item line; the whole card is a single click
     // target for opening the chunk, so nothing inside it is an anchor competing for
     // that click — the link out to the forge lives in the detail panel.
-    const item = el.querySelector('[data-testid="work-ref-chip"]');
-    expect(item?.textContent?.trim()).toBe('blizzard#8 widget#9');
+    const chips = el.querySelectorAll('[data-testid="work-ref-chip"]');
+    expect(Array.from(chips).map((c) => c.textContent?.trim())).toEqual(['blizzard#8', 'widget#9']);
     expect(el.querySelectorAll('[data-testid="chunk-card"] a')).toHaveLength(0);
     // The short chunk id stays visible as the stable handle.
     expect(el.querySelector('[data-testid="chunk-id"]')?.textContent).toContain('C-0000');
