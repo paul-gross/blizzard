@@ -36,10 +36,6 @@ import {
   template: `
     <div class="art-tab" data-testid="chunk-artifacts-tab">
       <nav class="art-nav">
-        <div class="nav-head">
-          <span class="nav-title">Artifact store</span>
-          <span class="cnt">{{ sortedArtifacts().length }}</span>
-        </div>
         @if (sortedArtifacts().length === 0) {
           <p class="none" data-testid="artifacts-tab-nav-empty">No artifacts yet.</p>
         } @else {
@@ -105,23 +101,6 @@ import {
       min-height: 0;
       max-height: 35%;
       border-bottom: 1px solid var(--line);
-    }
-    .nav-head {
-      flex: none;
-      display: flex;
-      align-items: baseline;
-      gap: 6px;
-      padding: 6px 8px;
-    }
-    .nav-title {
-      font-size: var(--fs-label);
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: var(--label);
-    }
-    .cnt {
-      color: var(--label-dim);
-      font-size: var(--fs-xs);
     }
     .none {
       margin: 0;

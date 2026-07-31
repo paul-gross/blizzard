@@ -546,6 +546,13 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 else:
                     expect(viewer).to_contain_text(target_artifact["commit_hash"])
 
+                # --- `< board` breadcrumb → back to the board, chunk re-selected (blizzard#203) --
+                # A client-side navigation, proving the breadcrumb itself carries the chunk
+                # back — distinct from the fresh-mount `page.goto` proof just below.
+                page.get_by_test_id("mobile-chunk-back").click()
+                expect(page).to_have_url(f"http://127.0.0.1:{hub_port}/board?chunk={chunk_b}")
+                expect(page.get_by_test_id("chunk-detail")).to_be_visible()
+
                 # Back to the board on the same dock link the click left — a fresh mount of
                 # the URL contract the dock's own selection relies on (issue #162).
                 page.goto(f"http://127.0.0.1:{hub_port}/board?chunk={chunk_b}", wait_until="load")

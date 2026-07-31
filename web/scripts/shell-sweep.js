@@ -18,11 +18,17 @@
  *
  *   npm run shell-sweep   (from web/)
  *
- * The three specs:
+ * The four specs:
  *   - projects/hub/src/app/nav/app-nav-menu.shell-sweep.spec.ts — the hub
  *     board shell (BoardHeader + AppNavMenu), swept over width only (no
  *     username is ever shown there): never lets the profile menu drift
  *     off-viewport as the window narrows.
+ *   - projects/hub/src/app/board/chunk/chunk-page-layout.shell-sweep.spec.ts —
+ *     the chunk detail page's General tab (`ChunkGeneralTab`, blizzard#203):
+ *     work item, issues and node history genuinely stack at phone widths, and
+ *     node history genuinely sits beside a shared work-item/issues column at
+ *     1024px — the `@media (min-width: 720px)` grid split jsdom cannot
+ *     evaluate.
  *   - projects/local-panel/src/lib/local-panel-layout.shell-sweep.spec.ts —
  *     the runner's local-panel shell (LocalPanelLayout), swept over width ×
  *     signed-in username length — the axis issue #163's actual defect lived
@@ -40,6 +46,7 @@ const { spawnSync } = require('node:child_process');
 
 const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/nav/app-nav-menu.shell-sweep.spec.ts' },
+  { project: 'hub', spec: 'projects/hub/src/app/board/chunk/chunk-page-layout.shell-sweep.spec.ts' },
   { project: 'local-panel', spec: 'projects/local-panel/src/lib/local-panel-layout.shell-sweep.spec.ts' },
   { project: 'local-panel', spec: 'projects/local-panel/src/lib/local-panel-mobile.shell-sweep.spec.ts' },
 ];
@@ -64,7 +71,7 @@ function main() {
     return;
   }
 
-  console.log('\nshell-sweep: all three specs clean.\n');
+  console.log('\nshell-sweep: all four specs clean.\n');
 }
 
 main();

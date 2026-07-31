@@ -1,5 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
+import { KitTab, KitTabStrip } from './kit-tab';
+
 /** One tab in a {@link KitTabs} strip. */
 export interface KitTabOption {
   readonly value: string;
@@ -9,12 +11,11 @@ export interface KitTabOption {
 }
 
 /**
- * The tab strip (issue #160) — a small, bordered, bottom-open row of tabs
- * selecting between sibling views of the same page (e.g. a chunk detail
- * page's General/Artifacts split). `kit/` had no tabs primitive before this;
- * shaped like {@link KitChips} (options + selected value in, `(choose)` out)
- * but rendered as the mockup's square, bottom-open strip, its active tab
- * reading as an extension of the panel body below it rather than a pill.
+ * The tab strip (issue #160) — a row of tabs selecting between sibling views
+ * of the same page (e.g. a chunk detail page's General/Artifacts split).
+ * Shaped like {@link KitChips} (options + selected value in, `(choose)` out),
+ * rendered with the same {@link KitTabStrip}/{@link KitTab} chrome the main
+ * nav's routed tabs wear (blizzard#203) — one tab treatment, not two.
  *
  * `role="tablist"` / `role="tab"` / `aria-selected` so the strip is
  * navigable by assistive tech; this component does not itself own the
@@ -23,12 +24,14 @@ export interface KitTabOption {
 @Component({
   selector: 'fleet-kit-tabs',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [KitTab, KitTabStrip],
   template: `
-    <div class="tabs" role="tablist">
+    <div class="tabs" fleetKitTabStrip role="tablist">
       @for (option of options(); track option.value) {
         <button
           type="button"
           class="tab"
+          fleetKitTab
           role="tab"
           [class.active]="option.value === activeValue()"
           [attr.aria-selected]="option.value === activeValue()"
@@ -43,30 +46,6 @@ export interface KitTabOption {
   styles: `
     :host {
       display: contents;
-    }
-    .tabs {
-      display: flex;
-      gap: 2px;
-    }
-    .tab {
-      font-family: inherit;
-      background: transparent;
-      border: 1px solid var(--line);
-      border-bottom: none;
-      color: var(--label);
-      cursor: pointer;
-      font-size: var(--fs-xs);
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      padding: 5px 18px;
-    }
-    .tab:hover {
-      color: var(--text);
-    }
-    .tab.active {
-      color: var(--cyan);
-      border-color: var(--bezel-hi);
-      background: linear-gradient(180deg, var(--panel) 0%, var(--panel-deep) 100%);
     }
   `,
 })
