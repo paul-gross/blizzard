@@ -347,6 +347,41 @@ def test_an_answered_ask_does_not_appear(tmp_path: Path) -> None:
 
 
 @pytest.mark.component
+def test_an_ask_whose_lease_closed_without_a_park_resume_does_not_appear(tmp_path: Path) -> None:
+    """blizzard#202's display-level backstop: an ask must never read open once its lease
+    has closed, independent of whichever loop path is responsible for retiring the park
+    fact — this is what keeps a leaked ``park_facts`` row (a fact-pair writer that missed
+    a non-happy-path closure) from surfacing as open at the API/CLI layer even if the fix
+    upstream ever regresses."""
+    app, store = _app_with_status(tmp_path)
+    _seed_lease(store)
+    store.record_ask(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        question_id="qn_1",
+        question="which branch?",
+        options=[],
+        session_id="sess-a",
+        asked_at=_NOW,
+    )
+    store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
+    # The lease closed with no matching `park_resumes` row — the exact leak shape blizzard#202
+    # describes for a non-happy-path ending (stopped/detached/abandoned).
+    store.record_closure(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        node_id="nd_build",
+        reason="released",
+        closed_at=_NOW + timedelta(minutes=1),
+    )
+
+    with TestClient(app) as client:
+        resp = client.get("/api/asks", params={"open": "true"})
+
+    assert resp.json()["items"] == []
+
+
+@pytest.mark.component
 def test_open_false_is_refused_rather_than_answered_wrong(tmp_path: Path) -> None:
     app, _store = _app_with_status(tmp_path)
     with TestClient(app) as client:

@@ -457,6 +457,42 @@ def test_fill_respects_max_agents(tmp_path):  # type: ignore[no-untyped-def]
     assert hub.claims == []  # no free slot
 
 
+@pytest.mark.unit
+def test_fill_releases_a_binding_the_hub_reports_terminal_with_no_route(tmp_path):  # type: ignore[no-untyped-def]
+    """blizzard#202: FILL's crash reconciler (``_reconcile_interrupted_claims``) must not
+    fall through silently on a held binding whose chunk the hub now reports with no live
+    route in a status that is neither ``ready`` nor ``running`` (e.g. detached and stopped
+    hub-side) — before the fix, this shape matched no branch and the binding, plus the
+    environment slot, leaked indefinitely.
+    """
+    store = _store(tmp_path)
+    # A binding survives with no lease at all — the chunk's last lease already closed
+    # (e.g. `transitioned`), exactly the observed-in-production shape.
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    hub = FakeHub()
+    hub.chunks["ch_1"] = ChunkDetail(
+        chunk_id="ch_1",
+        graph_id="gr_1",
+        status=ChunkStatus.DONE,
+        current_node_id=None,
+        latest_epoch=1,
+        route=None,  # no live route — terminal, hub-side
+    )
+    hub.queue = []  # nothing new to fill — the reconciler is the only path that could act
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
+        probe=FakeProbe(),
+    )
+
+    fill(ctx)
+
+    assert store.held_environment_ids() == []
+    assert store.live_tenure_chunk_ids() == []
+
+
 # --------------------------------------------------------------------------- #
 # ADVANCE — exited worker (buffer) + PULL flush (deliver)
 # --------------------------------------------------------------------------- #

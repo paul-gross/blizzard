@@ -21,10 +21,12 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.harness.adapter import WorkerHandle
-from blizzard.runner.loop.steps import advance, reap
+from blizzard.runner.loop.steps import advance, pull, reap
 from blizzard.runner.store.repository import NewLease
+from blizzard.wire.chunk import ChunkDetail
 from blizzard.wire.facts import ANSWER_DELIVERED, QUESTION_ASKED
 from blizzard.wire.question import QuestionView
 from tests.runner_fakes import FakeHarness, FakeHub, FakeProbe, FakeProvider, make_context, make_store
@@ -313,3 +315,48 @@ def test_worker_resumed_after_a_park_past_the_threshold_survives_the_next_reap(t
     assert store.active_lease("lease_1") is not None  # not reaped
     assert resumed_probe.killed == []
     assert [f for f in store.pending_outbound() if f.kind == "escalation.recorded"] == []
+
+
+def test_a_chunk_stopped_hub_side_while_parked_on_an_ask_retires_the_open_park(tmp_path):  # type: ignore[no-untyped-def]
+    """blizzard#202: the operator stops a chunk instead of answering its ask.
+
+    PULL's ``_reconcile_leases`` honors the hub's ``STOPPED`` fact via
+    ``_abandon_reassigned`` (issue #118) — before the fix, that path closed the lease and
+    released the environments but never retired the open ``park_facts`` row, since the
+    only other writer of ``park_resumes`` is the answer-driven resume
+    (``_resume_if_answered``), which never runs for a lease the operator stopped instead
+    of answered. The ask must not read open forever after the chunk it belonged to is
+    gone.
+    """
+    store = _store(tmp_path)
+    _seed_exited_lease(store)
+    store.record_ask(
+        lease_id="lease_1",
+        chunk_id="ch_1",
+        question_id="qn_1",
+        question="Which API?",
+        options=["rest", "graphql"],
+        session_id="sess-a",
+        asked_at=_NOW,
+    )
+    store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
+
+    hub = FakeHub()
+    hub.chunks["ch_1"] = ChunkDetail(
+        chunk_id="ch_1",
+        graph_id="gr_1",
+        status=ChunkStatus.STOPPED,
+        current_node_id="nd_build",
+        latest_epoch=1,
+        route=None,
+    )
+    ctx = _ctx(store, hub=hub)
+
+    pull(ctx)
+
+    # The lease is closed, the ask-park is retired, and the environment is freed — no
+    # facet of this abandoned, ask-parked chunk lingers as "open" or "held".
+    assert store.active_lease("lease_1") is None
+    assert store.parked_lease_ids() == set()
+    assert store.open_asks() == []
+    assert store.held_environment_ids() == []

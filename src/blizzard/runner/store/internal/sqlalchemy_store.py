@@ -438,8 +438,14 @@ class SqlAlchemyRunnerStore:
         )
 
     def open_asks(self) -> list[AskRecord]:
+        # A display-level backstop (blizzard#202) independent of whichever loop path
+        # writes the retiring `park_resumes` row: an ask whose lease has already closed
+        # is never open, even if the closing path failed to retire the park fact.
         stmt = (
-            select(asks).where(asks.c.question_id.not_in(select(park_resumes.c.question_id))).order_by(asks.c.id.desc())
+            select(asks)
+            .where(asks.c.question_id.not_in(select(park_resumes.c.question_id)))
+            .where(asks.c.lease_id.not_in(select(lease_closures.c.lease_id)))
+            .order_by(asks.c.id.desc())
         )
         return [self._row_to_ask(r) for r in self._all(stmt)]
 

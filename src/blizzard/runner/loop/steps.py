@@ -913,16 +913,22 @@ def _abandon_reassigned(ctx: LoopContext, lease: LeaseRecord, *, killed: bool = 
     gone outright — a 404 at the hub, e.g. after a store reset), so re-asserting authority over it
     would be wrong — the runner learns of it, whether over its own restart or on a live tick, and
     does exactly what losing ownership requires: kill the worker, release the environments. The lease is closed
-    ``released`` (not a failed attempt — it never gets to run) and the intent is cleared. ``via``
-    names which caller reached the ownership check that led here (``"resume"`` — restart-resume,
-    ``"pull"`` — a live tick's :func:`_reconcile_leases`, ``"reap"`` — an escalation REAP
-    suppressed in favor of this abandon, see :func:`_fail_attempt`) so the log line below does not
-    overclaim a single cause."""
+    ``released`` (not a failed attempt — it never gets to run) and the intent is cleared. Any open ask
+    park for this lease is retired alongside — this path is reached for a parked lease too (the
+    answer-driven resume, :func:`_resume_if_answered`, is the only other ``park_resumes`` writer), and
+    without it the ask would show open in ``blizzard runner status``/``GET /asks`` forever
+    (blizzard#202). ``via`` names which caller reached the ownership check that led here
+    (``"resume"`` — restart-resume, ``"pull"`` — a live tick's :func:`_reconcile_leases`, ``"reap"`` —
+    an escalation REAP suppressed in favor of this abandon, see :func:`_fail_attempt`) so the log
+    line below does not overclaim a single cause."""
     now = ctx.clock.now()
     if lease.pid is not None and not killed:
         ctx.process.kill(lease.pid)
     _CP_ABANDON_AFTER_KILL.reached()  # worker killed; envs not yet released — recovery is the next tick's re-scan
     _release_all(ctx, lease.chunk_id)
+    park = ctx.store.open_park(lease.lease_id)
+    if park is not None:
+        ctx.store.record_park_resume(lease_id=lease.lease_id, question_id=park.question_id, resumed_at=now)
     ctx.store.record_closure(
         lease_id=lease.lease_id, chunk_id=lease.chunk_id, node_id=lease.node_id, reason=_RELEASED, closed_at=now
     )
@@ -1445,6 +1451,16 @@ def _reconcile_interrupted_claims(ctx: LoopContext) -> None:
             _reclaim_interrupted(ctx, chunk_id, bindings)  # claim never landed — claim now, reuse the binding
         elif detail.route is not None and not ours:
             _log.info("releasing binding — another runner won the chunk", chunk_id=chunk_id)
+            _release_all(ctx, chunk_id)
+        elif detail.route is None:
+            # No live route, in a status that is neither `ready` (claimable) nor `running`
+            # (ours to adopt) — e.g. stopped or detached hub-side (blizzard#202). Release
+            # explicitly instead of matching no branch and leaking the binding forever.
+            _log.info(
+                "releasing binding — hub reports no live route in a non-ready, non-running state",
+                chunk_id=chunk_id,
+                hub_status=str(detail.status),
+            )
             _release_all(ctx, chunk_id)
 
 
