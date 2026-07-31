@@ -54,3 +54,14 @@ export function runnerChunkWorkItemsKey(chunkId: string): readonly unknown[] {
 export function runnerTranscriptKey(leaseId: string): readonly unknown[] {
   return ['runner', 'lease', leaseId, 'transcript'];
 }
+
+/**
+ * One chunk's full detail aggregate (issue #185) — the chunk-detail dock's
+ * header, pass-through-forwarded to the hub (`ChunkDetail.pause` is the only
+ * way this panel learns a chunk is paused). Its own key, keyed by chunk id,
+ * distinct from the severable {@link runnerChunkWorkItemsKey} title read and
+ * from `hub`-namespaced `chunk` reads in `fleet`.
+ */
+export function runnerChunkDetailKey(chunkId: string): readonly unknown[] {
+  return ['runner', 'chunk', chunkId, 'detail'];
+}

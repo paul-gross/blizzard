@@ -117,6 +117,8 @@ _FLEET: set[tuple[str, str]] = {
     ("GET", "/api/fleet/chunks/{chunk_id}"),
     ("GET", "/api/fleet/chunks/{chunk_id}/work-items"),
     ("GET", "/api/fleet/chunks/{chunk_id}/pm-items"),  # the issue-#55 deprecated alias
+    ("POST", "/api/fleet/chunks/{chunk_id}/pause"),
+    ("POST", "/api/fleet/chunks/{chunk_id}/resume"),
     ("GET", "/api/fleet/summary"),
     ("GET", "/api/fleet/questions/{question_id}"),
     ("GET", "/api/fleet/chunks/{chunk_id}/envelope"),

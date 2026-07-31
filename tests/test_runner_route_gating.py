@@ -59,6 +59,9 @@ _HUMAN: set[tuple[str, str]] = {
     ("PATCH", "/api/chunks/{chunk_id}/takeovers/{takeover_id}"),
     ("GET", "/api/takeovers"),
     ("POST", "/api/chunks/{chunk_id}/requeues"),
+    ("GET", "/api/chunks/{chunk_id}"),
+    ("POST", "/api/chunks/{chunk_id}/pause"),
+    ("POST", "/api/chunks/{chunk_id}/resume"),
 }
 
 #: Open — the worker-hook lane (workers call over TCP via ``BLIZZARD_RUNNER_URL`` and

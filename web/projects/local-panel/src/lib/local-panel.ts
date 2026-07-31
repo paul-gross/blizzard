@@ -79,6 +79,7 @@ export interface MachineChunkRow {
             (selectChunk)="selectChunk($event)"
             (selectAttempt)="selectAttempt($event)"
             (toggleShowAllChunks)="showAllChunks.set($event)"
+            (dismiss)="clearSelection()"
           />
         } @else {
           @defer (on immediate) {

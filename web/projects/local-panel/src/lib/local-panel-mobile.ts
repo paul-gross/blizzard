@@ -126,6 +126,7 @@ import { injectRunnerStatusQuery } from './status.query';
             [escalation]="selectedEscalation()"
             [activeAttemptLeaseId]="selectedAttemptLeaseId()"
             (selectAttempt)="selectAttempt.emit($event)"
+            (dismiss)="closeDetail.emit()"
           />
         </div>
       } @else {

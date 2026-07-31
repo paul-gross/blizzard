@@ -524,6 +524,27 @@ class ChunkDetail(BaseModel):
     bounces: list[BounceView] = []
 
 
+class ChunkHeaderView(BaseModel):
+    """The chunk-detail dock's header aggregate (issue #185) — the identity,
+    work-item links, live state, and pause fact a header needs, projected down
+    from :class:`ChunkDetail` rather than carrying its transition/artifact
+    history. This is deliberately the runner machine panel's own read: pydantic's
+    default ``extra="ignore"`` lets it validate straight off a `ChunkDetail`
+    payload, picking out only these fields — so the runner's chunk-detail proxy
+    (``blizzard.runner.api.chunk_detail``) never pulls this module's
+    :class:`EscalationView` into the runner's own OpenAPI schema, where it would
+    collide with the runner's unrelated, identically-named status escalation view.
+
+    ``pause`` is carried independently of ``status`` for the same reason
+    :class:`ChunkDetail`'s own field is: a chunk both paused and parked on a
+    question still derives ``waiting_on_human``."""
+
+    chunk_id: str
+    status: ChunkStatus
+    work_refs: list[WorkRefView] = []
+    pause: PauseView | None = None
+
+
 class WorkItemEntry(BaseModel):
     """One pointer's pass-through work item — title, body + comment
     thread, vendor-native.

@@ -5573,6 +5573,49 @@
         ]
       }
     },
+    "/api/fleet/chunks/{chunk_id}/pause": {
+      "post": {
+        "description": "The runner machine panel's chunk-detail Pause (issue #185), forwarded here with the\nrunner's own bearer token from the runner-local pass-through\n(:mod:`blizzard.runner.api.chunk_detail`) \u2014 the same transition the board's own Pause\nbutton drives, `by` defaulting to ``operator`` exactly as the board's mutation does.",
+        "operationId": "pause_chunk_api_fleet_chunks__chunk_id__pause_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChunkSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pause Chunk",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
     "/api/fleet/chunks/{chunk_id}/pm-items": {
       "get": {
         "deprecated": true,
@@ -5612,6 +5655,49 @@
           }
         },
         "summary": "Deprecated alias for GET /fleet/chunks/{chunk_id}/work-items",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
+    "/api/fleet/chunks/{chunk_id}/resume": {
+      "post": {
+        "description": "The runner machine panel's chunk-detail Resume (issue #185) \u2014 see :func:`pause_chunk`.",
+        "operationId": "resume_chunk_api_fleet_chunks__chunk_id__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChunkSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resume Chunk",
         "tags": [
           "fleet"
         ]

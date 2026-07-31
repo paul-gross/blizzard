@@ -28,6 +28,7 @@ from blizzard.foundation.web import mount_web_app
 from blizzard.runner.api.artifacts import router as artifacts_router
 from blizzard.runner.api.asks import router as asks_router
 from blizzard.runner.api.attachments import router as attachments_router
+from blizzard.runner.api.chunk_detail import router as chunk_detail_router
 from blizzard.runner.api.control import router as control_router
 from blizzard.runner.api.environments import router as environments_router
 from blizzard.runner.api.escalations import router as escalations_router
@@ -283,6 +284,9 @@ def create_app(
     # worker-hook lane, ungated (the worker never crosses a layer).
     app.include_router(work_items_router)
     # Human web lane (gated under an oauth-mode hub): the panel's own reads/writes.
+    # The chunk-detail dock's pass-through proxy (issue #185): the same layered forward
+    # as work-items above, but human-lane — it renders the operator dock, not a worker.
+    app.include_router(chunk_detail_router, dependencies=human_api)
     app.include_router(leases_router, dependencies=human_api)
     app.include_router(transcripts_router, dependencies=human_api)
     app.include_router(selftests_router, dependencies=human_api)

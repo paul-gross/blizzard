@@ -347,7 +347,7 @@ describe('LocalPanel', () => {
       el.querySelector<HTMLElement>('[data-testid="chunk-row"]')?.click();
       await settle(fixture);
 
-      expect(el.querySelector('[data-testid="detail-chunk-ref"]')?.textContent).toContain('C-3YJ9');
+      expect(el.querySelector('[data-testid="detail-chunk-ref"]')?.textContent).toContain('ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9');
       const facts = el.querySelector('[data-testid="detail-facts"]')?.textContent ?? '';
       expect(facts).toContain('L-ZPRR');
       expect(facts).toContain('4821');
@@ -393,7 +393,7 @@ describe('LocalPanel', () => {
       el.querySelector<HTMLElement>('[data-testid="agent-row"]')?.click();
       await settle(fixture);
 
-      expect(el.querySelector('[data-testid="detail-chunk-ref"]')?.textContent).toContain('C-3YJ9');
+      expect(el.querySelector('[data-testid="detail-chunk-ref"]')?.textContent).toContain('ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9');
       expect(el.querySelector('[data-testid="chunk-row"]')?.classList.contains('selected')).toBe(true);
       expect(el.querySelector('[data-testid="agent-row"]')?.classList.contains('selected')).toBe(true);
     });
@@ -442,7 +442,7 @@ describe('LocalPanel', () => {
       const el = fixture.nativeElement as HTMLElement;
 
       // The detail dock is open on the URL's chunk straight away…
-      expect(el.querySelector('[data-testid="detail-chunk-ref"]')?.textContent).toContain('C-3YJ9');
+      expect(el.querySelector('[data-testid="detail-chunk-ref"]')?.textContent).toContain('ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9');
       expect(el.querySelector('[data-testid="chunk-row"]')?.classList.contains('selected')).toBe(true);
       // …and hydration is a pure read — nothing rewrote the URL.
       expect(navigateSpy).not.toHaveBeenCalled();

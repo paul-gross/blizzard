@@ -156,6 +156,165 @@ export type CapacitiesView = {
 };
 
 /**
+ * ChunkHeaderView
+ *
+ * The chunk-detail dock's header aggregate (issue #185) — the identity,
+ * work-item links, live state, and pause fact a header needs, projected down
+ * from :class:`ChunkDetail` rather than carrying its transition/artifact
+ * history. This is deliberately the runner machine panel's own read: pydantic's
+ * default ``extra="ignore"`` lets it validate straight off a `ChunkDetail`
+ * payload, picking out only these fields — so the runner's chunk-detail proxy
+ * (``blizzard.runner.api.chunk_detail``) never pulls this module's
+ * :class:`EscalationView` into the runner's own OpenAPI schema, where it would
+ * collide with the runner's unrelated, identically-named status escalation view.
+ *
+ * ``pause`` is carried independently of ``status`` for the same reason
+ * :class:`ChunkDetail`'s own field is: a chunk both paused and parked on a
+ * question still derives ``waiting_on_human``.
+ */
+export type ChunkHeaderView = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    pause?: PauseView | null;
+    status: ChunkStatus;
+    /**
+     * Work Refs
+     */
+    work_refs?: Array<WorkRefView>;
+};
+
+/**
+ * ChunkStatus
+ *
+ * The derived chunk statuses. Never stored — always a query result.
+ */
+export type ChunkStatus = 'not_ready' | 'ready' | 'running' | 'delivering' | 'waiting_on_human' | 'needs_human' | 'paused' | 'stopped' | 'done';
+
+/**
+ * ChunkSummary
+ *
+ * One row of the fleet chunk list — derived status + current node.
+ *
+ * ``current_node_name`` is the node's human graph name (``build``, ``review``) the
+ * board renders in place of the raw ``nd_`` ULID; null when the chunk has no
+ * current node or its pinned graph cannot resolve the id.
+ *
+ * Deliberately status-only: the summary feeds the board **card**, which is a passive
+ * status view (issue #42), so no operator *fact* is carried here. The pause fact — and
+ * every other fact an operator action keys on — reaches the chunk detail dock through
+ * :class:`ChunkDetail`, the one place a board action lives. ``runner_id`` (the live
+ * route's holder, null when unrouted) is a passive where-is-it fact in that same
+ * sense — it lets the fleet registry list each runner's claims — not an action key.
+ * ``environment_count`` (issue #69) is a passive where-is-it *count* in that same
+ * spirit: the number of environments the chunk's live route holds, so the fleet registry
+ * can sum a runner's slot-bar numerator without the full ``environment_ids`` list (which
+ * stays out of scope on this status-only summary, reaching only
+ * :class:`ChunkDetail.route`).
+ *
+ * Both are **in-progress-only** (issue #140): a chunk at a terminal status
+ * (``done``/``stopped``) reports ``runner_id = None`` and ``environment_count = 0`` even
+ * when its route facts still show a route, because a finished chunk holds no claim. So a
+ * consumer folding these per runner — the fleet registry's claim lines and its slot-bar
+ * numerator — counts only live occupancy and needs no status filter of its own. The raw
+ * route fact is unfiltered on :class:`ChunkDetail.route`, which is where a "where was
+ * this worked" read belongs.
+ *
+ * ``cost`` and ``completed_at`` are the two exceptions (issues #59, #173): both are
+ * cheap, passive derived instants — not an operator fact — so they ride the summary
+ * rather than waiting for the detail fetch.
+ *
+ * ``completed_at`` (issue #173) is the terminal instant — see
+ * :func:`~blizzard.hub.domain.work.derive_completed_at` — null for every non-terminal
+ * status. Like every wire instant it is a ``str``, populated via
+ * :func:`~blizzard.foundation.clock.iso_utc` at the serialization edge, never a bare
+ * ``datetime`` (``bzh:utc-instants``).
+ */
+export type ChunkSummary = {
+    /**
+     * Chunk Id
+     */
+    chunk_id: string;
+    /**
+     * Completed At
+     */
+    completed_at?: string | null;
+    cost?: ChunkUsageTotalView;
+    /**
+     * Current Node Id
+     */
+    current_node_id: string | null;
+    /**
+     * Current Node Name
+     */
+    current_node_name?: string | null;
+    /**
+     * Default Effort
+     */
+    default_effort?: string | null;
+    /**
+     * Default Model
+     */
+    default_model?: Array<string>;
+    /**
+     * Environment Count
+     */
+    environment_count?: number;
+    /**
+     * Graph Id
+     */
+    graph_id: string;
+    /**
+     * Runner Id
+     */
+    runner_id?: string | null;
+    status: ChunkStatus;
+    /**
+     * Work Refs
+     */
+    work_refs?: Array<WorkRefView>;
+};
+
+/**
+ * ChunkUsageTotalView
+ *
+ * A chunk's derived usage/cost total — summed over every recorded invocation
+ * (issue #59). Never a stored column: computed at read time by
+ * ``derive_chunk_usage``.
+ *
+ * ``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd`` —
+ * see :class:`~blizzard.hub.domain.work.UsageTotal` for the one canonical
+ * statement of it, which this view's fields mirror verbatim.
+ */
+export type ChunkUsageTotalView = {
+    /**
+     * Cache Create Tokens
+     */
+    cache_create_tokens: number;
+    /**
+     * Cache Read Tokens
+     */
+    cache_read_tokens: number;
+    /**
+     * Cost Partial
+     */
+    cost_partial: boolean;
+    /**
+     * Cost Usd
+     */
+    cost_usd: number;
+    /**
+     * Input Tokens
+     */
+    input_tokens: number;
+    /**
+     * Output Tokens
+     */
+    output_tokens: number;
+};
+
+/**
  * EnvelopeArtifact
  *
  * One artifact carried into a node-step, resolved latest-by-epoch.
@@ -623,6 +782,28 @@ export type PauseStateView = {
 };
 
 /**
+ * PauseView
+ *
+ * An open pause on a chunk (issue #46) — who set it and when.
+ *
+ * Present only while ``paused=True`` is the newest pause fact; a resume clears it.
+ * Carried independently of ``status``: PAUSED sits below the human-gated statuses in
+ * the derivation order, so a chunk both paused and parked on a question derives
+ * ``waiting_on_human`` — this field is the only way the runner (and the board) learn
+ * the chunk is paused in that case, and it also answers "who paused it".
+ */
+export type PauseView = {
+    /**
+     * By
+     */
+    by: string;
+    /**
+     * Set At
+     */
+    set_at: string;
+};
+
+/**
  * ReadinessResponse
  *
  * The wire shape of a readiness reading (openapi-ts consumes this).
@@ -1059,6 +1240,35 @@ export type WorkItemsView = {
 };
 
 /**
+ * WorkRefView
+ *
+ * A pointer as the views render it — the raw pair plus its legible
+ * label and browser URL, both rendered by the pointer's configured source binding.
+ *
+ * ``label`` is the board-legible ``{name}#{ref}`` (e.g. ``blizzard#8``); ``web_url``
+ * is its browser-openable address. Both null when no configured source names
+ * ``source`` — the board then leans on the chunk's stable short id instead.
+ */
+export type WorkRefView = {
+    /**
+     * Label
+     */
+    label?: string | null;
+    /**
+     * Ref
+     */
+    ref: string;
+    /**
+     * Source
+     */
+    source: string;
+    /**
+     * Web Url
+     */
+    web_url?: string | null;
+};
+
+/**
  * WorkspacePromptReplacement
  *
  * A replacement workspace prompt — applies to subsequent spawns with no restart.
@@ -1188,6 +1398,66 @@ export type ReadSessionApiAuthSessionGetResponses = {
 
 export type ReadSessionApiAuthSessionGetResponse = ReadSessionApiAuthSessionGetResponses[keyof ReadSessionApiAuthSessionGetResponses];
 
+export type GetChunkApiChunksChunkIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}';
+};
+
+export type GetChunkApiChunksChunkIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetChunkApiChunksChunkIdGetError = GetChunkApiChunksChunkIdGetErrors[keyof GetChunkApiChunksChunkIdGetErrors];
+
+export type GetChunkApiChunksChunkIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ChunkHeaderView;
+};
+
+export type GetChunkApiChunksChunkIdGetResponse = GetChunkApiChunksChunkIdGetResponses[keyof GetChunkApiChunksChunkIdGetResponses];
+
+export type PauseChunkApiChunksChunkIdPausePostData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/pause';
+};
+
+export type PauseChunkApiChunksChunkIdPausePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PauseChunkApiChunksChunkIdPausePostError = PauseChunkApiChunksChunkIdPausePostErrors[keyof PauseChunkApiChunksChunkIdPausePostErrors];
+
+export type PauseChunkApiChunksChunkIdPausePostResponses = {
+    /**
+     * Successful Response
+     */
+    202: ChunkSummary;
+};
+
+export type PauseChunkApiChunksChunkIdPausePostResponse = PauseChunkApiChunksChunkIdPausePostResponses[keyof PauseChunkApiChunksChunkIdPausePostResponses];
+
 export type RunnerGetPmItemsDeprecatedAliasApiChunksChunkIdPmItemsGetData = {
     body?: never;
     path: {
@@ -1247,6 +1517,36 @@ export type RequeueChunkApiChunksChunkIdRequeuesPostResponses = {
 };
 
 export type RequeueChunkApiChunksChunkIdRequeuesPostResponse = RequeueChunkApiChunksChunkIdRequeuesPostResponses[keyof RequeueChunkApiChunksChunkIdRequeuesPostResponses];
+
+export type ResumeChunkApiChunksChunkIdResumePostData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/chunks/{chunk_id}/resume';
+};
+
+export type ResumeChunkApiChunksChunkIdResumePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ResumeChunkApiChunksChunkIdResumePostError = ResumeChunkApiChunksChunkIdResumePostErrors[keyof ResumeChunkApiChunksChunkIdResumePostErrors];
+
+export type ResumeChunkApiChunksChunkIdResumePostResponses = {
+    /**
+     * Successful Response
+     */
+    202: ChunkSummary;
+};
+
+export type ResumeChunkApiChunksChunkIdResumePostResponse = ResumeChunkApiChunksChunkIdResumePostResponses[keyof ResumeChunkApiChunksChunkIdResumePostResponses];
 
 export type OpenTakeoverApiChunksChunkIdTakeoversPostData = {
     body: TakeoverRequest;

@@ -212,7 +212,7 @@ describe('LocalPanelLayout', () => {
     const fixture = await render({ selectedChunkLeases: [LEASE()], selectedStatus: MACHINE_CHUNK.status });
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="detail-chunk-ref"]')?.textContent).toContain('C-3YJ9');
+    expect(el.querySelector('[data-testid="detail-chunk-ref"]')?.textContent).toContain('ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9');
   });
 
   it('marks the attempt tab named by selectedAttemptLeaseId as active in the detail dock', async () => {

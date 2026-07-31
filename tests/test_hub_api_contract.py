@@ -37,6 +37,8 @@ _NEW_PATHS = [
     "/api/fleet/queue/peek",
     "/api/fleet/chunks/{chunk_id}",
     "/api/fleet/chunks/{chunk_id}/work-items",
+    "/api/fleet/chunks/{chunk_id}/pause",
+    "/api/fleet/chunks/{chunk_id}/resume",
     "/api/fleet/chunks/{chunk_id}/envelope",
     "/api/fleet/chunks/{chunk_id}/completions",
     "/api/fleet/chunks/{chunk_id}/decisions",

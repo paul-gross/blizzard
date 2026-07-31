@@ -1,16 +1,26 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { ageMs, compactRef, formatAge, KitChips, type KitChipOption, type runnerApi } from 'fleet';
 
+import { injectChunkDetailQuery } from './chunk-detail.query';
+import { injectChunkPauseMutation } from './chunk-pause.mutations';
 import type { MachineChunkStatus } from './chunk-status';
 import { HeartbeatFreshness } from './heartbeat-freshness';
+import { MachineDetailHeader } from './machine-detail-header';
 import { TranscriptPanel } from './transcript-panel';
 
+/** Statuses the hub's `PauseService` refuses to pause (`ChunkNotPausable`), mirrored
+ * here so the dock never offers a Pause the server would answer with a 409 — the
+ * same table `fleet/chunk-detail/chunk-detail-header.ts`'s own `NOT_PAUSABLE` pins
+ * on the hub board's side of this same brake (issue #185). */
+const NOT_PAUSABLE = new Set<runnerApi.ChunkStatus>(['done', 'stopped', 'delivering']);
+
 /**
- * The machine detail dock — the discovery mock's "machine detail" panel for the
- * selected chunk: execution facts *from this box only* (lease, session, pid,
- * env, workdir, heartbeat), the escalation resume command when one is open,
- * and the transcript inline at the bottom (there is no cross-view navigation
- * yet, so the transcript list lives here rather than behind a link).
+ * The machine detail dock's container (`bzh:frontend-container-presentational`) —
+ * the discovery mock's "machine detail" panel for the selected chunk: execution
+ * facts *from this box only* (lease, session, pid, env, workdir, heartbeat), the
+ * escalation resume command when one is open, and the transcript inline at the
+ * bottom (there is no cross-view navigation yet, so the transcript list lives
+ * here rather than behind a link).
  *
  * The summary facts, status, and escalation all render off the chunk's newest
  * lease (the last entry of the `leases` list the shell hands in, oldest →
@@ -20,22 +30,40 @@ import { TranscriptPanel } from './transcript-panel';
  * newest is selected by default, and picking a tab feeds that attempt's lease
  * id to {@link TranscriptPanel}'s existing `leaseId` input. The dock only
  * passes the id and never branches on the transcript's states.
+ *
+ * The header ({@link MachineDetailHeader}, a presentational sibling) matches the
+ * hub board's own chunk-detail header shape (issue #185, the model at
+ * `fleet/chunk-detail/chunk-detail-header.ts`). Unlike the rest of this dock's
+ * facts (container-folded, "one owner"), the work-item links and the pause fact
+ * are this dock's own severable enrichment — the same self-fetching shape
+ * `injectChunkTitleQuery` already established for the chunks list — read through
+ * {@link injectChunkDetailQuery}, the runner's pass-through proxy onto the hub's
+ * `ChunkDetail` aggregate, projected to `ChunkHeaderView`. `pause` is the *only*
+ * way this panel learns a chunk is paused (it sits independently of the derived
+ * {@link status}, which folds in machine-only facts the hub aggregate does not
+ * carry), so Pause/Resume's own gating reads the fresh `pause`/`status` off that
+ * read, never the machine-derived one.
  */
 @Component({
   selector: 'local-machine-detail',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [HeartbeatFreshness, KitChips, TranscriptPanel],
+  imports: [HeartbeatFreshness, KitChips, MachineDetailHeader, TranscriptPanel],
   template: `
     <div class="detail" data-testid="machine-detail">
       @if (newestLease(); as l) {
-        <header class="d-hdr">
-          <span class="lbl">chunk detail</span>
-          <span class="cid" data-testid="detail-chunk-ref">{{ chunkRef() }}</span>
-          <span class="spacer"></span>
-          <span class="st" [attr.data-tone]="status()?.tone" data-testid="machine-detail-status">
-            {{ status()?.label }} · node {{ l.node_name }} · a{{ l.epoch }}
-          </span>
-        </header>
+        <local-machine-detail-header
+          [chunkId]="l.chunk_id"
+          [workRefs]="workRefs()"
+          [statusLabel]="status()?.label ?? null"
+          [statusTone]="status()?.tone"
+          [nodeName]="l.node_name"
+          [epoch]="l.epoch"
+          [pause]="pause()"
+          [pausable]="pausable()"
+          (dismiss)="dismiss.emit()"
+          (pauseChunk)="pauseMutation.mutate({ chunkId: $event, paused: true })"
+          (resumeChunk)="pauseMutation.mutate({ chunkId: $event, paused: false })"
+        />
         <div class="facts">
           <dl class="kv" data-testid="detail-facts">
             <dt>lease</dt>
@@ -104,48 +132,6 @@ import { TranscriptPanel } from './transcript-panel';
       letter-spacing: 0.18em;
       text-transform: uppercase;
       color: var(--label);
-    }
-    /* Wraps rather than overflows once the dock is only as wide as a phone —
-       the same header, one line on a desktop column, two on a 390px screen. */
-    .d-hdr {
-      flex: none;
-      display: flex;
-      flex-wrap: wrap;
-      align-items: baseline;
-      gap: 10px;
-      padding: 6px 8px;
-      border-bottom: 1px solid var(--bezel);
-      background: linear-gradient(180deg, var(--header-hi), var(--header-lo));
-    }
-    .cid {
-      color: var(--amber-hi);
-      font-size: var(--fs-md);
-    }
-    .spacer {
-      flex: 1;
-    }
-    .st {
-      font-size: var(--fs-label);
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      color: var(--label);
-    }
-    .st[data-tone='running'] {
-      color: var(--amber);
-    }
-    .st[data-tone='stale'],
-    .st[data-tone='needs'] {
-      color: var(--red);
-    }
-    .st[data-tone='waiting'],
-    .st[data-tone='takeover'] {
-      color: var(--amber-hi);
-    }
-    .st[data-tone='spawning'] {
-      color: var(--cyan);
-    }
-    .st[data-tone='done'] {
-      color: var(--green);
     }
     .facts {
       flex: none;
@@ -261,6 +247,10 @@ export class MachineDetail {
    * container writes it to the URL as the new selection. */
   readonly selectAttempt = output<string>();
 
+  /** Emitted when the operator dismisses the dock (issue #185) — the container
+   * clears the selection, mirroring the hub header's own `dismiss`. */
+  readonly dismiss = output<void>();
+
   /** One selectable chip per attempt (oldest → newest), keyed by lease id and
    * labelled with the attempt ordinal + its state, for the `KitChips` tab row. */
   protected readonly attemptOptions = computed<readonly KitChipOption[]>(() =>
@@ -277,10 +267,39 @@ export class MachineDetail {
     return att.state === 'closed' ? (att.closure_reason ?? 'closed') : att.state;
   }
 
-  protected readonly chunkRef = computed(() => {
-    const l = this.newestLease();
-    return l ? compactRef(l.chunk_id) : '';
+  /** The selected chunk's id — the severable detail read's subject. */
+  protected readonly chunkId = computed<string | null>(() => this.newestLease()?.chunk_id ?? null);
+
+  /**
+   * The dock's own severable enrichment (issue #185) — the `ChunkHeaderView` read,
+   * not container-folded: work-item links and the pause fact reach the header through
+   * this, the same self-fetching shape `injectChunkTitleQuery` established for the
+   * chunks list (`chunk-title.query.ts`, `chunk-row.ts`).
+   */
+  protected readonly detailQuery = injectChunkDetailQuery(() => this.chunkId());
+
+  /** The chunk's work refs, for the header — mirrors the hub header's own `pointers`. */
+  protected readonly workRefs = computed<readonly runnerApi.WorkRefView[]>(
+    () => this.detailQuery.data()?.work_refs ?? [],
+  );
+
+  /** The chunk's open operator pause, if any — read off the fresh
+   * `ChunkHeaderView.pause`, never the machine-derived {@link status}, which folds
+   * in facts the hub aggregate does not carry (mirrors the hub header's own `pause`). */
+  protected readonly pause = computed<runnerApi.PauseView | null>(() => this.detailQuery.data()?.pause ?? null);
+
+  /** Whether an **unpaused** chunk may be paused — mirrors the hub `PauseService`'s
+   * refusal so the header never offers a control the server would answer with a 409.
+   * `undefined` (the read hasn't resolved yet) degrades to not-pausable, so no button
+   * flashes before the fresh state is known. */
+  protected readonly pausable = computed<boolean>(() => {
+    const s = this.detailQuery.data()?.status;
+    return s !== undefined && !NOT_PAUSABLE.has(s);
   });
+
+  /** The header's Pause/Resume mutation — fired from its `pauseChunk`/`resumeChunk`
+   * outputs, once the operator has already confirmed. */
+  protected readonly pauseMutation = injectChunkPauseMutation();
 
   protected readonly leaseRef = computed(() => {
     const l = this.newestLease();

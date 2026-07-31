@@ -197,6 +197,200 @@
         "title": "CapacitiesView",
         "type": "object"
       },
+      "ChunkHeaderView": {
+        "description": "The chunk-detail dock's header aggregate (issue #185) \u2014 the identity,\nwork-item links, live state, and pause fact a header needs, projected down\nfrom :class:`ChunkDetail` rather than carrying its transition/artifact\nhistory. This is deliberately the runner machine panel's own read: pydantic's\ndefault ``extra=\"ignore\"`` lets it validate straight off a `ChunkDetail`\npayload, picking out only these fields \u2014 so the runner's chunk-detail proxy\n(``blizzard.runner.api.chunk_detail``) never pulls this module's\n:class:`EscalationView` into the runner's own OpenAPI schema, where it would\ncollide with the runner's unrelated, identically-named status escalation view.\n\n``pause`` is carried independently of ``status`` for the same reason\n:class:`ChunkDetail`'s own field is: a chunk both paused and parked on a\nquestion still derives ``waiting_on_human``.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "pause": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PauseView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/ChunkStatus"
+          },
+          "work_refs": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/WorkRefView"
+            },
+            "title": "Work Refs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "status"
+        ],
+        "title": "ChunkHeaderView",
+        "type": "object"
+      },
+      "ChunkStatus": {
+        "description": "The derived chunk statuses. Never stored \u2014 always a query result.",
+        "enum": [
+          "not_ready",
+          "ready",
+          "running",
+          "delivering",
+          "waiting_on_human",
+          "needs_human",
+          "paused",
+          "stopped",
+          "done"
+        ],
+        "title": "ChunkStatus",
+        "type": "string"
+      },
+      "ChunkSummary": {
+        "description": "One row of the fleet chunk list \u2014 derived status + current node.\n\n``current_node_name`` is the node's human graph name (``build``, ``review``) the\nboard renders in place of the raw ``nd_`` ULID; null when the chunk has no\ncurrent node or its pinned graph cannot resolve the id.\n\nDeliberately status-only: the summary feeds the board **card**, which is a passive\nstatus view (issue #42), so no operator *fact* is carried here. The pause fact \u2014 and\nevery other fact an operator action keys on \u2014 reaches the chunk detail dock through\n:class:`ChunkDetail`, the one place a board action lives. ``runner_id`` (the live\nroute's holder, null when unrouted) is a passive where-is-it fact in that same\nsense \u2014 it lets the fleet registry list each runner's claims \u2014 not an action key.\n``environment_count`` (issue #69) is a passive where-is-it *count* in that same\nspirit: the number of environments the chunk's live route holds, so the fleet registry\ncan sum a runner's slot-bar numerator without the full ``environment_ids`` list (which\nstays out of scope on this status-only summary, reaching only\n:class:`ChunkDetail.route`).\n\nBoth are **in-progress-only** (issue #140): a chunk at a terminal status\n(``done``/``stopped``) reports ``runner_id = None`` and ``environment_count = 0`` even\nwhen its route facts still show a route, because a finished chunk holds no claim. So a\nconsumer folding these per runner \u2014 the fleet registry's claim lines and its slot-bar\nnumerator \u2014 counts only live occupancy and needs no status filter of its own. The raw\nroute fact is unfiltered on :class:`ChunkDetail.route`, which is where a \"where was\nthis worked\" read belongs.\n\n``cost`` and ``completed_at`` are the two exceptions (issues #59, #173): both are\ncheap, passive derived instants \u2014 not an operator fact \u2014 so they ride the summary\nrather than waiting for the detail fetch.\n\n``completed_at`` (issue #173) is the terminal instant \u2014 see\n:func:`~blizzard.hub.domain.work.derive_completed_at` \u2014 null for every non-terminal\nstatus. Like every wire instant it is a ``str``, populated via\n:func:`~blizzard.foundation.clock.iso_utc` at the serialization edge, never a bare\n``datetime`` (``bzh:utc-instants``).",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "cost": {
+            "$ref": "#/components/schemas/ChunkUsageTotalView"
+          },
+          "current_node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Node Id"
+          },
+          "current_node_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Node Name"
+          },
+          "default_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Effort"
+          },
+          "default_model": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Default Model",
+            "type": "array"
+          },
+          "environment_count": {
+            "default": 0,
+            "title": "Environment Count",
+            "type": "integer"
+          },
+          "graph_id": {
+            "title": "Graph Id",
+            "type": "string"
+          },
+          "runner_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runner Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ChunkStatus"
+          },
+          "work_refs": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/WorkRefView"
+            },
+            "title": "Work Refs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "graph_id",
+          "status",
+          "current_node_id"
+        ],
+        "title": "ChunkSummary",
+        "type": "object"
+      },
+      "ChunkUsageTotalView": {
+        "description": "A chunk's derived usage/cost total \u2014 summed over every recorded invocation\n(issue #59). Never a stored column: computed at read time by\n``derive_chunk_usage``.\n\n``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd`` \u2014\nsee :class:`~blizzard.hub.domain.work.UsageTotal` for the one canonical\nstatement of it, which this view's fields mirror verbatim.",
+        "properties": {
+          "cache_create_tokens": {
+            "title": "Cache Create Tokens",
+            "type": "integer"
+          },
+          "cache_read_tokens": {
+            "title": "Cache Read Tokens",
+            "type": "integer"
+          },
+          "cost_partial": {
+            "title": "Cost Partial",
+            "type": "boolean"
+          },
+          "cost_usd": {
+            "title": "Cost Usd",
+            "type": "number"
+          },
+          "input_tokens": {
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "output_tokens": {
+            "title": "Output Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "input_tokens",
+          "output_tokens",
+          "cache_read_tokens",
+          "cache_create_tokens",
+          "cost_usd",
+          "cost_partial"
+        ],
+        "title": "ChunkUsageTotalView",
+        "type": "object"
+      },
       "EnvelopeArtifact": {
         "description": "One artifact carried into a node-step, resolved latest-by-epoch.",
         "properties": {
@@ -876,6 +1070,25 @@
         "title": "PauseStateView",
         "type": "object"
       },
+      "PauseView": {
+        "description": "An open pause on a chunk (issue #46) \u2014 who set it and when.\n\nPresent only while ``paused=True`` is the newest pause fact; a resume clears it.\nCarried independently of ``status``: PAUSED sits below the human-gated statuses in\nthe derivation order, so a chunk both paused and parked on a question derives\n``waiting_on_human`` \u2014 this field is the only way the runner (and the board) learn\nthe chunk is paused in that case, and it also answers \"who paused it\".",
+        "properties": {
+          "by": {
+            "title": "By",
+            "type": "string"
+          },
+          "set_at": {
+            "title": "Set At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "by",
+          "set_at"
+        ],
+        "title": "PauseView",
+        "type": "object"
+      },
       "ReadinessResponse": {
         "description": "The wire shape of a readiness reading (openapi-ts consumes this).",
         "properties": {
@@ -1519,6 +1732,47 @@
         "title": "WorkItemsView",
         "type": "object"
       },
+      "WorkRefView": {
+        "description": "A pointer as the views render it \u2014 the raw pair plus its legible\nlabel and browser URL, both rendered by the pointer's configured source binding.\n\n``label`` is the board-legible ``{name}#{ref}`` (e.g. ``blizzard#8``); ``web_url``\nis its browser-openable address. Both null when no configured source names\n``source`` \u2014 the board then leans on the chunk's stable short id instead.",
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "web_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Web Url"
+          }
+        },
+        "required": [
+          "source",
+          "ref"
+        ],
+        "title": "WorkRefView",
+        "type": "object"
+      },
       "WorkspacePromptReplacement": {
         "description": "A replacement workspace prompt \u2014 applies to subsequent spawns with no restart.",
         "properties": {
@@ -1696,6 +1950,92 @@
         ]
       }
     },
+    "/api/chunks/{chunk_id}": {
+      "get": {
+        "description": "Forward a chunk's detail read to the hub \u2014 the chunk-detail dock's header subject.\n\nForwards to the same fleet-mounted ``ChunkDetail`` read the build worker's own\nenvelope poll uses, but validates the response down to :class:`ChunkHeaderView`:\nthe header needs only the identity, work-item links, state, and pause fact, and\nprojecting here (rather than carrying the full aggregate over this proxy too)\nkeeps the transition/artifact history \u2014 and the schema collision its\n``EscalationView`` field would otherwise cause in the runner's own OpenAPI spec \u2014\nout of this route entirely.",
+        "operationId": "get_chunk_api_chunks__chunk_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChunkHeaderView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Chunk",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/chunks/{chunk_id}/pause": {
+      "post": {
+        "description": "Forward the chunk-detail dock's Pause to the hub \u2014 kills the active worker, keeps\nthe claim (issue #46). ``409`` when the chunk is not in a pausable state.",
+        "operationId": "pause_chunk_api_chunks__chunk_id__pause_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChunkSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pause Chunk",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
     "/api/chunks/{chunk_id}/pm-items": {
       "get": {
         "deprecated": true,
@@ -1778,6 +2118,49 @@
           }
         },
         "summary": "Requeue Chunk",
+        "tags": [
+          "runner"
+        ]
+      }
+    },
+    "/api/chunks/{chunk_id}/resume": {
+      "post": {
+        "description": "Forward the chunk-detail dock's Resume to the hub \u2014 idempotent, never refused.",
+        "operationId": "resume_chunk_api_chunks__chunk_id__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChunkSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resume Chunk",
         "tags": [
           "runner"
         ]

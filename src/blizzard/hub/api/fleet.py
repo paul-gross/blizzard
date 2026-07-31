@@ -57,7 +57,7 @@ from blizzard.hub.domain.work import (
     latest_epoch,
     newest_transition,
 )
-from blizzard.wire.chunk import ChunkDetail, HubAdvanceResponse, WorkItemsView
+from blizzard.wire.chunk import ChunkDetail, ChunkPauseRequest, ChunkSummary, HubAdvanceResponse, WorkItemsView
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeEnvelope
@@ -232,6 +232,21 @@ router.add_api_route(
         "this path aliases onto the identical handler and returns the identical view."
     ),
 )
+
+
+@router.post("/chunks/{chunk_id}/pause", response_model=ChunkSummary, status_code=status.HTTP_202_ACCEPTED)
+def pause_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> ChunkSummary:
+    """The runner machine panel's chunk-detail Pause (issue #185), forwarded here with the
+    runner's own bearer token from the runner-local pass-through
+    (:mod:`blizzard.runner.api.chunk_detail`) — the same transition the board's own Pause
+    button drives, `by` defaulting to ``operator`` exactly as the board's mutation does."""
+    return chunks_api.pause_chunk(chunk_id, ChunkPauseRequest(), services)
+
+
+@router.post("/chunks/{chunk_id}/resume", response_model=ChunkSummary, status_code=status.HTTP_202_ACCEPTED)
+def resume_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_services)]) -> ChunkSummary:
+    """The runner machine panel's chunk-detail Resume (issue #185) — see :func:`pause_chunk`."""
+    return chunks_api.resume_chunk(chunk_id, ChunkPauseRequest(), services)
 
 
 @router.get("/summary", response_model=FleetSummaryView)

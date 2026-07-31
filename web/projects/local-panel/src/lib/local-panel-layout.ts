@@ -194,6 +194,7 @@ import type { MachineChunkRow } from './local-panel';
               [status]="selectedStatus()"
               [escalation]="selectedEscalation()"
               (selectAttempt)="selectAttempt.emit($event)"
+              (dismiss)="dismiss.emit()"
             />
           </div>
         </section>
@@ -385,4 +386,8 @@ export class LocalPanelLayout {
   /** Emitted with an attempt lease id when the operator picks an attempt tab in
    * the detail dock — the container writes it to the URL. */
   readonly selectAttempt = output<string>();
+
+  /** Emitted when the operator dismisses the detail dock (issue #185) via its
+   * own close button — the container clears the selection. */
+  readonly dismiss = output<void>();
 }

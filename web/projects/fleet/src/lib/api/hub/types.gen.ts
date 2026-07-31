@@ -3769,6 +3769,36 @@ export type ReportLeaseApiFleetChunksChunkIdLeasesPostResponses = {
 
 export type ReportLeaseApiFleetChunksChunkIdLeasesPostResponse = ReportLeaseApiFleetChunksChunkIdLeasesPostResponses[keyof ReportLeaseApiFleetChunksChunkIdLeasesPostResponses];
 
+export type PauseChunkApiFleetChunksChunkIdPausePostData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/fleet/chunks/{chunk_id}/pause';
+};
+
+export type PauseChunkApiFleetChunksChunkIdPausePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PauseChunkApiFleetChunksChunkIdPausePostError = PauseChunkApiFleetChunksChunkIdPausePostErrors[keyof PauseChunkApiFleetChunksChunkIdPausePostErrors];
+
+export type PauseChunkApiFleetChunksChunkIdPausePostResponses = {
+    /**
+     * Successful Response
+     */
+    202: ChunkSummary;
+};
+
+export type PauseChunkApiFleetChunksChunkIdPausePostResponse = PauseChunkApiFleetChunksChunkIdPausePostResponses[keyof PauseChunkApiFleetChunksChunkIdPausePostResponses];
+
 export type FleetGetPmItemsDeprecatedAliasApiFleetChunksChunkIdPmItemsGetData = {
     body?: never;
     path: {
@@ -3798,6 +3828,36 @@ export type FleetGetPmItemsDeprecatedAliasApiFleetChunksChunkIdPmItemsGetRespons
 };
 
 export type FleetGetPmItemsDeprecatedAliasApiFleetChunksChunkIdPmItemsGetResponse = FleetGetPmItemsDeprecatedAliasApiFleetChunksChunkIdPmItemsGetResponses[keyof FleetGetPmItemsDeprecatedAliasApiFleetChunksChunkIdPmItemsGetResponses];
+
+export type ResumeChunkApiFleetChunksChunkIdResumePostData = {
+    body?: never;
+    path: {
+        /**
+         * Chunk Id
+         */
+        chunk_id: string;
+    };
+    query?: never;
+    url: '/api/fleet/chunks/{chunk_id}/resume';
+};
+
+export type ResumeChunkApiFleetChunksChunkIdResumePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ResumeChunkApiFleetChunksChunkIdResumePostError = ResumeChunkApiFleetChunksChunkIdResumePostErrors[keyof ResumeChunkApiFleetChunksChunkIdResumePostErrors];
+
+export type ResumeChunkApiFleetChunksChunkIdResumePostResponses = {
+    /**
+     * Successful Response
+     */
+    202: ChunkSummary;
+};
+
+export type ResumeChunkApiFleetChunksChunkIdResumePostResponse = ResumeChunkApiFleetChunksChunkIdResumePostResponses[keyof ResumeChunkApiFleetChunksChunkIdResumePostResponses];
 
 export type RekeyRouteTokenApiFleetChunksChunkIdRouteTokenPostData = {
     body?: never;
