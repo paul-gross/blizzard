@@ -1,17 +1,21 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 
 import { compactRef } from '../compact-ref';
+import { summarizeChunkChange } from './chunk-change-summary';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
 import { KitPanel } from '../kit/kit-panel';
 import { FleetLiveUpdates, type LoggedEvent, type RunnerChangeKind } from '../sse/fleet-live';
 import { formatClockTime } from '../when';
 
-/** One rendered Event log row — the logged frame plus its display strings. */
+/** One rendered Event log row — the logged frame plus its display strings.
+ * `detail` is the block row's second line (`chunk-changed` only, issue #212); every
+ * other event type leaves it unset and renders as the single-line row it always has. */
 interface LogRow {
   readonly seq: number;
   readonly type: string;
   readonly time: string;
   readonly message: string;
+  readonly detail?: string;
 }
 
 /** The verb a `runner-changed` kind reads as, where the kind alone does not already read
@@ -40,32 +44,44 @@ function summarizeRunnerChange(data: LoggedEvent['data']): string {
   return `${runner} ${verb}${by}${reason}`;
 }
 
+/** A rendered row's message (line 1) and optional detail (line 2, `chunk-changed`
+ * only — see {@link summarizeChunkChange}). */
+interface RowSummary {
+  readonly message: string;
+  readonly detail?: string;
+}
+
 /**
- * A human-readable one-line summary of a hub event (issue #25 — "a legible summary").
- * Maps the board's live vocabulary (events/broker.py) onto plain phrasing; an unknown
- * type degrades to its raw name rather than dropping the row.
+ * A human-readable summary of a hub event (issue #25 — "a legible summary"; widened by
+ * issue #212 to a two-line block for `chunk-changed`). Maps the board's live vocabulary
+ * (events/broker.py) onto plain phrasing; an unknown type degrades to its raw name
+ * rather than dropping the row.
  */
-function summarize(event: LoggedEvent): string {
+function summarize(event: LoggedEvent): RowSummary {
   const chunk = event.data.chunk_id ? compactRef(event.data.chunk_id) : '';
   switch (event.type) {
-    case 'chunk-changed':
-      return `${chunk} → ${event.data.status ?? '—'}`;
+    case 'chunk-changed': {
+      const { transition, runner } = summarizeChunkChange(event.data);
+      return { message: transition, detail: runner };
+    }
     case 'question-asked':
-      return `${chunk} asked a question`;
+      return { message: `${chunk} asked a question` };
     case 'question-answered':
-      return `${chunk} question answered`;
+      return { message: `${chunk} question answered` };
     case 'decision-opened':
-      return `${chunk} gate opened`;
+      return { message: `${chunk} gate opened` };
     case 'decision-resolved':
-      return `${chunk} gate resolved`;
+      return { message: `${chunk} gate resolved` };
     case 'queue-changed':
-      return 'ready queue changed';
+      return { message: 'ready queue changed' };
     case 'runner-changed':
-      return summarizeRunnerChange(event.data);
+      return { message: summarizeRunnerChange(event.data) };
     case 'event-logged':
-      return `${chunk || compactRef(event.data.runner_id ?? '—')} · ${event.data.severity ?? '—'} ${event.data.kind ?? '—'}`;
+      return {
+        message: `${chunk || compactRef(event.data.runner_id ?? '—')} · ${event.data.severity ?? '—'} ${event.data.kind ?? '—'}`,
+      };
     default:
-      return event.type;
+      return { message: event.type };
   }
 }
 
@@ -104,7 +120,12 @@ function summarize(event: LoggedEvent): string {
           @for (row of rows(); track row.seq) {
             <div class="ev" data-testid="event-log-row" [attr.data-kind]="row.type">
               <span class="t" data-testid="event-log-time">{{ row.time }}</span>
-              <span class="m" data-testid="event-log-message">{{ row.message }}</span>
+              <div class="m-block">
+                <span class="m" data-testid="event-log-message">{{ row.message }}</span>
+                @if (row.detail) {
+                  <span class="d" data-testid="event-log-detail">{{ row.detail }}</span>
+                }
+              </div>
             </div>
           }
         </div>
@@ -141,8 +162,16 @@ function summarize(event: LoggedEvent): string {
     .ev .t {
       color: var(--label-dim);
     }
+    .m-block {
+      display: flex;
+      flex-direction: column;
+    }
     .ev .m {
       color: var(--text);
+      overflow-wrap: anywhere;
+    }
+    .ev .d {
+      color: var(--label-dim);
       overflow-wrap: anywhere;
     }
   `,
@@ -158,7 +187,7 @@ export class EventLogPanel {
         seq: event.seq,
         type: event.type,
         time: formatClockTime(event.at),
-        message: summarize(event),
+        ...summarize(event),
       }))
       .reverse(),
   );

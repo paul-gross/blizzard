@@ -115,6 +115,41 @@ describe('EventLogPanel', () => {
     ]);
   });
 
+  it('renders a chunk-changed row as a two-line block when the frame names a runner', () => {
+    log.set([
+      {
+        seq: 1,
+        type: 'chunk-changed',
+        data: {
+          chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN1RJ1',
+          status: 'failed',
+          prev_node: 'review',
+          node: 'build',
+          runner_id: 'runner-local',
+        },
+        at: 0,
+      },
+    ]);
+    const fixture = TestBed.createComponent(EventLogPanel);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="event-log-message"]')?.textContent?.trim()).toBe(
+      'C-1RJ1 review → failed → build',
+    );
+    expect(el.querySelector('[data-testid="event-log-detail"]')?.textContent?.trim()).toBe('runner-local');
+  });
+
+  it('renders no event-log-detail element at all on a runner-less chunk-changed frame', () => {
+    log.set([{ seq: 1, type: 'chunk-changed', data: { chunk_id: 'ch_beta', status: 'ready' }, at: 0 }]);
+    const fixture = TestBed.createComponent(EventLogPanel);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="event-log-message"]')?.textContent?.trim()).toBe('C-beta → ready');
+    expect(el.querySelector('[data-testid="event-log-detail"]')).toBeNull();
+  });
+
   it('degrades a kind-less runner-changed frame rather than rendering it blank', () => {
     log.set([{ seq: 1, type: 'runner-changed', data: { runner_id: 'runner-local' }, at: 0 }]);
     const fixture = TestBed.createComponent(EventLogPanel);

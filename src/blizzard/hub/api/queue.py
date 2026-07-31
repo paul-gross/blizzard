@@ -25,6 +25,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 
 from blizzard.auth_core import FLEET_VIEW, QUEUE_REORDER
+from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
@@ -138,6 +139,7 @@ def group_chunks(
     Accepts ``not_ready`` and ``ready`` participants alike (issue #141); 409 names the
     first chunk a runner holds, or one already finished.
     """
+    prev_status = chunk_events.snapshot_chunk_status(services, chunk_id)
     try:
         result = services.group.group(chunk_id, request.merge_chunk_ids)
     except ChunkNotFound as exc:
@@ -151,7 +153,9 @@ def group_chunks(
     # to a status the store never derives (issue #141).
     survivor = result.survivor
     services.events.publish_queue_changed()
-    services.events.publish_chunk_changed(survivor.chunk_id, result.status.value)
+    chunk_events.publish_chunk_changed(
+        services, survivor.chunk_id, cause="grouped", prev_status=prev_status, status=result.status.value
+    )
     return ChunkGroupResponse(
         chunk_id=survivor.chunk_id,
         work_refs=[WorkRefModel(source=p.source, ref=p.ref) for p in survivor.work_refs],

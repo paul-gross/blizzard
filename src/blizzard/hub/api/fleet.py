@@ -37,6 +37,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.hub.api import chunk_events
 from blizzard.hub.api import chunks as chunks_api
 from blizzard.hub.api import questions as questions_api
 from blizzard.hub.api import queue as queue_api
@@ -57,12 +58,16 @@ from blizzard.hub.domain.work import (
     latest_epoch,
     newest_transition,
 )
+from blizzard.hub.events.broker import ChunkChangeCause
 from blizzard.wire.chunk import ChunkDetail, ChunkPauseRequest, ChunkSummary, HubAdvanceResponse, WorkItemsView
 from blizzard.wire.completion import CompletionSubmission
 from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, NodeEnvelope
 from blizzard.wire.facts import (
+    ANSWER_DELIVERED,
+    ESCALATION_RECORDED,
     EVENT_RECORDED,
+    LEASE_MINTED,
     QUESTION_ASKED,
     RUNNER_LOCALLY_PAUSED,
     RUNNER_LOCALLY_RESUMED,
@@ -85,6 +90,16 @@ from blizzard.wire.route import (
 from blizzard.wire.runner import RunnerRegistrationRequest, RunnerRegistrationResponse, RunnerView
 
 router = APIRouter(prefix="/api/fleet", tags=["fleet"], dependencies=[Depends(require_runner_principal)])
+
+#: ``ingest_runner_facts``' per-fact cause — the only chunk-scoped kinds the runner's
+#: outbound buffer carries (see its docstring); every other kind either has its own
+#: branch above the shared publish call or never reaches it.
+_INGEST_CAUSE_BY_FACT_KIND: dict[str, ChunkChangeCause] = {
+    QUESTION_ASKED: "question-asked",
+    ANSWER_DELIVERED: "question-answered",
+    ESCALATION_RECORDED: "escalated",
+    LEASE_MINTED: "claimed",
+}
 
 
 def _mode(request: Request) -> str:
@@ -332,11 +347,12 @@ def hub_advance(
         return HubAdvanceResponse(
             chunk_id=chunk_id, status=derived, ran=False, detail="not parked at a hub command node"
         )
+    prev_status = derive_chunk_status(facts).value
     epoch = latest_epoch(facts) or 0
     result = services.hub_node.run(chunk, graph, node, epoch=epoch)
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     derived = derive_chunk_status(facts)
-    services.events.publish_chunk_changed(chunk_id, derived.value)
+    chunk_events.publish_chunk_changed(services, chunk_id, cause="hub-advanced", prev_status=prev_status)
     if result is None:
         pending = hub_node_pending(facts)
         next_poll_at = pending.polled_at + poll_interval_for(node) if pending is not None else None
@@ -375,6 +391,7 @@ def claim_route(
     graph = services.graphs.get(chunk.graph_id)
     if graph is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
+    prev_status = chunk_events.snapshot_chunk_status(services, chunk.chunk_id)
     try:
         result = services.claim.claim(
             chunk,
@@ -392,7 +409,12 @@ def claim_route(
     except ClaimConflict as exc:
         conflict = RouteClaimConflict(chunk_id=claim.chunk_id, held_by_runner_id=exc.held_by_runner_id)
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=conflict.model_dump())
-    services.events.publish_chunk_changed(chunk.chunk_id, "running")
+    # Hardcoded literal, not a derivation — a fresh claim always lands the chunk at
+    # `running` and re-deriving here would be a behavior change outside this change's
+    # scope (see `chunk_events.publish_chunk_changed`'s docstring).
+    chunk_events.publish_chunk_changed(
+        services, chunk.chunk_id, cause="claimed", prev_status=prev_status, status="running"
+    )
     services.events.publish_queue_changed()  # the claim removed the chunk from the ready queue
     return RouteClaimResponse(
         chunk_id=result.route.chunk_id,
@@ -451,6 +473,7 @@ def submit_completion(
     follow_latest_graph = _resolve_follow_latest_target(
         services, chunk, graph, hub_default=_follow_latest_default(http_request)
     )
+    prev_status = chunk_events.snapshot_chunk_status(services, chunk_id)
     response = services.apply.apply(
         chunk,
         graph,
@@ -461,8 +484,8 @@ def submit_completion(
         intended_target_graph=intended_target_graph,
         follow_latest_graph=follow_latest_graph,
     )
-    facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
-    services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
+    cause = "migrated" if response.outcome is ApplyOutcome.MIGRATED and not already_migrated else "node-completed"
+    chunk_events.publish_chunk_changed(services, chunk_id, cause=cause, prev_status=prev_status)
     if response.outcome is ApplyOutcome.MIGRATED and not already_migrated:
         services.events.publish_queue_changed()  # a fresh migration re-queued the chunk under the target graph
     # A completion landing on a human-judged node opens a graph gate: surface it.
@@ -486,9 +509,9 @@ def submit_decision(
     graph = services.graphs.get(chunk.graph_id)
     if graph is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
+    prev_status = chunk_events.snapshot_chunk_status(services, chunk_id)
     response = services.decisions.submit(chunk, graph, submission, route_token_mode=_route_token_mode(http_request))
-    facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
-    services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
+    chunk_events.publish_chunk_changed(services, chunk_id, cause="decision-submitted", prev_status=prev_status)
     # The runner-config gate parked the chunk on an open decision: surface it.
     chunks_api.publish_open_decision(services, chunk_id)
     return response
@@ -522,9 +545,9 @@ def report_escalation(
     assert_owns(principal, report.runner_id, mode=_mode(http_request))
     if services.chunks.get(chunk_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
+    prev_status = chunk_events.snapshot_chunk_status(services, chunk_id)
     services.runner_facts.record_escalation(chunk_id, epoch=report.epoch, takeover_command=report.takeover_command)
-    facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
-    services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
+    chunk_events.publish_chunk_changed(services, chunk_id, cause="escalated", prev_status=prev_status)
     return {"chunk_id": chunk_id}
 
 
@@ -549,6 +572,14 @@ def ingest_runner_facts(
     its own.
     """
     assert_owns(principal, batch.runner_id, mode=_mode(http_request))
+    # One pre-mutation snapshot per distinct chunk, taken before the loop and reused —
+    # this is the hot path (issue #212's cost note): without it, a batch touching the
+    # same chunk repeatedly would double the loop's own read count.
+    prev_statuses: dict[str, str | None] = {}
+    for fact in batch.facts:
+        candidate = fact.payload.get("chunk_id")
+        if isinstance(candidate, str) and candidate not in prev_statuses:
+            prev_statuses[candidate] = chunk_events.snapshot_chunk_status(services, candidate)
     ack = services.facts.ingest(batch, route_token_mode=_route_token_mode(http_request))
     if ack.applied:
         applied = set(ack.applied)
@@ -594,8 +625,12 @@ def ingest_runner_facts(
                 question_id = fact.payload.get("question_id")
                 if isinstance(question_id, str):
                     services.events.publish_question_asked(chunk_id, question_id)
-            facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
-            services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
+            chunk_events.publish_chunk_changed(
+                services,
+                chunk_id,
+                cause=_INGEST_CAUSE_BY_FACT_KIND.get(fact.kind),
+                prev_status=prev_statuses.get(chunk_id),
+            )
     return ack
 
 

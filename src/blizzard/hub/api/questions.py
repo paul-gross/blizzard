@@ -26,11 +26,13 @@ from fastapi.responses import JSONResponse
 
 from blizzard.auth_core import FLEET_VIEW, QUESTION_ANSWER
 from blizzard.foundation.store.utc import iso_utc
+from blizzard.hub.api import chunk_events
 from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require, resolved_username
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.work import ChunkFacts, QuestionRow, derive_chunk_status
+from blizzard.hub.domain.work import QuestionRow
+from blizzard.hub.events.broker import ChunkChangeCause
 from blizzard.wire.question import AnswerRequest, AnswerResult, QuestionAsked, QuestionView
 
 router = APIRouter(prefix="/api", tags=["questions"], dependencies=[Depends(reject_runner_principal)])
@@ -62,9 +64,10 @@ def ask_question(fact: QuestionAsked, services: Annotated[HubServices, Depends(g
     """Land a ``question.asked`` row — the chunk parks ``waiting_on_human``."""
     if services.chunks.get(fact.chunk_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {fact.chunk_id}")
+    prev_status = chunk_events.snapshot_chunk_status(services, fact.chunk_id)
     services.questions.record_asked(fact)
     services.events.publish_question_asked(fact.chunk_id, fact.question_id)
-    _publish(services, fact.chunk_id)
+    _publish(services, fact.chunk_id, cause="question-asked", prev_status=prev_status)
     return {"question_id": fact.question_id}
 
 
@@ -85,8 +88,10 @@ def answer_question(
     ``answered_by`` is taken from the resolved session identity
     (:func:`~blizzard.hub.api.auth_session.resolved_username`), never the request
     body's ``answered_by`` field — a spoofed value there is silently ignored (issue #91)."""
-    if services.chunks.get_question(question_id) is None:
+    pre_answer = services.chunks.get_question(question_id)
+    if pre_answer is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown question {question_id}")
+    prev_status = chunk_events.snapshot_chunk_status(services, pre_answer.chunk_id)
     outcome = services.questions.answer(question_id, answer=request.answer, answered_by=resolved_username(http_request))
     result = AnswerResult(
         won=outcome.won,
@@ -103,7 +108,7 @@ def answer_question(
     winner = services.chunks.get_question(question_id)
     if winner is not None:
         services.events.publish_question_answered(winner.chunk_id, question_id)
-        _publish(services, winner.chunk_id)
+        _publish(services, winner.chunk_id, cause="question-answered", prev_status=prev_status)
     return result
 
 
@@ -113,6 +118,8 @@ def list_open_questions(services: Annotated[HubServices, Depends(get_services)])
     return [question_view(row) for row in services.chunks.list_open_questions()]
 
 
-def _publish(services: HubServices, chunk_id: str) -> None:
-    facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
-    services.events.publish_chunk_changed(chunk_id, derive_chunk_status(facts).value)
+def _publish(services: HubServices, chunk_id: str, *, cause: ChunkChangeCause, prev_status: str | None) -> None:
+    """One call site serving two routes with two different causes (issue #212) — a
+    default here is exactly how the mislabel would survive review, so ``cause`` is
+    required rather than defaulted."""
+    chunk_events.publish_chunk_changed(services, chunk_id, cause=cause, prev_status=prev_status)

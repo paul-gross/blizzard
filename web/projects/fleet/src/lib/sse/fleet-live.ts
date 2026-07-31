@@ -27,10 +27,20 @@ export const HUB_EVENT_TYPES = [
   'event-logged',
 ] as const;
 
-/** The payloads carried by each hub event frame. */
+/** A `chunk-changed` frame's payload (issue #212). `chunk_id`/`status` are always
+ * present; every other field is present-when-meaningful — omitted, never `null`, when
+ * it does not apply (a chunk that has never transitioned carries no `prev_node`, an
+ * unclaimed chunk carries no `runner_id`). `graph_id` rides the wire but is never
+ * rendered — the Event log's block row stops at the transition and runner lines. */
 interface ChunkChanged {
   chunk_id: string;
   status: string;
+  prev_status: string;
+  prev_node: string;
+  node: string;
+  runner_id: string;
+  cause: string;
+  graph_id: string;
 }
 interface QuestionEvent {
   chunk_id: string;

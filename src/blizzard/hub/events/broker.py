@@ -22,7 +22,10 @@ plus ``runner-changed`` for the fleet's liveness column); each maps to the hub f
 is emitted on (see the call sites in ``blizzard.hub.api``). A frame's payload carries only
 what identifies the change — a consumer re-GETs the REST resource for the rest — except
 where a frame is itself the news: ``runner-changed`` names its :data:`RunnerChangeKind`,
-since the runner-registry read it stales cannot say which change fired it.
+since the runner-registry read it stales cannot say which change fired it, and
+``chunk-changed`` names its :data:`ChunkChangeCause` alongside the prev/current node,
+prev status, runner id, and graph id (issue #212) — the Event log renders these directly
+rather than re-deriving them from a re-GET.
 """
 
 from __future__ import annotations
@@ -51,6 +54,31 @@ EVENT_LOGGED = "event-logged"
 #: is overwhelmingly the ``registered``/``heartbeat`` pair. Naming the kind lets a consumer
 #: keep invalidating on every frame while showing an operator only the ones that carry news.
 RunnerChangeKind = Literal["registered", "heartbeat", "paused", "resumed", "locally-paused", "locally-resumed"]
+
+#: What fact family drove a ``chunk-changed`` frame (issue #212) — each emit site names its
+#: own cause statically. ``escalated`` is reachable from both ``report_escalation`` and the
+#: runner-facts ingest loop; ``question-asked``/``question-answered`` are reachable from both
+#: ``questions.py``'s two routes and the ingest loop's ``fact.kind`` mapping.
+ChunkChangeCause = Literal[
+    "minted",
+    "promoted",
+    "edited",
+    "grouped",
+    "claimed",
+    "node-completed",
+    "migrated",
+    "decision-submitted",
+    "decision-resolved",
+    "question-asked",
+    "question-answered",
+    "escalated",
+    "requeued",
+    "detached",
+    "paused",
+    "resumed",
+    "stopped",
+    "hub-advanced",
+]
 
 
 @dataclass(frozen=True)
@@ -107,9 +135,39 @@ class EventBroker:
                 sub.loop.call_soon_threadsafe(sub.queue.put_nowait, event)
         return event.id
 
-    def publish_chunk_changed(self, chunk_id: str, status: str) -> int:
-        """A chunk's derived status changed — the board refreshes that row."""
-        return self.publish(CHUNK_CHANGED, {"chunk_id": chunk_id, "status": status})
+    def publish_chunk_changed(
+        self,
+        chunk_id: str,
+        status: str,
+        *,
+        prev_status: str | None = None,
+        prev_node: str | None = None,
+        node: str | None = None,
+        runner_id: str | None = None,
+        cause: ChunkChangeCause | None = None,
+        graph_id: str | None = None,
+    ) -> int:
+        """A chunk's derived status changed — the board refreshes that row.
+
+        The optionals are present-when-meaningful, the same shape :meth:`publish_runner_changed`
+        established for issue #151: each is added to the payload only when supplied, never
+        serialized as ``null``, so a chunk with no runner or no prior transition renders
+        without placeholder junk (issue #212).
+        """
+        payload: dict[str, object] = {"chunk_id": chunk_id, "status": status}
+        if prev_status is not None:
+            payload["prev_status"] = prev_status
+        if prev_node is not None:
+            payload["prev_node"] = prev_node
+        if node is not None:
+            payload["node"] = node
+        if runner_id is not None:
+            payload["runner_id"] = runner_id
+        if cause is not None:
+            payload["cause"] = cause
+        if graph_id is not None:
+            payload["graph_id"] = graph_id
+        return self.publish(CHUNK_CHANGED, payload)
 
     def publish_question_asked(self, chunk_id: str, question_id: str) -> int:
         """A ``question.asked`` landed — the chunk parks ``waiting_on_human``."""

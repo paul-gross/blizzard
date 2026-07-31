@@ -70,6 +70,38 @@ def test_runner_changed_carries_by_and_reason_only_where_they_apply() -> None:
     ]
 
 
+def test_chunk_changed_carries_optionals_only_where_supplied() -> None:
+    """The frame's new fields are present-when-meaningful, the same shape issue #151 set
+    for ``runner-changed`` (issue #212) — a call supplying none of the optionals emits a
+    bare ``{chunk_id, status}`` frame, never placeholder ``null``s."""
+    broker = EventBroker()
+    broker.publish_chunk_changed(
+        "ch_1",
+        "running",
+        prev_status="ready",
+        prev_node="build",
+        node="review",
+        runner_id="runner-a",
+        cause="claimed",
+        graph_id="gr_1",
+    )
+    broker.publish_chunk_changed("ch_1", "not_ready")
+    payloads = [json.loads(e.data) for e in broker.snapshot()]
+    assert payloads == [
+        {
+            "chunk_id": "ch_1",
+            "status": "running",
+            "prev_status": "ready",
+            "prev_node": "build",
+            "node": "review",
+            "runner_id": "runner-a",
+            "cause": "claimed",
+            "graph_id": "gr_1",
+        },
+        {"chunk_id": "ch_1", "status": "not_ready"},
+    ]
+
+
 def test_broker_live_fanout_delivers_to_a_subscriber() -> None:
     """A subscriber captures its loop; a publish fans out live across the thread boundary."""
 
