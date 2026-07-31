@@ -81,6 +81,30 @@ describe('ChunkArtifactsTab', () => {
     expect(viewer?.textContent).not.toContain('THE FINDINGS BODY');
   });
 
+  /**
+   * The viewer's identity handle, asserted here — in the component that owns it —
+   * because `demo/demo-director.ts` reads it in **production** to know which
+   * artifact is on screen before it starts scrolling.
+   *
+   * It is the one board handle nothing else pins: `artifacts-tab-artifact-key`
+   * is never a literal in the components at all (`ChunkArtifactBody` synthesizes
+   * it as `` `${testid()}-key` ``), so neither a grep nor a browser scenario
+   * catches a rename — and the director's own spec uses stand-ins, which would
+   * only prove it agrees with itself. Break this and the kiosk stops scrolling
+   * artifacts, silently. Change it here and the director changes with it.
+   */
+  it('renders the selected key inside the viewer — the handle demo mode steers by', async () => {
+    const fixture = TestBed.createComponent(ChunkArtifactsTab);
+    fixture.componentRef.setInput('artifacts', [OLDER, NEWER]);
+    fixture.componentRef.setInput('selectedKey', OLDER.key);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const viewer = el.querySelector('[data-testid="artifacts-tab-artifact"]');
+    const key = viewer?.querySelector('[data-testid="artifacts-tab-artifact-key"]');
+    expect(key?.textContent?.trim()).toBe(OLDER.key);
+  });
+
   it('resolves a key naming nothing in the store to the empty state, not a silent fallback', async () => {
     const fixture = TestBed.createComponent(ChunkArtifactsTab);
     fixture.componentRef.setInput('artifacts', [OLDER, NEWER]);

@@ -8,7 +8,7 @@ prose documentation, and aren't routed here.)
 | File | Read when… |
 |------|-------------|
 | [`install.md`](./install.md) | …standing up blizzard for the first time — the reference `docker compose` deployment: hub, postgres, Caddy. Start here. |
-| [`deployment.md`](./deployment.md) | …installing the colocated wheel + systemd alternative instead (hub and runner side by side, no containers), or configuring anything not specific to one deployment shape — work sources, runner authentication, human auth, cost caps, the recovery contract. |
+| [`deployment.md`](./deployment.md) | …installing the colocated wheel + systemd alternative instead (hub and runner side by side, no containers), or configuring anything not specific to one deployment shape — work sources, runner authentication, human auth, cost caps, the kiosk demo mode, the recovery contract. |
 | [`upgrade.md`](./upgrade.md) | …pulling a new image tag — the restart-based contract and the runner ride-out guarantee that makes it safe. |
 | [`rollback.md`](./rollback.md) | …a release needs reversing — the previous image tag plus a `migrate --down`, walked end to end. |
 | [`backup.md`](./backup.md) | …snapshotting or restoring durable state — the full inventory of what's durable, what's reclaimable, and the commands for both store backends. |

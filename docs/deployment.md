@@ -1087,6 +1087,51 @@ The event log makes failures **visible in-product**; it does not repair the unde
 modes (a missing spawn-env var, a `SessionEnd` hook that never fired) — those are fixed at their
 source. It is append-only with no rotation policy beyond that.
 
+## Kiosk demo mode — an unattended board on a wall screen
+
+`?demo=true` on any board URL hands the board to an automatic tour, for a screen left running in a
+room rather than watched by an operator. Nothing in the UI announces it and nothing links to it —
+the query string is the whole switch.
+
+```
+https://hub.example.com/board?demo=true
+```
+
+One cycle, repeated forever: a chunk is picked at random off the live fleet, opened on the board,
+and its detail dock scrolled slowly to the bottom; the tour then descends into that chunk's
+Artifacts tab and shows a random artifact at a time, each scrolled top to bottom across its dwell;
+at the end of the cycle it swaps to another chunk. A chunk with no artifacts ends its cycle early
+rather than holding an empty viewer.
+
+Four dials tune it. Each takes a bare number of **seconds**, or a number with an `s` / `m` / `h`
+suffix — `900`, `15m`, and `0.25h` all mean the same thing. A value that cannot be read falls back
+to its default rather than producing a cycle of no length.
+
+| Param | Default | Controls |
+|-------|---------|----------|
+| `demo_swap_chunk_interval` | `2m` | One whole cycle — the board dwell plus the artifact tour — before swapping chunks. |
+| `demo_board_scroll` | `60s` | How long the board's detail dock takes to scroll to its bottom. Clamped to **half** `demo_swap_chunk_interval`, so the artifact tour always keeps a share of the cycle. |
+| `demo_artifact_interval` | `20s` | How long each artifact holds the screen, and so how long its scroll takes. |
+| `demo_reload_after` | `1h` | Reload the page once it has been up this long. `0` disables it. |
+
+Two behaviors exist for the wall-screen case specifically, and are worth knowing before you blame
+the display:
+
+- **The screen is held awake** via the Screen Wake Lock API, re-acquired whenever the tab becomes
+  visible again (the browser drops the lock every time it is hidden). It needs a **secure context**,
+  so a hub reached over plain HTTP falls back to the display's own idle timer. This is the usual
+  reason a kiosk still blanks.
+- **A redeploy is picked up automatically.** A single-page app fetched once otherwise runs its
+  original bundle forever. The tour re-reads `index.html` past the HTTP cache at each chunk swap and
+  reloads when the deployed document has changed; `demo_reload_after` is a backstop under that for
+  what no deploy fixes. Both reloads happen **between** chunks, never mid-scroll, and the demo
+  params ride the URL, so what comes back up is the tour rather than a plain board.
+
+Demo mode needs the same session any board does — it drives real reads, so it will not run for a
+signed-out or permissionless viewer (see [Human authentication](#human-authentication-oauth-login)).
+It only reads: it scrolls and navigates, and never activates an operator control, so a board left
+touring cannot pause a runner or answer an ask.
+
 ## The recovery contract
 
 Two systemd mechanisms combine to deliver the journey's "came back under systemd":

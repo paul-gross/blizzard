@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, afterRenderEffect, computed, effect, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Injector, afterRenderEffect, computed, effect, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { filter, map } from 'rxjs';
@@ -17,6 +17,7 @@ import {
   redirectToLogin,
 } from 'fleet';
 
+import { readDemoConfig } from './demo/demo-config';
 import { startOfLocalDayIso, startOfPreviousLocalDayIso } from './local-day';
 import { AppNav } from './nav/app-nav';
 import { AppNavMenu } from './nav/app-nav-menu';
@@ -154,6 +155,17 @@ export class App {
   private readonly meQuery = injectMeQuery();
   private readonly logoutMutation = injectLogoutMutation();
   private readonly providersQuery = injectAuthProvidersQuery();
+  private readonly injector = inject(Injector);
+
+  /**
+   * Demo mode's config, latched **here** and now — at app construction, off the
+   * browser's own URL, before the router's first navigation and before the
+   * `/login` redirect below can rewrite the query string that carried it. The
+   * director itself is lazy (see the effect in the constructor) and arrives too
+   * late to read it for itself. Disabled for every ordinary session, which is
+   * every session that did not ask for `?demo`.
+   */
+  private readonly demoConfig = readDemoConfig(globalThis.location?.search ?? '');
 
   /** The fleet's spend-today read (issue #60) — `since` is local start-of-day,
    * recomputed each time the query re-derives its key (a day rollover moves the
@@ -222,6 +234,22 @@ export class App {
     // (`NG0602`) — the render-phase effect runs outside that reactive context.
     afterRenderEffect(() => {
       if (this.authState() === 'ready') this.live.start();
+    });
+
+    // Demo mode (`?demo=true`) — the unattended kiosk tour, gated on the same
+    // `ready` state as the SSE spine and for the same reason: it drives the board
+    // through real reads, which a guest or an expired session cannot make.
+    //
+    // Loaded dynamically so an ordinary session never pays for it: the director
+    // pulls in the chunk-detail read and the artifact machinery, ~50 kB that
+    // otherwise lands in the initial bundle for a feature nothing links to. The
+    // import is only reached when `?demo` actually asked, and `start()` is
+    // idempotent, so this effect re-running on an auth settle is a no-op.
+    afterRenderEffect(() => {
+      if (this.authState() !== 'ready' || !this.demoConfig.enabled) return;
+      void import('./demo/demo-director').then(({ DemoDirector }) =>
+        this.injector.get(DemoDirector).start(this.demoConfig),
+      );
     });
 
     // Drive the redirect to /login directly off the resolved session state — the
