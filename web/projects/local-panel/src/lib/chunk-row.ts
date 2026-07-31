@@ -8,11 +8,12 @@ import type { MachineChunkStatus } from './chunk-status';
  * One chunk on this machine — the machine-chunks list's card (issue #134):
  * a lane-colored left edge (the derived status's own {@link toneColor}, the
  * same ladder {@link KitBadge} paints its pill with — the hub board's own
- * card scheme, `fleet/board-card/board-card.ts`) over three stacked lines —
- * compact chunk ref + node name/attempt epoch, the work-item chips (linked to
- * the work items) and title, then the derived status. Same fields as the
- * row this replaces, laid out like the hub board's card instead of one
- * cramped grid line.
+ * card scheme, `fleet/board-card/board-card.ts`) over stacked lines —
+ * compact chunk ref + node name/attempt epoch, one line per work item (each
+ * carrying that item's own ref chip, linked when it has a `web_url`, and that
+ * item's own title), then the derived status. Same fields as the row this
+ * replaces, laid out like the hub board's card instead of one cramped grid
+ * line.
  *
  * The work-item enrichment is the same severable, volatile layering the old lease row
  * carried (issue #28, decision 1): one {@link injectChunkTitleQuery} per row,
@@ -44,15 +45,17 @@ import type { MachineChunkStatus } from './chunk-status';
       </div>
       <div class="ttl" data-testid="chunk-row-title">
         @for (item of linkedItems(); track item.ref) {
-          @if (item.web_url) {
-            <a class="chip" [href]="item.web_url" target="_blank" rel="noopener" (click)="$event.stopPropagation()">{{
-              item.label
-            }}</a>
-          } @else if (item.label) {
-            <span class="chip">{{ item.label }}</span>
-          }
+          <div class="wi">
+            @if (item.web_url) {
+              <a class="chip" [href]="item.web_url" target="_blank" rel="noopener" (click)="$event.stopPropagation()">{{
+                item.label
+              }}</a>
+            } @else if (item.label) {
+              <span class="chip">{{ item.label }}</span>
+            }
+            {{ item.title }}
+          </div>
         }
-        {{ titleText() }}
       </div>
       <div class="st-row">
         <fleet-kit-badge [tone]="status().tone" data-testid="chunk-row-status">{{ status().label }}</fleet-kit-badge>
@@ -113,8 +116,13 @@ import type { MachineChunkStatus } from './chunk-status';
       white-space: nowrap;
     }
     .ttl {
+      display: flex;
+      flex-direction: column;
       color: var(--text);
       font-size: var(--fs-sm);
+      min-width: 0;
+    }
+    .wi {
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -163,7 +171,4 @@ export class ChunkRow {
   protected readonly titleQuery = injectChunkTitleQuery(() => this.chunkId());
 
   protected readonly linkedItems = computed(() => this.titleQuery.data()?.items ?? []);
-
-  /** The first work-item's title, or empty when unresolved/failed/absent. */
-  protected readonly titleText = computed<string>(() => this.titleQuery.data()?.items?.[0]?.title ?? '');
 }
