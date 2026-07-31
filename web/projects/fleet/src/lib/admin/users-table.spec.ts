@@ -109,6 +109,19 @@ describe('UsersTable', () => {
     expect(Array.from(options ?? []).map((o) => o.value)).toEqual(['pending', 'guest', 'contributor', 'admin']);
   });
 
+  it("selects the row's current role by default, for every assignable role", async () => {
+    const fixture = mount({ currentUserId: 'usr_other', isSuperuser: true });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const guestSelect = el.querySelector<HTMLSelectElement>('[data-user-id="usr_guest"] [data-testid="users-table-role-select"]');
+    expect(guestSelect?.value).toBe('guest');
+    const pendingSelect = el.querySelector<HTMLSelectElement>(
+      '[data-user-id="usr_pending"] [data-testid="users-table-role-select"]',
+    );
+    expect(pendingSelect?.value).toBe('pending');
+  });
+
   it('renders a pending row with an enabled selector, not as static text', async () => {
     const fixture = mount({ currentUserId: 'usr_other', isSuperuser: true });
     await fixture.whenStable();

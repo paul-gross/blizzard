@@ -63,12 +63,13 @@ const ASSIGNABLE_ROLES: readonly string[] = ['pending', 'guest', 'contributor', 
                   } @else {
                     <select
                       data-testid="users-table-role-select"
-                      [value]="user.role"
                       [disabled]="user.role === 'admin' && !isSuperuser()"
                       (change)="onRoleChange(user.user_id, $event)"
                     >
                       @for (role of assignableRoles; track role) {
-                        <option [value]="role" [disabled]="role === 'admin' && !isSuperuser()">{{ role }}</option>
+                        <option [value]="role" [selected]="role === user.role" [disabled]="role === 'admin' && !isSuperuser()">
+                          {{ role }}
+                        </option>
                       }
                     </select>
                   }
