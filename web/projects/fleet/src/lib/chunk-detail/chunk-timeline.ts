@@ -153,10 +153,7 @@ interface StepUsageTotal {
     }
     .step {
       display: grid;
-      /* A fifth, fixed track for .step-usage (issue #182) — without it, that cell has
-         no track of its own and wraps onto a new implicit row sized to the 16px first
-         column, which is what forced "31.6M tok" and the cost onto their own lines. */
-      grid-template-columns: 16px 84px 1fr auto 132px;
+      grid-template-columns: 16px 84px 1fr auto;
       gap: 6px;
       align-items: baseline;
       padding: 3px 0;
@@ -228,13 +225,19 @@ interface StepUsageTotal {
       font-size: var(--fs-label);
       white-space: nowrap;
     }
-    /* A history step's own usage — tucked onto the same line as its judgement choice.
-       Its own dedicated grid track (above) is only wide enough once each cell inside
-       it has a fixed width too — otherwise the flex row still overflows unpredictably
-       and the cost never lines up decimal-to-decimal down the column. */
+    /* A history step's own usage — its own full-width row under the step's main
+       cells (issue #182), not squeezed onto the same line as the verdict/timestamp.
+       The node-history column is one third of the detail panel (chunk-detail-panel.ts's
+       three-way split) — often only ~300px wide — so reserving a fixed column on the
+       *shared* row starves the 1fr verdict track and clips or overlaps neighboring
+       cells. Spanning the full row width instead gives this line the whole column's
+       width to itself, comfortably wider than the two fixed-width cells inside it
+       need, so nothing wraps or clips at any panel width. */
     .step-usage {
+      grid-column: 1 / -1;
       display: flex;
       gap: 6px;
+      margin-top: 2px;
       color: var(--label);
       font-size: var(--fs-xs);
     }
