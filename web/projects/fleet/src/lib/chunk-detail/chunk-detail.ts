@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, input, output, signal } from '@angular/core';
 
+import { hasPermission, injectMeQuery } from '../auth/me.query';
 import { injectHubChunkDetailQuery } from '../chunks/chunk-detail.query';
 import { injectHubChunkWorkItemsQuery } from '../chunks/chunk-work-items.query';
 import { injectDetachChunkMutation } from '../chunks/detach.mutations';
@@ -63,6 +64,9 @@ import {
             [workItems]="workItems()"
             [actionError]="actionError()"
             [actionOutcome]="actionOutcome()"
+            [canControl]="canControl()"
+            [canAnswer]="canAnswer()"
+            [canResolve]="canResolve()"
             (dismiss)="dismiss.emit()"
             (answerQuestion)="onAnswer($event)"
             (resolveDecision)="onResolve($event)"
@@ -110,6 +114,19 @@ export class ChunkDetail {
   private readonly detachMutation = injectDetachChunkMutation();
   private readonly pauseMutation = injectChunkPauseMutation();
   private readonly editGraphMutation = injectSetChunkGraphMutation();
+  private readonly meQuery = injectMeQuery();
+
+  /** Whether the current identity may pause/resume/detach or set the chunk's graph
+   * (`chunk:control` — issue #210). Withholds those controls in the panel below so a
+   * `guest` never sees a write it cannot make; `null`/pending resolves to `false`
+   * (hidden until confirmed), the same convention `RunnerPanel`'s `canPause` set. */
+  protected readonly canControl = computed(() => hasPermission(this.meQuery.data(), 'chunk:control'));
+
+  /** Whether the current identity may answer an open question (`question:answer`). */
+  protected readonly canAnswer = computed(() => hasPermission(this.meQuery.data(), 'question:answer'));
+
+  /** Whether the current identity may resolve an open gate decision (`gate:resolve`). */
+  protected readonly canResolve = computed(() => hasPermission(this.meQuery.data(), 'gate:resolve'));
 
   /** The open chunk's last operator-action failure, or `null`. Reset on every new
    * attempt and whenever a different chunk opens (issue #42). Shared by every action

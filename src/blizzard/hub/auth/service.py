@@ -201,7 +201,7 @@ class AuthService:
         ``email`` either, so a later verified login for the same address cannot merge
         into an account an unverified claim seeded (an unverified provider-reported
         email is not proof of ownership). Otherwise a new user is minted with
-        ``role=guest`` and a username collision-suffixed from the handle."""
+        ``role=pending`` and a username collision-suffixed from the handle."""
         existing_link = self._identities.get(provider_name, identity.subject)
         if existing_link is not None:
             user = self._users.get(existing_link.user_id)
@@ -230,7 +230,7 @@ class AuthService:
             username=self.mint_username(identity.handle),
             display_name=identity.handle,
             email=identity.email if identity.email_verified else None,
-            role=Role.GUEST,
+            role=Role.PENDING,
             created_at=now,
         )
         self._users.create(user)
@@ -357,7 +357,7 @@ class AuthService:
           (granting it, or moving a stored ``superuser`` subject to anything else) — it
           is bootstrap-only;
         * only a ``superuser`` actor may grant or revoke ``admin`` (an ``admin`` actor
-          may freely move a subject between ``guest``/``contributor``).
+          may freely move a subject among ``pending``/``guest``/``contributor``).
 
         A no-op request (``subject.role == to_role``) returns ``subject`` unchanged and
         records no fact — there was no change to record."""

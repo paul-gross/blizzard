@@ -26,12 +26,21 @@ describe('BoardShell', () => {
 
   /** Render the board off a chunk list (and, when the READY lane is under test,
    * the hub's dispatch order for it), settled. Defaults to `'ready'` — most of
-   * this spec is exercising populated-board behavior, not the triad itself. */
-  const render = async (chunks: ChunkSummary[], readyOrder: string[] = [], state: KitAsyncStateValue = 'ready') => {
+   * this spec is exercising populated-board behavior, not the triad itself.
+   * `canControl`/`canReorder` default `true` — this spec's baseline actor is
+   * fully permissioned; a test asserting the withheld case sets its own `false`. */
+  const render = async (
+    chunks: ChunkSummary[],
+    readyOrder: string[] = [],
+    state: KitAsyncStateValue = 'ready',
+    permissions: { canControl?: boolean; canReorder?: boolean } = {},
+  ) => {
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('chunks', chunks);
     fixture.componentRef.setInput('readyOrder', readyOrder);
     fixture.componentRef.setInput('state', state);
+    fixture.componentRef.setInput('canControl', permissions.canControl ?? true);
+    fixture.componentRef.setInput('canReorder', permissions.canReorder ?? true);
     await fixture.whenStable();
     return fixture;
   };
@@ -105,6 +114,7 @@ describe('BoardShell', () => {
     const fixture = TestBed.createComponent(BoardShell);
     fixture.componentRef.setInput('chunks', chunks);
     fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('canControl', true);
     let promoted: string | undefined;
     fixture.componentInstance.promote.subscribe((id) => (promoted = id));
     await fixture.whenStable();
@@ -119,6 +129,20 @@ describe('BoardShell', () => {
 
     card?.querySelector<HTMLButtonElement>('[data-testid="promote-chunk"]')?.click();
     expect(promoted).toBe('ch_01notready00000000000000000');
+  });
+
+  it('withholds Promote without chunk:control', async () => {
+    const chunks: ChunkSummary[] = [
+      { chunk_id: 'ch_01notready00000000000000000', graph_id: 'gr_1', status: 'not_ready', current_node_id: 'nd_build', work_refs: [] },
+    ];
+    const fixture = TestBed.createComponent(BoardShell);
+    fixture.componentRef.setInput('chunks', chunks);
+    fixture.componentRef.setInput('state', 'ready');
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-col="notready"] [data-testid="chunk-card"]')).not.toBeNull();
+    expect(el.querySelector('[data-testid="promote-chunk"]')).toBeNull();
   });
 
   it('renders one card per chunk, in its derived-status column, showing status + current node', async () => {
@@ -425,6 +449,18 @@ describe('BoardShell', () => {
       expect(el.querySelectorAll('[data-testid="group-selected"]')).toHaveLength(1);
       expect(el.querySelector('[data-col="ready"] [data-testid="queue-select"]')).toBeTruthy();
       expect(el.querySelector('[data-col="running"] [data-testid="queue-move-top"]')).toBeNull();
+    });
+
+    it('does not arm the drag list, and withholds Group/Top/checkbox, without queue:reorder', async () => {
+      const fixture = await render([A, B], [A.chunk_id, B.chunk_id], 'ready', { canReorder: false });
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(fixture.debugElement.queryAll(By.directive(CdkDropList))).toHaveLength(0);
+      expect(el.querySelector('[data-testid="group-selected"]')).toBeNull();
+      expect(el.querySelector('[data-testid="queue-select"]')).toBeNull();
+      expect(el.querySelector('[data-testid="queue-move-top"]')).toBeNull();
+      // The cards themselves still render — a read-only board still shows the queue.
+      expect(laneIds(el, 'ready')).toEqual([A.chunk_id, B.chunk_id]);
     });
 
     it('resolves a drop to the anchor it landed after — null at the top', async () => {

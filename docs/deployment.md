@@ -584,14 +584,16 @@ superuser at a time, and this is the *only* way a user becomes (or stops being)
 
 ### Roles, in one paragraph
 
-A hub-local user carries one of four roles, a total order —
-`guest < contributor < admin < superuser`. A freshly-logged-in identity lands as
-`guest`: the lobby, holding no permissions at all beyond the public self routes
-(`GET /api/me`, login, logout) — no board read, no writes. An `admin` (promoted from
-the admin page, `POST /api/users/{id}/role`, gated on `user:manage`) can move a subject
-between `guest` and `contributor` freely, but only a `superuser` actor may grant or
-revoke `admin` itself, and `superuser` is never assignable through that API in either
-direction — it is bootstrap-only, per the previous section.
+A hub-local user carries one of five roles, a total order —
+`pending < guest < contributor < admin < superuser`. A freshly-logged-in identity
+lands as `pending`: the lobby, holding no permissions at all beyond the public self
+routes (`GET /api/me`, login, logout) — no board read, no writes. `guest` reads
+everything (the board, chunks, graphs, events) and mutates nothing. An `admin`
+(promoted from the admin page, `POST /api/users/{id}/role`, gated on `user:manage`)
+can move a subject freely among `pending`/`guest`/`contributor`, but only a
+`superuser` actor may grant or revoke `admin` itself, and `superuser` is never
+assignable through that API in either direction — it is bootstrap-only, per the
+previous section.
 
 ### Operator verbs
 
@@ -624,7 +626,7 @@ never in the hub store or its admin page:
 [auth]
 # superuser = "<hub-username>"   # this runner's own sovereign, config-only
 hub_role_default = "mirror"      # "mirror" (reproduce the hub's own role claim) or a
-                                  # fixed cap ("contributor"/"guest")
+                                  # fixed cap ("contributor"/"guest"/"pending")
 
 [auth.users]
 # ada = "admin"                  # per-hub-username role overrides
@@ -634,10 +636,10 @@ hub_role_default = "mirror"      # "mirror" (reproduce the hub's own role claim)
 through a JWT claim, a config-only designation mirroring the hub's own `auth.superuser`
 bootstrap identity. `hub_role_default` is the fallback runner-local role for a hub
 identity with no `[auth.users]` override: `"mirror"` (the default) trusts the hub's own
-`role` claim verbatim, or a fixed cap (`"contributor"`/`"guest"`) floors every unmatched
-identity regardless of hub role. `[auth.users]` overrides that default per hub
-username, resolved from the JWT's `username` claim only (never `email`, which is
-mutable and may be null).
+`role` claim verbatim, or a fixed cap (`"contributor"`/`"guest"`/`"pending"`) floors
+every unmatched identity regardless of hub role. `[auth.users]` overrides that default
+per hub username, resolved from the JWT's `username` claim only (never `email`, which
+is mutable and may be null).
 
 ### Behind a TLS-terminating reverse proxy
 

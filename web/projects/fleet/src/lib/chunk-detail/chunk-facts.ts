@@ -52,7 +52,7 @@ export interface EditGraphEvent {
       <dt>Graph</dt>
       <dd data-testid="fact-graph">
         <span data-testid="graph-value" [title]="detail().graph_id">{{ graphLabel() }}</span>
-        @if (editable()) {
+        @if (editable() && canControl()) {
           <span class="edit-row">
             <input
               #graphInput
@@ -121,6 +121,11 @@ export interface EditGraphEvent {
 export class ChunkFacts {
   /** The chunk aggregate to render (status, node, route, epoch, graph). */
   readonly detail = input.required<ChunkDetail>();
+
+  /** Whether the current identity may set the chunk's graph (`chunk:control` —
+   * issue #210). Withholds the edit row when `false`, alongside {@link editable};
+   * `null`/pending resolves to `false` (hidden until confirmed). */
+  readonly canControl = input(false);
 
   /** Emitted when the operator sets a not-ready chunk's graph (issue #27). No
    * confirm — repinning either before the chunk has run costs nothing to undo. */

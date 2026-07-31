@@ -202,8 +202,8 @@ class RunnerConfig:
     auth_superuser: str | None = None
     #: The fallback runner-local role for a hub identity with no `[auth.users]`
     #: override (issue #95) — `"mirror"` reproduces the hub's own `role` claim, or a
-    #: fixed cap (`"contributor"`/`"guest"`) floors every unmatched identity there
-    #: regardless of hub role. Defaults to `"mirror"` — a fresh scaffold trusts the
+    #: fixed cap (`"contributor"`/`"guest"`/`"pending"`) floors every unmatched identity
+    #: there regardless of hub role. Defaults to `"mirror"` — a fresh scaffold trusts the
     #: hub's own role claims verbatim until an operator narrows it.
     auth_hub_role_default: str = "mirror"
     #: Per-hub-username role overrides (issue #95, `[auth.users]`) — a tuple of
@@ -436,7 +436,7 @@ class RunnerConfig:
             + f"env_passthrough = [{', '.join(f'"{v}"' for v in self.worker_env_passthrough)}]\n"
             + "\n# Runner-local role resolution, keyed by hub username (issue #95) — lives only here,\n"
             + '# never in the hub store/admin page. `hub_role_default` is "mirror" or a fixed cap\n'
-            + '# ("contributor"/"guest"); `superuser` names this runner\'s own sovereign.\n'
+            + '# ("contributor"/"guest"/"pending"); `superuser` names this runner\'s own sovereign.\n'
             + "[auth]\n"
             + (f'superuser = "{self.auth_superuser}"\n' if self.auth_superuser else '# superuser = "<hub-username>"\n')
             + f'hub_role_default = "{self.auth_hub_role_default}"\n'

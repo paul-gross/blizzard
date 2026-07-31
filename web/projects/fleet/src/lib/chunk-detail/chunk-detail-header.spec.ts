@@ -64,6 +64,7 @@ describe('ChunkDetailHeader', () => {
   it('names the chunk and its work item the way the board card does', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
+    fixture.componentRef.setInput('canControl', true);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -80,6 +81,7 @@ describe('ChunkDetailHeader', () => {
   it('surfaces who paused a chunk in the header (issue #46)', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', pausedDetail('paused'));
+    fixture.componentRef.setInput('canControl', true);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -89,6 +91,7 @@ describe('ChunkDetailHeader', () => {
   it('shows no chunk-pause-by when the chunk carries no open pause fact', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
+    fixture.componentRef.setInput('canControl', true);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -98,6 +101,7 @@ describe('ChunkDetailHeader', () => {
   it('emits dismiss when the close button is activated', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
+    fixture.componentRef.setInput('canControl', true);
     let closed = false;
     fixture.componentInstance.dismiss.subscribe(() => (closed = true));
     await fixture.whenStable();
@@ -112,6 +116,7 @@ describe('ChunkDetailHeader', () => {
   it('shows no Detach action for a chunk with no live route', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ISSUE_DETAIL);
+    fixture.componentRef.setInput('canControl', true);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -122,6 +127,7 @@ describe('ChunkDetailHeader', () => {
   it('shows the routed runner and a Detach action for a chunk with a live route', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('canControl', true);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -129,10 +135,22 @@ describe('ChunkDetailHeader', () => {
     expect(el.querySelector<HTMLButtonElement>('[data-testid="detach-chunk"]')).not.toBeNull();
   });
 
+  it('withholds Detach and Pause without chunk:control, even with a live route', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailHeader);
+    fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="route-runner"]')?.textContent).toContain('rn_01');
+    expect(el.querySelector('[data-testid="detach-chunk"]')).toBeNull();
+    expect(el.querySelector('[data-testid="pause-chunk"]')).toBeNull();
+  });
+
   it('emits detach with the chunk id once the operator confirms', async () => {
     const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('canControl', true);
     let emitted: string | undefined;
     fixture.componentInstance.detach.subscribe((chunkId) => (emitted = chunkId));
     await fixture.whenStable();
@@ -149,6 +167,7 @@ describe('ChunkDetailHeader', () => {
     const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('canControl', true);
     let emitted = false;
     fixture.componentInstance.detach.subscribe(() => (emitted = true));
     await fixture.whenStable();
@@ -164,6 +183,7 @@ describe('ChunkDetailHeader', () => {
   it('still shows a Detach action for a needs_human chunk that still carries a live route (not requeue)', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ESCALATED_ROUTED_DETAIL);
+    fixture.componentRef.setInput('canControl', true);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -174,6 +194,7 @@ describe('ChunkDetailHeader', () => {
     const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ESCALATED_ROUTED_DETAIL);
+    fixture.componentRef.setInput('canControl', true);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -190,6 +211,7 @@ describe('ChunkDetailHeader', () => {
   it('shows Pause — not Resume — for a running chunk carrying no pause fact', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('canControl', true);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -201,6 +223,7 @@ describe('ChunkDetailHeader', () => {
     for (const status of ['done', 'stopped', 'delivering'] as const) {
       const fixture = TestBed.createComponent(ChunkDetailHeader);
       fixture.componentRef.setInput('detail', { ...ROUTED_DETAIL, status });
+    fixture.componentRef.setInput('canControl', true);
       await fixture.whenStable();
       const el = fixture.nativeElement as HTMLElement;
 
@@ -212,6 +235,7 @@ describe('ChunkDetailHeader', () => {
     for (const status of ['waiting_on_human', 'needs_human'] as const) {
       const fixture = TestBed.createComponent(ChunkDetailHeader);
       fixture.componentRef.setInput('detail', { ...ROUTED_DETAIL, status });
+    fixture.componentRef.setInput('canControl', true);
       await fixture.whenStable();
       const el = fixture.nativeElement as HTMLElement;
 
@@ -222,6 +246,7 @@ describe('ChunkDetailHeader', () => {
   it('shows Resume — not Pause — for a paused chunk', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', pausedDetail('paused'));
+    fixture.componentRef.setInput('canControl', true);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -232,6 +257,7 @@ describe('ChunkDetailHeader', () => {
   it('offers Resume — not Pause — for a paused chunk whose status reads waiting_on_human (issue #46)', async () => {
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', pausedDetail('waiting_on_human'));
+    fixture.componentRef.setInput('canControl', true);
     let resumed: string | undefined;
     fixture.componentInstance.resumeChunk.subscribe((id) => (resumed = id));
     const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
@@ -252,6 +278,7 @@ describe('ChunkDetailHeader', () => {
     const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('canControl', true);
     let emitted: string | undefined;
     fixture.componentInstance.pauseChunk.subscribe((id) => (emitted = id));
     await fixture.whenStable();
@@ -268,6 +295,7 @@ describe('ChunkDetailHeader', () => {
     const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('canControl', true);
     let emitted = false;
     fixture.componentInstance.pauseChunk.subscribe(() => (emitted = true));
     await fixture.whenStable();
@@ -284,6 +312,7 @@ describe('ChunkDetailHeader', () => {
     const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', pausedDetail('paused'));
+    fixture.componentRef.setInput('canControl', true);
     let emitted = false;
     fixture.componentInstance.resumeChunk.subscribe(() => (emitted = true));
     await fixture.whenStable();
@@ -300,6 +329,7 @@ describe('ChunkDetailHeader', () => {
     const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
     const fixture = TestBed.createComponent(ChunkDetailHeader);
     fixture.componentRef.setInput('detail', ROUTED_DETAIL);
+    fixture.componentRef.setInput('canControl', true);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 

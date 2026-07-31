@@ -368,13 +368,13 @@ def _provider_identity(
     return ProviderIdentity(subject=subject, handle=handle, email=email, email_verified=verified)
 
 
-def test_link_or_mint_mints_a_new_guest_user_for_an_unknown_identity() -> None:
+def test_link_or_mint_mints_a_new_pending_user_for_an_unknown_identity() -> None:
     clock = FixedClock(_T0)
     service, users, _, identities, _, _ = _service(clock)
 
     user = service.link_or_mint(_provider_identity(), provider_name="github")
 
-    assert user.role == Role.GUEST
+    assert user.role == Role.PENDING
     assert user.username == "ada"
     assert user.email == "ada@example.com"
     assert users.get(user.user_id) is user or users.get(user.user_id) == user
@@ -723,7 +723,7 @@ def test_link_or_mint_does_not_claim_a_bootstrap_target_for_a_different_email() 
 
     user = service.link_or_mint(_provider_identity(email="bob@example.com"), provider_name="github")
 
-    assert user.role is Role.GUEST
+    assert user.role is Role.PENDING
     bootstrap = superuser_bootstrap.get()
     assert bootstrap is not None
     assert bootstrap.claimed_user_id is None
@@ -738,7 +738,7 @@ def test_link_or_mint_does_not_reclaim_an_already_claimed_bootstrap_target() -> 
         _provider_identity(subject="gh-alice-2", email="alice@example.com"), provider_name="github"
     )
 
-    assert user.role is Role.GUEST
+    assert user.role is Role.PENDING
     bootstrap = superuser_bootstrap.get()
     assert bootstrap is not None
     assert bootstrap.claimed_user_id == "usr_already"

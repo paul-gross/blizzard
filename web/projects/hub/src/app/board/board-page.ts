@@ -7,10 +7,12 @@ import {
   QuestionsPanel,
   RunnerPanel,
   asyncState,
+  hasPermission,
   type KitAsyncStateValue,
   injectGroupChunksMutation,
   injectHubChunksQuery,
   injectHubQueueQuery,
+  injectMeQuery,
   injectPromoteChunkMutation,
   injectRepositionQueueMutation,
 } from 'fleet';
@@ -62,6 +64,8 @@ import { injectBoardSelection } from './board-selection';
           [readyOrder]="readyOrder()"
           [state]="boardState()"
           [selectedChunkId]="selected()"
+          [canControl]="canControl()"
+          [canReorder]="canReorder()"
           (selectChunk)="select($event)"
           (promote)="promoteChunk.mutate({ chunkId: $event })"
           (reposition)="reposition($event)"
@@ -130,9 +134,22 @@ export class BoardPage {
   private readonly repositionQueue = injectRepositionQueueMutation();
   private readonly groupChunks = injectGroupChunksMutation();
   private readonly selection = injectBoardSelection();
+  private readonly meQuery = injectMeQuery();
 
   /** Promote a backlog chunk to ready from its board card. */
   protected readonly promoteChunk = injectPromoteChunkMutation();
+
+  /** Whether the current identity may promote a backlog chunk (`chunk:control` —
+   * issue #210). Withholds the board card's Promote control when `false`; `null`/pending
+   * resolves to `false` (hidden until confirmed), the same convention `RunnerPanel`'s
+   * `canPause` set. */
+  protected readonly canControl = computed(() => hasPermission(this.meQuery.data(), 'chunk:control'));
+
+  /** Whether the current identity may reorder or group the ready queue
+   * (`queue:reorder` — issue #210). Withholds the READY lane's drag-and-drop, Top
+   * button, checkbox, and Group control when `false` — a read-only board must not
+   * *arm* a drag it would then refuse, not merely hide a button. */
+  protected readonly canReorder = computed(() => hasPermission(this.meQuery.data(), 'queue:reorder'));
 
   /** The live fleet chunk list; empty until the first read resolves. */
   protected readonly chunks = computed(() => this.chunksQuery.data() ?? []);

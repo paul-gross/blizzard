@@ -136,6 +136,7 @@ describe('ChunkFacts', () => {
   it('offers the graph edit input for a not_ready chunk', async () => {
     const fixture = TestBed.createComponent(ChunkFacts);
     fixture.componentRef.setInput('detail', NOT_READY_DETAIL);
+    fixture.componentRef.setInput('canControl', true);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -146,11 +147,22 @@ describe('ChunkFacts', () => {
   it('offers the graph edit input for a ready, unclaimed chunk (issue #120)', async () => {
     const fixture = TestBed.createComponent(ChunkFacts);
     fixture.componentRef.setInput('detail', { ...NOT_READY_DETAIL, status: 'ready' });
+    fixture.componentRef.setInput('canControl', true);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="graph-input"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="graph-submit"]')).not.toBeNull();
+  });
+
+  it('withholds the graph edit input without chunk:control, even while editable', async () => {
+    const fixture = TestBed.createComponent(ChunkFacts);
+    fixture.componentRef.setInput('detail', NOT_READY_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="graph-input"]')).toBeNull();
+    expect(el.querySelector('[data-testid="graph-value"]')).not.toBeNull();
   });
 
   it('renders no model row at all (issue #144)', async () => {
@@ -181,6 +193,7 @@ describe('ChunkFacts', () => {
   it('emits editGraph with the typed graph id when Set is activated', async () => {
     const fixture = TestBed.createComponent(ChunkFacts);
     fixture.componentRef.setInput('detail', NOT_READY_DETAIL);
+    fixture.componentRef.setInput('canControl', true);
     let emitted: { chunkId: string; graphId: string } | undefined;
     fixture.componentInstance.editGraph.subscribe((event) => (emitted = event));
     await fixture.whenStable();
@@ -196,6 +209,7 @@ describe('ChunkFacts', () => {
   it('does not emit editGraph for a blank graph id', async () => {
     const fixture = TestBed.createComponent(ChunkFacts);
     fixture.componentRef.setInput('detail', NOT_READY_DETAIL);
+    fixture.componentRef.setInput('canControl', true);
     let emitted = false;
     fixture.componentInstance.editGraph.subscribe(() => (emitted = true));
     await fixture.whenStable();

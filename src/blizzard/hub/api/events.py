@@ -15,7 +15,8 @@ id — an event caught in both the replay and the live queue is emitted once.
 The runner's store-and-forward fact push (``POST /events``) moved to the
 runner-authenticated fleet router (:mod:`blizzard.hub.api.fleet`, issue #87) — this
 stream is the board's own read, human-plane gated on ``fleet:view`` (issue #91): a
-``guest`` is refused here exactly as on every other board read. Identity is resolved
+``pending`` (or unauthenticated) identity is refused here exactly as on every other
+board read; a ``guest`` reaches it like any other reader. Identity is resolved
 *before* streaming starts (``require(FLEET_VIEW)``), then the generator stays
 broker-first — no ``get_services`` inside :func:`_stream` itself. Under the default
 ``auth.mode = "none"`` ``require()`` never touches the store (``hub/api/auth_session.py``),
