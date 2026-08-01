@@ -11,6 +11,11 @@ The browser half — the Events tab rendering severity-then-recency, its severit
 filters, a live event over SSE with no reload, and a row's chunk deep-link — is the second
 test in this module (:func:`test_the_events_tab_renders_filters_and_updates_live_in_the_browser`),
 over the built bundle.
+
+The Event log **rail** (not the Events tab above) gets its own reload proof (issue #213,
+Phase 5): :func:`test_the_rail_survives_a_reload_with_no_duplicate_or_missing_rows`. See
+that test's own docstring for why it restarts the hub daemon mid-test rather than merely
+reloading the page against a still-running one.
 """
 
 from __future__ import annotations
@@ -350,3 +355,143 @@ def test_the_events_grid_does_not_collapse_at_a_narrow_viewport(
                 assert no_overflow, "the page gained horizontal scroll at a narrow viewport"
             finally:
                 browser.close()
+
+
+def test_the_rail_survives_a_reload_with_no_duplicate_or_missing_rows(tmp_path: Path, chromium_available: bool) -> None:
+    """The Event log **rail** (``fleet-event-log-panel`` on the board, distinct from the
+    Events tab above) backfills on load and survives a reload with no gap and no
+    duplicate at the seam (issue #213 — the whole point of the issue).
+
+    **Why this restarts the hub daemon mid-test, rather than just calling
+    ``page.reload()`` against a hub that stays running throughout:**
+
+    ``EventBroker`` (``events/broker.py``) keeps its own connect-time replay ring
+    in-memory, ``history=256`` deep, scoped to the **process** — not to any one
+    browser tab or SSE subscription. A plain reload opens a brand-new
+    ``EventSource``/fetch stream with no ``Last-Event-ID`` (``sse.service.ts``'s
+    ``lastEventId`` is a local variable, reset to ``null`` on every fresh
+    ``SseService.connect()`` call — nothing persists it in ``localStorage`` or
+    anywhere else a reload could read back), so the hub replays its **entire**
+    still-resident ring to that fresh connection regardless of Phase 4. In a short,
+    quiet test with no runner heartbeats flooding the ring, that alone would already
+    repopulate the rail after a reload — even against the pre-Phase-4 code, which has
+    no backfill query at all. Asserting only "rows survive a plain reload" would
+    therefore pass on both sides of the fix and prove nothing.
+
+    What actually empties the ring — in production, a redeploy; here, deliberately —
+    is the **hub process exiting**: a fresh ``EventBroker`` instance starts with an
+    empty deque. So this test drives a few facts, loads the board once (over the
+    still-running hub, establishing a baseline row set), **restarts the hub daemon
+    against the same on-disk store** (facts are durable; the in-memory ring is not),
+    then reloads the page against the new process and asserts the same rows are
+    still there — which only the Phase 3/4 ``GET /api/activity`` backfill can supply,
+    since the fresh broker's replay tail is now empty. Against the pre-Phase-4 code
+    this fails on the reloaded page's now-empty rail; on this code it also proves no
+    duplicate at the seam (a broken ``key`` dedup would double every row the first
+    load's live-replay-plus-backfill overlap already covers, not just the reload).
+
+    Drives only chunk **mints** (``cause="minted"``, a lone ``chunk-changed`` publish
+    with no ``queue-changed`` companion) and one pushed operational event — deliberately
+    avoiding promote/pause/resume, which each also publish a live-only ``queue-changed``
+    frame (excluded from backfill by design, issue #213 §2): that would make the
+    first-load and post-restart row sets legitimately differ by design, not by a bug,
+    which would make an exact before/after comparison meaningless.
+
+    The two mint rows' rendered *text* is expected to differ — not stay byte-identical
+    — across the two loads, and this is itself a documented Phase 1/4 boundary worth
+    asserting rather than papering over: the **live** (replay-ring-sourced) rendering of
+    a `minted` frame carries a publish-time-derived `status`/`node` (`describe_chunk_change`
+    always derives the chunk's *current* state at publish, regardless of cause), so it
+    renders as `<ref> -> not_ready -> build`; the **backfilled** rendering of the exact
+    same historical fact structurally cannot reconstruct `status` for a past instant
+    (`ActivityRow`'s own docstring, `hub/domain/work.py`), so it renders as bare `<ref>`,
+    with no arrow. The row *identity* (which two chunks, exactly once each) must still
+    match across both loads; only the arrow's presence is expected to flip.
+    """
+    if not chromium_available:
+        pytest.skip("no Playwright Chromium installed (run `uv run playwright install chromium`)")
+    if not _HUB_BUNDLE.is_file():
+        pytest.skip("no built hub bundle (run the web build — release tier drives `mise run e2e`)")
+    bin_dir = _mock_bin_dir()
+    if bin_dir is None:
+        pytest.skip("no provisioned sibling blizzard-mock worktree (run `winter provision <env>`)")
+    winter_source = _winter_source()
+    if winter_source is None:
+        pytest.skip("no local winter source (set BLIZZARD_MOCK_WINTER_SOURCE)")
+
+    from playwright.sync_api import expect, sync_playwright
+
+    _workspace, origins = _reset_fixture(bin_dir, winter_source, tmp_path / "scratch")
+    forge_port, hub_port = _free_port(), _free_port()
+    hub_dir = tmp_path / "hub"  # reused verbatim across the restart — the durable store lives here
+
+    with _forge(bin_dir, origins, forge_port) as forge, sync_playwright() as pw:
+        browser = pw.chromium.launch(headless=True)
+        page = browser.new_page()
+        try:
+            with _hub(hub_dir, forge_port, hub_port) as hub:
+                issue_a = forge.post(f"/repos/{REPO}/issues", json={"title": "reload seam A", "body": "chunk a"})
+                chunk_a = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{issue_a.json()['number']}"]}).json()[
+                    "chunk_id"
+                ]
+                issue_b = forge.post(f"/repos/{REPO}/issues", json={"title": "reload seam B", "body": "chunk b"})
+                _chunk_b = hub.post("/api/chunks", json={"tokens": [f"{REPO_NAME}:{issue_b.json()['number']}"]}).json()[
+                    "chunk_id"
+                ]  # its own mint row is asserted on generically below, by count/shape
+                _push_event(
+                    hub,
+                    seq=1,
+                    severity="warning",
+                    kind="reload-seam-probe",
+                    chunk_id=chunk_a,
+                    message="a probed operational event",
+                    runner_id="runner-reload-seam",
+                )
+
+                page.goto(f"http://127.0.0.1:{hub_port}/", wait_until="load")
+                expect(page.get_by_test_id("board-shell")).to_be_visible()
+                expect(page.get_by_test_id("event-log-panel")).to_be_visible()
+                # Both chunk mints and the pushed event have already landed on the wire
+                # by the time this subscribes, so the connect-time SSE replay tail alone
+                # already carries them — this establishes the baseline row set, not yet
+                # the assertion the restart below makes meaningful.
+                expect(page.get_by_test_id("event-log-row")).to_have_count(3)
+                first_load_messages = page.get_by_test_id("event-log-message").all_text_contents()
+
+            # The hub process exits here (`_hub`'s context manager terminates it) — the
+            # facts above are durable (sqlite under `hub_dir`), but `EventBroker`'s
+            # in-memory replay ring is not: the next `_hub()` call starts a fresh one,
+            # empty, over the SAME store.
+            with _hub(hub_dir, forge_port, hub_port):
+                page.reload(wait_until="load")
+                expect(page.get_by_test_id("event-log-panel")).to_be_visible()
+                # The fresh broker's replay tail is empty — only `GET /api/activity`'s
+                # backfill (Phase 3/4) can repopulate these rows now: same row COUNT (no
+                # row silently dropped, none doubled by a broken key-dedup) as the
+                # pre-restart baseline.
+                expect(page.get_by_test_id("event-log-row")).to_have_count(3)
+                reload_messages = page.get_by_test_id("event-log-message").all_text_contents()
+
+                # The event-logged row carries the same severity/kind fields whichever
+                # source renders it, so its text matches exactly across both loads.
+                event_message = next(m for m in first_load_messages if "reload-seam-probe" in m)
+                reload_event_message = next(m for m in reload_messages if "reload-seam-probe" in m)
+                assert reload_event_message == event_message, (reload_messages, first_load_messages)
+
+                # The two mint rows: live-rendered (first load) carries the `→ … → …`
+                # transition arrow; backfill-rendered (post-restart) is the bare chunk
+                # ref (see the docstring). Confirming the arrow flips as expected is
+                # itself part of the proof this exercises the backfill path, not a
+                # leftover live replay — and the *set* of chunk refs must be identical
+                # either way: nothing missing, nothing duplicated.
+                first_mint_rows = [m for m in first_load_messages if m != event_message]
+                reload_mint_rows = [m for m in reload_messages if m != reload_event_message]
+                assert len(first_mint_rows) == len(reload_mint_rows) == 2, (first_mint_rows, reload_mint_rows)
+                assert all("→" in m for m in first_mint_rows), first_mint_rows
+                assert all("→" not in m for m in reload_mint_rows), reload_mint_rows
+                first_refs = {m.split(" ")[0] for m in first_mint_rows}
+                reload_refs = set(reload_mint_rows)
+                assert len(first_refs) == len(reload_refs) == 2, (first_refs, reload_refs)
+                assert first_refs == reload_refs, (first_refs, reload_refs)
+        finally:
+            browser.close()

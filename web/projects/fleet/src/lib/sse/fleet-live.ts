@@ -176,9 +176,13 @@ export interface LoggedEvent {
 }
 
 /**
- * Recent-event ring cap for the Event log — matches the broker's history depth
- * (events/broker.py, `history=256`) so the feed holds as much as a fresh connect can
- * ever backfill, and no more.
+ * Recent-event ring cap for *this live tee alone* — matches the broker's history depth
+ * (events/broker.py, `history=256`) so the ring never holds more than a fresh connect's
+ * own replay tail could ever deliver. Since issue #213 Phase 4 this is no longer the
+ * whole story for what the Event log panel renders: its container additionally
+ * backfills on load from `GET /api/activity`, a separate, durable-store-backed source
+ * this ring knows nothing about (`event-log-panel.ts`'s `RENDER_LIMIT`, reconciled with
+ * that read's own `limit` rather than derived from this one).
  */
 const LOG_LIMIT = 256;
 

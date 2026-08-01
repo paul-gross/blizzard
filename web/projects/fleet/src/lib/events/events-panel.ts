@@ -7,9 +7,12 @@ import { injectHubEventsQuery } from './events.query';
 
 /**
  * The Events tab's **container** (blizzard#125 Phase 4) — the board's operational
- * event feed (`GET /api/events`), distinct from the right rail's bounded
- * {@link EventLogPanel} SSE tee: this reads the hub's own persisted, filterable
- * event log, not the client-side ring the live spine keeps.
+ * event feed (`GET /api/events`), distinct from the right rail's {@link EventLogPanel}:
+ * this reads the hub's own persisted, filterable event log (severity/runner/chunk
+ * filters, capped only by `limit`), where the rail is an unfiltered recent-activity
+ * view that merges a `GET /api/activity` backfill on load with the live SSE tee,
+ * deduped by fact identity (issue #213 Phase 4) — no filters, no independent query
+ * of its own here.
  *
  * Owns the severity/runner/chunk filter state as signals and the reactive query
  * over them, and renders the presentational {@link EventsView}. Follows
