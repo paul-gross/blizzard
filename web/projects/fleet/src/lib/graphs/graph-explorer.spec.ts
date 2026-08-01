@@ -35,7 +35,7 @@ describe('GraphExplorer', () => {
 
   afterEach(() => stub?.restore());
 
-  it('groups graphs by name and shows the version count + effective summary', async () => {
+  it('groups graphs by name and shows the version count + effective summary as compact refs', async () => {
     const fixture = await mount();
     const el = fixture.nativeElement as HTMLElement;
 
@@ -43,12 +43,12 @@ describe('GraphExplorer', () => {
     expect(groups).toHaveLength(2);
 
     const buildGroup = el.querySelector('[data-name="build"]');
-    expect(buildGroup?.querySelector('[data-testid="graph-explorer-group-count"]')?.textContent).toContain(
-      '2 versions',
-    );
-    expect(buildGroup?.querySelector('[data-testid="graph-explorer-group-effective"]')?.textContent).toContain(
-      'gr_build_v2',
-    );
+    expect(buildGroup?.querySelector('[data-testid="graph-explorer-group-count"]')?.textContent?.trim()).toBe('(2)');
+    expect(
+      buildGroup?.querySelector('[data-testid="graph-explorer-group-effective"]')?.textContent?.trim(),
+    ).toBe('G-d_v2');
+    // No long id leaks into the group row.
+    expect(buildGroup?.textContent).not.toContain('gr_build_v2');
   });
 
   it('reveals the lineage newest-first with effective/superseded badges on expand', async () => {
@@ -67,6 +67,15 @@ describe('GraphExplorer', () => {
     expect(rows).toHaveLength(2);
     expect(rows[0].getAttribute('data-graph-id')).toBe('gr_build_v2');
     expect(rows[1].getAttribute('data-graph-id')).toBe('gr_build_v1');
+
+    // Compact ref, not the long id (issue #206).
+    expect(rows[0].querySelector('[data-testid="graph-explorer-graph-id"]')?.textContent?.trim()).toBe('G-d_v2');
+    expect(rows[1].querySelector('[data-testid="graph-explorer-graph-id"]')?.textContent?.trim()).toBe('G-d_v1');
+    // The shared relative-date component, not a raw ISO string.
+    expect(rows[0].querySelector('[data-testid="graph-explorer-created-at"]')?.textContent?.trim()).not.toBe(
+      GRAPHS[0].created_at,
+    );
+    expect(rows[0].querySelector('fleet-when[data-testid="graph-explorer-created-at"]')).toBeTruthy();
 
     expect(rows[0].querySelector('[data-testid="graph-explorer-badge"]')?.textContent?.trim()).toBe('effective');
     expect(rows[1].querySelector('[data-testid="graph-explorer-badge"]')?.textContent?.trim()).toBe('superseded');

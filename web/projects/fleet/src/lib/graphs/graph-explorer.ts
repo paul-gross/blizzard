@@ -1,9 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 
 import type { GraphSummaryView } from '../api/hub';
+import { compactRef } from '../compact-ref';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
 import { KitPanel } from '../kit/kit-panel';
 import { asyncState } from '../query-state';
+import { FleetWhen } from '../when-display';
 import { injectHubGraphsQuery } from './graphs.query';
 
 /** One graph name's lineage, grouped client-side from the flat `GraphSummaryView[]`
@@ -41,7 +43,7 @@ interface ExpansionOverride {
 @Component({
   selector: 'fleet-graph-explorer',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitPanel],
+  imports: [KitAsyncState, KitPanel, FleetWhen],
   template: `
     <fleet-kit-panel class="graph-explorer" aria-label="Graphs" data-testid="graph-explorer" label="Graphs · by name">
       <fleet-kit-async-state
@@ -63,11 +65,9 @@ interface ExpansionOverride {
                 (click)="toggle(group)"
               >
                 <span class="name">{{ group.name }}</span>
-                <span class="count" data-testid="graph-explorer-group-count">{{ group.versions.length }} version{{
-                  group.versions.length === 1 ? '' : 's'
-                }}</span>
+                <span class="count" data-testid="graph-explorer-group-count">({{ group.versions.length }})</span>
                 <span class="summary" data-testid="graph-explorer-group-effective">{{
-                  group.effective.graph_id
+                  shortId(group.effective.graph_id)
                 }}</span>
               </button>
               @if (isExpanded(group)) {
@@ -82,8 +82,8 @@ interface ExpansionOverride {
                         [attr.data-graph-id]="version.graph_id"
                         (click)="selectGraph.emit(version.graph_id)"
                       >
-                        <span class="gid" data-testid="graph-explorer-graph-id">{{ version.graph_id }}</span>
-                        <span class="created" data-testid="graph-explorer-created-at">{{ version.created_at }}</span>
+                        <span class="gid" data-testid="graph-explorer-graph-id">{{ shortId(version.graph_id) }}</span>
+                        <fleet-when class="created" data-testid="graph-explorer-created-at" [iso]="version.created_at" />
                         <span
                           class="badge"
                           data-testid="graph-explorer-badge"
@@ -282,6 +282,13 @@ export class GraphExplorer {
       return override.expanded;
     }
     return holdsSelection;
+  }
+
+  /** The compact display id (issue #206) — the single owner of that rendering is
+   * {@link compactRef}, kept behind this wrapper so the template calls a bound method
+   * rather than an imported free function. */
+  protected shortId(graphId: string): string {
+    return compactRef(graphId);
   }
 
   /** `effective` takes precedence (a graph can be both, briefly nonsensical, only if
