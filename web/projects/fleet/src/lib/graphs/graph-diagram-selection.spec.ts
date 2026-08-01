@@ -15,9 +15,9 @@ const LAID_OUT: LaidOutGraph = {
   width: 400,
   height: 300,
   nodes: [
-    { id: 'n_a', name: 'a', executor: 'runner', metaLines: [], isEntry: true, x: 0, y: 0, width: 150, height: 60 },
-    { id: 'n_b', name: 'b', executor: 'runner', metaLines: [], isEntry: false, x: 0, y: 100, width: 150, height: 60 },
-    { id: 'n_c', name: 'c', executor: 'hub', metaLines: [], isEntry: false, x: 0, y: 200, width: 150, height: 60 },
+    { id: 'n_a', name: 'a', executor: 'runner', metaLines: [], x: 0, y: 0, width: 150, height: 60 },
+    { id: 'n_b', name: 'b', executor: 'runner', metaLines: [], x: 0, y: 100, width: 150, height: 60 },
+    { id: 'n_c', name: 'c', executor: 'hub', metaLines: [], x: 0, y: 200, width: 150, height: 60 },
   ],
   edges: [
     { id: 'e0', kind: 'advance', path: '', label: null, fromNodeId: 'n_a', toNodeId: 'n_b', choiceId: 'c_pass' },
@@ -26,6 +26,7 @@ const LAID_OUT: LaidOutGraph = {
   ],
   selfLoops: [{ id: 'e3', nodeId: 'n_b', path: '', label: { text: 'fail', x: 0, y: 0, width: 0, height: 0 }, choiceId: 'c_fail' }],
   done: { x: 0, y: 260, r: 24 },
+  start: { x: 0, y: -40, r: 24, path: '' },
 };
 
 const GRAPH: GraphView = {
@@ -97,7 +98,7 @@ describe('incidentEdgeIds', () => {
   it('finds a node with only an incoming edge', () => {
     const withSink: LaidOutGraph = {
       ...LAID_OUT,
-      nodes: [...LAID_OUT.nodes, { id: 'n_d', name: 'd', executor: 'hub', metaLines: [], isEntry: false, x: 0, y: 300, width: 150, height: 60 }],
+      nodes: [...LAID_OUT.nodes, { id: 'n_d', name: 'd', executor: 'hub', metaLines: [], x: 0, y: 300, width: 150, height: 60 }],
       edges: [...LAID_OUT.edges, { id: 'e4', kind: 'advance', path: '', label: null, fromNodeId: 'n_c', toNodeId: 'n_d', choiceId: 'c_x' }],
     };
     expect(incidentEdgeIds(withSink, 'n_d')).toEqual(['e4']);

@@ -26,7 +26,6 @@ const LAID_OUT: LaidOutGraph = {
       name: 'build',
       executor: 'runner',
       metaLines: ['resume:code · retries 2', '→ plan, retrospective'],
-      isEntry: true,
       x: 20,
       y: 20,
       width: 150,
@@ -37,7 +36,6 @@ const LAID_OUT: LaidOutGraph = {
       name: 'deliver',
       executor: 'hub',
       metaLines: [],
-      isEntry: false,
       x: 20,
       y: 120,
       width: 150,
@@ -65,6 +63,7 @@ const LAID_OUT: LaidOutGraph = {
     },
   ],
   done: { x: 95, y: 220, r: 24 },
+  start: { x: 95, y: -20, r: 24, path: 'M 95 -20 L 95 20' },
 };
 
 function mount(outcome: LayoutOutcome, selection?: DiagramSelection | null) {
@@ -94,10 +93,8 @@ describe('GraphDiagram', () => {
     const nodes = el.querySelectorAll('[data-testid="graph-diagram-node"]');
     expect(nodes).toHaveLength(2);
     expect(nodes[0].getAttribute('data-node-id')).toBe('n_build');
-    expect(nodes[0].querySelector('[data-testid="graph-diagram-entry-ring"]')).toBeTruthy();
     expect(nodes[0].querySelector('[data-testid="graph-diagram-node-name"]')?.textContent?.trim()).toBe('build');
     expect(nodes[0].querySelector('[data-testid="graph-diagram-node-badge"]')?.textContent?.trim()).toBe('RUNNER');
-    expect(nodes[1].querySelector('[data-testid="graph-diagram-entry-ring"]')).toBeNull();
 
     const edges = el.querySelectorAll('[data-testid="graph-diagram-edge"]');
     expect(edges).toHaveLength(1);
@@ -110,6 +107,16 @@ describe('GraphDiagram', () => {
     expect(selfLoop?.getAttribute('data-node-id')).toBe('n_build');
 
     expect(el.querySelector('[data-testid="graph-diagram-done"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="graph-diagram-start"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="graph-diagram-start-path"]')).toBeTruthy();
+  });
+
+  it('renders no start indicator when the layout carries none (a degenerate entry_node_id)', () => {
+    const fixture = mount({ ok: true, graph: { ...LAID_OUT, start: null } });
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-testid="graph-diagram-start"]')).toBeNull();
+    expect(el.querySelector('[data-testid="graph-diagram-start-path"]')).toBeNull();
   });
 
   it('shows an unobtrusive fallback notice and no diagram when layout fails, without throwing', () => {

@@ -73,6 +73,7 @@ describe('layoutGraph', () => {
     expect(outcome.graph.nodes).toHaveLength(3);
     expect(outcome.graph.nodes.map((n) => n.id).sort()).toEqual(['n_build', 'n_deliver', 'n_review']);
     expect(outcome.graph.done).not.toBeNull();
+    expect(outcome.graph.start).not.toBeNull();
 
     // The self-loop (build -fail-> build) is filtered out of the dagre edge set and
     // surfaces only in `selfLoops`, never in `edges`.
@@ -167,6 +168,23 @@ describe('layoutGraph', () => {
     expect(outcome.graph.edges).toHaveLength(0);
     expect(outcome.graph.selfLoops).toHaveLength(0);
     expect(outcome.graph.done).toBeNull();
+    expect(outcome.graph.start).not.toBeNull();
+  });
+
+  it('lays out a start indicator positioned above the entry node, and none when entry_node_id names no node', () => {
+    const withEntry = layoutGraph(DEFAULT_LIKE, measure);
+    expect(withEntry.ok).toBe(true);
+    if (!withEntry.ok) return;
+
+    const entryNode = withEntry.graph.nodes.find((n) => n.id === 'n_build')!;
+    const start = withEntry.graph.start!;
+    expect(start).not.toBeNull();
+    expect(start.y).toBeLessThan(entryNode.y);
+
+    const noEntry = layoutGraph({ ...DEFAULT_LIKE, entry_node_id: 'n_missing' }, measure);
+    expect(noEntry.ok).toBe(true);
+    if (!noEntry.ok) return;
+    expect(noEntry.graph.start).toBeNull();
   });
 
   it('falls back to { ok: false } for an empty graph (no nodes)', () => {

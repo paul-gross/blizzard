@@ -45,6 +45,13 @@ export const META_LINE_HEIGHT = 15;
  * `node.y + META_FIRST_LINE_Y`, from which further lines step by {@link META_LINE_HEIGHT}. */
 export const META_FIRST_LINE_Y = 44;
 const DONE_RADIUS = 24;
+/** The synthetic source dagre lays out above the entry node (blizzard#207) — sized
+ * to match {@link DONE_RADIUS} so the START and DONE circles read as a pair. */
+const START_RADIUS = DONE_RADIUS;
+/** Dagre graph-lib id for the synthetic start node/edge — never a real `node_id`
+ * (those come from the domain as `n_<name>`), so it can't collide with one. */
+const START_TERMINAL = '__start__';
+const START_EDGE_NAME = 'start';
 /** Horizontal margin reserved so a self-loop's side arc doesn't clip the viewBox. */
 const SELF_LOOP_MARGIN = 60;
 
@@ -78,7 +85,6 @@ export interface LaidOutNode {
   /** The meta line, already wrapped to the box: one entry per rendered line, empty
    * when the node has no meta at all. */
   readonly metaLines: readonly string[];
-  readonly isEntry: boolean;
   readonly x: number;
   readonly y: number;
   readonly width: number;
@@ -121,6 +127,15 @@ export interface LaidOutDone {
   readonly r: number;
 }
 
+export interface LaidOutStart {
+  readonly x: number;
+  readonly y: number;
+  readonly r: number;
+  /** SVG path from the circle to the entry node's top edge, dagre-routed like any
+   * other edge — the component draws it with the same arrowhead as an advance edge. */
+  readonly path: string;
+}
+
 export interface LaidOutGraph {
   readonly width: number;
   readonly height: number;
@@ -129,6 +144,9 @@ export interface LaidOutGraph {
   readonly selfLoops: readonly LaidOutSelfLoop[];
   /** `null` when no edge in the graph targets the reserved terminal. */
   readonly done: LaidOutDone | null;
+  /** `null` only when `entry_node_id` names no node in `graph` — a degenerate graph
+   * the component simply renders without a start indicator. */
+  readonly start: LaidOutStart | null;
 }
 
 export type LayoutOutcome = { readonly ok: true; readonly graph: LaidOutGraph } | { readonly ok: false };
@@ -259,6 +277,20 @@ function selfLoopPath(x0: number, y0: number, y1: number, bulge: number): string
   return `M ${x0} ${y0} C ${x0 + bulge} ${y0 - 10}, ${x0 + bulge} ${y1 + 10}, ${x0 + 4} ${y1}`;
 }
 
+/** Turns a dagre edge's routed `points` into the same quadratic-curve `d` string
+ * every forward edge and the synthetic start connector render with. */
+function curvedPath(points: readonly { x: number; y: number }[]): string {
+  let d = `M ${points[0].x} ${points[0].y}`;
+  for (let j = 1; j < points.length - 1; j++) {
+    const mx = (points[j].x + points[j + 1].x) / 2;
+    const my = (points[j].y + points[j + 1].y) / 2;
+    d += ` Q ${points[j].x} ${points[j].y} ${mx} ${my}`;
+  }
+  const last = points[points.length - 1];
+  d += ` L ${last.x} ${last.y}`;
+  return d;
+}
+
 /**
  * Lays out one immutable graph once (spike #71: no live re-layout, no pan/zoom in
  * v1). Returns `{ ok: false }` — never throws — on a degenerate graph (no nodes, an
@@ -284,6 +316,7 @@ export function layoutGraph(graph: GraphView, measure: TextMeasurer): LayoutOutc
   }
 
   const usesDone = resolved.some((e) => e.toId === null);
+  const hasEntry = nodes.some((n) => n.node_id === graph.entry_node_id);
   const boxes = new Map(nodes.map((n) => [n.node_id, nodeBox(n, measure)]));
 
   try {
@@ -296,6 +329,10 @@ export function layoutGraph(graph: GraphView, measure: TextMeasurer): LayoutOutc
       g.setNode(n.node_id, { width: box.width, height: box.height });
     }
     if (usesDone) g.setNode(DONE_TERMINAL, { width: DONE_RADIUS * 2, height: DONE_RADIUS * 2 });
+    if (hasEntry) {
+      g.setNode(START_TERMINAL, { width: START_RADIUS * 2, height: START_RADIUS * 2 });
+      g.setEdge(START_TERMINAL, graph.entry_node_id, {}, START_EDGE_NAME);
+    }
 
     const forwardEdges = resolved.filter((e) => e.toId !== e.fromId);
     for (const edge of forwardEdges) {
@@ -314,7 +351,6 @@ export function layoutGraph(graph: GraphView, measure: TextMeasurer): LayoutOutc
         name: n.name,
         executor: n.executor,
         metaLines: box.metaLines,
-        isEntry: n.node_id === graph.entry_node_id,
         x: pos.x - box.width / 2,
         y: pos.y - box.height / 2,
         width: box.width,
@@ -325,15 +361,7 @@ export function layoutGraph(graph: GraphView, measure: TextMeasurer): LayoutOutc
     const laidOutEdges: LaidOutEdge[] = forwardEdges.map((edge) => {
       const target = edge.toId ?? DONE_TERMINAL;
       const e = g.edge(edge.fromId, target, edge.id);
-      const points = e.points;
-      let d = `M ${points[0].x} ${points[0].y}`;
-      for (let j = 1; j < points.length - 1; j++) {
-        const mx = (points[j].x + points[j + 1].x) / 2;
-        const my = (points[j].y + points[j + 1].y) / 2;
-        d += ` Q ${points[j].x} ${points[j].y} ${mx} ${my}`;
-      }
-      const last = points[points.length - 1];
-      d += ` L ${last.x} ${last.y}`;
+      const d = curvedPath(e.points);
       const labelX = e['x'] as number | undefined;
       const labelY = e['y'] as number | undefined;
       const label: LaidOutLabel | null =
@@ -366,6 +394,14 @@ export function layoutGraph(graph: GraphView, measure: TextMeasurer): LayoutOutc
         })()
       : null;
 
+    const start: LaidOutStart | null = hasEntry
+      ? (() => {
+          const sn = g.node(START_TERMINAL);
+          const e = g.edge(START_TERMINAL, graph.entry_node_id, START_EDGE_NAME);
+          return { x: sn.x, y: sn.y, r: START_RADIUS, path: curvedPath(e.points) };
+        })()
+      : null;
+
     // dagre only sizes `g.graph().width`/`height` around the nodes and forward
     // edges it laid out — the self-loop side arcs and their labels are drawn
     // manually (outside dagre's model, see the module doc) and can reach further
@@ -387,6 +423,7 @@ export function layoutGraph(graph: GraphView, measure: TextMeasurer): LayoutOutc
         edges: laidOutEdges,
         selfLoops,
         done,
+        start,
       },
     };
   } catch {

@@ -14,6 +14,7 @@ export {
   type LaidOutSelfLoop,
   type LaidOutLabel,
   type LaidOutDone,
+  type LaidOutStart,
   type EdgeKind,
   type TextMeasurer,
   type TextKind,

@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, InjectionToken, computed, inject, i
 import type { GraphView } from '../api/hub';
 import { type DiagramSelection, endpointNodeIds, incidentEdgeIds } from './graph-diagram-selection';
 import { GraphDiagramNodeShape } from './graph-diagram-node-shape';
+import { GraphDiagramStart } from './graph-diagram-start';
 import { type LaidOutEdge, type LaidOutSelfLoop, type LayoutOutcome, type TextMeasurer, layoutGraph } from './graph-layout';
 import { GRAPH_TEXT_MEASURER } from './graph-text-measurer';
 
@@ -55,7 +56,7 @@ export const GRAPH_LAYOUT = new InjectionToken<(graph: GraphView, measure: TextM
 @Component({
   selector: 'fleet-graph-diagram',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [GraphDiagramNodeShape],
+  imports: [GraphDiagramNodeShape, GraphDiagramStart],
   template: `
     <div class="diagram-root" data-testid="graph-diagram">
       @if (outcome(); as o) {
@@ -181,6 +182,10 @@ export const GRAPH_LAYOUT = new InjectionToken<(graph: GraphView, measure: TextM
                 ></g>
               }
 
+              @if (o.graph.start; as start) {
+                <g fleetGraphDiagramStart [start]="start"></g>
+              }
+
               @if (o.graph.done; as done) {
                 <circle
                   class="done-sink"
@@ -238,7 +243,9 @@ export const GRAPH_LAYOUT = new InjectionToken<(graph: GraphView, measure: TextM
       stroke-width: 14px;
       pointer-events: stroke;
     }
-    .edge-group:hover .edge,
+    .edge-group:hover .edge {
+      stroke-width: 3;
+    }
     .edge-group.selected .edge {
       stroke-width: 3.5;
     }
@@ -260,6 +267,12 @@ export const GRAPH_LAYOUT = new InjectionToken<(graph: GraphView, measure: TextM
     }
     .edge-label-bg {
       fill: var(--panel-deep);
+    }
+    .edge-group:hover .edge-label-bg {
+      fill: var(--panel-hover);
+    }
+    .edge-group.selected .edge-label-bg {
+      fill: var(--panel-hi);
     }
     .edge-label {
       font-family: var(--mono);
