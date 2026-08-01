@@ -113,6 +113,26 @@ def test_forwarded_question_parks_chunk_and_surfaces(tmp_path: Path) -> None:
     assert poll["answered"] is False
 
 
+def test_ask_and_answer_carry_distinct_causes(tmp_path: Path) -> None:
+    """The two routes share one call site (``questions.py``'s ``_publish``, issue #212) —
+    asserted separately so a hardcoded or defaulted cause on either route shows up here."""
+    hub = build_hub(tmp_path)
+    chunk_id = _claim(hub)
+
+    before_ask = int(emitted_events(hub)[-1]["id"])
+    _ask(hub, chunk_id)
+    ask_frames = [json.loads(e["data"]) for e in emitted_events(hub, since=before_ask) if e["event"] == CHUNK_CHANGED]
+    assert ask_frames[-1]["cause"] == "question-asked"
+
+    before_answer = int(emitted_events(hub)[-1]["id"])
+    answer = hub.client.post("/api/questions/qn_1/answers", json={"answer": "rest"})
+    assert answer.status_code == 201, answer.text
+    answer_frames = [
+        json.loads(e["data"]) for e in emitted_events(hub, since=before_answer) if e["event"] == CHUNK_CHANGED
+    ]
+    assert answer_frames[-1]["cause"] == "question-answered"
+
+
 def test_ask_question_normalizes_a_naive_asked_at(tmp_path: Path) -> None:
     """Insurance on the typed route too (issue #28, ``bzh:utc-instants``): ``_parse``
     coerces a naive ``asked_at`` to UTC rather than storing it (and later re-emitting
@@ -344,11 +364,16 @@ def test_landing_a_delivered_fact_publishes_chunk_changed_for_the_trail(tmp_path
 
     published = emitted_events(hub, since=before)
     frames = [(e["event"], json.loads(e["data"])) for e in published]
-    assert (CHUNK_CHANGED, {"chunk_id": chunk_id, "status": status_before}) in frames, frames
     # The frame naming this chunk is what the board re-reads on — and it is the *only*
     # frame the delivery emits, so a regression that adds a second one shows up here.
     assert [event for event, _ in frames] == [CHUNK_CHANGED]
-    # It genuinely carries no news by itself: the status is unchanged across the delivery.
+    data = frames[0][1]
+    assert data["chunk_id"] == chunk_id
+    # It genuinely carries no news by itself: the status is unchanged across the delivery
+    # — cause names the fact that drove the frame regardless (issue #212).
+    assert data["status"] == status_before
+    assert data["prev_status"] == status_before
+    assert data["cause"] == "question-answered"
     assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == status_before
 
 

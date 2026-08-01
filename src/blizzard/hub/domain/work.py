@@ -1072,6 +1072,74 @@ def current_node_id(facts: ChunkFacts) -> str | None:
     return transition.to_node_id if transition is not None else None
 
 
+@dataclass(frozen=True)
+class ChunkChange:
+    """A ``chunk-changed`` frame's derived content (issue #212) — the current status
+    (derived the same way every status read is, :func:`derive_chunk_status`), the
+    prev/current node names, the graph id, and the caller-supplied prev-status/runner/cause
+    passed straight through. :func:`describe_chunk_change` builds one; the API layer hands
+    it to :meth:`~blizzard.hub.events.broker.EventBroker.publish_chunk_changed` unpacked."""
+
+    status: str
+    prev_status: str | None
+    node: str | None
+    prev_node: str | None
+    runner_id: str | None
+    cause: str | None
+    graph_id: str
+
+
+def describe_chunk_change(
+    chunk: Chunk,
+    graph: Graph,
+    facts: ChunkFacts,
+    *,
+    prev_status: str | None,
+    runner_id: str | None,
+    cause: str | None,
+    from_graph: Graph | None = None,
+) -> ChunkChange:
+    """Derive a ``chunk-changed`` frame's content from already-loaded objects
+    (``bzh:domain-takes-objects``) — no store, no ids resolved here.
+
+    ``graph`` is the graph ``chunk`` is pinned to *after* the mutation the caller is
+    describing — ``chunk.graph_id`` names it, and this asserts the two agree rather than
+    silently deriving ``graph_id`` from a graph the chunk may not actually be on.
+
+    ``node`` is the chunk's current node **name**, resolved against ``graph``. ``prev_node``
+    is the newest transition's ``from_node_id``, resolved against ``from_graph`` when the
+    transition's own ``graph_id`` differs from ``graph.graph_id`` (a chunk that migrated
+    since that step — the same ``graph_id``-provenance :func:`transition_history` already
+    honors), else against ``graph`` itself. Both are ``None`` — omitted from the eventual
+    frame — when there is nothing to resolve, or the id resolves to no node in the graph
+    asked.
+    """
+    assert chunk.graph_id == graph.graph_id, "graph must be the chunk's post-mutation pin"
+
+    current_id = current_node_id(facts) or graph.entry_node_id
+    current = graph.node_by_id(current_id)
+    node = current.name if current is not None else None
+
+    prev_node: str | None = None
+    transition = newest_transition(facts)
+    if transition is not None and transition.from_node_id is not None:
+        target_graph = graph
+        if transition.graph_id is not None and transition.graph_id != graph.graph_id and from_graph is not None:
+            target_graph = from_graph
+        from_node = target_graph.node_by_id(transition.from_node_id)
+        prev_node = from_node.name if from_node is not None else None
+
+    return ChunkChange(
+        status=derive_chunk_status(facts).value,
+        prev_status=prev_status,
+        node=node,
+        prev_node=prev_node,
+        runner_id=runner_id,
+        cause=cause,
+        graph_id=graph.graph_id,
+    )
+
+
 def latest_epoch(facts: ChunkFacts) -> int | None:
     """The chunk's latest fencing epoch — its newest lease's, else ``None``."""
     if not facts.leases:
