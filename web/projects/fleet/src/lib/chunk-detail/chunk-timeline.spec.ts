@@ -271,4 +271,38 @@ describe('ChunkTimeline', () => {
     expect(firstStepUsage?.querySelector('[data-testid="history-step-cost"]')?.textContent).toContain('~$0.00');
     expect(firstStepUsage?.querySelector('[data-testid="history-step-cost-partial"]')).not.toBeNull();
   });
+
+  it("gives a history step's token count and cost their own fixed-width, nowrap tracks so neither wraps mid-text, and lets the pair itself drop to its own line rather than overflow a tight column (issue #204)", async () => {
+    const fixture = TestBed.createComponent(ChunkTimeline);
+    fixture.componentRef.setInput('detail', COST_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    // jsdom has no layout engine, so the actual line-count at a given width is
+    // unassertable here (proven in the browser instead) — what is assertable is that
+    // the CSS shape guaranteeing it is in place: each figure is `white-space: nowrap`
+    // (a single line's text can never itself break) inside a track that does not
+    // shrink below its own fixed size (`flex-shrink: 0`), and the pair's shared row is
+    // allowed to wrap the two *items* — not their text — onto their own line
+    // (`flex-wrap: wrap`) instead of overflowing a column too narrow to hold both.
+    const tokens = el.querySelector('[data-testid="history-step-tokens"]') as HTMLElement;
+    const cost = el.querySelector('[data-testid="history-step-cost"]') as HTMLElement;
+    const usageRow = el.querySelector('[data-testid="history-step-usage"]') as HTMLElement;
+
+    const tokensStyle = getComputedStyle(tokens);
+    expect(tokensStyle.whiteSpace).toBe('nowrap');
+    expect(tokensStyle.flexShrink).toBe('0');
+    expect(tokensStyle.flexBasis).not.toBe('auto');
+    expect(tokensStyle.flexBasis).not.toBe('0px');
+
+    const costStyle = getComputedStyle(cost);
+    expect(costStyle.whiteSpace).toBe('nowrap');
+    expect(costStyle.flexShrink).toBe('0');
+    expect(costStyle.flexBasis).not.toBe('auto');
+    expect(costStyle.flexBasis).not.toBe('0px');
+
+    const usageRowStyle = getComputedStyle(usageRow);
+    expect(usageRowStyle.display).toBe('flex');
+    expect(usageRowStyle.flexWrap).toBe('wrap');
+  });
 });

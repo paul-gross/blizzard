@@ -228,15 +228,22 @@ interface StepUsageTotal {
     /* A history step's own usage — its own full-width row under the step's main
        cells (issue #182), not squeezed onto the same line as the verdict/timestamp.
        The node-history column is one third of the detail panel (chunk-detail-panel.ts's
-       three-way split) — often only ~300px wide — so reserving a fixed column on the
-       *shared* row starves the 1fr verdict track and clips or overlaps neighboring
-       cells. Spanning the full row width instead gives this line the whole column's
-       width to itself, comfortably wider than the two fixed-width cells inside it
-       need, so nothing wraps or clips at any panel width. */
+       three-way split) — often only ~300px wide, sometimes narrower still — so
+       reserving a fixed column on the *shared* row starves the 1fr verdict track and
+       clips or overlaps neighboring cells. Spanning the full row width instead gives
+       this line the whole column's width, usually comfortable for the two
+       fixed-width cells inside it. min-width: 0 stops this spanning item from
+       forcing the row wider than the column actually has (grid's default is to let a
+       spanning item's own content floor win); flex-wrap: wrap is the fallback for
+       whatever's left over — the token cell and the cost cell each keep their own
+       nowrap (a figure's own text never breaks), but the pair as a whole can drop
+       the cost onto its own line rather than overflow the column. */
     .step-usage {
       grid-column: 1 / -1;
+      min-width: 0;
       display: flex;
-      gap: 6px;
+      flex-wrap: wrap;
+      gap: 2px 6px;
       margin-top: 2px;
       color: var(--label);
       font-size: var(--fs-xs);
