@@ -56,6 +56,7 @@ from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.runtime import migration_runner
 from blizzard.hub.store import schema
 from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
+from blizzard.hub.work_sources.closer import IWorkCloser, WorkCloseError, WorkItemGoneError
 from blizzard.hub.work_sources.registry import WorkSourceRegistry
 from blizzard.hub.work_sources.source import IWorkSource, WorkItem, WorkSourceError
 
@@ -248,6 +249,30 @@ def _conforms_fake_annotator(x: FakeAnnotator) -> IWorkAnnotator:
     return x
 
 
+class FakeCloser:
+    """An in-process :class:`IWorkCloser` — an in-memory ``{ref: outcome}`` map plus
+    a call log a test asserts against. ``gone_refs`` raises
+    :class:`WorkItemGoneError`; ``fail_refs`` raises a bare :class:`WorkCloseError` —
+    the reconciler's terminal-vs-retried outcome split drives this rather than the
+    real GitHub adapter."""
+
+    def __init__(self, *, gone_refs: set[str] | None = None, fail_refs: set[str] | None = None) -> None:
+        self.gone_refs = gone_refs or set()
+        self.fail_refs = fail_refs or set()
+        self.closed: list[WorkRef] = []
+
+    def close(self, pointer: WorkRef) -> None:
+        if pointer.ref in self.gone_refs:
+            raise WorkItemGoneError(f"{pointer.ref} no longer exists")
+        if pointer.ref in self.fail_refs:
+            raise WorkCloseError(f"boom closing {pointer.ref}")
+        self.closed.append(pointer)
+
+
+def _conforms_fake_closer(x: FakeCloser) -> IWorkCloser:
+    return x
+
+
 class _OmitTitle:
     """The sentinel a test uses to make :func:`github_double` omit ``title`` from the payload."""
 
@@ -304,6 +329,19 @@ def github_double(
         if title is not OMIT_TITLE:
             payload["title"] = title
         return payload
+
+    @app.patch("/repos/{owner}/{repo}/issues/{number}")
+    def update_issue_state(owner: str, repo: str, number: int, body: dict) -> JSONResponse:
+        if (forbidden := _forbidden_if_armed()) is not None:
+            return forbidden
+        # A number the double's fixed issue store doesn't know about is the "gone"
+        # case a closer must surface distinctly from a generic failure.
+        issue_state: dict[str, dict] = state.setdefault("issue_state", {})  # type: ignore[assignment]
+        key = f"{owner}/{repo}#{number}"
+        if key not in issue_store and key not in issue_state:
+            return JSONResponse(status_code=404, content={"message": "Not Found"})
+        issue_state[key] = {"state": body["state"], "state_reason": body.get("state_reason")}
+        return JSONResponse(status_code=200, content={"number": number, **issue_state[key]})
 
     @app.get("/repos/{owner}/{repo}/issues/{number}/comments")
     def get_comments(owner: str, repo: str, number: int) -> list[dict]:

@@ -38,6 +38,7 @@ from typing import Protocol
 
 from blizzard.hub.domain.work import WorkRef
 from blizzard.hub.work_sources.annotator import IWorkAnnotator
+from blizzard.hub.work_sources.closer import IWorkCloser
 
 
 @dataclass(frozen=True)
@@ -100,6 +101,17 @@ class IWorkSourceRegistry(Protocol):
 
     def annotating_names(self) -> list[str]:
         """Every source name with an annotator built — the opted-in subset of
+        :meth:`names`."""
+        ...
+
+    def closer(self, name: str) -> IWorkCloser | None:
+        """The binding declared under ``name``'s close half, or ``None`` when
+        that source is unconfigured or not opted into closing — the structural
+        "never closed" a non-opted source gets."""
+        ...
+
+    def closing_names(self) -> list[str]:
+        """Every source name with a closer built — the opted-in subset of
         :meth:`names`."""
         ...
 

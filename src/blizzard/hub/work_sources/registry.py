@@ -24,25 +24,29 @@ from collections.abc import Mapping
 
 from blizzard.hub.domain.work import WorkRef
 from blizzard.hub.work_sources.annotator import IWorkAnnotator
+from blizzard.hub.work_sources.closer import IWorkCloser
 from blizzard.hub.work_sources.source import IWorkSource, IWorkSourceRegistry
 
 
 class WorkSourceRegistry:
     """The hub's configured work sources, keyed by their declared ``name``.
 
-    ``annotators`` is a strict subset of ``sources`` — only a source config with
-    ``annotate = true`` gets an entry here (built by the factory); a name absent
-    from ``annotators`` has no write half at all, which is what makes "never
-    written to" a property of the object graph rather than a branch.
+    ``annotators``/``closers`` are each a strict subset of ``sources`` — only a
+    source config with ``annotate = true``/``close = true`` gets an entry here
+    (built by the factory); a name absent has no corresponding write half at all,
+    which is what makes "never written to"/"never closed" a property of the object
+    graph rather than a branch.
     """
 
     def __init__(
         self,
         sources: Mapping[str, IWorkSource] | None = None,
         annotators: Mapping[str, IWorkAnnotator] | None = None,
+        closers: Mapping[str, IWorkCloser] | None = None,
     ) -> None:
         self._sources = dict(sources or {})
         self._annotators = dict(annotators or {})
+        self._closers = dict(closers or {})
 
     def get(self, name: str) -> IWorkSource | None:
         return self._sources.get(name)
@@ -55,6 +59,12 @@ class WorkSourceRegistry:
 
     def annotating_names(self) -> list[str]:
         return list(self._annotators.keys())
+
+    def closer(self, name: str) -> IWorkCloser | None:
+        return self._closers.get(name)
+
+    def closing_names(self) -> list[str]:
+        return list(self._closers.keys())
 
     def resolve(self, token: str) -> WorkRef | None:
         """The first configured binding's ``parse`` of ``token`` that claims it, or
