@@ -7,8 +7,9 @@ import { listOrDash, producesNames, retriesLabel, sessionLabel } from './graph-n
 
 /**
  * The diagram's detail pane — the selected node's full `GraphNodeView` (including
- * `prompt`/`judgement_prompt`), the selected edge's choice, or a neutral hint when
- * nothing is selected. Presentational only: `graph`/`selection` are plain inputs,
+ * `prompt`/`judgement_prompt`), the selected edge's choice (including its
+ * `prompt_addendum`, issue #208), or a neutral hint when nothing is selected.
+ * Presentational only: `graph`/`selection` are plain inputs,
  * resolved against `graph-diagram-selection.ts`'s pure resolvers
  * (`bzh:frontend-container-presentational`). Field rendering (retries, produces,
  * session) goes through `graph-node.ts`'s shared helpers — the same ones
@@ -68,6 +69,12 @@ import { listOrDash, producesNames, retriesLabel, sessionLabel } from './graph-n
           </dl>
           @if (choice.description) {
             <p class="choice-description" data-testid="graph-diagram-detail-choice-description">{{ choice.description }}</p>
+          }
+          @if (choice.promptAddendum) {
+            <div class="text-block">
+              <span class="section-lbl">Prompt addendum</span>
+              <pre class="text-body" data-testid="graph-diagram-detail-prompt-addendum">{{ choice.promptAddendum }}</pre>
+            </div>
           }
         </div>
       } @else {

@@ -24,8 +24,7 @@ interface ResolvedEdge {
  * The graph explorer's **detail** view — one minted graph's immutable structure,
  * rendered in full: the entry node, a node table (executor, session, judged-by,
  * retries, mode, checks, produces), the graph-level session declarations (issue #144),
- * every edge with the choice it fires on and its prompt addendum, and each node's
- * judgement/prompt text. Consumes
+ * and every edge with the choice it fires on and its prompt addendum. Consumes
  * `injectHubGraphQuery` reactively over the `graphId` input, which the host page
  * binds to the `/graphs/:graphId` route param — refresh-safe and deep-linkable by
  * construction (`bzh:generated-client`; no hand-written fetch).
@@ -33,7 +32,9 @@ interface ResolvedEdge {
  * Mounts `<fleet-graph-diagram-view>` above the node table — the selectable DAG
  * render of the same `GraphView` plus its detail pane (blizzard#159), no re-fetch;
  * the table stays the ever-present fallback surface, unaffected by a diagram-layout
- * failure.
+ * failure. A node's prompt/judgement text and an edge's prompt addendum are read via
+ * that diagram selection pane, not duplicated here in a standalone prompts list
+ * (issue #208).
  */
 @Component({
   selector: 'fleet-graph-detail',
@@ -109,18 +110,6 @@ interface ResolvedEdge {
                       </li>
                     }
                   </ul>
-                </div>
-              }
-            }
-          </div>
-
-          <div class="section" data-testid="graph-detail-prompts">
-            <span class="gd-lbl">Prompts</span>
-            @for (node of nodes(); track node.node_id) {
-              @if (node.prompt) {
-                <div class="prompt-block" data-testid="graph-detail-prompt" [attr.data-node-id]="node.node_id">
-                  <span class="node-name">{{ node.name }}</span>
-                  <pre class="prompt-text" data-testid="graph-detail-prompt-text">{{ node.prompt }}</pre>
                 </div>
               }
             }
@@ -236,20 +225,6 @@ interface ResolvedEdge {
       margin: 2px 0 0;
       color: var(--label-dim);
       white-space: pre-wrap;
-    }
-    .prompt-block {
-      border: 1px solid var(--line);
-      padding: 4px 6px;
-    }
-    .node-name {
-      color: var(--cyan);
-      font-size: var(--fs-sm);
-    }
-    .prompt-text {
-      margin: 4px 0 0;
-      white-space: pre-wrap;
-      font-family: var(--mono);
-      font-size: var(--fs-xs);
     }
   `,
 })

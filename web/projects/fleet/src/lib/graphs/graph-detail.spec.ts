@@ -78,7 +78,7 @@ describe('GraphDetail', () => {
 
   afterEach(() => stub?.restore());
 
-  it('renders the entry node, node table, edges/choices, and prompt text', async () => {
+  it('renders the entry node, node table, and edges/choices', async () => {
     const fixture = await mount('gr_build_v2', (method, path) => {
       if (method === 'GET' && path === '/api/graphs/gr_build_v2') return GRAPH;
       return {};
@@ -107,8 +107,7 @@ describe('GraphDetail', () => {
       'Focus on tests.',
     );
 
-    const prompt = el.querySelector('[data-testid="graph-detail-prompt-text"]');
-    expect(prompt?.textContent).toContain('Build the feature.');
+    expect(el.querySelector('[data-testid="graph-detail-prompts"]')).toBeNull();
   });
 
   it('shows an error state for an unknown graph id', async () => {

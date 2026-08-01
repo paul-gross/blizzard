@@ -48,10 +48,11 @@ export const GRAPH_LAYOUT = new InjectionToken<(graph: GraphView, measure: TextM
  * The `<svg>` keeps `role="img"`, so its subtree is presentational to assistive
  * tech and the click targets here are a pointer affordance only — a deliberate
  * choice, not an oversight: `graph-detail.ts`'s ever-present structured table
- * (edges/choices list, prompts section) is the keyboard- and screen-reader-
- * accessible path to the same data. Making the diagram a focusable widget tree
- * (roving tabindex, `role="application"`, Enter/Space) is real work the issue this
- * shipped under did not ask for.
+ * covers the edges/choices list for keyboard and screen-reader access, but a
+ * node's prompt/judgement text and an edge's prompt addendum live only behind
+ * this diagram's node/edge selection (issue #208). Making the diagram a focusable
+ * widget tree (roving tabindex, `role="application"`, Enter/Space) is real work
+ * the issue this shipped under did not ask for.
  */
 @Component({
   selector: 'fleet-graph-diagram',

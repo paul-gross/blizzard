@@ -60,7 +60,8 @@ export function resolveSelectedNode(graph: GraphView, selection: DiagramSelectio
 }
 
 /** A selected edge's choice, resolved against its source node — the pane's view of
- * "source → target" plus the choice's name/description/kind. */
+ * "source → target" plus the choice's name/description/kind and the edge's own
+ * prompt addendum. */
 export interface ResolvedChoiceSelection {
   readonly choiceId: string;
   /** The choice's name, or the raw `choiceId` when it matches no choice on the
@@ -71,6 +72,10 @@ export interface ResolvedChoiceSelection {
   readonly fromNodeId: string;
   readonly toNodeId: string | null;
   readonly edgeKind: EdgeKind;
+  /** `GraphEdgeView.prompt_addendum` for this edge, `null` when the edge carries
+   * none or matches no entry in `graph.edges` (mirrors `graph-detail.ts`'s
+   * `resolvedEdges`, which keys the same way: `from_node_id` + `choice_id`). */
+  readonly promptAddendum: string | null;
 }
 
 /** The selected edge's choice, or `null` when nothing (or a node) is selected. */
@@ -78,6 +83,9 @@ export function resolveSelectedChoice(graph: GraphView, selection: DiagramSelect
   if (selection === null || selection.kind !== 'edge') return null;
   const fromNode = (graph.nodes ?? []).find((n) => n.node_id === selection.fromNodeId);
   const choice = fromNode?.choices?.find((c: GraphChoiceView) => c.choice_id === selection.choiceId);
+  const edge = (graph.edges ?? []).find(
+    (e) => e.from_node_id === selection.fromNodeId && e.choice_id === selection.choiceId,
+  );
   return {
     choiceId: selection.choiceId,
     name: choice?.name ?? selection.choiceId,
@@ -85,5 +93,6 @@ export function resolveSelectedChoice(graph: GraphView, selection: DiagramSelect
     fromNodeId: selection.fromNodeId,
     toNodeId: selection.toNodeId,
     edgeKind: selection.edgeKind,
+    promptAddendum: edge?.prompt_addendum ?? null,
   };
 }

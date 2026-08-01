@@ -63,7 +63,10 @@ const GRAPH: GraphView = {
       choices: [{ choice_id: 'c_done', name: 'landed', description: '' }],
     },
   ],
-  edges: [],
+  edges: [
+    { from_node_id: 'n_a', choice_id: 'c_pass', to_node_name: 'b', prompt_addendum: 'Focus on the happy path.' },
+    { from_node_id: 'n_b', choice_id: 'c_pass2', to_node_name: 'c', prompt_addendum: null },
+  ],
   warnings: [],
 };
 
@@ -157,7 +160,7 @@ describe('resolveSelectedNode', () => {
 });
 
 describe('resolveSelectedChoice', () => {
-  it("resolves an edge selection's choice name, description, and endpoints", () => {
+  it("resolves an edge selection's choice name, description, endpoints, and prompt addendum", () => {
     const resolved = resolveSelectedChoice(GRAPH, {
       kind: 'edge',
       edgeId: 'e0',
@@ -173,6 +176,7 @@ describe('resolveSelectedChoice', () => {
       fromNodeId: 'n_a',
       toNodeId: 'n_b',
       edgeKind: 'advance',
+      promptAddendum: 'Focus on the happy path.',
     });
   });
 
@@ -187,6 +191,29 @@ describe('resolveSelectedChoice', () => {
     });
     expect(resolved?.toNodeId).toBeNull();
     expect(resolved?.name).toBe('landed');
+  });
+
+  it('resolves null promptAddendum for an edge with none and for one matching no entry in graph.edges', () => {
+    expect(
+      resolveSelectedChoice(GRAPH, {
+        kind: 'edge',
+        edgeId: 'e1',
+        fromNodeId: 'n_b',
+        toNodeId: 'n_c',
+        choiceId: 'c_pass2',
+        edgeKind: 'advance',
+      })?.promptAddendum,
+    ).toBeNull();
+    expect(
+      resolveSelectedChoice(GRAPH, {
+        kind: 'edge',
+        edgeId: 'e2',
+        fromNodeId: 'n_c',
+        toNodeId: null,
+        choiceId: 'c_done',
+        edgeKind: 'advance',
+      })?.promptAddendum,
+    ).toBeNull();
   });
 
   it('falls back to the raw choiceId when it matches no choice on the source node, mirroring graph-detail.ts', () => {

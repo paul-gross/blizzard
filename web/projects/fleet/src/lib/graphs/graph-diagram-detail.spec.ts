@@ -40,7 +40,7 @@ const GRAPH: GraphView = {
       choices: [{ choice_id: 'c_landed', name: 'landed', description: '' }],
     },
   ],
-  edges: [],
+  edges: [{ from_node_id: 'n_build', choice_id: 'c_pass', to_node_name: 'deliver', prompt_addendum: 'Watch for flaky tests.' }],
   warnings: [],
 };
 
@@ -116,6 +116,9 @@ describe('GraphDiagramDetail', () => {
     expect(el.querySelector('[data-testid="graph-diagram-detail-choice-description"]')?.textContent?.trim()).toBe(
       'moves on to review',
     );
+    expect(el.querySelector('[data-testid="graph-diagram-detail-prompt-addendum"]')?.textContent).toBe(
+      'Watch for flaky tests.',
+    );
   });
 
   it('renders "done" as the target for an edge into the reserved done terminal', () => {
@@ -131,7 +134,7 @@ describe('GraphDiagramDetail', () => {
     expect(el.querySelector('[data-testid="graph-diagram-detail-target"]')?.textContent?.trim()).toBe('done');
   });
 
-  it('omits the choice-description paragraph when the choice has none', () => {
+  it('omits the choice-description paragraph and prompt-addendum block when the edge has neither', () => {
     const fixture = mount({
       kind: 'edge',
       edgeId: 'e1',
@@ -142,5 +145,6 @@ describe('GraphDiagramDetail', () => {
     });
     const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('[data-testid="graph-diagram-detail-choice-description"]')).toBeNull();
+    expect(el.querySelector('[data-testid="graph-diagram-detail-prompt-addendum"]')).toBeNull();
   });
 });
