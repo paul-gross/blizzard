@@ -25,6 +25,14 @@ import {
  * is hidden (no `user:manage` gate reads meaningfully with the implicit
  * operator/superuser), so this route is unreachable through normal navigation; a
  * direct hit still renders (the API answers an empty list — no users to list).
+ *
+ * A role change the hub refuses (`RoleAssignmentRefused`, 403 — self-change,
+ * `superuser` grant/revoke, or an `admin` actor touching the `admin` tier) is
+ * this page's own error state (`assignRoleError()`, issue #209): the mutation
+ * already rejects on a non-2xx response (`assign-role.mutation.ts`), so
+ * without reading `assignRoleMutation.error()` here a refusal would fail
+ * silently — the table keeps whatever the `<select>` was last set to, reading
+ * as a success that only a reload reveals never happened.
  */
 @Component({
   selector: 'app-admin-page',
@@ -38,6 +46,9 @@ import {
       errorText="Failed to load users."
       errorTestid="admin-page-error"
     >
+      @if (assignRoleError(); as message) {
+        <p class="assign-role-error" data-testid="admin-page-assign-role-error">{{ message }}</p>
+      }
       <fleet-users-table
         [users]="usersQuery.data() ?? []"
         [currentUserId]="currentUserId()"
@@ -53,6 +64,12 @@ import {
       min-height: 0;
       padding: 6px;
       position: relative;
+    }
+    .assign-role-error {
+      margin: 0 0 8px;
+      padding: 6px 8px;
+      color: var(--red);
+      font-size: var(--fs-sm);
     }
   `,
 })
@@ -71,6 +88,16 @@ export class AdminPage {
     if (this.usersQuery.isPending()) return 'loading';
     if (this.usersQuery.isError()) return 'error';
     return 'ready';
+  });
+
+  /** The last {@link assignRoleMutation} refusal's own `detail` (the hub's
+   * `RoleAssignmentRefused` message), or `null` once a fresh `mutate()` call
+   * clears the mutation's error state. */
+  protected readonly assignRoleError = computed<string | null>(() => {
+    const error = this.assignRoleMutation.error();
+    if (!error) return null;
+    const detail = (error as { detail?: unknown }).detail;
+    return typeof detail === 'string' ? detail : 'Failed to change role.';
   });
 
   protected onAssignRole(vars: { userId: string; role: string }): void {

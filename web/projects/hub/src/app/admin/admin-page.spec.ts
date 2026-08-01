@@ -90,4 +90,24 @@ describe('AdminPage', () => {
     const ownRow = el.querySelector('[data-user-id="usr_admin"]');
     expect(ownRow?.querySelector('[data-testid="users-table-role-static"]')?.textContent).toContain('(you)');
   });
+
+  it('surfaces a refused role change instead of appearing to succeed (issue #209)', async () => {
+    const fixture = await mount(ME_ADMIN, USERS);
+    stub.restore();
+    stub = stubRequestClient(hubClient, (method, path) =>
+      path === '/api/users/usr_guest/role' ? stubError(403, { detail: 'only superuser may grant or revoke admin' }) : USERS,
+    );
+    const el = fixture.nativeElement as HTMLElement;
+
+    const select = el.querySelector<HTMLSelectElement>(
+      '[data-user-id="usr_guest"] [data-testid="users-table-role-select"]',
+    );
+    select!.value = 'admin';
+    select!.dispatchEvent(new Event('change'));
+    await settle(fixture);
+
+    expect(el.querySelector('[data-testid="admin-page-assign-role-error"]')?.textContent).toContain(
+      'only superuser may grant or revoke admin',
+    );
+  });
 });

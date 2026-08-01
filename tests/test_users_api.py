@@ -88,6 +88,26 @@ def test_admin_promotes_a_guest_to_contributor(tmp_path: Path) -> None:
     assert resp.json()["role"] == "contributor"
 
 
+def test_assigned_role_is_returned_by_a_fresh_list_users_read(tmp_path: Path) -> None:
+    """Assign-then-read-back (issue #209): a follow-up ``GET /api/users`` — a
+    distinct request from the mutation, mirroring a page reload — must reflect
+    the new role, not just the assignment response's own rendered ``UserView``."""
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    admin = seed_user(hub, username="ada", role=Role.ADMIN)
+    guest = seed_user(hub, username="grace", role=Role.GUEST)
+    token = seed_session(hub, admin)
+
+    assign = hub.client.post(
+        f"/api/users/{guest.user_id}/role", json={"role": "contributor"}, headers=_cookie(token)
+    )
+    assert assign.status_code == 200
+
+    listing = hub.client.get("/api/users", headers=_cookie(token))
+    assert listing.status_code == 200
+    grace = next(u for u in listing.json() if u["username"] == "grace")
+    assert grace["role"] == "contributor"
+
+
 def test_role_change_takes_effect_on_the_subjects_next_request_without_re_login(tmp_path: Path) -> None:
     hub = build_hub(tmp_path, auth_mode="oauth")
     admin = seed_user(hub, username="ada", role=Role.ADMIN)
