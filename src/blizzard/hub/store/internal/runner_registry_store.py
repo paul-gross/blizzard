@@ -28,6 +28,7 @@ from datetime import datetime
 from sqlalchemy import Engine, insert, select
 
 from blizzard.hub.domain.registry import IWriteRunnerRegistry, RunnerRegistration
+from blizzard.hub.domain.work import ActivityRow
 from blizzard.hub.store import schema as s
 
 
@@ -68,6 +69,53 @@ class RunnerRegistryStore:
             return self._registration(
                 row, self._paused(conn, row.runner_id), self._local_pause_detail(conn, row.runner_id)
             )
+
+    def list_pause_facts_since(self, since: datetime, *, limit: int) -> list[ActivityRow]:
+        with self._engine.connect() as conn:
+            fleet_rows = conn.execute(
+                select(s.runner_pause_facts)
+                .where(s.runner_pause_facts.c.set_at >= since)
+                .order_by(s.runner_pause_facts.c.set_at.desc(), s.runner_pause_facts.c.id.desc())
+                .limit(limit)
+            ).all()
+            local_rows = conn.execute(
+                select(s.runner_local_pause_facts)
+                .where(s.runner_local_pause_facts.c.set_at >= since)
+                .order_by(s.runner_local_pause_facts.c.set_at.desc(), s.runner_local_pause_facts.c.id.desc())
+                .limit(limit)
+            ).all()
+        fleet = [
+            ActivityRow(
+                type="runner-changed",
+                key=f"runner_pause_facts:{r.id}",
+                at=r.set_at,
+                runner_id=r.runner_id,
+                kind="paused" if r.paused else "resumed",
+                by=r.set_by,
+            )
+            for r in fleet_rows
+        ]
+        local = [
+            ActivityRow(
+                type="runner-changed",
+                key=f"runner_local_pause_facts:{r.id}",
+                # `set_at` is the runner-machine's own clock (see this table's schema
+                # docstring, `runner_local_pause_facts`), arriving via the outbound
+                # store-and-forward buffer — the hub is a reader of it, never its
+                # author, and stamps no receipt/arrival instant of its own for this
+                # fact. Using it for the sort/window key risks a skewed runner clock
+                # floating a row to the top or out of the feed's window; no hub-side
+                # instant is recoverable here without a schema change, out of this
+                # phase's scope — a documented skew-risk gap, not assumed away.
+                at=r.set_at,
+                runner_id=r.runner_id,
+                kind="locally-paused" if r.paused else "locally-resumed",
+                by=r.set_by,
+                reason=r.reason,
+            )
+            for r in local_rows
+        ]
+        return [*fleet, *local]
 
     # --- writes -------------------------------------------------------------
 

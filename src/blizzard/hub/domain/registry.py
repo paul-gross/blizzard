@@ -39,6 +39,7 @@ from typing import Protocol
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import as_utc
+from blizzard.hub.domain.work import ActivityRow
 
 _log = get_logger("blizzard.hub.registry")
 
@@ -132,6 +133,24 @@ class IReadRunnerRegistry(Protocol):
         (``hub/api/auth.py``) resolves a principal with, from the token alone; a
         router-level dependency cannot uniformly read a declared ``runner_id`` (it
         lives in request bodies for some routes, path params for others)."""
+        ...
+
+    def list_pause_facts_since(self, since: datetime, *, limit: int) -> list[ActivityRow]:
+        """Every ``runner-changed`` activity row off the fleet's two pause-family fact
+        tables, at or after ``since`` — the activity feed's runner-scoped source (issue
+        #213), pause family only: ``registered``/``heartbeat`` carry no fact table and
+        are muted the same way the board's own live SSE consumer mutes them
+        (``MUTED_RUNNER_KINDS``, ``fleet-live.ts``).
+
+        Deliberately **not** on :class:`~blizzard.hub.domain.work.IReadChunkRepository`
+        (``bzh:repository-split``): a runner-pause fact names no chunk, so it belongs on
+        the registry seam its two source tables (``runner_pause_facts``,
+        ``runner_local_pause_facts``) already live behind.
+
+        Each source table is read with its own ``ORDER BY <ts> DESC, <pk> DESC LIMIT
+        :limit`` — never a full-table scan — so this can return up to ``2 * limit`` rows,
+        unsorted across the two; the caller merges, sorts, and re-caps via
+        :func:`~blizzard.hub.domain.work.derive_activity_feed`."""
         ...
 
 

@@ -549,6 +549,120 @@ def derive_event_feed(events: list[EventRow], escalations: list[EscalationOpen])
 
 
 @dataclass(frozen=True)
+class ActivityRow:
+    """One row of the board's Event log activity feed (issue #213) — a historical fact
+    reshaped into the same vocabulary a live SSE frame carries, so a page-load backfill
+    and a live frame can eventually render through one shared summarizer (a later
+    phase's concern; this one only shapes and derives the row).
+
+    ``type`` mirrors one of the event broker's own frame-type constants
+    (``"chunk-changed"`` / ``"event-logged"`` / ``"runner-changed"``) as a plain string,
+    never the ``events.broker`` module itself (``bzh:domain-core`` — the domain stays
+    events-layer-free, the same reason :attr:`ChunkChange.cause` widens to ``str``).
+
+    ``key`` is the identity of the underlying fact — a table-qualified natural key, e.g.
+    ``"transitions:tr_01J..."`` or ``"chunk_pause_facts:57"`` — the tiebreak
+    :func:`derive_activity_feed` sorts on beneath ``at``; never itself surfaced as a
+    stable frame id (unlike :class:`~blizzard.hub.events.broker.Event`'s monotonic
+    ``id``, which this row has no equivalent of).
+
+    ``at`` is the sort/window instant: the fact's own recorded timestamp for every
+    source except the runner-*local*-pause pair, which has no hub-side receipt instant
+    to use instead (see :meth:`IReadRunnerRegistry.list_pause_facts_since`) and so
+    risks clock skew against the runner's own reported clock — a documented, deliberate
+    gap, not silently assumed away.
+
+    The remaining fields are present-when-derivable-here, mirroring the live frame's own
+    present-when-meaningful shape (:meth:`~blizzard.hub.events.broker.EventBroker.publish_chunk_changed`
+    / ``publish_runner_changed``) — never placeholder ``None`` standing in for "checked
+    and absent" versus "not this row's concern".
+
+    Chunk-changed fields: ``chunk_id``, ``runner_id`` (only where the source fact table
+    itself records one — a route, a transition, a question), ``cause`` (one of
+    :data:`~blizzard.hub.events.broker.ChunkChangeCause`'s members, widened to ``str``
+    for the same reason ``type`` is), and ``graph_id``. ``status``/``prev_status``/
+    ``node``/``prev_node`` need a full graph resolution this phase's bounded reads
+    deliberately do not perform (no :class:`~blizzard.hub.domain.graph.IReadGraphRepository`
+    seam is threaded through here) — they stay ``None`` for every row this phase
+    produces, ready for a later phase to fill once it holds a graph. ``prev_status`` is
+    *always* absent for a historical row regardless: unlike the live frame, there is no
+    "immediately-prior" snapshot to have taken.
+
+    Event-logged fields: ``severity``, ``kind``, ``chunk_id``, ``runner_id`` — read
+    straight off an already-loaded :class:`EventRow` (:meth:`IReadChunkRepository.list_events`).
+
+    Runner-changed fields: ``runner_id``, ``kind`` (one of
+    :data:`~blizzard.hub.events.broker.RunnerChangeKind`'s pause-family members —
+    ``registered``/``heartbeat`` are muted client-side and never sourced here), ``by``,
+    ``reason`` (the runner-*local*-pause pair's free-text cause; always ``None`` off the
+    fleet-brake pair).
+    """
+
+    type: str
+    key: str
+    at: datetime
+    # chunk-changed
+    chunk_id: str | None = None
+    status: str | None = None
+    prev_status: str | None = None
+    node: str | None = None
+    prev_node: str | None = None
+    runner_id: str | None = None
+    cause: str | None = None
+    graph_id: str | None = None
+    # event-logged
+    severity: str | None = None
+    kind: str | None = None
+    # runner-changed
+    by: str | None = None
+    reason: str | None = None
+
+
+def _event_row_to_activity(row: EventRow) -> ActivityRow:
+    """Reshape one already-loaded ``event_log`` row into the activity feed's common
+    row type (issue #213) — the ``event-logged`` half of :func:`derive_activity_feed`."""
+    return ActivityRow(
+        type="event-logged",
+        key=f"event_log:{row.id}",
+        at=row.recorded_at,
+        chunk_id=row.chunk_id,
+        runner_id=row.runner_id,
+        severity=row.severity,
+        kind=row.kind,
+    )
+
+
+def derive_activity_feed(
+    chunk_changed: Sequence[ActivityRow],
+    events: Sequence[EventRow],
+    runner_changed: Sequence[ActivityRow],
+    *,
+    limit: int,
+) -> list[ActivityRow]:
+    """Merge the activity feed's three already-bounded per-source reads into one feed
+    (issue #213) — the board's Event log backfill on page load.
+
+    ``chunk_changed`` is :meth:`IReadChunkRepository.activity_facts_since`'s own read
+    (one row per :data:`~blizzard.hub.events.broker.ChunkChangeCause` member, ``edited``
+    excepted — no fact table backs it); ``events`` is the existing
+    :meth:`IReadChunkRepository.list_events` read, reused rather than reinvented and
+    reshaped here (:func:`_event_row_to_activity`); ``runner_changed`` is
+    :meth:`~blizzard.hub.domain.registry.IReadRunnerRegistry.list_pause_facts_since`'s
+    own read, pause-family only.
+
+    Each argument is already bounded (``since``+``limit``) by its own repository seam
+    (``bzh:repository-split``) — this performs no filtering of its own, only the merge:
+    sorts the union by ``(at desc, key desc)`` — recency first, ``key`` breaking an
+    exact-instant tie deterministically — and caps to ``limit`` on the way out (worst
+    case every source contributes its own ``limit`` rows, so up to ``n_sources * limit``
+    enter this merge). A pure function of already-loaded rows (``bzh:domain-takes-objects``);
+    an empty source set — every argument empty — returns an empty list."""
+    merged = [*chunk_changed, *(_event_row_to_activity(e) for e in events), *runner_changed]
+    merged.sort(key=lambda row: (row.at, row.key), reverse=True)
+    return merged[:limit]
+
+
+@dataclass(frozen=True)
 class DecisionChoice:
     """One selectable gate outcome — a button on the board/bot."""
 
@@ -1411,6 +1525,26 @@ class IReadChunkRepository(Protocol):
         every chunk's escalations at once (issue #125). Escalations are low-volume, so
         this is a full scan of the ``escalations`` table, not an indexed read — the
         ``GET /api/events`` unified feed's other half."""
+        ...
+
+    def activity_facts_since(self, since: datetime, *, limit: int) -> list[ActivityRow]:
+        """Every ``chunk-changed``-shaped activity row across every mapped
+        :data:`~blizzard.hub.events.broker.ChunkChangeCause` member's fact table, at or
+        after ``since`` (issue #213, AC4) — the activity feed's chunk-scoped source.
+
+        ``edited`` is deliberately unrepresented: a chunk edit (``PATCH``) mutates
+        ``chunks`` columns in place and writes no fact row, so no source exists to read
+        it from — a documented exclusion, not a gap. ``node-completed``/``hub-advanced``
+        both read ``transitions`` (discriminated by ``runner_id`` — the hub coordinator's
+        own reserved id authors a hub-advance transition, any other runner's a
+        node-completion); ``paused``/``resumed`` both read ``chunk_pause_facts``
+        (discriminated by its own ``paused`` column). Every other member reads its own
+        table (see the plan's cause -> table mapping).
+
+        Each underlying fact table is read with its own ``ORDER BY <ts> DESC, <pk> DESC
+        LIMIT :limit`` — never a full-table scan — so this method alone can return up to
+        ``n_source_tables * limit`` rows; the caller merges, sorts, and re-caps via
+        :func:`derive_activity_feed`. Unsorted across sources on its own."""
         ...
 
 

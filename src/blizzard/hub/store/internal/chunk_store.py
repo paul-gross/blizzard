@@ -29,6 +29,7 @@ from blizzard.hub.domain.graph import Executor
 from blizzard.hub.domain.work import (
     DEFAULT_EVENT_LIST_LIMIT,
     TERMINAL_STATUSES,
+    ActivityRow,
     AnswerOutcome,
     BounceFact,
     Chunk,
@@ -64,6 +65,16 @@ from blizzard.hub.domain.work import (
 from blizzard.hub.store import schema as s
 
 _ROUTE_PREFIX = "route"
+
+# The hub coordinator's own reserved ``transitions.runner_id`` (issue #213) — mirrors
+# ``delivery.hub_node._HUB_RUNNER_ID`` (kept private there; not imported here to stay
+# out of scope of this change, ``bzh:repository-split`` — the store owns its own read
+# concerns). What discriminates a ``hub-advanced`` transition (the hub coordinator
+# advancing a generic hub command node) from a ``node-completed`` one (a runner's own
+# judged completion) in :meth:`ChunkStore.activity_facts_since`: both write the same
+# ``transitions`` row shape, and this column is the only fact-table difference between
+# the two causes.
+_HUB_RUNNER_ID = "hub"
 
 
 def _serialize_intended_migration(intended: IntendedMigration | None) -> str | None:
@@ -648,6 +659,339 @@ class ChunkStore:
                     )
                 )
             return open_escalations
+
+    def activity_facts_since(self, since: datetime, *, limit: int) -> list[ActivityRow]:
+        """See :meth:`IReadChunkRepository.activity_facts_since` — one bounded read per
+        mapped ``ChunkChangeCause`` fact table (``edited`` excepted, no table backs it),
+        concatenated, unsorted across sources; :func:`~blizzard.hub.domain.work.derive_activity_feed`
+        does the merge/sort/cap. Every per-chunk source is joined to ``chunks`` for its
+        current ``graph_id`` — the same pin a live frame's own ``describe_chunk_change``
+        reports — except ``transitions``/``chunk_migrations``, which already carry their
+        own (more historically-accurate) graph id column."""
+        with self._engine.connect() as conn:
+            rows: list[ActivityRow] = []
+            rows += self._bounded(
+                conn,
+                select(s.chunks.c.chunk_id, s.chunks.c.graph_id, s.chunks.c.minted_at),
+                ts_col=s.chunks.c.minted_at,
+                pk_col=s.chunks.c.chunk_id,
+                since=since,
+                limit=limit,
+                builder=lambda r: ActivityRow(
+                    type="chunk-changed",
+                    key=f"chunks:{r.chunk_id}",
+                    at=r.minted_at,
+                    chunk_id=r.chunk_id,
+                    cause="minted",
+                    graph_id=r.graph_id,
+                ),
+            )
+            rows += self._bounded(
+                conn,
+                select(
+                    s.chunk_promoted.c.id,
+                    s.chunk_promoted.c.chunk_id,
+                    s.chunk_promoted.c.promoted_at,
+                    s.chunks.c.graph_id,
+                ).select_from(s.chunk_promoted.join(s.chunks, s.chunks.c.chunk_id == s.chunk_promoted.c.chunk_id)),
+                ts_col=s.chunk_promoted.c.promoted_at,
+                pk_col=s.chunk_promoted.c.id,
+                since=since,
+                limit=limit,
+                builder=lambda r: ActivityRow(
+                    type="chunk-changed",
+                    key=f"chunk_promoted:{r.id}",
+                    at=r.promoted_at,
+                    chunk_id=r.chunk_id,
+                    cause="promoted",
+                    graph_id=r.graph_id,
+                ),
+            )
+            rows += self._bounded(
+                conn,
+                select(
+                    s.chunk_grouped.c.id, s.chunk_grouped.c.chunk_id, s.chunk_grouped.c.grouped_at, s.chunks.c.graph_id
+                ).select_from(s.chunk_grouped.join(s.chunks, s.chunks.c.chunk_id == s.chunk_grouped.c.chunk_id)),
+                ts_col=s.chunk_grouped.c.grouped_at,
+                pk_col=s.chunk_grouped.c.id,
+                since=since,
+                limit=limit,
+                builder=lambda r: ActivityRow(
+                    type="chunk-changed",
+                    key=f"chunk_grouped:{r.id}",
+                    at=r.grouped_at,
+                    chunk_id=r.chunk_id,
+                    cause="grouped",
+                    graph_id=r.graph_id,
+                ),
+            )
+            rows += self._bounded(
+                conn,
+                select(
+                    s.route_created.c.route_id,
+                    s.route_created.c.chunk_id,
+                    s.route_created.c.runner_id,
+                    s.route_created.c.created_at,
+                    s.chunks.c.graph_id,
+                ).select_from(s.route_created.join(s.chunks, s.chunks.c.chunk_id == s.route_created.c.chunk_id)),
+                ts_col=s.route_created.c.created_at,
+                pk_col=s.route_created.c.route_id,
+                since=since,
+                limit=limit,
+                builder=lambda r: ActivityRow(
+                    type="chunk-changed",
+                    key=f"route_created:{r.route_id}",
+                    at=r.created_at,
+                    chunk_id=r.chunk_id,
+                    runner_id=r.runner_id,
+                    cause="claimed",
+                    graph_id=r.graph_id,
+                ),
+            )
+            rows += self._bounded(
+                conn,
+                select(
+                    s.transitions.c.transition_id,
+                    s.transitions.c.chunk_id,
+                    s.transitions.c.runner_id,
+                    s.transitions.c.graph_id,
+                    s.transitions.c.recorded_at,
+                ),
+                ts_col=s.transitions.c.recorded_at,
+                pk_col=s.transitions.c.transition_id,
+                since=since,
+                limit=limit,
+                builder=lambda r: ActivityRow(
+                    type="chunk-changed",
+                    key=f"transitions:{r.transition_id}",
+                    at=r.recorded_at,
+                    chunk_id=r.chunk_id,
+                    runner_id=r.runner_id,
+                    cause="hub-advanced" if r.runner_id == _HUB_RUNNER_ID else "node-completed",
+                    graph_id=r.graph_id,
+                ),
+            )
+            rows += self._bounded(
+                conn,
+                select(
+                    s.chunk_migrations.c.migration_id,
+                    s.chunk_migrations.c.chunk_id,
+                    s.chunk_migrations.c.to_graph_id,
+                    s.chunk_migrations.c.recorded_at,
+                ),
+                ts_col=s.chunk_migrations.c.recorded_at,
+                pk_col=s.chunk_migrations.c.migration_id,
+                since=since,
+                limit=limit,
+                builder=lambda r: ActivityRow(
+                    type="chunk-changed",
+                    key=f"chunk_migrations:{r.migration_id}",
+                    at=r.recorded_at,
+                    chunk_id=r.chunk_id,
+                    cause="migrated",
+                    graph_id=r.to_graph_id,
+                ),
+            )
+            rows += self._bounded(
+                conn,
+                select(
+                    s.decisions.c.decision_id, s.decisions.c.chunk_id, s.decisions.c.submitted_at, s.chunks.c.graph_id
+                ).select_from(s.decisions.join(s.chunks, s.chunks.c.chunk_id == s.decisions.c.chunk_id)),
+                ts_col=s.decisions.c.submitted_at,
+                pk_col=s.decisions.c.decision_id,
+                since=since,
+                limit=limit,
+                builder=lambda r: ActivityRow(
+                    type="chunk-changed",
+                    key=f"decisions:{r.decision_id}",
+                    at=r.submitted_at,
+                    chunk_id=r.chunk_id,
+                    cause="decision-submitted",
+                    graph_id=r.graph_id,
+                ),
+            )
+            rows += self._bounded(
+                conn,
+                select(
+                    s.decision_resolutions.c.decision_id,
+                    s.decisions.c.chunk_id,
+                    s.decision_resolutions.c.resolved_at,
+                    s.chunks.c.graph_id,
+                ).select_from(
+                    s.decision_resolutions.join(
+                        s.decisions, s.decisions.c.decision_id == s.decision_resolutions.c.decision_id
+                    ).join(s.chunks, s.chunks.c.chunk_id == s.decisions.c.chunk_id)
+                ),
+                ts_col=s.decision_resolutions.c.resolved_at,
+                pk_col=s.decision_resolutions.c.decision_id,
+                since=since,
+                limit=limit,
+                builder=lambda r: ActivityRow(
+                    type="chunk-changed",
+                    key=f"decision_resolutions:{r.decision_id}",
+                    at=r.resolved_at,
+                    chunk_id=r.chunk_id,
+                    cause="decision-resolved",
+                    graph_id=r.graph_id,
+                ),
+            )
+            rows += self._bounded(
+                conn,
+                select(
+                    s.questions.c.question_id,
+                    s.questions.c.chunk_id,
+                    s.questions.c.runner_id,
+                    s.questions.c.asked_at,
+                    s.chunks.c.graph_id,
+                ).select_from(s.questions.join(s.chunks, s.chunks.c.chunk_id == s.questions.c.chunk_id)),
+                ts_col=s.questions.c.asked_at,
+                pk_col=s.questions.c.question_id,
+                since=since,
+                limit=limit,
+                builder=lambda r: ActivityRow(
+                    type="chunk-changed",
+                    key=f"questions:{r.question_id}",
+                    at=r.asked_at,
+                    chunk_id=r.chunk_id,
+                    runner_id=r.runner_id,
+                    cause="question-asked",
+                    graph_id=r.graph_id,
+                ),
+            )
+            rows += self._bounded(
+                conn,
+                select(
+                    s.question_answers.c.question_id,
+                    s.questions.c.chunk_id,
+                    s.question_answers.c.answered_at,
+                    s.chunks.c.graph_id,
+                ).select_from(
+                    s.question_answers.join(
+                        s.questions, s.questions.c.question_id == s.question_answers.c.question_id
+                    ).join(s.chunks, s.chunks.c.chunk_id == s.questions.c.chunk_id)
+                ),
+                ts_col=s.question_answers.c.answered_at,
+                pk_col=s.question_answers.c.question_id,
+                since=since,
+                limit=limit,
+                builder=lambda r: ActivityRow(
+                    type="chunk-changed",
+                    key=f"question_answers:{r.question_id}",
+                    at=r.answered_at,
+                    chunk_id=r.chunk_id,
+                    cause="question-answered",
+                    graph_id=r.graph_id,
+                ),
+            )
+            rows += self._bounded(
+                conn,
+                select(
+                    s.escalations.c.id, s.escalations.c.chunk_id, s.escalations.c.recorded_at, s.chunks.c.graph_id
+                ).select_from(s.escalations.join(s.chunks, s.chunks.c.chunk_id == s.escalations.c.chunk_id)),
+                ts_col=s.escalations.c.recorded_at,
+                pk_col=s.escalations.c.id,
+                since=since,
+                limit=limit,
+                builder=lambda r: ActivityRow(
+                    type="chunk-changed",
+                    key=f"escalations:{r.id}",
+                    at=r.recorded_at,
+                    chunk_id=r.chunk_id,
+                    cause="escalated",
+                    graph_id=r.graph_id,
+                ),
+            )
+            rows += self._bounded(
+                conn,
+                select(
+                    s.requeues.c.id, s.requeues.c.chunk_id, s.requeues.c.requeued_at, s.chunks.c.graph_id
+                ).select_from(s.requeues.join(s.chunks, s.chunks.c.chunk_id == s.requeues.c.chunk_id)),
+                ts_col=s.requeues.c.requeued_at,
+                pk_col=s.requeues.c.id,
+                since=since,
+                limit=limit,
+                builder=lambda r: ActivityRow(
+                    type="chunk-changed",
+                    key=f"requeues:{r.id}",
+                    at=r.requeued_at,
+                    chunk_id=r.chunk_id,
+                    cause="requeued",
+                    graph_id=r.graph_id,
+                ),
+            )
+            rows += self._bounded(
+                conn,
+                select(
+                    s.route_released.c.id,
+                    s.route_released.c.chunk_id,
+                    s.route_released.c.released_at,
+                    s.chunks.c.graph_id,
+                ).select_from(s.route_released.join(s.chunks, s.chunks.c.chunk_id == s.route_released.c.chunk_id)),
+                ts_col=s.route_released.c.released_at,
+                pk_col=s.route_released.c.id,
+                since=since,
+                limit=limit,
+                builder=lambda r: ActivityRow(
+                    type="chunk-changed",
+                    key=f"route_released:{r.id}",
+                    at=r.released_at,
+                    chunk_id=r.chunk_id,
+                    cause="detached",
+                    graph_id=r.graph_id,
+                ),
+            )
+            rows += self._bounded(
+                conn,
+                select(
+                    s.chunk_pause_facts.c.id,
+                    s.chunk_pause_facts.c.chunk_id,
+                    s.chunk_pause_facts.c.paused,
+                    s.chunk_pause_facts.c.set_at,
+                    s.chunks.c.graph_id,
+                ).select_from(
+                    s.chunk_pause_facts.join(s.chunks, s.chunks.c.chunk_id == s.chunk_pause_facts.c.chunk_id)
+                ),
+                ts_col=s.chunk_pause_facts.c.set_at,
+                pk_col=s.chunk_pause_facts.c.id,
+                since=since,
+                limit=limit,
+                builder=lambda r: ActivityRow(
+                    type="chunk-changed",
+                    key=f"chunk_pause_facts:{r.id}",
+                    at=r.set_at,
+                    chunk_id=r.chunk_id,
+                    cause="paused" if r.paused else "resumed",
+                    graph_id=r.graph_id,
+                ),
+            )
+            rows += self._bounded(
+                conn,
+                select(
+                    s.chunk_stopped.c.id, s.chunk_stopped.c.chunk_id, s.chunk_stopped.c.stopped_at, s.chunks.c.graph_id
+                ).select_from(s.chunk_stopped.join(s.chunks, s.chunks.c.chunk_id == s.chunk_stopped.c.chunk_id)),
+                ts_col=s.chunk_stopped.c.stopped_at,
+                pk_col=s.chunk_stopped.c.id,
+                since=since,
+                limit=limit,
+                builder=lambda r: ActivityRow(
+                    type="chunk-changed",
+                    key=f"chunk_stopped:{r.id}",
+                    at=r.stopped_at,
+                    chunk_id=r.chunk_id,
+                    cause="stopped",
+                    graph_id=r.graph_id,
+                ),
+            )
+            return rows
+
+    @staticmethod
+    def _bounded(conn: Connection, stmt, *, ts_col, pk_col, since: datetime, limit: int, builder):  # type: ignore[no-untyped-def]
+        """Run one source's own ``ORDER BY <ts> DESC, <pk> DESC LIMIT :limit`` bounded
+        read and reshape each row via ``builder`` — the one piece every
+        :meth:`activity_facts_since` source shares (issue #213, AC4: never a full-table
+        scan)."""
+        bounded_stmt = stmt.where(ts_col >= since).order_by(ts_col.desc(), pk_col.desc()).limit(limit)
+        return [builder(row) for row in conn.execute(bounded_stmt).all()]
 
     # --- writes -------------------------------------------------------------
 
