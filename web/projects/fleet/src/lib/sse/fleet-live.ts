@@ -1,4 +1,4 @@
-import { DestroyRef, EnvironmentInjector, Injectable, type Signal, effect, inject, signal } from '@angular/core';
+import { DestroyRef, Injectable, type Signal, effect, inject, signal } from '@angular/core';
 import { QueryClient } from '@tanstack/angular-query-experimental';
 
 import {
@@ -210,11 +210,41 @@ const LOG_LIMIT = 256;
 export class FleetLiveUpdates {
   private readonly sse = inject(SseService);
   private readonly queryClient = inject(QueryClient);
-  private readonly injector = inject(EnvironmentInjector);
   private readonly destroyRef = inject(DestroyRef);
   private handle: SseHandle<HubEventPayload> | null = null;
+  /** Mirrors {@link handle} as a signal so the constructor's reconnect-watching
+   * `effect` below can track it — see that effect's own doc for why this indirection
+   * exists at all. */
+  private readonly handleSignal = signal<SseHandle<HubEventPayload> | null>(null);
+  /** The reopen count last seen by the reconnect-watching effect — the baseline a
+   * rise above means a reconnect happened. Captured synchronously in {@link start}
+   * rather than on the effect's own first run: the effect (like any `effect()`) does
+   * not execute its callback until the next flush, so a reconnect landing before
+   * that first flush must not be mistaken for the initial baseline. */
+  private lastReopens: number | null = null;
   private seq = 0;
   private readonly _log = signal<readonly LoggedEvent[]>([]);
+
+  constructor() {
+    // Reconnect-then-re-GET: a fresh reconnect re-reads the whole tree to close any
+    // gap. Created here, in the constructor, rather than inside `start()`: `start()`
+    // is invoked from `afterRenderEffect` (app.ts's root component), and Angular
+    // forbids creating an `effect()` synchronously inside another reactive
+    // computation's callback (`NG0602`) — a render effect's callback counts as one.
+    // Hoisting the effect out to the constructor (a plain injection context, never
+    // itself a reactive computation) sidesteps that, at the cost of watching a
+    // signal mirror of {@link handle} instead of closing over the local variable
+    // `start()` used to create the effect around.
+    effect(() => {
+      const handle = this.handleSignal();
+      if (!handle) return;
+      const reopens = handle.reopens();
+      if (this.lastReopens !== null && reopens > this.lastReopens) {
+        void this.queryClient.invalidateQueries();
+      }
+      this.lastReopens = reopens;
+    });
+  }
 
   /** Connection lifecycle for the header status, or `idle` before {@link start}. */
   get status(): Signal<SseStatus> {
@@ -247,30 +277,20 @@ export class FleetLiveUpdates {
       events: [...HUB_EVENT_TYPES],
     });
     this.handle = handle;
+    this.lastReopens = handle.reopens();
+    this.handleSignal.set(handle);
 
     const sub = handle.events.subscribe(({ type, data }) => {
       this.record(type, data);
       this.dispatch(type, data);
     });
 
-    // Reconnect-then-re-GET: a fresh reconnect re-reads the whole tree to close any gap.
-    let lastReopens = handle.reopens();
-    const ref = effect(
-      () => {
-        const reopens = handle.reopens();
-        if (reopens > lastReopens) {
-          lastReopens = reopens;
-          void this.queryClient.invalidateQueries();
-        }
-      },
-      { injector: this.injector },
-    );
-
     this.destroyRef.onDestroy(() => {
       sub.unsubscribe();
-      ref.destroy();
       handle.close();
       this.handle = null;
+      this.lastReopens = null;
+      this.handleSignal.set(null);
     });
   }
 

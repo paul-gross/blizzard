@@ -1,4 +1,4 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { effect, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
@@ -194,6 +194,43 @@ describe('FleetLiveUpdates', () => {
       TestBed.flushEffects();
 
       // A blanket invalidation (no filter) fires after the reconnect.
+      expect(invalidate.mock.calls.some((call) => call[0] === undefined)).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('start() called from inside another effect keeps reconnect gap-recovery working (issue #214)', () => {
+    // app.ts's root component calls `start()` from an `afterRenderEffect` callback —
+    // itself a reactive computation. `start()` used to create its reconnect-watching
+    // `effect()` internally, which threw NG0602 ("effect() cannot be called from
+    // within a reactive context") every time it ran nested like this, silently
+    // dropping that effect — the gap-recovery a reconnected client depends on never
+    // got wired up. A plain `effect()` here stands in for `afterRenderEffect`'s
+    // reactive-computation callback; the assertion is that nesting the `start()`
+    // call inside one no longer throws, and the reconnect-watching effect (now
+    // built in the service's own constructor, not inside `start()`) still fires.
+    // The service itself is injected first, outside the nested effect — matching
+    // app.ts's own sequencing (a field initializer injects it during the
+    // component's constructor, well before the render effect ever runs) — so this
+    // is testing the nested `start()` call, not conflating it with construction.
+    vi.useFakeTimers();
+    try {
+      const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+      const live = TestBed.inject(FleetLiveUpdates);
+      expect(() =>
+        TestBed.runInInjectionContext(() => {
+          effect(() => live.start());
+          TestBed.flushEffects();
+        }),
+      ).not.toThrow();
+
+      const source = FakeEventSource.instances[0];
+      source.open();
+      source.hardError();
+      vi.advanceTimersByTime(2000);
+      TestBed.flushEffects();
+
       expect(invalidate.mock.calls.some((call) => call[0] === undefined)).toBe(true);
     } finally {
       vi.useRealTimers();

@@ -229,10 +229,13 @@ export class App {
   constructor() {
     // Open the SSE stream and wire it to the query cache once authenticated with at
     // least one permission — `start()` is idempotent, so a flip back to `ready`
-    // (e.g. after a role change, #94) resumes it. `afterRenderEffect` (not a plain
-    // `effect`): `FleetLiveUpdates.start()` calls `effect()` itself, and Angular
-    // forbids calling `effect()` from within another effect's synchronous callback
-    // (`NG0602`) — the render-phase effect runs outside that reactive context.
+    // (e.g. after a role change, #94) resumes it. `afterRenderEffect`, run past the
+    // initial render commit, rather than a plain `effect` evaluated during change
+    // detection itself. `FleetLiveUpdates`'s own reconnect-gap-recovery effect lives
+    // in its constructor, not in `start()` — a render effect's callback is still a
+    // reactive computation, and Angular forbids nesting a fresh `effect()` inside
+    // one (`NG0602`), which calling `start()` from here used to trip until that
+    // effect was hoisted out (issue #214).
     afterRenderEffect(() => {
       if (this.authState() === 'ready') this.live.start();
     });
