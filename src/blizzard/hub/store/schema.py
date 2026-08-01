@@ -246,6 +246,12 @@ transitions = Table(
     Column("recorded_at", UtcDateTime, nullable=False),
 )
 
+# The activity feed's bounded read (issue #213) — indexed because ``transitions`` is the
+# one high-volume fact table (every chunk's every node-step) among the feed's sources
+# with no timestamp index otherwise; the low-volume sources (``escalations``,
+# ``requeues``, ...) are fine unindexed. Mirrors ``ix_event_log_recorded_at`` below.
+Index("ix_transitions_recorded_at", transitions.c.recorded_at)
+
 # --- Cross-graph migration record (chunk_migrations — issue #90) ---------------
 #
 # A judgement choice targeting another graph (``to: graph:<name>``) re-pins the chunk

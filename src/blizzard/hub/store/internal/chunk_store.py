@@ -29,6 +29,7 @@ from blizzard.hub.domain.graph import Executor
 from blizzard.hub.domain.work import (
     DEFAULT_EVENT_LIST_LIMIT,
     TERMINAL_STATUSES,
+    ActivityRow,
     AnswerOutcome,
     BounceFact,
     Chunk,
@@ -64,6 +65,16 @@ from blizzard.hub.domain.work import (
 from blizzard.hub.store import schema as s
 
 _ROUTE_PREFIX = "route"
+
+# The hub coordinator's own reserved ``transitions.runner_id`` (issue #213) — mirrors
+# ``delivery.hub_node._HUB_RUNNER_ID`` (kept private there; not imported here to stay
+# out of scope of this change, ``bzh:repository-split`` — the store owns its own read
+# concerns). What discriminates a ``hub-advanced`` transition (the hub coordinator
+# advancing a generic hub command node) from a ``node-completed`` one (a runner's own
+# judged completion) in :meth:`ChunkStore.activity_facts_since`: both write the same
+# ``transitions`` row shape, and this column is the only fact-table difference between
+# the two causes.
+_HUB_RUNNER_ID = "hub"
 
 
 def _serialize_intended_migration(intended: IntendedMigration | None) -> str | None:
@@ -408,6 +419,7 @@ class ChunkStore:
             workspace_id=created.workspace_id,
             environment_ids=env_ids,
             created_at=created.created_at,
+            route_id=created.route_id,
         )
 
     def list_all(self) -> list[Chunk]:
@@ -649,6 +661,339 @@ class ChunkStore:
                 )
             return open_escalations
 
+    def activity_facts_since(self, since: datetime, *, limit: int) -> list[ActivityRow]:
+        """See :meth:`IReadChunkRepository.activity_facts_since` — one bounded read per
+        mapped ``ChunkChangeCause`` fact table (``edited`` excepted, no table backs it),
+        concatenated, unsorted across sources; :func:`~blizzard.hub.domain.work.derive_activity_feed`
+        does the merge/sort/cap. Every per-chunk source is joined to ``chunks`` for its
+        current ``graph_id`` — the same pin a live frame's own ``describe_chunk_change``
+        reports — except ``transitions``/``chunk_migrations``, which already carry their
+        own (more historically-accurate) graph id column."""
+        with self._engine.connect() as conn:
+            rows: list[ActivityRow] = []
+            rows += self._bounded(
+                conn,
+                select(s.chunks.c.chunk_id, s.chunks.c.graph_id, s.chunks.c.minted_at),
+                ts_col=s.chunks.c.minted_at,
+                pk_col=s.chunks.c.chunk_id,
+                since=since,
+                limit=limit,
+                builder=lambda r: ActivityRow(
+                    type="chunk-changed",
+                    key=f"chunks:{r.chunk_id}",
+                    at=r.minted_at,
+                    chunk_id=r.chunk_id,
+                    cause="minted",
+                    graph_id=r.graph_id,
+                ),
+            )
+            rows += self._bounded(
+                conn,
+                select(
+                    s.chunk_promoted.c.id,
+                    s.chunk_promoted.c.chunk_id,
+                    s.chunk_promoted.c.promoted_at,
+                    s.chunks.c.graph_id,
+                ).select_from(s.chunk_promoted.join(s.chunks, s.chunks.c.chunk_id == s.chunk_promoted.c.chunk_id)),
+                ts_col=s.chunk_promoted.c.promoted_at,
+                pk_col=s.chunk_promoted.c.id,
+                since=since,
+                limit=limit,
+                builder=lambda r: ActivityRow(
+                    type="chunk-changed",
+                    key=f"chunk_promoted:{r.id}",
+                    at=r.promoted_at,
+                    chunk_id=r.chunk_id,
+                    cause="promoted",
+                    graph_id=r.graph_id,
+                ),
+            )
+            rows += self._bounded(
+                conn,
+                select(
+                    s.chunk_grouped.c.id, s.chunk_grouped.c.chunk_id, s.chunk_grouped.c.grouped_at, s.chunks.c.graph_id
+                ).select_from(s.chunk_grouped.join(s.chunks, s.chunks.c.chunk_id == s.chunk_grouped.c.chunk_id)),
+                ts_col=s.chunk_grouped.c.grouped_at,
+                pk_col=s.chunk_grouped.c.id,
+                since=since,
+                limit=limit,
+                builder=lambda r: ActivityRow(
+                    type="chunk-changed",
+                    key=f"chunk_grouped:{r.id}",
+                    at=r.grouped_at,
+                    chunk_id=r.chunk_id,
+                    cause="grouped",
+                    graph_id=r.graph_id,
+                ),
+            )
+            rows += self._bounded(
+                conn,
+                select(
+                    s.route_created.c.route_id,
+                    s.route_created.c.chunk_id,
+                    s.route_created.c.runner_id,
+                    s.route_created.c.created_at,
+                    s.chunks.c.graph_id,
+                ).select_from(s.route_created.join(s.chunks, s.chunks.c.chunk_id == s.route_created.c.chunk_id)),
+                ts_col=s.route_created.c.created_at,
+                pk_col=s.route_created.c.route_id,
+                since=since,
+                limit=limit,
+                builder=lambda r: ActivityRow(
+                    type="chunk-changed",
+                    key=f"route_created:{r.route_id}",
+                    at=r.created_at,
+                    chunk_id=r.chunk_id,
+                    runner_id=r.runner_id,
+                    cause="claimed",
+                    graph_id=r.graph_id,
+                ),
+            )
+            rows += self._bounded(
+                conn,
+                select(
+                    s.transitions.c.transition_id,
+                    s.transitions.c.chunk_id,
+                    s.transitions.c.runner_id,
+                    s.transitions.c.graph_id,
+                    s.transitions.c.recorded_at,
+                ),
+                ts_col=s.transitions.c.recorded_at,
+                pk_col=s.transitions.c.transition_id,
+                since=since,
+                limit=limit,
+                builder=lambda r: ActivityRow(
+                    type="chunk-changed",
+                    key=f"transitions:{r.transition_id}",
+                    at=r.recorded_at,
+                    chunk_id=r.chunk_id,
+                    runner_id=r.runner_id,
+                    cause="hub-advanced" if r.runner_id == _HUB_RUNNER_ID else "node-completed",
+                    graph_id=r.graph_id,
+                ),
+            )
+            rows += self._bounded(
+                conn,
+                select(
+                    s.chunk_migrations.c.migration_id,
+                    s.chunk_migrations.c.chunk_id,
+                    s.chunk_migrations.c.to_graph_id,
+                    s.chunk_migrations.c.recorded_at,
+                ),
+                ts_col=s.chunk_migrations.c.recorded_at,
+                pk_col=s.chunk_migrations.c.migration_id,
+                since=since,
+                limit=limit,
+                builder=lambda r: ActivityRow(
+                    type="chunk-changed",
+                    key=f"chunk_migrations:{r.migration_id}",
+                    at=r.recorded_at,
+                    chunk_id=r.chunk_id,
+                    cause="migrated",
+                    graph_id=r.to_graph_id,
+                ),
+            )
+            rows += self._bounded(
+                conn,
+                select(
+                    s.decisions.c.decision_id, s.decisions.c.chunk_id, s.decisions.c.submitted_at, s.chunks.c.graph_id
+                ).select_from(s.decisions.join(s.chunks, s.chunks.c.chunk_id == s.decisions.c.chunk_id)),
+                ts_col=s.decisions.c.submitted_at,
+                pk_col=s.decisions.c.decision_id,
+                since=since,
+                limit=limit,
+                builder=lambda r: ActivityRow(
+                    type="chunk-changed",
+                    key=f"decisions:{r.decision_id}",
+                    at=r.submitted_at,
+                    chunk_id=r.chunk_id,
+                    cause="decision-submitted",
+                    graph_id=r.graph_id,
+                ),
+            )
+            rows += self._bounded(
+                conn,
+                select(
+                    s.decision_resolutions.c.decision_id,
+                    s.decisions.c.chunk_id,
+                    s.decision_resolutions.c.resolved_at,
+                    s.chunks.c.graph_id,
+                ).select_from(
+                    s.decision_resolutions.join(
+                        s.decisions, s.decisions.c.decision_id == s.decision_resolutions.c.decision_id
+                    ).join(s.chunks, s.chunks.c.chunk_id == s.decisions.c.chunk_id)
+                ),
+                ts_col=s.decision_resolutions.c.resolved_at,
+                pk_col=s.decision_resolutions.c.decision_id,
+                since=since,
+                limit=limit,
+                builder=lambda r: ActivityRow(
+                    type="chunk-changed",
+                    key=f"decision_resolutions:{r.decision_id}",
+                    at=r.resolved_at,
+                    chunk_id=r.chunk_id,
+                    cause="decision-resolved",
+                    graph_id=r.graph_id,
+                ),
+            )
+            rows += self._bounded(
+                conn,
+                select(
+                    s.questions.c.question_id,
+                    s.questions.c.chunk_id,
+                    s.questions.c.runner_id,
+                    s.questions.c.asked_at,
+                    s.chunks.c.graph_id,
+                ).select_from(s.questions.join(s.chunks, s.chunks.c.chunk_id == s.questions.c.chunk_id)),
+                ts_col=s.questions.c.asked_at,
+                pk_col=s.questions.c.question_id,
+                since=since,
+                limit=limit,
+                builder=lambda r: ActivityRow(
+                    type="chunk-changed",
+                    key=f"questions:{r.question_id}",
+                    at=r.asked_at,
+                    chunk_id=r.chunk_id,
+                    runner_id=r.runner_id,
+                    cause="question-asked",
+                    graph_id=r.graph_id,
+                ),
+            )
+            rows += self._bounded(
+                conn,
+                select(
+                    s.question_answers.c.question_id,
+                    s.questions.c.chunk_id,
+                    s.question_answers.c.answered_at,
+                    s.chunks.c.graph_id,
+                ).select_from(
+                    s.question_answers.join(
+                        s.questions, s.questions.c.question_id == s.question_answers.c.question_id
+                    ).join(s.chunks, s.chunks.c.chunk_id == s.questions.c.chunk_id)
+                ),
+                ts_col=s.question_answers.c.answered_at,
+                pk_col=s.question_answers.c.question_id,
+                since=since,
+                limit=limit,
+                builder=lambda r: ActivityRow(
+                    type="chunk-changed",
+                    key=f"question_answers:{r.question_id}",
+                    at=r.answered_at,
+                    chunk_id=r.chunk_id,
+                    cause="question-answered",
+                    graph_id=r.graph_id,
+                ),
+            )
+            rows += self._bounded(
+                conn,
+                select(
+                    s.escalations.c.id, s.escalations.c.chunk_id, s.escalations.c.recorded_at, s.chunks.c.graph_id
+                ).select_from(s.escalations.join(s.chunks, s.chunks.c.chunk_id == s.escalations.c.chunk_id)),
+                ts_col=s.escalations.c.recorded_at,
+                pk_col=s.escalations.c.id,
+                since=since,
+                limit=limit,
+                builder=lambda r: ActivityRow(
+                    type="chunk-changed",
+                    key=f"escalations:{r.id}",
+                    at=r.recorded_at,
+                    chunk_id=r.chunk_id,
+                    cause="escalated",
+                    graph_id=r.graph_id,
+                ),
+            )
+            rows += self._bounded(
+                conn,
+                select(
+                    s.requeues.c.id, s.requeues.c.chunk_id, s.requeues.c.requeued_at, s.chunks.c.graph_id
+                ).select_from(s.requeues.join(s.chunks, s.chunks.c.chunk_id == s.requeues.c.chunk_id)),
+                ts_col=s.requeues.c.requeued_at,
+                pk_col=s.requeues.c.id,
+                since=since,
+                limit=limit,
+                builder=lambda r: ActivityRow(
+                    type="chunk-changed",
+                    key=f"requeues:{r.id}",
+                    at=r.requeued_at,
+                    chunk_id=r.chunk_id,
+                    cause="requeued",
+                    graph_id=r.graph_id,
+                ),
+            )
+            rows += self._bounded(
+                conn,
+                select(
+                    s.route_released.c.id,
+                    s.route_released.c.chunk_id,
+                    s.route_released.c.released_at,
+                    s.chunks.c.graph_id,
+                ).select_from(s.route_released.join(s.chunks, s.chunks.c.chunk_id == s.route_released.c.chunk_id)),
+                ts_col=s.route_released.c.released_at,
+                pk_col=s.route_released.c.id,
+                since=since,
+                limit=limit,
+                builder=lambda r: ActivityRow(
+                    type="chunk-changed",
+                    key=f"route_released:{r.id}",
+                    at=r.released_at,
+                    chunk_id=r.chunk_id,
+                    cause="detached",
+                    graph_id=r.graph_id,
+                ),
+            )
+            rows += self._bounded(
+                conn,
+                select(
+                    s.chunk_pause_facts.c.id,
+                    s.chunk_pause_facts.c.chunk_id,
+                    s.chunk_pause_facts.c.paused,
+                    s.chunk_pause_facts.c.set_at,
+                    s.chunks.c.graph_id,
+                ).select_from(
+                    s.chunk_pause_facts.join(s.chunks, s.chunks.c.chunk_id == s.chunk_pause_facts.c.chunk_id)
+                ),
+                ts_col=s.chunk_pause_facts.c.set_at,
+                pk_col=s.chunk_pause_facts.c.id,
+                since=since,
+                limit=limit,
+                builder=lambda r: ActivityRow(
+                    type="chunk-changed",
+                    key=f"chunk_pause_facts:{r.id}",
+                    at=r.set_at,
+                    chunk_id=r.chunk_id,
+                    cause="paused" if r.paused else "resumed",
+                    graph_id=r.graph_id,
+                ),
+            )
+            rows += self._bounded(
+                conn,
+                select(
+                    s.chunk_stopped.c.id, s.chunk_stopped.c.chunk_id, s.chunk_stopped.c.stopped_at, s.chunks.c.graph_id
+                ).select_from(s.chunk_stopped.join(s.chunks, s.chunks.c.chunk_id == s.chunk_stopped.c.chunk_id)),
+                ts_col=s.chunk_stopped.c.stopped_at,
+                pk_col=s.chunk_stopped.c.id,
+                since=since,
+                limit=limit,
+                builder=lambda r: ActivityRow(
+                    type="chunk-changed",
+                    key=f"chunk_stopped:{r.id}",
+                    at=r.stopped_at,
+                    chunk_id=r.chunk_id,
+                    cause="stopped",
+                    graph_id=r.graph_id,
+                ),
+            )
+            return rows
+
+    @staticmethod
+    def _bounded(conn: Connection, stmt, *, ts_col, pk_col, since: datetime, limit: int, builder):  # type: ignore[no-untyped-def]
+        """Run one source's own ``ORDER BY <ts> DESC, <pk> DESC LIMIT :limit`` bounded
+        read and reshape each row via ``builder`` — the one piece every
+        :meth:`activity_facts_since` source shares (issue #213, AC4: never a full-table
+        scan)."""
+        bounded_stmt = stmt.where(ts_col >= since).order_by(ts_col.desc(), pk_col.desc()).limit(limit)
+        return [builder(row) for row in conn.execute(bounded_stmt).all()]
+
     # --- writes -------------------------------------------------------------
 
     def mint(self, chunk: Chunk) -> None:
@@ -670,13 +1015,15 @@ class ChunkStore:
                     insert(s.chunk_work_refs).values(chunk_id=chunk.chunk_id, source=pointer.source, ref=pointer.ref)
                 )
 
-    def record_promote(self, chunk_id: str, *, at: datetime) -> None:
+    def record_promote(self, chunk_id: str, *, at: datetime) -> int | None:
         # Idempotent by chunk_id: a chunk already promoted keeps its first row, so a
         # double promote (board click, CLI retry) is a harmless no-op.
         with self._engine.begin() as conn:
             if self._exists(conn, s.chunk_promoted, chunk_id):
-                return
-            conn.execute(insert(s.chunk_promoted).values(chunk_id=chunk_id, promoted_at=at))
+                return None
+            result = conn.execute(insert(s.chunk_promoted).values(chunk_id=chunk_id, promoted_at=at))
+            key = result.inserted_primary_key
+            return int(key[0]) if key is not None else None
 
     def record_lease(self, chunk_id: str, *, epoch: int, runner_id: str, at: datetime) -> None:
         with self._engine.begin() as conn:
@@ -698,13 +1045,16 @@ class ChunkStore:
                     .values(seq=seq, updated_at=at)
                 )
 
-    def record_route(self, route: Route, *, token_hash: str, at: datetime) -> None:
+    def record_route(self, route: Route, *, token_hash: str, at: datetime) -> str:
         """Record the route and mint its capability token's fact, one transaction (issue #84a).
 
         The token fact is a second row on the same shared per-chunk seq counter
         (:meth:`_next_route_seq`), allocated *after* the route's own seq is taken —
         its own call to the same allocator, not a fixed +1, so it stays correct if a
-        future caller inserts anything else into this transaction between the two."""
+        future caller inserts anything else into this transaction between the two.
+
+        Returns the freshly-minted ``route_created.route_id`` (issue #213's
+        activity-feed key for the ``claimed`` cause)."""
         route_id = mint(_ROUTE_PREFIX, self._clock)
         with self._engine.begin() as conn:
             conn.execute(
@@ -727,14 +1077,17 @@ class ChunkStore:
                     minted_at=at,
                 )
             )
+            return route_id
 
-    def record_route_released(self, chunk_id: str, *, at: datetime) -> None:
+    def record_route_released(self, chunk_id: str, *, at: datetime) -> int:
         with self._engine.begin() as conn:
-            conn.execute(
+            result = conn.execute(
                 insert(s.route_released).values(
                     chunk_id=chunk_id, released_at=at, seq=self._next_route_seq(conn, chunk_id)
                 )
             )
+            key = result.inserted_primary_key
+            return int(key[0]) if key is not None else 0
 
     def record_route_token(self, chunk_id: str, *, token_hash: str, at: datetime) -> None:
         """Append a fresh ``route_token_minted`` fact — the re-key path (issue #84b).
@@ -912,9 +1265,9 @@ class ChunkStore:
 
     def record_escalation(
         self, chunk_id: str, *, epoch: int, takeover_command: str, at: datetime, decision_id: str | None = None
-    ) -> None:
+    ) -> int:
         with self._engine.begin() as conn:
-            conn.execute(
+            result = conn.execute(
                 insert(s.escalations).values(
                     chunk_id=chunk_id,
                     epoch=epoch,
@@ -923,6 +1276,8 @@ class ChunkStore:
                     recorded_at=at,
                 )
             )
+            key = result.inserted_primary_key
+            return int(key[0]) if key is not None else 0
 
     def record_usage(
         self,
@@ -973,12 +1328,12 @@ class ChunkStore:
         message: str,
         detail: dict | None,
         at: datetime,
-    ) -> None:
+    ) -> int:
         # Append-only operational fact (issue #125) — never mutated once written, no
         # epoch fence (it is not a transition). `detail` is serialized to JSON text here;
         # `chunk_id` is None for a runner-scoped event. See IWriteChunkRepository.record_event.
         with self._engine.begin() as conn:
-            conn.execute(
+            result = conn.execute(
                 insert(s.event_log).values(
                     severity=severity,
                     kind=kind,
@@ -991,6 +1346,8 @@ class ChunkStore:
                     recorded_at=at,
                 )
             )
+            key = result.inserted_primary_key
+            return int(key[0]) if key is not None else 0
 
     def record_question(
         self,
@@ -1114,9 +1471,11 @@ class ChunkStore:
             )
             return True
 
-    def record_requeue(self, chunk_id: str, *, at: datetime) -> None:
+    def record_requeue(self, chunk_id: str, *, at: datetime) -> int:
         with self._engine.begin() as conn:
-            conn.execute(insert(s.requeues).values(chunk_id=chunk_id, requeued_at=at))
+            result = conn.execute(insert(s.requeues).values(chunk_id=chunk_id, requeued_at=at))
+            key = result.inserted_primary_key
+            return int(key[0]) if key is not None else 0
 
     def accepted_migration(self, chunk_id: str, *, from_node_id: str, epoch: int) -> bool:
         """True iff a migration is already recorded for ``(chunk_id, from_node_id, epoch)``
@@ -1145,7 +1504,8 @@ class ChunkStore:
         source: MigrationSource,
         release_route: bool = True,
         clear_intent: bool = False,
-    ) -> bool:
+        migration_id: str | None = None,
+    ) -> str | None:
         """Record a cross-graph migration **atomically and idempotently** (#90).
 
         In **one transaction**: insert the ``chunk_migrations`` fact, re-pin
@@ -1167,8 +1527,10 @@ class ChunkStore:
         Default ``True`` preserves the runner-landing behavior (release + re-queue). Guarded
         by the natural key ``(chunk_id, from_node_id, epoch)``: a redelivery replay after a
         ``kill -9`` re-enters harmlessly, writing nothing a second time — the migration is
-        all-or-nothing, never a half-written re-pin with orphaned artifacts. Returns True
-        iff it wrote, False on a replay.
+        all-or-nothing, never a half-written re-pin with orphaned artifacts. ``migration_id``
+        (issue #213) is caller-minted when supplied (mirrors ``record_transition``'s own
+        ``transition_id``); ``None`` mints one internally. Returns the ``migration_id`` used
+        iff this call wrote, ``None`` on a replay.
 
         No lease is minted here (unlike :meth:`finalize_delivery`): the migration is
         recorded at the *submitting* epoch, and the re-queue means the **next** claim mints
@@ -1182,10 +1544,11 @@ class ChunkStore:
         intent to clear."""
         with self._engine.begin() as conn:
             if self._migration_exists(conn, chunk_id, from_node_id=from_node_id, epoch=epoch):
-                return False
+                return None
+            resolved_migration_id = migration_id if migration_id is not None else mint(MIGRATION_PREFIX, self._clock)
             conn.execute(
                 insert(s.chunk_migrations).values(
-                    migration_id=mint(MIGRATION_PREFIX, self._clock),
+                    migration_id=resolved_migration_id,
                     chunk_id=chunk_id,
                     from_node_id=from_node_id,
                     from_graph_id=from_graph_id,
@@ -1237,7 +1600,7 @@ class ChunkStore:
                         produced_at=at,
                     )
                 )
-            return True
+            return resolved_migration_id
 
     @staticmethod
     def _migration_exists(conn: Connection, chunk_id: str, *, from_node_id: str | None, epoch: int) -> bool:
@@ -1276,17 +1639,25 @@ class ChunkStore:
                 )
                 existing.add((pointer.source, pointer.ref))
 
-    def record_grouped(self, chunk_id: str, *, grouped_into: str, at: datetime) -> None:
+    def record_grouped(self, chunk_id: str, *, grouped_into: str, at: datetime) -> int:
         """Record ``chunk.grouped`` — the merged-away chunk is ephemeral now."""
         with self._engine.begin() as conn:
-            conn.execute(insert(s.chunk_grouped).values(chunk_id=chunk_id, grouped_into=grouped_into, grouped_at=at))
+            result = conn.execute(
+                insert(s.chunk_grouped).values(chunk_id=chunk_id, grouped_into=grouped_into, grouped_at=at)
+            )
+            key = result.inserted_primary_key
+            return int(key[0]) if key is not None else 0
 
-    def record_pause(self, chunk_id: str, *, paused: bool, by: str, at: datetime) -> None:
+    def record_pause(self, chunk_id: str, *, paused: bool, by: str, at: datetime) -> int:
         """Append a ``chunk.paused``/``chunk.resumed`` fact — newest-fact-wins (issue #46)."""
         with self._engine.begin() as conn:
-            conn.execute(insert(s.chunk_pause_facts).values(chunk_id=chunk_id, paused=paused, set_at=at, set_by=by))
+            result = conn.execute(
+                insert(s.chunk_pause_facts).values(chunk_id=chunk_id, paused=paused, set_at=at, set_by=by)
+            )
+            key = result.inserted_primary_key
+            return int(key[0]) if key is not None else 0
 
-    def record_stop(self, chunk_id: str, *, by: str, at: datetime) -> None:
+    def record_stop(self, chunk_id: str, *, by: str, at: datetime) -> int:
         """Append the ``chunk.stopped`` fact, release any live route, and release any
         held fleet-wide hub-exec slot — all in **one** transaction (issue #118,
         must-fix 2 from the #118 pre-push review).
@@ -1304,7 +1675,7 @@ class ChunkStore:
         between the check and this commit. The hub-exec slot release is unconditional
         and a no-op if this chunk holds none — same shape as :meth:`release_hub_exec_slot`."""
         with self._engine.begin() as conn:
-            conn.execute(insert(s.chunk_stopped).values(chunk_id=chunk_id, stopped_at=at, stopped_by=by))
+            result = conn.execute(insert(s.chunk_stopped).values(chunk_id=chunk_id, stopped_at=at, stopped_by=by))
             if self._route_of_conn(conn, chunk_id) is not None:
                 conn.execute(
                     insert(s.route_released).values(
@@ -1316,6 +1687,8 @@ class ChunkStore:
                 .where((s.hub_exec_slot.c.holder_chunk_id == chunk_id) & (s.hub_exec_slot.c.released_at.is_(None)))
                 .values(released_at=at)
             )
+            key = result.inserted_primary_key
+            return int(key[0]) if key is not None else 0
 
     def set_graph(self, chunk_id: str, *, graph_id: str) -> None:
         """Repin a not-ready or ready-unclaimed chunk to a different workflow graph (issue #27, #120)."""

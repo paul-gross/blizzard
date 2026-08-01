@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -41,8 +41,9 @@ from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.auth.models import ResolvedIdentity
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.work import EventRow, derive_event_feed
+from blizzard.hub.domain.work import ActivityRow, EventRow, derive_activity_feed, derive_event_feed
 from blizzard.hub.events.broker import EventBroker
+from blizzard.wire.activity import ActivityResponse, ActivityView
 from blizzard.wire.events import EventsResponse, EventView
 
 router = APIRouter(prefix="/api", tags=["meta"])
@@ -191,6 +192,56 @@ def list_events(
         escalations = [e for e in escalations if e.recorded_at >= since_utc]
     feed = derive_event_feed(events, escalations)[:limit]
     return EventsResponse(events=[_to_event_view(row) for row in feed])
+
+
+def _to_activity_view(row: ActivityRow) -> ActivityView:
+    """Map a domain :class:`ActivityRow` to its wire view."""
+    return ActivityView(
+        type=row.type,
+        key=row.key,
+        at=iso_utc(row.at),
+        chunk_id=row.chunk_id,
+        status=row.status,
+        prev_status=row.prev_status,
+        node=row.node,
+        prev_node=row.prev_node,
+        runner_id=row.runner_id,
+        cause=row.cause,
+        graph_id=row.graph_id,
+        severity=row.severity,
+        kind=row.kind,
+        by=row.by,
+        reason=row.reason,
+    )
+
+
+@router.get(
+    "/activity",
+    response_model=ActivityResponse,
+    dependencies=[Depends(reject_runner_principal), Depends(require(FLEET_VIEW))],
+)
+def list_activity(
+    services: Annotated[HubServices, Depends(get_services)],
+    since: Annotated[datetime | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 200,
+) -> ActivityResponse:
+    """The board's Event log backfill on page load (issue #213) — the three
+    already-bounded per-source activity reads merged, sorted newest-first, and capped.
+
+    A human-plane board read, gated exactly like ``GET /api/events``:
+    ``reject_runner_principal`` keeps a runner's bearer out and ``require(FLEET_VIEW)``
+    gates it like every other board read. ``since`` defaults to 24h before the injected
+    clock's own ``now()`` (never ``datetime.now()``) — the window the issue's AC calls
+    for when the board loads with no explicit cursor. A malformed ``since`` 422s via
+    FastAPI's own datetime coercion; a well-formed but tz-naive ``since`` (an
+    offset-less ISO string) is coerced to UTC (``as_utc``) so it never raises against
+    the store's aware timestamps."""
+    since_utc = as_utc(since) if since is not None else services.clock.now() - timedelta(hours=24)
+    chunk_changed = services.chunks.activity_facts_since(since_utc, limit=limit)
+    events = services.chunks.list_events(since=since_utc, limit=limit)
+    runner_changed = services.registry.list_pause_facts_since(since_utc, limit=limit)
+    feed = derive_activity_feed(chunk_changed, events, runner_changed, limit=limit)
+    return ActivityResponse(activity=[_to_activity_view(row) for row in feed])
 
 
 def _parse_last_event_id(request: Request) -> int:

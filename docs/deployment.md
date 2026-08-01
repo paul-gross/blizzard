@@ -1085,6 +1085,14 @@ command that failed on a missing environment var, a stall past the liveness wind
   one surface, not a place to look separately.
 - **The board's Events tab** renders the feed live: new events fan out over the existing SSE spine
   (`/api/events/stream`), so an open board updates without polling. Each row links to its chunk.
+- **`GET /api/activity`** is a second, differently-shaped operator read: the board's Event log rail
+  backfills from it on page load rather than starting empty and waiting for live traffic. It merges
+  three already-durable sources — chunk-level status changes, the operational event log above, and
+  runner pause/resume — newest-first, bounded by `since` (default 24h before now) and `limit`
+  (default/max 200, `1..1000`), gated the same as `GET /api/events`. Ordering is pure recency, not
+  severity-then-recency: this is a recent-activity feed, not the operational log's triage view.
+  After the initial backfill the rail continues live over the same `/api/events/stream`, deduped
+  against the backfilled rows by each frame's fact-identity `key` rather than by timestamp.
 
 The event log makes failures **visible in-product**; it does not repair the underlying failure
 modes (a missing spawn-env var, a `SessionEnd` hook that never fired) — those are fixed at their

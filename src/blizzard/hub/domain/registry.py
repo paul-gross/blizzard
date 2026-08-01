@@ -39,6 +39,7 @@ from typing import Protocol
 from blizzard.foundation.clock import IClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import as_utc
+from blizzard.hub.domain.work import ActivityRow
 
 _log = get_logger("blizzard.hub.registry")
 
@@ -134,6 +135,24 @@ class IReadRunnerRegistry(Protocol):
         lives in request bodies for some routes, path params for others)."""
         ...
 
+    def list_pause_facts_since(self, since: datetime, *, limit: int) -> list[ActivityRow]:
+        """Every ``runner-changed`` activity row off the fleet's two pause-family fact
+        tables, at or after ``since`` — the activity feed's runner-scoped source (issue
+        #213), pause family only: ``registered``/``heartbeat`` carry no fact table and
+        are muted the same way the board's own live SSE consumer mutes them
+        (``MUTED_RUNNER_KINDS``, ``fleet-live.ts``).
+
+        Deliberately **not** on :class:`~blizzard.hub.domain.work.IReadChunkRepository`
+        (``bzh:repository-split``): a runner-pause fact names no chunk, so it belongs on
+        the registry seam its two source tables (``runner_pause_facts``,
+        ``runner_local_pause_facts``) already live behind.
+
+        Each source table is read with its own ``ORDER BY <ts> DESC, <pk> DESC LIMIT
+        :limit`` — never a full-table scan — so this can return up to ``2 * limit`` rows,
+        unsorted across the two; the caller merges, sorts, and re-caps via
+        :func:`~blizzard.hub.domain.work.derive_activity_feed`."""
+        ...
+
 
 class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
     """Read-write registry access — only the domain layer depends on this variant."""
@@ -169,17 +188,21 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
         Returns False if the runner is unknown — a heartbeat before registration."""
         ...
 
-    def record_pause(self, runner_id: str, *, paused: bool, at: datetime, by: str) -> None:
-        """Append a fleet pause/resume fact; ``hub_paused`` derives from the newest."""
+    def record_pause(self, runner_id: str, *, paused: bool, at: datetime, by: str) -> int:
+        """Append a fleet pause/resume fact; ``hub_paused`` derives from the newest.
+
+        Returns the freshly-written ``runner_pause_facts.id`` (issue #213's activity-feed
+        key) — always writes, never a no-op."""
         ...
 
     def record_local_pause(
         self, runner_id: str, *, paused: bool, at: datetime, by: str, reason: str | None = None
-    ) -> None:
+    ) -> int:
         """Land a runner-reported local pause/start fact; ``locally_paused`` derives (issue #43).
 
         ``reason`` is the fact's own composed cause (issue #61) — ``None`` for a manual
-        pause/start, and always ``None`` on a start (a resume carries no reason)."""
+        pause/start, and always ``None`` on a start (a resume carries no reason). Returns
+        the freshly-written ``runner_local_pause_facts.id`` (issue #213's activity-feed key)."""
         ...
 
     def set_token_hash(self, runner_id: str, *, token_hash: str, at: datetime) -> None:
@@ -243,17 +266,19 @@ class FleetService:
         """Refresh a runner's liveness; returns False if it is unregistered."""
         return self._registry.touch_last_seen(runner_id, at=self._clock.now())
 
-    def set_paused(self, runner_id: str, *, paused: bool, by: str) -> bool:
-        """Flip the fleet's brake for a registered runner; returns False if unknown."""
+    def set_paused(self, runner_id: str, *, paused: bool, by: str) -> int | None:
+        """Flip the fleet's brake for a registered runner; returns ``None`` if unknown,
+        else the freshly-written ``runner_pause_facts.id`` (issue #213's activity-feed
+        key)."""
         if self._registry.get_runner(runner_id) is None:
-            return False
-        self._registry.record_pause(runner_id, paused=paused, at=self._clock.now(), by=by)
+            return None
+        fact_id = self._registry.record_pause(runner_id, paused=paused, at=self._clock.now(), by=by)
         _log.info("runner pause set", runner_id=runner_id, paused=paused, by=by)
-        return True
+        return fact_id
 
     def record_local_pause(
         self, runner_id: str, *, paused: bool, at: datetime, by: str, reason: str | None = None
-    ) -> None:
+    ) -> int:
         """Land a runner's report that it paused or started *itself* (issue #43).
 
         Not a control: the runner has already stopped claiming by the time this arrives, and
@@ -267,10 +292,11 @@ class FleetService:
         Unlike ``set_paused`` this does not require a known runner. The fact rides the
         outbound buffer, which replays an outage in FIFO order, so a pause can legitimately
         arrive before the registration that follows it — dropping it would lose the brake
-        exactly when the board most needs it.
-        """
-        self._registry.record_local_pause(runner_id, paused=paused, at=at, by=by, reason=reason)
+        exactly when the board most needs it. Returns the freshly-written
+        ``runner_local_pause_facts.id`` (issue #213's activity-feed key)."""
+        fact_id = self._registry.record_local_pause(runner_id, paused=paused, at=at, by=by, reason=reason)
         _log.info("runner local pause reported", runner_id=runner_id, paused=paused, by=by, reason=reason)
+        return fact_id
 
     def get_liveness(self, runner_id: str) -> RunnerLiveness | None:
         """One runner with its derived liveness — the runner's own pull read."""

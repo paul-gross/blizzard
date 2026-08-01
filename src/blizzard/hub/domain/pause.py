@@ -44,18 +44,22 @@ class PauseService:
         self._chunks = chunks
         self._clock = clock
 
-    def pause(self, chunk: Chunk, *, by: str) -> None:
+    def pause(self, chunk: Chunk, *, by: str) -> int:
         """Append ``chunk.paused``; raises :class:`ChunkNotPausable` for done/stopped/delivering.
 
         No route or lease is touched here — the runner reads the resulting
         :class:`~blizzard.hub.domain.work.PauseFact` off its next ``get_chunk`` and
-        kills/parks the worker itself, keeping the claim (issue #46 §3.1)."""
+        kills/parks the worker itself, keeping the claim (issue #46 §3.1). Returns the
+        freshly-written ``chunk_pause_facts.id`` (issue #213's activity-feed key)."""
         self._require_pausable(chunk.chunk_id)
-        self._chunks.record_pause(chunk.chunk_id, paused=True, by=by, at=self._clock.now())
+        return self._chunks.record_pause(chunk.chunk_id, paused=True, by=by, at=self._clock.now())
 
-    def resume(self, chunk: Chunk, *, by: str) -> None:
-        """Append ``chunk.resumed`` — idempotent, never refused (matches runner resume)."""
-        self._chunks.record_pause(chunk.chunk_id, paused=False, by=by, at=self._clock.now())
+    def resume(self, chunk: Chunk, *, by: str) -> int:
+        """Append ``chunk.resumed`` — idempotent, never refused (matches runner resume).
+
+        Returns the freshly-written ``chunk_pause_facts.id`` (issue #213's activity-feed
+        key) — always a fresh row, never a skipped write."""
+        return self._chunks.record_pause(chunk.chunk_id, paused=False, by=by, at=self._clock.now())
 
     def _require_pausable(self, chunk_id: str) -> None:
         facts = self._chunks.load_facts(chunk_id) or ChunkFacts(minted=True)

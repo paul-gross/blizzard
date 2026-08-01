@@ -49,15 +49,16 @@ class StopService:
         self._chunks = chunks
         self._clock = clock
 
-    def stop(self, chunk: Chunk, *, by: str) -> None:
+    def stop(self, chunk: Chunk, *, by: str) -> int:
         """Append ``chunk.stopped`` and release the chunk's live route (and any held
         hub-exec slot), atomically.
 
         Raises :class:`ChunkNotStoppable` for a chunk already done/stopped — no fact is
         written and no route touched. Otherwise the chunk derives ``stopped`` from here
-        on (``derive_chunk_status`` checks it first) and never re-derives ``ready``."""
+        on (``derive_chunk_status`` checks it first) and never re-derives ``ready``.
+        Returns the freshly-written ``chunk_stopped.id`` (issue #213's activity-feed key)."""
         self._require_stoppable(chunk.chunk_id)
-        self._chunks.record_stop(chunk.chunk_id, by=by, at=self._clock.now())
+        return self._chunks.record_stop(chunk.chunk_id, by=by, at=self._clock.now())
 
     def _require_stoppable(self, chunk_id: str) -> None:
         facts = self._chunks.load_facts(chunk_id) or ChunkFacts(minted=True)

@@ -32,6 +32,7 @@ def publish_chunk_changed(
     cause: ChunkChangeCause | None,
     prev_status: str | None,
     status: str | None = None,
+    key: str | None = None,
 ) -> None:
     """Publish a fully enriched ``chunk-changed`` frame for ``chunk_id``.
 
@@ -44,6 +45,13 @@ def publish_chunk_changed(
     change's scope — the override keeps that literal while still enriching every other
     field.
 
+    ``key`` (issue #213) names the identity of the durable fact the caller's own
+    mutation just wrote — e.g. ``f"transitions:{transition_id}"`` — matching
+    :class:`~blizzard.hub.domain.work.ActivityRow`'s key format exactly, so a page-load
+    backfill row and this live frame are recognizable as the same fact. The caller
+    computes it (this helper holds no fact-table knowledge of its own); ``None`` for a
+    cause with no fact table (``edited``) or when the call recorded nothing new.
+
     Degrades to a bare ``{chunk_id, status}`` frame — rather than raising — if the chunk
     or its pinned graph is missing: a frame should never break a mutation that otherwise
     succeeded.
@@ -53,7 +61,7 @@ def publish_chunk_changed(
     chunk = services.chunks.get(chunk_id)
     graph = services.graphs.get(chunk.graph_id) if chunk is not None else None
     if chunk is None or graph is None:
-        services.events.publish_chunk_changed(chunk_id, resolved_status)
+        services.events.publish_chunk_changed(chunk_id, resolved_status, key=key)
         return
 
     from_graph = None
@@ -77,4 +85,5 @@ def publish_chunk_changed(
         cause=cause,  # change.cause is a widened `str | None` (`bzh:domain-core` — the
         # domain stays events-layer-free); this module already holds the typed value.
         graph_id=change.graph_id,
+        key=key,
     )

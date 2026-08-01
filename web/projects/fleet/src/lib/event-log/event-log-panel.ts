@@ -1,22 +1,14 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 
+import { type ActivityView } from '../api/hub';
 import { compactRef } from '../compact-ref';
-import { summarizeChunkChange } from './chunk-change-summary';
-import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
-import { KitPanel } from '../kit/kit-panel';
-import { FleetLiveUpdates, type LoggedEvent, type RunnerChangeKind } from '../sse/fleet-live';
+import type { KitAsyncStateValue } from '../kit/kit-async-state';
+import { asyncState } from '../query-state';
+import { FleetLiveUpdates, type HubEventPayload, type LoggedEvent, type RunnerChangeKind } from '../sse/fleet-live';
 import { formatClockTime } from '../when';
-
-/** One rendered Event log row — the logged frame plus its display strings.
- * `detail` is the block row's second line (`chunk-changed` only, issue #212); every
- * other event type leaves it unset and renders as the single-line row it always has. */
-interface LogRow {
-  readonly seq: number;
-  readonly type: string;
-  readonly time: string;
-  readonly message: string;
-  readonly detail?: string;
-}
+import { injectHubActivityQuery } from './activity.query';
+import { summarizeChunkChange } from './chunk-change-summary';
+import { EventLogView, type LogRow } from './event-log-view';
 
 /** The verb a `runner-changed` kind reads as, where the kind alone does not already read
  * as one. Only the pause family needs an entry: the registration and heartbeat kinds
@@ -86,103 +78,98 @@ function summarize(event: LoggedEvent): RowSummary {
 }
 
 /**
- * The Event log panel (issue #25) — a scrolling, newest-first feed of recent fleet
- * events with a running count.
+ * The rendered-row cap for the merged backfill + live feed (issue #213 Phase 4) —
+ * reconciled with the backend's own `GET /api/activity` `limit` (`ACTIVITY_LIMIT`,
+ * `activity.query.ts`) so the two stay the same number in one place a future reader can
+ * find, rather than two caps that happen to agree by coincidence.
+ */
+const RENDER_LIMIT = 200;
+
+/** Shape one `GET /api/activity` row into the same {@link LoggedEvent} shape the live
+ * SSE tee produces, so {@link summarize} (and {@link summarizeChunkChange}) run
+ * unchanged over either source. `seq` is caller-assigned (negative, so it can never
+ * collide with the live spine's own positive, monotonic counter) — it exists only so
+ * the view has a stable `track` key, not for ordering (that's `at`). `at` is parsed
+ * from the wire's ISO instant into the ms epoch {@link LoggedEvent.at} expects.
  *
- * Presentational: it holds no transport and opens no stream of its own. It reads the
- * bounded feed {@link FleetLiveUpdates} already tees off the board's single SSE
- * subscription, so the broker's connect-time replay arrives as backfill for free and
- * the existing query-invalidation behavior is untouched. All color comes from the
- * design-token layer (design/tokens.css), never hard-coded hex.
+ * Field-by-field rather than a blind spread: `ActivityView`'s optional fields are
+ * `T | null | undefined` (an explicit "absent" from a JSON API), while
+ * `HubEventPayload`'s are `T | undefined` (`Partial`) — the seam every present-when-
+ * meaningful field needs `?? undefined` to cross. */
+function fromActivity(row: ActivityView, seq: number): LoggedEvent {
+  const data: HubEventPayload = {
+    chunk_id: row.chunk_id ?? undefined,
+    status: row.status ?? undefined,
+    prev_status: row.prev_status ?? undefined,
+    prev_node: row.prev_node ?? undefined,
+    node: row.node ?? undefined,
+    runner_id: row.runner_id ?? undefined,
+    cause: row.cause ?? undefined,
+    graph_id: row.graph_id ?? undefined,
+    kind: row.kind ?? undefined,
+    by: row.by ?? undefined,
+    reason: row.reason ?? undefined,
+    severity: row.severity ?? undefined,
+    key: row.key,
+  };
+  return { seq, type: row.type, data, at: Date.parse(row.at), key: row.key };
+}
+
+/**
+ * The Event log panel's **container** (issue #213 Phase 4, split from the formerly
+ * presentational `event-log-panel.ts` — `bzh:frontend-container-presentational`).
+ *
+ * Owns two independent reads of the same underlying feed and merges them into one
+ * rendered list:
+ *
+ * - The **live** tee: {@link FleetLiveUpdates}'s bounded SSE ring, unchanged from
+ *   before this phase — still the sanctioned bridge from the transport to the query
+ *   cache, and still the source the broker's connect-time replay lands in for free.
+ * - The **backfill**: {@link injectHubActivityQuery}, a one-shot `GET /api/activity`
+ *   read on mount, so the feed shows recent history immediately rather than starting
+ *   empty and filling in only as new frames arrive.
+ *
+ * The two are merged in {@link merged}: a backfilled row and a live frame naming the
+ * same `key` (issue #213 Phase 2) must render as exactly one row, preferring the live
+ * copy (it may carry more current info) — so the merge drops a backfilled row whose
+ * `key` also names a live frame already present, never the other way around. A row
+ * with no `key` at all can't collide with anything and always renders standalone. The
+ * merged list is newest-first-capped at {@link RENDER_LIMIT} by sorting on `at`, not by
+ * trusting either source's own ordering (the backfill arrives newest-first over the
+ * wire; the live ring is oldest-first) — sorting once here is one rule instead of two
+ * assumptions to keep in sync.
  */
 @Component({
   selector: 'fleet-event-log-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitPanel],
-  template: `
-    <fleet-kit-panel
-      class="fill"
-      aria-label="Event log"
-      data-testid="event-log-panel"
-      label="Event log"
-    >
-      <fleet-kit-async-state
-        [state]="state()"
-        placement="inline"
-        loadingText="CONNECTING…"
-        loadingTestid="event-log-loading"
-        errorText="EVENT STREAM UNAVAILABLE"
-        errorTestid="event-log-error"
-        emptyText="No events yet."
-        emptyTestid="event-log-empty"
-      >
-        <div class="rows" data-testid="event-log-rows">
-          @for (row of rows(); track row.seq) {
-            <div class="ev" data-testid="event-log-row" [attr.data-kind]="row.type">
-              <span class="t" data-testid="event-log-time">{{ row.time }}</span>
-              <div class="m-block">
-                <span class="m" data-testid="event-log-message">{{ row.message }}</span>
-                @if (row.detail) {
-                  <span class="d" data-testid="event-log-detail">{{ row.detail }}</span>
-                }
-              </div>
-            </div>
-          }
-        </div>
-      </fleet-kit-async-state>
-    </fleet-kit-panel>
-  `,
-  styles: `
-    :host {
-      display: flex;
-      flex-direction: column;
-      min-height: 0;
-      font-family: var(--mono);
-      font-size: var(--fs-base);
-      font-variant-numeric: tabular-nums;
-      color: var(--text);
-    }
-    fleet-kit-panel.fill {
-      flex: 1;
-    }
-    .rows {
-      overflow-y: auto;
-      min-height: 0;
-      flex: 1;
-    }
-    .ev {
-      display: grid;
-      grid-template-columns: 64px 1fr;
-      gap: 14px;
-      padding: 2px 8px;
-      border-bottom: 1px solid var(--line);
-      font-size: var(--fs-sm);
-      line-height: 1.5;
-    }
-    .ev .t {
-      color: var(--label-dim);
-    }
-    .m-block {
-      display: flex;
-      flex-direction: column;
-    }
-    .ev .m {
-      color: var(--text);
-      overflow-wrap: anywhere;
-    }
-    .ev .d {
-      color: var(--label-dim);
-      overflow-wrap: anywhere;
-    }
-  `,
+  imports: [EventLogView],
+  template: `<fleet-event-log-view [rows]="rows()" [state]="state()" />`,
 })
 export class EventLogPanel {
   private readonly live = inject(FleetLiveUpdates);
+  protected readonly activityQuery = injectHubActivityQuery();
 
-  /** The feed newest-first, each frame shaped into its display row. */
+  /** The backfill read shaped into {@link LoggedEvent}s, oldest-assignment-order
+   * irrelevant (sorted away in {@link merged}). Empty until the first read resolves. */
+  private readonly backfill = computed<readonly LoggedEvent[]>(() =>
+    (this.activityQuery.data() ?? []).map((row, i) => fromActivity(row, -1 - i)),
+  );
+
+  /** The backfill and live feeds merged and deduped by `key` (see the class doc),
+   * oldest → newest, capped at {@link RENDER_LIMIT} — the same shape
+   * {@link FleetLiveUpdates.log} produces on its own, so {@link rows} below needs no
+   * branch on which source a given entry came from. */
+  private readonly merged = computed<readonly LoggedEvent[]>(() => {
+    const live = this.live.log();
+    const liveKeys = new Set(live.flatMap((event) => (event.key ? [event.key] : [])));
+    const backfillOnly = this.backfill().filter((event) => !event.key || !liveKeys.has(event.key));
+    const combined = [...backfillOnly, ...live].sort((a, b) => a.at - b.at);
+    return combined.length > RENDER_LIMIT ? combined.slice(combined.length - RENDER_LIMIT) : combined;
+  });
+
+  /** The merged feed newest-first, each frame shaped into its display row. */
   protected readonly rows = computed<readonly LogRow[]>(() =>
-    this.live
-      .log()
+    this.merged()
       .map((event) => ({
         seq: event.seq,
         type: event.type,
@@ -193,20 +180,15 @@ export class EventLogPanel {
   );
 
   /**
-   * This panel has no query — its read is a client-side ring fed by
-   * {@link FleetLiveUpdates}'s SSE handle, so its own connection status stands
-   * in for a query's pending/error (AC 3). `'idle'` is the one status that
-   * means "never yet connected" (`SseService.connect`'s initial value, before
-   * the stream's first `onopen`), so it alone maps to `'loading'` — a
-   * `'reconnecting'` blip after data has already arrived must not regress an
-   * already-rendered feed back to a loading state (the same AC 6 guarantee
-   * {@link asyncState} gives a query-backed read). A hard auth failure
-   * (`authFailed`, `'closed'` with no reconnect scheduled) is the one case
-   * that reads as an error rather than an empty, still-live feed.
+   * The panel's async state: the backfill query drives loading/error/empty/ready
+   * ({@link asyncState}) — a first in-flight fetch renders `'loading'`, not `'empty'` —
+   * with one override: a hard SSE auth failure (`authFailed`, the stream closed on a
+   * `401` with no reconnect scheduled) always reads as `'error'`, since that's a real
+   * degraded state the backfill query alone never observes (it only ever runs once).
+   * Auth failure wins if both are somehow true.
    */
   protected readonly state = computed<KitAsyncStateValue>(() => {
-    if (this.live.status() === 'idle') return 'loading';
     if (this.live.status() === 'closed' && this.live.authFailed()) return 'error';
-    return this.rows().length === 0 ? 'empty' : 'ready';
+    return asyncState(this.activityQuery, this.rows().length === 0);
   });
 }

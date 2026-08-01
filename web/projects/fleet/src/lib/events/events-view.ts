@@ -47,11 +47,11 @@ const SEVERITY_TONE: Readonly<Record<string, Tone>> = {
  *
  * Each row is a **time-first grid** — time, chunk, severity, kind, runner, message,
  * lease — following the in-rail Event log's leading dim-stamp column
- * (`event-log-panel.ts`) rather than the wrapping flex line it used to be, so a
+ * (`event-log-view.ts`) rather than the wrapping flex line it used to be, so a
  * reader scans the feed down its timestamps instead of hunting for one per row.
  *
  * Every test handle here is `events-`prefixed, distinct from the in-rail Event log's
- * `event-log-*` handles (`event-log-panel.ts`) — two components on the same board
+ * `event-log-*` handles (`event-log-view.ts`) — two components on the same board
  * would otherwise make a browser test's locator ambiguous.
  */
 @Component({

@@ -549,6 +549,120 @@ def derive_event_feed(events: list[EventRow], escalations: list[EscalationOpen])
 
 
 @dataclass(frozen=True)
+class ActivityRow:
+    """One row of the board's Event log activity feed (issue #213) — a historical fact
+    reshaped into the same vocabulary a live SSE frame carries, so a page-load backfill
+    and a live frame can eventually render through one shared summarizer (a later
+    phase's concern; this one only shapes and derives the row).
+
+    ``type`` mirrors one of the event broker's own frame-type constants
+    (``"chunk-changed"`` / ``"event-logged"`` / ``"runner-changed"``) as a plain string,
+    never the ``events.broker`` module itself (``bzh:domain-core`` — the domain stays
+    events-layer-free, the same reason :attr:`ChunkChange.cause` widens to ``str``).
+
+    ``key`` is the identity of the underlying fact — a table-qualified natural key, e.g.
+    ``"transitions:tr_01J..."`` or ``"chunk_pause_facts:57"`` — the tiebreak
+    :func:`derive_activity_feed` sorts on beneath ``at``; never itself surfaced as a
+    stable frame id (unlike :class:`~blizzard.hub.events.broker.Event`'s monotonic
+    ``id``, which this row has no equivalent of).
+
+    ``at`` is the sort/window instant: the fact's own recorded timestamp for every
+    source except the runner-*local*-pause pair, which has no hub-side receipt instant
+    to use instead (see :meth:`IReadRunnerRegistry.list_pause_facts_since`) and so
+    risks clock skew against the runner's own reported clock — a documented, deliberate
+    gap, not silently assumed away.
+
+    The remaining fields are present-when-derivable-here, mirroring the live frame's own
+    present-when-meaningful shape (:meth:`~blizzard.hub.events.broker.EventBroker.publish_chunk_changed`
+    / ``publish_runner_changed``) — never placeholder ``None`` standing in for "checked
+    and absent" versus "not this row's concern".
+
+    Chunk-changed fields: ``chunk_id``, ``runner_id`` (only where the source fact table
+    itself records one — a route, a transition, a question), ``cause`` (one of
+    :data:`~blizzard.hub.events.broker.ChunkChangeCause`'s members, widened to ``str``
+    for the same reason ``type`` is), and ``graph_id``. ``status``/``prev_status``/
+    ``node``/``prev_node`` need a full graph resolution this phase's bounded reads
+    deliberately do not perform (no :class:`~blizzard.hub.domain.graph.IReadGraphRepository`
+    seam is threaded through here) — they stay ``None`` for every row this phase
+    produces, ready for a later phase to fill once it holds a graph. ``prev_status`` is
+    *always* absent for a historical row regardless: unlike the live frame, there is no
+    "immediately-prior" snapshot to have taken.
+
+    Event-logged fields: ``severity``, ``kind``, ``chunk_id``, ``runner_id`` — read
+    straight off an already-loaded :class:`EventRow` (:meth:`IReadChunkRepository.list_events`).
+
+    Runner-changed fields: ``runner_id``, ``kind`` (one of
+    :data:`~blizzard.hub.events.broker.RunnerChangeKind`'s pause-family members —
+    ``registered``/``heartbeat`` are muted client-side and never sourced here), ``by``,
+    ``reason`` (the runner-*local*-pause pair's free-text cause; always ``None`` off the
+    fleet-brake pair).
+    """
+
+    type: str
+    key: str
+    at: datetime
+    # chunk-changed
+    chunk_id: str | None = None
+    status: str | None = None
+    prev_status: str | None = None
+    node: str | None = None
+    prev_node: str | None = None
+    runner_id: str | None = None
+    cause: str | None = None
+    graph_id: str | None = None
+    # event-logged
+    severity: str | None = None
+    kind: str | None = None
+    # runner-changed
+    by: str | None = None
+    reason: str | None = None
+
+
+def _event_row_to_activity(row: EventRow) -> ActivityRow:
+    """Reshape one already-loaded ``event_log`` row into the activity feed's common
+    row type (issue #213) — the ``event-logged`` half of :func:`derive_activity_feed`."""
+    return ActivityRow(
+        type="event-logged",
+        key=f"event_log:{row.id}",
+        at=row.recorded_at,
+        chunk_id=row.chunk_id,
+        runner_id=row.runner_id,
+        severity=row.severity,
+        kind=row.kind,
+    )
+
+
+def derive_activity_feed(
+    chunk_changed: Sequence[ActivityRow],
+    events: Sequence[EventRow],
+    runner_changed: Sequence[ActivityRow],
+    *,
+    limit: int,
+) -> list[ActivityRow]:
+    """Merge the activity feed's three already-bounded per-source reads into one feed
+    (issue #213) — the board's Event log backfill on page load.
+
+    ``chunk_changed`` is :meth:`IReadChunkRepository.activity_facts_since`'s own read
+    (one row per :data:`~blizzard.hub.events.broker.ChunkChangeCause` member, ``edited``
+    excepted — no fact table backs it); ``events`` is the existing
+    :meth:`IReadChunkRepository.list_events` read, reused rather than reinvented and
+    reshaped here (:func:`_event_row_to_activity`); ``runner_changed`` is
+    :meth:`~blizzard.hub.domain.registry.IReadRunnerRegistry.list_pause_facts_since`'s
+    own read, pause-family only.
+
+    Each argument is already bounded (``since``+``limit``) by its own repository seam
+    (``bzh:repository-split``) — this performs no filtering of its own, only the merge:
+    sorts the union by ``(at desc, key desc)`` — recency first, ``key`` breaking an
+    exact-instant tie deterministically — and caps to ``limit`` on the way out (worst
+    case every source contributes its own ``limit`` rows, so up to ``n_sources * limit``
+    enter this merge). A pure function of already-loaded rows (``bzh:domain-takes-objects``);
+    an empty source set — every argument empty — returns an empty list."""
+    merged = [*chunk_changed, *(_event_row_to_activity(e) for e in events), *runner_changed]
+    merged.sort(key=lambda row: (row.at, row.key), reverse=True)
+    return merged[:limit]
+
+
+@dataclass(frozen=True)
 class DecisionChoice:
     """One selectable gate outcome — a button on the board/bot."""
 
@@ -1413,16 +1527,38 @@ class IReadChunkRepository(Protocol):
         ``GET /api/events`` unified feed's other half."""
         ...
 
+    def activity_facts_since(self, since: datetime, *, limit: int) -> list[ActivityRow]:
+        """Every ``chunk-changed``-shaped activity row across every mapped
+        :data:`~blizzard.hub.events.broker.ChunkChangeCause` member's fact table, at or
+        after ``since`` (issue #213, AC4) — the activity feed's chunk-scoped source.
+
+        ``edited`` is deliberately unrepresented: a chunk edit (``PATCH``) mutates
+        ``chunks`` columns in place and writes no fact row, so no source exists to read
+        it from — a documented exclusion, not a gap. ``node-completed``/``hub-advanced``
+        both read ``transitions`` (discriminated by ``runner_id`` — the hub coordinator's
+        own reserved id authors a hub-advance transition, any other runner's a
+        node-completion); ``paused``/``resumed`` both read ``chunk_pause_facts``
+        (discriminated by its own ``paused`` column). Every other member reads its own
+        table (see the plan's cause -> table mapping).
+
+        Each underlying fact table is read with its own ``ORDER BY <ts> DESC, <pk> DESC
+        LIMIT :limit`` — never a full-table scan — so this method alone can return up to
+        ``n_source_tables * limit`` rows; the caller merges, sorts, and re-caps via
+        :func:`derive_activity_feed`. Unsorted across sources on its own."""
+        ...
+
 
 class IWriteChunkRepository(IReadChunkRepository, Protocol):
     """Read-write chunk access. Only the domain layer depends on this variant."""
 
     def mint(self, chunk: Chunk) -> None: ...
-    def record_promote(self, chunk_id: str, *, at: datetime) -> None:
+    def record_promote(self, chunk_id: str, *, at: datetime) -> int | None:
         """Record a ``chunk.promoted`` fact — flips ``not_ready`` to ``ready``.
 
         Idempotent: a chunk already promoted keeps its first row, so a re-promote (a
-        double board click, a CLI retry) writes nothing and the status is unchanged."""
+        double board click, a CLI retry) writes nothing and the status is unchanged.
+        Returns the freshly-written ``chunk_promoted.id`` (issue #213's activity-feed
+        key), or ``None`` on that no-op replay — there is no fresh row to name."""
         ...
 
     def record_lease(self, chunk_id: str, *, epoch: int, runner_id: str, at: datetime) -> None: ...
@@ -1430,17 +1566,21 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         """Advance a runner's applied-seq high-water mark (upsert)."""
         ...
 
-    def record_route(self, route: Route, *, token_hash: str, at: datetime) -> None:
+    def record_route(self, route: Route, *, token_hash: str, at: datetime) -> str:
         """Record the route **and** mint its capability token's fact, atomically (issue #84a).
 
         ``token_hash`` is the sha256 hex digest of the claim's plaintext route token —
         already minted and hashed by the caller (``bzh:domain-takes-objects``); this
         appends the :class:`RouteTokenMintedFact` in the same store write as
         ``route_created`` (one transaction), never a column on the route fact itself
-        (``bzh:facts-not-status``)."""
+        (``bzh:facts-not-status``). Returns the freshly-minted ``route_created.route_id``
+        (issue #213's activity-feed key for the ``claimed`` cause)."""
         ...
 
-    def record_route_released(self, chunk_id: str, *, at: datetime) -> None: ...
+    def record_route_released(self, chunk_id: str, *, at: datetime) -> int:
+        """Append the ``route.released`` fact. Returns the freshly-written
+        ``route_released.id`` (issue #213's activity-feed key)."""
+        ...
 
     def record_route_token(self, chunk_id: str, *, token_hash: str, at: datetime) -> None:
         """Append a fresh :class:`RouteTokenMintedFact` for the chunk's route — the
@@ -1515,7 +1655,7 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
 
     def record_escalation(
         self, chunk_id: str, *, epoch: int, takeover_command: str, at: datetime, decision_id: str | None = None
-    ) -> None:
+    ) -> int:
         """Record an ``escalation.recorded`` fact reported up by a runner.
 
         Retries exhausted (or a dead worker past the cap): the chunk derives
@@ -1525,7 +1665,9 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         unresolvable target (issue #110) — the fact carries it so that decision derives
         closed; without it the gate's decision would stay live forever (neither a
         transition nor a migration row exists to close it), wedging REAP recovery and
-        driving a per-tick runner re-submit. Null for the ordinary escalation."""
+        driving a per-tick runner re-submit. Null for the ordinary escalation.
+
+        Returns the freshly-written ``escalations.id`` (issue #213's activity-feed key)."""
         ...
 
     def record_usage(
@@ -1565,12 +1707,15 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         message: str,
         detail: dict | None,
         at: datetime,
-    ) -> None:
+    ) -> int:
         """Append one ``event_log`` row (issue #125) — never mutated once written.
 
         ``chunk_id`` is ``None`` for a runner-scoped event; ``detail`` is an opaque
         event-specific payload, serialized to JSON text by the store. Clock-stamped by
-        the caller-passed ``at``, exactly like every other fact write here."""
+        the caller-passed ``at``, exactly like every other fact write here.
+
+        Returns the freshly-written ``event_log.id`` (issue #213's activity-feed key —
+        matches :func:`~blizzard.hub.domain.work._event_row_to_activity`'s key format)."""
         ...
 
     def record_question(
@@ -1632,8 +1777,10 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         the decision was already resolved (the loser is told who won)."""
         ...
 
-    def record_requeue(self, chunk_id: str, *, at: datetime) -> None:
-        """Record a ``requeue.recorded`` fact — supersedes an open escalation."""
+    def record_requeue(self, chunk_id: str, *, at: datetime) -> int:
+        """Record a ``requeue.recorded`` fact — supersedes an open escalation.
+
+        Returns the freshly-written ``requeues.id`` (issue #213's activity-feed key)."""
         ...
 
     def record_migration(
@@ -1653,7 +1800,8 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         source: MigrationSource,
         release_route: bool = True,
         clear_intent: bool = False,
-    ) -> bool:
+        migration_id: str | None = None,
+    ) -> str | None:
         """Record a cross-graph migration atomically and idempotently (issue #90).
 
         In one transaction: the ``chunk_migrations`` fact, the ``chunks.graph_id`` re-pin
@@ -1672,7 +1820,11 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         completion, exactly as a transition-into-a-hub-node retains the route. Idempotent
         by ``(chunk_id, from_node_id, epoch)`` — a redelivery replay writes nothing. No
         lease is minted: the fact is recorded at the submitting epoch, and the next claim
-        mints a fresh higher one. Returns True iff it wrote, False on a replay.
+        mints a fresh higher one. ``migration_id`` (issue #213) is caller-minted, mirroring
+        :meth:`record_transition`'s own ``transition_id`` — supplied so the caller can
+        build the fact's activity-feed key without a second read; ``None`` mints one
+        internally (every pre-existing caller). Returns the ``migration_id`` actually
+        used iff this call wrote, ``None`` on a replay — there is no fresh row to name.
 
         ``clear_intent`` (issue #124), when ``True``, adds ``chunks.intended_migration =
         NULL`` to the same ``chunks`` update this already writes for the re-pin — the same
@@ -1690,18 +1842,28 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         """Fold work refs into a group survivor, de-duped by (source, ref)."""
         ...
 
-    def record_grouped(self, chunk_id: str, *, grouped_into: str, at: datetime) -> None:
-        """Record ``chunk.grouped`` — the merged-away chunk becomes ephemeral."""
+    def record_grouped(self, chunk_id: str, *, grouped_into: str, at: datetime) -> int:
+        """Record ``chunk.grouped`` — the merged-away chunk becomes ephemeral.
+
+        Returns the freshly-written ``chunk_grouped.id`` (issue #213's activity-feed key)."""
         ...
 
-    def record_pause(self, chunk_id: str, *, paused: bool, by: str, at: datetime) -> None:
-        """Append a ``chunk.paused``/``chunk.resumed`` fact — newest-fact-wins (issue #46)."""
+    def record_pause(self, chunk_id: str, *, paused: bool, by: str, at: datetime) -> int:
+        """Append a ``chunk.paused``/``chunk.resumed`` fact — newest-fact-wins (issue #46).
+
+        Always writes a fresh row (never a no-op — "newest fact wins" reads, it does not
+        skip writes), so this returns the freshly-written ``chunk_pause_facts.id`` (issue
+        #213's activity-feed key) unconditionally."""
         ...
 
-    def record_stop(self, chunk_id: str, *, by: str, at: datetime) -> None:
+    def record_stop(self, chunk_id: str, *, by: str, at: datetime) -> int:
         """Append the ``chunk.stopped`` fact — terminal operator abandonment (issue #118) —
         and, atomically in the same store transaction, release any live route and any
-        held fleet-wide hub-exec slot (must-fix 2 from the #118 pre-push review)."""
+        held fleet-wide hub-exec slot (must-fix 2 from the #118 pre-push review).
+
+        Returns the freshly-written ``chunk_stopped.id`` (issue #213's activity-feed key)
+        — not the ``route_released.id`` this same transaction may also write, matching
+        the ``stopped`` cause's own mapped fact table."""
         ...
 
     def set_graph(self, chunk_id: str, *, graph_id: str) -> None:

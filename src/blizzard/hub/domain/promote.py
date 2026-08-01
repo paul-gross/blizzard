@@ -43,7 +43,7 @@ class PromoteService:
         self._chunks = chunks
         self._clock = clock
 
-    def promote(self, chunk_id: str) -> None:
+    def promote(self, chunk_id: str) -> int | None:
         """Append the ``chunk.promoted`` fact and stamp an explicit tail queue position.
 
         A complete no-op — no fact, no position write — if the chunk is already
@@ -52,10 +52,13 @@ class PromoteService:
         then stamps ``max(effective positions of currently-ready chunks) + 1.0`` (or
         ``0.0`` if none are ready) as the chunk's explicit position, so it lands at the
         tail regardless of ``minted_at``. The ready set and its positions are read
-        *before* either write, so the chunk being promoted never counts itself."""
+        *before* either write, so the chunk being promoted never counts itself.
+
+        Returns the freshly-written ``chunk_promoted.id`` (issue #213's activity-feed
+        key), or ``None`` on the already-promoted no-op — there is no fresh row to name."""
         facts = self._chunks.load_facts(chunk_id)
         if facts is not None and facts.promoted:
-            return
+            return None
         ready = self._chunks.list_ready()
         if ready:
             positions = self._chunks.queue_positions()
@@ -64,5 +67,6 @@ class PromoteService:
         else:
             tail = 0.0
         at = self._clock.now()
-        self._chunks.record_promote(chunk_id, at=at)
+        promoted_id = self._chunks.record_promote(chunk_id, at=at)
         self._chunks.record_queue_position(chunk_id, position=tail, at=at)
+        return promoted_id

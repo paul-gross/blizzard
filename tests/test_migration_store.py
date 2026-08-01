@@ -243,7 +243,7 @@ def test_record_migration_repins_releases_and_persists_artifacts_in_one_write(tm
         artifacts=[_artifact(chunk_id, node_id)],
     )
 
-    assert wrote is True
+    assert wrote is not None
     chunk = hub.services.chunks.get(chunk_id)
     assert chunk is not None
     assert chunk.graph_id == target_graph_id  # re-pinned
@@ -270,7 +270,7 @@ def test_record_migration_is_idempotent_on_replay(tmp_path: Path) -> None:
     assert pre_migration is not None
     source_graph_id = pre_migration.graph_id
 
-    def do_migrate() -> bool:
+    def do_migrate() -> str | None:
         return chunks.record_migration(
             chunk_id,
             from_node_id=node_id,
@@ -285,10 +285,10 @@ def test_record_migration_is_idempotent_on_replay(tmp_path: Path) -> None:
             artifacts=[_artifact(chunk_id, node_id)],
         )
 
-    assert do_migrate() is True
+    assert do_migrate() is not None
     assert chunks.accepted_migration(chunk_id, from_node_id=node_id, epoch=1) is True
     # A crash-replay re-enters harmlessly: writes nothing, no duplicate migration or artifact.
-    assert do_migrate() is False
+    assert do_migrate() is None
     with hub.engine.connect() as conn:
         migrations = conn.execute(select(s.chunk_migrations).where(s.chunk_migrations.c.chunk_id == chunk_id)).all()
         artifacts = conn.execute(select(s.artifacts).where(s.artifacts.c.chunk_id == chunk_id)).all()
@@ -332,7 +332,7 @@ def test_a_migration_landing_on_a_hub_node_derives_delivering_and_is_not_ready(t
         at=hub.clock.now(),
         artifacts=[_artifact(chunk_id, node_id)],
     )
-    assert wrote is True
+    assert wrote is not None
 
     facts = hub.services.chunks.load_facts(chunk_id)
     assert facts is not None
@@ -407,7 +407,7 @@ def test_record_migration_with_clear_intent_clears_the_intent_atomically(tmp_pat
         artifacts=[_artifact(chunk_id, node_id)],
         clear_intent=True,
     )
-    assert wrote is True
+    assert wrote is not None
 
     chunk = hub.services.chunks.get(chunk_id)
     assert chunk is not None
@@ -447,7 +447,7 @@ def test_record_migration_without_clear_intent_leaves_a_set_intent_untouched(tmp
         # clear_intent defaults False — an ordinary #90 authored-choice migration,
         # which carries no intent of its own to clear.
     )
-    assert wrote is True
+    assert wrote is not None
     chunk = hub.services.chunks.get(chunk_id)
     assert chunk is not None
     assert chunk.intended_migration == intent
@@ -494,7 +494,7 @@ def test_record_migration_with_clear_intent_on_a_hub_landing_retains_the_route(t
         release_route=False,
         clear_intent=True,
     )
-    assert wrote is True
+    assert wrote is not None
 
     chunk = hub.services.chunks.get(chunk_id)
     assert chunk is not None

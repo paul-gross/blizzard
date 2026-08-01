@@ -129,7 +129,12 @@ default `uv run pytest` gate stays hermetic.
   **SSE contract** an `EventSource` subscribes to; and a subscriber connected before the
   act receives `queue-changed` **live** the instant a fresh cross-graph migration
   re-queues a chunk — exactly once across that migration and its duplicate-delivery
-  replay.
+  replay. (The board's own Event log rail no longer relies on this stream alone for
+  what it shows on load: it seeds from `GET /api/activity` — recent history derived
+  from durable facts, bounded to the last 24h/200 rows — then continues live over this
+  same `/api/events/stream`, deduped against the backfill by each frame's fact-identity
+  `key` rather than by timestamp; see `test_event_log_service.py` and
+  `test_event_log_e2e.py`.)
 
 The counterpart mocks and their lever surfaces live in the `blizzard-mock` repo
 (`blizzard_mock.mock_hub` / `blizzard_mock.mock_runner`). sqlite only, no tokens, no

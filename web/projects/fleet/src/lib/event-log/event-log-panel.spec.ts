@@ -1,16 +1,22 @@
 import { type WritableSignal, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 
+import { type ActivityView } from '../api/hub';
+import { client as hubClient } from '../api/hub/client.gen';
 import { FleetLiveUpdates, type LoggedEvent } from '../sse/fleet-live';
 import type { SseStatus } from '../sse/sse.service';
+import { settle } from '../testing/settle';
+import { type RequestClientStub, stubRequestClient } from '../testing/stub-request-client';
 import { EventLogPanel } from './event-log-panel';
 
 describe('EventLogPanel', () => {
   let log: WritableSignal<readonly LoggedEvent[]>;
   let status: WritableSignal<SseStatus>;
   let authFailed: WritableSignal<boolean>;
+  let stub: RequestClientStub;
 
-  beforeEach(async () => {
+  const render = async (activity: readonly ActivityView[] = []) => {
     log = signal<readonly LoggedEvent[]>([]);
     status = signal<SseStatus>('open');
     authFailed = signal(false);
@@ -20,144 +26,141 @@ describe('EventLogPanel', () => {
       status: () => status(),
       authFailed: () => authFailed(),
     } as unknown as FleetLiveUpdates;
+    stub = stubRequestClient(hubClient, (method, path) => (method === 'GET' && path === '/api/activity' ? { activity } : {}));
     await TestBed.configureTestingModule({
       imports: [EventLogPanel],
-      providers: [provideZonelessChangeDetection(), { provide: FleetLiveUpdates, useValue: fakeLive }],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        { provide: FleetLiveUpdates, useValue: fakeLive },
+      ],
     }).compileComponents();
-  });
-
-  it('shows an empty state before any event, once connected', () => {
     const fixture = TestBed.createComponent(EventLogPanel);
-    fixture.detectChanges();
+    await settle(fixture);
+    return fixture;
+  };
+
+  afterEach(() => stub?.restore());
+
+  it('shows an empty state once the backfill read resolves with nothing and no live frame has arrived', async () => {
+    const fixture = await render([]);
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="event-log-empty"]')).toBeTruthy();
-    // The panel header carries no running event count (issue #139).
-    expect(el.querySelector('[data-testid="event-log-count"]')).toBeNull();
   });
 
-  it('withholds the empty copy while the stream has never yet connected (AC 3)', () => {
-    status.set('idle');
+  it('renders a loading state while the backfill read is still in flight, not empty (AC)', async () => {
+    const fakeLive = {
+      log: () => [] as readonly LoggedEvent[],
+      status: () => 'open' as SseStatus,
+      authFailed: () => false,
+    } as unknown as FleetLiveUpdates;
+    stub = stubRequestClient(hubClient, () => ({ activity: [] }));
+    await TestBed.configureTestingModule({
+      imports: [EventLogPanel],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+        { provide: FleetLiveUpdates, useValue: fakeLive },
+      ],
+    }).compileComponents();
     const fixture = TestBed.createComponent(EventLogPanel);
+    // A single, un-awaited detectChanges: the query has mounted but its microtask
+    // fetch has not yet resolved, so this is the "first in-flight fetch" instant the
+    // AC cares about — it must read as loading, never empty.
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="event-log-loading"]')).toBeTruthy();
     expect(el.querySelector('[data-testid="event-log-empty"]')).toBeNull();
+
+    await settle(fixture);
+    expect(el.querySelector('[data-testid="event-log-loading"]')).toBeNull();
+    expect(el.querySelector('[data-testid="event-log-empty"]')).toBeTruthy();
   });
 
-  it('shows an error state on a terminal auth failure', () => {
-    status.set('closed');
+  it('shows an error state on a terminal auth failure even though the backfill read succeeded', async () => {
+    const fixture = await render([]);
     authFailed.set(true);
-    const fixture = TestBed.createComponent(EventLogPanel);
+    status.set('closed');
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="event-log-error"]')).toBeTruthy();
   });
 
-  it('does not regress an already-rendered feed to loading on a reconnect (AC 6)', () => {
-    log.set([{ seq: 1, type: 'chunk-changed', data: { chunk_id: 'ch_alpha', status: 'running' }, at: 0 }]);
-    const fixture = TestBed.createComponent(EventLogPanel);
-    fixture.detectChanges();
+  it('renders the backfilled feed on load, before any live frame arrives', async () => {
+    const fixture = await render([
+      { type: 'chunk-changed', key: 'k-old', at: '2020-01-01T00:00:00Z', chunk_id: 'ch_old', status: 'ready' },
+    ]);
+    const el = fixture.nativeElement as HTMLElement;
 
-    status.set('reconnecting');
+    expect(el.querySelectorAll('[data-testid="event-log-row"]')).toHaveLength(1);
+    expect(el.querySelector('[data-testid="event-log-message"]')?.textContent?.trim()).toBe('C-old → ready');
+  });
+
+  it('dedupes a backfilled row against a live frame naming the same key, preferring the live copy', async () => {
+    const fixture = await render([
+      { type: 'chunk-changed', key: 'k1', at: '2020-01-01T00:00:00Z', chunk_id: 'ch_alp', status: 'queued' },
+    ]);
+    log.set([{ seq: 1, type: 'chunk-changed', data: { chunk_id: 'ch_alp', status: 'running', key: 'k1' }, at: 5_000, key: 'k1' }]);
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelectorAll('[data-testid="event-log-row"]')).toHaveLength(1);
-    expect(el.querySelector('[data-testid="event-log-loading"]')).toBeNull();
+    expect(el.querySelector('[data-testid="event-log-message"]')?.textContent?.trim()).toBe('C-alp → running');
   });
 
-  it('renders newest-first rows with human-readable summaries', () => {
+  it('never collides two keyless live frames with each other (a hub older than Phase 2 stamps no key)', async () => {
+    const fixture = await render([]);
     log.set([
-      { seq: 1, type: 'chunk-changed', data: { chunk_id: 'ch_alpha', status: 'running' }, at: 0 },
-      { seq: 2, type: 'question-asked', data: { chunk_id: 'ch_beta', question_id: 'q1' }, at: 0 },
+      { seq: 1, type: 'chunk-changed', data: { chunk_id: 'ch_old', status: 'ready' }, at: 1_000 },
+      { seq: 2, type: 'chunk-changed', data: { chunk_id: 'ch_new', status: 'running' }, at: 5_000 },
     ]);
-    const fixture = TestBed.createComponent(EventLogPanel);
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
 
-    const rows = el.querySelectorAll('[data-testid="event-log-row"]');
-    expect(rows).toHaveLength(2);
-
-    const messages = [...el.querySelectorAll('[data-testid="event-log-message"]')].map((n) => n.textContent?.trim());
-    // Newest first: the question-asked (seq 2) renders above the chunk-changed (seq 1).
-    expect(messages[0]).toContain('asked a question');
-    // The chunk id renders through compactRef (issue #81), not the raw id.
-    expect(messages[0]).toContain('C-beta');
-    expect(messages[1]).toContain('running');
+    expect(el.querySelectorAll('[data-testid="event-log-row"]')).toHaveLength(2);
   });
 
-  it('renders a runner-changed frame as what actually changed', () => {
-    // Issue #151: the pause family is the only kind that reaches the feed (fleet-live
-    // mutes registration/heartbeat), and each row must say who braked the runner and why.
-    log.set([
-      { seq: 1, type: 'runner-changed', data: { runner_id: 'runner-local', kind: 'paused', by: 'operator' }, at: 0 },
-      {
-        seq: 2,
-        type: 'runner-changed',
-        data: { runner_id: 'runner-local', kind: 'locally-paused', by: 'runner-ceiling', reason: 'disk full' },
-        at: 0,
-      },
-      { seq: 3, type: 'runner-changed', data: { runner_id: 'runner-local', kind: 'locally-resumed', by: 'ada' }, at: 0 },
+  it('orders the merged feed newest-first across backfill and live', async () => {
+    const fixture = await render([
+      { type: 'chunk-changed', key: 'k-old', at: '2020-01-01T00:00:00Z', chunk_id: 'ch_old', status: 'ready' },
     ]);
-    const fixture = TestBed.createComponent(EventLogPanel);
-    fixture.detectChanges();
-    const el = fixture.nativeElement as HTMLElement;
-
-    // Newest first, so seq 3 leads.
-    const messages = [...el.querySelectorAll('[data-testid="event-log-message"]')].map((n) => n.textContent?.trim());
-    expect(messages).toEqual([
-      'runner runner-local locally resumed by ada',
-      'runner runner-local locally paused by runner-ceiling — disk full',
-      'runner runner-local paused by operator',
-    ]);
-  });
-
-  it('renders a chunk-changed row as a two-line block when the frame names a runner', () => {
+    // A live frame's `at` is a ms-epoch instant (`Date.now()` at record time), so it must
+    // be a realistic, recent instant to sort after the 2020 backfill row — not a small
+    // offset-from-epoch number, which reads as 1970 and would sort *before* it.
     log.set([
       {
         seq: 1,
         type: 'chunk-changed',
-        data: {
-          chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN1RJ1',
-          status: 'failed',
-          prev_node: 'review',
-          node: 'build',
-          runner_id: 'runner-local',
-        },
-        at: 0,
+        data: { chunk_id: 'ch_new', status: 'running', key: 'k-new' },
+        at: Date.parse('2026-07-20T00:00:00Z'),
+        key: 'k-new',
       },
     ]);
-    const fixture = TestBed.createComponent(EventLogPanel);
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="event-log-message"]')?.textContent?.trim()).toBe(
-      'C-1RJ1 review → failed → build',
-    );
-    expect(el.querySelector('[data-testid="event-log-detail"]')?.textContent?.trim()).toBe('runner-local');
+    const messages = [...el.querySelectorAll('[data-testid="event-log-message"]')].map((n) => n.textContent?.trim());
+    expect(messages).toEqual(['C-new → running', 'C-old → ready']);
   });
 
-  it('renders no event-log-detail element at all on a runner-less chunk-changed frame', () => {
-    log.set([{ seq: 1, type: 'chunk-changed', data: { chunk_id: 'ch_beta', status: 'ready' }, at: 0 }]);
-    const fixture = TestBed.createComponent(EventLogPanel);
-    fixture.detectChanges();
+  it('renders a backfilled row missing status with no placeholder dash', async () => {
+    const fixture = await render([
+      { type: 'chunk-changed', key: 'k1', at: '2020-01-01T00:00:00Z', chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN1RJ1', prev_node: 'review', node: 'build' },
+    ]);
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="event-log-message"]')?.textContent?.trim()).toBe('C-beta → ready');
-    expect(el.querySelector('[data-testid="event-log-detail"]')).toBeNull();
+    expect(el.querySelector('[data-testid="event-log-message"]')?.textContent?.trim()).toBe('C-1RJ1 review → build');
   });
 
-  it('degrades a kind-less runner-changed frame rather than rendering it blank', () => {
-    log.set([{ seq: 1, type: 'runner-changed', data: { runner_id: 'runner-local' }, at: 0 }]);
-    const fixture = TestBed.createComponent(EventLogPanel);
+  it('renders a runner-changed frame from the live tee as what actually changed', async () => {
+    const fixture = await render([]);
+    log.set([{ seq: 1, type: 'runner-changed', data: { runner_id: 'runner-local', kind: 'paused', by: 'operator' }, at: 0 }]);
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="event-log-message"]')?.textContent?.trim()).toBe(
-      'runner runner-local changed',
-    );
+    expect(el.querySelector('[data-testid="event-log-message"]')?.textContent?.trim()).toBe('runner runner-local paused by operator');
   });
 });

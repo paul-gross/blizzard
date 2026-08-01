@@ -146,14 +146,19 @@ class EventBroker:
         runner_id: str | None = None,
         cause: ChunkChangeCause | None = None,
         graph_id: str | None = None,
+        key: str | None = None,
     ) -> int:
         """A chunk's derived status changed — the board refreshes that row.
 
         The optionals are present-when-meaningful, the same shape :meth:`publish_runner_changed`
         established for issue #151: each is added to the payload only when supplied, never
         serialized as ``null``, so a chunk with no runner or no prior transition renders
-        without placeholder junk (issue #212).
-        """
+        without placeholder junk (issue #212). ``key`` (issue #213) names the identity of the
+        durable fact this frame describes — e.g. ``"transitions:tr_01J..."`` — the same
+        table-qualified natural key :class:`~blizzard.hub.domain.work.ActivityRow` carries, so
+        a page-load backfill row and this live frame can be recognized as the same fact by
+        exact string equality. Absent (never a placeholder) for a cause with no fact table
+        (``edited``) or when this call recorded nothing new (an idempotent no-op)."""
         payload: dict[str, object] = {"chunk_id": chunk_id, "status": status}
         if prev_status is not None:
             payload["prev_status"] = prev_status
@@ -167,30 +172,53 @@ class EventBroker:
             payload["cause"] = cause
         if graph_id is not None:
             payload["graph_id"] = graph_id
+        if key is not None:
+            payload["key"] = key
         return self.publish(CHUNK_CHANGED, payload)
 
-    def publish_question_asked(self, chunk_id: str, question_id: str) -> int:
+    def publish_question_asked(self, chunk_id: str, question_id: str, *, key: str | None = None) -> int:
         """A ``question.asked`` landed — the chunk parks ``waiting_on_human``."""
-        return self.publish(QUESTION_ASKED, {"chunk_id": chunk_id, "question_id": question_id})
+        payload: dict[str, object] = {"chunk_id": chunk_id, "question_id": question_id}
+        if key is not None:
+            payload["key"] = key
+        return self.publish(QUESTION_ASKED, payload)
 
-    def publish_question_answered(self, chunk_id: str, question_id: str) -> int:
+    def publish_question_answered(self, chunk_id: str, question_id: str, *, key: str | None = None) -> int:
         """A ``question.answered`` landed — the chunk leaves ``waiting_on_human``."""
-        return self.publish(QUESTION_ANSWERED, {"chunk_id": chunk_id, "question_id": question_id})
+        payload: dict[str, object] = {"chunk_id": chunk_id, "question_id": question_id}
+        if key is not None:
+            payload["key"] = key
+        return self.publish(QUESTION_ANSWERED, payload)
 
-    def publish_decision_opened(self, chunk_id: str, decision_id: str) -> int:
+    def publish_decision_opened(self, chunk_id: str, decision_id: str, *, key: str | None = None) -> int:
         """A gate ``decision.submitted`` opened — a human choice is awaited."""
-        return self.publish(DECISION_OPENED, {"chunk_id": chunk_id, "decision_id": decision_id})
+        payload: dict[str, object] = {"chunk_id": chunk_id, "decision_id": decision_id}
+        if key is not None:
+            payload["key"] = key
+        return self.publish(DECISION_OPENED, payload)
 
-    def publish_decision_resolved(self, chunk_id: str, decision_id: str) -> int:
+    def publish_decision_resolved(self, chunk_id: str, decision_id: str, *, key: str | None = None) -> int:
         """A ``decision.resolved`` landed — the holding runner will advance the chunk."""
-        return self.publish(DECISION_RESOLVED, {"chunk_id": chunk_id, "decision_id": decision_id})
+        payload: dict[str, object] = {"chunk_id": chunk_id, "decision_id": decision_id}
+        if key is not None:
+            payload["key"] = key
+        return self.publish(DECISION_RESOLVED, payload)
 
     def publish_queue_changed(self) -> int:
-        """The ready queue's membership or order changed — the board re-peeks."""
+        """The ready queue's membership or order changed — the board re-peeks.
+
+        Carries no ``key`` (issue #213): a reorder writes N rows with no per-row news, so
+        there is no single durable fact this frame could name."""
         return self.publish(QUEUE_CHANGED, {})
 
     def publish_runner_changed(
-        self, runner_id: str, *, kind: RunnerChangeKind, by: str | None = None, reason: str | None = None
+        self,
+        runner_id: str,
+        *,
+        kind: RunnerChangeKind,
+        by: str | None = None,
+        reason: str | None = None,
+        key: str | None = None,
     ) -> int:
         """A runner's registry state changed — ``kind`` names which change (issue #151).
 
@@ -199,22 +227,32 @@ class EventBroker:
         log show the operator only the pause family. ``by`` rides the four pause/resume
         kinds (who set or cleared the brake) and ``reason`` the runner-local pair, which
         carries the free-text note off the ``runner.locally-paused``/``-resumed`` fact.
+        ``key`` (issue #213) names the pause-family fact's identity
+        (``runner_pause_facts``/``runner_local_pause_facts``); deliberately absent on
+        ``registered``/``heartbeat``, which have no fact table and are muted client-side.
         """
         payload: dict[str, object] = {"runner_id": runner_id, "kind": kind}
         if by is not None:
             payload["by"] = by
         if reason is not None:
             payload["reason"] = reason
+        if key is not None:
+            payload["key"] = key
         return self.publish(RUNNER_CHANGED, payload)
 
-    def publish_event_logged(self, *, severity: str, kind: str, chunk_id: str | None, runner_id: str) -> int:
+    def publish_event_logged(
+        self, *, severity: str, kind: str, chunk_id: str | None, runner_id: str, key: str | None = None
+    ) -> int:
         """An operational event landed in the event log (issue #125) — the board's Events
         tab refreshes, and a chunk-named event also refreshes that chunk's card. The frame
         carries only the identifying fields the board's invalidation registry keys on; the
-        row itself is read back off ``GET /api/events``."""
-        return self.publish(
-            EVENT_LOGGED, {"severity": severity, "kind": kind, "chunk_id": chunk_id, "runner_id": runner_id}
-        )
+        row itself is read back off ``GET /api/events``. ``key`` (issue #213) names the
+        ``event_log`` row's own id, matching :func:`~blizzard.hub.domain.work._event_row_to_activity`'s
+        backfill key exactly."""
+        payload: dict[str, object] = {"severity": severity, "kind": kind, "chunk_id": chunk_id, "runner_id": runner_id}
+        if key is not None:
+            payload["key"] = key
+        return self.publish(EVENT_LOGGED, payload)
 
     # --- subscription (called from the async SSE handler) -------------------
 

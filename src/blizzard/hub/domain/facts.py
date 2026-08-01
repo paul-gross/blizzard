@@ -27,6 +27,7 @@ mint, landing after the escalation, flips ``needs_human`` off with no resolution
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 
 from blizzard.foundation.clock import IClock
@@ -70,9 +71,31 @@ class RunnerFactsService:
         """Land a runner's ``lease.minted`` — advances the fence's latest epoch."""
         self._chunks.record_lease(chunk_id, epoch=epoch, runner_id=runner_id, at=self._clock.now())
 
-    def record_escalation(self, chunk_id: str, *, epoch: int, takeover_command: str) -> None:
-        """Land a runner's ``escalation.recorded`` — the chunk derives ``needs_human``."""
-        self._chunks.record_escalation(chunk_id, epoch=epoch, takeover_command=takeover_command, at=self._clock.now())
+    def record_escalation(self, chunk_id: str, *, epoch: int, takeover_command: str) -> int:
+        """Land a runner's ``escalation.recorded`` — the chunk derives ``needs_human``.
+
+        Returns the freshly-written ``escalations.id`` (issue #213's activity-feed key)."""
+        return self._chunks.record_escalation(
+            chunk_id, epoch=epoch, takeover_command=takeover_command, at=self._clock.now()
+        )
+
+
+@dataclass(frozen=True)
+class FactIngestResult:
+    """:meth:`FactIngestService.ingest`'s own return — the wire :class:`RunnerFactAck`
+    plus, per freshly-applied fact (issue #213), the identity of the row it wrote — not
+    a wire type: the route controller unwraps ``ack`` for the HTTP body and reads
+    ``row_id_by_seq`` to build each applied fact's own ``chunk-changed``/``event-logged``
+    frame ``key``.
+
+    ``row_id_by_seq`` carries an entry only for a fact kind whose own id is not already
+    in its payload (``escalation.recorded`` -> ``escalations.id``, ``event.recorded`` ->
+    ``event_log.id``) — every other applied kind either carries its own id already
+    (``question.asked``/``answer.delivered`` name their ``question_id``) or needs none
+    (``lease.minted``, runner-scoped facts)."""
+
+    ack: RunnerFactAck
+    row_id_by_seq: dict[int, int]
 
 
 class FactIngestService:
@@ -88,17 +111,19 @@ class FactIngestService:
         self._fleet = fleet
         self._clock = clock
 
-    def ingest(self, batch: RunnerFactBatch, *, route_token_mode: str = ROUTE_TOKEN_WARN) -> RunnerFactAck:
+    def ingest(self, batch: RunnerFactBatch, *, route_token_mode: str = ROUTE_TOKEN_WARN) -> FactIngestResult:
         mark = self._chunks.runner_high_water(batch.runner_id)
         applied: list[int] = []
         already: list[int] = []
         rejected: list[int] = []
+        row_id_by_seq: dict[int, int] = {}
 
         for fact in sorted(batch.facts, key=lambda f: f.seq):
             if fact.seq <= mark:
                 already.append(fact.seq)
                 continue
-            if not self._apply(batch.runner_id, fact.kind, fact.payload, route_token_mode=route_token_mode):
+            ok, row_id = self._apply(batch.runner_id, fact.kind, fact.payload, route_token_mode=route_token_mode)
+            if not ok:
                 # An unknown kind or a route-token rejection (issue #84b) is a contract
                 # mismatch, not an idempotency skip: do not advance the mark past it,
                 # and name it so the runner surfaces it.
@@ -106,6 +131,8 @@ class FactIngestService:
                 continue
             mark = fact.seq
             applied.append(fact.seq)
+            if row_id is not None:
+                row_id_by_seq[fact.seq] = row_id
 
         if applied:
             self._chunks.set_runner_high_water(batch.runner_id, seq=mark, at=self._clock.now())
@@ -117,20 +144,27 @@ class FactIngestService:
             already=len(already),
             rejected=len(rejected),
         )
-        return RunnerFactAck(
+        ack = RunnerFactAck(
             runner_id=batch.runner_id,
             high_water=mark,
             applied=applied,
             already_applied=already,
             rejected=rejected,
         )
+        return FactIngestResult(ack=ack, row_id_by_seq=row_id_by_seq)
 
-    def _apply(self, runner_id: str, kind: str, payload: dict[str, object], *, route_token_mode: str) -> bool:
+    def _apply(
+        self, runner_id: str, kind: str, payload: dict[str, object], *, route_token_mode: str
+    ) -> tuple[bool, int | None]:
+        """Apply one fact; ``(True, row_id)`` on success — ``row_id`` is the freshly-written
+        row's own id (issue #213) only for a kind whose id is not already in its own
+        payload (``escalation.recorded``/``event.recorded``), else ``None``. ``(False,
+        None)`` on an unknown kind or a route-token rejection."""
         now = self._clock.now()
         if kind in _ROUTE_TOKEN_GATED_KINDS:
             chunk_id = _opt(payload.get("chunk_id"))
             if chunk_id is None or not self._route_token_ok(chunk_id, runner_id, payload, mode=route_token_mode):
-                return False
+                return False, None
         if kind == LEASE_MINTED:
             self._chunks.record_lease(
                 str(payload["chunk_id"]),
@@ -138,15 +172,15 @@ class FactIngestService:
                 runner_id=runner_id,
                 at=now,
             )
-            return True
+            return True, None
         if kind == ESCALATION_RECORDED:
-            self._chunks.record_escalation(
+            escalation_id = self._chunks.record_escalation(
                 str(payload["chunk_id"]),
                 epoch=int(payload["epoch"]),  # type: ignore[arg-type]
                 takeover_command=str(payload.get("takeover_command", "")),
                 at=now,
             )
-            return True
+            return True, escalation_id
         if kind == QUESTION_ASKED:
             # The chunk derives waiting_on_human from the landed row; the runner
             # authored the question_id so it can poll the answer back.
@@ -161,7 +195,7 @@ class FactIngestService:
                 options=[str(o) for o in payload.get("options", [])],  # type: ignore[union-attr]
                 asked_at=_parse_at(payload.get("asked_at"), now),
             )
-            return True
+            return True, None
         if kind == USAGE_RECORDED:
             # Deliberately NO epoch fence (contrast the completion path, apply.py, which
             # rejects a stale-epoch submission before it writes anything): a usage row
@@ -191,7 +225,7 @@ class FactIngestService:
                 cost_usd=_opt_float(payload.get("cost_usd")),
                 at=now,
             )
-            return True
+            return True, None
         if kind == EVENT_RECORDED:
             # Fold one runner-surfaced operational event into the append-only event_log
             # (issue #125). Deliberately NOT epoch-fenced and NOT route-token-gated (it is
@@ -202,7 +236,7 @@ class FactIngestService:
             # fact — a seq already applied never reaches this method twice. `chunk_id` is
             # optional (a runner-scoped event names none); `detail` is an opaque object.
             detail = payload.get("detail")
-            self._chunks.record_event(
+            event_id = self._chunks.record_event(
                 severity=str(payload["severity"]),
                 kind=str(payload["kind"]),
                 runner_id=runner_id,
@@ -213,28 +247,28 @@ class FactIngestService:
                 detail=detail if isinstance(detail, dict) else None,
                 at=now,
             )
-            return True
+            return True, event_id
         if kind == ANSWER_DELIVERED:
             # Board detail: the resume-with-answer ran; status flipped at question.answered.
             self._chunks.record_answer_delivered(
                 question_id=str(payload["question_id"]), chunk_id=str(payload["chunk_id"]), at=now
             )
-            return True
+            return True, None
         if kind in (RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED):
             # Runner-scoped and hub-read-only: the runner already stopped claiming before
             # this arrived; landing it is what makes the brake visible on the board. Stamped
             # with the runner's own clock off the payload — when it decided, not when the
             # buffer drained, which may be an outage later.
-            self._fleet.record_local_pause(
+            local_pause_id = self._fleet.record_local_pause(
                 runner_id,
                 paused=kind == RUNNER_LOCALLY_PAUSED,
                 at=_parse_at(payload.get("at"), now),
                 by=str(payload.get("by", "operator")),
                 reason=_opt(payload.get("reason")),
             )
-            return True
+            return True, local_pause_id
         _log.warning("unknown runner fact kind", kind=kind)
-        return False
+        return False, None
 
     def _route_token_ok(self, chunk_id: str, runner_id: str, payload: dict[str, object], *, mode: str) -> bool:
         """Route-token authorization for a chunk-scoped, fence-advancing fact (issue

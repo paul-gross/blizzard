@@ -5,6 +5,94 @@ export type ClientOptions = {
 };
 
 /**
+ * ActivityResponse
+ *
+ * The activity feed, newest-first (bounded).
+ */
+export type ActivityResponse = {
+    /**
+     * Activity
+     */
+    activity?: Array<ActivityView>;
+};
+
+/**
+ * ActivityView
+ *
+ * One activity-feed row on the wire — the same present-when-meaningful shape
+ * :class:`~blizzard.hub.domain.work.ActivityRow` carries, absent (never placeholder
+ * ``None``-as-a-present-field) wherever a source doesn't fill a field.
+ *
+ * ``type`` is one of ``"chunk-changed"`` / ``"event-logged"`` / ``"runner-changed"``;
+ * ``key`` is the identity of the underlying fact, the merge's own recency tiebreak,
+ * never a stable frame id. ``status``/``prev_status``/``node``/``prev_node`` stay
+ * absent for every row this phase produces (no graph resolution is threaded through
+ * yet) — present in the shape for forward compatibility with a later phase.
+ */
+export type ActivityView = {
+    /**
+     * At
+     */
+    at: string;
+    /**
+     * By
+     */
+    by?: string | null;
+    /**
+     * Cause
+     */
+    cause?: string | null;
+    /**
+     * Chunk Id
+     */
+    chunk_id?: string | null;
+    /**
+     * Graph Id
+     */
+    graph_id?: string | null;
+    /**
+     * Key
+     */
+    key: string;
+    /**
+     * Kind
+     */
+    kind?: string | null;
+    /**
+     * Node
+     */
+    node?: string | null;
+    /**
+     * Prev Node
+     */
+    prev_node?: string | null;
+    /**
+     * Prev Status
+     */
+    prev_status?: string | null;
+    /**
+     * Reason
+     */
+    reason?: string | null;
+    /**
+     * Runner Id
+     */
+    runner_id?: string | null;
+    /**
+     * Severity
+     */
+    severity?: string | null;
+    /**
+     * Status
+     */
+    status?: string | null;
+    /**
+     * Type
+     */
+    type: string;
+};
+
+/**
  * AnswerRequest
  *
  * The body of ``POST /questions/{id}/answer`` — the human's answer.
@@ -2833,6 +2921,40 @@ export type BlizzardWireGraphRotatePolicyView = {
      */
     max_transcript_bytes?: number | null;
 };
+
+export type ListActivityApiActivityGetData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Since
+         */
+        since?: string | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/activity';
+};
+
+export type ListActivityApiActivityGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListActivityApiActivityGetError = ListActivityApiActivityGetErrors[keyof ListActivityApiActivityGetErrors];
+
+export type ListActivityApiActivityGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ActivityResponse;
+};
+
+export type ListActivityApiActivityGetResponse = ListActivityApiActivityGetResponses[keyof ListActivityApiActivityGetResponses];
 
 export type AuthorizeApiAuthAuthorizeGetData = {
     body?: never;
