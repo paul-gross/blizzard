@@ -502,6 +502,52 @@ def test_work_source_annotate_non_bool_raises_naming_the_source(tmp_path: Path) 
 
 
 @pytest.mark.unit
+def test_work_source_close_defaults_to_false(tmp_path: Path) -> None:
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text(
+        'db_url = "sqlite:///x"\n\n[[work_source]]\nname = "blizzard"\nprovider = "github"\nrepo = "o/r"\ntoken_env = "T"\n'
+    )
+    loaded = HubConfig.load(root)
+    assert loaded.work_sources[0].close is False
+
+
+@pytest.mark.unit
+def test_work_source_close_round_trips_through_to_toml_and_load(tmp_path: Path) -> None:
+    config = _hub_config(tmp_path)
+    config.config_path.write_text(config.to_toml())
+    loaded = HubConfig.load(config.root)
+
+    sources = (
+        WorkSourceConfig(
+            name="blizzard",
+            provider="github",
+            repo="paul-gross/blizzard",
+            token_env="BZ_WORK_SOURCE_TOKEN",
+            close=True,
+        ),
+    )
+    edited = dataclasses.replace(loaded, work_sources=sources)
+    edited.config_path.write_text(edited.to_toml())
+
+    reloaded = HubConfig.load(edited.root)
+    assert reloaded.work_sources == sources
+    assert reloaded.work_sources[0].close is True
+
+
+@pytest.mark.unit
+def test_work_source_close_non_bool_raises_naming_the_source(tmp_path: Path) -> None:
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text(
+        'db_url = "sqlite:///x"\n\n[[work_source]]\nname = "blizzard"\nprovider = "github"\nrepo = "o/r"\n'
+        'token_env = "T"\nclose = "yes"\n'
+    )
+    with pytest.raises(HubConfigError, match="blizzard"):
+        HubConfig.load(root)
+
+
+@pytest.mark.unit
 def test_annotation_interval_seconds_defaults_to_120(tmp_path: Path) -> None:
     config = _hub_config(tmp_path)
     assert config.annotation_interval_seconds == 120

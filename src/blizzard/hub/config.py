@@ -116,6 +116,9 @@ _WORK_SOURCE_EXAMPLE_COMMENT = """
 # annotate = false            # opt into the forge-status label sweep; only the canonical
 #                              # instance for a repo should ever set this to true — two
 #                              # writers against the same forge repo will fight
+# close = false                # opt into the delivery closure sweep; only the canonical
+#                              # instance for a repo should ever set this to true — two
+#                              # writers against the same forge repo will fight
 # api_base = "https://ghe.example.internal/api/v3"  # optional: override the API origin (e.g. GHE)
 # web_base = "https://ghe.example.internal"          # optional: override the web origin; derives from api_base
 """
@@ -168,6 +171,10 @@ class WorkSourceConfig:
     #: writers must never fight over the same issues. Only the canonical instance for
     #: a repo should ever set this.
     annotate: bool = False
+    #: Opt this source into the delivery closure sweep (issue #216) — default off,
+    #: mirroring ``annotate``'s own two-writers-must-never-fight rationale. Only the
+    #: canonical instance for a repo should ever set this.
+    close: bool = False
     api_base: str | None = None
     web_base: str | None = None
 
@@ -296,6 +303,7 @@ class HubConfig:
             lines.append(f'repo = "{source.repo}"\n')
             lines.append(f'token_env = "{source.token_env}"\n')
             lines.append(f"annotate = {str(source.annotate).lower()}\n")
+            lines.append(f"close = {str(source.close).lower()}\n")
             if source.api_base is not None:
                 lines.append(f'api_base = "{source.api_base}"\n')
             if source.web_base is not None:
@@ -429,6 +437,10 @@ def _parse_work_sources(raw_sources: object) -> tuple[WorkSourceConfig, ...]:
             # Validated rather than coerced, mirroring `follow_latest`: a source that opts
             # into writing to a shared forge deserves an explicit boolean, not a truthy guess.
             raise ConfigError(f"[[work_source]] {name!r} has annotate={annotate!r}, must be a boolean")
+        close = entry.get("close", False)
+        if not isinstance(close, bool):
+            # Mirrors `annotate`'s own validated-not-coerced rationale.
+            raise ConfigError(f"[[work_source]] {name!r} has close={close!r}, must be a boolean")
         api_base = str(entry["api_base"]) if entry.get("api_base") else None
         web_base = str(entry["web_base"]) if entry.get("web_base") else None
         sources.append(
@@ -438,6 +450,7 @@ def _parse_work_sources(raw_sources: object) -> tuple[WorkSourceConfig, ...]:
                 repo=repo,
                 token_env=token_env,
                 annotate=annotate,
+                close=close,
                 api_base=api_base,
                 web_base=web_base,
             )

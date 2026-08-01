@@ -69,6 +69,7 @@ from blizzard.hub.domain.queue import GroupService, QueueService
 from blizzard.hub.domain.registry import FleetService, IReadRunnerRegistry
 from blizzard.hub.domain.stop import StopService
 from blizzard.hub.domain.work import IReadChunkRepository
+from blizzard.hub.domain.work_closure import DeliveryClosureReconciler
 from blizzard.hub.events.broker import EventBroker
 from blizzard.hub.graphs import default_graph_yaml, load_default_graph_doc
 from blizzard.hub.store.internal.chunk_store import ChunkStore
@@ -115,6 +116,13 @@ class HubServices:
     default_graph_doc: GraphDoc
     default_graph_yaml: str
     work_sources: IWorkSourceRegistry
+    #: The delivery closure reconciler (issue #216) — built here (not in ``hub/app.py``'s
+    #: ``_lifespan``, unlike its ``AnnotationReconciler`` twin) because it needs the
+    #: write-capable chunk repository, which only the composition root holds
+    #: (``bzh:controller-read-only`` — ``HubServices.chunks`` stays read-only). Cheap
+    #: and side-effect-free to construct regardless of whether any source opts into
+    #: closing; ``_lifespan`` decides whether to actually run its sweep loop.
+    delivery_closure: DeliveryClosureReconciler
     #: The session read repository (issue #91), held directly by ``HubServices``
     #: (mirroring ``registry: IReadRunnerRegistry``) so the human-plane edge
     #: (``hub/api/auth_session.py``'s ``resolve_identity``) can resolve a presented
@@ -290,6 +298,7 @@ def build_services(
         default_graph_doc=load_default_graph_doc(),
         default_graph_yaml=default_graph_yaml(),
         work_sources=work_sources,
+        delivery_closure=DeliveryClosureReconciler(chunks=chunk_store, work_sources=work_sources, clock=clock),
         sessions=session_store,
         identities=identity_store,
         users=user_store,

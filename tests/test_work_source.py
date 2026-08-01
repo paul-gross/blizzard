@@ -15,6 +15,7 @@ import pytest
 from blizzard.hub.config import WorkSourceConfig
 from blizzard.hub.domain.work import WorkRef
 from blizzard.hub.work_sources.annotator import WorkAnnotateError, WorkStatusMarker
+from blizzard.hub.work_sources.closer import WorkCloseError, WorkItemGoneError
 from blizzard.hub.work_sources.internal.factory import build_work_source_registry
 from blizzard.hub.work_sources.internal.github_work_source import GitHubWorkSource
 from blizzard.hub.work_sources.registry import WorkSourceRegistry
@@ -473,3 +474,106 @@ def test_factory_builds_an_annotator_for_an_opted_in_source(monkeypatch: pytest.
     assert annotator is not None
     assert annotator is registry.get("widget")  # one instance, both Protocols
     assert registry.annotating_names() == ["widget"]
+
+
+# --------------------------------------------------------------------------- #
+# IWorkCloser — the close half (delivery-time closure, issue #216)
+# --------------------------------------------------------------------------- #
+
+
+def test_close_issues_the_documented_patch() -> None:
+    double = github_double(issues={"acme/widget#1": {"body": "b"}})
+    source = GitHubWorkSource(double, name="widget", repo="acme/widget", web_base="https://x")
+
+    source.close(WorkRef(source="widget", ref="1"))
+
+    assert forge_state(double)["issue_state"]["acme/widget#1"] == {  # type: ignore[index]
+        "state": "closed",
+        "state_reason": "completed",
+    }
+
+
+def test_close_is_idempotent() -> None:
+    double = github_double(issues={"acme/widget#1": {"body": "b"}})
+    source = GitHubWorkSource(double, name="widget", repo="acme/widget", web_base="https://x")
+    pointer = WorkRef(source="widget", ref="1")
+
+    source.close(pointer)
+    source.close(pointer)  # must not raise — a clean no-op re-close
+
+    assert forge_state(double)["issue_state"]["acme/widget#1"] == {  # type: ignore[index]
+        "state": "closed",
+        "state_reason": "completed",
+    }
+
+
+def test_close_a_missing_item_raises_work_item_gone() -> None:
+    source = GitHubWorkSource(github_double(), name="widget", repo="acme/widget", web_base="https://x")
+
+    with pytest.raises(WorkItemGoneError):
+        source.close(WorkRef(source="widget", ref="999"))
+
+
+def test_close_scope_failure_degrades_to_work_close_error() -> None:
+    double = github_double(issues={"acme/widget#1": {"body": "b"}})
+    forge_state(double)["forbidden"] = True
+    source = GitHubWorkSource(double, name="widget", repo="acme/widget", web_base="https://x")
+
+    with pytest.raises(WorkCloseError):
+        source.close(WorkRef(source="widget", ref="1"))
+
+
+def test_registry_closer_is_none_for_a_source_not_opted_in() -> None:
+    """A source configured but not bound into the closer map — the structural
+    ``registry.closer(name) is None`` a non-opted-in ``[[work_source]]`` gets."""
+    widget = GitHubWorkSource(github_double(), name="widget", repo="acme/widget", web_base="https://x")
+    registry = WorkSourceRegistry({"widget": widget})
+
+    assert registry.closer("widget") is None
+    assert registry.closing_names() == []
+    assert registry.get("widget") is widget  # `get` still resolves the read-only source
+
+
+def test_registry_closer_returns_the_bound_closer() -> None:
+    widget = GitHubWorkSource(github_double(), name="widget", repo="acme/widget", web_base="https://x")
+    registry = WorkSourceRegistry({"widget": widget}, closers={"widget": widget})
+
+    assert registry.closer("widget") is widget
+    assert registry.closing_names() == ["widget"]
+
+
+# --------------------------------------------------------------------------- #
+# The factory's opt-in wiring (issue #216) — a closer is built only for a
+# source configured with close=True.
+# --------------------------------------------------------------------------- #
+
+
+def test_factory_builds_no_closer_for_a_non_opted_in_source(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The structural "never closed" property: a configured-but-not-opted source
+    has no entry in the closer map at all."""
+    monkeypatch.setenv("_TEST_TOKEN_NOT_CLOSE_OPTED", "token")
+    registry = build_work_source_registry(
+        [
+            WorkSourceConfig(
+                name="widget", provider="github", repo="acme/widget", token_env="_TEST_TOKEN_NOT_CLOSE_OPTED"
+            )
+        ]
+    )
+    assert registry.get("widget") is not None
+    assert registry.closer("widget") is None
+    assert registry.closing_names() == []
+
+
+def test_factory_builds_a_closer_for_an_opted_in_source(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("_TEST_TOKEN_CLOSE_OPTED", "token")
+    registry = build_work_source_registry(
+        [
+            WorkSourceConfig(
+                name="widget", provider="github", repo="acme/widget", token_env="_TEST_TOKEN_CLOSE_OPTED", close=True
+            )
+        ]
+    )
+    closer = registry.closer("widget")
+    assert closer is not None
+    assert closer is registry.get("widget")  # one instance, every opted-in Protocol
+    assert registry.closing_names() == ["widget"]

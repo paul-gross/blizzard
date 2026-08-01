@@ -35,6 +35,7 @@ from blizzard.hub.domain.work import (
     Chunk,
     ChunkFacts,
     ChunkStatus,
+    ClosableWorkRef,
     DecisionChoice,
     DecisionFact,
     DecisionRow,
@@ -58,8 +59,10 @@ from blizzard.hub.domain.work import (
     RouteTokenMintedFact,
     TransitionFact,
     UsageFact,
+    WorkItemCloseOutcome,
     WorkRef,
     derive_chunk_status,
+    has_landed_repos,
     newest_live_route,
 )
 from blizzard.hub.store import schema as s
@@ -481,6 +484,36 @@ class ChunkStore:
             if status in TERMINAL_STATUSES:
                 continue
             result[WorkRef(source=row.source, ref=row.ref)] = status
+        return result
+
+    def closable_work_refs(self) -> list[ClosableWorkRef]:
+        with self._engine.connect() as conn:
+            grouped = self._grouped_ids(conn)
+            rows = conn.execute(
+                select(s.chunk_work_refs.c.chunk_id, s.chunk_work_refs.c.source, s.chunk_work_refs.c.ref)
+            ).all()
+            terminal = {
+                (r.chunk_id, r.source, r.ref)
+                for r in conn.execute(
+                    select(
+                        s.work_item_closures.c.chunk_id, s.work_item_closures.c.source, s.work_item_closures.c.ref
+                    ).where(
+                        s.work_item_closures.c.outcome.in_(
+                            [WorkItemCloseOutcome.CLOSED.value, WorkItemCloseOutcome.GONE.value]
+                        )
+                    )
+                ).all()
+            }
+        result: list[ClosableWorkRef] = []
+        for row in rows:
+            if row.chunk_id in grouped:
+                continue  # the pointer moved to the survivor; the grouped chunk owes nothing
+            if (row.chunk_id, row.source, row.ref) in terminal:
+                continue
+            facts = self.load_facts(row.chunk_id)
+            if facts is None or not has_landed_repos(facts, self.load_artifacts(row.chunk_id)):
+                continue  # never landed — has_landed_repos is the sole gate, not chunk status
+            result.append(ClosableWorkRef(chunk_id=row.chunk_id, ref=WorkRef(source=row.source, ref=row.ref)))
         return result
 
     def accepted_transition_target(self, chunk_id: str, *, from_node_id: str, epoch: int) -> str | None:
@@ -1161,6 +1194,34 @@ class ChunkStore:
     def record_delivery_landed(self, chunk_id: str, *, at: datetime) -> None:
         with self._engine.begin() as conn:
             conn.execute(insert(s.delivery_landed).values(chunk_id=chunk_id, landed_at=at))
+
+    def record_work_item_closure(
+        self, chunk_id: str, *, pointer: WorkRef, outcome: WorkItemCloseOutcome, reason: str | None, at: datetime
+    ) -> bool:
+        """Idempotent per ``(chunk_id, source, ref, outcome)`` — mirrors
+        :meth:`record_hub_artifact`'s own already-existed-row contract."""
+        with self._engine.begin() as conn:
+            already = conn.execute(
+                select(s.work_item_closures.c.id).where(
+                    (s.work_item_closures.c.chunk_id == chunk_id)
+                    & (s.work_item_closures.c.source == pointer.source)
+                    & (s.work_item_closures.c.ref == pointer.ref)
+                    & (s.work_item_closures.c.outcome == outcome.value)
+                )
+            ).first()
+            if already is not None:
+                return False
+            conn.execute(
+                insert(s.work_item_closures).values(
+                    chunk_id=chunk_id,
+                    source=pointer.source,
+                    ref=pointer.ref,
+                    outcome=outcome.value,
+                    reason=reason,
+                    recorded_at=at,
+                )
+            )
+            return True
 
     def finalize_delivery(
         self,

@@ -95,6 +95,29 @@ class WorkRef:
     ref: str
 
 
+class WorkItemCloseOutcome(StrEnum):
+    """The result of one close attempt against a work item's source (issue #216).
+
+    ``CLOSED``/``GONE`` are terminal — :func:`~blizzard.hub.domain.work.IReadChunkRepository.closable_work_refs`
+    never returns a ref once either lands. ``FAILED`` is not: the reconciler retries it
+    on every later sweep until it converges to a terminal outcome."""
+
+    CLOSED = "closed"
+    GONE = "gone"
+    FAILED = "failed"
+
+
+@dataclass(frozen=True)
+class ClosableWorkRef:
+    """One ``(chunk_id, ref)`` pair a landed, non-grouped chunk still owes a closure
+    attempt — :meth:`IReadChunkRepository.closable_work_refs`'s own row shape. Pairs,
+    not a ``WorkRef``-keyed dict: two chunks can name the same ref, and a dict would
+    silently drop one."""
+
+    chunk_id: str
+    ref: WorkRef
+
+
 class MigrationMode(StrEnum):
     """How a chunk's :class:`IntendedMigration` fires at its next transition (issue #124).
 
@@ -1458,6 +1481,18 @@ class IReadChunkRepository(Protocol):
         forge-status reconciler's desired-state sweep (issue #179)."""
         ...
 
+    def closable_work_refs(self) -> list[ClosableWorkRef]:
+        """Every ``(chunk_id, ref)`` pair a landed, non-grouped chunk still owes a
+        closure attempt — :func:`has_landed_repos` over the chunk's own facts and
+        node artifacts is the sole landing gate (the same truth delivery itself
+        reads), so a chunk that landed and was *later* stopped still closes; one
+        that never landed never does, whether or not it is stopped. A ref already
+        carrying a terminal (``closed``/``gone``) closure fact is excluded; one
+        carrying only a ``failed`` fact is not, so :class:`DeliveryClosureReconciler`
+        retries it. Pairs, not a ``WorkRef``-keyed dict — two chunks can name the
+        same ref, and a dict would silently drop one."""
+        ...
+
     def accepted_transition_target(self, chunk_id: str, *, from_node_id: str, epoch: int) -> str | None:
         """The ``to_node_id`` of an already-accepted transition out of ``from_node_id`` at
         ``epoch`` — the idempotency probe for a re-applied completion, or None."""
@@ -1613,6 +1648,18 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
 
     def record_delivery_repo_landed(self, chunk_id: str, *, repo: str, commit_hash: str, at: datetime) -> None: ...
     def record_delivery_landed(self, chunk_id: str, *, at: datetime) -> None: ...
+
+    def record_work_item_closure(
+        self, chunk_id: str, *, pointer: WorkRef, outcome: WorkItemCloseOutcome, reason: str | None, at: datetime
+    ) -> bool:
+        """Append one closure-attempt outcome fact, idempotent per ``(chunk_id,
+        pointer.source, pointer.ref, outcome)`` — the dedupe gate
+        :class:`DeliveryClosureReconciler`'s event emission rides on, mirroring
+        :meth:`record_hub_artifact`'s own already-existed contract. ``reason`` carries
+        the failure/gone detail; ``None`` for ``closed``. Returns True iff it wrote a
+        fresh row."""
+        ...
+
     def finalize_delivery(
         self,
         chunk_id: str,

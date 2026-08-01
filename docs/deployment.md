@@ -228,6 +228,7 @@ provider = "github"                                # the only adapter grammar to
 repo = "paul-gross/blizzard"                       # the "owner/repo" this source is pinned to
 token_env = "BZ_WORK_SOURCE_TOKEN"                          # names an env var — see credentials below
 annotate = false                                   # opt into the forge-status label sweep — see below
+close = false                                      # opt into the delivery closure sweep — see below
 # api_base = "https://ghe.example.internal/api/v3" # optional: override the provider's API origin
 # web_base = "https://ghe.example.internal"         # optional: override the web origin
 ```
@@ -241,6 +242,7 @@ Every field:
 | `repo` | yes | The `owner/name` coordinate this source is pinned to. Each `(provider, repo)` pair may appear under only one `name` — two names for the same repo would let one item be ingested twice under two identities. |
 | `token_env` | yes | Names an environment variable — **not the secret itself**. See "Credential indirection" below. |
 | `annotate` | no, default `false` | Opts this source into the forge-status label sweep. See "The forge-status label projection" below — **do not set this on more than one hub against the same forge repo.** |
+| `close` | no, default `false` | Opts this source into the delivery closure sweep. See "Closing delivered work items" below — **do not set this on more than one hub against the same forge repo.** |
 | `api_base` | no | Overrides the provider's default API origin. Required to reach a self-hosted forge (e.g. GitHub Enterprise). |
 | `web_base` | no | Overrides the provider's default web origin, used for the item's browsable URL. Derived from `api_base` when omitted, so a self-hosted GHE source only needs to set `api_base`. |
 
@@ -298,6 +300,30 @@ same repo will fight over the same labels — each pass "correcting" what the ot
 wrote — with no coordination between them. Only the canonical instance for a given
 forge repo should opt in; every dev/staging/snapshot hub pointed at that same repo
 must leave it `false`.
+
+### Closing delivered work items
+
+Per source with `close = true`, the hub runs a periodic background sweep that closes
+every landed, non-grouped chunk's still-open work refs through that source's own
+binding — the guarantee half of closing delivered work (issue #216); a worker's own
+commit metadata, when the source honors it, is only an opportunistic hint that may
+beat this sweep to it on a fast-forward landing.
+
+Closing is **best effort and non-atomic**: each ref is attempted independently, one
+ref's failure never blocks another's, and a failed attempt is retried on the sweep's
+next pass — there is no bound on how many passes a transient forge outage costs, only
+that it eventually converges. Each ref's outcome (`closed`, `gone`, or `failed`) is
+recorded as a durable fact and, the first time that outcome is recorded, one
+chunk-visible event (`work-item-closed` at `info`, or `work-item-close-failed` at
+`warning` — covering both a retried `failed` attempt and a terminal `gone` one). The
+same `annotation_interval_seconds` paces this sweep too — there is no second interval
+knob to configure.
+
+**Set `close = true` on at most one hub per forge repo**, for the same reason as
+`annotate` above: two writers issuing the same closing `PATCH` race each other with no
+coordination between them. A `STOPPED` chunk that never landed closes nothing; a chunk
+that landed and was *later* stopped still closes — landing, not chunk status, is what
+this sweep gates on.
 
 ### The upgrade note
 

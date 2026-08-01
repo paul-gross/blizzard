@@ -27,6 +27,7 @@ import httpx
 from blizzard.foundation.logging import get_logger
 from blizzard.hub.domain.work import WorkRef
 from blizzard.hub.work_sources.annotator import IWorkAnnotator, WorkAnnotateError, WorkStatusMarker
+from blizzard.hub.work_sources.closer import IWorkCloser, WorkCloseError, WorkItemGoneError
 from blizzard.hub.work_sources.source import IWorkSource, WorkItem, WorkSourceError
 
 _log = get_logger("blizzard.hub.work_sources")
@@ -60,9 +61,10 @@ def _other_marker(marker: WorkStatusMarker) -> WorkStatusMarker:
 class GitHubWorkSource:
     """Vendor-native issue reader over a GitHub-shaped forge, pinned to one repo.
 
-    Also implements :class:`~blizzard.hub.work_sources.annotator.IWorkAnnotator` —
-    one instance, one client, one credential, both Protocols — bound into the
-    registry's annotator map only for a source configured to opt in.
+    Also implements :class:`~blizzard.hub.work_sources.annotator.IWorkAnnotator` and
+    :class:`~blizzard.hub.work_sources.closer.IWorkCloser` — one instance, one client,
+    one credential, all three Protocols — bound into the registry's annotator/closer
+    maps only for a source configured to opt in.
     """
 
     def __init__(self, client: httpx.Client, *, name: str, repo: str, web_base: str) -> None:
@@ -203,10 +205,34 @@ class GitHubWorkSource:
             raise WorkAnnotateError(f"failed to discover marked refs for {self._name}: {exc}") from exc
         return {ref: frozenset(markers) for ref, markers in found.items()}
 
+    # -- IWorkCloser -----------------------------------------------------------
+
+    def close(self, pointer: WorkRef) -> None:
+        """``PATCH`` the issue closed with ``state_reason: completed`` — idempotent,
+        mirroring GitHub's own PATCH (re-closing an already-closed issue is a clean
+        200 no-op). A 404/410 means the item is gone rather than merely unreachable,
+        so it degrades to the terminal :class:`WorkItemGoneError` instead of the
+        retried :class:`WorkCloseError`."""
+        try:
+            resp = self._client.patch(
+                f"/repos/{self._repo}/issues/{pointer.ref}",
+                json={"state": "closed", "state_reason": "completed"},
+            )
+            if resp.status_code in (404, 410):
+                raise WorkItemGoneError(f"{self._name}#{pointer.ref} no longer exists")
+            resp.raise_for_status()
+        except httpx.HTTPError as exc:
+            _log.error("close failed", source=self._name, ref=pointer.ref, error=str(exc))
+            raise WorkCloseError(f"failed to close {self._name}#{pointer.ref}: {exc}") from exc
+
 
 def _conforms_work_source(x: GitHubWorkSource) -> IWorkSource:
     return x
 
 
 def _conforms_work_annotator(x: GitHubWorkSource) -> IWorkAnnotator:
+    return x
+
+
+def _conforms_work_closer(x: GitHubWorkSource) -> IWorkCloser:
     return x
