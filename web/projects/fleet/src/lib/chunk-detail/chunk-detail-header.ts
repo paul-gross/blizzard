@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { RouterLink } from '@angular/router';
 
 import type { ChunkDetail, ChunkStatus, PauseView, WorkRefView, RouteView } from '../api/hub';
 import { KitButton } from '../kit/kit-button';
@@ -36,14 +37,20 @@ const NOT_PAUSABLE = new Set<ChunkStatus>(['done', 'stopped', 'delivering']);
 @Component({
   selector: 'fleet-chunk-detail-header',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitButton],
+  imports: [KitButton, RouterLink],
   template: `
     <header class="d-head">
       <!-- The chunk's identity, in the board's own vocabulary: the short name in gold,
            the work item it serves in cyan, and its state — with the node it currently
            sits at pushed to the far right, the same shape the board cards use. -->
       <div class="d-title">
-        <span class="id" data-testid="detail-id" [attr.title]="detail().chunk_id">{{ detail().chunk_id }}</span>
+        <a
+          class="id"
+          data-testid="detail-id"
+          [attr.title]="detail().chunk_id"
+          [routerLink]="[...linkBase(), detail().chunk_id]"
+          >{{ detail().chunk_id }}</a
+        >
         <span class="d-sub">
           <!-- Each pointer links out to its work source here in the detail — the board
                cards stay plain click targets, so the anchor lives on this view only.
@@ -157,6 +164,12 @@ const NOT_PAUSABLE = new Set<ChunkStatus>(['done', 'stopped', 'delivering']);
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      text-decoration: none;
+    }
+    .d-title .id:hover,
+    .d-title .id:focus-visible {
+      text-decoration: underline;
+      outline: none;
     }
     .d-sub {
       display: flex;
@@ -241,6 +254,12 @@ export class ChunkDetailHeader {
    * never sees a write it cannot make; `null`/pending resolves to `false` (hidden
    * until confirmed), the same convention `RunnerPanel`'s `canPause` set. */
   readonly canControl = input(false);
+
+  /** The chunk detail route's own path segments, before the chunk id — lets a
+   * consumer outside the desktop board point the longname link elsewhere without
+   * `fleet` hardcoding a hub route (`ChunkArtifacts`'s own `linkBase` follows the
+   * same convention). */
+  readonly linkBase = input<readonly string[]>(['/board', 'chunk']);
 
   /** Emitted when the operator dismisses the dock. */
   readonly dismiss = output<void>();

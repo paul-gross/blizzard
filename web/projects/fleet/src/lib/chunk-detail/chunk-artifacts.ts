@@ -27,7 +27,7 @@ import { sortArtifacts } from './sort-artifacts';
   imports: [ChunkArtifactBody, RouterLink],
   template: `
     <div class="arts">
-      <div class="s-head"><span class="tag">Artifacts</span></div>
+      <div class="s-head"><span class="tag" id="chunk-artifacts-heading">Artifacts</span></div>
       @if (artifacts().length === 0) {
         <p class="none" data-testid="artifacts-empty">No artifacts yet.</p>
       } @else {

@@ -67,7 +67,7 @@ interface StepUsageTotal {
   selector: 'fleet-chunk-detail-timeline',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="s-head"><span class="tag">Node history</span></div>
+    <div class="s-head"><span class="tag" id="chunk-timeline-heading">Node history</span></div>
     @if (historyRows().length === 0 && !activeRow()) {
       <p class="none" data-testid="history-empty">No transitions yet — waiting on the first node-step.</p>
     } @else {

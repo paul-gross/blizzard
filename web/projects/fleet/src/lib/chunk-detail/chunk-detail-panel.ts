@@ -27,8 +27,8 @@ export type { WorkItemsState } from './chunk-issue-pane';
  * components under `lib/chunk-detail/`, each owning one region: the
  * {@link ChunkDetailHeader} (identity, pause/detach/resume, close), the
  * work-item column ({@link ChunkFacts} + {@link ChunkTokenBreakdown} +
- * {@link ChunkIssuePane}), the node-history {@link ChunkTimeline}, and the
- * artifacts-and-asks column ({@link ChunkAwaitingHuman} + {@link ChunkArtifacts}).
+ * {@link ChunkAwaitingHuman} + {@link ChunkIssuePane}), the node-history
+ * {@link ChunkTimeline}, and the artifacts column ({@link ChunkArtifacts}).
  * This panel forwards `detail`/`workItems`/`actionError` down to whichever
  * siblings need them and re-emits their outputs up unchanged, so
  * `chunk-detail.ts`'s (the container's) template binding set is identical to
@@ -77,12 +77,6 @@ export type { WorkItemsState } from './chunk-issue-pane';
           >
             <fleet-chunk-detail-token-breakdown token-breakdown [detail]="detail()" />
           </fleet-chunk-detail-facts>
-          <fleet-chunk-detail-issue-pane [workItems]="workItems()" />
-        </section>
-        <section class="d-sec" aria-label="Node history">
-          <fleet-chunk-detail-timeline [detail]="detail()" />
-        </section>
-        <section class="d-sec" aria-label="Artifacts and asks">
           <fleet-chunk-detail-awaiting-human
             [detail]="detail()"
             [canAnswer]="canAnswer()"
@@ -90,6 +84,12 @@ export type { WorkItemsState } from './chunk-issue-pane';
             (answerQuestion)="answerQuestion.emit($event)"
             (resolveDecision)="resolveDecision.emit($event)"
           />
+          <fleet-chunk-detail-issue-pane [workItems]="workItems()" />
+        </section>
+        <section class="d-sec" aria-labelledby="chunk-timeline-heading">
+          <fleet-chunk-detail-timeline [detail]="detail()" />
+        </section>
+        <section class="d-sec" aria-labelledby="chunk-artifacts-heading">
           <fleet-chunk-detail-artifacts [detail]="detail()" />
         </section>
       </div>

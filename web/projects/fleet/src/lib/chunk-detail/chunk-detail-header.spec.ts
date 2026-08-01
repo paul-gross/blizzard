@@ -1,5 +1,6 @@
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { vi } from 'vitest';
 
 import type { ChunkDetail } from '../api/hub';
@@ -57,7 +58,7 @@ describe('ChunkDetailHeader', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [ChunkDetailHeader],
-      providers: [provideZonelessChangeDetection()],
+      providers: [provideZonelessChangeDetection(), provideRouter([])],
     }).compileComponents();
   });
 
@@ -68,10 +69,13 @@ describe('ChunkDetailHeader', () => {
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('[data-testid="detail-id"]')?.textContent?.trim()).toBe(ISSUE_DETAIL.chunk_id);
+    const idLink = el.querySelector<HTMLAnchorElement>('[data-testid="detail-id"]');
+    expect(idLink?.textContent?.trim()).toBe(ISSUE_DETAIL.chunk_id);
     // At narrow widths the id truncates with an ellipsis (styles), so the full id
     // stays recoverable through the title attribute rather than the rendered text (issue #138).
-    expect(el.querySelector('[data-testid="detail-id"]')?.getAttribute('title')).toBe(ISSUE_DETAIL.chunk_id);
+    expect(idLink?.getAttribute('title')).toBe(ISSUE_DETAIL.chunk_id);
+    // The chunk longname links out to its dedicated page (issue #205).
+    expect(idLink?.getAttribute('href')).toBe(`/board/chunk/${ISSUE_DETAIL.chunk_id}`);
     const pointer = el.querySelector<HTMLAnchorElement>('a[data-testid="detail-pointer"]');
     expect(pointer?.textContent?.trim()).toBe('widget#42');
     expect(pointer?.getAttribute('href')).toBe('https://github.com/acme/widget/issues/42');

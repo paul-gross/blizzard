@@ -75,8 +75,11 @@ describe('ChunkDetailPanel', () => {
     // regions' labels rather than their CSS classes — a restyle that reshapes the
     // wrapper changes nothing about that guarantee.
     expect(el.querySelector('[aria-label="Work item"]')).not.toBeNull();
-    expect(el.querySelector('[aria-label="Node history"]')).not.toBeNull();
-    expect(el.querySelector('[aria-label="Artifacts and asks"]')).not.toBeNull();
+    // The node-history and artifacts sections are labelled through their own visible
+    // heading (`aria-labelledby`) rather than a second, literal copy of its text
+    // (issue #205) — asserted through the reference rather than a duplicated string.
+    expect(el.querySelector('[aria-labelledby="chunk-timeline-heading"]')).not.toBeNull();
+    expect(el.querySelector('[aria-labelledby="chunk-artifacts-heading"]')).not.toBeNull();
 
     // Each column's sibling components rendered — the composition wired `detail`
     // (and, below, `workItems`) down to every one of them.
@@ -85,6 +88,39 @@ describe('ChunkDetailPanel', () => {
     expect(el.querySelector('[data-testid="issue-pane"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="history-active"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="artifacts-empty"]')).not.toBeNull();
+  });
+
+  it('renders "Node history" exactly once (issue #205)', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', ISSUE_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.outerHTML.match(/Node history/g) ?? []).toHaveLength(1);
+  });
+
+  it('orders the work-item column work item, asks/decisions, issues (issue #205)', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', WAITING_QUESTION_DETAIL);
+    fixture.componentRef.setInput('canAnswer', true);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const workItemSection = el.querySelector('[aria-label="Work item"]')!;
+    const order = [
+      ...workItemSection.querySelectorAll('[data-testid="chunk-facts"], [data-testid="awaiting-human"], [data-testid="issue-pane"]'),
+    ].map((node) => node.getAttribute('data-testid'));
+    expect(order).toEqual(['chunk-facts', 'awaiting-human', 'issue-pane']);
+  });
+
+  it('links the chunk longname to its dedicated page (issue #205)', async () => {
+    const fixture = TestBed.createComponent(ChunkDetailPanel);
+    fixture.componentRef.setInput('detail', ISSUE_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const idLink = el.querySelector<HTMLAnchorElement>('[data-testid="detail-id"]');
+    expect(idLink?.getAttribute('href')).toBe(`/board/chunk/${ISSUE_DETAIL.chunk_id}`);
   });
 
   it('forwards workItems down to the issue pane', async () => {
