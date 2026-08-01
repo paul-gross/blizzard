@@ -1,4 +1,4 @@
-import { provideZonelessChangeDetection } from '@angular/core';
+import { Component, afterRenderEffect, provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { QueryClient, provideTanStackQuery } from '@tanstack/angular-query-experimental';
 import { vi } from 'vitest';
@@ -198,5 +198,41 @@ describe('FleetLiveUpdates', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  describe('started from within a reactive context (the app root wiring)', () => {
+    // The app root calls `start()` from inside `afterRenderEffect` (`app.ts`), which
+    // — like `effect` — tracks signals while its callback runs. `start()` must not
+    // throw NG0602 there, and its `handle.reopens()` watcher must still get installed:
+    // a hand-built repro (`effect(() => effect(() => {}))`) would catch the NG0602
+    // shape but says nothing about whether this app's actual wiring trips it.
+    @Component({ selector: 'fleet-test-host', template: '' })
+    class Host {
+      readonly live = TestBed.inject(FleetLiveUpdates);
+      constructor() {
+        afterRenderEffect(() => this.live.start());
+      }
+    }
+
+    it('does not throw NG0602 on render, and the reopens watcher still invalidates the cache', async () => {
+      vi.useFakeTimers();
+      try {
+        const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+        const fixture = TestBed.createComponent(Host);
+
+        expect(() => fixture.detectChanges()).not.toThrow();
+        await fixture.whenStable();
+
+        const source = FakeEventSource.instances[0];
+        source.open();
+        source.hardError();
+        vi.advanceTimersByTime(2000);
+        TestBed.flushEffects();
+
+        expect(invalidate.mock.calls.some((call) => call[0] === undefined)).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 });

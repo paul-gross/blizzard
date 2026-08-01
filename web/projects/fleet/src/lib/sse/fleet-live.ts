@@ -1,4 +1,4 @@
-import { DestroyRef, EnvironmentInjector, Injectable, type Signal, effect, inject, signal } from '@angular/core';
+import { DestroyRef, EnvironmentInjector, Injectable, type Signal, effect, inject, signal, untracked } from '@angular/core';
 import { QueryClient } from '@tanstack/angular-query-experimental';
 
 import {
@@ -254,16 +254,23 @@ export class FleetLiveUpdates {
     });
 
     // Reconnect-then-re-GET: a fresh reconnect re-reads the whole tree to close any gap.
+    // `untracked` around the `effect()` call itself (not its body): `start()` may be
+    // invoked from within another reactive context (the app root's `afterRenderEffect`
+    // wiring, which tracks signals same as `effect`), and `effect()` asserts it is not
+    // called from one (NG0602) — `untracked` clears the active consumer for the
+    // duration of this call, so `start()` stays safe regardless of its caller's context.
     let lastReopens = handle.reopens();
-    const ref = effect(
-      () => {
-        const reopens = handle.reopens();
-        if (reopens > lastReopens) {
-          lastReopens = reopens;
-          void this.queryClient.invalidateQueries();
-        }
-      },
-      { injector: this.injector },
+    const ref = untracked(() =>
+      effect(
+        () => {
+          const reopens = handle.reopens();
+          if (reopens > lastReopens) {
+            lastReopens = reopens;
+            void this.queryClient.invalidateQueries();
+          }
+        },
+        { injector: this.injector },
+      ),
     );
 
     this.destroyRef.onDestroy(() => {

@@ -230,9 +230,9 @@ export class App {
     // Open the SSE stream and wire it to the query cache once authenticated with at
     // least one permission — `start()` is idempotent, so a flip back to `ready`
     // (e.g. after a role change, #94) resumes it. `afterRenderEffect` (not a plain
-    // `effect`): `FleetLiveUpdates.start()` calls `effect()` itself, and Angular
-    // forbids calling `effect()` from within another effect's synchronous callback
-    // (`NG0602`) — the render-phase effect runs outside that reactive context.
+    // `effect`) so this runs post-render rather than mid-change-detection; either way
+    // `FleetLiveUpdates.start()` is itself safe to call from a reactive context — it
+    // wraps its own internal `effect()` call in `untracked` (fleet-live.ts).
     afterRenderEffect(() => {
       if (this.authState() === 'ready') this.live.start();
     });
