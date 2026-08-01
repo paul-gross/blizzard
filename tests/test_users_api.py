@@ -97,9 +97,7 @@ def test_assigned_role_is_returned_by_a_fresh_list_users_read(tmp_path: Path) ->
     guest = seed_user(hub, username="grace", role=Role.GUEST)
     token = seed_session(hub, admin)
 
-    assign = hub.client.post(
-        f"/api/users/{guest.user_id}/role", json={"role": "contributor"}, headers=_cookie(token)
-    )
+    assign = hub.client.post(f"/api/users/{guest.user_id}/role", json={"role": "contributor"}, headers=_cookie(token))
     assert assign.status_code == 200
 
     listing = hub.client.get("/api/users", headers=_cookie(token))
