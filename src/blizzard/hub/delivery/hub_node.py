@@ -126,12 +126,18 @@ _CP_HUBNODE_AFTER_POLL_BEFORE_SLOT_RELEASE = crashpoint(
 
 @dataclass(frozen=True)
 class HubRunResult:
-    """The outcome of one :meth:`HubNodeExecutor.run` call that actually ran."""
+    """The outcome of one :meth:`HubNodeExecutor.run` call that actually ran.
+
+    ``transition_id`` (issue #213) is the freshly-recorded ``transitions.transition_id``
+    when ``wrote_transition`` is true, and ``None`` otherwise (a pending poll, a bounce,
+    a bounce-cap escalation) — there is no fresh transition row to key an activity-feed
+    frame on."""
 
     outcome_choice: str
     to_node_name: str
     wrote_transition: bool
     detail: str = ""
+    transition_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -706,6 +712,7 @@ class HubNodeExecutor:
                 )
                 extra_artifacts = [*(extra_artifacts or []), envelope_artifact]
 
+        fresh_transition_id = mint(TRANSITION_PREFIX, self._clock)
         wrote = self._chunks.record_hub_step_transition(
             chunk.chunk_id,
             from_node_id=node.node_id,
@@ -713,12 +720,17 @@ class HubNodeExecutor:
             choice_name=choice,
             epoch=hub_epoch,
             runner_id=_HUB_RUNNER_ID,
-            transition_id=mint(TRANSITION_PREFIX, self._clock),
+            transition_id=fresh_transition_id,
             at=self._clock.now(),
             artifacts=extra_artifacts or [],
             release_route=to_node_id == RESERVED_TERMINAL,
         )
-        return HubRunResult(outcome_choice=choice, to_node_name=edge.to_node_name, wrote_transition=wrote)
+        return HubRunResult(
+            outcome_choice=choice,
+            to_node_name=edge.to_node_name,
+            wrote_transition=wrote,
+            transition_id=fresh_transition_id if wrote else None,
+        )
 
     def _resolve_feature_title(self, chunk: Chunk) -> str | None:
         """The chunk's prose feature title (:data:`ENV_FEATURE_TITLE`) — the FIRST

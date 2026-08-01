@@ -40,8 +40,22 @@ from blizzard.wire.decision import DecisionSubmission
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse
 
 
-def _failure(detail: str) -> ApplyResponse:
-    return ApplyResponse(outcome=ApplyOutcome.FAILURE, detail=detail)
+def _failure(detail: str) -> DecisionSubmitResult:
+    return DecisionSubmitResult(response=ApplyResponse(outcome=ApplyOutcome.FAILURE, detail=detail))
+
+
+@dataclass(frozen=True)
+class DecisionSubmitResult:
+    """:meth:`DecisionService.submit`'s own return — the wire :class:`ApplyResponse` plus
+    the identity of the durable fact this call itself just wrote (issue #213), not a
+    wire type: the route controller unwraps ``response`` for the HTTP body and reads
+    ``decision_id`` to build the ``chunk-changed`` frame's ``key``.
+
+    ``decision_id`` is set only on a fresh ``decisions`` row — never on a failure or the
+    idempotent-replay branch (a lost-ack re-submission of an already-open decision)."""
+
+    response: ApplyResponse
+    decision_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -66,7 +80,7 @@ class DecisionService:
 
     def submit(
         self, chunk: Chunk, graph: Graph, submission: DecisionSubmission, *, route_token_mode: str = ROUTE_TOKEN_WARN
-    ) -> ApplyResponse:
+    ) -> DecisionSubmitResult:
         """Runner-config gate: park the chunk on a decision instead of transitioning."""
         node = graph.node_by_id(submission.from_node_id)
         if node is None:
@@ -95,7 +109,9 @@ class DecisionService:
         # Idempotent replay: a decision already open at this (node, epoch) — a
         # lost-ack re-submission — returns the parked outcome without a second row.
         if self._chunks.find_decision(chunk.chunk_id, node_id=node.node_id, epoch=submission.epoch) is not None:
-            return ApplyResponse(outcome=ApplyOutcome.PARKED_AT_GATE, detail=f"parked at gate `{node.name}`")
+            return DecisionSubmitResult(
+                response=ApplyResponse(outcome=ApplyOutcome.PARKED_AT_GATE, detail=f"parked at gate `{node.name}`")
+            )
 
         if derive_chunk_status(facts) in TERMINAL_STATUSES:
             return _failure("chunk is terminal")
@@ -103,8 +119,9 @@ class DecisionService:
         if latest is not None and submission.epoch != latest:
             return _failure(f"stale epoch {submission.epoch}; chunk is at {latest}")
 
+        decision_id = mint(DECISION_PREFIX, self._clock)
         self._chunks.record_decision(
-            decision_id=mint(DECISION_PREFIX, self._clock),
+            decision_id=decision_id,
             chunk_id=chunk.chunk_id,
             node_id=node.node_id,
             node_name=node.name,
@@ -116,7 +133,10 @@ class DecisionService:
                 for a in submission.artifacts
             ],
         )
-        return ApplyResponse(outcome=ApplyOutcome.PARKED_AT_GATE, detail=f"parked at gate `{node.name}`")
+        return DecisionSubmitResult(
+            response=ApplyResponse(outcome=ApplyOutcome.PARKED_AT_GATE, detail=f"parked at gate `{node.name}`"),
+            decision_id=decision_id,
+        )
 
     def resolve(self, decision_id: str, *, choice: str, resolved_by: str) -> ResolutionResult | None:
         """Record a person's choice, first-write-wins. ``None`` if no such decision."""
@@ -144,17 +164,20 @@ class RequeueService:
         self._chunks = chunks
         self._clock = clock
 
-    def requeue(self, chunk_id: str) -> None:
+    def requeue(self, chunk_id: str) -> int:
         """Supersede the open escalation and release the route so the chunk re-derives ready.
 
         Raises :class:`NotEscalated` if the chunk is not ``needs_human`` — there is no
-        escalation to close, so a requeue would be meaningless."""
+        escalation to close, so a requeue would be meaningless. Returns the freshly-written
+        ``requeues.id`` (issue #213's activity-feed key) — the ``route_released`` row this
+        also writes is not the ``requeued`` cause's own mapped fact table."""
         facts = self._chunks.load_facts(chunk_id)
         if facts is None or open_escalation(facts) is None:
             raise NotEscalated(f"chunk {chunk_id} is not escalated (needs_human)")
         now = self._clock.now()
-        self._chunks.record_requeue(chunk_id, at=now)  # supersedes the escalation
+        requeue_id = self._chunks.record_requeue(chunk_id, at=now)  # supersedes the escalation
         self._chunks.record_route_released(chunk_id, at=now)  # -> ready, re-leasable at its current node
+        return requeue_id
 
 
 def _artifact_row(

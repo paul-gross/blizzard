@@ -352,7 +352,13 @@ def hub_advance(
     result = services.hub_node.run(chunk, graph, node, epoch=epoch)
     facts = services.chunks.load_facts(chunk_id) or ChunkFacts(minted=True)
     derived = derive_chunk_status(facts)
-    chunk_events.publish_chunk_changed(services, chunk_id, cause="hub-advanced", prev_status=prev_status)
+    # `key` names the transition this call itself just recorded — absent when this poll
+    # deferred (busy slot, not yet due) or wrote a poll-attempt/bounce fact instead of a
+    # transition (issue #213): there is no fresh `transitions` row to key on either way.
+    advance_key = f"transitions:{result.transition_id}" if result is not None and result.transition_id else None
+    chunk_events.publish_chunk_changed(
+        services, chunk_id, cause="hub-advanced", prev_status=prev_status, key=advance_key
+    )
     if result is None:
         pending = hub_node_pending(facts)
         next_poll_at = pending.polled_at + poll_interval_for(node) if pending is not None else None
@@ -413,7 +419,12 @@ def claim_route(
     # `running` and re-deriving here would be a behavior change outside this change's
     # scope (see `chunk_events.publish_chunk_changed`'s docstring).
     chunk_events.publish_chunk_changed(
-        services, chunk.chunk_id, cause="claimed", prev_status=prev_status, status="running"
+        services,
+        chunk.chunk_id,
+        cause="claimed",
+        prev_status=prev_status,
+        status="running",
+        key=f"route_created:{result.route_id}",
     )
     services.events.publish_queue_changed()  # the claim removed the chunk from the ready queue
     return RouteClaimResponse(
@@ -474,7 +485,7 @@ def submit_completion(
         services, chunk, graph, hub_default=_follow_latest_default(http_request)
     )
     prev_status = chunk_events.snapshot_chunk_status(services, chunk_id)
-    response = services.apply.apply(
+    result = services.apply.apply(
         chunk,
         graph,
         submission,
@@ -484,9 +495,23 @@ def submit_completion(
         intended_target_graph=intended_target_graph,
         follow_latest_graph=follow_latest_graph,
     )
-    cause = "migrated" if response.outcome is ApplyOutcome.MIGRATED and not already_migrated else "node-completed"
-    chunk_events.publish_chunk_changed(services, chunk_id, cause=cause, prev_status=prev_status)
-    if response.outcome is ApplyOutcome.MIGRATED and not already_migrated:
+    response = result.response
+    fresh_migration = response.outcome is ApplyOutcome.MIGRATED and not already_migrated
+    cause = "migrated" if fresh_migration else "node-completed"
+    # `key` names the fact this call itself just wrote, matching each cause's own mapped
+    # fact table (issue #213) — `result.migration_id` only when the cause is genuinely
+    # `migrated` (a hub-landing migration reports `HUB_NODE_TAKEN`, not `MIGRATED`, so it
+    # is labeled `node-completed` here and must not carry a `chunk_migrations` key), and
+    # `result.transition_id` only when a fresh `transitions` row backs `node-completed`
+    # (absent on a replay, a failure, or a migration's escalation branch).
+    if fresh_migration and result.migration_id is not None:
+        key = f"chunk_migrations:{result.migration_id}"
+    elif not fresh_migration and result.transition_id is not None:
+        key = f"transitions:{result.transition_id}"
+    else:
+        key = None
+    chunk_events.publish_chunk_changed(services, chunk_id, cause=cause, prev_status=prev_status, key=key)
+    if fresh_migration:
         services.events.publish_queue_changed()  # a fresh migration re-queued the chunk under the target graph
     # A completion landing on a human-judged node opens a graph gate: surface it.
     chunks_api.publish_open_decision(services, chunk_id)
@@ -510,11 +535,12 @@ def submit_decision(
     if graph is None:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="chunk's pinned graph is missing")
     prev_status = chunk_events.snapshot_chunk_status(services, chunk_id)
-    response = services.decisions.submit(chunk, graph, submission, route_token_mode=_route_token_mode(http_request))
-    chunk_events.publish_chunk_changed(services, chunk_id, cause="decision-submitted", prev_status=prev_status)
+    result = services.decisions.submit(chunk, graph, submission, route_token_mode=_route_token_mode(http_request))
+    key = f"decisions:{result.decision_id}" if result.decision_id is not None else None
+    chunk_events.publish_chunk_changed(services, chunk_id, cause="decision-submitted", prev_status=prev_status, key=key)
     # The runner-config gate parked the chunk on an open decision: surface it.
     chunks_api.publish_open_decision(services, chunk_id)
-    return response
+    return result.response
 
 
 @router.post("/chunks/{chunk_id}/leases", status_code=status.HTTP_202_ACCEPTED)
@@ -546,8 +572,12 @@ def report_escalation(
     if services.chunks.get(chunk_id) is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     prev_status = chunk_events.snapshot_chunk_status(services, chunk_id)
-    services.runner_facts.record_escalation(chunk_id, epoch=report.epoch, takeover_command=report.takeover_command)
-    chunk_events.publish_chunk_changed(services, chunk_id, cause="escalated", prev_status=prev_status)
+    escalation_id = services.runner_facts.record_escalation(
+        chunk_id, epoch=report.epoch, takeover_command=report.takeover_command
+    )
+    chunk_events.publish_chunk_changed(
+        services, chunk_id, cause="escalated", prev_status=prev_status, key=f"escalations:{escalation_id}"
+    )
     return {"chunk_id": chunk_id}
 
 
@@ -580,7 +610,8 @@ def ingest_runner_facts(
         candidate = fact.payload.get("chunk_id")
         if isinstance(candidate, str) and candidate not in prev_statuses:
             prev_statuses[candidate] = chunk_events.snapshot_chunk_status(services, candidate)
-    ack = services.facts.ingest(batch, route_token_mode=_route_token_mode(http_request))
+    result = services.facts.ingest(batch, route_token_mode=_route_token_mode(http_request))
+    ack = result.ack
     if ack.applied:
         applied = set(ack.applied)
         for fact in batch.facts:
@@ -597,11 +628,13 @@ def ingest_runner_facts(
                 # lands in the registry — same `by` default when the fact omits it.
                 by = fact.payload.get("by")
                 reason = fact.payload.get("reason")
+                local_pause_id = result.row_id_by_seq.get(fact.seq)
                 services.events.publish_runner_changed(
                     batch.runner_id,
                     kind="locally-paused" if fact.kind == RUNNER_LOCALLY_PAUSED else "locally-resumed",
                     by=by if isinstance(by, str) else "operator",
                     reason=reason if isinstance(reason, str) else None,
+                    key=f"runner_local_pause_facts:{local_pause_id}" if local_pause_id is not None else None,
                 )
                 continue
             # An operational event (issue #125) may be runner-scoped (no chunk_id), so it is
@@ -611,25 +644,50 @@ def ingest_runner_facts(
             # publish_chunk_changed.
             if fact.kind == EVENT_RECORDED:
                 ev_chunk = fact.payload.get("chunk_id")
+                event_id = result.row_id_by_seq.get(fact.seq)
                 services.events.publish_event_logged(
                     severity=str(fact.payload.get("severity", "")),
                     kind=str(fact.payload.get("kind", "")),
                     chunk_id=ev_chunk if isinstance(ev_chunk, str) else None,
                     runner_id=batch.runner_id,
+                    key=f"event_log:{event_id}" if event_id is not None else None,
                 )
                 continue
             chunk_id = fact.payload.get("chunk_id")
             if not isinstance(chunk_id, str):
                 continue
+            cause = _INGEST_CAUSE_BY_FACT_KIND.get(fact.kind)
+            key: str | None = None
             if fact.kind == QUESTION_ASKED:
                 question_id = fact.payload.get("question_id")
                 if isinstance(question_id, str):
-                    services.events.publish_question_asked(chunk_id, question_id)
+                    key = f"questions:{question_id}"
+                    services.events.publish_question_asked(chunk_id, question_id, key=key)
+            elif fact.kind == ANSWER_DELIVERED:
+                question_id = fact.payload.get("question_id")
+                if isinstance(question_id, str):
+                    key = f"question_answers:{question_id}"
+            elif fact.kind == ESCALATION_RECORDED:
+                escalation_id = result.row_id_by_seq.get(fact.seq)
+                if escalation_id is not None:
+                    key = f"escalations:{escalation_id}"
+            elif fact.kind == LEASE_MINTED:
+                # This ingest site's own write is a `lease_facts` row (an epoch-fencing
+                # fact, not a fresh route) — but its `claimed` cause is the mapped
+                # ``route_created`` (issue #213's cause -> fact-table mapping, matching
+                # `claim_route`'s own key exactly), so a lost-ack replay of this same
+                # lease-mint dedupes against that route's backfilled/live row rather than
+                # minting a key no backfilled row ever carries. Reads the chunk's
+                # currently-live route — the one this lease belongs to.
+                route = services.chunks.route_of(chunk_id)
+                if route is not None and route.route_id is not None:
+                    key = f"route_created:{route.route_id}"
             chunk_events.publish_chunk_changed(
                 services,
                 chunk_id,
-                cause=_INGEST_CAUSE_BY_FACT_KIND.get(fact.kind),
+                cause=cause,
                 prev_status=prev_statuses.get(chunk_id),
+                key=key,
             )
     return ack
 

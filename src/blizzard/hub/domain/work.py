@@ -1552,11 +1552,13 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
     """Read-write chunk access. Only the domain layer depends on this variant."""
 
     def mint(self, chunk: Chunk) -> None: ...
-    def record_promote(self, chunk_id: str, *, at: datetime) -> None:
+    def record_promote(self, chunk_id: str, *, at: datetime) -> int | None:
         """Record a ``chunk.promoted`` fact — flips ``not_ready`` to ``ready``.
 
         Idempotent: a chunk already promoted keeps its first row, so a re-promote (a
-        double board click, a CLI retry) writes nothing and the status is unchanged."""
+        double board click, a CLI retry) writes nothing and the status is unchanged.
+        Returns the freshly-written ``chunk_promoted.id`` (issue #213's activity-feed
+        key), or ``None`` on that no-op replay — there is no fresh row to name."""
         ...
 
     def record_lease(self, chunk_id: str, *, epoch: int, runner_id: str, at: datetime) -> None: ...
@@ -1564,17 +1566,21 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         """Advance a runner's applied-seq high-water mark (upsert)."""
         ...
 
-    def record_route(self, route: Route, *, token_hash: str, at: datetime) -> None:
+    def record_route(self, route: Route, *, token_hash: str, at: datetime) -> str:
         """Record the route **and** mint its capability token's fact, atomically (issue #84a).
 
         ``token_hash`` is the sha256 hex digest of the claim's plaintext route token —
         already minted and hashed by the caller (``bzh:domain-takes-objects``); this
         appends the :class:`RouteTokenMintedFact` in the same store write as
         ``route_created`` (one transaction), never a column on the route fact itself
-        (``bzh:facts-not-status``)."""
+        (``bzh:facts-not-status``). Returns the freshly-minted ``route_created.route_id``
+        (issue #213's activity-feed key for the ``claimed`` cause)."""
         ...
 
-    def record_route_released(self, chunk_id: str, *, at: datetime) -> None: ...
+    def record_route_released(self, chunk_id: str, *, at: datetime) -> int:
+        """Append the ``route.released`` fact. Returns the freshly-written
+        ``route_released.id`` (issue #213's activity-feed key)."""
+        ...
 
     def record_route_token(self, chunk_id: str, *, token_hash: str, at: datetime) -> None:
         """Append a fresh :class:`RouteTokenMintedFact` for the chunk's route — the
@@ -1649,7 +1655,7 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
 
     def record_escalation(
         self, chunk_id: str, *, epoch: int, takeover_command: str, at: datetime, decision_id: str | None = None
-    ) -> None:
+    ) -> int:
         """Record an ``escalation.recorded`` fact reported up by a runner.
 
         Retries exhausted (or a dead worker past the cap): the chunk derives
@@ -1659,7 +1665,9 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         unresolvable target (issue #110) — the fact carries it so that decision derives
         closed; without it the gate's decision would stay live forever (neither a
         transition nor a migration row exists to close it), wedging REAP recovery and
-        driving a per-tick runner re-submit. Null for the ordinary escalation."""
+        driving a per-tick runner re-submit. Null for the ordinary escalation.
+
+        Returns the freshly-written ``escalations.id`` (issue #213's activity-feed key)."""
         ...
 
     def record_usage(
@@ -1699,12 +1707,15 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         message: str,
         detail: dict | None,
         at: datetime,
-    ) -> None:
+    ) -> int:
         """Append one ``event_log`` row (issue #125) — never mutated once written.
 
         ``chunk_id`` is ``None`` for a runner-scoped event; ``detail`` is an opaque
         event-specific payload, serialized to JSON text by the store. Clock-stamped by
-        the caller-passed ``at``, exactly like every other fact write here."""
+        the caller-passed ``at``, exactly like every other fact write here.
+
+        Returns the freshly-written ``event_log.id`` (issue #213's activity-feed key —
+        matches :func:`~blizzard.hub.domain.work._event_row_to_activity`'s key format)."""
         ...
 
     def record_question(
@@ -1766,8 +1777,10 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         the decision was already resolved (the loser is told who won)."""
         ...
 
-    def record_requeue(self, chunk_id: str, *, at: datetime) -> None:
-        """Record a ``requeue.recorded`` fact — supersedes an open escalation."""
+    def record_requeue(self, chunk_id: str, *, at: datetime) -> int:
+        """Record a ``requeue.recorded`` fact — supersedes an open escalation.
+
+        Returns the freshly-written ``requeues.id`` (issue #213's activity-feed key)."""
         ...
 
     def record_migration(
@@ -1787,7 +1800,8 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         source: MigrationSource,
         release_route: bool = True,
         clear_intent: bool = False,
-    ) -> bool:
+        migration_id: str | None = None,
+    ) -> str | None:
         """Record a cross-graph migration atomically and idempotently (issue #90).
 
         In one transaction: the ``chunk_migrations`` fact, the ``chunks.graph_id`` re-pin
@@ -1806,7 +1820,11 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         completion, exactly as a transition-into-a-hub-node retains the route. Idempotent
         by ``(chunk_id, from_node_id, epoch)`` — a redelivery replay writes nothing. No
         lease is minted: the fact is recorded at the submitting epoch, and the next claim
-        mints a fresh higher one. Returns True iff it wrote, False on a replay.
+        mints a fresh higher one. ``migration_id`` (issue #213) is caller-minted, mirroring
+        :meth:`record_transition`'s own ``transition_id`` — supplied so the caller can
+        build the fact's activity-feed key without a second read; ``None`` mints one
+        internally (every pre-existing caller). Returns the ``migration_id`` actually
+        used iff this call wrote, ``None`` on a replay — there is no fresh row to name.
 
         ``clear_intent`` (issue #124), when ``True``, adds ``chunks.intended_migration =
         NULL`` to the same ``chunks`` update this already writes for the re-pin — the same
@@ -1824,18 +1842,28 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         """Fold work refs into a group survivor, de-duped by (source, ref)."""
         ...
 
-    def record_grouped(self, chunk_id: str, *, grouped_into: str, at: datetime) -> None:
-        """Record ``chunk.grouped`` — the merged-away chunk becomes ephemeral."""
+    def record_grouped(self, chunk_id: str, *, grouped_into: str, at: datetime) -> int:
+        """Record ``chunk.grouped`` — the merged-away chunk becomes ephemeral.
+
+        Returns the freshly-written ``chunk_grouped.id`` (issue #213's activity-feed key)."""
         ...
 
-    def record_pause(self, chunk_id: str, *, paused: bool, by: str, at: datetime) -> None:
-        """Append a ``chunk.paused``/``chunk.resumed`` fact — newest-fact-wins (issue #46)."""
+    def record_pause(self, chunk_id: str, *, paused: bool, by: str, at: datetime) -> int:
+        """Append a ``chunk.paused``/``chunk.resumed`` fact — newest-fact-wins (issue #46).
+
+        Always writes a fresh row (never a no-op — "newest fact wins" reads, it does not
+        skip writes), so this returns the freshly-written ``chunk_pause_facts.id`` (issue
+        #213's activity-feed key) unconditionally."""
         ...
 
-    def record_stop(self, chunk_id: str, *, by: str, at: datetime) -> None:
+    def record_stop(self, chunk_id: str, *, by: str, at: datetime) -> int:
         """Append the ``chunk.stopped`` fact — terminal operator abandonment (issue #118) —
         and, atomically in the same store transaction, release any live route and any
-        held fleet-wide hub-exec slot (must-fix 2 from the #118 pre-push review)."""
+        held fleet-wide hub-exec slot (must-fix 2 from the #118 pre-push review).
+
+        Returns the freshly-written ``chunk_stopped.id`` (issue #213's activity-feed key)
+        — not the ``route_released.id`` this same transaction may also write, matching
+        the ``stopped`` cause's own mapped fact table."""
         ...
 
     def set_graph(self, chunk_id: str, *, graph_id: str) -> None:

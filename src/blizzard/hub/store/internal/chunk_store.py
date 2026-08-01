@@ -419,6 +419,7 @@ class ChunkStore:
             workspace_id=created.workspace_id,
             environment_ids=env_ids,
             created_at=created.created_at,
+            route_id=created.route_id,
         )
 
     def list_all(self) -> list[Chunk]:
@@ -1014,13 +1015,15 @@ class ChunkStore:
                     insert(s.chunk_work_refs).values(chunk_id=chunk.chunk_id, source=pointer.source, ref=pointer.ref)
                 )
 
-    def record_promote(self, chunk_id: str, *, at: datetime) -> None:
+    def record_promote(self, chunk_id: str, *, at: datetime) -> int | None:
         # Idempotent by chunk_id: a chunk already promoted keeps its first row, so a
         # double promote (board click, CLI retry) is a harmless no-op.
         with self._engine.begin() as conn:
             if self._exists(conn, s.chunk_promoted, chunk_id):
-                return
-            conn.execute(insert(s.chunk_promoted).values(chunk_id=chunk_id, promoted_at=at))
+                return None
+            result = conn.execute(insert(s.chunk_promoted).values(chunk_id=chunk_id, promoted_at=at))
+            key = result.inserted_primary_key
+            return int(key[0]) if key is not None else None
 
     def record_lease(self, chunk_id: str, *, epoch: int, runner_id: str, at: datetime) -> None:
         with self._engine.begin() as conn:
@@ -1042,13 +1045,16 @@ class ChunkStore:
                     .values(seq=seq, updated_at=at)
                 )
 
-    def record_route(self, route: Route, *, token_hash: str, at: datetime) -> None:
+    def record_route(self, route: Route, *, token_hash: str, at: datetime) -> str:
         """Record the route and mint its capability token's fact, one transaction (issue #84a).
 
         The token fact is a second row on the same shared per-chunk seq counter
         (:meth:`_next_route_seq`), allocated *after* the route's own seq is taken —
         its own call to the same allocator, not a fixed +1, so it stays correct if a
-        future caller inserts anything else into this transaction between the two."""
+        future caller inserts anything else into this transaction between the two.
+
+        Returns the freshly-minted ``route_created.route_id`` (issue #213's
+        activity-feed key for the ``claimed`` cause)."""
         route_id = mint(_ROUTE_PREFIX, self._clock)
         with self._engine.begin() as conn:
             conn.execute(
@@ -1071,14 +1077,17 @@ class ChunkStore:
                     minted_at=at,
                 )
             )
+            return route_id
 
-    def record_route_released(self, chunk_id: str, *, at: datetime) -> None:
+    def record_route_released(self, chunk_id: str, *, at: datetime) -> int:
         with self._engine.begin() as conn:
-            conn.execute(
+            result = conn.execute(
                 insert(s.route_released).values(
                     chunk_id=chunk_id, released_at=at, seq=self._next_route_seq(conn, chunk_id)
                 )
             )
+            key = result.inserted_primary_key
+            return int(key[0]) if key is not None else 0
 
     def record_route_token(self, chunk_id: str, *, token_hash: str, at: datetime) -> None:
         """Append a fresh ``route_token_minted`` fact — the re-key path (issue #84b).
@@ -1256,9 +1265,9 @@ class ChunkStore:
 
     def record_escalation(
         self, chunk_id: str, *, epoch: int, takeover_command: str, at: datetime, decision_id: str | None = None
-    ) -> None:
+    ) -> int:
         with self._engine.begin() as conn:
-            conn.execute(
+            result = conn.execute(
                 insert(s.escalations).values(
                     chunk_id=chunk_id,
                     epoch=epoch,
@@ -1267,6 +1276,8 @@ class ChunkStore:
                     recorded_at=at,
                 )
             )
+            key = result.inserted_primary_key
+            return int(key[0]) if key is not None else 0
 
     def record_usage(
         self,
@@ -1317,12 +1328,12 @@ class ChunkStore:
         message: str,
         detail: dict | None,
         at: datetime,
-    ) -> None:
+    ) -> int:
         # Append-only operational fact (issue #125) — never mutated once written, no
         # epoch fence (it is not a transition). `detail` is serialized to JSON text here;
         # `chunk_id` is None for a runner-scoped event. See IWriteChunkRepository.record_event.
         with self._engine.begin() as conn:
-            conn.execute(
+            result = conn.execute(
                 insert(s.event_log).values(
                     severity=severity,
                     kind=kind,
@@ -1335,6 +1346,8 @@ class ChunkStore:
                     recorded_at=at,
                 )
             )
+            key = result.inserted_primary_key
+            return int(key[0]) if key is not None else 0
 
     def record_question(
         self,
@@ -1458,9 +1471,11 @@ class ChunkStore:
             )
             return True
 
-    def record_requeue(self, chunk_id: str, *, at: datetime) -> None:
+    def record_requeue(self, chunk_id: str, *, at: datetime) -> int:
         with self._engine.begin() as conn:
-            conn.execute(insert(s.requeues).values(chunk_id=chunk_id, requeued_at=at))
+            result = conn.execute(insert(s.requeues).values(chunk_id=chunk_id, requeued_at=at))
+            key = result.inserted_primary_key
+            return int(key[0]) if key is not None else 0
 
     def accepted_migration(self, chunk_id: str, *, from_node_id: str, epoch: int) -> bool:
         """True iff a migration is already recorded for ``(chunk_id, from_node_id, epoch)``
@@ -1489,7 +1504,8 @@ class ChunkStore:
         source: MigrationSource,
         release_route: bool = True,
         clear_intent: bool = False,
-    ) -> bool:
+        migration_id: str | None = None,
+    ) -> str | None:
         """Record a cross-graph migration **atomically and idempotently** (#90).
 
         In **one transaction**: insert the ``chunk_migrations`` fact, re-pin
@@ -1511,8 +1527,10 @@ class ChunkStore:
         Default ``True`` preserves the runner-landing behavior (release + re-queue). Guarded
         by the natural key ``(chunk_id, from_node_id, epoch)``: a redelivery replay after a
         ``kill -9`` re-enters harmlessly, writing nothing a second time — the migration is
-        all-or-nothing, never a half-written re-pin with orphaned artifacts. Returns True
-        iff it wrote, False on a replay.
+        all-or-nothing, never a half-written re-pin with orphaned artifacts. ``migration_id``
+        (issue #213) is caller-minted when supplied (mirrors ``record_transition``'s own
+        ``transition_id``); ``None`` mints one internally. Returns the ``migration_id`` used
+        iff this call wrote, ``None`` on a replay.
 
         No lease is minted here (unlike :meth:`finalize_delivery`): the migration is
         recorded at the *submitting* epoch, and the re-queue means the **next** claim mints
@@ -1526,10 +1544,11 @@ class ChunkStore:
         intent to clear."""
         with self._engine.begin() as conn:
             if self._migration_exists(conn, chunk_id, from_node_id=from_node_id, epoch=epoch):
-                return False
+                return None
+            resolved_migration_id = migration_id if migration_id is not None else mint(MIGRATION_PREFIX, self._clock)
             conn.execute(
                 insert(s.chunk_migrations).values(
-                    migration_id=mint(MIGRATION_PREFIX, self._clock),
+                    migration_id=resolved_migration_id,
                     chunk_id=chunk_id,
                     from_node_id=from_node_id,
                     from_graph_id=from_graph_id,
@@ -1581,7 +1600,7 @@ class ChunkStore:
                         produced_at=at,
                     )
                 )
-            return True
+            return resolved_migration_id
 
     @staticmethod
     def _migration_exists(conn: Connection, chunk_id: str, *, from_node_id: str | None, epoch: int) -> bool:
@@ -1620,17 +1639,25 @@ class ChunkStore:
                 )
                 existing.add((pointer.source, pointer.ref))
 
-    def record_grouped(self, chunk_id: str, *, grouped_into: str, at: datetime) -> None:
+    def record_grouped(self, chunk_id: str, *, grouped_into: str, at: datetime) -> int:
         """Record ``chunk.grouped`` — the merged-away chunk is ephemeral now."""
         with self._engine.begin() as conn:
-            conn.execute(insert(s.chunk_grouped).values(chunk_id=chunk_id, grouped_into=grouped_into, grouped_at=at))
+            result = conn.execute(
+                insert(s.chunk_grouped).values(chunk_id=chunk_id, grouped_into=grouped_into, grouped_at=at)
+            )
+            key = result.inserted_primary_key
+            return int(key[0]) if key is not None else 0
 
-    def record_pause(self, chunk_id: str, *, paused: bool, by: str, at: datetime) -> None:
+    def record_pause(self, chunk_id: str, *, paused: bool, by: str, at: datetime) -> int:
         """Append a ``chunk.paused``/``chunk.resumed`` fact — newest-fact-wins (issue #46)."""
         with self._engine.begin() as conn:
-            conn.execute(insert(s.chunk_pause_facts).values(chunk_id=chunk_id, paused=paused, set_at=at, set_by=by))
+            result = conn.execute(
+                insert(s.chunk_pause_facts).values(chunk_id=chunk_id, paused=paused, set_at=at, set_by=by)
+            )
+            key = result.inserted_primary_key
+            return int(key[0]) if key is not None else 0
 
-    def record_stop(self, chunk_id: str, *, by: str, at: datetime) -> None:
+    def record_stop(self, chunk_id: str, *, by: str, at: datetime) -> int:
         """Append the ``chunk.stopped`` fact, release any live route, and release any
         held fleet-wide hub-exec slot — all in **one** transaction (issue #118,
         must-fix 2 from the #118 pre-push review).
@@ -1648,7 +1675,7 @@ class ChunkStore:
         between the check and this commit. The hub-exec slot release is unconditional
         and a no-op if this chunk holds none — same shape as :meth:`release_hub_exec_slot`."""
         with self._engine.begin() as conn:
-            conn.execute(insert(s.chunk_stopped).values(chunk_id=chunk_id, stopped_at=at, stopped_by=by))
+            result = conn.execute(insert(s.chunk_stopped).values(chunk_id=chunk_id, stopped_at=at, stopped_by=by))
             if self._route_of_conn(conn, chunk_id) is not None:
                 conn.execute(
                     insert(s.route_released).values(
@@ -1660,6 +1687,8 @@ class ChunkStore:
                 .where((s.hub_exec_slot.c.holder_chunk_id == chunk_id) & (s.hub_exec_slot.c.released_at.is_(None)))
                 .values(released_at=at)
             )
+            key = result.inserted_primary_key
+            return int(key[0]) if key is not None else 0
 
     def set_graph(self, chunk_id: str, *, graph_id: str) -> None:
         """Repin a not-ready or ready-unclaimed chunk to a different workflow graph (issue #27, #120)."""

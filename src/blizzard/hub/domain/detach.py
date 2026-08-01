@@ -35,12 +35,13 @@ class DetachService:
         self._chunks = chunks
         self._clock = clock
 
-    def detach(self, chunk: Chunk) -> None:
+    def detach(self, chunk: Chunk) -> int:
         """Release the chunk's live route so it re-derives ``ready``.
 
         Raises :class:`NotRouted` if the chunk has no live route — there is nothing to
         release. No supersession fact is written and no epoch is bumped: unlike requeue,
-        detach never touches an open escalation."""
+        detach never touches an open escalation. Returns the freshly-written
+        ``route_released.id`` (issue #213's activity-feed key)."""
         if self._chunks.route_of(chunk.chunk_id) is None:
             raise NotRouted(f"chunk {chunk.chunk_id} has no live route")
-        self._chunks.record_route_released(chunk.chunk_id, at=self._clock.now())
+        return self._chunks.record_route_released(chunk.chunk_id, at=self._clock.now())

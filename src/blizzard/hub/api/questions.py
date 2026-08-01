@@ -66,8 +66,9 @@ def ask_question(fact: QuestionAsked, services: Annotated[HubServices, Depends(g
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {fact.chunk_id}")
     prev_status = chunk_events.snapshot_chunk_status(services, fact.chunk_id)
     services.questions.record_asked(fact)
-    services.events.publish_question_asked(fact.chunk_id, fact.question_id)
-    _publish(services, fact.chunk_id, cause="question-asked", prev_status=prev_status)
+    key = f"questions:{fact.question_id}"
+    services.events.publish_question_asked(fact.chunk_id, fact.question_id, key=key)
+    _publish(services, fact.chunk_id, cause="question-asked", prev_status=prev_status, key=key)
     return {"question_id": fact.question_id}
 
 
@@ -107,8 +108,9 @@ def answer_question(
     # The winning answer row alone flips the chunk out of waiting_on_human.
     winner = services.chunks.get_question(question_id)
     if winner is not None:
-        services.events.publish_question_answered(winner.chunk_id, question_id)
-        _publish(services, winner.chunk_id, cause="question-answered", prev_status=prev_status)
+        key = f"question_answers:{question_id}"
+        services.events.publish_question_answered(winner.chunk_id, question_id, key=key)
+        _publish(services, winner.chunk_id, cause="question-answered", prev_status=prev_status, key=key)
     return result
 
 
@@ -118,8 +120,10 @@ def list_open_questions(services: Annotated[HubServices, Depends(get_services)])
     return [question_view(row) for row in services.chunks.list_open_questions()]
 
 
-def _publish(services: HubServices, chunk_id: str, *, cause: ChunkChangeCause, prev_status: str | None) -> None:
+def _publish(
+    services: HubServices, chunk_id: str, *, cause: ChunkChangeCause, prev_status: str | None, key: str | None = None
+) -> None:
     """One call site serving two routes with two different causes (issue #212) — a
     default here is exactly how the mislabel would survive review, so ``cause`` is
     required rather than defaulted."""
-    chunk_events.publish_chunk_changed(services, chunk_id, cause=cause, prev_status=prev_status)
+    chunk_events.publish_chunk_changed(services, chunk_id, cause=cause, prev_status=prev_status, key=key)

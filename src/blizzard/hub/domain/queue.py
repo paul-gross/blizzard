@@ -206,6 +206,11 @@ class GroupResult:
 
     survivor: Chunk
     status: ChunkStatus
+    # The last ``chunk_grouped.id`` this call wrote (issue #213's activity-feed key) —
+    # ``None`` when ``merge_ids`` resolved to zero targets (every id was the survivor
+    # itself or a duplicate, a no-op). A multi-chunk merge writes one row per target;
+    # this names the newest, representative of "the survivor's row just changed".
+    grouped_id: int | None = None
 
 
 class GroupService:
@@ -234,9 +239,10 @@ class GroupService:
         targets = self._resolve_targets(survivor_id, merge_ids)
 
         now = self._clock.now()
+        grouped_id: int | None = None
         for target in targets:
             self._chunks.add_work_refs(survivor_id, target.work_refs, at=now)
-            self._chunks.record_grouped(target.chunk_id, grouped_into=survivor_id, at=now)
+            grouped_id = self._chunks.record_grouped(target.chunk_id, grouped_into=survivor_id, at=now)
         _log.info(
             "chunks grouped",
             survivor=survivor_id,
@@ -245,7 +251,9 @@ class GroupService:
             count=len(targets),
         )
         merged = self._chunks.get(survivor_id)
-        return GroupResult(survivor=merged if merged is not None else survivor, status=survivor_status)
+        return GroupResult(
+            survivor=merged if merged is not None else survivor, status=survivor_status, grouped_id=grouped_id
+        )
 
     def _resolve_targets(self, survivor_id: str, merge_ids: list[str]) -> list[Chunk]:
         seen: set[str] = set()

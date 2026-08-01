@@ -175,19 +175,25 @@ class RunnerRegistryStore:
             )
             return bool(result.rowcount)
 
-    def record_pause(self, runner_id: str, *, paused: bool, at: datetime, by: str) -> None:
+    def record_pause(self, runner_id: str, *, paused: bool, at: datetime, by: str) -> int:
         with self._engine.begin() as conn:
-            conn.execute(insert(s.runner_pause_facts).values(runner_id=runner_id, paused=paused, set_at=at, set_by=by))
+            result = conn.execute(
+                insert(s.runner_pause_facts).values(runner_id=runner_id, paused=paused, set_at=at, set_by=by)
+            )
+            key = result.inserted_primary_key
+            return int(key[0]) if key is not None else 0
 
     def record_local_pause(
         self, runner_id: str, *, paused: bool, at: datetime, by: str, reason: str | None = None
-    ) -> None:
+    ) -> int:
         with self._engine.begin() as conn:
-            conn.execute(
+            result = conn.execute(
                 insert(s.runner_local_pause_facts).values(
                     runner_id=runner_id, paused=paused, set_at=at, set_by=by, reason=reason
                 )
             )
+            key = result.inserted_primary_key
+            return int(key[0]) if key is not None else 0
 
     def set_token_hash(self, runner_id: str, *, token_hash: str, at: datetime) -> None:
         # `at` is not persisted: no rotation-audit column exists yet (see the Protocol

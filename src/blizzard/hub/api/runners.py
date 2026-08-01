@@ -119,9 +119,12 @@ def resume_runner(
 
 
 def _set_paused(runner_id: str, *, paused: bool, by: str, services: HubServices) -> RunnerView:
-    if not services.fleet.set_paused(runner_id, paused=paused, by=by):
+    fact_id = services.fleet.set_paused(runner_id, paused=paused, by=by)
+    if fact_id is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown runner {runner_id}")
-    services.events.publish_runner_changed(runner_id, kind="paused" if paused else "resumed", by=by)
+    services.events.publish_runner_changed(
+        runner_id, kind="paused" if paused else "resumed", by=by, key=f"runner_pause_facts:{fact_id}"
+    )
     liveness = services.fleet.get_liveness(runner_id)
     assert liveness is not None  # just set_paused succeeded, so the runner exists
     return runner_view(liveness)

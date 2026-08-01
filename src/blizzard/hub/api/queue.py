@@ -153,8 +153,9 @@ def group_chunks(
     # to a status the store never derives (issue #141).
     survivor = result.survivor
     services.events.publish_queue_changed()
+    key = f"chunk_grouped:{result.grouped_id}" if result.grouped_id is not None else None
     chunk_events.publish_chunk_changed(
-        services, survivor.chunk_id, cause="grouped", prev_status=prev_status, status=result.status.value
+        services, survivor.chunk_id, cause="grouped", prev_status=prev_status, status=result.status.value, key=key
     )
     return ChunkGroupResponse(
         chunk_id=survivor.chunk_id,

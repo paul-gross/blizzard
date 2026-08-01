@@ -145,7 +145,7 @@ def publish_open_decision(services: HubServices, chunk_id: str) -> None:
     module boundary."""
     decision = services.chunks.decision_for_chunk(chunk_id)
     if decision is not None and not decision.resolved and not decision.transitioned:
-        services.events.publish_decision_opened(chunk_id, decision.decision_id)
+        services.events.publish_decision_opened(chunk_id, decision.decision_id, key=f"decisions:{decision.decision_id}")
 
 
 def _node_name(graph: Graph | None, node_id: str | None) -> str | None:
@@ -408,7 +408,7 @@ def ingest_chunk(request: ChunkIngestRequest, services: Annotated[HubServices, D
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=conflict.model_dump())
     # A freshly ingested chunk rests ``not_ready`` — visible on the board but not
     # in the ready queue, so no ``queue-changed`` fires until it is promoted.
-    chunk_events.publish_chunk_changed(services, chunk_id, cause="minted", prev_status=None)
+    chunk_events.publish_chunk_changed(services, chunk_id, cause="minted", prev_status=None, key=f"chunks:{chunk_id}")
     return ChunkIngestResponse(chunk_id=chunk_id)
 
 
@@ -589,10 +589,12 @@ def requeue_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_se
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     prev_status = chunk_events.snapshot_chunk_status(services, chunk_id)
     try:
-        services.requeue.requeue(chunk_id)
+        requeue_id = services.requeue.requeue(chunk_id)
     except NotEscalated as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    chunk_events.publish_chunk_changed(services, chunk_id, cause="requeued", prev_status=prev_status)
+    chunk_events.publish_chunk_changed(
+        services, chunk_id, cause="requeued", prev_status=prev_status, key=f"requeues:{requeue_id}"
+    )
     services.events.publish_queue_changed()  # requeue can re-admit the chunk to the queue
     return _summary_view(services, chunk)
 
@@ -610,10 +612,12 @@ def detach_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_ser
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     prev_status = chunk_events.snapshot_chunk_status(services, chunk_id)
     try:
-        services.detach.detach(chunk)
+        released_id = services.detach.detach(chunk)
     except NotRouted as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    chunk_events.publish_chunk_changed(services, chunk_id, cause="detached", prev_status=prev_status)
+    chunk_events.publish_chunk_changed(
+        services, chunk_id, cause="detached", prev_status=prev_status, key=f"route_released:{released_id}"
+    )
     services.events.publish_queue_changed()  # a detached chunk re-enters the ready queue
     return _summary_view(services, chunk)
 
@@ -633,10 +637,12 @@ def pause_chunk(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     prev_status = chunk_events.snapshot_chunk_status(services, chunk_id)
     try:
-        services.pause.pause(chunk, by=request.by)
+        pause_fact_id = services.pause.pause(chunk, by=request.by)
     except ChunkNotPausable as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    chunk_events.publish_chunk_changed(services, chunk_id, cause="paused", prev_status=prev_status)
+    chunk_events.publish_chunk_changed(
+        services, chunk_id, cause="paused", prev_status=prev_status, key=f"chunk_pause_facts:{pause_fact_id}"
+    )
     services.events.publish_queue_changed()  # a pause moves the chunk out of the ready queue (issue #46)
     return _summary_view(services, chunk)
 
@@ -655,8 +661,10 @@ def resume_chunk(
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     prev_status = chunk_events.snapshot_chunk_status(services, chunk_id)
-    services.pause.resume(chunk, by=request.by)
-    chunk_events.publish_chunk_changed(services, chunk_id, cause="resumed", prev_status=prev_status)
+    pause_fact_id = services.pause.resume(chunk, by=request.by)
+    chunk_events.publish_chunk_changed(
+        services, chunk_id, cause="resumed", prev_status=prev_status, key=f"chunk_pause_facts:{pause_fact_id}"
+    )
     services.events.publish_queue_changed()  # a resume can re-admit the chunk to the queue (issue #46)
     return _summary_view(services, chunk)
 
@@ -682,10 +690,12 @@ def stop_chunk(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     prev_status = chunk_events.snapshot_chunk_status(services, chunk_id)
     try:
-        services.stop.stop(chunk, by=request.by)
+        stopped_id = services.stop.stop(chunk, by=request.by)
     except ChunkNotStoppable as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    chunk_events.publish_chunk_changed(services, chunk_id, cause="stopped", prev_status=prev_status)
+    chunk_events.publish_chunk_changed(
+        services, chunk_id, cause="stopped", prev_status=prev_status, key=f"chunk_stopped:{stopped_id}"
+    )
     services.events.publish_queue_changed()  # a stopped chunk is never offered for claim again
     return _summary_view(services, chunk)
 
@@ -705,8 +715,9 @@ def promote_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_se
     if chunk is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     prev_status = chunk_events.snapshot_chunk_status(services, chunk_id)
-    services.promote.promote(chunk_id)
-    chunk_events.publish_chunk_changed(services, chunk_id, cause="promoted", prev_status=prev_status)
+    promoted_id = services.promote.promote(chunk_id)
+    key = f"chunk_promoted:{promoted_id}" if promoted_id is not None else None
+    chunk_events.publish_chunk_changed(services, chunk_id, cause="promoted", prev_status=prev_status, key=key)
     services.events.publish_queue_changed()  # a promoted chunk enters the ready queue
     return _summary_view(services, chunk)
 

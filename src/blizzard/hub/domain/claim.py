@@ -131,11 +131,16 @@ class ClaimResult:
     ``route_token`` is returned exactly once, here — the hub persists only its sha256
     hash (:meth:`~blizzard.hub.domain.work.IWriteChunkRepository.record_route`'s
     ``token_hash``); :class:`~blizzard.hub.domain.fleet.Route` itself stays
-    dependency-free and carries no secret."""
+    dependency-free and carries no secret.
+
+    ``route_id`` (issue #213) is the freshly-minted ``route_created.route_id`` —
+    ``Route`` itself carries no id (its natural key is ``chunk_id``), so this is the
+    one place a caller can read it to build the ``claimed`` cause's activity-feed key."""
 
     route: Route
     envelope: NodeEnvelope
     route_token: str
+    route_id: str
 
 
 class ClaimService:
@@ -245,7 +250,7 @@ class ClaimService:
         # the result below and never stored — only its sha256 hash lands, appended as
         # its own route_token_minted fact in the same store write as record_route.
         route_token = secrets.token_urlsafe(_ROUTE_TOKEN_BYTES)
-        self._chunks.record_route(route, token_hash=hash_token(route_token), at=now)
+        route_id = self._chunks.record_route(route, token_hash=hash_token(route_token), at=now)
         _CP_CLAIM_AFTER_PERSIST_BEFORE_RESPONSE.reached()
 
         node_id = (current_node_id(facts) if facts is not None else None) or graph.entry_node_id
@@ -259,7 +264,7 @@ class ClaimService:
             artifacts=self._chunks.load_artifacts(chunk.chunk_id),
             epoch=epoch,
         )
-        return ClaimResult(route=route, envelope=envelope, route_token=route_token)
+        return ClaimResult(route=route, envelope=envelope, route_token=route_token, route_id=route_id)
 
     def rekey(self, route: Route) -> str:
         """Rotate a live route's capability token (issue #84b) — the lost-plaintext

@@ -95,12 +95,18 @@ def resolve_decision(
         conflict = DecisionResolutionConflict(decision_id=decision_id, already_resolved_by=result.resolved_by)
         return JSONResponse(status_code=status.HTTP_409_CONFLICT, content=conflict.model_dump())
     if decision is not None:
-        services.events.publish_decision_resolved(decision.chunk_id, decision_id)
+        key = f"decision_resolutions:{decision_id}"
+        services.events.publish_decision_resolved(decision.chunk_id, decision_id, key=key)
         # Hardcoded literal, not a derivation — a resolution always lands the chunk
         # back at `running` and re-deriving here would be a behavior change outside
         # this change's scope (see `chunk_events.publish_chunk_changed`'s docstring).
         chunk_events.publish_chunk_changed(
-            services, decision.chunk_id, cause="decision-resolved", prev_status=prev_status, status="running"
+            services,
+            decision.chunk_id,
+            cause="decision-resolved",
+            prev_status=prev_status,
+            status="running",
+            key=key,
         )
     assert result.resolved and result.resolved_by
     return DecisionResolutionResponse(

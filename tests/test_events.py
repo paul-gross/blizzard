@@ -196,11 +196,19 @@ def test_every_runner_changed_publish_site_names_its_kind(tmp_path: Path) -> Non
 
     frames = [json.loads(e["data"]) for e in emitted_events(hub) if e["event"] == "runner-changed"]
     assert frames == [
+        # `registered`/`heartbeat` carry no `key` (issue #213) — no fact table backs them.
         {"runner_id": "r1", "kind": "registered"},
         {"runner_id": "r1", "kind": "heartbeat"},
-        {"runner_id": "r1", "kind": "paused", "by": "alice"},
-        {"runner_id": "r1", "kind": "resumed", "by": "alice"},
-        {"runner_id": "r1", "kind": "locally-paused", "by": "runner-ceiling", "reason": "cap hit"},
+        # The pause family each names its own fact's identity.
+        {"runner_id": "r1", "kind": "paused", "by": "alice", "key": "runner_pause_facts:1"},
+        {"runner_id": "r1", "kind": "resumed", "by": "alice", "key": "runner_pause_facts:2"},
+        {
+            "runner_id": "r1",
+            "kind": "locally-paused",
+            "by": "runner-ceiling",
+            "reason": "cap hit",
+            "key": "runner_local_pause_facts:1",
+        },
         # No `reason` on the fact — the frame omits it rather than carrying an empty note.
-        {"runner_id": "r1", "kind": "locally-resumed", "by": "bob"},
+        {"runner_id": "r1", "kind": "locally-resumed", "by": "bob", "key": "runner_local_pause_facts:2"},
     ]
