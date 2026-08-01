@@ -64,6 +64,7 @@ _PUBLIC: set[tuple[str, str]] = {
 _HUMAN: dict[tuple[str, str], Permission] = {
     ("GET", "/api/events/stream"): FLEET_VIEW,
     ("GET", "/api/events"): FLEET_VIEW,
+    ("GET", "/api/activity"): FLEET_VIEW,
     ("POST", "/api/graphs"): GRAPH_EDIT,
     # Reconciliation mints (issue #146), so it needs exactly what an explicit mint needs.
     ("POST", "/api/graphs/sync"): GRAPH_EDIT,
