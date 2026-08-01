@@ -34,6 +34,28 @@ def test_build_loop_context_threads_worker_env_passthrough_into_the_adapter(tmp_
 
 
 @pytest.mark.unit
+def test_build_loop_context_threads_external_usage_credentials_path_into_the_adapter(tmp_path: Path) -> None:
+    """A composition-root gap here is a network-isolation gap, not just a wiring miss:
+    an unthreaded override leaves every daemon this root builds — including the real
+    subprocess service/e2e/journey/crash-sweep tiers spawn — reading the adapter's own
+    default (``~/.claude/.credentials.json``) and reaching the real Anthropic endpoint
+    on its sampling cadence, silently breaking those tiers' no-network-access guarantee
+    (issue #218)."""
+    scratch = str(tmp_path / "scratch-credentials.json")
+    config = RunnerConfig(
+        root=tmp_path,
+        db_url=RunnerConfig.default_db_url(tmp_path),
+        workspace_root=str(tmp_path / "workspace"),
+        external_usage_credentials_path=scratch,
+    )
+
+    ctx = build_loop_context(config, FakeHub(), workspace_prompt="", runner_prompt="")
+
+    assert isinstance(ctx.harness, ClaudeCodeAdapter)
+    assert ctx.harness._credentials_path == scratch
+
+
+@pytest.mark.unit
 def test_periodic_driver_resolves_prompts_eagerly_at_construction(tmp_path: Path) -> None:
     """A configured-but-missing ``runner_prompt_file`` must raise ``ConfigError`` from
     the constructor — on the caller's (``host``'s) own thread — not from inside the

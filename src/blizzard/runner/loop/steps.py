@@ -42,6 +42,7 @@ from blizzard.runner.environments.provider import (
     WorkspaceAcquisitionError,
 )
 from blizzard.runner.harness.adapter import HarnessSpawnError, WorkerPreamble
+from blizzard.runner.harness.external_usage import ExternalSubscriptionUsageSnapshot
 from blizzard.runner.harness.preamble import render_worker_preamble
 from blizzard.runner.harness.spawn_cwd import resolve_spawn_cwd
 from blizzard.runner.harness.usage import UsageKind, UsageSample
@@ -74,6 +75,7 @@ from blizzard.wire.facts import (
     ANSWER_DELIVERED,
     ESCALATION_RECORDED,
     EVENT_RECORDED,
+    EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
     LEASE_MINTED,
     QUESTION_ASKED,
     RUNNER_LOCALLY_PAUSED,
@@ -96,6 +98,7 @@ __all__ = [
     "pull",
     "reap",
     "resume",
+    "sample_external_subscription_usage",
 ]
 
 _log = get_logger("blizzard.runner.loop")
@@ -1169,7 +1172,10 @@ def _flush_one(ctx: LoopContext, fact: BufferedFact) -> bool:
 
 
 def _flush_hub_fact(ctx: LoopContext, fact: BufferedFact) -> bool:
-    """Push a ``lease.minted`` / ``escalation.recorded`` fact to POST /events."""
+    """Push one buffered fact to POST /events — the generic default arm for every kind
+    but completion and decision (``lease.minted``, ``escalation.recorded``,
+    ``question.asked``, the local pause/resume pair, ``usage.recorded``,
+    ``event.recorded``, and ``external_subscription_usage.sampled`` among them)."""
     payload = json.loads(fact.payload)
     batch = RunnerFactBatch(
         runner_id=ctx.config.runner_id,
@@ -3498,3 +3504,100 @@ def _checks_block(results: list[CheckResultRecord]) -> str:
             for tail_line in r.output_tail.strip().splitlines():
                 lines.append(f"#       {tail_line}")
     return "\n".join(lines)
+
+
+# --------------------------------------------------------------------------- #
+# EXTERNAL SUBSCRIPTION USAGE SAMPLE (issue #218)
+# --------------------------------------------------------------------------- #
+
+
+def _external_usage_payload(snapshot: ExternalSubscriptionUsageSnapshot) -> dict[str, object]:
+    """The stable JSON shape for a sampled snapshot — both this attempt's stored
+    ``payload`` and its buffered outbound report use this exact shape, and phase 3's wire
+    fact payload is defined to match it field-for-field: ``sampled_at``, ``windows``, and
+    per-window ``window``/``utilization_pct``/``resets_at``/``window_seconds``."""
+    return {
+        "sampled_at": iso_utc(snapshot.sampled_at),
+        "windows": [
+            {
+                "window": w.window,
+                "utilization_pct": w.utilization_pct,
+                "resets_at": iso_utc(w.resets_at),
+                "window_seconds": w.window_seconds,
+            }
+            for w in snapshot.windows
+        ],
+    }
+
+
+def sample_external_subscription_usage(ctx: LoopContext) -> None:
+    """Sample the harness's own subscription rate-limit utilization (issue #218) — the
+    tick's last step, run **after** ADVANCE (:func:`blizzard.runner.loop.tick.tick`, behind
+    CEILING, REAP, RESUME, PULL, FILL and ADVANCE), the mirror image of
+    :func:`check_spend_ceiling`'s reasoning for running first: that check gates every later
+    step's spawn/kill decisions within the same pass, so it must run before them; this step
+    gates nothing — no other step in this tick or any later one reads what it wrote before
+    deciding anything — so there is no correctness reason to run it earlier, and every
+    reason not to: its only network call (the harness's own usage endpoint, via
+    :meth:`~blizzard.runner.harness.adapter.IHarnessAdapter.sample_external_subscription_usage`)
+    must never sit ahead of REAP's stale-worker reap or FILL's claim-and-spawn in the same
+    pass and delay either on a diagnostic read neither depends on.
+
+    **Cadence gate.** Reads :meth:`~blizzard.runner.store.repository.
+    IReadRunnerStore.last_external_usage_attempt_at` — the derived ``max(sampled_at)``
+    anchor, never a separately-stored "last sampled" column. ``None`` (never attempted)
+    samples immediately; otherwise this attempt is skipped unless
+    ``ctx.clock.now() - anchor`` has reached ``ctx.config.external_usage_sample_interval_
+    seconds`` (at exactly the interval, it samples — not strictly past it).
+
+    **On a sample**, records the attempt row keyed on ``ctx.clock.now()`` — not the
+    snapshot's own ``sampled_at`` — so the cadence anchor stays on *this* runner's own
+    timeline regardless of what clock the adapter samples against (``bzh:injected-clock``);
+    the snapshot's own ``sampled_at`` still rides the JSON payload's ``sampled_at`` field
+    (what the harness actually reported), just not the cadence-driving column. Enqueues the
+    outbound report under the shared ``wire/facts.py`` :data:`~blizzard.wire.facts.
+    EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED` kind. **On no sample** (``None`` — no subscription
+    concept, or this attempt produced nothing), records the attempt with a ``NULL``
+    payload and buffers no report; the next tick's cadence gate reads the attempt back
+    regardless, so a harness with nothing to report is not re-queried every tick.
+
+    Wrapped in a broad ``except Exception`` as a **second line of defense**: the adapter
+    contract already promises never to raise (:meth:`~blizzard.runner.harness.adapter.
+    IHarnessAdapter.sample_external_subscription_usage`'s docstring), but this is a
+    diagnostic sample bolted onto the tick's very last step, and the tick's "always
+    completes" invariant must not depend on every adapter conforming to that promise —
+    an adapter that raises anyway must still leave REAP/RESUME/PULL/FILL/ADVANCE's work
+    from *this same tick* intact rather than losing it to an exception that unwinds past
+    ``tick()``.
+
+    Crash safety: the only durable write here is the single-transaction
+    ``record_external_usage_attempt`` (attempt fact + its optional hub-bound report,
+    atomic by construction — the same call shape ``record_local_pause``/``record_usage``
+    use, which carry no crash point of their own for the same reason). The read before it
+    (``last_external_usage_attempt_at``) and the adapter call are side-effect-free from
+    the store's perspective, so a crash at any point up to the write leaves nothing to
+    recover: the next tick simply re-derives the identical cadence decision from the same
+    durable attempts and the (now later) clock. This opens no new crash window, so no new
+    crash-point-registry point is added.
+    """
+    try:
+        anchor = ctx.store.last_external_usage_attempt_at()
+        if anchor is not None:
+            elapsed = ctx.clock.now() - anchor
+            if elapsed < timedelta(seconds=ctx.config.external_usage_sample_interval_seconds):
+                return
+        snapshot = ctx.harness.sample_external_subscription_usage()
+        if snapshot is None:
+            ctx.store.record_external_usage_attempt(
+                sampled_at=ctx.clock.now(), payload=None, report_kind="", report_payload=""
+            )
+            return
+        payload = json.dumps(_external_usage_payload(snapshot))
+        ctx.store.record_external_usage_attempt(
+            sampled_at=ctx.clock.now(),
+            payload=payload,
+            report_kind=EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
+            report_payload=payload,
+        )
+    except Exception as exc:  # second line of defense — the adapter contract already promises this
+        _log.warning("external subscription usage sample step failed", detail=str(exc))

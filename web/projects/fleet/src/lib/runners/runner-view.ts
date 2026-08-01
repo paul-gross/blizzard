@@ -4,6 +4,7 @@ import type { ChunkStatus } from '../api/hub';
 import { STATUS_TONE } from '../chunk-lanes';
 import { KitAsyncState, type KitAsyncStateValue } from '../kit/kit-async-state';
 import { KitBadge } from '../kit/kit-badge';
+import { KitPaceBar } from '../kit/kit-pace-bar';
 import { KitPanel } from '../kit/kit-panel';
 import { KitSlotBar } from '../kit/kit-slot-bar';
 import type { Tone } from '../kit/tone';
@@ -19,7 +20,7 @@ import type { RunnerRow } from './runner-panel';
 @Component({
   selector: 'fleet-runner-view',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitAsyncState, KitBadge, KitPanel, KitSlotBar],
+  imports: [KitAsyncState, KitBadge, KitPaceBar, KitPanel, KitSlotBar],
   template: `
     <fleet-kit-panel
       aria-label="Runner registry"
@@ -98,6 +99,25 @@ import type { RunnerRow } from './runner-panel';
                     [used]="row.used"
                     [total]="row.env_capacity ?? 0"
                   />
+                }
+                <!-- The rate-limit pacing bars (issue #218): one stacked utilization/elapsed
+                     pair per external-subscription window the runner last sampled. Rendered
+                     straight off the folded paceBars array — empty (no bars, not zeroed
+                     ones) for a runner that has never sampled, or whose sample the hub has
+                     already nulled as stale. -->
+                @if (row.paceBars.length > 0) {
+                  <div class="pace-bars" data-testid="runner-pace-bars">
+                    @for (bar of row.paceBars; track bar.window) {
+                      <fleet-kit-pace-bar
+                        data-testid="runner-pace-bar"
+                        [attr.data-runner-pace-bar]="row.runner_id"
+                        [attr.data-pace-window]="bar.window"
+                        [label]="bar.window"
+                        [utilizationPct]="bar.utilizationPct"
+                        [elapsedPct]="bar.elapsedPct"
+                      />
+                    }
+                  </div>
                 }
                 <div class="r3">
                   <span class="badges">
@@ -213,6 +233,14 @@ import type { RunnerRow } from './runner-panel';
       color: var(--label-dim);
       font-size: var(--fs-label);
       white-space: nowrap;
+    }
+    /* One stacked utilization/elapsed pair per sampled window (#218), same
+       vertical rhythm as the slot bar. */
+    .pace-bars {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-top: 3px;
     }
     /* The runner's claims: chunk short name — node, one line each, dim so the
        registry row's own identity stays the loudest thing in it. */

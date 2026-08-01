@@ -1109,6 +1109,50 @@ export type EventsResponse = {
 export type Executor = 'runner' | 'hub';
 
 /**
+ * ExternalSubscriptionUsageView
+ *
+ * A runner's newest sampled external-subscription-usage snapshot (issue #218).
+ */
+export type ExternalSubscriptionUsageView = {
+    /**
+     * Sampled At
+     */
+    sampled_at: string;
+    /**
+     * Windows
+     */
+    windows: Array<ExternalSubscriptionUsageWindowView>;
+};
+
+/**
+ * ExternalSubscriptionUsageWindowView
+ *
+ * One rate-limit window's utilization, as the harness's own account reported it
+ * (issue #218) — ``window`` is the harness-native label (``"5h"``/``"7d"`` for Claude
+ * Code), ``utilization_pct`` is 0-100, ``resets_at`` the window's reset instant, and
+ * ``window_seconds`` its length, carried alongside the label so a reader never has
+ * to hardcode the mapping back.
+ */
+export type ExternalSubscriptionUsageWindowView = {
+    /**
+     * Resets At
+     */
+    resets_at: string;
+    /**
+     * Utilization Pct
+     */
+    utilization_pct: number;
+    /**
+     * Window
+     */
+    window: string;
+    /**
+     * Window Seconds
+     */
+    window_seconds: number;
+};
+
+/**
  * FleetSpendView
  *
  * The fleet's usage/cost total since ``since`` — and, when the caller bounded the
@@ -2526,19 +2570,24 @@ export type RunnerRegistrationResponse = {
 /**
  * RunnerView
  *
- * One fleet-registry row — derived liveness and both brakes.
+ * One fleet-registry row — derived liveness, both brakes, and (issue #218) an
+ * advisory external-usage snapshot.
  *
  * A runner can be paused by two different parties for two different reasons, so the two
  * are reported separately rather than collapsed into one ``paused`` (issue #43): the
  * board shows *which*. A reader that wants "is it claiming?" ORs them; since issue #45
  * the two diverge past claiming — ``hub_paused`` keeps its claims-only meaning, while
- * ``locally_paused`` alone answers "is it spawning anything at all?".
+ * ``locally_paused`` alone answers "is it spawning anything at all?". ``external_subscription_usage``
+ * is a third, unrelated kind of thing carried on the same row: a read-only diagnostic
+ * of the harness's own subscription rate-limit windows, never a brake and never
+ * consulted by scheduling or claiming.
  */
 export type RunnerView = {
     /**
      * Env Capacity
      */
     env_capacity?: number | null;
+    external_subscription_usage?: ExternalSubscriptionUsageView | null;
     /**
      * Hub Paused
      */

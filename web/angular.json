@@ -199,7 +199,10 @@
         "test": {
           "builder": "@angular/build:unit-test",
           "options": {
-            "tsConfig": "projects/fleet/tsconfig.spec.json"
+            "tsConfig": "projects/fleet/tsconfig.spec.json",
+            "exclude": [
+              "**/*.shell-sweep.spec.ts"
+            ]
           }
         },
         "lint": {

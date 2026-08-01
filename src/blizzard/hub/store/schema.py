@@ -859,6 +859,31 @@ runner_local_pause_facts = Table(
     Column("reason", Text, nullable=True),
 )
 
+# The runner's latest sampled external-subscription-usage snapshot (issue #218, phase 3)
+# — an advisory display fact for the board, refreshed in place on every sample rather
+# than appended: only the newest reading is ever of interest, and there is no history to
+# derive from stale ones. This is a deliberate `bzh:facts-not-status` refresh-in-place
+# exception, the same one `runner_registrations`'s own module docstring already
+# documents (its `token_hash`/`env_capacity`/`public_url`/`redirect_uris` columns) — see
+# that table's comments above rather than re-arguing it here.
+#
+# No ForeignKey to ``runner_registrations.runner_id``, deliberately: a fact for a runner
+# the hub has no registration row for would raise on insert, making `_apply` return
+# `False`, which makes the ingest batch `rejected`, which means the seq's high-water
+# mark never advances — a permanent stall of that runner's entire fact rail over an
+# advisory display field. An orphan row here is simply never read.
+runner_external_usage = Table(
+    "runner_external_usage",
+    metadata,
+    Column("runner_id", String, primary_key=True),
+    Column("sampled_at", UtcDateTime, nullable=False),
+    # JSON array of {window, utilization_pct, resets_at, window_seconds} — rewritten
+    # wholesale on every sample, never queried by its members (the `redirect_uris`
+    # JSON-blob-as-Text precedent above).
+    Column("windows", Text, nullable=False),
+    Column("updated_at", UtcDateTime, nullable=False),
+)
+
 # --- The identity spine: users, provider identities, sessions (issue #91) -----
 #
 # Independent of any login mechanism (that is #92) — the schema every other auth slice

@@ -522,6 +522,10 @@ def _runner_config(runner_dir: Path, workspace: Path, bin_dir: Path, hub_port: i
         # flag, so it must be omitted (``None``) — the real adapter default's own contract
         # (``bypassPermissions``): None omits the flag so the mock is unaffected.
         harness_permission_mode=None,
+        # A path that is never created — the external-usage sampler's first soft-failure
+        # check (a missing credentials file) trips before any request is built, keeping
+        # this real daemon's no-network-access guarantee real for that step too (issue #218).
+        external_usage_credentials_path=str(runner_dir / "no-such-credentials.json"),
         base_branch="main",
         # The adapter's spawn-environment allowlist (issue #88) forwards only what is
         # declared here — the mock's fence var and transcripts-root override are not real

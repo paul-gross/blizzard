@@ -96,6 +96,13 @@ class LoopConfig:
     #: The runner ceiling's rolling window, in hours, mirrored from ``RunnerConfig.
     #: runner_ceiling_window_hours``. Unused while :attr:`runner_ceiling_usd` is ``None``.
     runner_ceiling_window_hours: float = 24.0
+    #: The external-subscription-usage sample step's cadence in seconds (issue #218),
+    #: mirrored from ``RunnerConfig.external_usage_sample_interval_seconds``. The tick's
+    #: sample step (:func:`blizzard.runner.loop.steps.sample_external_subscription_usage`)
+    #: re-samples only once this many seconds have elapsed since the runner's last
+    #: sampling attempt (:meth:`~blizzard.runner.store.repository.
+    #: IReadRunnerStore.last_external_usage_attempt_at`).
+    external_usage_sample_interval_seconds: int = 300
 
 
 @dataclass(frozen=True)

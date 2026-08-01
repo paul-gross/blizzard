@@ -43,6 +43,7 @@ from blizzard.runner.app import build_hosted_app, create_app
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.harness.adapter import WorkerHandle, WorkerPreamble
+from blizzard.runner.harness.external_usage import ExternalSubscriptionUsageSnapshot
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.listeners import bind_listeners, unlink_socket
@@ -331,6 +332,9 @@ class _HangingAdapter:
     def sum_transcript_usage(self, lines: Sequence[str], kind: UsageKind, *, model: str | None = None) -> UsageSample:
         raise AssertionError("unreachable — spawn never returns")
 
+    def sample_external_subscription_usage(self) -> ExternalSubscriptionUsageSnapshot | None:
+        raise AssertionError("unreachable — spawn never returns")
+
 
 @pytest.mark.component
 def test_selftest_run_that_exceeds_its_budget_fails_loudly_instead_of_hanging(tmp_path: Path) -> None:
@@ -431,6 +435,9 @@ class _FixedPidAdapter:
             cache_create_tokens=0,
             cost_usd=None,
         )
+
+    def sample_external_subscription_usage(self) -> ExternalSubscriptionUsageSnapshot | None:
+        return None
 
 
 class _RecordingProcessProbe:

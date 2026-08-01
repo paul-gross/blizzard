@@ -22,6 +22,11 @@ recording anything themselves: ``parse_usage`` reads a result envelope's own
 fallback, summing per-message ``usage`` off the raw session transcript. Cost always
 comes from the harness — blizzard never maintains a pricing table.
 
+One more (issue #218) samples the harness's own **subscription** rate-limit
+utilization, distinct from the cost/token telemetry above: ``sample_external_
+subscription_usage`` reads the account's own view of how much of its metered
+window it has consumed, never derived from blizzard's own usage tallies.
+
 Adapters stay dumb (``bzh:deterministic-shell``): ``parse_verdict`` returns the
 choice *name*, not a graph decision — resolving it to an edge is the core's job.
 """
@@ -33,6 +38,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from blizzard.runner.environments.provider import AcquiredEnvironment
+from blizzard.runner.harness.external_usage import ExternalSubscriptionUsageSnapshot
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.wire.envelope import NodeEnvelope
 
@@ -319,5 +325,18 @@ class IHarnessAdapter(Protocol):
 
         ``model`` is the same attribution fallback :meth:`parse_usage` takes, applying
         when no transcript line names a model either.
+        """
+        ...
+
+    def sample_external_subscription_usage(self) -> ExternalSubscriptionUsageSnapshot | None:
+        """Sample this harness's own subscription rate-limit utilization (issue #218).
+
+        Mirrors :meth:`resolve_effort`'s ``None`` contract: ``None`` means this harness
+        has no subscription concept at all (an adapter with no such notion, or a
+        deployment not authenticated against one), **or** this particular attempt
+        produced nothing — an unreadable/expired credential, an unreachable or
+        non-2xx usage endpoint, an unparseable response, anything. Never a raise: a
+        diagnostic sample is by nature best-effort, so every failure path is the
+        caller's cue to log and move on, exactly like a harness with no knob to ask.
         """
         ...

@@ -9,8 +9,10 @@ never a ``server_default`` (``bzh:injected-clock``); portable-SQL surface only
 The loop mints a lease, binds an environment, buffers each hub-bound fact for the
 flusher (store-and-forward), records a heartbeat per worker tool call
 (progress detection), and — for the ask/answer protocol — records the local
-open-ask fact and the chunk's park/resume around it. All the same facts-only
-pattern.
+open-ask fact and the chunk's park/resume around it. It also records one row per
+tick's external-subscription-usage sampling attempt (issue #218), the harness's
+own rate-limit-window reading, kept for the tick's cadence gate. All the same
+facts-only pattern.
 """
 
 from __future__ import annotations
@@ -721,4 +723,26 @@ session_preamble_facts = Table(
     Column("blizzard_digest", String, nullable=False),  # sha256 of the resolved layer 1
     Column("workspace_digest", String, nullable=False),  # sha256 of the resolved layer 2
     Column("recorded_at", UtcDateTime, nullable=False),
+)
+
+# --- External subscription usage samples (the harness's own rate-limit windows — issue #218) -
+#
+# One append-only row per tick's sampling *attempt*, never a "last sampled" column: the
+# cadence anchor the tick gate reads (:meth:`IReadRunnerStore.last_external_usage_attempt_at`)
+# is derived as ``max(sampled_at)`` over this table, mirroring the facts-only pattern every
+# other table in this module follows (``bzh:facts-not-status``) rather than an upserted
+# single-row "when did we last try" value. ``payload`` is the JSON-serialized
+# :class:`~blizzard.runner.harness.external_usage.ExternalSubscriptionUsageSnapshot` the
+# adapter returned, or NULL when that attempt produced nothing (no subscription concept, an
+# unreachable/expired credential, anything — see
+# :meth:`~blizzard.runner.harness.adapter.IHarnessAdapter.sample_external_subscription_usage`).
+# A NULL-payload row still counts as an attempt for cadence purposes: the tick does not retry
+# early just because the harness had nothing to report last time.
+
+external_usage_samples = Table(
+    "external_usage_samples",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("sampled_at", UtcDateTime, nullable=False),
+    Column("payload", Text, nullable=True),  # NULL = this attempt sampled nothing
 )

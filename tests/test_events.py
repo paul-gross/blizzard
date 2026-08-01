@@ -169,8 +169,8 @@ def test_route_emission_lands_in_the_replay_buffer(tmp_path: Path) -> None:
 
 
 def test_every_runner_changed_publish_site_names_its_kind(tmp_path: Path) -> None:
-    """All four ``publish_runner_changed`` sites, driven through their own routes (issue
-    #151). The kind is what a consumer filters on, so a site that published a bare
+    """All five ``publish_runner_changed`` sites, driven through their own routes (issue
+    #151, #218). The kind is what a consumer filters on, so a site that published a bare
     ``runner_id`` would be indistinguishable from the heartbeat flood and silently muted."""
     hub = build_hub(tmp_path)
 
@@ -182,6 +182,8 @@ def test_every_runner_changed_publish_site_names_its_kind(tmp_path: Path) -> Non
     assert hub.client.post("/api/runners/r1/pause", json={"by": "alice"}).status_code == 200
     assert hub.client.post("/api/runners/r1/resume", json={"by": "alice"}).status_code == 200
     # 4. Runner-local pause/resume facts — the runner braked itself, and says why.
+    # 5. A sampled external-subscription-usage snapshot (issue #218) — runner-scoped,
+    #    no `by`/`reason`/`key`.
     resp = hub.client.post(
         "/api/fleet/events",
         json={
@@ -189,6 +191,21 @@ def test_every_runner_changed_publish_site_names_its_kind(tmp_path: Path) -> Non
             "facts": [
                 {"seq": 1, "kind": "runner.locally_paused", "payload": {"by": "runner-ceiling", "reason": "cap hit"}},
                 {"seq": 2, "kind": "runner.locally_resumed", "payload": {"by": "bob"}},
+                {
+                    "seq": 3,
+                    "kind": "external_subscription_usage.sampled",
+                    "payload": {
+                        "sampled_at": "2026-08-01T12:00:00+00:00",
+                        "windows": [
+                            {
+                                "window": "5h",
+                                "utilization_pct": 42.0,
+                                "resets_at": "2026-08-01T17:00:00+00:00",
+                                "window_seconds": 18000,
+                            }
+                        ],
+                    },
+                },
             ],
         },
     )
@@ -211,4 +228,6 @@ def test_every_runner_changed_publish_site_names_its_kind(tmp_path: Path) -> Non
         },
         # No `reason` on the fact — the frame omits it rather than carrying an empty note.
         {"runner_id": "r1", "kind": "locally-resumed", "by": "bob", "key": "runner_local_pause_facts:2"},
+        # No `by`/`reason`/`key` — no fact-table row identity worth naming.
+        {"runner_id": "r1", "kind": "external-usage"},
     ]

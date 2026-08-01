@@ -27,6 +27,7 @@ mint, landing after the escalation, flips ``needs_human`` off with no resolution
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -41,6 +42,7 @@ from blizzard.wire.facts import (
     ANSWER_DELIVERED,
     ESCALATION_RECORDED,
     EVENT_RECORDED,
+    EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
     LEASE_MINTED,
     QUESTION_ASKED,
     RUNNER_LOCALLY_PAUSED,
@@ -252,6 +254,20 @@ class FactIngestService:
             # Board detail: the resume-with-answer ran; status flipped at question.answered.
             self._chunks.record_answer_delivered(
                 question_id=str(payload["question_id"]), chunk_id=str(payload["chunk_id"]), at=now
+            )
+            return True, None
+        if kind == EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED:
+            # Runner-scoped and hub-read-only, same as the local-pause pair below: an
+            # advisory display fact for the board, never a status the hub derives
+            # anything from. Refresh-in-place (`bzh:facts-not-status`'s stated
+            # exception, `runner_external_usage`'s schema comment) — only the latest
+            # sample is ever of interest, so this upserts rather than appends. No row
+            # id to report: identity is the runner id, already known to the caller.
+            self._fleet.record_external_usage(
+                runner_id,
+                sampled_at=_parse_at(payload.get("sampled_at"), now),
+                windows_json=json.dumps(payload.get("windows", [])),
+                at=now,
             )
             return True, None
         if kind in (RUNNER_LOCALLY_PAUSED, RUNNER_LOCALLY_RESUMED):

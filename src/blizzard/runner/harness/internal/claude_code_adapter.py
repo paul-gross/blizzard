@@ -42,6 +42,17 @@ Implements :class:`~blizzard.runner.harness.adapter.IHarnessAdapter` against the
   envelope is present. **sum_transcript_usage** is the envelope-less fallback,
   summing per-message ``usage`` off the raw session transcript (``cost_usd`` always
   ``None`` there — a transcript carries no dollar figure). Both epic #57.
+* **sample_external_subscription_usage** (issue #218) — reads the account's OAuth
+  credential file (``~/.claude/.credentials.json`` by default) for the bearer token,
+  then GETs Claude's own ``/api/oauth/usage`` endpoint and parses the ``five_hour``/
+  ``seven_day`` windows into an :class:`~blizzard.runner.harness.external_usage.
+  ExternalSubscriptionUsageSnapshot`. **Never refreshes and never writes** the
+  credential file — Claude Code itself owns refresh, and every worker this runner
+  spawns shares that one file, so a second writer risks corrupting it out from under
+  a live session. Every failure path (unreadable/malformed credentials, missing or
+  expired token, a non-2xx/unreachable/timed-out request, an unparseable response,
+  or a response with no parseable window) logs one warning and returns ``None`` —
+  never a raise, since a diagnostic sample is inherently best-effort.
 
 ``spawn``/``resume_with_message`` redirect the worker's stdout to an **injected**
 per-lease file (``preamble.stdout_path`` / the ``stdout_path`` param) rather than
@@ -101,10 +112,16 @@ import contextlib
 import json
 import subprocess
 from collections.abc import Iterator, Sequence
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import IO
 
+import httpx
+
+from blizzard.foundation.clock import IClock, SystemClock
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.process import read_process_start_time
+from blizzard.foundation.store.utc import iso_utc
 from blizzard.runner.harness.adapter import (
     HarnessSpawnError,
     IHarnessAdapter,
@@ -112,6 +129,7 @@ from blizzard.runner.harness.adapter import (
     WorkerPreamble,
 )
 from blizzard.runner.harness.env_allowlist import allowlisted_env
+from blizzard.runner.harness.external_usage import ExternalSubscriptionUsageSnapshot, ExternalSubscriptionUsageWindow
 from blizzard.runner.harness.spawn_cwd import resolve_spawn_cwd
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.wire.envelope import NodeEnvelope
@@ -164,6 +182,26 @@ _NATIVE_PREFIX = "claude-"
 # tier outside the ordinal, e.g. Claude Code's own ``xhigh``.
 _EFFORT_ORDINAL = frozenset({"low", "medium", "high", "max"})
 
+# The subscription-usage seam (issue #218). ``DEFAULT_USAGE_API_BASE`` is Claude's own
+# API host — the same one the ``claude`` CLI itself talks to — and
+# ``DEFAULT_CREDENTIALS_PATH`` is where Claude Code's own OAuth login writes the shared
+# credential file every worker this runner spawns reads. Both overridable via the
+# constructor for a verification double that points at neither.
+DEFAULT_USAGE_API_BASE = "https://api.anthropic.com"
+DEFAULT_CREDENTIALS_PATH = str(Path.home() / ".claude" / ".credentials.json")
+
+_USAGE_PATH = "/api/oauth/usage"
+_USAGE_OAUTH_BETA_HEADER = "oauth-2025-04-20"
+_USAGE_TIMEOUT_SECONDS = 5.0
+
+# The one window each source-body key maps to (issue #218): the harness-native label
+# ``sample_external_subscription_usage`` reports plus that window's fixed length in
+# seconds, so a caller never has to hardcode the 5h/7d -> seconds mapping itself.
+_USAGE_WINDOW_SPECS: tuple[tuple[str, str, int], ...] = (
+    ("five_hour", "5h", 18_000),
+    ("seven_day", "7d", 604_800),
+)
+
 
 def _result_envelope(output: str) -> dict[str, object] | None:
     """The last JSON-object line carrying a ``result`` key, else ``None``.
@@ -215,6 +253,10 @@ class ClaudeCodeAdapter:
         env_passthrough: Sequence[str] = (),
         model_aliases: Sequence[tuple[str, str]] = (),
         effort_aliases: Sequence[tuple[str, str]] = (),
+        credentials_path: str | None = None,
+        usage_api_base: str = DEFAULT_USAGE_API_BASE,
+        http_client: httpx.Client | None = None,
+        clock: IClock | None = None,
     ) -> None:
         self._binary = binary
         self._settings_path = settings_path
@@ -239,6 +281,18 @@ class ClaudeCodeAdapter:
         # #88, `RunnerConfig.worker_env_passthrough`) — forwarded to every worker/judge/
         # resume child alongside the fixed base allowlist.
         self._env_passthrough = tuple(env_passthrough)
+        # The subscription-usage seam (issue #218), all defaulted so every existing
+        # call site keeps building the same adapter it always has. ``credentials_path``
+        # is where Claude Code's own OAuth login writes the shared credential file —
+        # read-only here (see ``sample_external_subscription_usage``'s docstring for
+        # why this adapter never refreshes or writes it). The ``httpx.Client`` is
+        # constructed lazily so an adapter built for spawn/judge/resume alone (the
+        # overwhelming majority of callers) never opens a connection pool it never
+        # uses.
+        self._credentials_path = credentials_path or DEFAULT_CREDENTIALS_PATH
+        self._usage_api_base = usage_api_base
+        self._http_client = http_client
+        self._clock: IClock = clock or SystemClock()
 
     def resolve_model(self, preferences: Sequence[str]) -> str:
         """Left-to-right; first entry that resolves wins; unresolvable entries skipped."""
@@ -537,6 +591,162 @@ class ClaudeCodeAdapter:
             cache_create_tokens=cache_create_tokens,
             cost_usd=None,
         )
+
+    def sample_external_subscription_usage(self) -> ExternalSubscriptionUsageSnapshot | None:
+        access_token = self._read_access_token()
+        if access_token is None:
+            return None
+        try:
+            resp = self._usage_client().get(
+                f"{self._usage_api_base}{_USAGE_PATH}",
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "anthropic-beta": _USAGE_OAUTH_BETA_HEADER,
+                    "Content-Type": "application/json",
+                },
+                timeout=_USAGE_TIMEOUT_SECONDS,
+            )
+        except httpx.HTTPError as exc:
+            # Covers both a timeout and a connection failure — httpx's own
+            # `TimeoutException`/`ConnectError` are both `HTTPError` subclasses, and
+            # this is a best-effort diagnostic sample, never a spawn/resume failure.
+            _log.warning("external subscription usage sample failed: request error", detail=str(exc))
+            return None
+        if not resp.is_success:
+            _log.warning("external subscription usage sample failed: non-2xx response", status_code=resp.status_code)
+            return None
+        try:
+            body = resp.json()
+        except ValueError as exc:
+            _log.warning("external subscription usage sample failed: unparseable response body", detail=str(exc))
+            return None
+        if not isinstance(body, dict):
+            _log.warning(
+                "external subscription usage sample failed: unexpected response shape",
+                body_type=type(body).__name__,
+            )
+            return None
+        windows = self._parse_usage_windows(body)
+        if not windows:
+            _log.warning("external subscription usage sample failed: no parseable windows in response")
+            return None
+        return ExternalSubscriptionUsageSnapshot(sampled_at=self._clock.now(), windows=tuple(windows))
+
+    def _usage_client(self) -> httpx.Client:
+        """The injected ``httpx.Client``, or a lazily-constructed real one.
+
+        Lazy so an adapter built for spawn/judge/resume alone — the overwhelming
+        majority of construction sites — never opens a connection pool it never uses;
+        cached on ``self`` once created so a long-lived daemon reuses one connection
+        across repeated samples rather than a fresh client per call.
+        """
+        if self._http_client is None:
+            self._http_client = httpx.Client()
+        return self._http_client
+
+    def _read_access_token(self) -> str | None:
+        """The OAuth bearer token from the credential file, or ``None`` on any failure.
+
+        Read-only, always: this adapter never refreshes and never writes the
+        credential file. Claude Code itself owns the refresh flow, and the file is
+        shared by every worker this runner spawns — a second writer risks
+        corrupting it out from under a live session mid-refresh. An expired token is
+        therefore just another ``None`` path, not a refresh trigger.
+        """
+        try:
+            raw = Path(self._credentials_path).read_text()
+        except OSError as exc:
+            _log.warning(
+                "external subscription usage sample failed: could not read credentials file",
+                path=self._credentials_path,
+                detail=str(exc),
+            )
+            return None
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            _log.warning(
+                "external subscription usage sample failed: malformed credentials JSON",
+                path=self._credentials_path,
+                detail=str(exc),
+            )
+            return None
+        oauth = data.get("claudeAiOauth") if isinstance(data, dict) else None
+        if not isinstance(oauth, dict):
+            _log.warning(
+                "external subscription usage sample failed: no claudeAiOauth block in credentials",
+                path=self._credentials_path,
+            )
+            return None
+        access_token = oauth.get("accessToken")
+        if not isinstance(access_token, str) or not access_token:
+            _log.warning(
+                "external subscription usage sample failed: no access token in credentials",
+                path=self._credentials_path,
+            )
+            return None
+        expires_at = self._parse_epoch_millis(oauth.get("expiresAt"))
+        if expires_at is None:
+            _log.warning(
+                "external subscription usage sample failed: missing/unparseable token expiry",
+                path=self._credentials_path,
+            )
+            return None
+        if expires_at <= self._clock.now():
+            _log.warning(
+                "external subscription usage sample failed: access token expired",
+                path=self._credentials_path,
+                expires_at=iso_utc(expires_at),
+            )
+            return None
+        return access_token
+
+    def _parse_usage_windows(self, body: dict[str, object]) -> list[ExternalSubscriptionUsageWindow]:
+        """Every window ``body`` reports usable data for — see
+        :mod:`~blizzard.runner.harness.external_usage`'s module docstring for the
+        near-miss note on ``utilization_pct`` (the source field is already 0-100,
+        not a fraction). A window whose key is absent/null, or whose
+        ``utilization``/``resets_at`` is null or unparseable, is skipped rather than
+        fabricated as a zero entry."""
+        windows: list[ExternalSubscriptionUsageWindow] = []
+        for key, label, seconds in _USAGE_WINDOW_SPECS:
+            entry = body.get(key)
+            if not isinstance(entry, dict):
+                continue
+            utilization = entry.get("utilization")
+            resets_at_raw = entry.get("resets_at")
+            if utilization is None or resets_at_raw is None or not isinstance(utilization, int | float):
+                continue
+            resets_at = self._parse_resets_at(resets_at_raw)
+            if resets_at is None:
+                continue
+            windows.append(
+                ExternalSubscriptionUsageWindow(
+                    window=label, utilization_pct=float(utilization), resets_at=resets_at, window_seconds=seconds
+                )
+            )
+        return windows
+
+    @staticmethod
+    def _parse_epoch_millis(value: object) -> datetime | None:
+        """Claude Code's own credential file stamps ``expiresAt`` in epoch milliseconds."""
+        if not isinstance(value, int | float):
+            return None
+        return datetime.fromtimestamp(value / 1000, tz=UTC)
+
+    @staticmethod
+    def _parse_resets_at(value: object) -> datetime | None:
+        """``resets_at`` as either epoch seconds (int/float) or an ISO-8601 string,
+        coerced to the same UTC-aware instant either way (``bzh:utc-instants``)."""
+        if isinstance(value, int | float):
+            return datetime.fromtimestamp(value, tz=UTC)
+        if isinstance(value, str):
+            try:
+                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError:
+                return None
+            return parsed.astimezone(UTC) if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
+        return None
 
     # --- plumbing -----------------------------------------------------------
 

@@ -68,6 +68,7 @@ def build_loop_context(
         env_passthrough=config.worker_env_passthrough,
         model_aliases=config.model_aliases,
         effort_aliases=config.effort_aliases,
+        credentials_path=config.external_usage_credentials_path,
     )
     # The per-lease harness-stdout directory (issue #58) — under the runner's own data
     # directory, created once here (never inside the adapter), so a worker's stdout
@@ -93,6 +94,7 @@ def build_loop_context(
         chunk_cap_usd=config.chunk_cap_usd,
         runner_ceiling_usd=config.runner_ceiling_usd,
         runner_ceiling_window_hours=config.runner_ceiling_window_hours,
+        external_usage_sample_interval_seconds=config.external_usage_sample_interval_seconds,
     )
     # The envelope-less usage fallback's transcript read (issue #58), mirroring
     # `runner/app.py`'s own construction of the panel's transcript seam (issue #29):

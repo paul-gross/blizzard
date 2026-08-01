@@ -67,6 +67,7 @@ from blizzard.wire.facts import (
     ANSWER_DELIVERED,
     ESCALATION_RECORDED,
     EVENT_RECORDED,
+    EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED,
     LEASE_MINTED,
     QUESTION_ASKED,
     RUNNER_LOCALLY_PAUSED,
@@ -637,6 +638,14 @@ def ingest_runner_facts(
                     key=f"runner_local_pause_facts:{local_pause_id}" if local_pause_id is not None else None,
                 )
                 continue
+            # A sampled external-subscription-usage snapshot (issue #218) is runner-scoped
+            # (no chunk_id), handled here for the same reason as the local-pause pair
+            # above: falling through to the chunk_id branch below would silently swallow
+            # it (applied to the store, never pushed). No `by`/`reason`/`key` — there is
+            # no fact-table row identity worth naming, only an advisory display field.
+            if fact.kind == EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED:
+                services.events.publish_runner_changed(batch.runner_id, kind="external-usage")
+                continue
             # An operational event (issue #125) may be runner-scoped (no chunk_id), so it is
             # broadcast here before the chunk branch below: `event-logged` refreshes the
             # board's Events tab, and a chunk-named event also refreshes that chunk's card.
@@ -747,4 +756,4 @@ def get_runner(
     liveness = services.fleet.get_liveness(runner_id)
     if liveness is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown runner {runner_id}")
-    return runners_api.runner_view(liveness)
+    return runners_api.runner_view(liveness, now=services.clock.now())

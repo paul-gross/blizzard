@@ -60,14 +60,38 @@ class RunnerEnrollmentResponse(BaseModel):
     token: str
 
 
+class ExternalSubscriptionUsageWindowView(BaseModel):
+    """One rate-limit window's utilization, as the harness's own account reported it
+    (issue #218) — ``window`` is the harness-native label (``"5h"``/``"7d"`` for Claude
+    Code), ``utilization_pct`` is 0-100, ``resets_at`` the window's reset instant, and
+    ``window_seconds`` its length, carried alongside the label so a reader never has
+    to hardcode the mapping back."""
+
+    window: str
+    utilization_pct: float
+    resets_at: str
+    window_seconds: int
+
+
+class ExternalSubscriptionUsageView(BaseModel):
+    """A runner's newest sampled external-subscription-usage snapshot (issue #218)."""
+
+    sampled_at: str
+    windows: list[ExternalSubscriptionUsageWindowView]
+
+
 class RunnerView(BaseModel):
-    """One fleet-registry row — derived liveness and both brakes.
+    """One fleet-registry row — derived liveness, both brakes, and (issue #218) an
+    advisory external-usage snapshot.
 
     A runner can be paused by two different parties for two different reasons, so the two
     are reported separately rather than collapsed into one ``paused`` (issue #43): the
     board shows *which*. A reader that wants "is it claiming?" ORs them; since issue #45
     the two diverge past claiming — ``hub_paused`` keeps its claims-only meaning, while
-    ``locally_paused`` alone answers "is it spawning anything at all?".
+    ``locally_paused`` alone answers "is it spawning anything at all?". ``external_subscription_usage``
+    is a third, unrelated kind of thing carried on the same row: a read-only diagnostic
+    of the harness's own subscription rate-limit windows, never a brake and never
+    consulted by scheduling or claiming.
     """
 
     runner_id: str
@@ -87,6 +111,11 @@ class RunnerView(BaseModel):
     # slot bar renders ``used/total`` against. ``None`` for a runner registered by a client
     # that predates this field; the board omits the bar (not a zero-slot bar) when null.
     env_capacity: int | None = None
+    # The runner's newest external-subscription-usage sample (issue #218) — absent when
+    # the runner has never sampled one, or when the latest sample is older than the
+    # hub's staleness threshold (`EXTERNAL_USAGE_STALE_AFTER`); never a fabricated
+    # empty/zero value, the same `env_capacity` convention above.
+    external_subscription_usage: ExternalSubscriptionUsageView | None = None
 
 
 class RunnerListResponse(BaseModel):

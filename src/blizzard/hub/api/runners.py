@@ -28,6 +28,7 @@ runner's token is confined to the fleet router.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -38,8 +39,10 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.deps import get_services
 from blizzard.hub.composition import HubServices
-from blizzard.hub.domain.registry import RunnerLiveness
+from blizzard.hub.domain.registry import RunnerLiveness, derive_external_subscription_usage
 from blizzard.wire.runner import (
+    ExternalSubscriptionUsageView,
+    ExternalSubscriptionUsageWindowView,
     RunnerEnrollmentResponse,
     RunnerListResponse,
     RunnerPauseRequest,
@@ -49,8 +52,9 @@ from blizzard.wire.runner import (
 router = APIRouter(prefix="/api", tags=["runners"], dependencies=[Depends(reject_runner_principal)])
 
 
-def runner_view(liveness: RunnerLiveness) -> RunnerView:
+def runner_view(liveness: RunnerLiveness, *, now: datetime) -> RunnerView:
     r = liveness.registration
+    usage = derive_external_subscription_usage(r.external_usage_sampled_at, r.external_usage_windows, now=now)
     return RunnerView(
         runner_id=r.runner_id,
         workspace_id=r.workspace_id,
@@ -62,6 +66,22 @@ def runner_view(liveness: RunnerLiveness) -> RunnerView:
         locally_paused_by=r.locally_paused_by,
         locally_paused_reason=r.locally_paused_reason,
         env_capacity=r.env_capacity,
+        external_subscription_usage=(
+            ExternalSubscriptionUsageView(
+                sampled_at=iso_utc(usage.sampled_at),
+                windows=[
+                    ExternalSubscriptionUsageWindowView(
+                        window=w.window,
+                        utilization_pct=w.utilization_pct,
+                        resets_at=iso_utc(w.resets_at),
+                        window_seconds=w.window_seconds,
+                    )
+                    for w in usage.windows
+                ],
+            )
+            if usage is not None
+            else None
+        ),
     )
 
 
@@ -89,7 +109,8 @@ def enroll_runner(runner_id: str, services: Annotated[HubServices, Depends(get_s
 @router.get("/runners", response_model=RunnerListResponse, dependencies=[Depends(require(FLEET_VIEW))])
 def list_runners(services: Annotated[HubServices, Depends(get_services)]) -> RunnerListResponse:
     """The fleet registry — every runner with derived liveness + paused state."""
-    return RunnerListResponse(runners=[runner_view(item) for item in services.fleet.list_with_liveness()])
+    now = services.clock.now()
+    return RunnerListResponse(runners=[runner_view(item, now=now) for item in services.fleet.list_with_liveness()])
 
 
 @router.get("/runners/{runner_id}", response_model=RunnerView, dependencies=[Depends(require(FLEET_VIEW))])
@@ -99,7 +120,7 @@ def get_runner(runner_id: str, services: Annotated[HubServices, Depends(get_serv
     liveness = services.fleet.get_liveness(runner_id)
     if liveness is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown runner {runner_id}")
-    return runner_view(liveness)
+    return runner_view(liveness, now=services.clock.now())
 
 
 @router.post("/runners/{runner_id}/pause", response_model=RunnerView, dependencies=[Depends(require(RUNNER_PAUSE))])
@@ -127,4 +148,4 @@ def _set_paused(runner_id: str, *, paused: bool, by: str, services: HubServices)
     )
     liveness = services.fleet.get_liveness(runner_id)
     assert liveness is not None  # just set_paused succeeded, so the runner exists
-    return runner_view(liveness)
+    return runner_view(liveness, now=services.clock.now())

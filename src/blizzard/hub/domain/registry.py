@@ -3,7 +3,7 @@
 The registry is the fleet's view of its runners: a
 runner registers on startup (runner_id + workspace_id) and appears on the board, its
 ``last_seen_at`` refreshed by registration and the dedicated liveness heartbeat.
-Two things derive over the registry, never stored as columns:
+Three things derive over the registry, never stored as columns:
 
 * **liveness** — ``last_seen_at`` against a staleness threshold yields online/offline;
   it is time-relative, so it is computed with the injected clock at read time, not on
@@ -12,6 +12,10 @@ Two things derive over the registry, never stored as columns:
   derives from the newest one, exactly as a graph's enabled-ness does. The runner
   reads it back on its outbound pull and adheres — pausing stops new leases, in-flight
   chunks run on.
+* **external subscription usage** (issue #218) — the runner's newest sampled
+  harness-subscription rate-limit window snapshot (``runner_external_usage``) against
+  its own, wider staleness threshold; renders when a sample exists and is recent
+  enough, else ``None`` (never sampled, or too stale to trust).
 
 :class:`FleetService` is the domain service the routes delegate to
 (``bzh:controller-read-only``); it holds the write registry repository and the injected
@@ -48,6 +52,13 @@ _log = get_logger("blizzard.hub.registry")
 #: heartbeat; a runner unheard-from for longer than this reads offline on the board. The
 #: runner's reconciliation tick (~30s) refreshes it many times over inside this window.
 STALE_AFTER = timedelta(minutes=5)
+
+#: External-subscription-usage staleness threshold (issue #218) — a chosen constant,
+#: deliberately its own, wider than :data:`STALE_AFTER`: the sample rides the runner's
+#: slow reconciliation tick rather than the fast worker heartbeat, so a usage-specific
+#: window avoids flapping a merely-slow-to-resample runner's block to ``None`` on the
+#: same cadence liveness would flip it offline.
+EXTERNAL_USAGE_STALE_AFTER = timedelta(minutes=15)
 
 
 @dataclass(frozen=True)
@@ -98,6 +109,17 @@ class RunnerRegistration:
     #: hub's IdP authorize endpoint exact-matches a presented ``redirect_uri`` against.
     #: Empty for a runner that has registered none.
     redirect_uris: tuple[str, ...] = ()
+    #: The runner's newest reported external-subscription-usage sample (issue #218),
+    #: raw, not yet staleness-derived — ``None`` for a runner that has never reported
+    #: one. Staleness
+    #: is *not* applied here (the store read is not clock-aware); see
+    #: :func:`derive_external_subscription_usage`, which turns this plus ``now`` into
+    #: the renderable view, mirroring how ``last_seen_at`` stays a raw column here while
+    #: :func:`derive_online` is the clock-relative read.
+    external_usage_sampled_at: datetime | None = None
+    #: The sample's windows, parsed off the stored JSON array — empty when
+    #: ``external_usage_sampled_at`` is ``None``.
+    external_usage_windows: tuple[ExternalSubscriptionUsageWindow, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -106,6 +128,31 @@ class RunnerLiveness:
 
     registration: RunnerRegistration
     online: bool
+
+
+@dataclass(frozen=True)
+class ExternalSubscriptionUsageWindow:
+    """One rate-limit window's utilization, read back off ``runner_external_usage``
+    (issue #218) — mirrors :class:`blizzard.runner.harness.external_usage.ExternalSubscriptionUsageWindow`'s
+    shape. A separate, hub-domain-owned copy rather than an import of the runner
+    package: the hub domain depends on nothing under ``blizzard.runner``
+    (``bzh:domain-core``), so the shape is duplicated at the wire boundary the fact
+    already crossed, not shared across it.
+    """
+
+    window: str
+    utilization_pct: float
+    resets_at: datetime
+    window_seconds: int
+
+
+@dataclass(frozen=True)
+class ExternalSubscriptionUsageView:
+    """One runner's external-subscription-usage sample, already past the staleness
+    gate — what :func:`derive_external_subscription_usage` returns on a hit."""
+
+    sampled_at: datetime
+    windows: tuple[ExternalSubscriptionUsageWindow, ...]
 
 
 def derive_online(last_seen_at: datetime, now: datetime, *, threshold: timedelta) -> bool:
@@ -118,6 +165,29 @@ def derive_online(last_seen_at: datetime, now: datetime, *, threshold: timedelta
     (``bzh:domain-core``).
     """
     return (as_utc(now) - as_utc(last_seen_at)) <= threshold
+
+
+def derive_external_subscription_usage(
+    sampled_at: datetime | None,
+    windows: tuple[ExternalSubscriptionUsageWindow, ...],
+    *,
+    now: datetime,
+) -> ExternalSubscriptionUsageView | None:
+    """The renderable external-subscription-usage view, or ``None`` (issue #218).
+
+    ``None`` for a runner that has never sampled (``sampled_at is None``) or whose
+    newest sample is older than :data:`EXTERNAL_USAGE_STALE_AFTER` relative to ``now``
+    — never a fabricated empty/zero view. Both operands coerced via
+    :func:`~blizzard.foundation.store.utc.as_utc` for the same reason
+    :func:`derive_online` does (``bzh:domain-core``): a public pure function whose
+    inputs are not guaranteed to come from the store.
+    """
+    if sampled_at is None:
+        return None
+    sampled_at = as_utc(sampled_at)
+    if (as_utc(now) - sampled_at) > EXTERNAL_USAGE_STALE_AFTER:
+        return None
+    return ExternalSubscriptionUsageView(sampled_at=sampled_at, windows=windows)
 
 
 class IReadRunnerRegistry(Protocol):
@@ -216,6 +286,17 @@ class IWriteRunnerRegistry(IReadRunnerRegistry, Protocol):
         it into."""
         ...
 
+    def record_external_usage(self, runner_id: str, *, sampled_at: datetime, windows_json: str, at: datetime) -> None:
+        """Upsert the runner's newest sampled external-subscription-usage snapshot
+        (issue #218) — refresh-in-place, not an append (``runner_external_usage``'s own
+        schema comment states the exception this shares with ``token_hash``/
+        ``env_capacity`` above). ``sampled_at`` is the snapshot's own reported instant;
+        ``at`` is the hub's landing time (``bzh:injected-clock``), stamped into
+        ``updated_at``. Unlike ``upsert_registration``, this never requires a known
+        runner — a fact for one the registry has not seen yet lands anyway, and is
+        simply never read until a registration exists."""
+        ...
+
 
 class FleetService:
     """Register runners, refresh liveness, and set the declarative pause brake."""
@@ -297,6 +378,14 @@ class FleetService:
         fact_id = self._registry.record_local_pause(runner_id, paused=paused, at=at, by=by, reason=reason)
         _log.info("runner local pause reported", runner_id=runner_id, paused=paused, by=by, reason=reason)
         return fact_id
+
+    def record_external_usage(self, runner_id: str, *, sampled_at: datetime, windows_json: str, at: datetime) -> None:
+        """Land a runner's reported external-subscription-usage sample (issue #218) —
+        refresh-in-place, mirroring :meth:`record_local_pause`'s no-known-runner-required
+        acceptance: the fact rides the same outbound buffer, so it can legitimately
+        arrive ahead of the registration that follows it."""
+        self._registry.record_external_usage(runner_id, sampled_at=sampled_at, windows_json=windows_json, at=at)
+        _log.info("runner external usage sample landed", runner_id=runner_id, sampled_at=sampled_at)
 
     def get_liveness(self, runner_id: str) -> RunnerLiveness | None:
         """One runner with its derived liveness — the runner's own pull read."""

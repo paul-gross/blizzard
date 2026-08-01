@@ -1640,6 +1640,57 @@
         "title": "Executor",
         "type": "string"
       },
+      "ExternalSubscriptionUsageView": {
+        "description": "A runner's newest sampled external-subscription-usage snapshot (issue #218).",
+        "properties": {
+          "sampled_at": {
+            "title": "Sampled At",
+            "type": "string"
+          },
+          "windows": {
+            "items": {
+              "$ref": "#/components/schemas/ExternalSubscriptionUsageWindowView"
+            },
+            "title": "Windows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sampled_at",
+          "windows"
+        ],
+        "title": "ExternalSubscriptionUsageView",
+        "type": "object"
+      },
+      "ExternalSubscriptionUsageWindowView": {
+        "description": "One rate-limit window's utilization, as the harness's own account reported it\n(issue #218) \u2014 ``window`` is the harness-native label (``\"5h\"``/``\"7d\"`` for Claude\nCode), ``utilization_pct`` is 0-100, ``resets_at`` the window's reset instant, and\n``window_seconds`` its length, carried alongside the label so a reader never has\nto hardcode the mapping back.",
+        "properties": {
+          "resets_at": {
+            "title": "Resets At",
+            "type": "string"
+          },
+          "utilization_pct": {
+            "title": "Utilization Pct",
+            "type": "number"
+          },
+          "window": {
+            "title": "Window",
+            "type": "string"
+          },
+          "window_seconds": {
+            "title": "Window Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "window",
+          "utilization_pct",
+          "resets_at",
+          "window_seconds"
+        ],
+        "title": "ExternalSubscriptionUsageWindowView",
+        "type": "object"
+      },
       "FleetSpendView": {
         "description": "The fleet's usage/cost total since ``since`` \u2014 and, when the caller bounded the\nwindow, strictly before ``until`` (issue #183; ``None`` for the original open-ended\ntail). ``cost_partial`` carries the lower-bound + PARTIAL contract on ``cost_usd`` \u2014\nsee :class:`~blizzard.hub.domain.work.UsageTotal` for the one canonical statement of\nit, which this view's fields mirror verbatim.",
         "properties": {
@@ -3585,7 +3636,7 @@
         "type": "object"
       },
       "RunnerView": {
-        "description": "One fleet-registry row \u2014 derived liveness and both brakes.\n\nA runner can be paused by two different parties for two different reasons, so the two\nare reported separately rather than collapsed into one ``paused`` (issue #43): the\nboard shows *which*. A reader that wants \"is it claiming?\" ORs them; since issue #45\nthe two diverge past claiming \u2014 ``hub_paused`` keeps its claims-only meaning, while\n``locally_paused`` alone answers \"is it spawning anything at all?\".",
+        "description": "One fleet-registry row \u2014 derived liveness, both brakes, and (issue #218) an\nadvisory external-usage snapshot.\n\nA runner can be paused by two different parties for two different reasons, so the two\nare reported separately rather than collapsed into one ``paused`` (issue #43): the\nboard shows *which*. A reader that wants \"is it claiming?\" ORs them; since issue #45\nthe two diverge past claiming \u2014 ``hub_paused`` keeps its claims-only meaning, while\n``locally_paused`` alone answers \"is it spawning anything at all?\". ``external_subscription_usage``\nis a third, unrelated kind of thing carried on the same row: a read-only diagnostic\nof the harness's own subscription rate-limit windows, never a brake and never\nconsulted by scheduling or claiming.",
         "properties": {
           "env_capacity": {
             "anyOf": [
@@ -3597,6 +3648,16 @@
               }
             ],
             "title": "Env Capacity"
+          },
+          "external_subscription_usage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExternalSubscriptionUsageView"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "hub_paused": {
             "title": "Hub Paused",
