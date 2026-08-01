@@ -63,10 +63,16 @@ import { injectRunnerAsksQuery } from './status.query';
       color: var(--label);
       font-size: var(--fs-label);
     }
+    /* The ask renders as the agent wrote it — see fleet's .ask-q. This panel is
+       read-only, but it is still where an operator reads the question before going to
+       the hub to answer it, so it collapses the prose no more than the board does. */
     .q {
       color: var(--text);
       font-size: var(--fs-sm);
+      line-height: 1.5;
       margin-top: 2px;
+      white-space: pre-wrap;
+      word-break: break-word;
     }
     .route {
       color: var(--label-dim);

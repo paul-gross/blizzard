@@ -190,6 +190,7 @@ const TERMINAL_STATUSES: ReadonlySet<string> = new Set<ChunkStatus>(['done', 'st
     }
     .trail-answer {
       color: var(--text);
+      white-space: pre-wrap;
     }
     .trail-answer::before {
       content: ' · ';
@@ -205,6 +206,8 @@ const TERMINAL_STATUSES: ReadonlySet<string> = new Set<ChunkStatus>(['done', 'st
       margin: 0 0 4px;
       color: var(--text);
       font-size: var(--fs-sm);
+      white-space: pre-wrap;
+      word-break: break-word;
     }
     .gate-head {
       display: flex;

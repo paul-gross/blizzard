@@ -93,6 +93,23 @@ describe('QuestionsPanelView', () => {
     expect(el.querySelector('[data-testid="questions-empty"]')).toBeNull();
   });
 
+  it('keeps a multi-paragraph ask readable as paragraphs rather than collapsing it', async () => {
+    const fixture = TestBed.createComponent(QuestionsPanelView);
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('questions', [
+      { ...QUESTIONS[0], question: 'It does not reproduce. Details:\n\n1. Code trace.\n2. Browser test.' },
+    ]);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    // The rail shows the same authored prose the detail dock does, so it collapses it no
+    // more than the dock does — see chunk-awaiting-human.spec.ts for why the CSS shape,
+    // not the rendered line count, is what a jsdom test can assert.
+    const text = el.querySelector('[data-testid="rail-question-text"]') as HTMLElement;
+    expect(text.textContent).toContain('Details:\n\n1. Code trace.');
+    expect(getComputedStyle(text).whiteSpace).toBe('pre-wrap');
+  });
+
   it('shows an error state when the questions read fails', async () => {
     const fixture = TestBed.createComponent(QuestionsPanelView);
     fixture.componentRef.setInput('state', 'error');

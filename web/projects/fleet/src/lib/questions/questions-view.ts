@@ -110,10 +110,15 @@ import { KitPanel } from '../kit/kit-panel';
       font-size: var(--fs-label);
       white-space: nowrap;
     }
+    /* Same as the detail dock's ask (chunk-awaiting-human .ask-q): the question is
+       authored prose, so its newlines are preserved rather than collapsed into one
+       run-on paragraph. The rail already rendered the ask in full — this only restores
+       the breaks the agent wrote, so a long ask reads as its paragraphs here too. */
     .qt {
       color: var(--text);
       font-size: var(--fs-sm);
       line-height: 1.5;
+      white-space: pre-wrap;
       overflow-wrap: anywhere;
     }
     .opts {

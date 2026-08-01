@@ -95,6 +95,38 @@ const ANSWERED_UNDELIVERED_DETAIL: ChunkDetail = {
   questions: [answered({ question_id: 'qn_01' })],
 };
 
+/** An agent's ask as they actually arrive — multi-paragraph prose with a numbered list,
+ * alongside an answer that carries its own line break. The shape that read as one
+ * run-on wall of text before the dock stopped collapsing its whitespace. */
+const MULTILINE_DETAIL: ChunkDetail = {
+  chunk_id: 'ch_01prose00000000000000000000',
+  graph_id: 'gr_1',
+  status: 'waiting_on_human',
+  current_node_id: 'nd_build',
+  latest_epoch: 1,
+  work_refs: [],
+  history: [],
+  artifacts: [],
+  questions: [
+    {
+      question_id: 'qn_open',
+      chunk_id: 'ch_01prose00000000000000000000',
+      question: 'Issue #214 does not reproduce under any condition I can test. Details:\n\n1. Code trace: the mutation already invalidates both keys.\n2. Live browser test: the board updated within 500ms.\n\nHow should I proceed?',
+      options: [],
+      epoch: 1,
+      runner_id: 'rn_01',
+      asked_at: '2026-07-13T00:00:01Z',
+      answered: false,
+    },
+    answered({
+      question_id: 'qn_answered',
+      chunk_id: 'ch_01prose00000000000000000000',
+      question: 'Which API style should the endpoint use?\n\nBoth are wired already.',
+      answer: 'line one\nline two',
+    }),
+  ],
+};
+
 const ESCALATED_DETAIL: ChunkDetail = {
   chunk_id: 'ch_01esc00000000000000000000000',
   graph_id: 'gr_1',
@@ -376,6 +408,30 @@ describe('ChunkAwaitingHuman', () => {
 
     const answers = [...el.querySelectorAll('[data-testid="answered-answer"]')].map((n) => n.textContent?.trim());
     expect(answers).toEqual(['q1', 'q3', 'q2']);
+  });
+
+  it('renders an ask and its answer as the prose they were written as, keeping the newlines', async () => {
+    const fixture = TestBed.createComponent(ChunkAwaitingHuman);
+    fixture.componentRef.setInput('detail', MULTILINE_DETAIL);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    // Two halves, because collapsing can happen in either. The *text* must survive
+    // Angular interpolation with its newlines intact, and the *CSS* must be told not to
+    // collapse them — jsdom has no layout engine, so the rendered line count is
+    // unassertable here (proven in the browser instead) and the assertable shape is
+    // `white-space: pre-wrap`. Without it the browser folds every run of whitespace to
+    // a single space and the agent's paragraphs render as one wall of text.
+    const ask = el.querySelector('[data-testid="question-text"]') as HTMLElement;
+    expect(ask.textContent).toContain('Details:\n\n1. Code trace');
+    expect(getComputedStyle(ask).whiteSpace).toBe('pre-wrap');
+
+    const answeredAsk = el.querySelector('[data-testid="answered-question-text"]') as HTMLElement;
+    expect(getComputedStyle(answeredAsk).whiteSpace).toBe('pre-wrap');
+
+    const answer = el.querySelector('[data-testid="answered-answer"]') as HTMLElement;
+    expect(answer.textContent).toContain('line one\nline two');
+    expect(getComputedStyle(answer).whiteSpace).toBe('pre-wrap');
   });
 
   it('surfaces an escalation with its copyable takeover command', async () => {
