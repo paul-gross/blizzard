@@ -120,7 +120,15 @@ def _federated_runner(
         env={**os.environ, "BZ_HUB_URL": f"http://127.0.0.1:{hub_port}"},
     )
     config = RunnerConfig.load(runner_dir)
-    config = dataclasses.replace(config, runner_id=runner_id, public_url=public_url)
+    config = dataclasses.replace(
+        config,
+        runner_id=runner_id,
+        public_url=public_url,
+        # A path that is never created — the external-usage sampler's first soft-failure
+        # check (a missing credentials file) trips before any request is built, keeping
+        # this real daemon's no-network-access guarantee real for that step too (issue #218).
+        external_usage_credentials_path=str(runner_dir / "no-such-credentials.json"),
+    )
     config.config_path.write_text(config.to_toml())
 
     # Registration (issue #95) — an authenticated-by-default-warn-mode fleet write,

@@ -330,6 +330,7 @@ def external_usage_probe(directory: str) -> None:
         permission_mode=config.harness_permission_mode,
         model_aliases=config.model_aliases,
         effort_aliases=config.effort_aliases,
+        credentials_path=config.external_usage_credentials_path,
     )
     snapshot = harness.sample_external_subscription_usage()
     if snapshot is None:

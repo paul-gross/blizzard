@@ -196,6 +196,16 @@ class RunnerConfig:
     #: spend control, so there is no "absent means never" knob here the way
     #: ``runner_ceiling_usd`` has one.
     external_usage_sample_interval_seconds: int = DEFAULT_EXTERNAL_USAGE_SAMPLE_INTERVAL_SECONDS
+    #: An override for the credential file the external-usage sampler reads (issue #218) —
+    #: read from the ``[external_subscription_usage]`` table's ``credentials_path`` key.
+    #: ``None`` (the key absent, the default for every real deployment) means the adapter's
+    #: own default, Claude Code's real ``~/.claude/.credentials.json``. Test scaffolding
+    #: (the same daemons every service/e2e/journey/crash-sweep tier spawns for real, over
+    #: the same composition root a live deployment uses) points this at a scratch path that
+    #: is never created, so the sampler's first soft-failure check (a missing file) trips
+    #: before any request is built — keeping those tiers' no-network-access guarantee real
+    #: for this step exactly as it already is for every other seam.
+    external_usage_credentials_path: str | None = None
     #: The operator's declared extension to the worker spawn-environment allowlist
     #: (issue #88) — read from the ``[worker]`` table's ``env_passthrough`` key. The
     #: adapter's three subprocess env constructions build from a fixed base allowlist
@@ -448,6 +458,11 @@ class RunnerConfig:
             + "# windows (issue #218) — a diagnostic, best-effort read, not a spend control.\n"
             + "[external_subscription_usage]\n"
             + f"sample_interval_seconds = {self.external_usage_sample_interval_seconds}\n"
+            + (
+                f'credentials_path = "{self.external_usage_credentials_path}"\n'
+                if self.external_usage_credentials_path is not None
+                else '# credentials_path = "/path/to/.credentials.json"  # defaults to ~/.claude/.credentials.json\n'
+            )
             + "\n# The worker spawn-environment allowlist's operator extension (`bzh:worker-env-allowlist`).\n"
             + "# The base allowlist (PATH/HOME/USER/LANG/LC_*/TERM/TMPDIR) always reaches a worker;\n"
             + "# name additional vars here to forward them too. Empty = base allowlist only. The\n"
@@ -516,6 +531,9 @@ class RunnerConfig:
             external_usage_sample_interval_seconds=_parse_external_usage_sample_interval_seconds(
                 raw.get("external_subscription_usage", {})
             ),
+            external_usage_credentials_path=_parse_external_usage_credentials_path(
+                raw.get("external_subscription_usage", {})
+            ),
             worker_env_passthrough=_parse_worker_env_passthrough(raw.get("worker", {})),
             public_url=str(raw.get("public_url", "")),
             auth_superuser=_parse_auth_superuser(raw.get("auth", {})),
@@ -564,6 +582,15 @@ def _parse_external_usage_sample_interval_seconds(table: object) -> int:
     if not isinstance(table, dict) or table.get("sample_interval_seconds") is None:
         return DEFAULT_EXTERNAL_USAGE_SAMPLE_INTERVAL_SECONDS
     return int(table["sample_interval_seconds"])
+
+
+def _parse_external_usage_credentials_path(table: object) -> str | None:
+    """``[external_subscription_usage].credentials_path`` (issue #218) — absent (the table,
+    or just this key) means ``None``, which lets :class:`ClaudeCodeAdapter` fall back to its
+    own real-credential-store default."""
+    if not isinstance(table, dict) or table.get("credentials_path") is None:
+        return None
+    return str(table["credentials_path"])
 
 
 def _parse_worker_env_passthrough(worker: object) -> tuple[str, ...]:

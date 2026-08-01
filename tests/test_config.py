@@ -294,6 +294,28 @@ def test_runner_ceiling_window_hours_defaults_when_ceiling_set_but_window_omitte
 
 
 @pytest.mark.unit
+def test_external_usage_credentials_path_defaults_none(tmp_path: Path) -> None:
+    # No `[external_subscription_usage]` table at all — absent means the adapter's own
+    # real-credential-store default, not a scratch/disabled path (issue #218).
+    assert RunnerConfig.scaffold(tmp_path).external_usage_credentials_path is None
+
+
+@pytest.mark.unit
+def test_external_usage_credentials_path_round_trips_through_to_toml_and_load(tmp_path: Path) -> None:
+    root = tmp_path / "runner"
+    root.mkdir()
+    scratch = str(tmp_path / "scratch-credentials.json")
+    edited = RunnerConfig(
+        root=root,
+        db_url=RunnerConfig.default_db_url(root),
+        external_usage_credentials_path=scratch,
+    )
+    (root / "blizzard-runner.toml").write_text(edited.to_toml())
+    reloaded = RunnerConfig.load(root)
+    assert reloaded.external_usage_credentials_path == scratch
+
+
+@pytest.mark.unit
 def test_worker_env_passthrough_defaults_absent(tmp_path: Path) -> None:
     # No `[worker]` table at all on a fresh scaffold — absent means no operator
     # extension to the spawn-environment allowlist (issue #88).
