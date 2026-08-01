@@ -71,7 +71,17 @@ interface EventLoggedEvent {
   chunk_id: string | null;
   runner_id: string;
 }
-type HubEventPayload = Partial<ChunkChanged & QuestionEvent & DecisionEvent & RunnerEvent & EventLoggedEvent>;
+/** The fact-identity stamp the hub puts on every frame (issue #213 Phase 2) — the
+ * merge/dedup key a backfilled row and the live frame reporting the same underlying
+ * fact share, so a consumer that reads both (the Event log's backfill, Phase 4) can
+ * tell they are the same event rather than rendering it twice. Absent on a frame from
+ * a hub older than Phase 2. */
+interface KeyedEvent {
+  key: string;
+}
+export type HubEventPayload = Partial<
+  ChunkChanged & QuestionEvent & DecisionEvent & RunnerEvent & EventLoggedEvent & KeyedEvent
+>;
 
 /** One of the named event types the hub broadcasts ({@link HUB_EVENT_TYPES}). */
 export type HubEventType = (typeof HUB_EVENT_TYPES)[number];
@@ -152,12 +162,17 @@ const EVENT_INVALIDATION_REGISTRY: Record<HubEventType, (data: HubEventPayload) 
  * (`seq` — a stable, monotonic client key), its board vocabulary `type`, the parsed
  * `data`, and the client-side arrival time `at` (ms epoch; the hub frames carry no
  * timestamp of their own). Presentation — the human-readable summary — is the panel's.
+ *
+ * `key` rides `data.key` (issue #213 Phase 4) so the panel's backfill/live merge can
+ * dedupe a backfilled row against the live frame reporting the same fact without
+ * reaching back into `data` itself. Absent on a frame from a hub older than Phase 2.
  */
 export interface LoggedEvent {
   readonly seq: number;
   readonly type: string;
   readonly data: HubEventPayload;
   readonly at: number;
+  readonly key?: string;
 }
 
 /**
@@ -260,7 +275,7 @@ export class FleetLiveUpdates {
    * a `seq`, so the panel's row keys stay dense. */
   private record(type: string, data: HubEventPayload): void {
     if (!isLoggable(type, data)) return;
-    const entry: LoggedEvent = { seq: ++this.seq, type, data, at: Date.now() };
+    const entry: LoggedEvent = { seq: ++this.seq, type, data, at: Date.now(), key: data.key };
     this._log.update((prev) => {
       const next = [...prev, entry];
       return next.length > LOG_LIMIT ? next.slice(next.length - LOG_LIMIT) : next;
