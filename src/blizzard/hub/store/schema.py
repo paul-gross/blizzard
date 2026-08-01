@@ -400,6 +400,30 @@ delivery_landed = Table(
     Column("landed_at", UtcDateTime, nullable=False),  # terminal: all repos landed
 )
 
+# --- Delivery closure facts (work_item_closures — issue #216) -----------------
+#
+# One row per close ATTEMPT outcome against a delivered chunk's work item —
+# `DeliveryClosureReconciler`'s durable record, keyed `(chunk_id, source, ref,
+# outcome)` so a repeated attempt at the same outcome is a clean no-op
+# (`record_work_item_closure`'s own idempotent-bool contract, mirroring
+# `record_hub_artifact`). `closed`/`gone` are terminal — `closable_work_refs` never
+# returns a ref once either lands; `failed` is not, and is retried on every later
+# sweep, so a permanently-failing ref costs one row here (plus one warning event),
+# not one per sweep. `reason` carries the failure/gone detail; null for `closed`.
+
+work_item_closures = Table(
+    "work_item_closures",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
+    Column("source", String, nullable=False),
+    Column("ref", String, nullable=False),
+    Column("outcome", String, nullable=False),
+    Column("reason", String, nullable=True),
+    Column("recorded_at", UtcDateTime, nullable=False),
+    UniqueConstraint("chunk_id", "source", "ref", "outcome", name="uq_work_item_closures_chunk_source_ref_outcome"),
+)
+
 # --- Delivery kick-backs (chunk_bounces — #64) --------------------------------
 #
 # A delivery kick-back (conflict / CI-red / master-moved) is contention, not
