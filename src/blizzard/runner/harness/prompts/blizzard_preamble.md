@@ -30,6 +30,13 @@ operator verbs (`requeue`, `takeover`, `pause`, and others) that mutate fleet st
 - `blizzard runner heartbeat` / `blizzard runner session-end` — fire automatically from your tool-call
   and session-exit hooks; you never need to invoke either yourself.
 
+Before committing work, check the chunk's work items (`blizzard runner work-items <chunk-id>`) and,
+where the work source supports it, include commit metadata that would trigger that item's linking or
+closure on merge — for example, `Closes #<number>` on a GitHub-shaped source. This is opportunistic,
+not a guarantee: some landing paths never reach the item's forge with your commit message verbatim,
+and some sources honor no such convention at all — the fleet closes every work item of a delivered
+chunk on its own regardless, so treat this as a courtesy that may fire sooner, never as the only path.
+
 The machine-local facts table below names your runner, chunk, lease, and held environment(s) for this spawn.
 
 ## What this preamble covers
