@@ -8,7 +8,7 @@ import { client as hubClient } from '../api/hub/client.gen';
 import { toneColor } from '../kit/kit-badge';
 import { OPERATOR_ME_RESPONSE } from '../testing/auth-fixtures';
 import { type RequestClientStub, stubRequestClient } from '../testing/stub-request-client';
-import { RunnerPanel } from './runner-panel';
+import { RunnerPanel, windowElapsedPct } from './runner-panel';
 
 /** A `contributor`'s `/api/me` — every day-to-day operating permission, but not the
  * admin-tier `runner:pause` (#93). Drives the brake-gating assertion. */
@@ -342,5 +342,91 @@ describe('RunnerPanel seenLabel (bzh:utc-instants)', () => {
   it('falls through to offline (not "0s ago") for a stale runner behind a stamp hours in the future', async () => {
     const el = await render('2026-07-16T17:00:00.000Z', false); // 5h after REF
     expect(el.querySelector('[data-testid="runner-seen"]')?.textContent).toBe('offline');
+  });
+});
+
+describe('windowElapsedPct (issue #218)', () => {
+  const FIVE_H_SECONDS = 5 * 60 * 60;
+
+  it('reads ~0 right at the window\'s own start (just reset)', () => {
+    const resetsAt = '2026-07-16T17:00:00.000Z';
+    const nowMs = Date.parse('2026-07-16T12:00:00.000Z'); // exactly resetsAt - 5h
+    expect(windowElapsedPct(nowMs, resetsAt, FIVE_H_SECONDS)).toBe(0);
+  });
+
+  it('reads ~100 right at the instant the window resets (about to reset)', () => {
+    const resetsAt = '2026-07-16T17:00:00.000Z';
+    const nowMs = Date.parse(resetsAt);
+    expect(windowElapsedPct(nowMs, resetsAt, FIVE_H_SECONDS)).toBe(100);
+  });
+
+  it('reads the midpoint at half the window elapsed', () => {
+    const resetsAt = '2026-07-16T17:00:00.000Z';
+    const nowMs = Date.parse('2026-07-16T14:30:00.000Z'); // resetsAt - 2.5h
+    expect(windowElapsedPct(nowMs, resetsAt, FIVE_H_SECONDS)).toBe(50);
+  });
+
+  it('clamps to 0 for a window that has not started yet', () => {
+    const resetsAt = '2026-07-16T17:00:00.000Z';
+    const nowMs = Date.parse('2026-07-16T11:00:00.000Z'); // an hour before the window starts
+    expect(windowElapsedPct(nowMs, resetsAt, FIVE_H_SECONDS)).toBe(0);
+  });
+
+  it('clamps to 100 for a resets_at already in the past (a stale sample)', () => {
+    const resetsAt = '2026-07-16T17:00:00.000Z';
+    const nowMs = Date.parse('2026-07-16T18:00:00.000Z'); // an hour past reset
+    expect(windowElapsedPct(nowMs, resetsAt, FIVE_H_SECONDS)).toBe(100);
+  });
+
+  it('reads 0 for an unparseable resets_at rather than throwing', () => {
+    expect(windowElapsedPct(Date.now(), 'not-a-date', FIVE_H_SECONDS)).toBe(0);
+  });
+});
+
+describe('RunnerPanel external-subscription pace bars (issue #218)', () => {
+  let stub: RequestClientStub;
+
+  const RUNNERS_WITH_USAGE = {
+    runners: [
+      runner('rn_paced', {
+        external_subscription_usage: {
+          sampled_at: NOW,
+          windows: [
+            { window: '5h', utilization_pct: 40, resets_at: '2026-07-16T17:00:00.000Z', window_seconds: 5 * 60 * 60 },
+            { window: '7d', utilization_pct: 70, resets_at: '2026-07-22T12:00:00.000Z', window_seconds: 7 * 24 * 60 * 60 },
+          ],
+        },
+      }),
+      runner('rn_unsampled', { external_subscription_usage: null }),
+    ],
+  };
+
+  beforeEach(async () => {
+    stub = stubRequestClient(hubClient, (method, path) => {
+      if (method === 'GET' && path === '/api/me') return OPERATOR_ME_RESPONSE;
+      if (method === 'GET' && path === '/api/runners') return RUNNERS_WITH_USAGE;
+      if (method === 'GET' && path === '/api/chunks') return [];
+      return {};
+    });
+    await TestBed.configureTestingModule({
+      imports: [RunnerPanel],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideTanStackQuery(new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+      ],
+    }).compileComponents();
+  });
+
+  afterEach(() => stub.restore());
+
+  it('renders one pace bar per sampled window, and none for a runner that has never sampled', async () => {
+    const fixture = TestBed.createComponent(RunnerPanel);
+    await settle(fixture);
+    const el = fixture.nativeElement as HTMLElement;
+
+    const bars = el.querySelectorAll('[data-runner-pace-bar="rn_paced"]');
+    expect(bars).toHaveLength(2);
+    expect([...bars].map((b) => b.getAttribute('data-pace-window'))).toEqual(['5h', '7d']);
+    expect(el.querySelector('[data-runner="rn_unsampled"] [data-testid="runner-pace-bars"]')).toBeNull();
   });
 });

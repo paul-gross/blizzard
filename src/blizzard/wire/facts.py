@@ -57,6 +57,14 @@ USAGE_RECORDED = "usage.recorded"
 # other fact here does; deliberately NOT route-token-gated — a failure event from a
 # fenced-out or dying worker is exactly what an operator must see.
 EVENT_RECORDED = "event.recorded"
+# A runner's periodic sample of the harness's own subscription rate-limit utilization
+# (issue #218) — an advisory display fact for the board, never a status the hub derives
+# anything from. Runner-scoped: no chunk_id, no lease_id. Payload: {sampled_at,
+# windows: [{window, utilization_pct, resets_at, window_seconds}, ...]}. Idempotency
+# rides the same per-runner outbound seq every other fact here does; the hub upserts
+# (refresh-in-place, ``bzh:facts-not-status``'s stated exception) rather than appends —
+# only the latest sample is ever of interest.
+EXTERNAL_SUBSCRIPTION_USAGE_SAMPLED = "external_subscription_usage.sampled"
 
 
 class LeaseMintReport(BaseModel):

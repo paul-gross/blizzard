@@ -5,6 +5,7 @@ import { hasPermission, injectMeQuery } from '../auth/me.query';
 import { compactRef } from '../compact-ref';
 import { injectHubChunksQuery } from '../chunks/chunks.query';
 import type { KitAsyncStateValue } from '../kit/kit-async-state';
+import { injectNowSignal } from '../now-signal';
 import { asyncState } from '../query-state';
 import { RunnerPanelView } from './runner-view';
 import { injectHubRunnersQuery } from './runners.query';
@@ -20,12 +21,46 @@ export interface ClaimLine {
   readonly status: ChunkStatus;
 }
 
+/** One rate-limit window's pacing pair for the registry row's pace bar (issue #218) —
+ * `window` is the harness-native label (`"5h"`/`"7d"`), `utilizationPct` is read
+ * straight off the sample, `elapsedPct` is derived (see {@link windowElapsedPct}). */
+export interface PaceBar {
+  readonly window: string;
+  readonly utilizationPct: number;
+  readonly elapsedPct: number;
+}
+
 /** A registry row: the runner plus the claims it holds, pre-folded so the
  * presentational sibling needs no second read to render them. `used` is the slot
- * bar's numerator — environments held by this runner's live routes (issue #69). */
+ * bar's numerator — environments held by this runner's live routes (issue #69).
+ * `paceBars` is empty when the runner has never sampled its external-subscription
+ * usage, or the sample is stale — the hub already nulls `external_subscription_usage`
+ * in that case (issue #218), so this row never needs to re-derive staleness itself. */
 export interface RunnerRow extends RunnerView {
   readonly claims: readonly ClaimLine[];
   readonly used: number;
+  readonly paceBars: readonly PaceBar[];
+}
+
+/**
+ * How far a rate-limit window has elapsed toward its own reset, `0-100` (issue #218).
+ * Derived **backward** from `resetsAt`/`windowSeconds` rather than assumed clock-aligned
+ * — the 5h window is session-anchored, not aligned to any fixed clock boundary, so a
+ * window's start is never assumed, only computed as `resetsAt - windowSeconds`. Clamped
+ * to `[0, 100]`: a `resetsAt` more than a full window out (not yet started) reads 0, one
+ * already passed (a stale sample) reads 100 rather than overshooting.
+ *
+ * `nowMs` is the caller's own clock reading (`injectNowSignal()`'s value in the
+ * container) — this function does no clock reads of its own, so it stays directly
+ * testable against a fixed instant.
+ */
+export function windowElapsedPct(nowMs: number, resetsAt: string, windowSeconds: number): number {
+  const resetsAtMs = Date.parse(resetsAt);
+  if (Number.isNaN(resetsAtMs) || windowSeconds <= 0) return 0;
+  const windowMs = windowSeconds * 1000;
+  const startMs = resetsAtMs - windowMs;
+  const fraction = (nowMs - startMs) / windowMs;
+  return Math.min(100, Math.max(0, fraction * 100));
 }
 
 /**
@@ -102,12 +137,41 @@ export class RunnerPanel {
     return used;
   });
 
-  /** Each runner with its claims and slot-bar numerator folded on, for the view. */
+  /** A slow-ticking clock (issue #218) — this data refreshes on `runner-changed` SSE,
+   * not by polling, so the only job here is keeping each pace bar's *elapsed* fraction
+   * visually live between those pushes, not driving fresh reads. */
+  private readonly now = injectNowSignal(30_000);
+
+  /** Each runner's pace bars, one per external-subscription window — empty for a
+   * runner that has never sampled, or whose sample the hub has already nulled as
+   * stale (issue #218). Recomputes on {@link now}'s tick as well as on fresh data, so
+   * the elapsed bar keeps advancing even between `runner-changed` pushes. */
+  private readonly paceBarsByRunner = computed<Map<string, readonly PaceBar[]>>(() => {
+    const now = this.now();
+    const bars = new Map<string, readonly PaceBar[]>();
+    for (const runner of this.runners()) {
+      const usage = runner.external_subscription_usage;
+      if (!usage) continue;
+      bars.set(
+        runner.runner_id,
+        usage.windows.map((w) => ({
+          window: w.window,
+          utilizationPct: w.utilization_pct,
+          elapsedPct: windowElapsedPct(now, w.resets_at, w.window_seconds),
+        })),
+      );
+    }
+    return bars;
+  });
+
+  /** Each runner with its claims, slot-bar numerator, and pace bars folded on, for the
+   * view. */
   protected readonly rows = computed<readonly RunnerRow[]>(() =>
     this.runners().map((runner) => ({
       ...runner,
       claims: this.claims().get(runner.runner_id) ?? [],
       used: this.usedByRunner().get(runner.runner_id) ?? 0,
+      paceBars: this.paceBarsByRunner().get(runner.runner_id) ?? [],
     })),
   );
 

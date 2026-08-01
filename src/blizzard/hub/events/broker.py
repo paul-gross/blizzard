@@ -53,7 +53,9 @@ EVENT_LOGGED = "event-logged"
 #: because a runner re-registers on every pull-loop cycle as its liveness heartbeat, that
 #: is overwhelmingly the ``registered``/``heartbeat`` pair. Naming the kind lets a consumer
 #: keep invalidating on every frame while showing an operator only the ones that carry news.
-RunnerChangeKind = Literal["registered", "heartbeat", "paused", "resumed", "locally-paused", "locally-resumed"]
+RunnerChangeKind = Literal[
+    "registered", "heartbeat", "paused", "resumed", "locally-paused", "locally-resumed", "external-usage"
+]
 
 #: What fact family drove a ``chunk-changed`` frame (issue #212) — each emit site names its
 #: own cause statically. ``escalated`` is reachable from both ``report_escalation`` and the

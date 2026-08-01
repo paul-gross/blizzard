@@ -45,6 +45,7 @@ from blizzard.runner.store.schema import (
     checks_ran,
     daemon_liveness,
     env_bindings,
+    external_usage_samples,
     git_commit_declarations,
     heartbeats,
     hub_control,
@@ -660,6 +661,12 @@ class SqlAlchemyRunnerStore:
             cost_partial=bool(row[5]),
         )
 
+    def last_external_usage_attempt_at(self) -> datetime | None:
+        stmt = select(func.max(external_usage_samples.c.sampled_at))
+        with self._connect() as conn:
+            value = conn.execute(stmt).scalar_one_or_none()
+        return value
+
     # --- writes -------------------------------------------------------------
 
     def record_lease(self, lease: NewLease) -> None:
@@ -1178,6 +1185,25 @@ class SqlAlchemyRunnerStore:
             kind=sample.kind,
             cost_usd=sample.cost_usd,
         )
+
+    def record_external_usage_attempt(
+        self, *, sampled_at: datetime, payload: str | None, report_kind: str, report_payload: str
+    ) -> None:
+        # The attempt row and (when there is a sample) its outbound report land in ONE
+        # transaction — the same atomic local+outbound pairing `record_local_pause` and
+        # `record_usage` use: a sample the hub is never told about is a board that
+        # silently drifts, and nothing later reconciles it. Runner-scoped like
+        # `record_local_pause`'s report (`chunk_id=None, lease_id=None`) — this is a
+        # fact about the runner's own account, not about any chunk or lease.
+        with self._begin() as conn:
+            conn.execute(external_usage_samples.insert().values(sampled_at=sampled_at, payload=payload))
+            if payload is not None:
+                conn.execute(
+                    outbound_buffer.insert().values(
+                        kind=report_kind, chunk_id=None, lease_id=None, payload=report_payload, created_at=sampled_at
+                    )
+                )
+        _log.info("external subscription usage attempt recorded", sampled=payload is not None)
 
     # --- plumbing -----------------------------------------------------------
 

@@ -75,6 +75,12 @@ DEFAULT_ENV_POOL: tuple[str, ...] = ("e1",)
 # `runner_ceiling_usd` is set and `window_hours` is not given alongside it; a ceiling with
 # no window still needs one to sum over, and a day is the least surprising default.
 DEFAULT_RUNNER_CEILING_WINDOW_HOURS = 24.0
+# The external-subscription-usage sample step's cadence (issue #218) — how often the tick
+# re-samples the harness's own rate-limit windows. A diagnostic, best-effort read, not a
+# spend control, so it needs no operator action to get a reasonable default: 5 minutes is
+# frequent enough for a board to look current without hammering the harness's usage
+# endpoint every ~30s tick.
+DEFAULT_EXTERNAL_USAGE_SAMPLE_INTERVAL_SECONDS = 300
 
 
 def socket_path_for(root: Path) -> Path:
@@ -180,6 +186,16 @@ class RunnerConfig:
     #: is ``None``; defaults to :data:`DEFAULT_RUNNER_CEILING_WINDOW_HOURS` when a ceiling
     #: is set but no window is given alongside it.
     runner_ceiling_window_hours: float = DEFAULT_RUNNER_CEILING_WINDOW_HOURS
+    #: The external-subscription-usage sample step's cadence in seconds (issue #218) —
+    #: read from the ``[external_subscription_usage]`` table's ``sample_interval_seconds``
+    #: key. Defaults to :data:`DEFAULT_EXTERNAL_USAGE_SAMPLE_INTERVAL_SECONDS` when the
+    #: table (or just this key) is absent. The tick's sample step
+    #: (:func:`blizzard.runner.loop.steps.sample_external_subscription_usage`) only
+    #: re-samples the harness's own rate-limit windows once this many seconds have
+    #: elapsed since the runner's last sampling *attempt* — a diagnostic cadence, not a
+    #: spend control, so there is no "absent means never" knob here the way
+    #: ``runner_ceiling_usd`` has one.
+    external_usage_sample_interval_seconds: int = DEFAULT_EXTERNAL_USAGE_SAMPLE_INTERVAL_SECONDS
     #: The operator's declared extension to the worker spawn-environment allowlist
     #: (issue #88) — read from the ``[worker]`` table's ``env_passthrough`` key. The
     #: adapter's three subprocess env constructions build from a fixed base allowlist
@@ -428,6 +444,10 @@ class RunnerConfig:
                 else "# runner_ceiling_usd = 50.0\n"
             )
             + f"window_hours = {self.runner_ceiling_window_hours}\n"
+            + "\n# How often (seconds) the tick re-samples the harness's own subscription rate-limit\n"
+            + "# windows (issue #218) — a diagnostic, best-effort read, not a spend control.\n"
+            + "[external_subscription_usage]\n"
+            + f"sample_interval_seconds = {self.external_usage_sample_interval_seconds}\n"
             + "\n# The worker spawn-environment allowlist's operator extension (`bzh:worker-env-allowlist`).\n"
             + "# The base allowlist (PATH/HOME/USER/LANG/LC_*/TERM/TMPDIR) always reaches a worker;\n"
             + "# name additional vars here to forward them too. Empty = base allowlist only. The\n"
@@ -493,6 +513,9 @@ class RunnerConfig:
             chunk_cap_usd=_parse_chunk_cap_usd(raw.get("cost", {})),
             runner_ceiling_usd=_parse_runner_ceiling_usd(raw.get("cost", {})),
             runner_ceiling_window_hours=_parse_runner_ceiling_window_hours(raw.get("cost", {})),
+            external_usage_sample_interval_seconds=_parse_external_usage_sample_interval_seconds(
+                raw.get("external_subscription_usage", {})
+            ),
             worker_env_passthrough=_parse_worker_env_passthrough(raw.get("worker", {})),
             public_url=str(raw.get("public_url", "")),
             auth_superuser=_parse_auth_superuser(raw.get("auth", {})),
@@ -532,6 +555,15 @@ def _parse_runner_ceiling_window_hours(cost: object) -> float:
     if not isinstance(cost, dict) or cost.get("window_hours") is None:
         return DEFAULT_RUNNER_CEILING_WINDOW_HOURS
     return float(cost["window_hours"])
+
+
+def _parse_external_usage_sample_interval_seconds(table: object) -> int:
+    """``[external_subscription_usage].sample_interval_seconds`` (issue #218) — defaults to
+    :data:`DEFAULT_EXTERNAL_USAGE_SAMPLE_INTERVAL_SECONDS` when the table (or just this
+    key) is absent, mirroring :func:`_parse_runner_ceiling_window_hours`'s shape."""
+    if not isinstance(table, dict) or table.get("sample_interval_seconds") is None:
+        return DEFAULT_EXTERNAL_USAGE_SAMPLE_INTERVAL_SECONDS
+    return int(table["sample_interval_seconds"])
 
 
 def _parse_worker_env_passthrough(worker: object) -> tuple[str, ...]:

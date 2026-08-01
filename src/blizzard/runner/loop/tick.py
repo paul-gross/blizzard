@@ -1,4 +1,4 @@
-"""The tick driver — one pass of CEILING → REAP → RESUME → PULL → FILL → ADVANCE.
+"""The tick driver — one pass of CEILING → REAP → RESUME → PULL → FILL → ADVANCE → SAMPLE.
 
 ``tick`` composes the step functions in order; it is the single synchronous pass the
 ``blizzard runner tick`` CLI verb and the periodic daemon driver both call. The spend
@@ -10,15 +10,28 @@ before ADVANCE could mistake a killed-mid-work worker for a done declaration: on
 first tick after a restart it re-attaches each in-flight session marked for same-lease
 resume — by the graceful shutdown hook (#12) or, when a ``kill -9`` / reboot skipped that
 hook, by ``host``'s startup crash-recovery scan (#13); on every other tick it is a no-op.
-The tick holds no state: every step reads and writes the runner store through the
-context's seams.
+The external-subscription-usage sample (issue #218) runs last, the mirror image of the
+ceiling check's reasoning: that check gates every later step, so it runs first; this step
+gates nothing that any step in this tick or a later one reads before deciding anything,
+so there is no correctness reason to run it earlier — and every reason not to, since its
+only network call must never sit ahead of REAP's reap or FILL's spawn and delay either on
+a diagnostic read neither depends on. The tick holds no state: every step reads and
+writes the runner store through the context's seams.
 """
 
 from __future__ import annotations
 
 from blizzard.foundation.logging import get_logger
 from blizzard.runner.loop.context import LoopContext
-from blizzard.runner.loop.steps import advance, check_spend_ceiling, fill, pull, reap, resume
+from blizzard.runner.loop.steps import (
+    advance,
+    check_spend_ceiling,
+    fill,
+    pull,
+    reap,
+    resume,
+    sample_external_subscription_usage,
+)
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -40,4 +53,7 @@ def tick(ctx: LoopContext) -> None:
     pull(ctx)
     fill(ctx)
     advance(ctx)
+    # Last (issue #218): gates nothing in this tick or any later one, so it runs behind
+    # every step whose spawn/kill/claim decision could be delayed by its one network call.
+    sample_external_subscription_usage(ctx)
     _log.debug("tick end", runner_id=ctx.config.runner_id)

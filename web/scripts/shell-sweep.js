@@ -18,7 +18,7 @@
  *
  *   npm run shell-sweep   (from web/)
  *
- * The four specs:
+ * The five specs:
  *   - projects/hub/src/app/nav/app-nav-menu.shell-sweep.spec.ts — the hub
  *     board shell (BoardHeader + AppNavMenu), swept over width only (no
  *     username is ever shown there): never lets the profile menu drift
@@ -40,6 +40,10 @@
  *     `getBoundingClientRect().top`s) with no horizontal overflow, at the
  *     narrow phone widths this component — unlike `ChunkRow` — is actually
  *     reached at, beneath the persistent mobile bottom tab bar.
+ *   - projects/fleet/src/lib/runners/runner-view.shell-sweep.spec.ts — the
+ *     runner registry's rate-limit pace bars (issue #218): the stacked
+ *     utilization/elapsed pair per sampled window genuinely stacks, with no
+ *     horizontal overflow, at the board right rail's ~390px width.
  */
 
 const { spawnSync } = require('node:child_process');
@@ -49,6 +53,7 @@ const SWEEPS = [
   { project: 'hub', spec: 'projects/hub/src/app/board/chunk/chunk-page-layout.shell-sweep.spec.ts' },
   { project: 'local-panel', spec: 'projects/local-panel/src/lib/local-panel-layout.shell-sweep.spec.ts' },
   { project: 'local-panel', spec: 'projects/local-panel/src/lib/local-panel-mobile.shell-sweep.spec.ts' },
+  { project: 'fleet', spec: 'projects/fleet/src/lib/runners/runner-view.shell-sweep.spec.ts' },
 ];
 
 function runSweep({ project, spec }) {
@@ -71,7 +76,7 @@ function main() {
     return;
   }
 
-  console.log('\nshell-sweep: all four specs clean.\n');
+  console.log('\nshell-sweep: all five specs clean.\n');
 }
 
 main();

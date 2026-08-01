@@ -88,7 +88,14 @@ export type HubEventType = (typeof HUB_EVENT_TYPES)[number];
 
 /** Which registry change a `runner-changed` frame reports (events/broker.py,
  * `RunnerChangeKind`). */
-export type RunnerChangeKind = 'registered' | 'heartbeat' | 'paused' | 'resumed' | 'locally-paused' | 'locally-resumed';
+export type RunnerChangeKind =
+  | 'registered'
+  | 'heartbeat'
+  | 'paused'
+  | 'resumed'
+  | 'locally-paused'
+  | 'locally-resumed'
+  | 'external-usage';
 
 /**
  * The `runner-changed` kinds the Event log feed drops (issue #151). A runner re-registers
@@ -98,8 +105,16 @@ export type RunnerChangeKind = 'registered' | 'heartbeat' | 'paused' | 'resumed'
  * is what keeps the feed legible rather than merely tidier. Dropping is scoped to the
  * feed: {@link FleetLiveUpdates.dispatch} still invalidates on them, so the fleet
  * registry's liveness column keeps refreshing on every heartbeat exactly as before.
+ *
+ * `external-usage` (issue #218) is muted for a different reason: it is not an
+ * operator-visible event-log entry, and carries no `key` — there is no fact-table row
+ * identity worth naming, only an advisory display field the fleet registry re-reads.
  */
-const MUTED_RUNNER_KINDS: ReadonlySet<string> = new Set<RunnerChangeKind>(['registered', 'heartbeat']);
+const MUTED_RUNNER_KINDS: ReadonlySet<string> = new Set<RunnerChangeKind>([
+  'registered',
+  'heartbeat',
+  'external-usage',
+]);
 
 /** Whether a frame belongs in the Event log feed — see {@link MUTED_RUNNER_KINDS}. */
 function isLoggable(type: string, data: HubEventPayload): boolean {

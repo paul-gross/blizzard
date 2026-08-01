@@ -700,6 +700,19 @@ class IReadRunnerStore(Protocol):
         PARTIAL contract on ``cost_usd``."""
         ...
 
+    def last_external_usage_attempt_at(self) -> datetime | None:
+        """The derived cadence anchor for the external-subscription-usage sample step
+        (issue #218): ``max(sampled_at)`` across ``external_usage_samples``, or ``None``
+        if this runner has never attempted a sample.
+
+        Deliberately derived rather than a separately-stored "last sampled" column
+        (``bzh:facts-not-status``) — the append-only attempt log is the one fact table,
+        and this is a read over it, the same relationship :meth:`usage_since` has to
+        ``usage_facts``. Counts a NULL-``payload`` attempt (the harness had nothing to
+        report) exactly like a successful one: either way, this runner *tried* at that
+        instant, and the cadence gate's job is to space out attempts, not just successes."""
+        ...
+
     def attachments_for_lease(self, lease_id: str) -> dict[str, str]:
         """The lease's explicit artifact submissions, newest content per ``name``
         (issue #113, Phase 2). Append-only, latest-wins-per-``(lease_id, name)``: a
@@ -971,6 +984,23 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         between this write and the outbound enqueue, re-run by the next tick reaching the
         same exited worker again before its completion is buffered — finds the row already
         there and writes nothing a second time, buffering no duplicate report either."""
+        ...
+
+    def record_external_usage_attempt(
+        self, *, sampled_at: datetime, payload: str | None, report_kind: str, report_payload: str
+    ) -> None:
+        """Append one external-subscription-usage sampling attempt **and**, only when it
+        produced a sample, buffer its outbound report — atomically (issue #218), mirroring
+        :meth:`record_local_pause`'s atomic local-write + outbound-enqueue pairing.
+
+        Always appends the attempt row (the cadence anchor
+        :meth:`~IReadRunnerStore.last_external_usage_attempt_at` derives from), whether or
+        not the harness had anything to report — an attempt that samples nothing still
+        counts for cadence purposes. Enqueues the outbound fact only when ``payload`` is
+        not ``None``: a NULL-payload attempt has nothing for the hub to hear about, so
+        nothing is buffered for it. ``report_kind``/``report_payload`` stay caller-supplied
+        so the store owns no fact vocabulary (the same split as :meth:`record_local_pause`
+        and :meth:`enqueue_outbound`)."""
         ...
 
     def record_attachment(

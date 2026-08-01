@@ -25,9 +25,11 @@ import uvicorn
 from blizzard.cli.host_directory import resolve_host_directory
 from blizzard.cli.param_rank import source_rank
 from blizzard.foundation.store.migrations import RevisionMismatchError
+from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.artifacts import ArtifactKind
 from blizzard.runner.app import build_hosted_app
 from blizzard.runner.config import ConfigError, RunnerConfig, socket_path_for
+from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.listeners import ListenerError, bind_listeners, unlink_socket
 from blizzard.runner.loop.build import (
     PeriodicDriver,
@@ -293,6 +295,54 @@ def tick_cmd(directory: str) -> None:
         raise click.ClickException(str(exc)) from exc
     run_single_tick(config)
     click.echo("tick complete")
+
+
+@runner.group("external-usage")
+def external_usage_group() -> None:
+    """Diagnostics for the runner's own external-subscription usage sampling (issue #218)."""
+
+
+@external_usage_group.command("probe")
+@click.option(
+    "--dir",
+    "directory",
+    default=DEFAULT_DIR,
+    envvar=ENV_RUNNER_DIR,
+    help="Runner runtime directory (overrides $BZ_RUNNER_DIR).",
+)
+def external_usage_probe(directory: str) -> None:
+    """Sample the harness's own subscription rate-limit usage and print it. Read-only.
+
+    Builds the same Claude Code adapter the reconciliation loop uses
+    (``blizzard.runner.loop.build.build_loop_context``'s own construction) and calls
+    :meth:`~blizzard.runner.harness.adapter.IHarnessAdapter.
+    sample_external_subscription_usage` directly — a diagnostic seam-check for phase 1
+    of issue #218 (the store/hub/board wiring is a later phase): no store write, no
+    tick, nothing enqueued or delivered anywhere.
+    """
+    try:
+        config = RunnerConfig.load(Path(directory))
+    except ConfigError as exc:
+        raise click.ClickException(str(exc)) from exc
+    harness = ClaudeCodeAdapter(
+        binary=config.harness_binary,
+        settings_path=config.worker_settings_path,
+        permission_mode=config.harness_permission_mode,
+        model_aliases=config.model_aliases,
+        effort_aliases=config.effort_aliases,
+    )
+    snapshot = harness.sample_external_subscription_usage()
+    if snapshot is None:
+        click.echo("no sample: the harness reported nothing (see the warning log for why)")
+        return
+    click.echo(f"sampled at {iso_utc(snapshot.sampled_at)}")
+    if not snapshot.windows:
+        click.echo("  (no windows reported)")
+    for window in snapshot.windows:
+        click.echo(
+            f"  {window.window}: {window.utilization_pct:.1f}% used, "
+            f"resets at {iso_utc(window.resets_at)} (window {window.window_seconds}s)"
+        )
 
 
 @runner.command()

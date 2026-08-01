@@ -26,6 +26,7 @@ from blizzard.runner.environments.provider import (
     WorkspaceAcquisitionError,
 )
 from blizzard.runner.harness.adapter import IHarnessAdapter, WorkerHandle, WorkerPreamble
+from blizzard.runner.harness.external_usage import ExternalSubscriptionUsageSnapshot
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.loop.checks import CheckOutcome, ICheckRunner
 from blizzard.runner.loop.context import LoopConfig, LoopContext
@@ -288,6 +289,8 @@ class FakeHarness:
         usage: UsageSample | None = None,
         usage_by_kind: dict[str, UsageSample | None] | None = None,
         transcript_usage: UsageSample | None = None,
+        external_usage_snapshot: ExternalSubscriptionUsageSnapshot | None = None,
+        external_usage_raises: Exception | None = None,
     ) -> None:
         self._handle = handle
         self.verdict = verdict
@@ -318,6 +321,15 @@ class FakeHarness:
         # about resolution sees what it passed in.
         self.resolved_model = "fake-model"
         self.resolved_effort: str | None = None
+        # The scripted `sample_external_subscription_usage` reply (issue #218, phase 2):
+        # `external_usage_snapshot` is returned verbatim; `external_usage_raises`, when
+        # set, is raised instead — the fake's way of exercising the loop step's own
+        # second-line-of-defense `except Exception`, since the real adapter contract
+        # promises never to raise. `external_usage_calls` counts every invocation so a
+        # test can assert the cadence gate skipped (or did not skip) sampling.
+        self.external_usage_snapshot = external_usage_snapshot
+        self.external_usage_raises = external_usage_raises
+        self.external_usage_calls = 0
 
     def spawn(
         self,
@@ -412,6 +424,12 @@ class FakeHarness:
             cache_create_tokens=0,
             cost_usd=None,
         )
+
+    def sample_external_subscription_usage(self) -> ExternalSubscriptionUsageSnapshot | None:
+        self.external_usage_calls += 1
+        if self.external_usage_raises is not None:
+            raise self.external_usage_raises
+        return self.external_usage_snapshot
 
 
 class FakeTranscripts:

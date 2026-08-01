@@ -1091,6 +1091,42 @@ window_hours = 24.0
 See `blizzard hub status` for the per-chunk cost column, the fleet total, and a paused runner's
 ceiling reason; the board's chunk cards and detail dock show the same figures live.
 
+## Surfacing subscription rate-limit windows — an advisory-only board read
+
+A harness that runs under a metered subscription plan — Claude Code's OAuth-backed plan is
+the first — tracks its own account's rate-limit window utilization independently of
+anything blizzard spends or caps. The runner can sample that figure on a configurable
+cadence, controlled by an `[external_subscription_usage]` table in `blizzard-runner.toml`,
+**absent by default — no table means the default cadence below, exactly the prior
+behavior**.
+
+```toml
+[external_subscription_usage]
+# How often the runner samples Claude Code's own OAuth usage endpoint, in seconds.
+# Defaults to 300 (5 minutes) when the table (or just this key) is absent.
+sample_interval_seconds = 300
+```
+
+- **Claude-Code-only, today.** Only the Claude Code adapter has a subscription concept to
+  sample; the Codex and OpenCode adapters report no sample at all. On the board this shows
+  up as the usage block simply being absent for a runner on one of those harnesses — never
+  a fabricated zero or empty reading.
+- **Advisory only.** The sampled utilization never throttles or backpressures claiming,
+  scheduling, or spawning in any way — it is a read for a human, not an input to the
+  runner's own decisions. Nothing about cost caps, the spend kill-switch, or work claiming
+  changes based on it.
+- **Credentials never leave the runner machine.** The sample step reads the runner's own
+  local OAuth credential file to authenticate the usage request; only the derived
+  utilization percentages, window labels, and reset times cross the wire to the hub — the
+  bearer token itself is never reported, stored, or forwarded.
+- **`blizzard runner external-usage probe`** is a read-only diagnostic that samples once and
+  prints the parsed snapshot without writing to the store, ticking, or reporting anything
+  to the hub — useful for confirming the runner's credentials and cadence are working
+  before waiting on the next scheduled sample.
+
+See the runner panel on the board for a paced-window bar per sampled window (`5h`/`7d` for
+Claude Code), rendered only when a runner has a non-stale sample to show.
+
 ## Operational visibility — the event log
 
 The failures that cost the most are the least visible: a worker that exits without recording a

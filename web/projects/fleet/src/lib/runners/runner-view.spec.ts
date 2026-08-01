@@ -17,6 +17,7 @@ const row = (id: string, over: Partial<RunnerRow> = {}): RunnerRow => ({
   locally_paused: false,
   claims: [],
   used: 0,
+  paceBars: [],
   ...over,
 });
 
@@ -115,6 +116,42 @@ describe('RunnerPanelView', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-runner="rn_nocap"] [data-testid="runner-slot-bar"]')).toBeNull();
+  });
+
+  it('renders one pace bar per folded window (#218)', async () => {
+    const fixture = TestBed.createComponent(RunnerPanelView);
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('rows', [
+      row('rn_paced', {
+        paceBars: [
+          { window: '5h', utilizationPct: 40, elapsedPct: 20 },
+          { window: '7d', utilizationPct: 70, elapsedPct: 55 },
+        ],
+      }),
+    ]);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const bars = el.querySelectorAll('[data-runner-pace-bar="rn_paced"]');
+    expect(bars).toHaveLength(2);
+    expect([...bars].map((b) => b.getAttribute('data-pace-window'))).toEqual(['5h', '7d']);
+    expect(bars[0].querySelector('[data-testid="pace-bar-utilization"] .fill')?.getAttribute('style')).toContain(
+      'width: 40%',
+    );
+    expect(bars[0].querySelector('[data-testid="pace-bar-elapsed"] .fill')?.getAttribute('style')).toContain(
+      'width: 20%',
+    );
+  });
+
+  it('renders no pace-bar markup at all when the row has no folded windows (#218)', async () => {
+    const fixture = TestBed.createComponent(RunnerPanelView);
+    fixture.componentRef.setInput('state', 'ready');
+    fixture.componentRef.setInput('rows', [row('rn_unsampled', { paceBars: [] })]);
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('[data-runner="rn_unsampled"] [data-testid="runner-pace-bars"]')).toBeNull();
+    expect(el.querySelector('[data-testid="runner-pace-bar"]')).toBeNull();
   });
 
   it('emits togglePause with the row when the pause/resume button is activated', async () => {
