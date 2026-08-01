@@ -44,9 +44,37 @@ const FIVE_WORK_ITEMS = {
   })),
 };
 
-async function render() {
+/**
+ * One open ask, shaped the way agents actually write them: paragraph breaks, a numbered
+ * list, and — the part narrow width is the only tier that can judge — a bare unbroken
+ * repo path far wider than a 320px phone. The ask list preserves these newlines
+ * (`local-asks.ts` `.q`), and preserving them is exactly what stops lines breaking on
+ * spaces alone, so the long token has to be proven to break rather than push the panel
+ * sideways.
+ */
+const LONG_ASK = {
+  items: [
+    {
+      question_id: 'qn_long',
+      chunk_id: 'ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9',
+      lease_id: 'lease_01KXKVVF1J3D6H6VYZ3XYNZPRR',
+      session_id: 'sess-77',
+      options: [],
+      asked_at: '2026-07-16T11:30:00.000Z',
+      question:
+        'Issue #214 does not reproduce under any condition I can test. Details:\n\n' +
+        '1. Code trace: the mutation already invalidates both query keys.\n' +
+        '2. Live browser test: the board updated within 500ms.\n\n' +
+        'The failing path is web/projects/fleet/src/lib/chunk-detail/chunk-awaiting-human.spec.ts\n\n' +
+        'How should I proceed?',
+    },
+  ],
+};
+
+async function render(asks: unknown = { items: [] }) {
   const stub = stubRequestClient(runnerClient, (method, path) => {
     if (method === 'GET' && WORK_ITEMS_ROUTE.test(path)) return FIVE_WORK_ITEMS;
+    if (method === 'GET' && path.startsWith('/api/asks')) return asks;
     return { items: [] };
   });
   await TestBed.configureTestingModule({
@@ -112,6 +140,48 @@ describe('runner mobile chunk list shell sweep (web:shell-sweep, issue #176)', (
       }
 
       expect(pageErrors, `page errors fired during the sweep: ${pageErrors.join('; ')}`).toEqual([]);
+    });
+
+    it(`renders a multi-paragraph ask on its own lines without overflowing at width ${width}`, async () => {
+      const { fixture, stub } = await render(LONG_ASK);
+      const root = fixture.nativeElement as HTMLElement;
+      document.body.appendChild(root);
+      await fixture.whenStable();
+
+      try {
+        await page.viewport(width, 800);
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+
+        const ask = root.querySelector<HTMLElement>('[data-testid="ask-row"] .q');
+        expect(ask, `width ${width}: no ask text in the DOM`).not.toBeNull();
+
+        // The preserved newlines have to produce real height — a collapsed render of this
+        // question still wraps, so height alone is weak. Measuring the same element both
+        // ways keeps width, font, and box identical, so the delta is the newlines alone.
+        const preserved = ask!.offsetHeight;
+        ask!.style.whiteSpace = 'normal';
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        const collapsed = ask!.offsetHeight;
+        ask!.style.whiteSpace = '';
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        expect(
+          preserved,
+          `width ${width}: ask rendered no taller than its own collapsed rendering (${preserved} vs ${collapsed}) — newlines were not preserved`,
+        ).toBeGreaterThan(collapsed);
+
+        // The long unbroken path must break rather than push the panel sideways.
+        expect(
+          ask!.scrollWidth,
+          `width ${width}: ask text overflows horizontally (${ask!.scrollWidth} > ${ask!.clientWidth})`,
+        ).toBeLessThanOrEqual(ask!.clientWidth);
+        expect(
+          root.scrollWidth,
+          `width ${width}: mobile shell overflows horizontally (${root.scrollWidth} > ${root.clientWidth})`,
+        ).toBeLessThanOrEqual(root.clientWidth);
+      } finally {
+        root.remove();
+        stub.restore();
+      }
     });
   }
 });

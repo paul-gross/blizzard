@@ -432,6 +432,12 @@ describe('ChunkAwaitingHuman', () => {
     const answer = el.querySelector('[data-testid="answered-answer"]') as HTMLElement;
     expect(answer.textContent).toContain('line one\nline two');
     expect(getComputedStyle(answer).whiteSpace).toBe('pre-wrap');
+
+    // The separator pseudo-element inherits that pre-wrap, so a leading space in its
+    // `content` is no longer collapsed — and it sits right after the space the parent
+    // `.trail-line` already collapses out of the template's own line break. Two spaces
+    // in a monospace face is visible, so the separator carries only a trailing one.
+    expect(getComputedStyle(answer, '::before').content).not.toMatch(/^["']\s/);
   });
 
   it('surfaces an escalation with its copyable takeover command', async () => {

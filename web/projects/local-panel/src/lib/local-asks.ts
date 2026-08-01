@@ -72,7 +72,7 @@ import { injectRunnerAsksQuery } from './status.query';
       line-height: 1.5;
       margin-top: 2px;
       white-space: pre-wrap;
-      word-break: break-word;
+      overflow-wrap: anywhere;
     }
     .route {
       color: var(--label-dim);

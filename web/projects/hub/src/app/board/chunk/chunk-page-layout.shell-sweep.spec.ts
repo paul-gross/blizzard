@@ -39,13 +39,42 @@ const DETAIL: hubApi.ChunkDetail = {
   artifacts: [],
 };
 
-async function render() {
+/**
+ * The same tab with an open ask, shaped the way agents actually write them: paragraph
+ * breaks, a numbered list, and a bare unbroken repo path far wider than a 320px phone.
+ * The dock preserves the newlines (`chunk-awaiting-human.ts` `.ask-q`), which is exactly
+ * what stops lines breaking on spaces alone — so the long token has to be proven to break
+ * rather than push the dock sideways, a claim only a real layout engine can make.
+ */
+const ASK_DETAIL: hubApi.ChunkDetail = {
+  ...DETAIL,
+  status: 'waiting_on_human',
+  questions: [
+    {
+      question_id: 'qn_long',
+      chunk_id: DETAIL.chunk_id,
+      question:
+        'Issue #214 does not reproduce under any condition I can test. Details:\n\n' +
+        '1. Code trace: the mutation already invalidates both query keys.\n' +
+        '2. Live browser test: the board updated within 500ms.\n\n' +
+        'The failing path is web/projects/fleet/src/lib/chunk-detail/chunk-awaiting-human.spec.ts\n\n' +
+        'How should I proceed?',
+      options: [],
+      epoch: 2,
+      runner_id: 'rn_01',
+      asked_at: '2026-07-16T11:30:00.000Z',
+      answered: false,
+    },
+  ],
+};
+
+async function render(detail: hubApi.ChunkDetail = DETAIL) {
   await TestBed.configureTestingModule({
     imports: [ChunkGeneralTab],
     providers: [provideZonelessChangeDetection()],
   }).compileComponents();
   const fixture = TestBed.createComponent(ChunkGeneralTab);
-  fixture.componentRef.setInput('detail', DETAIL);
+  fixture.componentRef.setInput('detail', detail);
   fixture.componentRef.setInput('workItems', { status: 'success', items: [] });
   await fixture.whenStable();
   return fixture;
@@ -138,5 +167,52 @@ describe('chunk page General tab layout shell sweep (web:shell-sweep, blizzard#2
     }
 
     expect(pageErrors, `page errors fired during the sweep: ${pageErrors.join('; ')}`).toEqual([]);
+  });
+
+  it("renders an agent's multi-paragraph ask on its own lines without overflowing a phone", async () => {
+    const fixture = await render(ASK_DETAIL);
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      for (const width of [390, 320]) {
+        await page.viewport(width, 800);
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+
+        const label = `width ${width}`;
+        const ask = root.querySelector<HTMLElement>('[data-testid="question-text"]');
+        expect(ask, `${label}: no ask text in the DOM`).not.toBeNull();
+
+        // Height alone is weak — this question wraps to several lines even collapsed. The
+        // claim is that the *breaks* survive, so measure the same element both ways: only
+        // preserved newlines make it taller than its own collapsed rendering. Toggling in
+        // place keeps width, font, and box identical, so the height delta is the newlines
+        // and nothing else.
+        const preserved = ask!.offsetHeight;
+        ask!.style.whiteSpace = 'normal';
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        const collapsed = ask!.offsetHeight;
+        ask!.style.whiteSpace = '';
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        expect(
+          preserved,
+          `${label}: ask rendered no taller than its own collapsed rendering (${preserved} vs ${collapsed}) — newlines were not preserved`,
+        ).toBeGreaterThan(collapsed);
+
+        // The long unbroken path must break rather than push the dock sideways.
+        expect(
+          ask!.scrollWidth,
+          `${label}: ask text overflows horizontally (${ask!.scrollWidth} > ${ask!.clientWidth})`,
+        ).toBeLessThanOrEqual(ask!.clientWidth);
+        const general = root.querySelector<HTMLElement>('[data-testid="chunk-general-tab"]')!;
+        expect(
+          general.scrollWidth,
+          `${label}: General tab overflows horizontally (${general.scrollWidth} > ${general.clientWidth})`,
+        ).toBeLessThanOrEqual(general.clientWidth);
+      }
+    } finally {
+      root.remove();
+    }
   });
 });

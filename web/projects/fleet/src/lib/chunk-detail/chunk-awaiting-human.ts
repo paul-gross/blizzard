@@ -193,7 +193,7 @@ const TERMINAL_STATUSES: ReadonlySet<string> = new Set<ChunkStatus>(['done', 'st
       white-space: pre-wrap;
     }
     .trail-answer::before {
-      content: ' · ';
+      content: '· ';
       color: var(--label-dim);
     }
     .delivered {
@@ -207,7 +207,7 @@ const TERMINAL_STATUSES: ReadonlySet<string> = new Set<ChunkStatus>(['done', 'st
       color: var(--text);
       font-size: var(--fs-sm);
       white-space: pre-wrap;
-      word-break: break-word;
+      overflow-wrap: anywhere;
     }
     .gate-head {
       display: flex;
