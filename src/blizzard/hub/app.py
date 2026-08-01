@@ -74,26 +74,32 @@ DEFAULT_FORGE_BASE_BRANCH = "main"
 
 
 class _Sweepable(Protocol):
-    """The one capability :func:`_run_annotation_loop` needs — structural, so a test's
+    """The one capability :func:`_run_sweep_loop` needs — structural, so a test's
     counting fake stands in for :class:`~blizzard.hub.domain.forge_status.AnnotationReconciler`
-    with no inheritance."""
+    or :class:`~blizzard.hub.domain.work_closure.DeliveryClosureReconciler` with no
+    inheritance."""
 
     def sweep(self) -> None: ...
 
 
-async def _run_annotation_loop(reconciler: _Sweepable, interval_seconds: int, shutdown: asyncio.Event) -> None:
-    """A thin sleep-and-call wrapper around one steppable :meth:`AnnotationReconciler.sweep`
-    per interval (``bzh:steppable-loop`` — the reconciler itself has no opinion about
-    scheduling). Races ``shutdown`` exactly like the runner's own ``PeriodicDriver._run``
-    (``runner/loop/build.py``), so it wakes immediately on shutdown instead of holding a
-    graceful drain for up to the interval. A sweep that raises is logged and swallowed —
-    a bad tick must never kill the loop, only skip a cycle."""
-    log = get_logger("blizzard.hub.forge_status")
+async def _run_sweep_loop(
+    reconciler: _Sweepable, interval_seconds: int, shutdown: asyncio.Event, *, logger_name: str
+) -> None:
+    """A thin sleep-and-call wrapper around one steppable ``sweep()`` per interval
+    (``bzh:steppable-loop`` — the reconciler itself has no opinion about scheduling).
+    Shared by the forge-status annotation loop (issue #179) and the delivery closure
+    loop (issue #216) — both a periodic-sweep-over-injected-Protocols reconciler with
+    the identical scheduling shape, so one driver serves either. Races ``shutdown``
+    exactly like the runner's own ``PeriodicDriver._run`` (``runner/loop/build.py``),
+    so it wakes immediately on shutdown instead of holding a graceful drain for up to
+    the interval. A sweep that raises is logged and swallowed — a bad tick must never
+    kill the loop, only skip a cycle."""
+    log = get_logger(logger_name)
     while not shutdown.is_set():
         try:
             await asyncio.to_thread(reconciler.sweep)
         except Exception:
-            log.exception("annotation sweep failed")
+            log.exception("sweep failed")
         with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(shutdown.wait(), timeout=interval_seconds)
 
@@ -101,7 +107,8 @@ async def _run_annotation_loop(reconciler: _Sweepable, interval_seconds: int, sh
 @contextlib.asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Set ``app.state.shutdown`` on the ASGI ``lifespan`` "shutdown" message (issue #47),
-    and drive the forge-status annotation loop (issue #179) across the app's lifetime.
+    and drive the forge-status annotation loop (issue #179) and the delivery closure
+    loop (issue #216) across the app's lifetime.
 
     ``app.state.shutdown`` (an ``asyncio.Event``, created eagerly in :func:`create_app` so
     it exists before the first subscriber connects) is what every ``/api/events/stream``
@@ -116,21 +123,38 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     ``blizzard.hub.cli._EarlyShutdownServer.handle_exit``, which sets the same event
     synchronously the instant SIGTERM/SIGINT is caught, well before uvicorn's drain begins.
 
-    The annotation task is created here — not in :func:`build_hosted_app` — because this
-    is the one place that runs for every app the ``lifespan`` fires for, and only when
-    ``app.state.services`` names at least one opted-in source: the store-free path
-    (``create_app_for_export``, unit tests) sets ``services`` to ``None`` and starts
-    nothing, exactly like a hosted hub with no ``annotate = true`` source starts nothing.
-    """
+    Both sweep tasks are created here — not in :func:`build_hosted_app` — because this
+    is the one place that runs for every app the ``lifespan`` fires for, and each starts
+    only when ``app.state.services`` names at least one opted-in source: the store-free
+    path (``create_app_for_export``, unit tests) sets ``services`` to ``None`` and starts
+    neither, exactly like a hosted hub with no ``annotate``/``close`` source starts
+    neither. The same ``annotation_interval_seconds`` paces both — no second knob. The
+    annotation reconciler is built here (it needs only ``services.chunks``' read-only
+    Protocol); the closure reconciler needs the write-capable chunk repository
+    (``bzh:controller-read-only``), so it is built once at the composition root
+    (``services.delivery_closure``, ``hub/composition.py``) and just started or not."""
     services: HubServices | None = app.state.services
-    task: asyncio.Task[None] | None = None
-    if services is not None and services.work_sources.annotating_names():
-        reconciler = AnnotationReconciler(chunks=services.chunks, work_sources=services.work_sources)
+    tasks: list[asyncio.Task[None]] = []
+    if services is not None:
         interval = app.state.config.annotation_interval_seconds
-        task = asyncio.create_task(_run_annotation_loop(reconciler, interval, app.state.shutdown))
+        if services.work_sources.annotating_names():
+            annotator = AnnotationReconciler(chunks=services.chunks, work_sources=services.work_sources)
+            tasks.append(
+                asyncio.create_task(
+                    _run_sweep_loop(annotator, interval, app.state.shutdown, logger_name="blizzard.hub.forge_status")
+                )
+            )
+        if services.work_sources.closing_names():
+            tasks.append(
+                asyncio.create_task(
+                    _run_sweep_loop(
+                        services.delivery_closure, interval, app.state.shutdown, logger_name="blizzard.hub.work_closure"
+                    )
+                )
+            )
     yield
     app.state.shutdown.set()
-    if task is not None:
+    for task in tasks:
         await task
 
 

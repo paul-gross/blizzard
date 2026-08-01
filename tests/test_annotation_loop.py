@@ -1,19 +1,30 @@
-"""The forge-status background driver — a thin sleep-and-call wrapper (issue #179, Phase 5).
+"""The hub's sweep-loop background driver — a thin sleep-and-call wrapper shared by the
+forge-status annotation loop (issue #179) and the delivery closure loop (issue #216).
 
-``_run_annotation_loop`` is unit-tested by direct import, mirroring
+``_run_sweep_loop`` is unit-tested by direct import, mirroring
 ``tests/test_events_stream.py``'s own pattern for ``_stream``: a counting fake
-reconciler stands in for :class:`~blizzard.hub.domain.forge_status.AnnotationReconciler`,
-and a real ``asyncio.Event`` proves the shutdown race — with zero real sleeping,
-since ``interval_seconds=0`` makes the interval wait resolve immediately every pass.
+reconciler stands in for :class:`~blizzard.hub.domain.forge_status.AnnotationReconciler`
+or :class:`~blizzard.hub.domain.work_closure.DeliveryClosureReconciler` (the loop is
+identical either way — it only ever sees the structural ``_Sweepable``), and a real
+``asyncio.Event`` proves the shutdown race — with zero real sleeping, since
+``interval_seconds=0`` makes the interval wait resolve immediately every pass.
+
+``_lifespan``'s own closure-task-starting condition — a task is created iff
+``work_sources.closing_names()`` names at least one opted-in source — is proven
+directly against ``_lifespan`` with a fake ``services`` object and a spy standing in
+for ``services.delivery_closure``, one context-manager entry/exit per case (no real
+HTTP, no real interval wait).
 """
 
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 
 import pytest
 
-from blizzard.hub.app import _run_annotation_loop
+from blizzard.hub.app import _lifespan, _run_sweep_loop
+from blizzard.hub.config import HubConfig
 
 pytestmark = pytest.mark.unit
 
@@ -41,7 +52,7 @@ async def test_loop_calls_sweep_once_per_interval_with_no_real_sleeping() -> Non
         shutdown.set()
 
     await asyncio.wait_for(
-        asyncio.gather(_run_annotation_loop(reconciler, 0, shutdown), _stop_once_three_sweeps_land()),
+        asyncio.gather(_run_sweep_loop(reconciler, 0, shutdown, logger_name="test"), _stop_once_three_sweeps_land()),
         timeout=2.0,
     )
 
@@ -59,7 +70,7 @@ async def test_loop_survives_a_sweep_that_raises() -> None:
         shutdown.set()
 
     await asyncio.wait_for(
-        asyncio.gather(_run_annotation_loop(reconciler, 0, shutdown), _stop_once_two_sweeps_land()),
+        asyncio.gather(_run_sweep_loop(reconciler, 0, shutdown, logger_name="test"), _stop_once_two_sweeps_land()),
         timeout=2.0,
     )
 
@@ -74,9 +85,78 @@ async def test_loop_returns_promptly_when_shutdown_fires_mid_wait() -> None:
     reconciler = _CountingReconciler()
     shutdown = asyncio.Event()
 
-    task = asyncio.ensure_future(_run_annotation_loop(reconciler, 3600, shutdown))
+    task = asyncio.ensure_future(_run_sweep_loop(reconciler, 3600, shutdown, logger_name="test"))
     await asyncio.sleep(0.05)  # let the loop run its first sweep and enter the interval wait
     assert reconciler.calls == 1
 
     shutdown.set()
     await asyncio.wait_for(task, timeout=1.0)
+
+
+# --------------------------------------------------------------------------- #
+# _lifespan's closure-task-starting condition (issue #216) — mirrors the
+# already-shipped annotation task's own "at least one opted-in source" gate.
+# --------------------------------------------------------------------------- #
+
+
+class _FakeWorkSources:
+    """A minimal stand-in for ``IWorkSourceRegistry`` — only the two ``*_names()``
+    methods ``_lifespan`` consults to decide whether to start each loop."""
+
+    def __init__(self, *, annotating: tuple[str, ...] = (), closing: tuple[str, ...] = ()) -> None:
+        self._annotating = annotating
+        self._closing = closing
+
+    def annotating_names(self) -> list[str]:
+        return list(self._annotating)
+
+    def closing_names(self) -> list[str]:
+        return list(self._closing)
+
+
+class _FakeServices:
+    """A minimal stand-in for ``HubServices`` — only the attributes ``_lifespan``
+    reads: ``work_sources`` (the start-condition) and ``delivery_closure`` (the
+    already-built reconciler it starts or not, mirroring the composition root)."""
+
+    def __init__(self, *, work_sources: _FakeWorkSources, delivery_closure: _CountingReconciler) -> None:
+        self.work_sources = work_sources
+        self.delivery_closure = delivery_closure
+        self.chunks = None  # unread unless annotating_names() is non-empty, which these tests never set
+
+
+class _FakeState:
+    def __init__(self, services: _FakeServices, config: HubConfig) -> None:
+        self.services = services
+        self.config = config
+        self.shutdown = asyncio.Event()
+
+
+class _FakeApp:
+    """Duck-types the two attributes ``_lifespan`` reads off a real ``FastAPI``
+    instance — ``app.state.{services,config,shutdown}`` — with no ASGI machinery."""
+
+    def __init__(self, services: _FakeServices, config: HubConfig) -> None:
+        self.state = _FakeState(services, config)
+
+
+async def test_lifespan_does_not_start_the_closure_loop_when_no_source_opts_in(tmp_path: Path) -> None:
+    closure = _CountingReconciler()
+    services = _FakeServices(work_sources=_FakeWorkSources(), delivery_closure=closure)
+    app = _FakeApp(services, HubConfig(root=tmp_path, db_url="sqlite:///:memory:"))
+
+    async with _lifespan(app):  # type: ignore[arg-type]
+        await asyncio.sleep(0)
+
+    assert closure.calls == 0
+
+
+async def test_lifespan_starts_the_closure_loop_when_a_source_opts_in(tmp_path: Path) -> None:
+    closure = _CountingReconciler()
+    services = _FakeServices(work_sources=_FakeWorkSources(closing=("default",)), delivery_closure=closure)
+    app = _FakeApp(services, HubConfig(root=tmp_path, db_url="sqlite:///:memory:", annotation_interval_seconds=3600))
+
+    async with _lifespan(app):  # type: ignore[arg-type]
+        await asyncio.sleep(0.05)  # let the loop run its first sweep and enter the interval wait
+
+    assert closure.calls == 1
