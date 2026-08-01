@@ -78,7 +78,7 @@ export interface BoardCard {
         <span class="tid">
           <span class="card-id" data-testid="chunk-id">{{ card().shortId }}</span>
           <span class="nd" data-testid="chunk-node" [attr.title]="card().nodeId || null">{{
-            card().node
+            nodeLabel(card())
           }}</span>
         </span>
         <!-- Pointer labels are plain text here, not links: a card is a
@@ -90,15 +90,27 @@ export interface BoardCard {
           }
         </span>
         <span class="st-row">
-          <span class="st" data-testid="chunk-status" [title]="card().status">{{ card().status }}</span>
-          @if (isDoneLane(card().status) && card().completedAt; as completedAt) {
-            <fleet-when class="done-at" data-testid="chunk-done-at" [iso]="completedAt" />
+          <!-- The DONE lane's status is already the upper-right node slot
+               ("done"/"stopped"); repeating it here would be issue #215's
+               duplicate. Every other lane still names its status, since the
+               node label there doesn't stand in for it. -->
+          @if (!isDoneLane(card().status)) {
+            <span class="st" data-testid="chunk-status" [title]="card().status">{{ card().status }}</span>
           }
-          @if (card().costUsd > 0 || card().costPartial) {
-            <span class="cost" data-testid="card-cost">{{
-              formatCost(card().costUsd, card().costPartial)
-            }}</span>
-          }
+          <!-- Pushed to the row's end via margin-left: auto rather than the row's
+               own justify-content, so it lands right-aligned whether it's carrying
+               one child or two (issue #215) instead of drifting to a centered gap
+               only space-between produces with three total row children. -->
+          <span class="meta-right">
+            @if (isDoneLane(card().status) && card().completedAt; as completedAt) {
+              <fleet-when class="done-at" data-testid="chunk-done-at" [iso]="completedAt" />
+            }
+            @if (card().costUsd > 0 || card().costPartial) {
+              <span class="cost" data-testid="card-cost">{{
+                formatCost(card().costUsd, card().costPartial)
+              }}</span>
+            }
+          </span>
         </span>
       </button>
       @if (card().status === 'not_ready' && canControl()) {
@@ -227,7 +239,6 @@ export interface BoardCard {
     }
     .st-row {
       display: flex;
-      justify-content: space-between;
       align-items: baseline;
       gap: 6px;
       min-width: 0;
@@ -237,6 +248,13 @@ export interface BoardCard {
       font-size: var(--fs-label);
       letter-spacing: 0.14em;
       text-transform: uppercase;
+    }
+    .meta-right {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      margin-left: auto;
+      min-width: 0;
     }
     /* The chunk's derived spend total (issue #60) — the leading-tilde lower-bound
        prefix (formatCost) is the card's whole PARTIAL marker; no separate badge on a
@@ -298,5 +316,14 @@ export class BoardCardComponent {
    * it somehow carried one (issue #173). */
   protected isDoneLane(status: ChunkStatus): boolean {
     return STATUS_LANE[status] === 'done';
+  }
+
+  /** The upper-right node slot's label — {@link BoardCard.node} for every status
+   * except `stopped`, which shows the status word instead: a stopped chunk's
+   * last-active node name (e.g. "deliver") read as unhelpful noise next to
+   * "stopped" in the lower-left status label it used to sit beside (issue #215),
+   * so it's replaced rather than shown alongside. */
+  protected nodeLabel(card: BoardCard): string {
+    return card.status === 'stopped' ? 'stopped' : card.node;
   }
 }

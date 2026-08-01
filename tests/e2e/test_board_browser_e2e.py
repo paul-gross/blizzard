@@ -512,7 +512,10 @@ def test_board_browser_live_group_reorder_answer_and_pause(tmp_path: Path, chrom
                 status = _tick_until(config, hub, chunk_b, fenced, {"done", "needs_human", "stopped"}, 120.0)
                 assert status == "done", f"survivor did not land after the board answer (status {status!r})"
                 expect(col_cards("done")).to_have_count(1)
-                expect(col("done").get_by_test_id("chunk-status")).to_have_text("done")
+                # issue #215: the DONE column no longer duplicates "done" in a lower-left
+                # status label — the upper-right node slot is the one place it renders.
+                expect(col("done").get_by_test_id("chunk-node")).to_have_text("done")
+                expect(col("done").get_by_test_id("chunk-status")).to_have_count(0)
 
                 # The dock (still filled with B) renders the node history and the artifact
                 # store — issue #21's "existing detail content continues to render".

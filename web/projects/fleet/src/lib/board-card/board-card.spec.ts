@@ -28,12 +28,10 @@ async function render(card: BoardCard) {
 }
 
 describe('BoardCardComponent completion stamp (issue #173)', () => {
-  it('renders the completion time next to the status label on a done-lane card', async () => {
+  it('renders the completion time on a done-lane card', async () => {
     const el = await render(BASE);
 
-    const status = el.querySelector('[data-testid="chunk-status"]');
     const stamp = el.querySelector('[data-testid="chunk-done-at"]');
-    expect(status?.textContent?.trim()).toBe('done');
     expect(stamp).not.toBeNull();
     // formatWhen's short form, via fleet-when — no new date formatter.
     expect(stamp?.textContent?.trim().length).toBeGreaterThan(0);
@@ -57,11 +55,28 @@ describe('BoardCardComponent completion stamp (issue #173)', () => {
 
     expect(el.querySelector('[data-testid="chunk-done-at"]')).toBeNull();
   });
+});
 
-  it("keeps chunk-status's text exactly the status string", async () => {
+describe('BoardCardComponent DONE-column layout (issue #215)', () => {
+  it('shows "done" once, in the upper-right node slot, and nothing in the lower-left status slot', async () => {
     const el = await render(BASE);
 
-    expect(el.querySelector('[data-testid="chunk-status"]')?.textContent?.trim()).toBe('done');
+    expect(el.querySelector('[data-testid="chunk-node"]')?.textContent?.trim()).toBe('done');
+    expect(el.querySelector('[data-testid="chunk-status"]')).toBeNull();
+  });
+
+  it('shows "stopped" in the upper-right node slot for a stopped chunk, not its last node name', async () => {
+    const el = await render({ ...BASE, status: 'stopped', node: 'deliver' });
+
+    expect(el.querySelector('[data-testid="chunk-node"]')?.textContent?.trim()).toBe('stopped');
+    expect(el.querySelector('[data-testid="chunk-status"]')).toBeNull();
+  });
+
+  it('still names the status for a non-done-lane card', async () => {
+    const el = await render({ ...BASE, status: 'running', node: 'build', completedAt: null });
+
+    expect(el.querySelector('[data-testid="chunk-status"]')?.textContent?.trim()).toBe('running');
+    expect(el.querySelector('[data-testid="chunk-node"]')?.textContent?.trim()).toBe('build');
   });
 });
 
