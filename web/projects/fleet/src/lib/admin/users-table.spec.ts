@@ -71,6 +71,17 @@ describe('UsersTable', () => {
     expect(adaRow?.querySelector('[data-testid="users-table-identities"]')?.textContent).toContain('github');
   });
 
+  it('renders the created column via the shared relative-date component, not a raw ISO string', async () => {
+    const fixture = mount();
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    const adaRow = el.querySelector('[data-user-id="usr_admin"]');
+    const when = adaRow?.querySelector('fleet-when[data-testid="users-table-created-at"]');
+    expect(when).toBeTruthy();
+    expect(when?.textContent?.trim()).not.toBe(USERS[0].created_at);
+  });
+
   it('shows an empty state with no users', async () => {
     const fixture = mount({ users: [] });
     await fixture.whenStable();

@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 
 import type { UserView } from '../api/hub';
 import { KitPanel } from '../kit/kit-panel';
+import { FleetWhen } from '../when-display';
 
 /** The four roles ever assignable through this page's own mutation — `superuser` is
  * bootstrap-only (never offered as a select option, `hub/auth/service.py`'s own
@@ -31,7 +32,7 @@ const ASSIGNABLE_ROLES: readonly string[] = ['pending', 'guest', 'contributor', 
 @Component({
   selector: 'fleet-users-table',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitPanel],
+  imports: [KitPanel, FleetWhen],
   template: `
     <fleet-kit-panel class="users-table" aria-label="Users" data-testid="users-table" label="Users">
       @if (users().length === 0) {
@@ -74,7 +75,9 @@ const ASSIGNABLE_ROLES: readonly string[] = ['pending', 'guest', 'contributor', 
                     </select>
                   }
                 </td>
-                <td data-testid="users-table-created-at">{{ user.created_at }}</td>
+                <td>
+                  <fleet-when data-testid="users-table-created-at" [iso]="user.created_at" />
+                </td>
               </tr>
             }
           </tbody>
