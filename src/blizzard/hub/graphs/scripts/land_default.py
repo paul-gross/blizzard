@@ -5,8 +5,17 @@ The reference hub-command-node `run:` script; it honors the authoring contract o
 ``bzh:hub-node-env-contract``, ``bzh:hub-node-outcome-protocol``,
 ``bzh:hub-node-step-idempotence``).
 
-Invoked by the packaged default graph's `deliver` hub command node
-(``hub/graphs/default.yaml``) as ``python3 -m blizzard.hub.graphs.scripts.land_default``.
+Not wired into any packaged graph today — the packaged default graph
+(``hub/graphs/default/graph.yaml``) is a triage router with no `deliver` node of its own,
+and the two graphs that do deliver author their own policy instead (`land_ff` for
+``hub/graphs/basic-development-workflow/graph.yaml``, `land_pr_ci` for
+``hub/graphs/advanced-development-workflow/graph.yaml``). This module remains the
+reference land policy — exercised directly by the e2e delivery scenarios
+(`tests/e2e/test_delivery_conflict_e2e.py` and siblings) and the shared home
+`land_ff`/`land_pr_ci` import their common helpers from
+(:mod:`~blizzard.hub.graphs.scripts.land_common`) — and any graph that wants this exact
+PR-then-merge-all policy authors a `deliver` node running
+``python3 -m blizzard.hub.graphs.scripts.land_default``.
 Talks to the forge itself, through the env a hub command node's executor injects
 (``BZ_FORGE_URL``/``BZ_FORGE_TOKEN``/``BZ_FORGE_OWNER``/``BZ_HUB_FEATURE_TITLE``,
 optional) plus stdlib ``urllib`` — the hub engine never calls a forge seam for this
@@ -40,9 +49,19 @@ import json
 import os
 import sys
 import time
-import urllib.error
-import urllib.request
 from typing import Any
+
+from blizzard.hub.graphs.scripts.land_common import (
+    _MARKER_PREFIX,
+    MarkerWriteError,
+    forge_request,
+    marker_recorder,
+    pr_title,
+    qualify_repo,
+    refuse_empty_delivery,
+    require_env,
+    require_json_env,
+)
 
 _ENV_FORGE_URL = "BZ_FORGE_URL"
 _ENV_FORGE_TOKEN = "BZ_FORGE_TOKEN"
@@ -51,6 +70,7 @@ _ENV_BASE_BRANCH = "BZ_HUB_BASE_BRANCH"
 _ENV_GIT_COMMITS = "BZ_HUB_GIT_COMMITS"
 _ENV_ARTIFACT_NAMES = "BZ_HUB_ARTIFACT_NAMES"
 _ENV_MARKER_CALLBACK_URL = "BZ_HUB_MARKER_CALLBACK_URL"
+_ENV_MARKER_TOKEN = "BZ_HUB_MARKER_TOKEN"
 _ENV_FEATURE_TITLE = "BZ_HUB_FEATURE_TITLE"
 _ENV_EXPECT_GIT_COMMITS = "BZ_HUB_EXPECT_GIT_COMMITS"
 
@@ -69,82 +89,6 @@ _ENV_EXPECT_GIT_COMMITS = "BZ_HUB_EXPECT_GIT_COMMITS"
 _ENV_TEST_PAUSE_AFTER_FIRST_MARKER = "BZ_HUB_LAND_TEST_PAUSE_SECONDS"
 
 _HUB_USER = "blizzard-hub"
-_MARKER_PREFIX = "merged/"
-
-# GitHub caps PR/issue titles at 256 characters; a resolved feature title longer than
-# that is truncated with an ellipsis so PR creation never fails on an over-long title.
-_PR_TITLE_MAX = 256
-
-
-def pr_title(feature_title: str, branch: str) -> str:
-    """The opened PR's title: JUST the hub-resolved feature title, or the branch name
-    when none resolved — never a ``blizzard: land`` prefix — truncated to
-    :data:`_PR_TITLE_MAX`."""
-    title = feature_title or branch
-    if len(title) > _PR_TITLE_MAX:
-        title = title[: _PR_TITLE_MAX - 1].rstrip() + "…"
-    return title
-
-
-def qualify_repo(repo: str, owner: str) -> str:
-    """``owner/name`` a forge route resolves."""
-    if "/" in repo or not owner:
-        return repo
-    return f"{owner}/{repo}"
-
-
-def refuse_empty_delivery(commits: list[dict[str, str]]) -> None:
-    """Exit non-zero when a delivery node is handed nothing to deliver **and the graph
-    promised something**.
-
-    "Nothing to deliver" and "everything already delivered" are not the same outcome,
-    and every land policy used to answer both with ``landed``: the marker filter below
-    yields an empty pending list either way, so a chunk whose ``git_commit`` artifacts
-    never materialized printed ``landed`` without contacting the forge at all. That is
-    how a fully-built feature reached `done` with no PR, no merge, and a delivery log
-    three lines long.
-
-    But an empty set is not always wrong. A non-code chunk — a review, a spike — declares
-    no ``git_commit`` anywhere in its graph and still routes through ``deliver`` as the
-    uniform terminal (MVP criterion 10): landing nothing is its correct outcome. The two
-    are told apart by the graph's own statement of intent, injected as
-    ``BZ_HUB_EXPECT_GIT_COMMITS``, not by the emptiness alone — which is the same
-    information every caller of this function lacked on its own.
-
-    Absent (an older executor), the var reads as "expected": a delivery policy that fails
-    loudly on a set it cannot explain is the safer default of the two.
-    """
-    if commits:
-        return
-    if os.environ.get(_ENV_EXPECT_GIT_COMMITS, "1") == "0":
-        return  # a non-code chunk: no node ever promised a commit, so none is missing
-    print(
-        "no git commits to deliver: this chunk submitted no git_commit artifact, so there "
-        "is nothing to open a PR for. A delivery node reached with an empty commit set is "
-        "a failure, not a landing — check that the nodes before this one declared their "
-        "commits (`blizzard runner artifact commit`) and that each verified.",
-        file=sys.stderr,
-    )
-    raise SystemExit(1)
-
-
-def forge_request(method: str, url: str, *, token: str | None, body: dict[str, Any] | None) -> tuple[int, Any]:
-    data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(url, data=data, method=method)
-    req.add_header("Content-Type", "application/json")
-    if token:
-        req.add_header("Authorization", f"token {token}")
-    try:
-        with urllib.request.urlopen(req) as resp:
-            raw = resp.read()
-            return resp.status, (json.loads(raw) if raw else None)
-    except urllib.error.HTTPError as exc:
-        raw = exc.read()
-        try:
-            payload = json.loads(raw) if raw else {}
-        except ValueError:
-            payload = {"message": raw.decode(errors="replace")}
-        return exc.code, payload
 
 
 def _test_pause_after_first_marker(*, marker_index: int, pending_count: int) -> None:
@@ -169,24 +113,35 @@ class _Conflict(Exception):
 
 
 def main() -> int:
-    forge_url = os.environ[_ENV_FORGE_URL].rstrip("/")
+    """Run the land policy, aborting cleanly on an unconfirmed marker write.
+
+    A :class:`MarkerWriteError` raised anywhere inside :func:`_land` (always from the
+    push stage, after at least one repo's merge) is caught HERE — a single top-level
+    catch, not inside the per-repo loop — so a marker failure aborts the rest of the
+    run instead of quietly continuing to the next repo, and ``landed`` is never printed
+    once one has fired."""
+    try:
+        return _land()
+    except MarkerWriteError as exc:
+        print(f"marker write failed: {exc}", file=sys.stderr)
+        return 1
+
+
+def _land() -> int:
+    forge_url = require_env(_ENV_FORGE_URL).rstrip("/")
     token = os.environ.get(_ENV_FORGE_TOKEN)
     owner = os.environ.get(_ENV_FORGE_OWNER, "")
-    base_branch = os.environ[_ENV_BASE_BRANCH]
-    commits: list[dict[str, str]] = json.loads(os.environ[_ENV_GIT_COMMITS])
+    base_branch = require_env(_ENV_BASE_BRANCH)
+    commits: list[dict[str, str]] = require_json_env(_ENV_GIT_COMMITS)
     already: set[str] = set(json.loads(os.environ.get(_ENV_ARTIFACT_NAMES, "[]")))
     callback_url = os.environ.get(_ENV_MARKER_CALLBACK_URL, "")
+    marker_token = os.environ.get(_ENV_MARKER_TOKEN, "")
     feature_title = os.environ.get(_ENV_FEATURE_TITLE) or ""
 
     def api(method: str, path: str, body: dict[str, Any] | None = None) -> tuple[int, Any]:
         return forge_request(method, f"{forge_url}{path}", token=token, body=body)
 
-    def record_marker(repo: str, commit_hash: str) -> None:
-        if not callback_url:
-            return
-        forge_request(
-            "POST", callback_url, token=None, body={"name": f"{_MARKER_PREFIX}{repo}", "content": commit_hash}
-        )
+    record_marker = marker_recorder(callback_url=callback_url, token=marker_token, request=forge_request)
 
     refuse_empty_delivery(commits)
     pending = [c for c in commits if f"{_MARKER_PREFIX}{c['repo']}" not in already]

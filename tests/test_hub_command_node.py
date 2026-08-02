@@ -27,6 +27,7 @@ from blizzard.hub.delivery.command_runner import CommandResult
 from blizzard.hub.delivery.hub_node import (
     DEFAULT_POLL_INTERVAL,
     DEFAULT_POLL_TIMEOUT,
+    ENV_MARKER_TOKEN,
     HubEnvInputs,
     UnconvergedDeliveryError,
     _printed_choice,
@@ -557,6 +558,29 @@ def test_a_multi_repo_chunk_keeps_one_commit_per_repo() -> None:
     assert by_repo == {"acme/widget": "b" * 40, "acme/gadget": "c" * 40}
 
 
+def test_build_hub_env_omits_the_marker_token_when_none_is_given() -> None:
+    """The shape a call after a step completes takes (issue #230): once the
+    executor's `finally` has revoked the token, the next `build_hub_env` call it
+    would make carries no `marker_token` — and the env it builds carries no
+    `BZ_HUB_MARKER_TOKEN` key, mirroring every other optional env var's
+    only-when-non-empty convention."""
+    _, merge_node = _reified_merge_node()
+    chunk = Chunk(chunk_id="ch_x", graph_id="gr_x", work_refs=[], minted_at=datetime(2026, 7, 17, tzinfo=UTC))
+    env = build_hub_env(
+        HubEnvInputs(
+            chunk=chunk,
+            node=merge_node,
+            workdir="/tmp/ch_x",
+            epoch=1,
+            artifacts=[],
+            base_branch="main",
+            marker_callback_url="http://hub/api/chunks/ch_x/hub-markers",
+            marker_token="",
+        )
+    )
+    assert ENV_MARKER_TOKEN not in env
+
+
 def test_build_hub_env_carries_the_feature_title_when_given() -> None:
     _, merge_node = _reified_merge_node()
     chunk = Chunk(chunk_id="ch_x", graph_id="gr_x", work_refs=[], minted_at=datetime(2026, 7, 17, tzinfo=UTC))
@@ -664,6 +688,9 @@ def test_full_run_maps_success_to_the_authored_edge(tmp_path: Path) -> None:
     # The chunk's work ref resolves through the default FakeWorkSource — its title
     # flows into the hub node's env for the land script to use as the PR/merge title.
     assert env["BZ_HUB_FEATURE_TITLE"] == "issue title"
+    # The mid-run marker-write capability token (issue #230) — minted by the executor's
+    # `MarkerAuthority` ahead of this step and present in its injected env.
+    assert env[ENV_MARKER_TOKEN]
     assert workdir.ensured == [chunk_id]
 
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()

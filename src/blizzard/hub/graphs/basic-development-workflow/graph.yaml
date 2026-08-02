@@ -156,6 +156,10 @@ nodes:
           description: A repo did not fast-forward cleanly (the base moved out from under it); returned to pre-push to rebase against the base as it now stands, not to build.
           to: pre-push
           prompt_addendum: ./prompts/pre-push.from-deliver.md
+        failure:
+          description: land_ff itself failed or crashed (a missing env var, an unauthorized or failed marker write) rather than reporting a clean outcome; this lane has no resolve node, so it returns to pre-push — the same recovery point as conflict — to diagnose and retry without discarding the validated spine.
+          to: pre-push
+          prompt_addendum: ./prompts/pre-push.from-deliver.md
 
   retrospective:
     executor: runner

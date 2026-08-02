@@ -55,6 +55,7 @@ from blizzard.foundation.crash import crashpoint
 from blizzard.foundation.ids import ARTIFACT_PREFIX, TRANSITION_PREFIX, mint
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.delivery.command_runner import IHubCommandRunner
+from blizzard.hub.delivery.marker_auth import MarkerAuthority
 from blizzard.hub.delivery.repo_ref import parse_repo_ref
 from blizzard.hub.delivery.workdir import IHubWorkdir
 from blizzard.hub.domain.artifacts import ArtifactKind, ArtifactRow
@@ -160,6 +161,7 @@ class HubEnvInputs:
     forge_owner: str | None = None
     feature_title: str | None = None
     expects_git_commits: bool = True
+    marker_token: str = ""
 
 
 # The env-injection contract (mirrors the worker's own, `_spawn_env` in
@@ -174,6 +176,7 @@ ENV_BASE_BRANCH = "BZ_HUB_BASE_BRANCH"
 ENV_GIT_COMMITS = "BZ_HUB_GIT_COMMITS"  # JSON list of {repo, branch, commit}
 ENV_ARTIFACT_NAMES = "BZ_HUB_ARTIFACT_NAMES"  # JSON list of already-recorded artifact names for this node
 ENV_MARKER_CALLBACK_URL = "BZ_HUB_MARKER_CALLBACK_URL"  # POST {name, content} records a marker mid-run
+ENV_MARKER_TOKEN = "BZ_HUB_MARKER_TOKEN"  # the capability token authorizing that POST (issue #230)
 ENV_FORGE_URL = "BZ_FORGE_URL"
 ENV_FORGE_TOKEN = "BZ_FORGE_TOKEN"
 ENV_FORGE_OWNER = "BZ_FORGE_OWNER"  # qualifies a bare (owner-less) repo, mirroring land_default.qualify_repo
@@ -277,7 +280,9 @@ def build_hub_env(inputs: HubEnvInputs) -> dict[str, str]:
     structurally agentless): this function injects only the chunk/workdir/node
     identity, the per-repo git pointers the chunk's submitted work carries, the
     forge credential the coordinator already holds today, the mid-run marker
-    callback, and (when resolved) the chunk's prose feature title. There is no
+    callback and its authorizing token (:data:`ENV_MARKER_TOKEN` — a **delivery**
+    credential scoped to this one node visit's marker writes, not a model
+    credential), and (when resolved) the chunk's prose feature title. There is no
     field here, and must never be one, naming an LLM/agent API key.
     """
     commits = [
@@ -314,6 +319,8 @@ def build_hub_env(inputs: HubEnvInputs) -> dict[str, str]:
         env[ENV_FORGE_OWNER] = inputs.forge_owner
     if inputs.feature_title:
         env[ENV_FEATURE_TITLE] = inputs.feature_title
+    if inputs.marker_token:
+        env[ENV_MARKER_TOKEN] = inputs.marker_token
     return env
 
 
@@ -371,6 +378,7 @@ class HubNodeExecutor:
         runner: IHubCommandRunner,
         workdir: IHubWorkdir,
         clock: IClock,
+        marker_authority: MarkerAuthority,
         base_branch: str = "main",
         marker_callback_base_url: str = "",
         forge_url: str | None = None,
@@ -383,6 +391,7 @@ class HubNodeExecutor:
         self._runner = runner
         self._workdir = workdir
         self._clock = clock
+        self._marker_authority = marker_authority
         self._base_branch = base_branch
         self._marker_callback_base_url = marker_callback_base_url
         self._forge_url = forge_url
@@ -447,86 +456,95 @@ class HubNodeExecutor:
             return self._route_pending_timeout(chunk, graph, node, epoch=epoch)
         workdir = self._workdir.ensure(chunk.chunk_id)
         artifacts = self._chunks.load_artifacts(chunk.chunk_id)
+        # Minted before the env is built, revoked once this call is done with it —
+        # scoped to exactly the (chunk, node, epoch) visit whose `run:` steps are about
+        # to execute (issue #230). A land script presents this back on its own mid-run
+        # marker-write callback (see `blizzard.hub.delivery.marker_auth`).
+        marker_token = self._marker_authority.issue(chunk.chunk_id, node_id=node.node_id, epoch=epoch)
         try:
-            env = build_hub_env(
-                HubEnvInputs(
-                    chunk=chunk,
-                    node=node,
-                    workdir=workdir,
-                    epoch=epoch,
-                    artifacts=artifacts,
-                    base_branch=self._base_branch,
-                    marker_callback_url=self._marker_callback_url(chunk.chunk_id, node.node_id, epoch),
-                    forge_url=self._forge_url,
-                    forge_token=self._forge_token,
-                    forge_owner=self._forge_owner,
-                    feature_title=self._resolve_feature_title(chunk),
-                    expects_git_commits=graph_declares_git_commit(graph),
+            try:
+                env = build_hub_env(
+                    HubEnvInputs(
+                        chunk=chunk,
+                        node=node,
+                        workdir=workdir,
+                        epoch=epoch,
+                        artifacts=artifacts,
+                        base_branch=self._base_branch,
+                        marker_callback_url=self._marker_callback_url(chunk.chunk_id, node.node_id, epoch),
+                        forge_url=self._forge_url,
+                        forge_token=self._forge_token,
+                        forge_owner=self._forge_owner,
+                        feature_title=self._resolve_feature_title(chunk),
+                        expects_git_commits=graph_declares_git_commit(graph),
+                        marker_token=marker_token,
+                    )
                 )
-            )
-        except UnconvergedDeliveryError as exc:
-            # A defect in what reached this node, not a fault in running it — route the
-            # node's `failure` edge exactly as a non-zero step exit would, rather than
-            # letting it escape and crash-loop the tick. The detail lands in an artifact
-            # so the reason survives where an operator reads it.
-            self._chunks.record_hub_artifact(
-                chunk.chunk_id,
-                node_id=node.node_id,
-                node_name=node.name,
-                epoch=epoch,
-                name=_log_name(1, "unconverged-delivery", None),
-                content=f"[unconverged delivery]\n{exc}\n",
-                at=self._clock.now(),
-            )
-            return self._route(chunk, graph, node, epoch=epoch, choice=HUB_DEFAULT_FAILURE_CHOICE, commits=[])
-
-        choice_names = frozenset(c.name for c in node.choices)
-        chosen: str | None = None
-        for index, step in enumerate(node.run or [_NoopStep()], start=1):
-            if step.produces and self._chunks.has_hub_artifact(
-                chunk.chunk_id, node_id=node.node_id, epoch=epoch, name=step.produces
-            ):
-                continue  # already done — the at-least-once-per-step skip (#65)
-
-            result = self._runner.run(command=step.command, cwd=workdir, env=env)
-            self._chunks.record_hub_artifact(
-                chunk.chunk_id,
-                node_id=node.node_id,
-                node_name=node.name,
-                epoch=epoch,
-                name=_log_name(index, step.name, step.produces),
-                content=f"$ {step.command}\n[exit {result.exit_code}]\n{result.stdout}{result.stderr}",
-                at=self._clock.now(),
-            )
-            if result.exit_code != 0:
-                chosen = _printed_choice(result.stdout, choice_names) or HUB_DEFAULT_FAILURE_CHOICE
-                break
-            printed = _printed_choice(result.stdout, choice_names)
-            if printed == HUB_PENDING_CHOICE:
-                # Pending (#66): NOT a step success — no marker, no transition, no edge
-                # lookup. Record the poll attempt and hand back to `run()`'s `finally`,
-                # which releases the slot immediately.
-                return self._record_pending(chunk, node, epoch=epoch)
-            _CP_HUBNODE_AFTER_STEP_BEFORE_MARKER.reached()
-            if step.produces:
+            except UnconvergedDeliveryError as exc:
+                # A defect in what reached this node, not a fault in running it — route the
+                # node's `failure` edge exactly as a non-zero step exit would, rather than
+                # letting it escape and crash-loop the tick. The detail lands in an artifact
+                # so the reason survives where an operator reads it.
                 self._chunks.record_hub_artifact(
                     chunk.chunk_id,
                     node_id=node.node_id,
                     node_name=node.name,
                     epoch=epoch,
-                    name=step.produces,
-                    content="done",
+                    name=_log_name(1, "unconverged-delivery", None),
+                    content=f"[unconverged delivery]\n{exc}\n",
                     at=self._clock.now(),
                 )
-            _CP_HUBNODE_AFTER_MARKER_BEFORE_NEXT.reached()
-            if printed:
-                chosen = printed
-                break
-        if chosen is None:
-            chosen = HUB_DEFAULT_SUCCESS_CHOICE
+                return self._route(chunk, graph, node, epoch=epoch, choice=HUB_DEFAULT_FAILURE_CHOICE, commits=[])
 
-        commits: list[dict[str, str]] = json.loads(env[ENV_GIT_COMMITS])
-        return self._route(chunk, graph, node, epoch=epoch, choice=chosen, commits=commits)
+            choice_names = frozenset(c.name for c in node.choices)
+            chosen: str | None = None
+            for index, step in enumerate(node.run or [_NoopStep()], start=1):
+                if step.produces and self._chunks.has_hub_artifact(
+                    chunk.chunk_id, node_id=node.node_id, epoch=epoch, name=step.produces
+                ):
+                    continue  # already done — the at-least-once-per-step skip (#65)
+
+                result = self._runner.run(command=step.command, cwd=workdir, env=env)
+                self._chunks.record_hub_artifact(
+                    chunk.chunk_id,
+                    node_id=node.node_id,
+                    node_name=node.name,
+                    epoch=epoch,
+                    name=_log_name(index, step.name, step.produces),
+                    content=f"$ {step.command}\n[exit {result.exit_code}]\n{result.stdout}{result.stderr}",
+                    at=self._clock.now(),
+                )
+                if result.exit_code != 0:
+                    chosen = _printed_choice(result.stdout, choice_names) or HUB_DEFAULT_FAILURE_CHOICE
+                    break
+                printed = _printed_choice(result.stdout, choice_names)
+                if printed == HUB_PENDING_CHOICE:
+                    # Pending (#66): NOT a step success — no marker, no transition, no edge
+                    # lookup. Record the poll attempt and hand back to `run()`'s `finally`,
+                    # which releases the slot immediately.
+                    return self._record_pending(chunk, node, epoch=epoch)
+                _CP_HUBNODE_AFTER_STEP_BEFORE_MARKER.reached()
+                if step.produces:
+                    self._chunks.record_hub_artifact(
+                        chunk.chunk_id,
+                        node_id=node.node_id,
+                        node_name=node.name,
+                        epoch=epoch,
+                        name=step.produces,
+                        content="done",
+                        at=self._clock.now(),
+                    )
+                _CP_HUBNODE_AFTER_MARKER_BEFORE_NEXT.reached()
+                if printed:
+                    chosen = printed
+                    break
+            if chosen is None:
+                chosen = HUB_DEFAULT_SUCCESS_CHOICE
+
+            commits: list[dict[str, str]] = json.loads(env[ENV_GIT_COMMITS])
+            return self._route(chunk, graph, node, epoch=epoch, choice=chosen, commits=commits)
+        finally:
+            self._marker_authority.revoke(chunk.chunk_id, node_id=node.node_id, epoch=epoch)
 
     def _record_pending(self, chunk: Chunk, node: Node, *, epoch: int) -> HubRunResult:
         """Record one pending-poll-attempt fact (#66) — no transition, slot released
