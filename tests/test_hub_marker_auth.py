@@ -13,10 +13,12 @@ write this issue exists to close.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from blizzard.auth_core import Role
+from blizzard.hub.graphs.scripts.land_common import MarkerWriteError, marker_recorder
 from tests.support import HubHarness, build_hub, pointer_token, seed_session, seed_user
 
 pytestmark = pytest.mark.component
@@ -123,3 +125,67 @@ def test_an_operators_own_chunk_control_session_still_works_with_no_marker_token
 
     assert resp.status_code == 200, resp.text
     assert _MARKER_NAME in _recorded_marker_names(hub, chunk_id)
+
+
+# -- the two sides of the credential, bound (issue #230) -----------------------------
+#
+# Every test above drives the route with a header literal the *test* writes, and every
+# land-script test (``tests/test_land_common.py``, ``tests/test_land_scripts.py``,
+# ``tests/test_land_ff.py``) asserts a header literal the *test* writes. Each side is
+# proven against its own copy of the string, so renaming ``_MARKER_TOKEN_HEADER`` on
+# one side alone — ``land_common``'s producer copy or ``api.marker_auth``'s consumer
+# copy — leaves the whole gate green while every real land against an ``auth.mode !=
+# "none"`` hub 401s. The two tests below are the only place the producer's real closure
+# posts through the consumer's real route, so that rename fails here.
+#
+# `blizzard:e2e`'s delivery scenarios cannot cover it either: their hubs run at the
+# `init` default (``auth.mode = "none"``), where ``require_marker_authority`` short-
+# circuits before it ever reads the header.
+
+
+def _hub_request(hub: HubHarness):
+    """``land_common.forge_request``'s exact signature, funnelled through the wired hub
+    app — the seam ``marker_recorder`` takes as ``request``, so the closure under test
+    is the shipped one, sending the header name ``land_common`` actually sends."""
+
+    def request(
+        method: str,
+        url: str,
+        *,
+        token: str | None,
+        body: dict[str, Any] | None,
+        headers: dict[str, str] | None = None,
+    ) -> tuple[int, Any]:
+        resp = hub.client.request(method, url, json=body, headers=headers)
+        return resp.status_code, (resp.json() if resp.content else None)
+
+    return request
+
+
+def test_the_land_scripts_own_recorder_records_durably_against_an_oauth_hub(tmp_path: Path) -> None:
+    """The issue's headline claim, end to end within one process: the real
+    ``marker_recorder`` closure a land script builds, holding the real token the
+    executor mints, writes a marker that is durably readable back — against a hub with
+    authentication genuinely on."""
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    chunk_id = _seed_chunk(hub)
+    token = hub.services.marker_authority.issue(chunk_id, node_id=_NODE_ID, epoch=_EPOCH)
+    record = marker_recorder(callback_url=_marker_url(chunk_id), token=token, request=_hub_request(hub))
+
+    record("acme-widget", "sha:abc123")
+
+    assert _MARKER_NAME in _recorded_marker_names(hub, chunk_id)
+
+
+def test_the_land_scripts_own_recorder_fails_loudly_when_the_hub_refuses(tmp_path: Path) -> None:
+    """The other half of non-contradictory: a recorder with no credential does not
+    quietly report a landing against an authenticated hub — it raises out of the land
+    stage (``MarkerWriteError``), and the refused write records nothing."""
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    chunk_id = _seed_chunk(hub)
+    record = marker_recorder(callback_url=_marker_url(chunk_id), token="", request=_hub_request(hub))
+
+    with pytest.raises(MarkerWriteError):
+        record("acme-widget", "sha:abc123")
+
+    assert _recorded_marker_names(hub, chunk_id) == set()
