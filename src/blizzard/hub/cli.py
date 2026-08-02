@@ -30,6 +30,7 @@ import yaml
 from blizzard.cli.host_directory import resolve_host_directory
 from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.hub import cli_login, session_store
+from blizzard.hub.api.marker_auth import _MARKER_TOKEN_HEADER
 from blizzard.hub.app import build_hosted_app
 from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.hub.delivery.hub_node import ENV_MARKER_CALLBACK_URL, ENV_MARKER_TOKEN
@@ -399,7 +400,8 @@ def record_marker(name: str, content: str) -> None:
     without waiting for the whole step to exit. Idempotent per marker NAME.
 
     Authorizes the write with the run's marker capability token
-    (``BZ_HUB_MARKER_TOKEN``, issue #230) via ``X-Blizzard-Marker-Token`` — a missing
+    (``BZ_HUB_MARKER_TOKEN``, issue #230) via the route's own
+    :data:`~blizzard.hub.api.marker_auth._MARKER_TOKEN_HEADER` — a missing
     token is named explicitly rather than silently posting an unauthenticated write."""
     callback_url = os.environ.get(ENV_MARKER_CALLBACK_URL)
     if not callback_url:
@@ -411,7 +413,7 @@ def record_marker(name: str, content: str) -> None:
         resp = httpx.post(
             callback_url,
             json={"name": name, "content": content},
-            headers={"X-Blizzard-Marker-Token": marker_token},
+            headers={_MARKER_TOKEN_HEADER: marker_token},
             timeout=_CLIENT_TIMEOUT,
         )
         resp.raise_for_status()

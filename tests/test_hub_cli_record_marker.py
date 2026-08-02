@@ -3,8 +3,10 @@
 A pure client of the injected ``BZ_HUB_MARKER_CALLBACK_URL`` — this file stubs
 ``httpx.post`` (the same monkeypatch seam every other CLI unit test uses) to prove the
 command authorizes its write with the run's marker capability token
-(``BZ_HUB_MARKER_TOKEN``) via ``X-Blizzard-Marker-Token``, and refuses to post at all
-when either the callback URL or the token is missing from the environment.
+(``BZ_HUB_MARKER_TOKEN``) via the header named by
+:data:`~blizzard.hub.api.marker_auth._MARKER_TOKEN_HEADER` — the same constant the
+route reads (issue #240) — and refuses to post at all when either the callback URL or
+the token is missing from the environment.
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ import pytest
 from click.testing import CliRunner
 
 import blizzard.hub.cli as hub_cli
+from blizzard.hub.api.marker_auth import _MARKER_TOKEN_HEADER
 from blizzard.hub.cli import hub as hub_group
 
 pytestmark = pytest.mark.unit
@@ -58,7 +61,7 @@ def test_record_marker_sends_the_token_header(monkeypatch: pytest.MonkeyPatch) -
     assert len(calls) == 1
     assert calls[0]["url"] == _CALLBACK_URL
     assert calls[0]["json"] == {"name": "merged/acme/widget", "content": "sha1"}
-    assert calls[0]["headers"]["X-Blizzard-Marker-Token"] == _MARKER_TOKEN
+    assert calls[0]["headers"][_MARKER_TOKEN_HEADER] == _MARKER_TOKEN
 
 
 def test_record_marker_refuses_without_a_callback_url(monkeypatch: pytest.MonkeyPatch) -> None:
