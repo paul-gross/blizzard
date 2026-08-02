@@ -20,6 +20,7 @@ without ever waking the LLM:
     unknown             -> "pending"  (GitHub still computing mergeability — re-poll)
     behind              -> PUT .../update-branch, then "pending"  (base moved, no conflict — self-heal)
     blocked/unstable    -> "pending"  (required CI/reviews not green yet — WAIT, the CI-watch case)
+    blocked/unstable, a check run completed terminally -> "failure"  (never going green — issue #232)
     dirty               -> "conflict"  (a real merge conflict — the ONE true LLM bounce)
 
 ``behind`` already implies ``mergeable: true`` (a *conflicting* stale branch is ``dirty``,
@@ -32,9 +33,13 @@ other chunks' hub nodes run in the gap. ``poll_timeout`` is the executor's job
 so the graph MUST author a ``failure`` edge, and (for the ``dirty`` fast-bounce) a
 ``conflict`` edge.
 
-This improves on the prior CI-watch policy in two ways: a real ``dirty`` conflict bounces
-*immediately* instead of waiting out the full ``poll_timeout``, and a ``behind`` branch is
-*healed* via ``update-branch`` instead of pending forever (nothing used to update it).
+This improves on the prior CI-watch policy in three ways: a real ``dirty`` conflict bounces
+*immediately* instead of waiting out the full ``poll_timeout``; a ``behind`` branch is
+*healed* via ``update-branch`` instead of pending forever (nothing used to update it); and a
+``blocked``/``unstable`` PR whose check run has already completed with a terminal conclusion
+routes ``failure`` immediately instead of polling out to ``poll_timeout`` for a check that
+will never turn green — recording a ``delivery-findings`` artifact naming what failed so
+``resolve`` starts from a diagnosis instead of archaeology (issue #232).
 
 Same env contract as :mod:`~blizzard.hub.graphs.scripts.land_default`
 (``BZ_FORGE_URL``/``BZ_FORGE_TOKEN``/``BZ_FORGE_OWNER``/``BZ_HUB_BASE_BRANCH``/
@@ -55,6 +60,7 @@ from blizzard.hub.graphs.scripts.land_common import (
     MarkerWriteError,
     forge_request,
     marker_recorder,
+    post_marker,
     pr_title,
     qualify_repo,
     refuse_empty_delivery,
@@ -78,12 +84,27 @@ _HUB_USER = "blizzard-hub"
 _LANDED = "landed"
 _CONFLICT = "conflict"
 _PENDING = "pending"
+# The graph's authored `failure` choice on the `deliver` node (issue #232) —
+# advanced-development-workflow/graph.yaml's `deliver.judgement.choices` names exactly
+# `landed`/`failure`, so a terminal CI check failure must print THIS literal string, not
+# `_FAILED` (below), which is an internal per-repo decision spelled differently ("failed").
+_CI_FAILURE = "failure"
+
+# The marker name a terminal-CI-failure or a substantive wait writes its findings under —
+# a resolve worker reads this artifact directly (issue #232).
+_FINDINGS_NAME = "delivery-findings"
 
 # Pure routing decisions (what to do with one repo after reading its live PR).
 _PUSH = "push"  # clean (or already merged) — eligible for the merge stage
 _WAIT = "wait"  # unknown / required-checks-not-green / … — re-poll, no side effect
 _UPDATE = "update"  # behind — fire update-branch, then re-poll
 _BOUNCE = "bounce"  # dirty — a real content conflict, kick back to build
+_FAILED = "failed"  # a check run completed with a terminal conclusion — never re-poll
+
+# `classify_checks`' terminal conclusions (issue #232): a completed check run in any of
+# these is never going to turn green on its own — polling `mergeable_state` out to
+# `poll_timeout` just burns the slot instead of surfacing the failure.
+_TERMINAL_CONCLUSIONS = {"failure", "timed_out", "cancelled", "action_required"}
 
 
 def classify(mergeable_state: str | None, *, merged: bool) -> str:
@@ -94,7 +115,10 @@ def classify(mergeable_state: str | None, *, merged: bool) -> str:
     bounce (the only true LLM kick-back); ``behind`` -> update-branch then wait;
     everything else (``unknown``, ``blocked``, ``unstable``, ``has_hooks``, ``draft``,
     missing) -> wait, because none is a content conflict — the CI-watch case (``blocked``/
-    ``unstable``) is exactly a wait — and the node's ``poll_timeout`` is the backstop."""
+    ``unstable``) is exactly a wait *within this function*; the caller layers a further
+    :func:`classify_checks` read on top of a ``blocked``/``unstable`` wait to catch a check
+    run that has already failed terminally (issue #232) — and the node's ``poll_timeout``
+    is the backstop for whatever still isn't resolved."""
     if merged:
         return _PUSH
     if mergeable_state == "clean":
@@ -104,6 +128,110 @@ def classify(mergeable_state: str | None, *, merged: bool) -> str:
     if mergeable_state == "behind":
         return _UPDATE
     return _WAIT
+
+
+def classify_checks(check_runs: list[dict[str, Any]]) -> str:
+    """Map a commit's live check-run list to a terminal-vs-wait decision — pure.
+
+    Mirrors :func:`classify`'s role for ``mergeable_state``, one level lower: given the
+    ``check_runs`` array from ``GET /repos/{owner}/{repo}/commits/{ref}/check-runs`` (each a
+    dict carrying at least ``status`` and ``conclusion``), ``_FAILED`` fires when ANY run has
+    completed with a terminal ``conclusion`` (``failure``/``timed_out``/``cancelled``/
+    ``action_required``) — a check that will never turn green on its own, so burning the rest
+    of ``poll_timeout`` on it is pure waste. Every other shape — runs still ``queued``/
+    ``in_progress``/``waiting``/``requested``, an empty list, or a malformed payload (missing
+    keys, wrong types) — degrades to ``_WAIT``; this function never raises.
+
+    Design decision D1 (issue #232): a required-vs-optional distinction needs a
+    branch-protection read this script doesn't do — ``clean`` is its only merge gate, so a
+    completed-failing run while ``mergeable_state`` is ``blocked``/``unstable`` is terminal
+    regardless of whether GitHub would call the check "required"."""
+    if not isinstance(check_runs, list):
+        return _WAIT
+    for run in check_runs:
+        if not isinstance(run, dict):
+            continue
+        if run.get("status") == "completed" and run.get("conclusion") in _TERMINAL_CONCLUSIONS:
+            return _FAILED
+    return _WAIT
+
+
+def render_findings(records: list[dict[str, Any]]) -> str:
+    """Render a ``delivery-findings`` marker artifact body from per-repo poll records — pure.
+
+    Plain text/markdown (not JSON) meant for a resolve worker to read directly. Each element
+    of ``records`` describes one repo's PR at poll time::
+
+        {
+            "repo": str,                  # qualified repo, e.g. "acme/widget"
+            "number": int,                # PR number
+            "url": str,                   # PR's html_url
+            "decision": _FAILED | _WAIT,  # which case this repo is reported in
+            "checks": [...],              # see below — shape depends on `decision`
+        }
+
+    When ``decision == _FAILED``, each element of ``checks`` is::
+
+        {
+            "name": str,
+            "conclusion": str,           # the terminal conclusion classify_checks matched
+            "details_url": str,
+            "base_red": bool | None,     # whether the base branch's own latest check run of
+                                          # the SAME name also fails — "the base's gate was
+                                          # already red" (True) vs "this change broke CI"
+                                          # (False); None when that lookup wasn't done.
+        }
+
+    When ``decision == _WAIT``, each element of ``checks`` is::
+
+        {"name": str, "status": str}     # still queued/in_progress/waiting/requested
+
+    Pure text formatting — no I/O — and independent of `main`'s own dict shapes beyond what's
+    documented here, so a later wiring phase is free to build these records however is
+    convenient there."""
+    return "\n\n".join(_render_repo_findings(record) for record in records)
+
+
+def _render_repo_findings(record: dict[str, Any]) -> str:
+    """Render one repo's section of :func:`render_findings`'s output."""
+    header = f"## {record['repo']}#{record['number']} — {record['url']}"
+    if record["decision"] == _FAILED:
+        lines = [header, "CI check failures:"]
+        for check in record["checks"]:
+            lines.append(f"  - {check['name']}: {check['conclusion']} — {check['details_url']}")
+            base_red = check.get("base_red")
+            if base_red is True:
+                lines.append(f"    base branch: also failing {check['name']} — not this change")
+            elif base_red is False:
+                lines.append(f"    base branch: {check['name']} is clean — this change broke CI")
+        return "\n".join(lines)
+    lines = [header, "Still running:"]
+    for check in record["checks"]:
+        lines.append(f"  - {check['name']}: {check['status']}")
+    return "\n".join(lines)
+
+
+def _failing_checks(check_runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The subset of ``check_runs`` :func:`classify_checks` would call terminal — pure,
+    used to build the ``checks`` list a ``_FAILED`` :func:`render_findings` record names."""
+    return [
+        run
+        for run in check_runs
+        if isinstance(run, dict) and run.get("status") == "completed" and run.get("conclusion") in _TERMINAL_CONCLUSIONS
+    ]
+
+
+def _base_check_failed(base_checks: list[dict[str, Any]] | None, name: str) -> bool | None:
+    """Whether the base branch's own latest check run named ``name`` is itself terminal —
+    ``None`` when ``base_checks`` is ``None`` (the base read wasn't done or degraded, per
+    :func:`render_findings`'s documented ``base_red`` contract), ``False`` when
+    ``base_checks`` was read but carries no terminal run of that name."""
+    if base_checks is None:
+        return None
+    for run in base_checks:
+        if isinstance(run, dict) and run.get("name") == name:
+            return run.get("status") == "completed" and run.get("conclusion") in _TERMINAL_CONCLUSIONS
+    return False
 
 
 class _Conflict(Exception):
@@ -139,7 +267,21 @@ def _land() -> int:
     def api(method: str, path: str, body: dict[str, Any] | None = None) -> tuple[int, Any]:
         return forge_request(method, f"{forge_url}{path}", token=token, body=body)
 
+    def fetch_check_runs(repo: str, ref: str) -> list[dict[str, Any]] | None:
+        """GET ``repo``'s check-runs at ``ref``, degrading to ``None`` on ANY read
+        failure — a non-200 response, a malformed body, or an outright exception (the
+        shape a real forge outage raises) — never a bounce or a crash (issue #232)."""
+        try:
+            status, payload = api("GET", f"/repos/{repo}/commits/{ref}/check-runs")
+        except Exception:
+            return None
+        if status != 200 or not isinstance(payload, dict):
+            return None
+        check_runs = payload.get("check_runs")
+        return check_runs if isinstance(check_runs, list) else None
+
     record_marker = marker_recorder(callback_url=callback_url, token=marker_token, request=forge_request)
+    write_findings = post_marker(callback_url=callback_url, token=marker_token, request=forge_request)
 
     refuse_empty_delivery(commits)
     pending = [c for c in commits if f"{_MARKER_PREFIX}{c['repo']}" not in already]
@@ -150,7 +292,12 @@ def _land() -> int:
     # --- check stage: read every pending repo's live PR state; decide per repo. No repo
     #     is merged unless ALL check `clean` (chunk atomicity). A `dirty` short-circuits
     #     to `conflict`; a `behind` self-heals via update-branch; unknown/CI-not-green wait.
+    #     `failures`/`wait_records` (issue #232) accumulate `render_findings` records for a
+    #     terminally-failed check run and a substantive wait, respectively — the loop never
+    #     short-circuits on a failure, so every pending repo's findings are named together.
     to_merge: list[tuple[str, str, int, str]] = []  # (bare repo, qualified repo, pr number, head sha)
+    failures: list[dict[str, Any]] = []
+    wait_records: list[dict[str, Any]] = []
     wait = False
     try:
         for commit in pending:
@@ -203,6 +350,51 @@ def _land() -> int:
                 wait = True
                 continue
             if decision == _WAIT:
+                if state in {"blocked", "unstable"}:
+                    # The CI-watch case: read the head's own check runs and see whether
+                    # any has already completed terminally — never re-poll one out to
+                    # `poll_timeout` (issue #232). A degraded read (`None`) falls straight
+                    # through to the plain wait below, unchanged from today's behavior.
+                    check_runs = fetch_check_runs(repo, head_sha)
+                    if check_runs is not None and classify_checks(check_runs) == _FAILED:
+                        base_checks = fetch_check_runs(repo, base_branch)
+                        checks = [
+                            {
+                                "name": run.get("name"),
+                                "conclusion": run.get("conclusion"),
+                                "details_url": run.get("details_url"),
+                                "base_red": _base_check_failed(base_checks, run.get("name", "")),
+                            }
+                            for run in _failing_checks(check_runs)
+                        ]
+                        failures.append(
+                            {
+                                "repo": repo,
+                                "number": number,
+                                "url": pull.get("html_url") or "",
+                                "decision": _FAILED,
+                                "checks": checks,
+                            }
+                        )
+                        print(f"{repo}#{number} has a terminal CI check failure — will not re-poll", file=sys.stderr)
+                        continue
+                    if check_runs:
+                        # D2: only a NON-empty check-runs read makes this poll
+                        # "substantive" — the very first poll of a fresh PR often reads
+                        # zero check runs yet, and writing findings then says nothing.
+                        wait_records.append(
+                            {
+                                "repo": repo,
+                                "number": number,
+                                "url": pull.get("html_url") or "",
+                                "decision": _WAIT,
+                                "checks": [
+                                    {"name": run.get("name"), "status": run.get("status")}
+                                    for run in check_runs
+                                    if isinstance(run, dict)
+                                ],
+                            }
+                        )
                 print(f"{repo}#{number} is {state} — not cleanly mergeable yet; re-polling", file=sys.stderr)
                 wait = True
                 continue
@@ -213,9 +405,24 @@ def _land() -> int:
         print(_CONFLICT)
         return 0
 
+    if failures:
+        # At least one repo's check run completed terminally — never worth re-polling
+        # out to `poll_timeout`. Nothing merges (chunk atomicity, same as `wait` below);
+        # write the findings so the resolve worker can read exactly what failed.
+        write_findings(_FINDINGS_NAME, render_findings(failures))
+        print(_CI_FAILURE)
+        return 0
+
     if wait:
         # At least one repo is not cleanly mergeable yet (unknown/behind/CI-not-green) —
-        # release the hub slot and re-poll; merge NOTHING (chunk atomicity).
+        # release the hub slot and re-poll; merge NOTHING (chunk atomicity). A
+        # substantive wait (D2) writes its in-flight findings on EVERY poll — the
+        # callback's own (chunk, node, name, epoch) idempotence makes a repeat write
+        # within one visit a no-op, so this is not gated on `already`/artifact names,
+        # which is scoped by node, not epoch, and would wrongly suppress every visit
+        # after the first.
+        if wait_records:
+            write_findings(_FINDINGS_NAME, render_findings(wait_records))
         print(_PENDING)
         return 0
 
@@ -273,7 +480,32 @@ def _selftest() -> int:
         failures += not ok
         print(f"  {'ok ' if ok else 'FAIL'}  ({state!r}, merged={merged}) -> {got}  (want {expected})")
     print(f"{'PASS' if not failures else 'FAIL'}: {len(cases) - failures}/{len(cases)} routing cases")
-    return 1 if failures else 0
+
+    check_cases = [
+        ([{"status": "completed", "conclusion": "failure"}], _FAILED),
+        ([{"status": "completed", "conclusion": "timed_out"}], _FAILED),
+        ([{"status": "completed", "conclusion": "cancelled"}], _FAILED),
+        ([{"status": "completed", "conclusion": "action_required"}], _FAILED),
+        ([{"status": "queued", "conclusion": None}], _WAIT),
+        ([{"status": "in_progress", "conclusion": None}], _WAIT),
+        ([{"status": "waiting", "conclusion": None}], _WAIT),
+        ([{"status": "requested", "conclusion": None}], _WAIT),
+        ([], _WAIT),  # no check runs reported yet
+        ([{"name": "build"}], _WAIT),  # malformed — missing status/conclusion, never raises
+    ]
+    check_failures = 0
+    for check_runs, expected in check_cases:
+        got = classify_checks(check_runs)
+        ok = got == expected
+        check_failures += not ok
+        print(f"  {'ok ' if ok else 'FAIL'}  {check_runs!r} -> {got}  (want {expected})")
+    print(
+        f"{'PASS' if not check_failures else 'FAIL'}: "
+        f"{len(check_cases) - check_failures}/{len(check_cases)} check-run cases"
+    )
+
+    total_failures = failures + check_failures
+    return 1 if total_failures else 0
 
 
 if __name__ == "__main__":

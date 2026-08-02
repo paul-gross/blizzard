@@ -23,6 +23,10 @@ against the (extended) mock forge, one scenario per route:
 * **bounce** — the `merge_conflict` lever makes the PR read `dirty` (a real conflict):
   the script prints `conflict` *immediately* (not a 30-min `poll_timeout` wait), the
   chunk records a `conflict` bounce and routes back to `build`, **nothing lands**.
+* **terminal CI failure** (issue #232) — the `checks_failed` lever makes the PR read
+  `blocked` with a completed, failing check run: the script prints the authored `failure`
+  edge *immediately* (not a 30-min `poll_timeout` wait), routes to `resolve`, and records a
+  `delivery-findings` artifact naming the failed check — **nothing merges**.
 
 Asserted over the full live stack (mock forge + mock harness + fixture workspace + real
 hub/runner), exactly like the sibling e2e scenarios — fleet truth (pending/bounce/done)
@@ -211,6 +215,13 @@ def _fenced_env() -> dict[str, str]:
 
 
 def test_pr_ci_pends_on_blocked_then_lands_when_green(tmp_path: Path) -> None:
+    """Also the wait-path half of issue #232's D2/F1: `checks_pending` now also serves
+    one `in_progress` check run (Phase 1), so this scenario's blocked wait is a
+    *substantive* one, driven over several polls in one visit — the only tier that can
+    prove the wait-path `delivery-findings` write's per-epoch idempotence against the
+    real hub. Exactly one artifact must exist across repeated polls, its content naming
+    the in-flight check, unchanged by later polls — and landing must still work once the
+    lever clears, proving the wait-path write costs the happy path nothing."""
     bin_dir, workspace, origins, origin_bare = _reset_fixture(tmp_path)
     main_before = _git_bare(origin_bare, "rev-parse", "main").strip()
 
@@ -230,6 +241,36 @@ def test_pr_ci_pends_on_blocked_then_lands_when_green(tmp_path: Path) -> None:
         assert pulls and not any(p.get("merged") for p in pulls), f"a blocked PR merged while pending: {pulls}"
         assert _git_bare(origin_bare, "rev-parse", "main").strip() == main_before, "bare main moved while pending"
 
+        # D2/F1 — the substantive wait writes `delivery-findings` on its first poll...
+        findings_rows = [a for a in pending["artifacts"] if a.get("name") == "delivery-findings"]
+        assert len(findings_rows) == 1, f"expected exactly one delivery-findings artifact: {findings_rows}"
+        first_content = findings_rows[0].get("content") or ""
+        assert REPO_NAME in first_content
+        assert "ci" in first_content.lower()
+
+        # ...and repeated polls within this SAME visit (still blocked, same hub epoch)
+        # must leave it unchanged — the callback's per-(chunk, node, name, epoch)
+        # idempotence, exercised against the real hub, not a scripted double.
+        first_next_poll = pending["pending"]["next_poll_at"]
+        second = _drive_until(
+            config,
+            hub,
+            chunk_id,
+            fenced,
+            lambda b: bool(b.get("pending")) and b["pending"]["next_poll_at"] != first_next_poll,
+        )
+        third = _drive_until(
+            config,
+            hub,
+            chunk_id,
+            fenced,
+            lambda b: bool(b.get("pending")) and b["pending"]["next_poll_at"] != second["pending"]["next_poll_at"],
+        )
+        for detail in (second, third):
+            rows = [a for a in detail["artifacts"] if a.get("name") == "delivery-findings"]
+            assert len(rows) == 1, f"a repeat poll duplicated the delivery-findings artifact: {rows}"
+            assert (rows[0].get("content") or "") == first_content, "a repeat poll changed the findings content"
+
         # Phase 2 — CI goes green: clear the lever; the next poll reads clean and merges.
         assert forge.delete("/_levers/checks_pending", params={"repo": REPO}).status_code == 200
         done = _drive_until(config, hub, chunk_id, fenced, lambda b: b["status"] in {"done", "needs_human"}, timeout=90)
@@ -242,6 +283,68 @@ def test_pr_ci_pends_on_blocked_then_lands_when_green(tmp_path: Path) -> None:
         ln for ln in _git_bare(origin_bare, "log", "--oneline", "--", "PR_CI_LANDED.md").splitlines() if ln.strip()
     ]
     assert len(landings) == 1, f"PR_CI_LANDED.md landed {len(landings)} times on bare main"
+
+
+def test_pr_ci_routes_failure_on_a_terminally_failed_check(tmp_path: Path) -> None:
+    """Issue #232: a terminally-failed check run routes `failure` immediately, well
+    inside this scenario's 60s `_drive_until` budget — proof today's code cannot reach
+    it before the inlined `poll_timeout: 600`, since only the timeout path could route
+    `failure` before this change. Two passes: the first asserts the `delivery-findings`
+    content for a plain CI failure; a second, shorter pass also arms `base_checks_failed`
+    and asserts the findings instead name the base as already red ("not this change")."""
+    bin_dir, workspace, origins, origin_bare = _reset_fixture(tmp_path)
+    main_before = _git_bare(origin_bare, "rev-parse", "main").strip()
+
+    forge_port, hub_port = _free_port(), _free_port()
+    with _forge(bin_dir, origins, forge_port) as forge, _hub(tmp_path / "hub", forge_port, hub_port) as hub:
+        # `checks_failed` — blocked with a completed, failing check run on the PR head.
+        assert forge.post("/_levers/checks_failed", json={"repo": REPO}).status_code == 200
+        chunk_id = _ingest_and_promote(hub, forge)
+        config = _runner_config(tmp_path / "runner", workspace, bin_dir, hub_port)
+        fenced = _fenced_env()
+
+        bounced = _drive_until(config, hub, chunk_id, fenced, lambda b: bool(b.get("bounces")))
+        assert bounced["bounces"][0]["cause"] == "failure", bounced["bounces"]
+        assert bounced["landed"] is False
+
+        pulls = forge.get(f"/repos/{REPO}/pulls", params={"state": "all"}).json()
+        assert pulls and not any(p.get("merged") for p in pulls), f"a failing PR merged: {pulls}"
+
+        artifacts = hub.get(f"/api/chunks/{chunk_id}").json()["artifacts"]
+        findings = next((a for a in artifacts if a.get("name") == "delivery-findings"), None)
+        assert findings is not None, f"no delivery-findings artifact recorded: {artifacts}"
+        content = findings.get("content") or ""
+        assert REPO_NAME in content
+        assert "failure" in content
+        assert "not this change" not in content, (
+            "the base wasn't armed red in this pass — the findings must not claim it is"
+        )
+
+    assert _git_bare(origin_bare, "rev-parse", "main").strip() == main_before, "bare main moved on a CI failure"
+
+    # Second, shorter pass — the base branch's own latest check run of the SAME name is
+    # also failing: the findings must distinguish "the base's gate was already red" from
+    # "this change broke CI" (AC3/AC5). A fresh tmp_path subdirectory, not the one the
+    # first pass used — reusing it would reuse the first pass's hub data dir too, and its
+    # bounced-back-to-build chunk would still hold the `toy-api:1` work-ref pointer.
+    second_pass = tmp_path / "second-pass"
+    bin_dir, workspace, origins, origin_bare = _reset_fixture(second_pass)
+    forge_port, hub_port = _free_port(), _free_port()
+    with _forge(bin_dir, origins, forge_port) as forge, _hub(second_pass / "hub", forge_port, hub_port) as hub:
+        assert forge.post("/_levers/checks_failed", json={"repo": REPO}).status_code == 200
+        assert forge.post("/_levers/base_checks_failed", json={"repo": REPO}).status_code == 200
+        chunk_id = _ingest_and_promote(hub, forge)
+        config = _runner_config(second_pass / "runner", workspace, bin_dir, hub_port)
+        fenced = _fenced_env()
+
+        bounced = _drive_until(config, hub, chunk_id, fenced, lambda b: bool(b.get("bounces")))
+        assert bounced["bounces"][0]["cause"] == "failure", bounced["bounces"]
+
+        artifacts = hub.get(f"/api/chunks/{chunk_id}").json()["artifacts"]
+        findings = next((a for a in artifacts if a.get("name") == "delivery-findings"), None)
+        assert findings is not None
+        content = findings.get("content") or ""
+        assert "not this change" in content, content
 
 
 def test_pr_ci_self_heals_a_behind_branch_and_lands(tmp_path: Path) -> None:

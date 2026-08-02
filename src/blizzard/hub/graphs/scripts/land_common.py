@@ -8,13 +8,15 @@ Pure stdlib, exactly like the scripts that import from here (``bzh:deterministic
 mid-run marker callback) through; ``qualify_repo``/``pr_title``/``refuse_empty_delivery``
 are the small pure helpers their policies share; ``require_env``/``require_json_env`` turn
 a missing or malformed injected env var into a named diagnostic instead of a raw traceback;
-``marker_recorder`` is the durable-write wrapper around the marker callback POST — a
+``post_marker`` is the durable-write wrapper around the marker callback POST — a
 dropped or unconfirmed marker write used to be silently discarded (the closure's return
 value was never even checked), which is exactly how a merge could land with no durable
 record of it. A confirmed write (any 2xx, including the idempotent ``recorded: false``
 replay) is the only success; anything else is retried a bounded number of times and, if
 still unconfirmed, raises :class:`MarkerWriteError` rather than letting the script print
-``landed`` over an unrecorded merge.
+``landed`` over an unrecorded merge. ``marker_recorder`` is ``post_marker`` specialized to
+the ``merged/<repo>`` marker name (issue #230); a second marker kind — e.g. the
+``delivery-findings`` write issue #232 adds — calls ``post_marker`` directly.
 """
 
 from __future__ import annotations
@@ -166,6 +168,58 @@ class MarkerWriteError(Exception):
     ``landed`` over an unrecorded merge."""
 
 
+def post_marker(
+    *,
+    callback_url: str,
+    token: str,
+    request: Callable[..., tuple[int, Any]],
+) -> Callable[[str, str], None]:
+    """Build the generic ``post(name, content)`` durable-marker-write closure (issue
+    #232) — the retry/auth logic :func:`marker_recorder` used to own directly, extracted
+    so a second marker kind (``delivery-findings``) can share it without a bespoke,
+    unauthenticated, unretried ``forge_request``/``api`` call of its own.
+
+    A confirmed write (any 2xx, including an idempotent replay) is the only success;
+    anything else is retried a bounded number of times and, if still unconfirmed, raises
+    :class:`MarkerWriteError`. The caller supplies the full marker ``name`` — this
+    function prepends nothing.
+
+    A falsy ``callback_url`` is not fatal by itself — a caller that never invokes
+    ``post`` never notices. It is fatal only once something reaches this closure with
+    nowhere to send it.
+    """
+
+    def post(name: str, content: str) -> None:
+        if not callback_url:
+            raise MarkerWriteError(
+                f"could not write marker {name!r}: no {_MARKER_CALLBACK_ENV} was configured for this run"
+            )
+        headers = {_MARKER_TOKEN_HEADER: token} if token else None
+        body = {"name": name, "content": content}
+        last_status: int | None = None
+        last_body: Any = None
+        for attempt in range(1, _MARKER_WRITE_ATTEMPTS + 1):
+            try:
+                status, response_body = request("POST", callback_url, token=None, headers=headers, body=body)
+            except OSError as exc:
+                last_status, last_body = None, str(exc)
+                if attempt < _MARKER_WRITE_ATTEMPTS:
+                    time.sleep(_MARKER_RETRY_BACKOFF_SECONDS)
+                    continue
+                raise MarkerWriteError(
+                    f"could not write marker {name!r}: connection error after {attempt} attempts: {last_body}"
+                ) from exc
+            if 200 <= status < 300:
+                return
+            last_status, last_body = status, response_body
+            if status >= 500 and attempt < _MARKER_WRITE_ATTEMPTS:
+                time.sleep(_MARKER_RETRY_BACKOFF_SECONDS)
+                continue
+            raise MarkerWriteError(f"could not write marker {name!r}: HTTP {last_status} {last_body!r}")
+
+    return post
+
+
 def marker_recorder(
     *,
     callback_url: str,
@@ -182,35 +236,13 @@ def marker_recorder(
     calls ``record`` at all, and that stays a silent no-op exactly as before. It is fatal
     only once a repo that genuinely needs a marker recorded reaches this closure with
     nowhere to send it.
+
+    Delegates its retry/auth logic to :func:`post_marker`, prepending the
+    ``merged/`` marker-name prefix.
     """
+    post = post_marker(callback_url=callback_url, token=token, request=request)
 
     def record(repo: str, commit_hash: str) -> None:
-        if not callback_url:
-            raise MarkerWriteError(
-                f"could not record the merge marker for {repo!r}: no {_MARKER_CALLBACK_ENV} was configured for this run"
-            )
-        headers = {_MARKER_TOKEN_HEADER: token} if token else None
-        body = {"name": f"{_MARKER_PREFIX}{repo}", "content": commit_hash}
-        last_status: int | None = None
-        last_body: Any = None
-        for attempt in range(1, _MARKER_WRITE_ATTEMPTS + 1):
-            try:
-                status, response_body = request("POST", callback_url, token=None, headers=headers, body=body)
-            except OSError as exc:
-                last_status, last_body = None, str(exc)
-                if attempt < _MARKER_WRITE_ATTEMPTS:
-                    time.sleep(_MARKER_RETRY_BACKOFF_SECONDS)
-                    continue
-                raise MarkerWriteError(
-                    f"could not record the merge marker for {repo!r}: connection error after "
-                    f"{attempt} attempts: {last_body}"
-                ) from exc
-            if 200 <= status < 300:
-                return
-            last_status, last_body = status, response_body
-            if status >= 500 and attempt < _MARKER_WRITE_ATTEMPTS:
-                time.sleep(_MARKER_RETRY_BACKOFF_SECONDS)
-                continue
-            raise MarkerWriteError(f"could not record the merge marker for {repo!r}: HTTP {last_status} {last_body!r}")
+        post(f"{_MARKER_PREFIX}{repo}", commit_hash)
 
     return record
