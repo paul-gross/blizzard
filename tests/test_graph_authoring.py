@@ -56,7 +56,7 @@ def test_reify_mints_ids_and_splits_choices_into_edges() -> None:
     # The deliver hub node authors its own judgement (#67) exactly like a worker
     # node's — its outcome choices reify into real choices and edges, not a
     # machinery-applied default.
-    assert {c.name for c in deliver.choices} == {"landed", "conflict"}
+    assert {c.name for c in deliver.choices} == {"landed", "conflict", "failure"}
     deliver_targets = {e.to_node_name for e in graph.edges_from(deliver.node_id)}
     assert deliver_targets == {"retrospective", "pre-push"}
     assert deliver.run and deliver.run[0].command == "python3 -m blizzard.hub.graphs.scripts.land_ff"
