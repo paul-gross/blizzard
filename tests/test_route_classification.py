@@ -193,20 +193,43 @@ def _dependency_names(route: APIRoute) -> set[str]:
     return {dep.call.__name__ for dep in route.dependant.dependencies if dep.call is not None}
 
 
-def _required_permission(route: APIRoute) -> Permission | None:
-    """The exact :class:`Permission` a ``require(<permission>)`` dependency closes
-    over, or ``None`` if the route carries no such dependency — introspects the
-    closure cell rather than trusting a second hand-maintained map, so this check
-    cannot silently drift from what the route actually enforces."""
-    for dep in route.dependant.dependencies:
-        call = dep.call
-        if call is None or call.__name__ != "_dependency":
-            continue
-        freevars = call.__code__.co_freevars
-        closure = call.__closure__ or ()
+def _permission_of(call: object) -> Permission | None:
+    """The exact :class:`Permission` a ``require(<permission>)`` dependency (the
+    ``_dependency`` closure ``require`` returns) closes over, or ``None`` if ``call``
+    is not one — introspects the closure cell rather than trusting a second
+    hand-maintained map, so this check cannot silently drift from what the route
+    actually enforces.
+
+    ``require_marker_authority`` (issue #230) is a **second**, one-off way to pass
+    the marker-write route's gate — its module keeps its own ``_require_chunk_control
+    = require(CHUNK_CONTROL)`` module global as the human-plane fallback a live
+    marker token defers to, rather than declaring a second ``Depends(...)`` on the
+    route (a marker token is a delivery-layer credential, not a human permission, so
+    it has none to introspect here). Recursing into that module global — rather than
+    special-casing the route by path — keeps this generic to any future dependency
+    shaped the same way.
+    """
+    if getattr(call, "__name__", None) == "_dependency":
+        freevars = call.__code__.co_freevars  # type: ignore[union-attr]
+        closure = call.__closure__ or ()  # type: ignore[union-attr]
         for name, cell in zip(freevars, closure, strict=True):
             if name == "permission":
                 return cell.cell_contents
+        return None
+    if getattr(call, "__name__", None) == "require_marker_authority":
+        fallback = call.__globals__.get("_require_chunk_control")  # type: ignore[union-attr]
+        return _permission_of(fallback) if fallback is not None else None
+    return None
+
+
+def _required_permission(route: APIRoute) -> Permission | None:
+    """The permission (see :func:`_permission_of`) the first recognized dependency on
+    ``route`` enforces, or ``None`` if none of its dependencies are of a recognized
+    shape."""
+    for dep in route.dependant.dependencies:
+        permission = _permission_of(dep.call)
+        if permission is not None:
+            return permission
     return None
 
 

@@ -43,6 +43,7 @@ from blizzard.hub.api.auth import reject_runner_principal
 from blizzard.hub.api.auth_session import require
 from blizzard.hub.api.decisions import to_decision_view
 from blizzard.hub.api.deps import get_services
+from blizzard.hub.api.marker_auth import require_marker_authority
 from blizzard.hub.api.questions import question_view
 from blizzard.hub.composition import HubServices
 from blizzard.hub.delivery.hub_node import poll_interval_for
@@ -540,7 +541,9 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
 
 
 @router.post(
-    "/chunks/{chunk_id}/hub-markers", response_model=HubMarkerResponse, dependencies=[Depends(require(CHUNK_CONTROL))]
+    "/chunks/{chunk_id}/hub-markers",
+    response_model=HubMarkerResponse,
+    dependencies=[Depends(require_marker_authority)],
 )
 def record_hub_marker(
     chunk_id: str,
