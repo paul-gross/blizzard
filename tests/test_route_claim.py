@@ -43,7 +43,7 @@ def test_winning_claim_carries_the_first_node_envelope(tmp_path: Path) -> None:
     # The claim does not mint the lease: the runner reports its epoch via
     # POST /events, so the claim envelope carries the current epoch (0, no lease yet).
     assert env["epoch"] == 0
-    assert env["node"]["node_name"] == "build"
+    assert env["node"]["node_name"] == "triage"
     assert env["node"]["executor"] == "runner"
     # The envelope carries the pre-prompt, the authored judgement prose (the runner
     # appends the elicitation tail from the choice set), the choice set, and the
@@ -51,7 +51,7 @@ def test_winning_claim_carries_the_first_node_envelope(tmp_path: Path) -> None:
     assert env["prompt"]
     assert env["judgement_prompt"]
     assert "<Choice>" not in env["judgement_prompt"]  # the tail is the runner's to render
-    assert {c["name"] for c in env["node"]["choices"]} == {"pass", "fail"}
+    assert {c["name"] for c in env["node"]["choices"]} == {"already-done", "basic", "advanced"}
     assert env["work_refs"] == [_POINTER]
 
 
@@ -215,7 +215,7 @@ def test_completion_carrying_the_claims_route_token_is_accepted(tmp_path: Path) 
     resp = hub.client.post(
         f"/api/fleet/chunks/{chunk_id}/completions",
         json={
-            "choice": "pass",
+            "choice": "already-done",
             "epoch": 1,
             "runner_id": "r1",
             "from_node_id": node_id,
@@ -360,12 +360,12 @@ def test_in_flight_submission_unaffected_while_hub_paused(tmp_path: Path) -> Non
 
     resp = hub.client.post(
         f"/api/fleet/chunks/{chunk_id}/completions",
-        json={"choice": "pass", "epoch": 1, "runner_id": "r1", "from_node_id": node_id, "artifacts": []},
+        json={"choice": "already-done", "epoch": 1, "runner_id": "r1", "from_node_id": node_id, "artifacts": []},
     )
 
     assert resp.status_code == 200
     assert resp.json()["outcome"] != "failure"
-    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["current_node_name"] == "review"
+    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "done"
 
 
 # --------------------------------------------------------------------------- #

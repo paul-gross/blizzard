@@ -35,12 +35,8 @@ export type { BoardCard, BoardReposition };
   imports: [BoardColumn, KitPanel, KitAsyncState, KitSkeleton],
   template: `
     <div class="mc" data-testid="board-shell">
-      <fleet-kit-panel
-        class="board-panel"
-        aria-label="Chunk board"
-        label="Chunk board · workflow build → review → deliver"
-      >
-        <span header class="col-lbl">graph: default</span>
+      <fleet-kit-panel class="board-panel" aria-label="Chunk board" label="Chunk board">
+        <span header class="col-lbl">all workflows</span>
         <div class="board" data-testid="board">
           @for (col of columns; track col.key) {
             <fleet-board-column

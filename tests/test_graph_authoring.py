@@ -11,13 +11,14 @@ from blizzard.hub.domain.artifacts import ArtifactKind
 from blizzard.hub.domain.graph import (
     RESERVED_TERMINAL,
     Executor,
+    GraphDoc,
     GraphParseError,
     JudgedBy,
     ProducesSpec,
     parse_graph_doc,
 )
 from blizzard.hub.domain.graph_authoring import reify_graph
-from blizzard.hub.graphs import load_default_graph_doc
+from blizzard.hub.graphs import _GRAPHS_DIR, load_graph_doc
 
 pytestmark = pytest.mark.unit
 
@@ -26,8 +27,14 @@ def _clock() -> FixedClock:
     return FixedClock(datetime(2026, 7, 13, tzinfo=UTC))
 
 
+def _bas_dwf_doc() -> GraphDoc:
+    """The packaged ``bas-dwf`` lane — the richest packaged fixture for reify assertions:
+    a worker cycle with arrival addenda plus a hub-executed ``deliver`` node."""
+    return load_graph_doc(_GRAPHS_DIR / "basic-development-workflow" / "graph.yaml")
+
+
 def test_reify_mints_ids_and_splits_choices_into_edges() -> None:
-    doc = load_default_graph_doc()
+    doc = _bas_dwf_doc()
     graph = reify_graph(doc, _clock())
 
     assert graph.graph_id.startswith("gr_")
@@ -40,7 +47,7 @@ def test_reify_mints_ids_and_splits_choices_into_edges() -> None:
     assert build.judged_by is JudgedBy.WORKER
 
     # build's two fused choices reify into two choices and two edges (pass -> review,
-    # fail -> build) in the P7 build -> review -> deliver default graph.
+    # fail -> build) in the bas-dwf lane.
     assert {c.name for c in build.choices} == {"pass", "fail"}
     assert all(c.choice_id.startswith("cho_") for c in build.choices)
     targets = {e.to_node_name for e in graph.edges_from(build.node_id)}
@@ -51,9 +58,9 @@ def test_reify_mints_ids_and_splits_choices_into_edges() -> None:
     # machinery-applied default.
     assert {c.name for c in deliver.choices} == {"landed", "conflict"}
     deliver_targets = {e.to_node_name for e in graph.edges_from(deliver.node_id)}
-    assert deliver_targets == {RESERVED_TERMINAL, "build"}
-    assert deliver.run and deliver.run[0].command == "python3 -m blizzard.hub.graphs.scripts.land_default"
-    # The default graph authors no bounce_cap (#64) — it reifies as None, so the
+    assert deliver_targets == {"retrospective", "pre-push"}
+    assert deliver.run and deliver.run[0].command == "python3 -m blizzard.hub.graphs.scripts.land_ff"
+    # The lane authors no bounce_cap (#64) — it reifies as None, so the
     # executor falls back to the fleet-wide default.
     assert deliver.bounce_cap is None
 
@@ -120,7 +127,7 @@ def test_reify_defaults_poll_interval_and_timeout_to_none() -> None:
 
 
 def test_reify_preserves_judgement_prompt_and_addendum() -> None:
-    doc = load_default_graph_doc()
+    doc = _bas_dwf_doc()
     graph = reify_graph(doc, _clock())
     build = graph.node_by_name("build")
     assert build is not None
@@ -130,7 +137,7 @@ def test_reify_preserves_judgement_prompt_and_addendum() -> None:
 
 
 def test_edge_for_choice_resolves_by_name() -> None:
-    graph = reify_graph(load_default_graph_doc(), _clock())
+    graph = reify_graph(_bas_dwf_doc(), _clock())
     build = graph.node_by_name("build")
     assert build is not None
     edge = graph.edge_for_choice(build.node_id, "pass")

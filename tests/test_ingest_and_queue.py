@@ -110,7 +110,7 @@ def test_list_row_is_board_legible(tmp_path: Path) -> None:
     unconfigured_id = hub.services.ingest.ingest([unconfigured], graph=graph)
 
     rows = {r["chunk_id"]: r for r in hub.client.get("/api/chunks").json()}
-    assert rows[chunk_id]["current_node_name"] == "build"  # the entry node, pre-first-transition
+    assert rows[chunk_id]["current_node_name"] == "triage"  # the entry node, pre-first-transition
     assert rows[chunk_id]["work_refs"] == [
         {**_P1, "label": "default#1", "web_url": "http://forge.local/acme/widget/issues/1"}
     ]

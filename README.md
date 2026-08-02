@@ -91,7 +91,7 @@ The same `init` / `migrate` / `host` verbs exist under `blizzard runner`. A daem
 
 ## The standing e2e smoke suite (`mise run e2e`)
 
-`mise run e2e` (`BLIZZARD_E2E=1 uv run pytest tests/e2e/`) is the standing end-to-end smoke suite — the acceptance criterion for the whole system. It grew from the P6 acceptance loop to **eight** full-stack scenarios over the `build → review → deliver` default shape and its human-loop and operator-surface variants:
+`mise run e2e` (`BLIZZARD_E2E=1 uv run pytest tests/e2e/`) is the standing end-to-end smoke suite — the acceptance criterion for the whole system. It grew from the P6 acceptance loop to **eight** full-stack scenarios over the canonical `build → review → deliver` delivery shape and its human-loop and operator-surface variants:
 
 1. `test_acceptance_loop` — the happy path: one chunk travels ingest → acquire → mock-scripted commit → review (PASS) → deliver → landed on bare `main`;
 2. `test_review_cycle_e2e` — review fails once, the findings + prompt_addendum thread back into build, then it lands on the second pass;

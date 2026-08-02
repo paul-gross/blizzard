@@ -100,8 +100,9 @@ def test_adv_dwf_declares_the_three_tiers_and_bounds_only_the_mechanical_one() -
         (
             "default",
             {
-                "build": (SessionMode.RESUME, "code"),
-                "review": (SessionMode.FRESH, "gate"),
+                # The triage router's one node: always a fresh cold read through the
+                # advanced-tier `gate` pool — a routed chunk leaves this graph.
+                "triage": (SessionMode.FRESH, "gate"),
             },
         ),
         (

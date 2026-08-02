@@ -65,7 +65,7 @@ const DEFAULT_LIKE: GraphView = {
 };
 
 describe('layoutGraph', () => {
-  it('lays out the default-delivery shape: 3 node boxes, done sink, one self-loop extracted', () => {
+  it('lays out a build-review-deliver shape: 3 node boxes, done sink, one self-loop extracted', () => {
     const outcome = layoutGraph(DEFAULT_LIKE, measure);
     expect(outcome.ok).toBe(true);
     if (!outcome.ok) return;
