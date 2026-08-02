@@ -138,6 +138,55 @@ def test_hub_init_produces_a_config_a_copy_can_migrate_from_with_no_flags(tmp_pa
     assert result.exit_code == 0, result.output
 
 
+def test_hub_init_refuses_a_db_url_copied_from_elsewhere(tmp_path: Path) -> None:
+    """`init` is idempotent and re-running it on an already-inited directory takes the
+    same ``HubConfig.load`` path `migrate`/`host` do — it must refuse the same way rather
+    than crash with a raw traceback, and accept the same escape hatch."""
+    runner = CliRunner()
+    live = tmp_path / "live"
+    assert runner.invoke(blizzard, ["hub", "init", str(live)]).exit_code == 0
+    live_db_url = f"sqlite:///{(live / 'data' / 'hub.db').resolve()}"
+
+    copy_dir = tmp_path / "copy"
+    shutil.copytree(live, copy_dir)
+    config_path = copy_dir / "blizzard-hub.toml"
+    config_path.write_text(f'db_url = "{live_db_url}"\n' + config_path.read_text())
+
+    refused = runner.invoke(blizzard, ["hub", "init", str(copy_dir)])
+    assert refused.exit_code != 0, f"init silently touched a db_url outside its directory:\n{refused.output}"
+    assert "Traceback" not in refused.output, f"init must raise a clean ClickException, not crash:\n{refused.output}"
+    assert str(copy_dir) in refused.output
+    assert live_db_url.removeprefix("sqlite:///") in refused.output
+
+    allowed = runner.invoke(blizzard, ["hub", "init", str(copy_dir), "--allow-external-db"])
+    assert allowed.exit_code == 0, allowed.output
+
+
+def test_dev_check_invariants_refuses_a_hub_db_url_copied_from_elsewhere(tmp_path: Path) -> None:
+    """`blizzard dev check-invariants --hub-dir` loads a `HubConfig` the same way `migrate`/
+    `host`/`init` do, and must refuse a copied-in external db_url the same clean way rather
+    than crash — it accepts the same escape hatch too."""
+    runner = CliRunner()
+    live = tmp_path / "live"
+    assert runner.invoke(blizzard, ["hub", "init", str(live)]).exit_code == 0
+    live_db_url = f"sqlite:///{(live / 'data' / 'hub.db').resolve()}"
+
+    copy_dir = tmp_path / "copy"
+    shutil.copytree(live, copy_dir)
+    config_path = copy_dir / "blizzard-hub.toml"
+    config_path.write_text(f'db_url = "{live_db_url}"\n' + config_path.read_text())
+
+    refused = runner.invoke(blizzard, ["dev", "check-invariants", "--hub-dir", str(copy_dir)])
+    assert refused.exit_code != 0, f"check-invariants silently touched a db_url outside its directory:\n{refused.output}"
+    assert "Traceback" not in refused.output, f"must raise a clean ClickException, not crash:\n{refused.output}"
+    assert str(copy_dir) in refused.output
+
+    allowed = runner.invoke(
+        blizzard, ["dev", "check-invariants", "--hub-dir", str(copy_dir), "--allow-external-db"]
+    )
+    assert allowed.exit_code == 0, allowed.output
+
+
 def test_runner_init(tmp_path: Path) -> None:
     root = str(tmp_path / "runner")
     result = CliRunner().invoke(blizzard, ["runner", "init", root])

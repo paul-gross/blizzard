@@ -196,20 +196,24 @@ def hub(ctx: click.Context) -> None:
         ctx.invoke(host)
 
 
-@hub.command()
-@click.argument("directory", default=DEFAULT_DIR, envvar=ENV_HUB_DIR)
-def init(directory: str) -> None:
-    """Scaffold config + data dir + a migrated store under DIRECTORY. Idempotent.
-
-    DIRECTORY defaults to $BZ_HUB_DIR, then the cwd."""
-    config = init_environment(Path(directory))
-    revision = migration_runner(config).current_revision()
-    click.echo(f"hub runtime ready at {config.root} (store revision {revision})")
-
-
 _ALLOW_EXTERNAL_DB_HELP = (
     "Proceed even if the config's db_url names a database outside this directory (issue #234's --dir isolation guard)."
 )
+
+
+@hub.command()
+@click.argument("directory", default=DEFAULT_DIR, envvar=ENV_HUB_DIR)
+@click.option("--allow-external-db", "allow_external_db", is_flag=True, default=False, help=_ALLOW_EXTERNAL_DB_HELP)
+def init(directory: str, allow_external_db: bool) -> None:
+    """Scaffold config + data dir + a migrated store under DIRECTORY. Idempotent.
+
+    DIRECTORY defaults to $BZ_HUB_DIR, then the cwd."""
+    try:
+        config = init_environment(Path(directory), allow_external_db=allow_external_db)
+    except ConfigError as exc:
+        raise click.ClickException(str(exc)) from exc
+    revision = migration_runner(config).current_revision()
+    click.echo(f"hub runtime ready at {config.root} (store revision {revision})")
 
 
 @hub.command("migrate")

@@ -25,12 +25,15 @@ def migration_runner(config: HubConfig) -> MigrationRunner:
     return MigrationRunner(script_location=MIGRATIONS_DIR, url=config.db_url)
 
 
-def init_environment(root: Path) -> HubConfig:
+def init_environment(root: Path, *, allow_external_db: bool = False) -> HubConfig:
     """Scaffold config + data dir + a migrated store under ``root``. Idempotent.
 
     Re-running reconciles: an existing config file is left untouched, the data dir
     is ensured, and the store is migrated to head — a no-op when already current
-    (the Alembic version table makes re-application safe).
+    (the Alembic version table makes re-application safe). The re-run's load is
+    guarded the same as ``migrate``/``host`` (issue #234): re-running ``init`` against
+    a directory copied from elsewhere, whose config still carries an absolute db_url
+    from the original, refuses rather than silently reconciling the original store.
     """
     root = root.resolve()
     root.mkdir(parents=True, exist_ok=True)
@@ -41,7 +44,7 @@ def init_environment(root: Path) -> HubConfig:
         config.config_path.write_text(config.to_toml())
         _log.info("hub config scaffolded", path=str(config.config_path))
     else:
-        config = HubConfig.load(root)
+        config = HubConfig.load(root, allow_external_db=allow_external_db)
 
     migration_runner(config).upgrade("head")
     _log.info("hub store migrated to head", root=str(root), db_url=config.db_url)

@@ -17,7 +17,7 @@ from pathlib import Path
 import click
 
 from blizzard.foundation.store.invariants import check_invariants
-from blizzard.hub.config import HubConfig
+from blizzard.hub.config import ConfigError, HubConfig
 from blizzard.runner.config import RunnerConfig
 
 
@@ -29,7 +29,15 @@ def dev() -> None:
 @dev.command("check-invariants")
 @click.option("--runner-dir", "runner_dir", default=None, help="Runner runtime directory to check.")
 @click.option("--hub-dir", "hub_dir", default=None, help="Hub runtime directory to check.")
-def check_invariants_cmd(runner_dir: str | None, hub_dir: str | None) -> None:
+@click.option(
+    "--allow-external-db",
+    "allow_external_db",
+    is_flag=True,
+    default=False,
+    help="Proceed even if --hub-dir's config names a database outside that directory "
+    "(issue #234's --dir isolation guard).",
+)
+def check_invariants_cmd(runner_dir: str | None, hub_dir: str | None, allow_external_db: bool) -> None:
     """Assert both stores' durable invariants (``bzh:invariant-checker``).
 
     Point at a runner runtime (``--runner-dir``), a hub runtime (``--hub-dir``), or both.
@@ -39,7 +47,11 @@ def check_invariants_cmd(runner_dir: str | None, hub_dir: str | None) -> None:
         raise click.UsageError("pass --runner-dir and/or --hub-dir")
 
     runner_db = RunnerConfig.load(Path(runner_dir)).db_url if runner_dir is not None else None
-    hub_db = HubConfig.load(Path(hub_dir)).db_url if hub_dir is not None else None
+    try:
+        hub_config = HubConfig.load(Path(hub_dir), allow_external_db=allow_external_db) if hub_dir is not None else None
+    except ConfigError as exc:
+        raise click.ClickException(str(exc)) from exc
+    hub_db = hub_config.db_url if hub_config is not None else None
 
     violations = check_invariants(runner_db_url=runner_db, hub_db_url=hub_db)
     if not violations:
