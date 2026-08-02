@@ -216,7 +216,7 @@ nodes:
           description: Every repo's PR merged cleanly into its base branch; the chunk closes with a retrospective.
           to: retrospective
         failure:
-          description: poll_timeout exceeded with a repo never going cleanly mergeable, or the land script crashed; routed to resolve to diagnose and repair without discarding the validated spine.
+          description: A repo's check run completed with a terminal conclusion (routed immediately, without waiting out poll_timeout), poll_timeout exceeded with a repo never going cleanly mergeable, or the land script crashed; routed to resolve to diagnose and repair without discarding the validated spine.
           to: resolve
 
   resolve:
