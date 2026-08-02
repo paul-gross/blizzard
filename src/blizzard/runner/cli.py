@@ -738,6 +738,50 @@ def artifact_commit(environment_id: str | None, repo: str, branch: str, commit_s
         raise click.ClickException(f"artifact commit: could not record {repo!r} ({exc})") from exc
 
 
+@runner.group("chunk")
+def chunk_group() -> None:
+    """Worker: read facts about the chunk this node-step belongs to (identity from the
+    environment).
+
+    Scope is ambient, like ``artifact`` — every verb acts on the worker's own lease,
+    resolved from ``BLIZZARD_LEASE_ID``/``BLIZZARD_LEASE_TOKEN``/``BLIZZARD_RUNNER_URL``
+    (all inherited at spawn) — so no verb takes a ``--lease``/``--chunk`` flag by which a
+    worker could name another chunk.
+    """
+
+
+@chunk_group.command("history")
+def chunk_history() -> None:
+    """Worker: read this chunk's own transition history as kind-discriminated JSON
+    (issue #237).
+
+    A pure client of the runner's local API: the runner resolves the lease in
+    ``BLIZZARD_LEASE_ID`` to its chunk, proxies to the hub's chunk-detail read (runner
+    principal), and prints the merged, oldest-first timeline — one row per accepted
+    transition, cross-graph migration, or delivery bounce, each carrying its own
+    ``kind`` (``transition``/``migration``/``bounce``). A bounced attempt that produced
+    no artifact still appears as a row. The worker holds no hub credential.
+
+    Does **not** include the in-flight node-step this call is itself part of — a
+    transition is recorded only once an attempt completes, so this call's own step is
+    not a gap in the history, just not there yet.
+    """
+    lease_id, runner_url, lease_token = _worker_lease_identity("chunk history")
+    try:
+        resp = httpx.get(
+            f"{runner_url.rstrip('/')}/api/leases/{lease_id}/history",
+            headers={"X-Blizzard-Lease-Token": lease_token} if lease_token else {},
+            timeout=_WORK_ITEMS_TIMEOUT,
+        )
+        resp.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        detail = _problem_detail(exc.response) or str(exc)
+        raise click.ClickException(f"chunk history: could not read the history ({detail})") from exc
+    except httpx.HTTPError as exc:
+        raise click.ClickException(f"chunk history: could not read the history ({exc})") from exc
+    click.echo(resp.text)
+
+
 @runner.command(hidden=True)
 @click.option("--name", required=True, help="The `produces:` name this content is submitted for.")
 @click.pass_context
