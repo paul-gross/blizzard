@@ -1,5 +1,7 @@
 # Plan — re-entry after a failed gate
 
-You are re-entering the **plan** node after the plan-review gate returned `must-fix`. The gate's `plan-findings` asset is attached in this envelope: it lists every blocking finding against the verifiability and architecture gates. Revise the plan to address each finding — do not restart from scratch — and declare done so the gate can re-review.
+You are re-entering the **plan** node after the plan-review gate returned `must-fix`. The gate's `plan-findings` asset is attached in this envelope: it lists every finding against the verifiability and architecture gates, docket-formatted per [../docket.md](../docket.md) — blocking and should-fix alike. Revise the plan to address each blocking finding — do not restart from scratch — and declare done so the gate can re-review. Address a should-fix finding too where it's cheap; where it isn't, leave it riding forward for build.
 
 Address findings by simplifying where you can — cut or tighten before you add. A plan that grows on every round is itself a signal: if your revisions have become guard text about the plan's own criteria rather than changed substance, stop iterating and raise it with `blizzard runner ask` instead of drafting another round.
+
+For every finding you address, record a disposition in this node-step's own `retrospective` asset, per [../docket.md](../docket.md): cite it `plan-review:<id>`, and mark it `fixed-in-chunk` (with the commit hash), `filed-as-issue` (with the issue URL), or `accepted-wont-fix` (with a one-line reason). Leaving a should-fix finding undisposed is fine — the retrospective node folds the docket and catches whatever is still open.
