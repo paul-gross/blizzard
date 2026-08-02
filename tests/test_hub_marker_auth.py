@@ -18,8 +18,17 @@ from typing import Any
 import pytest
 
 from blizzard.auth_core import Role
+from blizzard.hub.delivery.hub_node import ENV_MARKER_CALLBACK_URL, ENV_MARKER_TOKEN
 from blizzard.hub.graphs.scripts.land_common import MarkerWriteError, marker_recorder
-from tests.support import HubHarness, build_hub, pointer_token, seed_session, seed_user
+from tests.support import (
+    FakeHubCommandRunner,
+    HubHarness,
+    build_hub,
+    pointer_token,
+    report_lease,
+    seed_session,
+    seed_user,
+)
 
 pytestmark = pytest.mark.component
 
@@ -189,3 +198,134 @@ def test_the_land_scripts_own_recorder_fails_loudly_when_the_hub_refuses(tmp_pat
         record("acme-widget", "sha:abc123")
 
     assert _recorded_marker_names(hub, chunk_id) == set()
+
+
+# -- the credential the executor actually injects, spent on the actual route ---------
+#
+# The two tests above build their recorder from a token the *test* mints off
+# ``hub.services.marker_authority`` — the same instance the route's dependency reads —
+# and from a callback URL the *test* formats. Neither reaches the executor, so two
+# claims the shipped credential depends on are asserted nowhere:
+#
+#   * ``build_services`` hands the executor and ``HubServices`` the **same**
+#     ``MarkerAuthority``. Give the executor its own instance and the whole
+#     unit+component tier stays green while every real land against an ``oauth`` hub
+#     401s — the exact production symptom issue #230 exists to close.
+#   * ``HubNodeExecutor._marker_callback_url``'s ``?node_id=&epoch=`` — the triple the
+#     route re-derives to verify against — names the same node id and epoch the
+#     executor ``issue()``d the token under.
+#
+# The test below is the only place a token travels the whole shipped path: minted by
+# the executor, injected into a real ``run:`` step's env, spent by the real
+# ``marker_recorder`` on the real route, against a hub with authentication on. Its
+# `run:` step stands in for the land script exactly where a land script sits — the
+# subprocess boundary is the one thing it cannot reproduce in-process, and nothing
+# about the credential lives there.
+
+_HUB_NODE_GRAPH_YAML = """
+name: default-delivery
+entry: build
+nodes:
+  build:
+    executor: runner
+    prompt: |
+      Build the change.
+    judgement:
+      prompt: |
+        Assess the build.
+      choices:
+        pass:
+          description: Complete and green.
+          to: merge
+        fail:
+          description: Incomplete.
+          to: build
+  merge:
+    executor: hub
+    run:
+      - name: land
+        command: land-the-repo
+        produces: merged
+    judgement:
+      choices:
+        success:
+          description: Landed.
+          to: done
+        failure:
+          description: Failed to land.
+          to: build
+"""
+
+
+def _drive_to_the_hub_node(hub: HubHarness) -> str:
+    """Ingest, promote, claim, and pass ``build`` so the completion's own apply runs the
+    hub node executor synchronously — returning the chunk id.
+
+    Only the three human-plane calls carry the admin session; the ``/api/fleet`` calls
+    are the runner plane, and deliberately none of them sets a cookie on ``hub.client``
+    itself. A client-wide cookie would ride the nested marker POST too, and the human
+    ``require(CHUNK_CONTROL)`` fallback would then grant a write the marker token was
+    supposed to be the only credential for — passing the test for the wrong reason.
+    """
+    admin = seed_user(hub, username="root", role=Role.SUPERUSER)
+    cookie = _cookie(seed_session(hub, admin))
+    assert (
+        hub.client.post("/api/graphs", json={"definition_yaml": _HUB_NODE_GRAPH_YAML}, headers=cookie).status_code
+        == 201
+    )
+    resp = hub.client.post("/api/chunks", json={"tokens": [pointer_token(_POINTER)]}, headers=cookie)
+    assert resp.status_code == 201, resp.text
+    chunk_id = resp.json()["chunk_id"]
+    assert hub.client.post(f"/api/chunks/{chunk_id}/promote", headers=cookie).status_code == 202
+    claim = hub.client.post(
+        "/api/fleet/routes",
+        json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["env-a"]},
+    )
+    assert claim.status_code == 201, claim.text
+    build_node_id = claim.json()["envelope"]["node"]["node_id"]
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+    apply = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions",
+        json={
+            "choice": "pass",
+            "epoch": 1,
+            "runner_id": "r1",
+            "from_node_id": build_node_id,
+            "check_results": [],
+            "artifacts": [],
+        },
+    )
+    assert apply.json()["outcome"] == "hub_node_taken", apply.text
+    return chunk_id
+
+
+def test_the_token_the_executor_injects_authorizes_the_route_it_names(tmp_path: Path) -> None:
+    """A hub node step spends the credential its own executor minted, and the marker
+    lands — on a hub with authentication on."""
+    runner = FakeHubCommandRunner()
+    hub = build_hub(tmp_path, auth_mode="oauth", hub_command_runner=runner)
+    write_errors: list[MarkerWriteError] = []
+
+    def land_the_repo(_command: str) -> None:
+        """Stand in for a land script at the exact point one runs: build the shipped
+        ``marker_recorder`` out of nothing but the injected env, and spend it."""
+        env = runner.calls[-1][2]
+        record = marker_recorder(
+            callback_url=env[ENV_MARKER_CALLBACK_URL],
+            token=env.get(ENV_MARKER_TOKEN, ""),
+            request=_hub_request(hub),
+        )
+        try:
+            record("acme-widget", "sha:abc123")
+        except MarkerWriteError as exc:
+            # Captured rather than raised: an exception here escapes through the
+            # executor into the completion request, and the test would fail on a 500
+            # naming neither the status nor the refusal.
+            write_errors.append(exc)
+
+    runner.before_run = land_the_repo
+
+    chunk_id = _drive_to_the_hub_node(hub)
+
+    assert write_errors == []
+    assert _MARKER_NAME in _recorded_marker_names(hub, chunk_id)
