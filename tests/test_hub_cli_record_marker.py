@@ -7,18 +7,29 @@ command authorizes its write with the run's marker capability token
 :data:`~blizzard.hub.api.marker_auth._MARKER_TOKEN_HEADER` — the same constant the
 route reads (issue #240) — and refuses to post at all when either the callback URL or
 the token is missing from the environment.
-"""
+
+The unit tests above stub ``httpx.post`` and only ever capture the header the CLI
+built from that constant, which proves the CLI *sends* the header the constant
+currently names but nothing about whether a real gate reads the same name — since the
+import binds them structurally, that pair can't drift, but the component test below
+still proves the live end-to-end claim directly: the CLI's write, unmodified, is
+accepted by a real ``auth.mode="oauth"`` hub and durably recorded, the same way
+``tests/test_hub_marker_auth.py``'s ``test_the_token_the_executor_injects_authorizes_the_route_it_names``
+proves the land-script side (issue #240 AC3)."""
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
 from click.testing import CliRunner
 
 import blizzard.hub.cli as hub_cli
+from blizzard.auth_core import Role
 from blizzard.hub.api.marker_auth import _MARKER_TOKEN_HEADER
 from blizzard.hub.cli import hub as hub_group
+from tests.support import build_hub, pointer_token, seed_session, seed_user
 
 pytestmark = pytest.mark.unit
 
@@ -82,3 +93,40 @@ def test_record_marker_refuses_without_a_token(monkeypatch: pytest.MonkeyPatch) 
 
     assert result.exit_code != 0
     assert "BZ_HUB_MARKER_TOKEN" in result.output
+
+
+@pytest.mark.component
+def test_record_marker_is_accepted_by_a_real_oauth_hub(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The live end-to-end proof: the CLI's own request, header and all, is accepted by
+    a real hub with authentication genuinely on, and the marker lands durably —
+    mirroring ``tests/test_hub_marker_auth.py``'s land-script proof for the CLI path.
+
+    ``httpx.post`` is still stubbed (the CLI makes a real network call otherwise, and
+    the wired hub app here has no live socket) — but the stub forwards to the app's own
+    ``TestClient`` instead of faking a response, so the request actually runs through
+    ``require_marker_authority`` and the real marker-write route."""
+    hub = build_hub(tmp_path, auth_mode="oauth")
+    admin = seed_user(hub, username="root", role=Role.SUPERUSER)
+    admin_token = seed_session(hub, admin)
+    resp = hub.client.post(
+        "/api/chunks",
+        json={"tokens": [pointer_token({"source": "default", "ref": "1"})]},
+        headers={"Cookie": f"bz_session={admin_token}"},
+    )
+    assert resp.status_code == 201, resp.text
+    chunk_id = resp.json()["chunk_id"]
+    node_id, epoch = "nd_merge", 1
+    token = hub.services.marker_authority.issue(chunk_id, node_id=node_id, epoch=epoch)
+    callback_url = f"/api/chunks/{chunk_id}/hub-markers?node_id={node_id}&epoch={epoch}"
+    _set_env(monkeypatch, callback_url=callback_url, token=token)
+
+    def relay_to_the_real_hub(url: str, *, json: dict[str, Any], headers: dict[str, str], timeout: float):
+        return hub.client.post(url, json=json, headers=headers)
+
+    monkeypatch.setattr(hub_cli.httpx, "post", relay_to_the_real_hub)
+
+    result = CliRunner().invoke(hub_group, ["record-marker", "merged/acme-widget", "sha:abc123"])
+
+    assert result.exit_code == 0, result.output
+    names = {a.name for a in hub.services.chunks.load_artifacts(chunk_id)}
+    assert "merged/acme-widget" in names
