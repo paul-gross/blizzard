@@ -10,9 +10,8 @@ token-authorized shape.
 The read is layered exactly like the work-item proxy (``work_items.py``): the worker never
 holds hub credentials. This route authorizes the lease token minted at the worker's own
 spawn (the same ``X-Blizzard-Lease-Token`` / ``Authorization: Bearer`` the attach edge
-takes, via :func:`~blizzard.runner.api.lease_token.presented_lease_token` +
-:func:`~blizzard.runner.domain.lease_auth.check_lease_token`), resolves the lease to its
-``chunk_id`` through the read-only store on ``app.state``, and forwards to the hub's
+takes, via :func:`~blizzard.runner.api.lease_scope.authorized_lease`), resolves the lease
+to its ``chunk_id`` through the read-only store on ``app.state``, and forwards to the hub's
 runner-authenticated envelope route (``GET /api/fleet/chunks/{id}/envelope``) as the
 runner principal (``config.auth_headers()``, issue #86b — the same one-credential path
 every runner->hub call rides). The artifacts are filtered straight off the envelope; no
@@ -35,37 +34,14 @@ from fastapi import APIRouter, Request, status
 from fastapi.exceptions import HTTPException
 
 from blizzard.foundation.logging import get_logger
-from blizzard.runner.api.lease_token import presented_lease_token
+from blizzard.runner.api.lease_scope import authorized_lease, upstream_detail
 from blizzard.runner.config import RunnerConfig
-from blizzard.runner.domain.lease_auth import check_lease_token
-from blizzard.runner.store.repository import IReadRunnerStore, LeaseRecord
 from blizzard.wire.envelope import EnvelopeArtifact, NodeEnvelope
 
 router = APIRouter(prefix="/api", tags=["runner"])
 
 _log = get_logger("blizzard.runner.api.artifacts")
 _HUB_TIMEOUT = 15.0
-
-
-def _authorized_lease(lease_id: str, request: Request) -> LeaseRecord:
-    """Resolve ``lease_id`` to its active lease and check the presented token, or raise
-    the store-free ``503`` / unknown-lease ``404`` / bad-token ``403``."""
-    store: IReadRunnerStore | None = getattr(request.app.state, "runner_store", None)
-    if store is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="runner store not wired — start via `blizzard runner host`",
-        )
-    lease = store.active_lease(lease_id)
-    if lease is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"no active lease {lease_id}")
-    if not check_lease_token(
-        presented_token=presented_lease_token(request), stored_hash=store.lease_token_hash(lease_id)
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail=f"presented token does not authorize lease {lease_id}"
-        )
-    return lease
 
 
 def _envelope_artifacts(chunk_id: str, request: Request) -> list[EnvelopeArtifact]:
@@ -84,7 +60,7 @@ def _envelope_artifacts(chunk_id: str, request: Request) -> list[EnvelopeArtifac
         _log.error("artifacts proxy could not reach the hub", chunk_id=chunk_id, error=str(exc))
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"hub unreachable: {exc}") from exc
     if upstream.status_code != status.HTTP_200_OK:
-        raise HTTPException(status_code=upstream.status_code, detail=_upstream_detail(upstream))
+        raise HTTPException(status_code=upstream.status_code, detail=upstream_detail(upstream))
     return NodeEnvelope.model_validate(upstream.json()).artifacts
 
 
@@ -92,7 +68,7 @@ def _envelope_artifacts(chunk_id: str, request: Request) -> list[EnvelopeArtifac
 def list_artifacts(lease_id: str, request: Request) -> list[EnvelopeArtifact]:
     """The worker's own node-step inputs — every artifact resolved latest-by-epoch,
     both kinds, kind-discriminated."""
-    lease = _authorized_lease(lease_id, request)
+    lease = authorized_lease(lease_id, request)
     return _envelope_artifacts(lease.chunk_id, request)
 
 
@@ -105,7 +81,7 @@ def get_artifact(lease_id: str, name: str, request: Request, node: str | None = 
     bare NAME that resolves to more than one candidate is ``409``, naming the
     producing nodes, rather than silently returning an arbitrary one; ``?node=`` picks
     a specific one."""
-    lease = _authorized_lease(lease_id, request)
+    lease = authorized_lease(lease_id, request)
     matches = [a for a in _envelope_artifacts(lease.chunk_id, request) if a.name == name]
     if node is not None:
         matches = [a for a in matches if a.node_name == node]
@@ -122,14 +98,3 @@ def get_artifact(lease_id: str, name: str, request: Request, node: str | None = 
             "(pass --node to disambiguate)",
         )
     return matches[0]
-
-
-def _upstream_detail(response: httpx.Response) -> str:
-    """The hub's error detail, unwrapped from its JSON body when present."""
-    try:
-        payload = response.json()
-    except ValueError:
-        return response.text
-    if isinstance(payload, dict) and "detail" in payload:
-        return str(payload["detail"])
-    return response.text

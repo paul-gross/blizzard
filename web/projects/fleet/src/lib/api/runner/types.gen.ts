@@ -620,6 +620,60 @@ export type HeartbeatResponse = {
 };
 
 /**
+ * HistoryRowView
+ *
+ * One row of a chunk's own timeline, as a worker reads it — a transition, a
+ * cross-graph migration, or a delivery bounce, merged oldest-first by ``recorded_at``.
+ *
+ * ``from_node``/``to_node`` are human-legible labels: a transition's node names, or (for
+ * a migration) the ``graph/node`` hop the board itself renders
+ * (``from_graph/from_node --choice--> to_graph/landed_node``, see ``MigrationView``).
+ * Both null for a bounce, which names no node. ``epoch`` is populated only for a
+ * transition row — the wire's own ``MigrationView``/``BounceView`` carry no epoch to
+ * project. ``cause``/``detail`` carry a bounce's kick-back cause and its raw envelope, or
+ * a migration's ``source`` (``authored-edge``/``intent``/``follow-latest``) in
+ * ``detail``; both null on a transition row.
+ */
+export type HistoryRowView = {
+    /**
+     * Cause
+     */
+    cause?: string | null;
+    /**
+     * Choice
+     */
+    choice?: string | null;
+    /**
+     * Detail
+     */
+    detail?: string | null;
+    /**
+     * Epoch
+     */
+    epoch?: number | null;
+    /**
+     * From Node
+     */
+    from_node?: string | null;
+    /**
+     * Graph Name
+     */
+    graph_name?: string | null;
+    /**
+     * Kind
+     */
+    kind: 'transition' | 'migration' | 'bounce';
+    /**
+     * Recorded At
+     */
+    recorded_at: string;
+    /**
+     * To Node
+     */
+    to_node?: string | null;
+};
+
+/**
  * HubConnectivityView
  *
  * Hub reachability (derived, not probed) plus the outbound backlog depth.
@@ -1973,6 +2027,38 @@ export type RecordGitCommitDeclarationApiLeasesLeaseIdGitCommitsPostResponses = 
 };
 
 export type RecordGitCommitDeclarationApiLeasesLeaseIdGitCommitsPostResponse = RecordGitCommitDeclarationApiLeasesLeaseIdGitCommitsPostResponses[keyof RecordGitCommitDeclarationApiLeasesLeaseIdGitCommitsPostResponses];
+
+export type GetHistoryApiLeasesLeaseIdHistoryGetData = {
+    body?: never;
+    path: {
+        /**
+         * Lease Id
+         */
+        lease_id: string;
+    };
+    query?: never;
+    url: '/api/leases/{lease_id}/history';
+};
+
+export type GetHistoryApiLeasesLeaseIdHistoryGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetHistoryApiLeasesLeaseIdHistoryGetError = GetHistoryApiLeasesLeaseIdHistoryGetErrors[keyof GetHistoryApiLeasesLeaseIdHistoryGetErrors];
+
+export type GetHistoryApiLeasesLeaseIdHistoryGetResponses = {
+    /**
+     * Response Get History Api Leases  Lease Id  History Get
+     *
+     * Successful Response
+     */
+    200: Array<HistoryRowView>;
+};
+
+export type GetHistoryApiLeasesLeaseIdHistoryGetResponse = GetHistoryApiLeasesLeaseIdHistoryGetResponses[keyof GetHistoryApiLeasesLeaseIdHistoryGetResponses];
 
 export type SessionEndApiLeasesLeaseIdSessionEndPostData = {
     body?: never;
