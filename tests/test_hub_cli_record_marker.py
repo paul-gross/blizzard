@@ -31,8 +31,6 @@ from blizzard.hub.api.marker_auth import _MARKER_TOKEN_HEADER
 from blizzard.hub.cli import hub as hub_group
 from tests.support import build_hub, pointer_token, seed_session, seed_user
 
-pytestmark = pytest.mark.unit
-
 _CALLBACK_URL = "http://callback/hub-markers"
 _MARKER_TOKEN = "test-marker-token"
 
@@ -56,6 +54,7 @@ def _set_env(monkeypatch: pytest.MonkeyPatch, *, callback_url: str | None, token
         monkeypatch.setenv("BZ_HUB_MARKER_TOKEN", token)
 
 
+@pytest.mark.unit
 def test_record_marker_sends_the_token_header(monkeypatch: pytest.MonkeyPatch) -> None:
     _set_env(monkeypatch, callback_url=_CALLBACK_URL, token=_MARKER_TOKEN)
     calls: list[dict[str, Any]] = []
@@ -75,6 +74,7 @@ def test_record_marker_sends_the_token_header(monkeypatch: pytest.MonkeyPatch) -
     assert calls[0]["headers"][_MARKER_TOKEN_HEADER] == _MARKER_TOKEN
 
 
+@pytest.mark.unit
 def test_record_marker_refuses_without_a_callback_url(monkeypatch: pytest.MonkeyPatch) -> None:
     _set_env(monkeypatch, callback_url=None, token=_MARKER_TOKEN)
     monkeypatch.setattr(hub_cli.httpx, "post", lambda *a, **k: pytest.fail("must not post without a callback URL"))
@@ -85,6 +85,7 @@ def test_record_marker_refuses_without_a_callback_url(monkeypatch: pytest.Monkey
     assert "BZ_HUB_MARKER_CALLBACK_URL" in result.output
 
 
+@pytest.mark.unit
 def test_record_marker_refuses_without_a_token(monkeypatch: pytest.MonkeyPatch) -> None:
     _set_env(monkeypatch, callback_url=_CALLBACK_URL, token=None)
     monkeypatch.setattr(hub_cli.httpx, "post", lambda *a, **k: pytest.fail("must not post without a token"))
