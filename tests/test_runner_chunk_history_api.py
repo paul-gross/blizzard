@@ -25,8 +25,7 @@ from blizzard.runner.store.repository import NewLease
 from blizzard.wire.chunk import BounceView, MigrationView, TransitionView
 from blizzard.wire.history import ChunkHistoryView, history_rows
 from tests.runner_fakes import make_store
-
-pytestmark = pytest.mark.unit
+from tests.support import build_hub, pointer_token, report_lease
 
 _NOW = datetime(2026, 7, 21, 12, 0, 0, tzinfo=UTC)
 _TOKEN = "the-lease-token"
@@ -97,6 +96,7 @@ _DETAIL: dict[str, object] = {
 # --------------------------------------------------------------------------- #
 
 
+@pytest.mark.unit
 def test_history_rows_merges_all_three_kinds_oldest_first() -> None:
     detail = ChunkHistoryView.model_validate(_DETAIL)
     rows = history_rows(detail)
@@ -109,6 +109,7 @@ def test_history_rows_merges_all_three_kinds_oldest_first() -> None:
     assert [r.kind for r in rows] == ["migration", "transition", "bounce", "transition"]
 
 
+@pytest.mark.unit
 def test_a_bounced_attempt_with_no_artifact_is_still_a_row() -> None:
     """#237 AC3: a bounce that produced no artifact anywhere in the envelope still
     appears on the timeline — it carries its own kick-back cause."""
@@ -122,6 +123,7 @@ def test_a_bounced_attempt_with_no_artifact_is_still_a_row() -> None:
     assert rows[0].from_node is None and rows[0].to_node is None
 
 
+@pytest.mark.unit
 def test_a_migration_becomes_its_own_row_with_a_graph_hop_label() -> None:
     detail = ChunkHistoryView(
         migrations=[
@@ -149,6 +151,7 @@ def test_a_migration_becomes_its_own_row_with_a_graph_hop_label() -> None:
     assert rows[0].epoch is None
 
 
+@pytest.mark.unit
 def test_a_transition_row_carries_epoch_and_choice() -> None:
     detail = ChunkHistoryView(
         history=[
@@ -346,3 +349,128 @@ def test_hub_status_passes_through_verbatim(tmp_path: Path, monkeypatch: pytest.
         resp = client.get("/api/leases/lease_1/history", headers={"X-Blizzard-Lease-Token": _TOKEN})
     assert resp.status_code == 404
     assert resp.json()["detail"] == "no such chunk"
+
+
+# --------------------------------------------------------------------------- #
+# The full round trip — a real hub, a real bounce loop, matched row-for-row
+# --------------------------------------------------------------------------- #
+
+_SCENARIO_YAML = """
+name: default-delivery
+entry: build
+nodes:
+  build:
+    executor: runner
+    prompt: |
+      Build the change.
+    judgement:
+      prompt: |
+        Assess the build.
+      choices:
+        pass:
+          description: Complete and green.
+          to: review
+        fail:
+          description: Incomplete.
+          to: build
+  review:
+    executor: runner
+    prompt: |
+      Review the change.
+    judgement:
+      prompt: |
+        Assess the review.
+      choices:
+        pass:
+          description: Approved.
+          to: done
+        fail:
+          description: Needs another pass.
+          to: build
+"""
+
+
+def _step(node_id: str, *, epoch: int, choice: str) -> dict:
+    return {"choice": choice, "epoch": epoch, "runner_id": "r1", "from_node_id": node_id}
+
+
+@pytest.mark.component
+def test_a_workers_history_read_matches_the_transitions_the_hub_recorded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#237 AC5: drive a chunk through a bounce loop (build -> review -> build -> review
+    -> done) against a **real** hub app, then read that same chunk's history through the
+    runner's lease-scoped proxy — dispatched into the hub's own ``TestClient`` rather than
+    a canned payload — and assert row-for-row equality with the hub's own recorded
+    ``ChunkDetail.history``, including the review-fail attempt that produced no artifact
+    anywhere in the aggregate (#237 AC3)."""
+    hub = build_hub(tmp_path)
+    assert hub.client.post("/api/graphs", json={"definition_yaml": _SCENARIO_YAML}).status_code == 201
+    chunk_id = hub.client.post(
+        "/api/chunks", json={"tokens": [pointer_token({"source": "default", "ref": "1"})]}
+    ).json()["chunk_id"]
+    claim = hub.client.post(
+        "/api/fleet/routes",
+        json={"chunk_id": chunk_id, "runner_id": "r1", "workspace_id": "w1", "environment_ids": ["e1"]},
+    )
+    build_node_id = claim.json()["envelope"]["node"]["node_id"]
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+
+    step1 = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions", json=_step(build_node_id, epoch=1, choice="pass")
+    )
+    review_node_id = step1.json()["next_envelope"]["node"]["node_id"]
+    report_lease(hub, chunk_id, epoch=2, seq=2)
+
+    step2 = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions", json=_step(review_node_id, epoch=2, choice="fail")
+    )
+    build_node_id_2 = step2.json()["next_envelope"]["node"]["node_id"]
+    report_lease(hub, chunk_id, epoch=3, seq=3)
+
+    step3 = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions", json=_step(build_node_id_2, epoch=3, choice="pass")
+    )
+    review_node_id_2 = step3.json()["next_envelope"]["node"]["node_id"]
+    report_lease(hub, chunk_id, epoch=4, seq=4)
+
+    step4 = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/completions", json=_step(review_node_id_2, epoch=4, choice="pass")
+    )
+    assert step4.json()["outcome"] == "done"
+
+    hub_detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert len(hub_detail["history"]) == 4
+    assert hub_detail["artifacts"] == []  # the review-fail attempt produced no artifact anywhere
+
+    def fake_get(url: str, *, headers: dict[str, str], timeout: float) -> object:
+        return hub.client.get(url.replace(_HUB_URL, ""))
+
+    monkeypatch.setattr(history_route.httpx, "get", fake_get)
+    runner_store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    runner_store.record_lease(
+        NewLease(
+            lease_id="lease_1",
+            chunk_id=chunk_id,
+            graph_id=hub_detail["graph_id"],
+            node_id=review_node_id_2,
+            node_name="review",
+            epoch=4,
+            runner_id="runner-local",
+            retries_max=2,
+            created_at=_NOW,
+        )
+    )
+    runner_store.record_lease_token("lease_1", hash_token(_TOKEN), _NOW)
+    runner_config = RunnerConfig(root=tmp_path, db_url=f"sqlite:///{tmp_path / 'runner.db'}", hub_url=_HUB_URL)
+    with TestClient(create_app(runner_config, runner_store=runner_store)) as client:
+        resp = client.get("/api/leases/lease_1/history", headers={"X-Blizzard-Lease-Token": _TOKEN})
+    assert resp.status_code == 200, resp.text
+    worker_rows = resp.json()
+
+    expected = [row.model_dump() for row in history_rows(ChunkHistoryView.model_validate(hub_detail))]
+    assert worker_rows == expected
+    assert len(worker_rows) == 4
+    assert [r["kind"] for r in worker_rows] == ["transition", "transition", "transition", "transition"]
+    fail_row = worker_rows[1]
+    assert fail_row["choice"] == "fail" and fail_row["from_node"] == "review" and fail_row["to_node"] == "build"
