@@ -50,6 +50,7 @@ from blizzard.hub.delivery.command_runner import IHubCommandRunner
 from blizzard.hub.delivery.hub_node import HubNodeExecutor
 from blizzard.hub.delivery.internal.hub_command_runner import SubprocessHubCommandRunner
 from blizzard.hub.delivery.internal.hub_workdir import FilesystemHubWorkdir
+from blizzard.hub.delivery.marker_auth import MarkerAuthority
 from blizzard.hub.delivery.workdir import IHubWorkdir
 from blizzard.hub.domain.apply import ApplyService
 from blizzard.hub.domain.claim import ClaimService
@@ -111,6 +112,12 @@ class HubServices:
     #: The same underlying store instance as ``fleet``'s write registry.
     registry: IReadRunnerRegistry
     hub_node: HubNodeExecutor
+    #: The mid-run marker-write capability authority (issue #230) — one instance
+    #: shared by the hub node executor (mints/revokes around a step) and the
+    #: ``hub-markers`` API endpoint (verifies a presented token), so both sides of
+    #: the same-process credential agree on the one live token per (chunk, node,
+    #: epoch) key.
+    marker_authority: MarkerAuthority
     events: EventBroker
     clock: IClock
     default_graph_doc: GraphDoc
@@ -208,12 +215,14 @@ def build_services(
     chunk_store = ChunkStore(engine, clock)
     graph_store = GraphStore(engine)
     registry_store = RunnerRegistryStore(engine)
+    marker_authority = MarkerAuthority()
     hub_node = HubNodeExecutor(
         chunks=chunk_store,
         runner=hub_command_runner or SubprocessHubCommandRunner(),
         workdir=hub_workdir
         or FilesystemHubWorkdir(hub_workdir_root or Path(tempfile.gettempdir()) / "blizzard-hub-workdirs"),
         clock=clock,
+        marker_authority=marker_authority,
         base_branch=base_branch,
         marker_callback_base_url=hub_marker_callback_base_url,
         forge_url=forge_url,
@@ -293,6 +302,7 @@ def build_services(
         enrollment=enrollment,
         registry=registry_store,
         hub_node=hub_node,
+        marker_authority=marker_authority,
         events=events,
         clock=clock,
         default_graph_doc=load_default_graph_doc(),
