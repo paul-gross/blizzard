@@ -20,6 +20,8 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from sqlalchemy.engine import make_url
+
 from blizzard.foundation.forwarded import TrustedProxies
 
 CONFIG_FILENAME = "blizzard-hub.toml"
@@ -272,9 +274,15 @@ class HubConfig:
         )
 
     def to_toml(self) -> str:
-        lines = [
-            "# blizzard-hub runtime configuration (blizzard hub init)\n",
-            f'db_url = "{self.db_url}"\n',
+        lines = ["# blizzard-hub runtime configuration (blizzard hub init)\n"]
+        if self.db_url != self.default_db_url(self.root):
+            # The default is omitted rather than serialized absolute (issue #234): a fresh
+            # scaffold's db_url is always `default_db_url(root)`, and writing that out bakes
+            # an absolute pointer to *this* root into the file — `load` re-derives the same
+            # default from wherever the directory ends up, so a `cp -r`'d copy stays
+            # self-contained instead of carrying a live pointer back to the original.
+            lines.append(f'db_url = "{self.db_url}"\n')
+        lines += [
             f'host = "{self.host}"\n',
             f"port = {self.port}\n",
             f'runner_auth_mode = "{self.runner_auth_mode}"\n',
@@ -328,13 +336,30 @@ class HubConfig:
         return "".join(lines)
 
     @classmethod
-    def load(cls, root: Path, *, host: str | None = None, port: int | None = None) -> HubConfig:
+    def load(
+        cls,
+        root: Path,
+        *,
+        host: str | None = None,
+        port: int | None = None,
+        allow_external_db: bool = False,
+    ) -> HubConfig:
         """Read a runtime root's config file; overlay CLI host/port when given.
 
         ``db_url``/``host``/``port`` each resolve **CLI flag > environment > toml >
         default** (no CLI flag exists for ``db_url``) — see :data:`ENV_DB_URL`,
         :data:`ENV_HOST`, :data:`ENV_PORT`. Every variable unset leaves the resolved
-        config byte-identical to a toml-only load.
+        config byte-identical to a toml-only load. A toml with no ``db_url`` key falls
+        back to :meth:`default_db_url` for ``root`` — the pair with :meth:`to_toml`
+        omitting the key when it is exactly that default (issue #234), so a `cp -r`'d
+        runtime directory re-derives its store path from wherever it lands rather than
+        carrying an absolute pointer back to the directory it was copied from.
+
+        The resolved ``db_url``, once known — CLI/env overrides included — is guarded
+        against naming a sqlite path outside ``root`` (issue #234): copying a store
+        directory whose config still carries an absolute path from elsewhere would
+        otherwise silently operate on the original database. ``allow_external_db`` is
+        the operator's explicit opt-out.
         """
         root = root.resolve()
         path = root / CONFIG_FILENAME
@@ -366,9 +391,11 @@ class HubConfig:
                 "`work-items` would 503 and every board label would render null."
             )
         toml_port = int(raw.get("port", DEFAULT_PORT))
+        db_url = os.environ.get(ENV_DB_URL) or str(raw.get("db_url") or cls.default_db_url(root))
+        _guard_db_url_within_root(root, db_url, allow_external_db=allow_external_db)
         return cls(
             root=root,
-            db_url=os.environ.get(ENV_DB_URL) or str(raw["db_url"]),
+            db_url=db_url,
             host=host or os.environ.get(ENV_HOST) or str(raw.get("host", DEFAULT_HOST)),
             port=port if port is not None else _resolve_port_env(os.environ.get(ENV_PORT), toml_port),
             work_sources=_parse_work_sources(raw.get("work_source", [])),
@@ -380,6 +407,41 @@ class HubConfig:
             auth=_parse_auth(raw.get("auth", {})),
             trusted_proxies=_parse_trusted_proxies(raw.get("trusted_proxies", ())),
         )
+
+
+def _sqlite_db_path(db_url: str) -> Path | None:
+    """The filesystem path a ``sqlite:///`` URL names, or ``None`` when ``db_url`` is not
+    sqlite (postgres, etc — inherently external, so the ``--dir`` guard below has nothing
+    to compare against and passes it untouched; ``bzh:sql-portable``) or names an in-memory
+    store (``sqlite://``/``sqlite:///:memory:``, which has no path to guard)."""
+    url = make_url(db_url)
+    if url.get_backend_name() != "sqlite" or url.database in (None, ":memory:"):
+        return None
+    return Path(url.database)
+
+
+def _guard_db_url_within_root(root: Path, db_url: str, *, allow_external_db: bool) -> None:
+    """Refuse a ``db_url`` whose sqlite path resolves outside ``root`` (issue #234).
+
+    ``hub init`` used to write an absolute store path into a fresh runtime's config, so
+    copying that directory elsewhere (a snapshot, a safe-inspection copy) copied a live
+    pointer back to the original database with it — the exact trap this guard closes.
+    A relative sqlite path is left alone: it resolves against the process's cwd at open
+    time, not against ``root``, so there is nothing here to compare it to.
+    """
+    if allow_external_db:
+        return
+    path = _sqlite_db_path(db_url)
+    if path is None or not path.is_absolute():
+        return
+    try:
+        path.resolve().relative_to(root.resolve())
+    except ValueError as exc:
+        raise ConfigError(
+            f"{root}'s config names a db_url outside this directory: {path} — a copied or "
+            "moved store directory would silently operate on the original database. Pass "
+            "--allow-external-db to use it anyway."
+        ) from exc
 
 
 def _resolve_port_env(raw: str | None, fallback: int) -> int:

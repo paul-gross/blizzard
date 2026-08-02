@@ -48,9 +48,9 @@ def init_environment(root: Path) -> HubConfig:
     return config
 
 
-def migrate(root: Path, *, down: str | None = None) -> None:
+def migrate(root: Path, *, down: str | None = None, allow_external_db: bool = False) -> None:
     """Apply pending revisions, or reverse to ``down`` when given."""
-    config = HubConfig.load(root)
+    config = HubConfig.load(root, allow_external_db=allow_external_db)
     runner = migration_runner(config)
     if down is not None:
         runner.downgrade(down)

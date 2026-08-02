@@ -1049,12 +1049,132 @@ def test_hub_db_url_honored_identically_by_host_and_migrate(tmp_path: Path, monk
     root = tmp_path / "hub"
     init_environment(root)  # scaffolds + migrates the default sqlite store
 
-    override_url = f"sqlite:///{tmp_path / 'override.db'}"
+    # Inside root: an override pointing elsewhere is exactly what the --dir isolation
+    # guard (issue #234) exists to catch — see test_config.py's own guard tests below.
+    override_url = f"sqlite:///{root / 'override.db'}"
     monkeypatch.setenv(HUB_ENV_DB_URL, override_url)
 
     migrate(root)  # resolves through HubConfig.load — migrates the overridden store
     config = HubConfig.load(root)
     assert config.db_url == override_url
-    assert (tmp_path / "override.db").exists()
+    assert (root / "override.db").exists()
     # what the daemon's own revision-mismatch guard reads at startup is the same store
     assert migration_runner(config).current_revision() is not None
+
+
+# --------------------------------------------------------------------------- #
+# The db_url --dir isolation guard (issue #234) — a copied store directory whose
+# config still names an absolute path elsewhere must not silently operate on the
+# original database.
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.unit
+def test_db_url_outside_root_is_refused(tmp_path: Path) -> None:
+    live_db = tmp_path / "live" / "hub.db"
+    root = tmp_path / "copy"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text(f'db_url = "sqlite:///{live_db}"\n')
+
+    with pytest.raises(HubConfigError, match=str(live_db)):
+        HubConfig.load(root)
+
+
+@pytest.mark.unit
+def test_db_url_outside_root_proceeds_with_allow_external_db(tmp_path: Path) -> None:
+    live_db = tmp_path / "live" / "hub.db"
+    root = tmp_path / "copy"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text(f'db_url = "sqlite:///{live_db}"\n')
+
+    config = HubConfig.load(root, allow_external_db=True)
+    assert config.db_url == f"sqlite:///{live_db}"
+
+
+@pytest.mark.unit
+def test_db_url_absolute_but_inside_root_needs_no_flag(tmp_path: Path) -> None:
+    # Acceptance: existing configs with an in-dir absolute db_url still work — the guard
+    # triggers only on paths that resolve *outside* root.
+    root = tmp_path / "hub"
+    root.mkdir()
+    in_dir_db = root / "hub.db"
+    (root / "blizzard-hub.toml").write_text(f'db_url = "sqlite:///{in_dir_db}"\n')
+
+    config = HubConfig.load(root)
+    assert config.db_url == f"sqlite:///{in_dir_db}"
+
+
+@pytest.mark.unit
+def test_db_url_env_override_outside_root_is_also_guarded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Acceptance: BZ_HUB_DB_URL overrides remain honored, but pass through the same guard.
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text(f'db_url = "sqlite:///{root / "hub.db"}"\n')
+    outside_db = tmp_path / "elsewhere" / "hub.db"
+    monkeypatch.setenv(HUB_ENV_DB_URL, f"sqlite:///{outside_db}")
+
+    with pytest.raises(HubConfigError, match=str(outside_db)):
+        HubConfig.load(root)
+
+    config = HubConfig.load(root, allow_external_db=True)
+    assert config.db_url == f"sqlite:///{outside_db}"
+
+
+@pytest.mark.unit
+def test_db_url_relative_sqlite_path_bypasses_the_guard(tmp_path: Path) -> None:
+    # A relative sqlite path resolves against the process cwd at open time, not root —
+    # there is nothing for the --dir guard to compare it to.
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text('db_url = "sqlite:///relative.db"\n')
+    assert HubConfig.load(root).db_url == "sqlite:///relative.db"
+
+
+@pytest.mark.unit
+def test_postgres_db_url_bypasses_the_guard(tmp_path: Path) -> None:
+    # A non-sqlite db_url is inherently external — it passes the --dir guard untouched.
+    root = tmp_path / "hub"
+    root.mkdir()
+    pg = "postgresql+psycopg://blizzard:secret@elsewhere:5432/hub"
+    (root / "blizzard-hub.toml").write_text(f'db_url = "{pg}"\n')
+    assert HubConfig.load(root).db_url == pg
+
+
+@pytest.mark.unit
+def test_fresh_scaffold_omits_db_url_from_to_toml(tmp_path: Path) -> None:
+    # issue #234: a fresh scaffold's db_url is the resolved default, which `to_toml`
+    # omits rather than serializing absolute — a copied dir must not carry a live
+    # pointer back to the directory it was copied from.
+    root = tmp_path / "hub"
+    root.mkdir()
+    config = HubConfig.scaffold(root)
+    emitted = config.to_toml()
+    assert "db_url" not in emitted
+
+
+@pytest.mark.unit
+def test_load_falls_back_to_default_db_url_when_key_is_absent(tmp_path: Path) -> None:
+    root = tmp_path / "hub"
+    root.mkdir()
+    (root / "blizzard-hub.toml").write_text('host = "0.0.0.0"\n')
+    assert HubConfig.load(root).db_url == HubConfig.default_db_url(root)
+
+
+@pytest.mark.unit
+def test_a_freshly_scaffolded_dir_copied_elsewhere_re_derives_its_own_db_url(tmp_path: Path) -> None:
+    """The whole point of issue #234's `to_toml` change: `cp -r` a freshly-inited
+    runtime dir and it is self-contained — the copy's db_url points into the copy,
+    not back at the original, with no `--allow-external-db` needed either way."""
+    import shutil
+
+    from blizzard.hub.runtime import init_environment
+
+    original = tmp_path / "original"
+    init_environment(original)
+
+    copy_root = tmp_path / "copy"
+    shutil.copytree(original, copy_root)
+
+    copy_config = HubConfig.load(copy_root)
+    assert copy_config.db_url == HubConfig.default_db_url(copy_root)
+    assert Path(copy_config.db_url.removeprefix("sqlite:///")).exists()

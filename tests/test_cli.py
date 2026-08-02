@@ -7,6 +7,7 @@ not the daemon runtime (``host`` blocks on a server and is not driven here).
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import pytest
@@ -94,6 +95,47 @@ def test_hub_migrate_rejects_a_leftover_pm_source_block(tmp_path: Path) -> None:
 
     assert result.exit_code != 0, f"migrate accepted a stale [[pm_source]] config:\n{result.output}"
     assert "[[work_source]]" in result.output, f"the error must name the new key: {result.output}"
+
+
+def test_hub_migrate_refuses_a_db_url_copied_from_elsewhere(tmp_path: Path) -> None:
+    """The bug scenario in issue #234: `cp -r <live-store>/* <copy>/ && blizzard hub
+    migrate --dir <copy>` must refuse rather than silently migrate the live store —
+    this fails against the pre-#234 code, which applies no such guard.
+
+    `hub init` no longer embeds an absolute db_url for a *fresh* scaffold, so this
+    reproduces a config carrying one anyway — an unpatched-era init, or an operator's
+    own explicit override — the case the guard still has to catch."""
+    runner = CliRunner()
+    live = tmp_path / "live"
+    assert runner.invoke(blizzard, ["hub", "init", str(live)]).exit_code == 0
+    live_db_url = f"sqlite:///{(live / 'data' / 'hub.db').resolve()}"
+
+    copy_dir = tmp_path / "copy"
+    shutil.copytree(live, copy_dir)
+    config_path = copy_dir / "blizzard-hub.toml"
+    config_path.write_text(f'db_url = "{live_db_url}"\n' + config_path.read_text())
+
+    refused = runner.invoke(blizzard, ["hub", "migrate", "--dir", str(copy_dir)])
+    assert refused.exit_code != 0, f"migrate silently touched a db_url outside --dir:\n{refused.output}"
+    assert str(copy_dir) in refused.output
+    assert live_db_url.removeprefix("sqlite:///") in refused.output
+
+    allowed = runner.invoke(blizzard, ["hub", "migrate", "--dir", str(copy_dir), "--allow-external-db"])
+    assert allowed.exit_code == 0, allowed.output
+
+
+def test_hub_init_produces_a_config_a_copy_can_migrate_from_with_no_flags(tmp_path: Path) -> None:
+    """Acceptance: a freshly-inited dir can be `cp -r`'d and driven from the copy with
+    no flags — `hub init`'s output no longer embeds the absolute default path."""
+    runner = CliRunner()
+    original = tmp_path / "original"
+    assert runner.invoke(blizzard, ["hub", "init", str(original)]).exit_code == 0
+
+    copy_dir = tmp_path / "copy"
+    shutil.copytree(original, copy_dir)
+
+    result = runner.invoke(blizzard, ["hub", "migrate", "--dir", str(copy_dir)])
+    assert result.exit_code == 0, result.output
 
 
 def test_runner_init(tmp_path: Path) -> None:
@@ -250,6 +292,27 @@ def test_runner_takeover_errors_cleanly_with_no_daemon_serving(tmp_path: Path) -
 
     assert result.exit_code != 0
     assert "no runner daemon is serving" in result.output
+
+
+def test_hub_host_refuses_a_db_url_copied_from_elsewhere(tmp_path: Path) -> None:
+    """`host` applies the same --dir isolation guard as `migrate` (issue #234) — it
+    fails before ever announcing "serving", let alone binding a socket."""
+    runner = CliRunner()
+    live = tmp_path / "live"
+    assert runner.invoke(blizzard, ["hub", "init", str(live)]).exit_code == 0
+    live_db_url = f"sqlite:///{(live / 'data' / 'hub.db').resolve()}"
+
+    copy_dir = tmp_path / "copy"
+    shutil.copytree(live, copy_dir)
+    config_path = copy_dir / "blizzard-hub.toml"
+    config_path.write_text(f'db_url = "{live_db_url}"\n' + config_path.read_text())
+
+    result = runner.invoke(blizzard, ["hub", "host", "--dir", str(copy_dir)])
+
+    assert result.exit_code != 0
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+    assert str(copy_dir) in result.output
+    assert "serving blizzard-hub" not in result.output
 
 
 def test_hub_host_reports_an_unset_work_source_token_env_as_a_clean_error(

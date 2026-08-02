@@ -207,15 +207,21 @@ def init(directory: str) -> None:
     click.echo(f"hub runtime ready at {config.root} (store revision {revision})")
 
 
+_ALLOW_EXTERNAL_DB_HELP = (
+    "Proceed even if the config's db_url names a database outside this directory (issue #234's --dir isolation guard)."
+)
+
+
 @hub.command("migrate")
 @click.option(
     "--dir", "directory", default=DEFAULT_DIR, envvar=ENV_HUB_DIR, help="Hub runtime directory (overrides $BZ_HUB_DIR)."
 )
 @click.option("--down", default=None, help="Reverse migrations down to this revision (e.g. base).")
-def migrate_cmd(directory: str, down: str | None) -> None:
+@click.option("--allow-external-db", "allow_external_db", is_flag=True, default=False, help=_ALLOW_EXTERNAL_DB_HELP)
+def migrate_cmd(directory: str, down: str | None, allow_external_db: bool) -> None:
     """Apply pending store migrations, or reverse with --down <rev>."""
     try:
-        migrate(Path(directory), down=down)
+        migrate(Path(directory), down=down, allow_external_db=allow_external_db)
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo("migrated" if down is None else f"reversed to {down}")
@@ -261,14 +267,15 @@ class _EarlyShutdownServer(uvicorn.Server):
 )
 @click.option("--host", "host_", default=None, help="Bind host (overrides config).")
 @click.option("--port", type=int, default=None, help="Bind port (overrides config).")
-def host(directory: str | None, dir_option: str, host_: str | None, port: int | None) -> None:
+@click.option("--allow-external-db", "allow_external_db", is_flag=True, default=False, help=_ALLOW_EXTERNAL_DB_HELP)
+def host(directory: str | None, dir_option: str, host_: str | None, port: int | None, allow_external_db: bool) -> None:
     """Become the blizzard-hub daemon: HTTP API + SSE + the embedded web app.
 
     DIRECTORY (positional) and --dir are equivalent — pass one; giving both requires
     they agree. Defaults to $BZ_HUB_DIR, then the cwd."""
     directory = resolve_host_directory(directory, dir_option)
     try:
-        config = HubConfig.load(Path(directory), host=host_, port=port)
+        config = HubConfig.load(Path(directory), host=host_, port=port, allow_external_db=allow_external_db)
     except ConfigError as exc:
         raise click.ClickException(str(exc)) from exc
     try:
