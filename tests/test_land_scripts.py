@@ -174,14 +174,27 @@ def _forge_with_state(
     update_status: int = 202,
     marker_headers: list[dict[str, str] | None] | None = None,
     marker_status: int | list[int] = 200,
+    head_check_runs: list[dict[str, Any]] | None = None,
+    head_check_runs_status: int = 200,
+    base_check_runs: list[dict[str, Any]] | None = None,
+    base_check_runs_status: int = 200,
 ):
-    """A double whose one already-open PR reads ``mergeable_state``. Records every call."""
+    """A double whose one already-open PR reads ``mergeable_state``. Records every call.
+
+    ``head_check_runs``/``base_check_runs`` (issue #232), when given, stub the
+    ``GET .../commits/{ref}/check-runs`` routes for the PR's head sha and the base
+    branch (``"main"``) respectively — a route left unstubbed (the default) raises
+    ``KeyError`` on lookup, exactly like every other unstubbed route in this double,
+    so the degradation path under test reacts to the same real failure mode
+    ``forge_request`` surfaces from a genuine outage, not a test-double artifact.
+    """
     base = f"http://forge/repos/{_REPO}"
     pull = {
         "number": 1,
         "merged": merged,
         "mergeable_state": mergeable_state,
         "head": {"ref": _BRANCH, "sha": "headsha"},
+        "html_url": f"http://forge/{_REPO}/pull/1",
     }
     responses = {
         ("GET", f"{base}/pulls?state=open"): (200, [{"number": 1, "head": {"ref": _BRANCH, "sha": "headsha"}}]),
@@ -189,6 +202,16 @@ def _forge_with_state(
         ("PUT", f"{base}/pulls/1/update-branch"): (update_status, {"message": "Updating pull request branch."}),
         ("PUT", f"{base}/pulls/1/merge"): (200, {"sha": "merged-sha1", "merged": True}),
     }
+    if head_check_runs is not None:
+        responses[("GET", f"{base}/commits/headsha/check-runs")] = (
+            head_check_runs_status,
+            {"total_count": len(head_check_runs), "check_runs": head_check_runs},
+        )
+    if base_check_runs is not None:
+        responses[("GET", f"{base}/commits/main/check-runs")] = (
+            base_check_runs_status,
+            {"total_count": len(base_check_runs), "check_runs": base_check_runs},
+        )
     marker_queue, marker_fallback = _marker_status_queue(marker_status)
 
     def fake(
@@ -269,6 +292,232 @@ def test_clean_pr_merges_the_current_head_sha(
     assert _last_line(capsys) == "landed"
     merge = [body for m, url, body in calls if m == "PUT" and url.endswith("/merge") and body is not None]
     assert merge and merge[0]["sha"] == "headsha", "a self-heal must merge the CURRENT head, not a stale commit"
+
+
+# -- land_pr_ci terminal CI check failure + CI-watch findings (issue #232) ----------
+#
+# `classify`'s `blocked`/`unstable` wait is the CI-watch case; these assert `main()`'s
+# actual check-runs GETs, the `delivery-findings` marker write, and the graph's authored
+# `failure` edge (`advanced-development-workflow/graph.yaml`'s `deliver` node authors
+# exactly `landed`/`failure`) against a scripted double.
+
+
+def _check_runs_urls(calls: list[tuple[str, str, dict[str, Any] | None]]) -> list[str]:
+    return [url for m, url, _ in calls if m == "GET" and url.endswith("/check-runs")]
+
+
+def _findings_posts(calls: list[tuple[str, str, dict[str, Any] | None]]) -> list[dict[str, Any]]:
+    return [body for m, url, body in calls if m == "POST" and url == _CALLBACK_URL and body is not None]
+
+
+@pytest.mark.parametrize("state", ["blocked", "unstable"])
+def test_a_terminal_check_failure_prints_the_failure_edge_and_writes_findings(
+    state: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    _set_base_env(monkeypatch, feature_title="t")
+    monkeypatch.setattr(
+        land_pr_ci,
+        "forge_request",
+        _forge_with_state(
+            calls,
+            mergeable_state=state,
+            head_check_runs=[_check_run("completed", "failure")],
+        ),
+    )
+
+    assert land_pr_ci.main() == 0
+    assert _last_line(capsys) == "failure"  # the graph's authored `failure` choice
+    assert not any(url.endswith("/merge") for url in _urls(calls, "PUT"))
+    assert not any(url.endswith("/update-branch") for url in _urls(calls, "PUT"))
+
+    posts = _findings_posts(calls)
+    assert len(posts) == 1
+    assert posts[0]["name"] == "delivery-findings"
+    content = posts[0]["content"]
+    assert _REPO in content
+    assert "1" in content  # the PR number
+    assert "http://forge" in content and "/pull/1" in content  # the PR url
+    assert "build" in content  # the check's name
+    assert "failure" in content  # the terminal conclusion
+    assert "https://forge/build/1" in content  # the check's details_url
+
+
+def test_a_base_branch_also_red_names_the_change_as_not_at_fault(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    _set_base_env(monkeypatch, feature_title="t")
+    monkeypatch.setattr(
+        land_pr_ci,
+        "forge_request",
+        _forge_with_state(
+            calls,
+            mergeable_state="blocked",
+            head_check_runs=[_check_run("completed", "failure")],
+            base_check_runs=[_check_run("completed", "failure")],
+        ),
+    )
+
+    assert land_pr_ci.main() == 0
+    assert _last_line(capsys) == "failure"
+
+    posts = _findings_posts(calls)
+    assert len(posts) == 1
+    assert "not this change" in posts[0]["content"]
+
+
+def test_a_check_runs_read_failure_degrades_to_a_plain_pending_not_the_failure_edge(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    _set_base_env(monkeypatch, feature_title="t")
+    monkeypatch.setattr(
+        land_pr_ci,
+        "forge_request",
+        _forge_with_state(
+            calls,
+            mergeable_state="blocked",
+            head_check_runs=[_check_run("completed", "failure")],
+            head_check_runs_status=500,
+        ),
+    )
+
+    assert land_pr_ci.main() == 0
+    assert _last_line(capsys) == "pending"  # a forge-read hiccup must never bounce or crash
+    assert not _findings_posts(calls)
+
+
+def test_two_pending_repos_one_failing_names_only_the_failing_repo_and_merges_neither(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    other_repo = "acme/gadget"
+    other_branch = "other-branch"
+    commits = [
+        {"repo": _REPO, "branch": _BRANCH, "commit": _COMMIT},
+        {"repo": other_repo, "branch": other_branch, "commit": "sha2"},
+    ]
+    monkeypatch.setenv("BZ_FORGE_URL", "http://forge")
+    monkeypatch.setenv("BZ_HUB_BASE_BRANCH", "main")
+    monkeypatch.setenv("BZ_HUB_GIT_COMMITS", json.dumps(commits))
+    monkeypatch.delenv("BZ_HUB_ARTIFACT_NAMES", raising=False)
+    monkeypatch.delenv("BZ_FORGE_OWNER", raising=False)
+    monkeypatch.setenv("BZ_HUB_MARKER_CALLBACK_URL", _CALLBACK_URL)
+    monkeypatch.setenv("BZ_HUB_MARKER_TOKEN", _MARKER_TOKEN)
+    monkeypatch.delenv("BZ_FORGE_TOKEN", raising=False)
+    monkeypatch.setenv("BZ_HUB_FEATURE_TITLE", "t")
+
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    other_base = f"http://forge/repos/{other_repo}"
+    responses = {
+        ("GET", f"http://forge/repos/{_REPO}/pulls?state=open"): (
+            200,
+            [{"number": 1, "head": {"ref": _BRANCH, "sha": "headsha"}}],
+        ),
+        ("GET", f"http://forge/repos/{_REPO}/pulls/1"): (
+            200,
+            {
+                "number": 1,
+                "merged": False,
+                "mergeable_state": "blocked",
+                "head": {"ref": _BRANCH, "sha": "headsha"},
+                "html_url": f"http://forge/{_REPO}/pull/1",
+            },
+        ),
+        ("GET", f"http://forge/repos/{_REPO}/commits/headsha/check-runs"): (
+            200,
+            {"total_count": 1, "check_runs": [_check_run("completed", "failure")]},
+        ),
+        ("GET", f"{other_base}/pulls?state=open"): (
+            200,
+            [{"number": 2, "head": {"ref": other_branch, "sha": "otherheadsha"}}],
+        ),
+        ("GET", f"{other_base}/pulls/2"): (
+            200,
+            {
+                "number": 2,
+                "merged": False,
+                "mergeable_state": "clean",
+                "head": {"ref": other_branch, "sha": "otherheadsha"},
+                "html_url": f"http://forge/{other_repo}/pull/2",
+            },
+        ),
+    }
+
+    def fake(
+        method: str,
+        url: str,
+        *,
+        token: str | None,
+        body: dict[str, Any] | None,
+        headers: dict[str, str] | None = None,
+    ) -> tuple[int, Any]:
+        calls.append((method, url, body))
+        if url == _CALLBACK_URL:
+            return 200, {"recorded": True}
+        return responses[(method, url)]
+
+    monkeypatch.setattr(land_pr_ci, "forge_request", fake)
+
+    assert land_pr_ci.main() == 0
+    assert _last_line(capsys) == "failure"
+    assert not any(url.endswith("/merge") for url in _urls(calls, "PUT")), "chunk atomicity: neither repo merges"
+
+    posts = _findings_posts(calls)
+    assert len(posts) == 1
+    content = posts[0]["content"]
+    assert _REPO in content
+    assert other_repo not in content
+
+
+def test_an_in_progress_check_writes_exactly_one_wait_finding_and_pends(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    _set_base_env(monkeypatch, feature_title="t")
+    monkeypatch.setattr(
+        land_pr_ci,
+        "forge_request",
+        _forge_with_state(calls, mergeable_state="blocked", head_check_runs=[_check_run("in_progress", None)]),
+    )
+
+    assert land_pr_ci.main() == 0
+    assert _last_line(capsys) == "pending"
+
+    posts = _findings_posts(calls)
+    assert len(posts) == 1
+    content = posts[0]["content"]
+    assert _REPO in content
+    assert "1" in content  # the PR number
+    assert "build" in content  # the check's name
+    assert "in_progress" in content  # the check's live status
+
+
+def test_an_unknown_mergeable_state_never_reads_check_runs_or_writes_findings(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    _set_base_env(monkeypatch, feature_title="t")
+    monkeypatch.setattr(land_pr_ci, "forge_request", _forge_with_state(calls, mergeable_state="unknown"))
+
+    assert land_pr_ci.main() == 0
+    assert _last_line(capsys) == "pending"
+    assert not _check_runs_urls(calls)
+    assert not _findings_posts(calls)
+
+
+def test_an_empty_check_runs_list_is_not_a_substantive_wait(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    _set_base_env(monkeypatch, feature_title="t")
+    monkeypatch.setattr(
+        land_pr_ci, "forge_request", _forge_with_state(calls, mergeable_state="blocked", head_check_runs=[])
+    )
+
+    assert land_pr_ci.main() == 0
+    assert _last_line(capsys) == "pending"
+    assert not _findings_posts(calls)
 
 
 @pytest.mark.parametrize("script", [land_default, land_pr_ci, land_ff], ids=["default", "pr-ci", "ff"])
@@ -487,3 +736,161 @@ def test_an_empty_callback_url_with_a_pending_repo_fails_instead_of_landing_sile
     captured = capsys.readouterr()
     assert "landed" not in captured.out
     assert "BZ_HUB_MARKER_CALLBACK_URL" in captured.err
+
+
+# -- land_pr_ci.classify_checks + render_findings (issue #232) ----------------------
+#
+# A terminally-failed check run must never be polled out to `poll_timeout` — these are
+# the pure, network-free functions a later phase wires into `main()`'s check stage and
+# a `delivery-findings` marker artifact.
+
+
+def _check_run(status: str, conclusion: str | None = None) -> dict[str, Any]:
+    return {
+        "id": 1,
+        "name": "build",
+        "status": status,
+        "conclusion": conclusion,
+        "details_url": "https://forge/build/1",
+        "head_sha": "headsha",
+    }
+
+
+@pytest.mark.parametrize("conclusion", ["failure", "timed_out", "cancelled", "action_required"])
+def test_classify_checks_is_failed_for_every_terminal_conclusion(conclusion: str) -> None:
+    assert land_pr_ci.classify_checks([_check_run("completed", conclusion)]) == land_pr_ci._FAILED
+
+
+@pytest.mark.parametrize("status", ["queued", "in_progress", "waiting", "requested"])
+def test_classify_checks_waits_for_every_non_terminal_status(status: str) -> None:
+    assert land_pr_ci.classify_checks([_check_run(status)]) == land_pr_ci._WAIT
+
+
+def test_classify_checks_waits_on_an_empty_list() -> None:
+    assert land_pr_ci.classify_checks([]) == land_pr_ci._WAIT
+
+
+@pytest.mark.parametrize(
+    "check_runs",
+    [
+        [{"name": "build"}],  # missing status/conclusion
+        [{"status": "completed"}],  # missing conclusion
+        [{"status": "completed", "conclusion": None}],  # conclusion not yet set
+        "not-a-list",  # wrong top-level type
+        [None],  # non-dict entry
+    ],
+    ids=["missing-status-and-conclusion", "missing-conclusion", "null-conclusion", "wrong-type", "non-dict-entry"],
+)
+def test_classify_checks_degrades_to_wait_on_a_malformed_payload_without_raising(check_runs: Any) -> None:
+    assert land_pr_ci.classify_checks(check_runs) == land_pr_ci._WAIT
+
+
+def test_classify_checks_fails_when_any_run_among_several_is_terminal() -> None:
+    runs = [_check_run("completed", "success"), _check_run("in_progress"), _check_run("completed", "failure")]
+    assert land_pr_ci.classify_checks(runs) == land_pr_ci._FAILED
+
+
+def test_render_findings_names_repo_pr_and_each_failing_check() -> None:
+    records = [
+        {
+            "repo": _REPO,
+            "number": 42,
+            "url": "https://forge/acme/widget/pull/42",
+            "decision": land_pr_ci._FAILED,
+            "checks": [
+                {"name": "build", "conclusion": "failure", "details_url": "https://forge/build/1", "base_red": False},
+            ],
+        }
+    ]
+
+    text = land_pr_ci.render_findings(records)
+
+    assert _REPO in text
+    assert "42" in text
+    assert "https://forge/acme/widget/pull/42" in text
+    assert "build" in text
+    assert "failure" in text
+    assert "https://forge/build/1" in text
+
+
+def test_render_findings_names_a_broken_base_as_not_this_change() -> None:
+    records = [
+        {
+            "repo": _REPO,
+            "number": 42,
+            "url": "https://forge/acme/widget/pull/42",
+            "decision": land_pr_ci._FAILED,
+            "checks": [
+                {"name": "build", "conclusion": "failure", "details_url": "https://forge/build/1", "base_red": True},
+            ],
+        }
+    ]
+
+    text = land_pr_ci.render_findings(records)
+
+    assert "not this change" in text
+
+
+def test_render_findings_omits_a_base_red_verdict_when_unknown() -> None:
+    records = [
+        {
+            "repo": _REPO,
+            "number": 42,
+            "url": "https://forge/acme/widget/pull/42",
+            "decision": land_pr_ci._FAILED,
+            "checks": [
+                {"name": "build", "conclusion": "failure", "details_url": "https://forge/build/1", "base_red": None},
+            ],
+        }
+    ]
+
+    text = land_pr_ci.render_findings(records)
+
+    assert "base branch" not in text
+
+
+def test_render_findings_names_the_still_in_flight_checks_for_a_waiting_repo() -> None:
+    records = [
+        {
+            "repo": _REPO,
+            "number": 7,
+            "url": "https://forge/acme/widget/pull/7",
+            "decision": land_pr_ci._WAIT,
+            "checks": [{"name": "lint", "status": "in_progress"}, {"name": "test", "status": "queued"}],
+        }
+    ]
+
+    text = land_pr_ci.render_findings(records)
+
+    assert _REPO in text
+    assert "7" in text
+    assert "lint" in text
+    assert "in_progress" in text
+    assert "test" in text
+    assert "queued" in text
+    # a wait record carries no conclusion/details_url at all — only name + status.
+    assert "conclusion" not in text.lower()
+
+
+def test_render_findings_joins_multiple_repos() -> None:
+    records = [
+        {
+            "repo": "acme/widget",
+            "number": 1,
+            "url": "https://forge/acme/widget/pull/1",
+            "decision": land_pr_ci._FAILED,
+            "checks": [{"name": "build", "conclusion": "failure", "details_url": "https://forge/1", "base_red": False}],
+        },
+        {
+            "repo": "acme/gadget",
+            "number": 2,
+            "url": "https://forge/acme/gadget/pull/2",
+            "decision": land_pr_ci._WAIT,
+            "checks": [{"name": "test", "status": "queued"}],
+        },
+    ]
+
+    text = land_pr_ci.render_findings(records)
+
+    assert "acme/widget" in text
+    assert "acme/gadget" in text

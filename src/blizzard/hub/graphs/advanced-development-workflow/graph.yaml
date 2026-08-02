@@ -203,9 +203,11 @@ nodes:
     # land_pr_ci reports the reserved `pending` outcome while any PR is `unstable`/
     # `unknown`/not-yet-clean, so a transient forge state polls in place (freeing the
     # fleet-wide hub slot between polls) instead of bouncing validated work to build.
-    # Only a PR that NEVER goes clean within poll_timeout — or a crash of the land
-    # script itself — routes the reserved `failure` edge, and that lands on `resolve`,
-    # not `build`: a merge conflict invalidates none of verify/review/pre-push.
+    # A PR that NEVER goes clean within poll_timeout, a crash of the land script itself,
+    # or a `blocked`/`unstable` PR whose check run has already completed with a terminal
+    # conclusion (routed immediately, without waiting out poll_timeout — issue #232) all
+    # route the authored `failure` edge, and that lands on `resolve`, not `build`: a merge
+    # conflict invalidates none of verify/review/pre-push.
     poll_interval: 30
     poll_timeout: 1800
     judgement:
@@ -214,7 +216,7 @@ nodes:
           description: Every repo's PR merged cleanly into its base branch; the chunk closes with a retrospective.
           to: retrospective
         failure:
-          description: poll_timeout exceeded with a repo never going cleanly mergeable, or the land script crashed; routed to resolve to diagnose and repair without discarding the validated spine.
+          description: A repo's check run completed with a terminal conclusion (routed immediately, without waiting out poll_timeout), poll_timeout exceeded with a repo never going cleanly mergeable, or the land script crashed; routed to resolve to diagnose and repair without discarding the validated spine.
           to: resolve
 
   resolve:
