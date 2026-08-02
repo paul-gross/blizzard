@@ -200,7 +200,8 @@ def build_services(
     subprocess/filesystem adapters, rooted under ``hub_workdir_root``. ``forge_owner``
     is injected into a hub command node's env (``BZ_FORGE_OWNER``) so its own
     ``run:`` script can qualify a bare (owner-less) repo the same way its own
-    ``qualify_repo`` does (e.g. ``hub/graphs/scripts/land_default.py``). ``oauth_providers``
+    ``qualify_repo`` does (``hub/graphs/scripts/land_common.py``, shared by every land
+    script). ``oauth_providers``
     (issue #92) mirrors ``work_sources`` above: the ``host`` composition root passes
     ``config.auth.oauth_providers`` only under ``auth.mode = "oauth"`` (mirroring #95's
     "no IdP surface under none"); tests inject ``oauth_http_client`` (an

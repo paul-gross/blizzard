@@ -32,7 +32,7 @@ from blizzard.foundation.store.migrations import RevisionMismatchError
 from blizzard.hub import cli_login, session_store
 from blizzard.hub.app import build_hosted_app
 from blizzard.hub.config import ConfigError, HubConfig
-from blizzard.hub.delivery.hub_node import ENV_MARKER_CALLBACK_URL
+from blizzard.hub.delivery.hub_node import ENV_MARKER_CALLBACK_URL, ENV_MARKER_TOKEN
 from blizzard.hub.graphs import inline_graph_yaml
 from blizzard.hub.runtime import ensure_current_revision, init_environment, migrate, migration_runner
 
@@ -385,12 +385,24 @@ def record_marker(name: str, content: str) -> None:
     ``BZ_HUB_MARKER_CALLBACK_URL`` already carries this run's chunk id, node id, and
     epoch, mirroring ``blizzard runner ask``'s identity-from-environment convention.
     Enables a dynamic loop (``merge repo -> push -> record merged/<repo> -> next``)
-    without waiting for the whole step to exit. Idempotent per marker NAME."""
+    without waiting for the whole step to exit. Idempotent per marker NAME.
+
+    Authorizes the write with the run's marker capability token
+    (``BZ_HUB_MARKER_TOKEN``, issue #230) via ``X-Blizzard-Marker-Token`` — a missing
+    token is named explicitly rather than silently posting an unauthenticated write."""
     callback_url = os.environ.get(ENV_MARKER_CALLBACK_URL)
     if not callback_url:
         raise click.ClickException(f"record-marker: no {ENV_MARKER_CALLBACK_URL} in the environment")
+    marker_token = os.environ.get(ENV_MARKER_TOKEN)
+    if not marker_token:
+        raise click.ClickException(f"record-marker: no {ENV_MARKER_TOKEN} in the environment")
     try:
-        resp = httpx.post(callback_url, json={"name": name, "content": content}, timeout=_CLIENT_TIMEOUT)
+        resp = httpx.post(
+            callback_url,
+            json={"name": name, "content": content},
+            headers={"X-Blizzard-Marker-Token": marker_token},
+            timeout=_CLIENT_TIMEOUT,
+        )
         resp.raise_for_status()
     except httpx.HTTPError as exc:
         raise click.ClickException(f"record-marker: could not record the marker ({exc})") from exc

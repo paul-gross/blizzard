@@ -63,7 +63,16 @@ import sys
 import time
 from typing import Any
 
-from blizzard.hub.graphs.scripts.land_default import forge_request, qualify_repo, refuse_empty_delivery
+from blizzard.hub.graphs.scripts.land_common import (
+    _MARKER_PREFIX,
+    MarkerWriteError,
+    forge_request,
+    marker_recorder,
+    qualify_repo,
+    refuse_empty_delivery,
+    require_env,
+    require_json_env,
+)
 
 _ENV_FORGE_URL = "BZ_FORGE_URL"
 _ENV_FORGE_TOKEN = "BZ_FORGE_TOKEN"
@@ -72,6 +81,7 @@ _ENV_BASE_BRANCH = "BZ_HUB_BASE_BRANCH"
 _ENV_GIT_COMMITS = "BZ_HUB_GIT_COMMITS"
 _ENV_ARTIFACT_NAMES = "BZ_HUB_ARTIFACT_NAMES"
 _ENV_MARKER_CALLBACK_URL = "BZ_HUB_MARKER_CALLBACK_URL"
+_ENV_MARKER_TOKEN = "BZ_HUB_MARKER_TOKEN"
 
 # Test-only instrumentation for the mid-script crash sweep
 # (``tests/crash/test_kill9_sweep.py::test_kill9_between_ff_graph_repo_pushes``) — the
@@ -90,8 +100,6 @@ _ENV_MARKER_CALLBACK_URL = "BZ_HUB_MARKER_CALLBACK_URL"
 # still-unmarked remainder, so ``pending_count`` is then 1), and is wholly inert unless
 # the env var is set — never present in a production land.
 _ENV_TEST_PAUSE_AFTER_FIRST_MARKER = "BZ_HUB_LAND_TEST_PAUSE_SECONDS"
-
-_MARKER_PREFIX = "merged/"
 
 
 def _test_pause_after_first_marker(*, marker_index: int, pending_count: int) -> None:
@@ -118,23 +126,34 @@ class _Conflict(Exception):
 
 
 def main() -> int:
-    forge_url = os.environ[_ENV_FORGE_URL].rstrip("/")
+    """Run the land policy, aborting cleanly on an unconfirmed marker write.
+
+    A :class:`MarkerWriteError` raised anywhere inside :func:`_land` (always from the
+    update stage, after at least one repo's ref advanced) is caught HERE — a single
+    top-level catch, not inside the per-repo loop — so a marker failure aborts the rest
+    of the run instead of quietly continuing to the next repo, and ``landed`` is never
+    printed once one has fired."""
+    try:
+        return _land()
+    except MarkerWriteError as exc:
+        print(f"marker write failed: {exc}", file=sys.stderr)
+        return 1
+
+
+def _land() -> int:
+    forge_url = require_env(_ENV_FORGE_URL).rstrip("/")
     token = os.environ.get(_ENV_FORGE_TOKEN)
     owner = os.environ.get(_ENV_FORGE_OWNER, "")
-    base_branch = os.environ[_ENV_BASE_BRANCH]
-    commits: list[dict[str, str]] = json.loads(os.environ[_ENV_GIT_COMMITS])
+    base_branch = require_env(_ENV_BASE_BRANCH)
+    commits: list[dict[str, str]] = require_json_env(_ENV_GIT_COMMITS)
     already: set[str] = set(json.loads(os.environ.get(_ENV_ARTIFACT_NAMES, "[]")))
     callback_url = os.environ.get(_ENV_MARKER_CALLBACK_URL, "")
+    marker_token = os.environ.get(_ENV_MARKER_TOKEN, "")
 
     def api(method: str, path: str, body: dict[str, Any] | None = None) -> tuple[int, Any]:
         return forge_request(method, f"{forge_url}{path}", token=token, body=body)
 
-    def record_marker(repo: str, commit_hash: str) -> None:
-        if not callback_url:
-            return
-        forge_request(
-            "POST", callback_url, token=None, body={"name": f"{_MARKER_PREFIX}{repo}", "content": commit_hash}
-        )
+    record_marker = marker_recorder(callback_url=callback_url, token=marker_token, request=forge_request)
 
     refuse_empty_delivery(commits)
     pending = [c for c in commits if f"{_MARKER_PREFIX}{c['repo']}" not in already]
