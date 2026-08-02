@@ -27,6 +27,11 @@ operator verbs (`requeue`, `takeover`, `pause`, and others) that mutate fleet st
   `create` stages durably and prints a `recorded ... bytes` confirmation, but the submission is
   published into the envelope only once this node-step completes — so it stays absent from `artifact
   list`/`get` until then; check `artifact staged` to confirm a submission landed.
+- `blizzard runner chunk history` — read this chunk's own transition history as kind-discriminated
+  JSON: one row per accepted transition, cross-graph migration, or delivery bounce, oldest-first, each
+  carrying its `kind` (`transition`/`migration`/`bounce`). A bounced attempt that produced no artifact
+  still appears as a row. Scope is ambient, like `artifact` above. Does not include the in-flight
+  node-step this call is itself part of — a transition is recorded only once an attempt completes.
 - `blizzard runner heartbeat` / `blizzard runner session-end` — fire automatically from your tool-call
   and session-exit hooks; you never need to invoke either yourself.
 
