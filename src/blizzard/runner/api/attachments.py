@@ -31,10 +31,10 @@ from __future__ import annotations
 from fastapi import APIRouter, Request, status
 from fastapi.exceptions import HTTPException
 
+from blizzard.runner.api.lease_scope import authorized_lease
 from blizzard.runner.api.lease_token import presented_lease_token
 from blizzard.runner.domain.attachments import AttachmentRejected, AttachmentService
-from blizzard.runner.domain.lease_auth import check_lease_token
-from blizzard.runner.store.repository import IReadRunnerStore, LeaseRecord
+from blizzard.runner.store.repository import IReadRunnerStore
 from blizzard.wire.attachments import AttachmentRequest, AttachmentResponse, StagedAttachment
 
 router = APIRouter(prefix="/api", tags=["runner"])
@@ -48,29 +48,6 @@ def _service(request: Request) -> AttachmentService:
             detail="attachment service not wired — start via `blizzard runner host`",
         )
     return service
-
-
-def _authorized_lease(lease_id: str, request: Request) -> LeaseRecord:
-    """Resolve ``lease_id`` to its active lease and check the presented token, or raise
-    the store-free ``503`` / unknown-lease ``404`` / bad-token ``403`` — the same shape
-    as ``artifacts.py``'s helper of the same name, kept local since it is this file's
-    own auth path for both the write and the read below."""
-    store: IReadRunnerStore | None = getattr(request.app.state, "runner_store", None)
-    if store is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="runner store not wired — start via `blizzard runner host`",
-        )
-    lease = store.active_lease(lease_id)
-    if lease is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"no active lease {lease_id}")
-    if not check_lease_token(
-        presented_token=presented_lease_token(request), stored_hash=store.lease_token_hash(lease_id)
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail=f"presented token does not authorize lease {lease_id}"
-        )
-    return lease
 
 
 @router.post("/leases/{lease_id}/attachments", response_model=AttachmentResponse, status_code=status.HTTP_200_OK)
@@ -107,7 +84,7 @@ def record_attachment(lease_id: str, request_body: AttachmentRequest, request: R
 def list_staged_attachments(lease_id: str, request: Request) -> list[StagedAttachment]:
     """The lease's currently staged submissions — newest content per ``name``, not yet
     published into any envelope (issue #169)."""
-    lease = _authorized_lease(lease_id, request)
+    lease = authorized_lease(lease_id, request)
     store: IReadRunnerStore = request.app.state.runner_store
     staged = store.attachments_for_lease(lease.lease_id)
     return [StagedAttachment(name=name, content=content) for name, content in sorted(staged.items())]

@@ -1,5 +1,9 @@
 # Retrospective — judgement
 
-Confirm the retrospective is written as the `retrospective` asset with all required sections, honest and specific, and that the workspace's post-delivery convention — if it declares one — was carried out, or its failure reported plainly.
+Confirm the retrospective is written as the `retrospective` asset with all required sections, honest and specific — above all the **Landing Verification** section `retrospective.md`'s landing-check duty requires — and that the workspace's post-delivery convention — if it declares one — was carried out, or its failure reported plainly.
 
-Select `recorded` — the work is complete and the chunk closes.
+Select `recorded` when the landing verification found nothing wrong, or found only a red merge-commit gate result and/or an open work item (each logged as a finding — neither alone is a reason to withhold `recorded`: the code is on base and stays there regardless of the gate result, and a work item's closure is opportunistic, never guaranteed, so an open one is not evidence the landing itself is incomplete): the work is complete and the chunk closes.
+
+Select `delivery-incomplete` when the landing verification found a real discrepancy — a declared sha not reachable from its repo's base branch, or a repo's PR unmerged. It does **not** apply to a red merge-commit gate result (record that as a finding and select `recorded` instead) or to anything about the change's own content — a real defect in the change is `resolve`'s `broken` outcome on an earlier pass, not this node's concern. Name the specific discrepancy in your `retrospective` asset before selecting it — `resolve` reads it from there.
+
+**Loop bound.** Before selecting `delivery-incomplete`, read `blizzard runner chunk history`. If a `delivery-incomplete` transition has already left this node once for this chunk, do not select it again — record the second discrepancy as a finding in your `retrospective` asset and escalate with `blizzard runner ask` instead, so a human resolves it rather than the cycle looping a second time. This is what keeps the `retrospective -> resolve -> deliver -> retrospective` cycle a bounded, single round-trip rather than a loop with no authored limit.

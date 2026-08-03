@@ -134,6 +134,7 @@ def test_baked_default_used_when_runner_prompt_unset() -> None:
     assert out.startswith(DEFAULT_BLIZZARD_PREAMBLE)
     assert "blizzard runner ask" in out
     assert "blizzard runner work-items" in out
+    assert "blizzard runner chunk history" in out
     assert "blizzard runner heartbeat" in out
     assert "blizzard runner session-end" in out
     # Names the worker verbs explicitly rather than pointing at the operator's

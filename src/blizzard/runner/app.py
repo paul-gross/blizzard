@@ -37,6 +37,7 @@ from blizzard.runner.api.fleet_summary import router as fleet_summary_router
 from blizzard.runner.api.git_commits import router as git_commits_router
 from blizzard.runner.api.health import router as health_router
 from blizzard.runner.api.heartbeat import router as heartbeat_router
+from blizzard.runner.api.history import router as history_router
 from blizzard.runner.api.leases import router as leases_router
 from blizzard.runner.api.readiness import router as readiness_router
 from blizzard.runner.api.requeues import router as requeues_router
@@ -279,6 +280,12 @@ def create_app(
     # node-step inputs (`blizzard runner artifact list|get`) without a hub credential —
     # worker-hook lane, ungated.
     app.include_router(artifacts_router)
+    # The chunk-history read (issue #237): the same lease-token-authorized, lease-scoped
+    # shape as the artifacts read above, proxied to the hub's chunk-detail route so the
+    # worker reads its own chunk's transitions/migrations/bounces
+    # (`blizzard runner chunk history`) without a hub credential — worker-hook lane,
+    # ungated.
+    app.include_router(history_router)
     # The work-item pass-through proxy: a build worker reads its issue through this route
     # (`blizzard runner work-items` over `BLIZZARD_RUNNER_URL`), which forwards to the hub —
     # worker-hook lane, ungated (the worker never crosses a layer).

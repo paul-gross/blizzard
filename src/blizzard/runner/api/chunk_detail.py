@@ -30,6 +30,7 @@ from fastapi import APIRouter, Request, status
 from fastapi.exceptions import HTTPException
 
 from blizzard.foundation.logging import get_logger
+from blizzard.runner.api.lease_scope import upstream_detail
 from blizzard.runner.config import RunnerConfig
 from blizzard.wire.chunk import ChunkHeaderView, ChunkSummary
 
@@ -59,17 +60,6 @@ def _forward(request: Request, method: str, path: str) -> httpx.Response:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"hub unreachable: {exc}") from exc
 
 
-def _upstream_detail(response: httpx.Response) -> str:
-    """The hub's error detail, unwrapped from its JSON body when present."""
-    try:
-        payload = response.json()
-    except ValueError:
-        return response.text
-    if isinstance(payload, dict) and "detail" in payload:
-        return str(payload["detail"])
-    return response.text
-
-
 @router.get("/chunks/{chunk_id}", response_model=ChunkHeaderView)
 def get_chunk(chunk_id: str, request: Request) -> ChunkHeaderView:
     """Forward a chunk's detail read to the hub — the chunk-detail dock's header subject.
@@ -83,7 +73,7 @@ def get_chunk(chunk_id: str, request: Request) -> ChunkHeaderView:
     out of this route entirely."""
     upstream = _forward(request, "GET", f"/api/fleet/chunks/{chunk_id}")
     if upstream.status_code != status.HTTP_200_OK:
-        raise HTTPException(status_code=upstream.status_code, detail=_upstream_detail(upstream))
+        raise HTTPException(status_code=upstream.status_code, detail=upstream_detail(upstream))
     return ChunkHeaderView.model_validate(upstream.json())
 
 
@@ -93,7 +83,7 @@ def pause_chunk(chunk_id: str, request: Request) -> ChunkSummary:
     the claim (issue #46). ``409`` when the chunk is not in a pausable state."""
     upstream = _forward(request, "POST", f"/api/fleet/chunks/{chunk_id}/pause")
     if upstream.status_code != status.HTTP_202_ACCEPTED:
-        raise HTTPException(status_code=upstream.status_code, detail=_upstream_detail(upstream))
+        raise HTTPException(status_code=upstream.status_code, detail=upstream_detail(upstream))
     return ChunkSummary.model_validate(upstream.json())
 
 
@@ -102,5 +92,5 @@ def resume_chunk(chunk_id: str, request: Request) -> ChunkSummary:
     """Forward the chunk-detail dock's Resume to the hub — idempotent, never refused."""
     upstream = _forward(request, "POST", f"/api/fleet/chunks/{chunk_id}/resume")
     if upstream.status_code != status.HTTP_202_ACCEPTED:
-        raise HTTPException(status_code=upstream.status_code, detail=_upstream_detail(upstream))
+        raise HTTPException(status_code=upstream.status_code, detail=upstream_detail(upstream))
     return ChunkSummary.model_validate(upstream.json())
