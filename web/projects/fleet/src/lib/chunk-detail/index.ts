@@ -12,6 +12,7 @@ export { ChunkFacts } from './chunk-facts';
 export type { EditGraphEvent } from './chunk-facts';
 export { ChunkIssuePane } from './chunk-issue-pane';
 export type { WorkItemsState } from './chunk-issue-pane';
+export { ChunkTakeover } from './chunk-takeover';
 export { ChunkTimeline } from './chunk-timeline';
 export { ChunkTokenBreakdown } from './chunk-token-breakdown';
 export type { TransitionView, ArtifactView, DecisionView, EscalationView, ChunkUsageTotalView, ChunkUsageView } from '../api/hub';

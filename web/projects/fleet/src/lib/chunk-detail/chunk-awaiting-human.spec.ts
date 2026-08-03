@@ -440,16 +440,12 @@ describe('ChunkAwaitingHuman', () => {
     expect(getComputedStyle(answer, '::before').content).not.toMatch(/^["']\s/);
   });
 
-  it('surfaces an escalation with its copyable takeover command', async () => {
+  it('renders the takeover region for an escalated chunk (deep coverage lives in ChunkTakeover’s own spec)', async () => {
     const fixture = TestBed.createComponent(ChunkAwaitingHuman);
     fixture.componentRef.setInput('detail', ESCALATED_DETAIL);
     await fixture.whenStable();
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('[data-testid="escalation"]')).not.toBeNull();
-    expect(el.querySelector('[data-testid="takeover-command"]')?.textContent).toContain(
-      'blizzard runner takeover ch_01esc',
-    );
-    expect(el.querySelector('[data-testid="copy-takeover"]')).not.toBeNull();
   });
 });
