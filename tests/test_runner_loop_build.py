@@ -56,6 +56,24 @@ def test_build_loop_context_threads_external_usage_credentials_path_into_the_ada
 
 
 @pytest.mark.unit
+def test_build_loop_context_threads_runner_dir_from_the_resolved_root(tmp_path: Path) -> None:
+    """The wrapped takeover command (issue #251) is composed at escalation from
+    ``LoopConfig.runner_dir``, which must mirror ``RunnerConfig``'s own resolved
+    ``root`` — the runtime directory a human's ``blizzard runner takeover <chunk_id>
+    --dir <runner_dir>`` needs to land back in *this* runner, not some other
+    composition root's idea of it."""
+    config = RunnerConfig(
+        root=tmp_path,
+        db_url=RunnerConfig.default_db_url(tmp_path),
+        workspace_root=str(tmp_path / "workspace"),
+    )
+
+    ctx = build_loop_context(config, FakeHub(), workspace_prompt="", runner_prompt="")
+
+    assert ctx.config.runner_dir == str(config.root.resolve())
+
+
+@pytest.mark.unit
 def test_periodic_driver_resolves_prompts_eagerly_at_construction(tmp_path: Path) -> None:
     """A configured-but-missing ``runner_prompt_file`` must raise ``ConfigError`` from
     the constructor — on the caller's (``host``'s) own thread — not from inside the

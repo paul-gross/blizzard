@@ -1771,10 +1771,13 @@ def test_retries_exhausted_escalates_and_holds_envs(tmp_path):  # type: ignore[n
 @pytest.mark.unit
 def test_escalation_without_a_session_composes_neither_takeover_command(tmp_path):  # type: ignore[no-untyped-def]
     """A lease escalated before it ever recorded a session (`session_id` still `None`)
-    composes no takeover command at all — the wrapped verb (issue #251) tracks the raw
-    fallback in lockstep, staying empty right alongside it, even though `runner_dir`
-    is configured and bindings exist. The panel must never see "wrapped present, raw
-    empty" or vice versa."""
+    composes no takeover command at all — with nothing to resume, there's no raw
+    command to build and so nothing for the wrapped verb (issue #251) to wrap, even
+    though `runner_dir` is configured and bindings exist. This is the one case where
+    the two fields track together: wrapped non-empty always implies raw non-empty,
+    but the reverse doesn't hold — see
+    `test_cost_cap_parks_needs_human_at_next_step_boundary` below, where an unset
+    `runner_dir` leaves wrapped empty alongside a present raw command."""
     store = _store(tmp_path)
     store.record_lease(
         NewLease(

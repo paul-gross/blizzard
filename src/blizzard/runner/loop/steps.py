@@ -2982,9 +2982,15 @@ def _escalate(ctx: LoopContext, lease: LeaseRecord, *, reason: str = "retries ex
             model=lease.resolved_model,
             effort=lease.resolved_effort,
         )
-        # The wrapped command's presence tracks the raw one in lockstep (both empty, or
-        # both set) — under the same session+bindings guard, gated further on a resolved
-        # runtime dir so an unresolved one composes nothing rather than a broken command.
+        # The wrapped command needs everything the raw one needs (session+bindings,
+        # checked above) plus a resolved runtime dir to fill --dir with, so the
+        # relationship is one-way, not lockstep: wrapped non-empty implies raw
+        # non-empty, but raw can be non-empty with wrapped still "" — e.g. an older
+        # runner build (or a deployment) that never configured runner_dir composes a
+        # normal raw command here and leaves wrapped empty rather than broken. (A
+        # hub-authored escalation is the other raw-without-wrapped case, but that
+        # never reaches this function — the hub composes its own takeover_command
+        # directly, with no runner_dir to draw a wrapped command from at all.)
         if ctx.config.runner_dir:
             wrapped_takeover = f"blizzard runner takeover {lease.chunk_id} --dir {shlex.quote(ctx.config.runner_dir)}"
     payload = json.dumps(

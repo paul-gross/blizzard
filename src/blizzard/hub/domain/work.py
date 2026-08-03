@@ -306,8 +306,13 @@ class EscalationFact:
     status derivation itself keys only on ``(epoch, recorded_at)`` supersession.
 
     ``wrapped_takeover_command`` is the blizzard-runner-wrapped equivalent (``blizzard
-    runner takeover <chunk_id> --dir <runner runtime dir>``) the board prefers; empty
-    for an escalation recorded by a runner too old to compose it.
+    runner takeover <chunk_id> --dir <runner runtime dir>``) the board prefers.
+    Non-empty only when a runner composed the escalation with a resumable session,
+    live bindings, and a configured runtime dir — a strictly narrower condition than
+    ``takeover_command`` needs, so wrapped non-empty implies raw non-empty but not the
+    reverse: it stays empty for a hub-authored escalation (no runner runtime dir to
+    compose from at all) and for a runner-composed escalation whose ``runner_dir`` is
+    unset, in both of which ``takeover_command`` can still be non-empty.
     """
 
     epoch: int
@@ -1718,10 +1723,13 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         """Record an ``escalation.recorded`` fact reported up by a runner.
 
         Retries exhausted (or a dead worker past the cap): the chunk derives
-        ``needs_human`` until a later lease mint supersedes it. The runner-composed
-        takeover command rides along so the parked session is resumable, alongside its
-        blizzard-runner-wrapped equivalent (``wrapped_takeover_command``, empty for a
-        runner too old to compose it). When ``decision_id`` is set — a human gate's
+        ``needs_human`` until a later lease mint supersedes it. The takeover command
+        rides along so the parked session is resumable, alongside its
+        blizzard-runner-wrapped equivalent (``wrapped_takeover_command``, defaulted
+        empty here — non-empty only when the caller is a runner that composed it with
+        a resumable session, live bindings, and a configured runtime dir; this same
+        method also lands the hub's own cross-graph-unresolvable escalation, which
+        never has one to pass). When ``decision_id`` is set — a human gate's
         resolved choice migrated cross-graph to an unresolvable target (issue #110) —
         the fact carries it so that decision derives closed; without it the gate's
         decision would stay live forever (neither a transition nor a migration row

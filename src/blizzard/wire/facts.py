@@ -81,8 +81,12 @@ class EscalationReport(BaseModel):
     pastes to enter the parked session; ``epoch`` is the
     exhausted attempt's fence, closed by a later lease mint. ``wrapped_takeover_command``
     is the blizzard-runner-wrapped equivalent (``blizzard runner takeover <chunk_id>
-    --dir <runner runtime dir>``) — empty for a runner too old to compose it, in which
-    case the board falls back to the raw ``takeover_command``."""
+    --dir <runner runtime dir>``), non-empty only when this runner has a resumable
+    session, live bindings, and a configured runtime dir to compose it from — a
+    strictly narrower condition than ``takeover_command`` needs, so wrapped non-empty
+    implies raw non-empty but not the reverse (an older runner build, or one with
+    ``runner_dir`` unset, still composes a normal raw command while leaving wrapped
+    empty). When empty, the board falls back to the raw ``takeover_command``."""
 
     epoch: int
     runner_id: str

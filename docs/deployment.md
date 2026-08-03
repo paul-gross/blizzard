@@ -936,20 +936,35 @@ Two things ride that exec which a plain copy-paste of a resume command does not 
   your own variables — stays untouched, and nothing beyond that bounded set leaves
   the daemon.
 
-This makes the takeover verb, not the escalation record's `resume:` string, the
-supported way in. `blizzard runner status` still prints that raw string (`cd … &&
-claude --resume …`) — that surface is deliberately unchanged — and the board (issue
-#251) now renders the wrapped verb as the primary, copyable command, with the raw
-string demoted to a collapsed "Unwrapped fallback" disclosure beside it (present only
-when the escalating runner composed a wrapped form at all; an older runner, or a
-hub-composed escalation, leaves the raw string primary with no fallback to demote it
-into). Either way, the raw string resumes the transcript but deliberately carries
-**neither** of the above: pasted into a bare terminal it runs at the harness's
-interactive permission default, with no identity env — that session can read and edit,
-but its `blizzard runner` verbs cannot reach the runner. A taken-over session also
-installs **no** heartbeat or session-end hooks: quitting it must not record a
-done-signal against the lease, so liveness reporting stays a daemon-spawned-worker
-concern.
+For a **runner-composed** escalation, this makes the takeover verb, not the escalation
+record's raw string, the supported way in. `blizzard runner status` still prints that
+raw string (`cd … && claude --resume …`) — that surface is deliberately unchanged —
+and the board (issue #251) now renders the wrapped verb as the primary, copyable
+command, with the raw string demoted to a collapsed "Unwrapped fallback" disclosure
+beside it (present only when the escalating runner composed a wrapped form at all; an
+older runner — a build predating `LoopConfig.runner_dir`, or a deployment that never
+configured it — leaves the raw string primary with no fallback to demote it into).
+Either way, for a runner-composed escalation the raw string resumes the transcript but
+deliberately carries **neither** of the above: pasted into a bare terminal it runs at
+the harness's interactive permission default, with no identity env — that session can
+read and edit, but its `blizzard runner` verbs cannot reach the runner.
+
+A **hub-composed** escalation is not a weaker case of the same fallback — it is a
+different situation the verb was never built for. The hub has no runner runtime to
+compose a resumable session from, so none is ever parked, and `wrapped_takeover_command`
+stays empty because there is nothing to wrap either way. Its raw string depends on
+which hub path recorded it: an unresolvable cross-graph migration carries operator
+guidance prose (naming the graph to mint before requeuing the chunk), not a runnable
+shell command, while a bounce-cap escalation leaves the raw string itself empty — no
+command of any kind. `blizzard runner takeover` does not apply to a hub-composed
+escalation at all — with no parked session to resume, `open()` refuses with
+`ChunkNotTakeable` before it execs anything. Resolving one means acting on the chunk
+directly (reading its prose, if any, or its bounce history) and requeuing, not taking
+anything over.
+
+A taken-over session also installs **no** heartbeat or session-end hooks: quitting it
+must not record a done-signal against the lease, so liveness reporting stays a
+daemon-spawned-worker concern.
 
 ### Editing an unclaimed chunk's build config
 

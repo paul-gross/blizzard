@@ -999,8 +999,12 @@ export type EnvelopeChoice = {
  * pastes to enter the parked session; ``epoch`` is the
  * exhausted attempt's fence, closed by a later lease mint. ``wrapped_takeover_command``
  * is the blizzard-runner-wrapped equivalent (``blizzard runner takeover <chunk_id>
- * --dir <runner runtime dir>``) — empty for a runner too old to compose it, in which
- * case the board falls back to the raw ``takeover_command``.
+ * --dir <runner runtime dir>``), non-empty only when this runner has a resumable
+ * session, live bindings, and a configured runtime dir to compose it from — a
+ * strictly narrower condition than ``takeover_command`` needs, so wrapped non-empty
+ * implies raw non-empty but not the reverse (an older runner build, or one with
+ * ``runner_dir`` unset, still composes a normal raw command while leaving wrapped
+ * empty). When empty, the board falls back to the raw ``takeover_command``.
  */
 export type EscalationReport = {
     /**
@@ -1032,8 +1036,16 @@ export type EscalationReport = {
  *
  * ``wrapped_takeover_command`` is the blizzard-runner-wrapped equivalent (``blizzard
  * runner takeover <chunk_id> --dir <runner runtime dir>``) the board prefers as the
- * primary copyable command; empty for an escalation recorded by a runner too old to
- * compose it, in which case the board falls back to ``takeover_command``.
+ * primary copyable command, falling back to ``takeover_command`` when it's empty.
+ * Non-empty only when a runner composed the escalation with a resumable
+ * session, live bindings, and a configured runtime dir — a strictly narrower
+ * condition than ``takeover_command`` alone needs, so wrapped non-empty implies raw
+ * non-empty but not the reverse. It stays empty for a hub-authored escalation (no
+ * runner runtime dir exists to compose from — ``takeover_command`` there carries
+ * either operator guidance prose or is itself empty, depending on which hub path
+ * recorded it), for a runner-composed escalation whose ``runner_dir`` is unset
+ * (``takeover_command`` still composes normally), and — in lockstep with
+ * ``takeover_command`` — when there was no parked session to resume at all.
  */
 export type EscalationView = {
     /**
