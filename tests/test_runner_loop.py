@@ -1776,7 +1776,7 @@ def test_escalation_without_a_session_composes_neither_takeover_command(tmp_path
     though `runner_dir` is configured and bindings exist. This is the one case where
     the two fields track together: wrapped non-empty always implies raw non-empty,
     but the reverse doesn't hold — see
-    `test_cost_cap_parks_needs_human_at_next_step_boundary` below, where an unset
+    `test_cost_cap_park_leaves_wrapped_empty_without_runner_dir` below, where an unset
     `runner_dir` leaves wrapped empty alongside a present raw command."""
     store = _store(tmp_path)
     store.record_lease(

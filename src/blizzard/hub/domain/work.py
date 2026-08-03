@@ -298,10 +298,11 @@ class TransitionFact:
 
 @dataclass(frozen=True)
 class EscalationFact:
-    """An ``escalation.recorded`` fact — retries exhausted / dead worker.
+    """An ``escalation.recorded`` fact — the system ran out of moves on this chunk.
 
-    Carries the **takeover command**: the literal ``cd <workdir> && <harness resume>``
-    a human pastes to enter the parked session. It is surfaced on the chunk detail so
+    Carries the **takeover command**: not always the literal ``cd <workdir> &&
+    <harness resume>`` a human pastes — a hub-authored escalation's raw field can
+    carry operator prose instead, or be empty. It is surfaced on the chunk detail so
     ``needs_human`` is actionable; the status derivation itself keys only on
     ``(epoch, recorded_at)`` supersession.
 
@@ -872,8 +873,9 @@ def open_escalation(facts: ChunkFacts) -> EscalationFact | None:
     Requeue/takeover close an escalation by **supersession** — a later lease mint or a
     later ``requeue.recorded`` fact, never a resolution fact — so an escalation
     stays open exactly while nothing was recorded after it. When open, its
-    ``takeover_command`` is the resume command a human pastes; the
-    board surfaces it on the ``needs_human`` chunk.
+    ``takeover_command`` is not always a resume command a human pastes — see
+    ``EscalationFact`` above — but the board surfaces whatever it carries on the
+    ``needs_human`` chunk.
     """
     if not facts.escalations:
         return None

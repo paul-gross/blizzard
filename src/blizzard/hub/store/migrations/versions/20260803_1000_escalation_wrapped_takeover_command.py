@@ -1,11 +1,10 @@
 """escalation wrapped takeover command (hub store tree, issue #251)
 
-Adds the ``escalations.wrapped_takeover_command`` column: the additive field the
-runner will compose starting next phase — a ``blizzard runner takeover`` invocation,
-not the raw harness-resume string ``takeover_command`` already carries — so the board
-can eventually render a takeover that actually routes through the runner rather than
-bypassing it. This revision lands the column only; nothing writes a non-default value
-yet (issue #251, phase 1 of 7).
+Adds the ``escalations.wrapped_takeover_command`` column: a ``blizzard runner
+takeover`` invocation, not the raw harness-resume string ``takeover_command`` already
+carries — so the board can render a takeover that actually routes through the runner
+rather than bypassing it. ``_escalate`` and ``record_bounce_escalation`` write it from
+this same change onward; see ``schema.py`` for the column's present contract.
 
 The hub store's Alembic tree targets one shared ``schema`` metadata whose table
 objects reflect the *current* definition, so a fresh database's 0002 already creates

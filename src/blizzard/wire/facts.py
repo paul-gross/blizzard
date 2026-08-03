@@ -75,15 +75,15 @@ class LeaseMintReport(BaseModel):
 
 
 class EscalationReport(BaseModel):
-    """A runner's ``escalation.recorded`` — retries exhausted for the node.
+    """A runner's ``escalation.recorded`` — the runner ran out of moves on this node.
 
-    ``takeover_command`` is the literal ``cd <workdir> && <harness resume>`` a human
-    pastes to enter the parked session; ``epoch`` is the exhausted attempt's fence,
-    closed by a later lease mint. ``wrapped_takeover_command`` is the
-    blizzard-runner-wrapped equivalent the board prefers as primary, falling back to
-    the raw form when empty. Wrapped implies raw, never the reverse — see
-    `blizzard-context:/domain/humans.md` for the full enumeration of when each is
-    empty."""
+    ``takeover_command`` is not always the literal ``cd <workdir> && <harness resume>``
+    a human pastes — it can carry operator prose instead, or be empty; ``epoch`` is
+    the exhausted attempt's fence, closed by a later lease mint.
+    ``wrapped_takeover_command`` is the blizzard-runner-wrapped equivalent, present
+    only when composed. Wrapped implies raw, never the reverse — see
+    https://github.com/paul-gross/blizzard-context/blob/master/domain/humans.md for
+    the full account."""
 
     epoch: int
     runner_id: str

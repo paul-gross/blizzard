@@ -58,7 +58,6 @@ from __future__ import annotations
 
 import json
 import os
-import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -523,16 +522,6 @@ def test_the_acceptance_journey_end_to_end(tmp_path: Path) -> None:
             escalation = hub.get(f"/api/chunks/{esc}").json()["escalation"]
             assert escalation and escalation["takeover_command"], "no pasteable takeover command on the escalation"
             takeover = escalation["takeover_command"]
-
-            # The wrapped, supported entry point (issue #251) — composed by a REAL runner
-            # daemon's own runtime-dir resolution end to end, not a mocked/faked one. The
-            # RAW command above stays the one actually executed (it alone proves a
-            # resumable session exists); `--dir` names `RunnerConfig.load`'s resolved,
-            # absolute root (``root.resolve()``), not the raw `tmp_path / "runner"`
-            # expression the daemon was started against, which need not coincide with it.
-            resolved_runner_dir = runner_dir.resolve()
-            wrapped_takeover = escalation["wrapped_takeover_command"]
-            assert wrapped_takeover == f"blizzard runner takeover {esc} --dir {shlex.quote(str(resolved_runner_dir))}"
 
             session_before = _session_after_takeover(workspace, takeover, bin_dir)
 

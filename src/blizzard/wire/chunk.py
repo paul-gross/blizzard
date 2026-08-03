@@ -191,9 +191,10 @@ class EscalationView(BaseModel):
     ``wrapped_takeover_command`` is the blizzard-runner-wrapped equivalent of
     ``takeover_command`` the board prefers as the primary copyable command, falling
     back to the raw form when it's empty. Wrapped implies raw, never the reverse, and
-    both go empty together only when there is no parked session to resume at all —
-    see `blizzard-context:/domain/humans.md` for the full enumeration of when each
-    is empty."""
+    whether a takeover is actually possible for this escalation is a separate
+    question from whether either is populated — see
+    https://github.com/paul-gross/blizzard-context/blob/master/domain/humans.md for
+    the full account."""
 
     epoch: int
     takeover_command: str

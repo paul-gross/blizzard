@@ -31,9 +31,7 @@ const TERMINAL_STATUSES: ReadonlySet<string> = new Set<ChunkStatus>(['done', 'st
  * a human for: an open **question** with an inline **Answer** action (MVP
  * criterion 7), an open gate **decision** as **choice buttons** (MVP
  * criterion 12), or an open **escalation**, rendered by {@link ChunkTakeover}
- * (blizzard#251, split out once that region's own growth pushed this file
- * over the `web:structural-gate` line cap) — this component keeps no
- * escalation state of its own, just forwards `detail`.
+ * — this component keeps no escalation state of its own, just forwards `detail`.
  *
  * Below those, the **answered trail** (issue #165): a recently answered question stays
  * rendered with who answered it, what they said, and whether the runner has delivered

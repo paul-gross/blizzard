@@ -23,7 +23,6 @@ from __future__ import annotations
 import contextlib
 import json
 import os
-import shlex
 import uuid
 from datetime import datetime, timedelta
 
@@ -36,6 +35,7 @@ from blizzard.hub.domain.graph import SessionMode
 from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.domain.lease_auth import mint_lease_token
 from blizzard.runner.domain.leases import as_utc, is_heartbeat_stale
+from blizzard.runner.domain.takeover import wrapped_takeover_command
 from blizzard.runner.environments.provider import (
     AcquiredEnvironment,
     EnvironmentPreparationError,
@@ -2983,14 +2983,13 @@ def _escalate(ctx: LoopContext, lease: LeaseRecord, *, reason: str = "retries ex
             effort=lease.resolved_effort,
         )
         # Wrapped implies raw, never the reverse — see
-        # blizzard-context:/domain/humans.md for the full enumeration. The
-        # `bindings` checked above is always non-empty by the time this runs (this
-        # function only ever fires on a chunk this runner still holds; bindings are
-        # released only at terminal exit, which forecloses reaching here at all), so
-        # the guard's only real branch is on `session_id`, not on `bindings` going
-        # empty on its own.
+        # blizzard-context:/domain/humans.md for the full account. `bindings` is
+        # checked explicitly above, not assumed non-empty: `_requeue` and
+        # `_resume_in_place` guard the identical state on this same funnel, and
+        # `_abandon_reassigned` releases bindings ahead of its own closure record —
+        # a narrow crash window between the two, not provably unreachable here.
         if ctx.config.runner_dir:
-            wrapped_takeover = f"blizzard runner takeover {lease.chunk_id} --dir {shlex.quote(ctx.config.runner_dir)}"
+            wrapped_takeover = wrapped_takeover_command(lease.chunk_id, ctx.config.runner_dir)
     payload = json.dumps(
         {
             "chunk_id": lease.chunk_id,

@@ -993,15 +993,15 @@ export type EnvelopeChoice = {
 /**
  * EscalationReport
  *
- * A runner's ``escalation.recorded`` — retries exhausted for the node.
+ * A runner's ``escalation.recorded`` — the runner ran out of moves on this node.
  *
- * ``takeover_command`` is the literal ``cd <workdir> && <harness resume>`` a human
- * pastes to enter the parked session; ``epoch`` is the exhausted attempt's fence,
- * closed by a later lease mint. ``wrapped_takeover_command`` is the
- * blizzard-runner-wrapped equivalent the board prefers as primary, falling back to
- * the raw form when empty. Wrapped implies raw, never the reverse — see
- * `blizzard-context:/domain/humans.md` for the full enumeration of when each is
- * empty.
+ * ``takeover_command`` is not always the literal ``cd <workdir> && <harness resume>``
+ * a human pastes — it can carry operator prose instead, or be empty; ``epoch`` is
+ * the exhausted attempt's fence, closed by a later lease mint.
+ * ``wrapped_takeover_command`` is the blizzard-runner-wrapped equivalent, present
+ * only when composed. Wrapped implies raw, never the reverse — see
+ * https://github.com/paul-gross/blizzard-context/blob/master/domain/humans.md for
+ * the full account.
  */
 export type EscalationReport = {
     /**
@@ -1032,9 +1032,10 @@ export type EscalationReport = {
  * ``wrapped_takeover_command`` is the blizzard-runner-wrapped equivalent of
  * ``takeover_command`` the board prefers as the primary copyable command, falling
  * back to the raw form when it's empty. Wrapped implies raw, never the reverse, and
- * both go empty together only when there is no parked session to resume at all —
- * see `blizzard-context:/domain/humans.md` for the full enumeration of when each
- * is empty.
+ * whether a takeover is actually possible for this escalation is a separate
+ * question from whether either is populated — see
+ * https://github.com/paul-gross/blizzard-context/blob/master/domain/humans.md for
+ * the full account.
  */
 export type EscalationView = {
     /**
