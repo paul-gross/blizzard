@@ -177,13 +177,13 @@ def test_dev_check_invariants_refuses_a_hub_db_url_copied_from_elsewhere(tmp_pat
     config_path.write_text(f'db_url = "{live_db_url}"\n' + config_path.read_text())
 
     refused = runner.invoke(blizzard, ["dev", "check-invariants", "--hub-dir", str(copy_dir)])
-    assert refused.exit_code != 0, f"check-invariants silently touched a db_url outside its directory:\n{refused.output}"
+    assert refused.exit_code != 0, (
+        f"check-invariants silently touched a db_url outside its directory:\n{refused.output}"
+    )
     assert "Traceback" not in refused.output, f"must raise a clean ClickException, not crash:\n{refused.output}"
     assert str(copy_dir) in refused.output
 
-    allowed = runner.invoke(
-        blizzard, ["dev", "check-invariants", "--hub-dir", str(copy_dir), "--allow-external-db"]
-    )
+    allowed = runner.invoke(blizzard, ["dev", "check-invariants", "--hub-dir", str(copy_dir), "--allow-external-db"])
     assert allowed.exit_code == 0, allowed.output
 
 
