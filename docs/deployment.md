@@ -774,6 +774,11 @@ sudo -u blizzard /opt/blizzard/venv/bin/blizzard-runner pause --dir /var/lib/bli
 sudo -u blizzard /opt/blizzard/venv/bin/blizzard-runner start --dir /var/lib/blizzard/runner
 ```
 
+The board's copyable wrapped takeover command (issue #251) supplies that `--dir` for
+you, but nothing else here — not the service account, not the venv's `blizzard`
+binary path — so pasting it still needs a shell already set up exactly like the
+`sudo -u` form above.
+
 `--runner-url` (or `$BZ_RUNNER_URL`) points a local verb at the TCP door instead — for a
 shell that cannot see the runtime dir, or cannot open the socket. Passing both `--dir` and
 `--runner-url` explicitly is an error; an explicit flag beats either variable, and if both
@@ -932,13 +937,19 @@ Two things ride that exec which a plain copy-paste of a resume command does not 
   the daemon.
 
 This makes the takeover verb, not the escalation record's `resume:` string, the
-supported way in. The string `blizzard runner status` and the board print (`cd … &&
-claude --resume …`) resumes the transcript, but deliberately carries **neither** of the
-above: pasted into a bare terminal it runs at the harness's interactive permission
-default, with no identity env — that session can read and edit, but its `blizzard
-runner` verbs cannot reach the runner. A taken-over session also installs **no**
-heartbeat or session-end hooks: quitting it must not record a done-signal against the
-lease, so liveness reporting stays a daemon-spawned-worker concern.
+supported way in. `blizzard runner status` still prints that raw string (`cd … &&
+claude --resume …`) — that surface is deliberately unchanged — and the board (issue
+#251) now renders the wrapped verb as the primary, copyable command, with the raw
+string demoted to a collapsed "Unwrapped fallback" disclosure beside it (present only
+when the escalating runner composed a wrapped form at all; an older runner, or a
+hub-composed escalation, leaves the raw string primary with no fallback to demote it
+into). Either way, the raw string resumes the transcript but deliberately carries
+**neither** of the above: pasted into a bare terminal it runs at the harness's
+interactive permission default, with no identity env — that session can read and edit,
+but its `blizzard runner` verbs cannot reach the runner. A taken-over session also
+installs **no** heartbeat or session-end hooks: quitting it must not record a
+done-signal against the lease, so liveness reporting stays a daemon-spawned-worker
+concern.
 
 ### Editing an unclaimed chunk's build config
 
