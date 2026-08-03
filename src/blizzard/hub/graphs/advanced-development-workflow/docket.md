@@ -42,15 +42,23 @@ lines). Each disposition:
   - `accepted-wont-fix` — plus a one-line reason.
 
 Disposing every `blocking` finding is already required to clear the bounce (unchanged). Disposing a
-`should-fix` finding is optional — fix it if the fix is cheap, otherwise leave it undisposed. An undisposed
-should-fix finding is not an error to raise here; it's retrospective's to catch.
+`should-fix` finding is optional — fix it if the fix is cheap, otherwise leave it undisposed. But:
+a superseded round's undisposed findings are abandoned by design (see below), so leaving one undisposed
+loses it if this round is later superseded by a fresh submission. If it matters beyond this chunk,
+dispose it now — `filed-as-issue` or `accepted-wont-fix` — rather than leaving it to a fold that will not
+see it once superseded.
 
 ## The retrospective fold
 
-`retrospective.md` enumerates every id in the **newest** `plan-findings` asset and the **newest**
-`review-findings` asset — the series' latest submission of each; an earlier round is superseded and out of
-the fold entirely, whether or not its findings were ever individually disposed. It matches each id against
-disposition records recorded anywhere in the chunk's node `retrospective` assets, then:
+**Decision: supersession is authoritative.** `retrospective.md` enumerates every id in the **newest**
+`plan-findings` asset and the **newest** `review-findings` asset — the series' latest submission of each;
+an earlier round is superseded and out of the fold entirely, whether or not its findings were ever
+individually disposed. A superseded round's undisposed findings are abandoned by design — this is
+deliberate: the next review is a full cold pass over the change **as it stands** (`review.md`), not a
+delta over what changed since the last round, so a defect still present in the code is re-reported under
+a new id in the newest asset, where the fold already sees it. When a chunk had a superseded round, the
+fold table names it, so a reader sees the supersession rather than a silent absence. It matches each id
+against disposition records recorded anywhere in the chunk's node `retrospective` assets, then:
 
 - a matched id is closed — carry its disposition into the fold table.
 - an unmatched `should-fix` id is open — file a forge issue for it, following the workspace's own
