@@ -32,7 +32,7 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.loop.build import run_single_tick
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
-from blizzard.wire.facts import QUESTION_ASKED, RunnerFact, RunnerFactBatch
+from blizzard.wire.facts import ESCALATION_RECORDED, QUESTION_ASKED, RunnerFact, RunnerFactBatch
 from tests.e2e.test_acceptance_loop import REPO, _free_port, _runner_config
 from tests.service.support import (
     http_hub_client,
@@ -88,7 +88,13 @@ def test_report_escalation_lands_on_the_chunk_detail() -> None:
     with mock_hub(bin_dir, hub_port) as hub, http_hub_client(hub_port) as client:
         chunk_id = _seed(hub)
 
-        client.report_escalation(chunk_id, epoch=3, runner_id="runner-parity", takeover_command="take over")
+        client.report_escalation(
+            chunk_id,
+            epoch=3,
+            runner_id="runner-parity",
+            takeover_command="take over",
+            wrapped_takeover_command="blizzard runner takeover ch_1 --dir /tmp/runner",
+        )
 
         detail = hub.get(f"/api/fleet/chunks/{chunk_id}")
         assert detail.status_code == 200, detail.text
@@ -96,6 +102,45 @@ def test_report_escalation_lands_on_the_chunk_detail() -> None:
         assert escalation is not None, detail.text
         assert escalation["epoch"] == 3
         assert escalation["takeover_command"] == "take over"
+        assert escalation["wrapped_takeover_command"] == "blizzard runner takeover ch_1 --dir /tmp/runner"
+
+
+def test_report_escalation_buffered_via_push_facts_lands_on_the_chunk_detail() -> None:
+    """The path production actually takes: ``escalation.recorded`` rides the runner's
+    outbound buffer through ``push_facts`` -> ``POST /api/fleet/events``, not the
+    dedicated direct route above — mirrors the ask/answer case's buffered shape
+    (case 3 below) for the escalation kind."""
+    bin_dir = require_mock_fleet()
+    hub_port = _free_port()
+    with mock_hub(bin_dir, hub_port) as hub, http_hub_client(hub_port) as client:
+        chunk_id = _seed(hub)
+
+        ack = client.push_facts(
+            RunnerFactBatch(
+                runner_id="runner-parity",
+                facts=[
+                    RunnerFact(
+                        seq=1,
+                        kind=ESCALATION_RECORDED,
+                        payload={
+                            "chunk_id": chunk_id,
+                            "epoch": 4,
+                            "takeover_command": "cd /ws/e1 && claude --resume sess-1",
+                            "wrapped_takeover_command": f"blizzard runner takeover {chunk_id} --dir /tmp/runner",
+                        },
+                    )
+                ],
+            )
+        )
+        assert 1 in ack.applied, ack
+
+        detail = hub.get(f"/api/fleet/chunks/{chunk_id}")
+        assert detail.status_code == 200, detail.text
+        escalation = detail.json()["escalation"]
+        assert escalation is not None, detail.text
+        assert escalation["epoch"] == 4
+        assert escalation["takeover_command"] == "cd /ws/e1 && claude --resume sess-1"
+        assert escalation["wrapped_takeover_command"] == f"blizzard runner takeover {chunk_id} --dir /tmp/runner"
 
 
 # --------------------------------------------------------------------------------- #

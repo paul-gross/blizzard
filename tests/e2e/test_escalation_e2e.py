@@ -27,6 +27,7 @@ import dataclasses
 import json
 import os
 import re
+import shlex
 import subprocess
 import uuid
 from pathlib import Path
@@ -175,6 +176,16 @@ def test_retries_exhausted_escalates_and_takeover_resumes_session(tmp_path: Path
         assert escalation is not None, "an open escalation should surface on a needs_human chunk"
         takeover = escalation["takeover_command"]
         assert takeover, "the escalation must surface a pasteable takeover command"
+
+        # The wrapped, supported entry point (issue #251) rides alongside the raw
+        # fallback above — asserted here as shape only; the RAW command below stays the
+        # one actually executed (it alone proves a resumable session exists). `--dir`
+        # names the runner's own runtime root as `RunnerConfig.load` stamps it — a
+        # resolved, absolute path (`root.resolve()`) — not the raw `tmp_path / "runner"`
+        # expression, which need not coincide with it off a plain Linux tmpdir.
+        runner_dir = (tmp_path / "runner").resolve()
+        wrapped_takeover = escalation["wrapped_takeover_command"]
+        assert wrapped_takeover == f"blizzard runner takeover {chunk_id} --dir {shlex.quote(str(runner_dir))}"
 
         # The parked session the takeover command targets (parsed from the command
         # itself — proof the command names a real, resumable session).
