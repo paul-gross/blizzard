@@ -11,8 +11,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import sqlalchemy as sa
 
+from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.foundation.store.migrations import RevisionMismatchError
+from blizzard.hub import runtime as hub_runtime
 from tests.conftest import Daemon
 
 pytestmark = pytest.mark.unit
@@ -70,3 +73,32 @@ def test_ensure_current_revision_passes_at_head(daemon: Daemon, tmp_path: Path) 
     config = daemon.runtime.init_environment(tmp_path)
     # No exception when the store is migrated exactly to head.
     daemon.runtime.ensure_current_revision(config)
+
+
+def test_wrapped_takeover_command_column_survives_migration_roundtrip(tmp_path: Path) -> None:
+    """Hub-only (``escalations.wrapped_takeover_command`` has no runner counterpart).
+
+    ``base -> head`` alone would exercise this revision's ``add_column`` branch
+    vacuously — the walking-skeleton revision already creates ``escalations`` with
+    every column current ``schema.py`` declares — so the middle ``downgrade -1``
+    below is what actually proves the revision's ``upgrade()``/``downgrade()``
+    bodies, not just its presence in the ladder.
+    """
+    config = hub_runtime.init_environment(tmp_path)  # upgrades to head
+    runner = hub_runtime.migration_runner(config)
+
+    def _has_column() -> bool:
+        engine = create_engine_from_url(config.db_url)
+        try:
+            columns = {c["name"] for c in sa.inspect(engine).get_columns("escalations")}
+        finally:
+            engine.dispose()
+        return "wrapped_takeover_command" in columns
+
+    assert _has_column()
+
+    runner.downgrade("-1")
+    assert not _has_column()
+
+    runner.upgrade("head")
+    assert _has_column()

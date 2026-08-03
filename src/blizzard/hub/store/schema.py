@@ -573,6 +573,14 @@ escalations = Table(
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("epoch", Integer, nullable=False),  # closed by a later lease mint, not a resolution
     Column("takeover_command", Text, nullable=False, server_default=""),  # the pasteable resume command
+    # The runner-composed ``blizzard runner takeover`` invocation (issue #251) — sits
+    # beside ``takeover_command`` rather than replacing it: that column stays the raw
+    # harness-resume string for back-compat/audit, while this one is what the board
+    # renders so a human's takeover actually routes through the runner instead of
+    # bypassing it with a pasted harness command. Additive; written starting the next
+    # phase, so every existing row (and every column-adding revision on an old store)
+    # reads back its ``server_default`` empty string until then.
+    Column("wrapped_takeover_command", Text, nullable=False, server_default=""),
     # ``decision_id`` is set only when a **human gate's** resolved choice migrated
     # cross-graph to an unresolvable target (issue #110): the escalation stands in for the
     # migration fact the resolvable branch writes (issue #90), so the gate's decision
