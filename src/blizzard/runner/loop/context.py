@@ -103,6 +103,12 @@ class LoopConfig:
     #: sampling attempt (:meth:`~blizzard.runner.store.repository.
     #: IReadRunnerStore.last_external_usage_attempt_at`).
     external_usage_sample_interval_seconds: int = 300
+    #: This runner's runtime directory (``RunnerConfig.root``, already absolute by
+    #: construction), mirrored once at composition. ``_escalate`` (issue #251) composes the
+    #: wrapped ``blizzard runner takeover <chunk_id> --dir <runner_dir>`` command from it;
+    #: empty means unresolved (no context ever built without it in practice, but the guard
+    #: composes no wrapped command rather than guessing).
+    runner_dir: str = ""
 
 
 @dataclass(frozen=True)

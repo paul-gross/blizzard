@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shlex
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -37,6 +38,7 @@ from blizzard.runner.harness.preamble import (
 from blizzard.runner.loop.context import LoopConfig
 from blizzard.runner.loop.steps import (
     _collect_asset_artifacts,
+    _escalate,
     _spawn_attempt,
     advance,
     fill,
@@ -1733,12 +1735,16 @@ def test_retries_exhausted_escalates_and_holds_envs(tmp_path):  # type: ignore[n
     store = _store(tmp_path)
     hub = FakeHub()
     hub.envelopes["ch_1"] = _build_envelope()  # retries_max = 2
+    # A runtime dir with whitespace (issue #251) — proves the composed wrapped command
+    # stays shell-safe (shlex.quote) rather than merely happening to work on a plain path.
+    runner_dir = "/tmp/runner dir/r1"
+    config = LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1, runner_dir=runner_dir)
     # Three verdict-less attempts: attempt 1 & 2 requeue, attempt 3 escalates.
     provider = FakeProvider({"e1": "/ws/e1"})
     for i in range(1, 4):
         handle = WorkerHandle(session_id=f"sess-{i}", pid=300 + i, process_start_time=f"start-{i}")
         harness = FakeHarness(handle=handle, verdict=None)
-        ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe())
+        ctx = make_context(store, hub=hub, provider=provider, harness=harness, probe=FakeProbe(), config=config)
         if i == 1:
             _seed_running_lease(store, pid=300, start="start-0")
         advance(ctx)
@@ -1753,6 +1759,58 @@ def test_retries_exhausted_escalates_and_holds_envs(tmp_path):  # type: ignore[n
     payload = json.loads(escalations[0].payload)
     assert payload["chunk_id"] == "ch_1"
     assert payload["takeover_command"].startswith("cd /ws/e1 &&") and "--resume" in payload["takeover_command"]
+    # The wrapped, supported entry point (issue #251) — composed under the same guard,
+    # alongside the raw fallback above.
+    wrapped = payload["wrapped_takeover_command"]
+    assert wrapped == f"blizzard runner takeover ch_1 --dir {shlex.quote(runner_dir)}"
+    # shlex.quote round-trips: splitting the composed command back out yields the
+    # original whitespace-bearing runner_dir verbatim, not a truncated/mangled token.
+    assert shlex.split(wrapped)[-1] == runner_dir
+
+
+@pytest.mark.unit
+def test_escalation_without_a_session_composes_neither_takeover_command(tmp_path):  # type: ignore[no-untyped-def]
+    """A lease escalated before it ever recorded a session (`session_id` still `None`)
+    composes no takeover command at all — the wrapped verb (issue #251) tracks the raw
+    fallback in lockstep, staying empty right alongside it, even though `runner_dir`
+    is configured and bindings exist. The panel must never see "wrapped present, raw
+    empty" or vice versa."""
+    store = _store(tmp_path)
+    store.record_lease(
+        NewLease(
+            lease_id="lease_1",
+            chunk_id="ch_1",
+            graph_id="gr_1",
+            node_id="nd_build",
+            node_name="build",
+            epoch=1,
+            runner_id="r1",
+            retries_max=2,
+            created_at=_NOW,
+        )
+    )
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    lease = store.active_lease_for_chunk("ch_1")
+    assert lease is not None and lease.session_id is None  # never spawned
+
+    hub = FakeHub()
+    config = LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1, runner_dir="/tmp/runner-dir")
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=FakeHarness(handle=_HANDLE, verdict="pass"),
+        probe=FakeProbe(),
+        config=config,
+    )
+
+    _escalate(ctx, lease)
+
+    escalations = [b for b in store.pending_outbound() if b.kind == ESCALATION_RECORDED]
+    assert len(escalations) == 1
+    payload = json.loads(escalations[0].payload)
+    assert payload["takeover_command"] == ""
+    assert payload["wrapped_takeover_command"] == ""
 
 
 # --------------------------------------------------------------------------- #
@@ -1797,6 +1855,9 @@ def test_cost_cap_parks_needs_human_at_next_step_boundary(tmp_path):  # type: ig
     # The takeover resumes the just-finished attempt's own session — a human's entry point
     # back into the chunk, the same shape a retries-exhausted escalation carries.
     assert payload["takeover_command"].startswith("cd /ws/e1 &&") and "--resume sess-a" in payload["takeover_command"]
+    # `_cap_config` leaves `runner_dir` unset (issue #251) — no runtime dir to compose the
+    # wrapped command from, so it stays empty even though the raw fallback above is present.
+    assert payload["wrapped_takeover_command"] == ""
     # Envs stay held for the takeover; nothing was released on a cap park.
     assert store.held_environment_ids() == ["e1"]
 

@@ -95,6 +95,7 @@ def build_loop_context(
         runner_ceiling_usd=config.runner_ceiling_usd,
         runner_ceiling_window_hours=config.runner_ceiling_window_hours,
         external_usage_sample_interval_seconds=config.external_usage_sample_interval_seconds,
+        runner_dir=str(config.root),
     )
     # The envelope-less usage fallback's transcript read (issue #58), mirroring
     # `runner/app.py`'s own construction of the panel's transcript seam (issue #29):
