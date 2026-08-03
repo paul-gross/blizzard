@@ -447,6 +447,8 @@ class ApplyService:
             facts = self._chunks.load_facts(chunk.chunk_id)
             already = facts is not None and any(e.epoch == submission.epoch for e in facts.escalations)
             if not already:
+                # Hub-authored escalation, no runner runtime dir to compose a wrapped
+                # takeover command from — leaves wrapped_takeover_command at its store default.
                 self._chunks.record_escalation(
                     chunk.chunk_id,
                     epoch=submission.epoch,

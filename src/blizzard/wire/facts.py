@@ -79,11 +79,15 @@ class EscalationReport(BaseModel):
 
     ``takeover_command`` is the literal ``cd <workdir> && <harness resume>`` a human
     pastes to enter the parked session; ``epoch`` is the
-    exhausted attempt's fence, closed by a later lease mint."""
+    exhausted attempt's fence, closed by a later lease mint. ``wrapped_takeover_command``
+    is the blizzard-runner-wrapped equivalent (``blizzard runner takeover <chunk_id>
+    --dir <runner runtime dir>``) — empty for a runner too old to compose it, in which
+    case the board falls back to the raw ``takeover_command``."""
 
     epoch: int
     runner_id: str
     takeover_command: str = ""
+    wrapped_takeover_command: str = ""
 
 
 class RunnerFact(BaseModel):
@@ -91,7 +95,8 @@ class RunnerFact(BaseModel):
 
     ``payload`` is the kind-specific body — for ``lease.minted`` ``{chunk_id, epoch,
     route_token}``, for ``escalation.recorded`` ``{chunk_id, epoch, takeover_command,
-    route_token}``, for ``question.asked`` the ask fields plus ``route_token`` — kept
+    wrapped_takeover_command, route_token}``, for ``question.asked`` the ask fields
+    plus ``route_token`` — kept
     open so a new runner fact kind bolts on without a wire change. ``route_token``
     (issue #84a) is the chunk-scoped fact's route capability token, stamped at
     enqueue; present-only in this phase (the hub does not yet reject on it).

@@ -518,7 +518,11 @@ def get_chunk(chunk_id: str, services: Annotated[HubServices, Depends(get_servic
         )
         if route is not None
         else None,
-        escalation=EscalationView(epoch=escalation.epoch, takeover_command=escalation.takeover_command)
+        escalation=EscalationView(
+            epoch=escalation.epoch,
+            takeover_command=escalation.takeover_command,
+            wrapped_takeover_command=escalation.wrapped_takeover_command,
+        )
         if escalation is not None
         else None,
         pause=PauseView(by=pause.set_by, set_at=iso_utc(pause.set_at)) if pause is not None else None,

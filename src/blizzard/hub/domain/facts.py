@@ -73,12 +73,18 @@ class RunnerFactsService:
         """Land a runner's ``lease.minted`` — advances the fence's latest epoch."""
         self._chunks.record_lease(chunk_id, epoch=epoch, runner_id=runner_id, at=self._clock.now())
 
-    def record_escalation(self, chunk_id: str, *, epoch: int, takeover_command: str) -> int:
+    def record_escalation(
+        self, chunk_id: str, *, epoch: int, takeover_command: str, wrapped_takeover_command: str = ""
+    ) -> int:
         """Land a runner's ``escalation.recorded`` — the chunk derives ``needs_human``.
 
         Returns the freshly-written ``escalations.id`` (issue #213's activity-feed key)."""
         return self._chunks.record_escalation(
-            chunk_id, epoch=epoch, takeover_command=takeover_command, at=self._clock.now()
+            chunk_id,
+            epoch=epoch,
+            takeover_command=takeover_command,
+            wrapped_takeover_command=wrapped_takeover_command,
+            at=self._clock.now(),
         )
 
 
@@ -180,6 +186,7 @@ class FactIngestService:
                 str(payload["chunk_id"]),
                 epoch=int(payload["epoch"]),  # type: ignore[arg-type]
                 takeover_command=str(payload.get("takeover_command", "")),
+                wrapped_takeover_command=str(payload.get("wrapped_takeover_command", "")),
                 at=now,
             )
             return True, escalation_id

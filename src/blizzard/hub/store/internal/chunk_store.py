@@ -216,7 +216,12 @@ class ChunkStore:
                 for lease in conn.execute(select(s.lease_facts).where(s.lease_facts.c.chunk_id == chunk_id)).all()
             ]
             escalations = [
-                EscalationFact(epoch=e.epoch, recorded_at=e.recorded_at, takeover_command=e.takeover_command or "")
+                EscalationFact(
+                    epoch=e.epoch,
+                    recorded_at=e.recorded_at,
+                    takeover_command=e.takeover_command or "",
+                    wrapped_takeover_command=e.wrapped_takeover_command or "",
+                )
                 for e in conn.execute(select(s.escalations).where(s.escalations.c.chunk_id == chunk_id)).all()
             ]
             routes_created = [

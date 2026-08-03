@@ -23,6 +23,7 @@ pytestmark = pytest.mark.component
 
 _POINTER = {"source": "default", "ref": "9"}
 _TAKEOVER = "cd /ws/e1 && mock-claude-code --resume sess-abc"
+_WRAPPED_TAKEOVER = "blizzard runner takeover ch_abc --dir /runner/data/runtime/ch_abc"
 
 _GRAPH_YAML = """
 name: default-delivery
@@ -110,6 +111,50 @@ def test_requeue_lease_mint_closes_escalation_by_supersession(tmp_path: Path) ->
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["status"] == "running"  # back on the route, escalation closed
     assert detail["escalation"] is None
+
+
+def test_escalation_with_wrapped_takeover_round_trips(tmp_path: Path) -> None:
+    """A runner new enough to compose the wrapped takeover command has it round-trip
+    onto chunk detail alongside the raw one (issue #251)."""
+    hub = build_hub(tmp_path)
+    chunk_id = _claim(hub)
+
+    hub.clock.advance(timedelta(minutes=5))
+    resp = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/escalations",
+        json={
+            "epoch": 1,
+            "runner_id": "r1",
+            "takeover_command": _TAKEOVER,
+            "wrapped_takeover_command": _WRAPPED_TAKEOVER,
+        },
+    )
+    assert resp.status_code == 202, resp.text
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["escalation"] is not None
+    assert detail["escalation"]["takeover_command"] == _TAKEOVER
+    assert detail["escalation"]["wrapped_takeover_command"] == _WRAPPED_TAKEOVER
+
+
+def test_escalation_without_wrapped_takeover_reads_back_empty(tmp_path: Path) -> None:
+    """A runner too old to know about ``wrapped_takeover_command`` omits it entirely —
+    the field reads back empty while the raw ``takeover_command`` stays intact
+    (issue #251)."""
+    hub = build_hub(tmp_path)
+    chunk_id = _claim(hub)
+
+    hub.clock.advance(timedelta(minutes=5))
+    resp = hub.client.post(
+        f"/api/fleet/chunks/{chunk_id}/escalations",
+        json={"epoch": 1, "runner_id": "r1", "takeover_command": _TAKEOVER},
+    )
+    assert resp.status_code == 202, resp.text
+
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["escalation"] is not None
+    assert detail["escalation"]["takeover_command"] == _TAKEOVER
+    assert detail["escalation"]["wrapped_takeover_command"] == ""
 
 
 def test_escalation_on_unknown_chunk_is_404(tmp_path: Path) -> None:

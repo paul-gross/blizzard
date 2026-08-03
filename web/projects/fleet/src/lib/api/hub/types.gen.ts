@@ -997,7 +997,10 @@ export type EnvelopeChoice = {
  *
  * ``takeover_command`` is the literal ``cd <workdir> && <harness resume>`` a human
  * pastes to enter the parked session; ``epoch`` is the
- * exhausted attempt's fence, closed by a later lease mint.
+ * exhausted attempt's fence, closed by a later lease mint. ``wrapped_takeover_command``
+ * is the blizzard-runner-wrapped equivalent (``blizzard runner takeover <chunk_id>
+ * --dir <runner runtime dir>``) — empty for a runner too old to compose it, in which
+ * case the board falls back to the raw ``takeover_command``.
  */
 export type EscalationReport = {
     /**
@@ -1012,6 +1015,10 @@ export type EscalationReport = {
      * Takeover Command
      */
     takeover_command?: string;
+    /**
+     * Wrapped Takeover Command
+     */
+    wrapped_takeover_command?: string;
 };
 
 /**
@@ -1022,6 +1029,11 @@ export type EscalationReport = {
  * Surfaces the runner-composed takeover command so a human can resume the parked
  * session. Present only while the escalation is open —
  * a later lease mint (requeue/takeover) supersedes it and this drops away.
+ *
+ * ``wrapped_takeover_command`` is the blizzard-runner-wrapped equivalent (``blizzard
+ * runner takeover <chunk_id> --dir <runner runtime dir>``) the board prefers as the
+ * primary copyable command; empty for an escalation recorded by a runner too old to
+ * compose it, in which case the board falls back to ``takeover_command``.
  */
 export type EscalationView = {
     /**
@@ -1032,6 +1044,10 @@ export type EscalationView = {
      * Takeover Command
      */
     takeover_command: string;
+    /**
+     * Wrapped Takeover Command
+     */
+    wrapped_takeover_command?: string;
 };
 
 /**
@@ -2420,7 +2436,8 @@ export type RunnerEnrollmentResponse = {
  *
  * ``payload`` is the kind-specific body — for ``lease.minted`` ``{chunk_id, epoch,
  * route_token}``, for ``escalation.recorded`` ``{chunk_id, epoch, takeover_command,
- * route_token}``, for ``question.asked`` the ask fields plus ``route_token`` — kept
+ * wrapped_takeover_command, route_token}``, for ``question.asked`` the ask fields
+ * plus ``route_token`` — kept
  * open so a new runner fact kind bolts on without a wire change. ``route_token``
  * (issue #84a) is the chunk-scoped fact's route capability token, stamped at
  * enqueue; present-only in this phase (the hub does not yet reject on it).

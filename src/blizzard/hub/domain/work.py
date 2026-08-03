@@ -304,11 +304,16 @@ class EscalationFact:
     literal ``cd <workdir> && <harness resume>`` a human pastes to enter the parked
     session. It is surfaced on the chunk detail so ``needs_human`` is actionable; the
     status derivation itself keys only on ``(epoch, recorded_at)`` supersession.
+
+    ``wrapped_takeover_command`` is the blizzard-runner-wrapped equivalent (``blizzard
+    runner takeover <chunk_id> --dir <runner runtime dir>``) the board prefers; empty
+    for an escalation recorded by a runner too old to compose it.
     """
 
     epoch: int
     recorded_at: datetime
     takeover_command: str = ""
+    wrapped_takeover_command: str = ""
 
 
 @dataclass(frozen=True)
@@ -1701,18 +1706,27 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         ...
 
     def record_escalation(
-        self, chunk_id: str, *, epoch: int, takeover_command: str, at: datetime, decision_id: str | None = None
+        self,
+        chunk_id: str,
+        *,
+        epoch: int,
+        takeover_command: str,
+        at: datetime,
+        decision_id: str | None = None,
+        wrapped_takeover_command: str = "",
     ) -> int:
         """Record an ``escalation.recorded`` fact reported up by a runner.
 
         Retries exhausted (or a dead worker past the cap): the chunk derives
         ``needs_human`` until a later lease mint supersedes it. The runner-composed
-        takeover command rides along so the parked session is resumable. When
-        ``decision_id`` is set — a human gate's resolved choice migrated cross-graph to an
-        unresolvable target (issue #110) — the fact carries it so that decision derives
-        closed; without it the gate's decision would stay live forever (neither a
-        transition nor a migration row exists to close it), wedging REAP recovery and
-        driving a per-tick runner re-submit. Null for the ordinary escalation.
+        takeover command rides along so the parked session is resumable, alongside its
+        blizzard-runner-wrapped equivalent (``wrapped_takeover_command``, empty for a
+        runner too old to compose it). When ``decision_id`` is set — a human gate's
+        resolved choice migrated cross-graph to an unresolvable target (issue #110) —
+        the fact carries it so that decision derives closed; without it the gate's
+        decision would stay live forever (neither a transition nor a migration row
+        exists to close it), wedging REAP recovery and driving a per-tick runner
+        re-submit. Null for the ordinary escalation.
 
         Returns the freshly-written ``escalations.id`` (issue #213's activity-feed key)."""
         ...

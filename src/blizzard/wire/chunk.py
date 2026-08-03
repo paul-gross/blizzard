@@ -188,10 +188,16 @@ class EscalationView(BaseModel):
 
     Surfaces the runner-composed takeover command so a human can resume the parked
     session. Present only while the escalation is open —
-    a later lease mint (requeue/takeover) supersedes it and this drops away."""
+    a later lease mint (requeue/takeover) supersedes it and this drops away.
+
+    ``wrapped_takeover_command`` is the blizzard-runner-wrapped equivalent (``blizzard
+    runner takeover <chunk_id> --dir <runner runtime dir>``) the board prefers as the
+    primary copyable command; empty for an escalation recorded by a runner too old to
+    compose it, in which case the board falls back to ``takeover_command``."""
 
     epoch: int
     takeover_command: str
+    wrapped_takeover_command: str = ""
 
 
 class TransitionView(BaseModel):
