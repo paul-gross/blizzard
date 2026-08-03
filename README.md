@@ -134,7 +134,11 @@ default `uv run pytest` gate stays hermetic.
   from durable facts, bounded to the last 24h/200 rows — then continues live over this
   same `/api/events/stream`, deduped against the backfill by each frame's fact-identity
   `key` rather than by timestamp; see `test_event_log_service.py` and
-  `test_event_log_e2e.py`.)
+  `test_event_log_e2e.py`. The **field-level shape** of that SSE contract — as opposed to
+  this tier's count-and-timing proof of live delivery — is gated separately by
+  `mise run sse-contract` (`blizzard:sse-contract`) against the golden corpus at
+  `contracts/sse/`, read by both a Python producer/parse suite and the board's own
+  transport spec.)
 
 The counterpart mocks and their lever surfaces live in the `blizzard-mock` repo
 (`blizzard_mock.mock_hub` / `blizzard_mock.mock_runner`). sqlite only, no tokens, no

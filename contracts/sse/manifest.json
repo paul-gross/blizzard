@@ -1,0 +1,15 @@
+{
+  "kinds": [
+    "chunk-changed",
+    "question-asked",
+    "question-answered",
+    "decision-opened",
+    "decision-resolved",
+    "queue-changed",
+    "runner-changed",
+    "event-logged"
+  ],
+  "reserved_comment": ": blizzard hub event stream\n\n",
+  "keepalive_comment": ": keepalive\n\n",
+  "frame_line_order": ["id", "event", "data"]
+}

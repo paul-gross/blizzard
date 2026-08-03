@@ -1,0 +1,11 @@
+{
+  "minimal": {
+    "chunk_id": "ch_1",
+    "question_id": "qn_1"
+  },
+  "keyed": {
+    "chunk_id": "ch_1",
+    "question_id": "qn_1",
+    "key": "questions:qn_1"
+  }
+}

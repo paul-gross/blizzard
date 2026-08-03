@@ -1,0 +1,11 @@
+{
+  "minimal": {
+    "chunk_id": "ch_1",
+    "decision_id": "dec_1"
+  },
+  "keyed": {
+    "chunk_id": "ch_1",
+    "decision_id": "dec_1",
+    "key": "decisions:dec_1"
+  }
+}

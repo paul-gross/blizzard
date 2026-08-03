@@ -35,6 +35,10 @@ run = "BLIZZARD_JOURNEY=1 uv run pytest -m journey tests/journey/"
 description = "Run the service tier — a running daemon's HTTP API exercised from outside with the counterpart mocked: the runner against the mock hub (unreachable→buffered, dropped-ack→idempotent, stale-envelope), and the hub against the mock runner + mock forge (claim/completion, stale-epoch rejection, queue shaping, the SSE contract + live fan-out to a connected subscriber). sqlite only, no tokens/network; needs the sibling blizzard-mock worktree provisioned (winter provision <env>) — skips cleanly without it"
 run = "BLIZZARD_SERVICE=1 uv run pytest tests/service/"
 
+[tasks.sse-contract]
+description = "blizzard:sse-contract — gate the SSE frame shape contract (issue #235): the Python producer+parse suite against contracts/sse/'s golden corpus, then the board's contract spec driving the same goldens through the real SseService/FetchEventSource transport"
+run = "uv run pytest tests/test_sse_contract.py && (cd web && npx ng test fleet --include='**/sse-contract.spec.ts')"
+
 [tasks.lint]
 description = "Lint with ruff"
 run = "uv run ruff check ."

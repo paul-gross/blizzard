@@ -36,7 +36,19 @@ import json
 import threading
 from collections import deque
 from dataclasses import dataclass
-from typing import Literal
+
+from blizzard.wire.sse import (
+    ChunkChangeCause,
+    ChunkChangedPayload,
+    DecisionOpenedPayload,
+    DecisionResolvedPayload,
+    EventLoggedPayload,
+    QuestionAnsweredPayload,
+    QuestionAskedPayload,
+    QueueChangedPayload,
+    RunnerChangedPayload,
+    RunnerChangeKind,
+)
 
 # SSE event-type names — the board's live vocabulary.
 CHUNK_CHANGED = "chunk-changed"
@@ -48,39 +60,22 @@ QUEUE_CHANGED = "queue-changed"
 RUNNER_CHANGED = "runner-changed"
 EVENT_LOGGED = "event-logged"
 
-#: What a ``runner-changed`` frame reports (issue #151). The frame's ``runner_id`` alone
-#: says only *that* something changed, which is all the board could ever render — and
-#: because a runner re-registers on every pull-loop cycle as its liveness heartbeat, that
-#: is overwhelmingly the ``registered``/``heartbeat`` pair. Naming the kind lets a consumer
-#: keep invalidating on every frame while showing an operator only the ones that carry news.
-RunnerChangeKind = Literal[
-    "registered", "heartbeat", "paused", "resumed", "locally-paused", "locally-resumed", "external-usage"
-]
-
-#: What fact family drove a ``chunk-changed`` frame (issue #212) — each emit site names its
-#: own cause statically. ``escalated`` is reachable from both ``report_escalation`` and the
-#: runner-facts ingest loop; ``question-asked``/``question-answered`` are reachable from both
-#: ``questions.py``'s two routes and the ingest loop's ``fact.kind`` mapping.
-ChunkChangeCause = Literal[
-    "minted",
-    "promoted",
-    "edited",
-    "grouped",
-    "claimed",
-    "node-completed",
-    "migrated",
-    "decision-submitted",
-    "decision-resolved",
-    "question-asked",
-    "question-answered",
-    "escalated",
-    "requeued",
-    "detached",
-    "paused",
-    "resumed",
-    "stopped",
-    "hub-advanced",
-]
+#: Every event-type name the broker can publish (issue #235) — the single enumerable
+#: source the SSE contract test's corpus-closure check reads, mirroring the board's own
+#: ``HUB_EVENT_TYPES`` (``fleet-live.ts``). A ninth constant added above without a slot
+#: here would still be invisible to that check, exactly as adding one to
+#: ``HUB_EVENT_TYPES`` on the TS side is what makes a new kind visible there — this
+#: tuple, not the bare constants, is the broker's declared vocabulary.
+EVENT_TYPES: tuple[str, ...] = (
+    CHUNK_CHANGED,
+    QUESTION_ASKED,
+    QUESTION_ANSWERED,
+    DECISION_OPENED,
+    DECISION_RESOLVED,
+    QUEUE_CHANGED,
+    RUNNER_CHANGED,
+    EVENT_LOGGED,
+)
 
 
 @dataclass(frozen=True)
@@ -161,49 +156,37 @@ class EventBroker:
         a page-load backfill row and this live frame can be recognized as the same fact by
         exact string equality. Absent (never a placeholder) for a cause with no fact table
         (``edited``) or when this call recorded nothing new (an idempotent no-op)."""
-        payload: dict[str, object] = {"chunk_id": chunk_id, "status": status}
-        if prev_status is not None:
-            payload["prev_status"] = prev_status
-        if prev_node is not None:
-            payload["prev_node"] = prev_node
-        if node is not None:
-            payload["node"] = node
-        if runner_id is not None:
-            payload["runner_id"] = runner_id
-        if cause is not None:
-            payload["cause"] = cause
-        if graph_id is not None:
-            payload["graph_id"] = graph_id
-        if key is not None:
-            payload["key"] = key
+        payload = ChunkChangedPayload(
+            chunk_id=chunk_id,
+            status=status,
+            prev_status=prev_status,
+            prev_node=prev_node,
+            node=node,
+            runner_id=runner_id,
+            cause=cause,
+            graph_id=graph_id,
+            key=key,
+        ).to_payload()
         return self.publish(CHUNK_CHANGED, payload)
 
     def publish_question_asked(self, chunk_id: str, question_id: str, *, key: str | None = None) -> int:
         """A ``question.asked`` landed — the chunk parks ``waiting_on_human``."""
-        payload: dict[str, object] = {"chunk_id": chunk_id, "question_id": question_id}
-        if key is not None:
-            payload["key"] = key
+        payload = QuestionAskedPayload(chunk_id=chunk_id, question_id=question_id, key=key).to_payload()
         return self.publish(QUESTION_ASKED, payload)
 
     def publish_question_answered(self, chunk_id: str, question_id: str, *, key: str | None = None) -> int:
         """A ``question.answered`` landed — the chunk leaves ``waiting_on_human``."""
-        payload: dict[str, object] = {"chunk_id": chunk_id, "question_id": question_id}
-        if key is not None:
-            payload["key"] = key
+        payload = QuestionAnsweredPayload(chunk_id=chunk_id, question_id=question_id, key=key).to_payload()
         return self.publish(QUESTION_ANSWERED, payload)
 
     def publish_decision_opened(self, chunk_id: str, decision_id: str, *, key: str | None = None) -> int:
         """A gate ``decision.submitted`` opened — a human choice is awaited."""
-        payload: dict[str, object] = {"chunk_id": chunk_id, "decision_id": decision_id}
-        if key is not None:
-            payload["key"] = key
+        payload = DecisionOpenedPayload(chunk_id=chunk_id, decision_id=decision_id, key=key).to_payload()
         return self.publish(DECISION_OPENED, payload)
 
     def publish_decision_resolved(self, chunk_id: str, decision_id: str, *, key: str | None = None) -> int:
         """A ``decision.resolved`` landed — the holding runner will advance the chunk."""
-        payload: dict[str, object] = {"chunk_id": chunk_id, "decision_id": decision_id}
-        if key is not None:
-            payload["key"] = key
+        payload = DecisionResolvedPayload(chunk_id=chunk_id, decision_id=decision_id, key=key).to_payload()
         return self.publish(DECISION_RESOLVED, payload)
 
     def publish_queue_changed(self) -> int:
@@ -211,7 +194,7 @@ class EventBroker:
 
         Carries no ``key`` (issue #213): a reorder writes N rows with no per-row news, so
         there is no single durable fact this frame could name."""
-        return self.publish(QUEUE_CHANGED, {})
+        return self.publish(QUEUE_CHANGED, QueueChangedPayload().to_payload())
 
     def publish_runner_changed(
         self,
@@ -233,13 +216,7 @@ class EventBroker:
         (``runner_pause_facts``/``runner_local_pause_facts``); deliberately absent on
         ``registered``/``heartbeat``, which have no fact table and are muted client-side.
         """
-        payload: dict[str, object] = {"runner_id": runner_id, "kind": kind}
-        if by is not None:
-            payload["by"] = by
-        if reason is not None:
-            payload["reason"] = reason
-        if key is not None:
-            payload["key"] = key
+        payload = RunnerChangedPayload(runner_id=runner_id, kind=kind, by=by, reason=reason, key=key).to_payload()
         return self.publish(RUNNER_CHANGED, payload)
 
     def publish_event_logged(
@@ -251,9 +228,9 @@ class EventBroker:
         row itself is read back off ``GET /api/events``. ``key`` (issue #213) names the
         ``event_log`` row's own id, matching :func:`~blizzard.hub.domain.work._event_row_to_activity`'s
         backfill key exactly."""
-        payload: dict[str, object] = {"severity": severity, "kind": kind, "chunk_id": chunk_id, "runner_id": runner_id}
-        if key is not None:
-            payload["key"] = key
+        payload = EventLoggedPayload(
+            severity=severity, kind=kind, chunk_id=chunk_id, runner_id=runner_id, key=key
+        ).to_payload()
         return self.publish(EVENT_LOGGED, payload)
 
     # --- subscription (called from the async SSE handler) -------------------
