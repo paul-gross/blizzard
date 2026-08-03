@@ -1,12 +1,13 @@
-"""The packaged triage router drives real migrations (component tier, issue #229).
+"""The packaged triage router drives real migrations (component tier, issues #229, #231).
 
 ``test_migration_apply.py`` proves the migration machinery over fixture graphs; this
 proves the **packaged wiring**: reconciling the shipped set mints every graph the
 default graph's choices name, a default-pinned chunk claims at ``triage``, and each
 authored choice does what the front door promises — ``basic`` lands the chunk at
-``bas-dwf``'s ``build``, ``advanced`` at ``adv-dwf``'s ``plan`` (entry landings: neither
-lane declares a ``triage`` node to name-match), and ``already-done`` closes the chunk at
-the terminal with the ``triage-findings`` asset on record and nothing delivered.
+``bas-dwf``'s ``build``, ``advanced`` at ``adv-dwf``'s ``plan``, ``harness`` at
+``bas-hwf``'s ``build`` (entry landings: no lane declares a ``triage`` node to
+name-match), and ``already-done`` closes the chunk at the terminal with the
+``triage-findings`` asset on record and nothing delivered.
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ def _reconciled_hub(tmp_path: Path):  # type: ignore[no-untyped-def]
     """A hub with the whole packaged set minted, the way a deploy's reconcile does."""
     hub = build_hub(tmp_path)
     outcomes = reconcile_packaged_graphs(hub.services.graph_mint, hub.services.graphs)
-    assert {o.name for o in outcomes} >= {"default-delivery", "bas-dwf", "adv-dwf"}
+    assert {o.name for o in outcomes} >= {"default-delivery", "bas-dwf", "adv-dwf", "bas-hwf"}
     assert all(o.status is GraphSyncStatus.MINTED for o in outcomes), outcomes
     return hub
 
@@ -93,6 +94,21 @@ def test_the_advanced_choice_lands_the_chunk_at_adv_dwf_plan(tmp_path: Path) -> 
     assert detail["graph_id"] == adv_dwf_id
     assert detail["current_node_name"] == "plan"  # entry landing — adv-dwf has no triage node
     assert detail["status"] == "ready"
+
+
+def test_the_harness_choice_lands_the_chunk_at_bas_hwf_build(tmp_path: Path) -> None:
+    hub = _reconciled_hub(tmp_path)
+    chunk_id, node_id = _claimed_triage_chunk(hub, ref="4")
+
+    resp = _route(hub, chunk_id, node_id, "harness")
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["outcome"] == "migrated"
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    bas_hwf_id = next(g["graph_id"] for g in hub.client.get("/api/graphs").json() if g["name"] == "bas-hwf")
+    assert detail["graph_id"] == bas_hwf_id
+    assert detail["current_node_name"] == "build"  # entry landing — bas-hwf has no triage node
+    assert detail["status"] == "ready"  # re-queued under the lane, claimable
 
 
 def test_the_already_done_choice_closes_the_chunk_without_entering_a_lane(tmp_path: Path) -> None:

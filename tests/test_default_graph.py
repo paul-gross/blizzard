@@ -37,10 +37,15 @@ def test_default_graph_triage_routes_to_lanes_or_done() -> None:
     triage = load_default_graph_doc().node("triage")
     assert triage is not None and triage.judgement is not None
     routes = {c.name: c.to for c in triage.judgement.choices}
-    assert routes == {"already-done": "done", "basic": "graph:bas-dwf", "advanced": "graph:adv-dwf"}
+    assert routes == {
+        "already-done": "done",
+        "basic": "graph:bas-dwf",
+        "advanced": "graph:adv-dwf",
+        "harness": "graph:bas-hwf",
+    }
     # The lane choices are cross-graph migration targets, parsed as such.
     targets = {c.name: c.target_graph for c in triage.judgement.choices}
-    assert targets == {"already-done": None, "basic": "bas-dwf", "advanced": "adv-dwf"}
+    assert targets == {"already-done": None, "basic": "bas-dwf", "advanced": "adv-dwf", "harness": "bas-hwf"}
 
 
 def test_default_graph_triage_is_a_fresh_advanced_tier_cold_read() -> None:
@@ -58,25 +63,28 @@ def test_default_graph_triage_is_a_fresh_advanced_tier_cold_read() -> None:
 
 
 def test_default_graph_lane_targets_are_packaged_and_land_at_their_entries() -> None:
-    # Both migration targets ship in the same wheel, and neither declares a `triage`
+    # Every migration target ships in the same wheel, and none declares a `triage`
     # node — so a migration name-matches nothing and lands at the target's entry.
     from blizzard.hub.graphs import load_graph_doc
 
     docs = {doc.name: doc for doc in (load_graph_doc(p) for p in packaged_graph_paths())}
-    assert {"bas-dwf", "adv-dwf"} <= set(docs)
+    assert {"bas-dwf", "adv-dwf", "bas-hwf"} <= set(docs)
     assert docs["bas-dwf"].entry == "build"
     assert docs["adv-dwf"].entry == "plan"
+    assert docs["bas-hwf"].entry == "build"
     assert docs["bas-dwf"].node("triage") is None
     assert docs["adv-dwf"].node("triage") is None
+    assert docs["bas-hwf"].node("triage") is None
 
 
 def test_default_graph_reconciles_after_its_lane_targets() -> None:
-    # `packaged_graph_paths` walks in directory order, so on a fresh store both lane
-    # targets are minted before the graph whose choices name them — the late-binding
+    # `packaged_graph_paths` walks in directory order, so on a fresh store every lane
+    # target is minted before the graph whose choices name them — the late-binding
     # mint warning never fires from a deploy's own reconcile.
     order = [p.parent.name for p in packaged_graph_paths()]
     assert order.index("default") > order.index("basic-development-workflow")
     assert order.index("default") > order.index("advanced-development-workflow")
+    assert order.index("default") > order.index("basic-harness-workflow")
 
 
 def test_default_graph_prompts_are_inlined_not_paths() -> None:

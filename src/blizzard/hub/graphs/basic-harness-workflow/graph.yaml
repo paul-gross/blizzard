@@ -1,0 +1,138 @@
+# The basic-harness-workflow graph — build -> review -> deliver -> retrospective, on one
+# single linear track, at the frontier capability tier.
+#
+# Harness work — workspace skills, `blizzard-context` convention rules, graph prompts,
+# agent docs, and other agent-capability surfaces — is the fleet's own operating rules:
+# unusually high-leverage per token and judgement-heavy per line, so this lane runs on
+# the strongest available model rather than the mechanical `blizzard:basic` tier the
+# other lightweight lane (`bas-dwf`) pins. It is otherwise the SAME lightweight shape as
+# `basic-development-workflow`, cut down one node further: no `pre-push` node at all.
+#
+# Why no pre-push: `bas-dwf` keeps one so a rejected fast-forward (the base moved) can be
+# resolved by rebasing without re-earning verification — the point of that node is
+# recovering from a moved base without disturbing an already-reviewed change. This lane
+# is the user-stated minimum instead (issue #231): build, review, deliver, plus the
+# closing retrospective every lane owes. A rejected fast-forward here routes straight
+# back to `build` — the only station left that can rebase and revalidate — carrying the
+# same "why you're back" context `bas-dwf`'s `pre-push.from-deliver.md` gives its own
+# re-entry, just landing one node earlier.
+#
+# Like `bas-dwf`: no `plan` node (harness changes are prose-and-convention shaped; inline
+# planning suffices) and no standalone `verify` node (`build` fuses build and
+# verification into one node).
+#
+# Delivery is PR-free: `deliver` runs the packaged `land_ff` script, which fast-forwards
+# each repo's base branch ref directly to the chunk's own commit instead of opening and
+# merging a PR — no merge commit, so history stays linear.
+#
+# A landing closes on `retrospective`, same as `bas-dwf` — the lightweight lane is cut
+# down on *gates*, not on learning from itself.
+#
+# Conforms to the canonical authoring schema: fused choice/edge entries, prompts as
+# file references inlined at mint, retries escaping to escalation. Every prompt below
+# is this graph's own copy, isolated in ./prompts — never shared with another graph's
+# directory.
+
+name: bas-hwf
+entry: build
+
+# Named session pools (issue #144), both pinned to the frontier tier — the whole point
+# of this lane (issue #231). Two lineages:
+#
+#   code  the mechanical build lineage, BOUNDED — it is the one that can accumulate
+#         indefinitely across a review-fail (or deliver-conflict) loop.
+#   gate  the cold-eyes review. No `rotate:` block: a gate is only ever reached through
+#         `fresh:gate`, so its head is minted every entry and rotation never applies.
+#
+# Declared here rather than inherited — a graph referencing a pool it does not declare
+# is rejected at mint, and `graph_sync` would go red on first boot.
+sessions:
+  code:
+    model: ["blizzard:frontier"]
+    rotate:
+      # Harness INVOCATIONS, not node-steps: one node-step burns two or three.
+      max_invocations: 30
+      max_context_tokens: 300000
+      max_transcript_bytes: 50000000
+  gate:
+    model: ["blizzard:frontier"]
+
+nodes:
+  build:
+    executor: runner
+    prompt: ./prompts/build.md
+    session: resume:code  # explicit: re-entry from review/deliver should pull build's
+      # own prior context, not whichever node ran last (review is deliberately fresh, so
+      # bare `resume` would otherwise hand build its cold-read session instead of its own)
+    produces:
+      - {name: commit, kind: git_commit}  # the pushed branch(es); kind-matched, not name-matched
+    judgement:
+      prompt: ./prompts/build.judgement.md
+      choices:
+        pass:
+          description: The work meets the item's intent, committed and pushed.
+          to: review
+        fail:
+          description: The work does not yet meet the criteria; the failure output is attached.
+          to: build
+          prompt_addendum: ./prompts/build.from-build.md
+    retries:
+      max: 2
+      exhausted: escalate
+
+  review:
+    executor: runner
+    prompt: ./prompts/review.md
+    session: fresh:gate  # cold eyes for review; the default is resume
+    produces:
+      - review-findings  # asset artifact — carried back into build on a fail
+    judgement:
+      prompt: ./prompts/review.judgement.md
+      choices:
+        pass:
+          description: The submitted work passes review and is ready to deliver.
+          to: deliver
+        fail:
+          description: Review found blocking issues, recorded in the review-findings asset.
+          to: build  # THE LOOP: the findings asset rides this edge back into build
+          prompt_addendum: ./prompts/build.from-review.md
+    retries:
+      max: 2
+      exhausted: escalate
+
+  deliver:
+    executor: hub
+    run:
+      - name: land-every-repo
+        command: python3 -m blizzard.hub.graphs.scripts.land_ff
+    judgement:
+      choices:
+        landed:
+          description: Every repo's base branch ref fast-forwarded cleanly to this chunk's commit; the chunk closes with a retrospective.
+          to: retrospective
+        conflict:
+          description: A repo did not fast-forward cleanly (the base moved out from under it); with no pre-push node in this lane, returned to build to rebase against the base as it now stands and revalidate.
+          to: build
+          prompt_addendum: ./prompts/build.from-deliver.md
+        failure:
+          description: land_ff itself failed or crashed (a missing env var, an unauthorized or failed marker write) rather than reporting a clean outcome; returned to build — the same recovery point as conflict — to diagnose and retry without discarding the validated spine.
+          to: build
+          prompt_addendum: ./prompts/build.from-deliver.md
+
+  retrospective:
+    executor: runner
+    prompt: ./prompts/retrospective.md
+    session: resume  # the default, spelled out: `deliver` is a script node with no
+      # session, so the chunk's most-recent session is build's own — the session
+      # holding the whole journey, which is exactly what a retrospective synthesizes.
+    produces:
+      - retrospective
+    judgement:
+      prompt: ./prompts/retrospective.judgement.md
+      choices:
+        recorded:
+          description: The retrospective is written as the retrospective asset and the workspace's post-delivery work is done; the work is complete.
+          to: done
+    retries:
+      max: 1
+      exhausted: escalate

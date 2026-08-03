@@ -13,15 +13,18 @@
 # Routing is authored as graph content, on the two primitives the engine already has:
 # a judgement choice whose `to:` names `graph:<name>` (a cross-graph MIGRATION target,
 # issue #90 — late-bound by name when taken, `bzh:ids-exact-names-correlate`), and the
-# reserved `done` terminal. Neither lane declares a `triage` node, so a migration lands
-# at the target's entry — `bas-dwf`'s `build`, `adv-dwf`'s `plan` — per the landing
-# rule in `blizzard-context:/domain/graphs.md`. The choice table is the extension
-# point: a future lane is a new choice row and a re-mint, never an engine change.
+# reserved `done` terminal. No lane declares a `triage` node, so a migration lands
+# at the target's entry — `bas-dwf`'s `build`, `adv-dwf`'s `plan`, `bas-hwf`'s `build`
+# — per the landing rule in `blizzard-context:/domain/graphs.md`. The choice table is
+# the extension point: a future lane is a new choice row and a re-mint, never an engine
+# change. `harness` (issue #231) is the first choice to exercise that point since the
+# original two.
 #
 # The packaged set reconciles in directory order (`packaged_graph_paths`, issue #146):
-# `advanced-development-workflow` and `basic-development-workflow` sort before
-# `default`, so both migration targets are minted before the graph that names them and
-# the late-binding mint warning never fires on a fresh store.
+# `advanced-development-workflow`, `basic-development-workflow`, and
+# `basic-harness-workflow` all sort before `default`, so every migration target is
+# minted before the graph that names them and the late-binding mint warning never fires
+# on a fresh store.
 #
 # Conforms to the canonical authoring schema: fused choice/edge entries, prompts as
 # file references inlined at mint, retries escaping to escalation. The full authoring
@@ -61,6 +64,9 @@ nodes:
         advanced:
           description: Work that warrants a plan — design or architecture decisions, multi-repo or schema changes, or vague acceptance criteria; migrates to the plan-gated adv-dwf lane.
           to: graph:adv-dwf
+        harness:
+          description: The work item's subject IS the agentic harness itself — a workspace skill, a blizzard-context convention rule, a graph prompt, agent docs, or other agent-capability surface; migrates to the frontier-tier bas-hwf lane regardless of complexity.
+          to: graph:bas-hwf
     retries:
       max: 2
       exhausted: escalate
