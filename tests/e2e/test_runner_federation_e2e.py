@@ -31,6 +31,7 @@ import subprocess
 import sys
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -53,6 +54,30 @@ _SECRET_ENV = "BZ_OAUTH_E2E_FED_SECRET"
 _SECRET = "e2e-fed-oauth-secret"
 _PROVIDER_NAME = "oidc-fed"
 _PROFILE_EMAIL = "fed-admin@example.com"
+_BOUNCE_STATE_COOKIE = "bz_runner_bounce_state"
+
+
+def _bounce_state_cookie(response: Any) -> str:
+    """Read the runner's bounce-state value straight off a login redirect's
+    ``Set-Cookie`` header, rather than through ``BrowserContext.cookies()``.
+
+    The runner mints this cookie ``Secure`` even on a loopback ``http://127.0.0.1``
+    origin (``_bounce_cookie_policy`` in ``runner/auth/federation.py`` — real
+    Chromium navigation, this scenario's own step 1, treats loopback as trustworthy
+    enough to still send it). Playwright's ``APIRequestContext`` (``page.request``)
+    does not replicate that: ``BrowserContext.cookies(url)`` never attributes a
+    ``Secure`` cookie to a plain-``http`` URL, and a later ``page.request`` call
+    does not re-attach one either. Reading the value directly off ``Set-Cookie``
+    sidesteps the first gap; callers must pass it back explicitly via a ``Cookie``
+    header (rather than relying on automatic attachment) to sidestep the second.
+    """
+    for header in response.headers_array:
+        if header["name"].lower() != "set-cookie":
+            continue
+        match = re.match(rf"{_BOUNCE_STATE_COOKIE}=([^;]+)", header["value"])
+        if match:
+            return match.group(1)
+    raise AssertionError(f"login response carried no {_BOUNCE_STATE_COOKIE} cookie: {response.headers_array}")
 
 
 def _hub_bin() -> str:
@@ -216,12 +241,13 @@ def test_multi_daemon_sso_bounce(tmp_path: Path) -> None:
                 # different `aud`), is rejected even with a state B itself minted.
                 login_b = page.request.get(f"{runner_b_url}/api/auth/login?return_to=/", max_redirects=0)
                 assert login_b.status in (302, 307)
-                state_b = next(
-                    c.get("value") for c in context.cookies(runner_b_url) if c.get("name") == "bz_runner_bounce_state"
-                )
+                state_b = _bounce_state_cookie(login_b)
                 cross_resp = page.request.post(
                     f"{runner_b_url}/api/auth/callback",
-                    headers={"content-type": "application/x-www-form-urlencoded"},
+                    headers={
+                        "content-type": "application/x-www-form-urlencoded",
+                        "cookie": f"{_BOUNCE_STATE_COOKIE}={state_b}",
+                    },
                     data=f"token={captured_token}&state={state_b}",
                 )
                 assert cross_resp.status == 400
@@ -231,12 +257,13 @@ def test_multi_daemon_sso_bounce(tmp_path: Path) -> None:
                 # single-use.
                 login_a_again = page.request.get(f"{runner_a_url}/api/auth/login?return_to=/", max_redirects=0)
                 assert login_a_again.status in (302, 307)
-                state_a2 = next(
-                    c.get("value") for c in context.cookies(runner_a_url) if c.get("name") == "bz_runner_bounce_state"
-                )
+                state_a2 = _bounce_state_cookie(login_a_again)
                 replay_resp = page.request.post(
                     f"{runner_a_url}/api/auth/callback",
-                    headers={"content-type": "application/x-www-form-urlencoded"},
+                    headers={
+                        "content-type": "application/x-www-form-urlencoded",
+                        "cookie": f"{_BOUNCE_STATE_COOKIE}={state_a2}",
+                    },
                     data=f"token={captured_token}&state={state_a2}",
                 )
                 assert replay_resp.status == 400
@@ -244,9 +271,13 @@ def test_multi_daemon_sso_bounce(tmp_path: Path) -> None:
                 # --- 4. A mismatched `state` is rejected outright.
                 login_a_3 = page.request.get(f"{runner_a_url}/api/auth/login?return_to=/", max_redirects=0)
                 assert login_a_3.status in (302, 307)
+                state_a3 = _bounce_state_cookie(login_a_3)
                 mismatch_resp = page.request.post(
                     f"{runner_a_url}/api/auth/callback",
-                    headers={"content-type": "application/x-www-form-urlencoded"},
+                    headers={
+                        "content-type": "application/x-www-form-urlencoded",
+                        "cookie": f"{_BOUNCE_STATE_COOKIE}={state_a3}",
+                    },
                     data=f"token={captured_token}&state=not-the-real-state",
                 )
                 assert mismatch_resp.status == 400
