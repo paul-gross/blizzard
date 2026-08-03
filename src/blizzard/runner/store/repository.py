@@ -913,13 +913,15 @@ class IWriteRunnerStore(IReadRunnerStore, Protocol):
         ...
 
     def record_lease_token(self, lease_id: str, token_hash: str, at: datetime) -> None:
-        """Persist a freshly minted lease's capability-token hash (issue #113, Phase 1).
+        """Persist a lease's capability-token hash (issue #113, Phase 1).
 
-        Called once from :func:`_spawn_attempt` right after :meth:`record_lease` —
-        a lease id is never re-minted, so this is an insert, never an upsert. The
-        plaintext itself is never persisted; only this sha256 hash lands here, read
-        back by a later attach-authorization check via :meth:`~IReadRunnerStore.
-        lease_token_hash`."""
+        Every ``mint_lease_token`` caller records through here — the spawn mint
+        (:func:`_spawn_attempt`), the resume re-mint (:func:`_resume_preamble`), and
+        the takeover re-mint (``TakeoverService.open``, issue #258) — so a lease id
+        **is** re-minted and this write is overwrite-safe (the implementation replaces
+        any prior row, invalidating the previous token). The plaintext itself is never
+        persisted; only this sha256 hash lands here, read back by a later
+        attach-authorization check via :meth:`~IReadRunnerStore.lease_token_hash`."""
         ...
 
     def record_resume_intent(self, *, lease_id: str, marked_at: datetime) -> None:

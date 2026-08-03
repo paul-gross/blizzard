@@ -389,11 +389,36 @@ class FakeHarness:
         return self.resume_pid
 
     def resume_command(
-        self, workdir: str, session_id: str, *, model: str | None = None, effort: str | None = None
+        self,
+        workdir: str,
+        session_id: str,
+        *,
+        model: str | None = None,
+        effort: str | None = None,
+        attended: bool = False,
     ) -> str:
         self.resume_command_config.append((model, effort))
         flags = "".join(f" --{name} {value}" for name, value in (("model", model), ("effort", effort)) if value)
         return f"cd {workdir} && claude --resume {session_id}{flags}"
+
+    def identity_env(self, preamble: WorkerPreamble, chunk_id: str, session_id: str) -> dict[str, str]:
+        # Mirrors the real adapter's shape (issue #258): the BLIZZARD_* identity ON TOP
+        # of an allowlisted-base stand-in — fixed daemon-side values for PATH/HOME plus
+        # vars a takeover must NOT forward (the daemon's TERM, an env_passthrough
+        # secret), so a consumer that fails to bound what it takes is caught by a test.
+        return {
+            "PATH": "/daemon/venv/bin:/usr/bin",
+            "HOME": "/daemon/home",
+            "TERM": "daemon-term",
+            "FAKE_PASSTHROUGH_SECRET": "should-never-leave-the-daemon",
+            "BLIZZARD_ENV_IDS": ",".join(e.environment_id for e in preamble.environments),
+            "BLIZZARD_ENV_WORKDIRS": ",".join(e.workdir for e in preamble.environments),
+            "BLIZZARD_SESSION_ID": session_id,
+            "BLIZZARD_CHUNK_ID": chunk_id,
+            "BLIZZARD_LEASE_ID": preamble.lease_id,
+            "BLIZZARD_RUNNER_URL": preamble.local_api_url,
+            "BLIZZARD_LEASE_TOKEN": preamble.lease_token,
+        }
 
     def resolve_model(self, preferences: Sequence[str]) -> str:
         return self.resolved_model

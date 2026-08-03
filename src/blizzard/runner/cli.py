@@ -1027,8 +1027,10 @@ def takeover(chunk_id: str, force: bool, directory: str, runner_url: str | None)
     A pure client of the runner's local API — the same door ``status``/``pause`` use.
     ``POST /chunks/{id}/takeovers`` records the takeover fact before anything else runs
     (so no loop step can respawn or judge the session while it is open) and returns the
-    adapter-composed interactive command; this verb then execs that command as its own
-    child, inheriting this terminal — the daemon itself never touches a TTY. ``--force``
+    adapter-composed interactive command plus the lease's identity env (issue #258);
+    this verb then execs that command as its own child, inheriting this terminal with
+    the identity env layered on top — the daemon itself never touches a TTY, and the
+    lease token travels only in the response body and the exec, never printed. ``--force``
     supersedes a live worker attempt instead of refusing (``409``): the runner kills it
     itself, after the fact lands, consuming no retry and recording no escalation. Once
     the child exits — or this terminal is interrupted (``Ctrl-C``) — ``PATCH
@@ -1045,7 +1047,16 @@ def takeover(chunk_id: str, force: bool, directory: str, runner_url: str | None)
             view = resp.json()
             click.echo(f"taking over chunk {chunk_id} in {view['workdir']}")
             try:
-                exit_code = subprocess.call(view["command"], shell=True, cwd=view["workdir"])
+                # The takeover env (issue #258), layered over the terminal env. The
+                # daemon forwards a bounded set — the ``BLIZZARD_*`` identity plus
+                # ``PATH``/``HOME`` — and those forwarded vars deliberately WIN over the
+                # terminal's (PATH so bare ``blizzard`` resolves to the deployment venv;
+                # HOME so ``--resume`` finds the daemon's session store). Everything
+                # else — TERM, locale, the rest of the operator's shell — stays the
+                # terminal's own, because it was never forwarded. The lease token
+                # arrives only here, never in the printable command.
+                child_env = {**os.environ, **view.get("env", {})}
+                exit_code = subprocess.call(view["command"], shell=True, cwd=view["workdir"], env=child_env)
             finally:
                 end_resp = client.patch(f"/api/chunks/{chunk_id}/takeovers/{view['takeover_id']}")
                 end_resp.raise_for_status()

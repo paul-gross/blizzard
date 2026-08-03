@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 import pytest
 
 from blizzard.foundation.clock import FixedClock
+from blizzard.hub.domain.enrollment import hash_token
 from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.domain.leases import HEARTBEAT_STALENESS_THRESHOLD
 from blizzard.runner.domain.takeover import (
@@ -48,6 +49,7 @@ def _service(store, *, clock=None, harness=None, probe=None):  # type: ignore[no
         clock or FixedClock(_NOW),
         harness or FakeHarness(handle=_HANDLE, verdict=None),
         probe or FakeProbe(),
+        local_api_url="http://127.0.0.1:8431",
     )
 
 
@@ -404,3 +406,48 @@ def test_takeover_of_a_session_predating_the_stamps_renders_the_bare_command(tmp
 
     assert opened.command == "cd /ws/e1 && claude --resume sess-a"
     assert opened.session_name is None
+
+
+def test_takeover_carries_the_lease_identity_env_and_reminting_its_token(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """The taken-over session's worker identity (issue #258): ``--resume`` inherits no
+    spawn env, so the takeover carries it — with a freshly re-minted capability token,
+    invalidating the prior one, and never baked into the printable command."""
+    store = _store(tmp_path)
+    _seed_lease(store)
+    store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
+    store.record_lease_token("lease_1", "prior-token-hash", _NOW)  # the spawn's original mint
+
+    opened = _service(store).open("ch_1", force=False)
+
+    assert opened.env["BLIZZARD_CHUNK_ID"] == "ch_1"
+    assert opened.env["BLIZZARD_LEASE_ID"] == "lease_1"
+    assert opened.env["BLIZZARD_SESSION_ID"] == "sess-a"
+    assert opened.env["BLIZZARD_ENV_IDS"] == "e1"
+    assert opened.env["BLIZZARD_ENV_WORKDIRS"] == "/ws/e1"
+    assert opened.env["BLIZZARD_RUNNER_URL"] == "http://127.0.0.1:8431"
+    token = opened.env["BLIZZARD_LEASE_TOKEN"]
+    assert token
+    stored = store.lease_token_hash("lease_1")
+    assert stored == hash_token(token)  # re-minted and recorded...
+    assert stored != "prior-token-hash"  # ...INVALIDATING the spawn's original token
+    assert token not in opened.command  # env only — never a printable surface
+
+
+def test_takeover_env_is_bounded_to_identity_plus_path_and_home(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """What leaves the daemon is a bounded set (issue #258 review): the BLIZZARD_*
+    identity plus PATH/HOME. The adapter's full child env carries the daemon's TERM
+    and any ``env_passthrough`` secret — neither may cross the local API, and the
+    daemon's TERM must not clobber the operator's terminal on exec."""
+    store = _store(tmp_path)
+    _seed_lease(store)
+    store.record_park(lease_id="lease_1", chunk_id="ch_1", question_id="qn_1", parked_at=_NOW)
+
+    opened = _service(store).open("ch_1", force=False)
+
+    # Forwarded: the execution vars an interactive resume needs from the daemon side.
+    assert opened.env["PATH"] == "/daemon/venv/bin:/usr/bin"
+    assert opened.env["HOME"] == "/daemon/home"
+    # Withheld: the rest of the daemon's child env (FakeHarness plants both).
+    assert "TERM" not in opened.env
+    assert "FAKE_PASSTHROUGH_SECRET" not in opened.env
+    assert set(opened.env) == {"PATH", "HOME"} | {k for k in opened.env if k.startswith("BLIZZARD_")}

@@ -75,6 +75,36 @@ def test_resume_command_is_the_literal_takeover() -> None:
     assert cmd == "cd /ws/e1 && claude --resume sess-x"
 
 
+@pytest.mark.unit
+def test_attended_resume_command_reasserts_the_permission_mode() -> None:
+    # The flag is per-invocation, not session-sticky (issue #258): the takeover door's
+    # exec'd command reasserts it so a bypassPermissions worker is not demoted to
+    # per-tool approval prompts mid-task.
+    adapter = ClaudeCodeAdapter(binary="claude", permission_mode="bypassPermissions")
+
+    cmd = adapter.resume_command("/ws/e1", "sess-x", model="opus", attended=True)
+
+    assert cmd == "cd /ws/e1 && claude --resume sess-x --model opus --permission-mode bypassPermissions"
+
+
+@pytest.mark.unit
+def test_the_advertised_paste_string_never_carries_the_permission_mode() -> None:
+    # The default composition is the escalation record / `runner status` paste string:
+    # a human runs it in a bare terminal with none of the identity env, so it stays at
+    # the interactive permission default even on a bypassPermissions deployment.
+    adapter = ClaudeCodeAdapter(binary="claude", permission_mode="bypassPermissions")
+
+    assert adapter.resume_command("/ws/e1", "sess-x") == "cd /ws/e1 && claude --resume sess-x"
+
+
+@pytest.mark.unit
+def test_resume_command_without_a_permission_mode_stays_bare() -> None:
+    assert (
+        ClaudeCodeAdapter(binary="claude").resume_command("/ws/e1", "sess-x", attended=True)
+        == "cd /ws/e1 && claude --resume sess-x"
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Node-entry resume (issue #115): spawn(resume_from=...) branches the CLI flag
 # and echoes the authoritative continuation id, with no real subprocess launched

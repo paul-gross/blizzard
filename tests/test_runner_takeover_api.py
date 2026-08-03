@@ -31,7 +31,9 @@ def _app_with_takeover(tmp_path: Path, *, clock: FixedClock | None = None, probe
     harness = FakeHarness(
         handle=WorkerHandle(session_id="sess-a", pid=100, process_start_time="start-100"), verdict=None
     )
-    service = TakeoverService(store, clock or FixedClock(_NOW), harness, probe or FakeProbe())
+    service = TakeoverService(
+        store, clock or FixedClock(_NOW), harness, probe or FakeProbe(), local_api_url="http://127.0.0.1:8431"
+    )
     return create_app(config, runner_store=store, takeover=service), store
 
 
@@ -75,6 +77,17 @@ def test_open_over_a_parked_chunk_returns_the_interactive_command(tmp_path: Path
     assert body["command"] == "cd /ws/e1 && claude --resume sess-a"
     assert body["workdir"] == "/ws/e1"
     assert body["takeover_id"]
+    # The bounded takeover env rides the response (issue #258) — the BLIZZARD_*
+    # identity (with the re-minted token) plus PATH/HOME, never the daemon's full
+    # child env, and never the printable command string.
+    assert body["env"]["BLIZZARD_CHUNK_ID"] == "ch_1"
+    assert body["env"]["BLIZZARD_LEASE_ID"] == "lease_1"
+    assert body["env"]["BLIZZARD_SESSION_ID"] == "sess-a"
+    assert body["env"]["BLIZZARD_LEASE_TOKEN"]
+    assert body["env"]["BLIZZARD_LEASE_TOKEN"] not in body["command"]
+    assert body["env"]["PATH"] == "/daemon/venv/bin:/usr/bin"
+    assert "TERM" not in body["env"]
+    assert "FAKE_PASSTHROUGH_SECRET" not in body["env"]
     assert store.open_takeover_for_chunk("ch_1") is not None
 
 

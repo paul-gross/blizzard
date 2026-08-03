@@ -1513,11 +1513,19 @@
         "type": "object"
       },
       "TakeoverOpenResponse": {
-        "description": "``POST /chunks/{id}/takeovers`` \u2014 the CLI execs ``command`` verbatim in ``workdir``.",
+        "description": "``POST /chunks/{id}/takeovers`` \u2014 the CLI execs ``command`` verbatim in ``workdir``.\n\n``env`` (issue #258) is the bounded takeover env \u2014 the lease's ``BLIZZARD_*``\nidentity (including the re-minted lease token) plus ``PATH``/``HOME`` \u2014 for the\nCLI to layer over the operator's terminal env on exec. Never the daemon's full\nchild env: no ``env_passthrough`` secret and no daemon ``TERM``/locale crosses\nthis response. It rides only this body; the ``command`` string stays\nprintable-safe.",
         "properties": {
           "command": {
             "title": "Command",
             "type": "string"
+          },
+          "env": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Env",
+            "type": "object"
           },
           "takeover_id": {
             "title": "Takeover Id",

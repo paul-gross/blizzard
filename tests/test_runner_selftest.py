@@ -297,8 +297,17 @@ class _HangingAdapter:
         raise AssertionError("unreachable — spawn never returns")
 
     def resume_command(
-        self, workdir: str, session_id: str, *, model: str | None = None, effort: str | None = None
+        self,
+        workdir: str,
+        session_id: str,
+        *,
+        model: str | None = None,
+        effort: str | None = None,
+        attended: bool = False,
     ) -> str:
+        raise AssertionError("unreachable — spawn never returns")
+
+    def identity_env(self, preamble: WorkerPreamble, chunk_id: str, session_id: str) -> dict[str, str]:
         raise AssertionError("unreachable — spawn never returns")
 
     def judge(
@@ -393,9 +402,18 @@ class _FixedPidAdapter:
         return self.resume_pid
 
     def resume_command(
-        self, workdir: str, session_id: str, *, model: str | None = None, effort: str | None = None
+        self,
+        workdir: str,
+        session_id: str,
+        *,
+        model: str | None = None,
+        effort: str | None = None,
+        attended: bool = False,
     ) -> str:
         return f"cd {workdir} && fake --resume {session_id}"
+
+    def identity_env(self, preamble: WorkerPreamble, chunk_id: str, session_id: str) -> dict[str, str]:
+        return {"BLIZZARD_SESSION_ID": session_id, "BLIZZARD_CHUNK_ID": chunk_id}
 
     def judge(
         self,

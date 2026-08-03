@@ -387,7 +387,15 @@ def build_hosted_app(config: RunnerConfig) -> FastAPI:
     # ``blizzard runner takeover``'s backing service (issue #52). Its own
     # ``LinuxProcessProbe()``/``SystemClock()`` instances, like ``leases``/``runner_status``
     # above: stateless, so a second instance is equivalent to sharing one.
-    takeover = TakeoverService(runner_store, SystemClock(), harness, LinuxProcessProbe())
+    takeover = TakeoverService(
+        runner_store,
+        SystemClock(),
+        harness,
+        LinuxProcessProbe(),
+        # The same derivation the loop's spawn preamble uses, so a taken-over session's
+        # ``BLIZZARD_RUNNER_URL`` matches a daemon-spawned one's.
+        local_api_url=config.local_api_url,
+    )
     # ``blizzard runner requeue``'s backing service (issue #53). Its own ``SystemClock()``
     # instance, like the siblings above: stateless, so a second instance is equivalent to
     # sharing one.

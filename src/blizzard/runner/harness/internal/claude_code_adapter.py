@@ -33,8 +33,18 @@ Implements :class:`~blizzard.runner.harness.adapter.IHarnessAdapter` against the
   heartbeat and ``SessionEnd`` hooks re-attached — ``--resume`` alone does not inherit
   them. ``judge`` deliberately omits them (its synchronous exit must not fire a
   ``SessionEnd``).
-* **resume_command** — the literal interactive takeover command for the escalation
-  record.
+* **resume_command** — the literal interactive takeover command, in two compositions
+  (issue #258). ``attended=True`` is the takeover door's exec'd command: it reasserts
+  ``--permission-mode`` (per-invocation, not session-sticky) so a ``bypassPermissions``
+  worker is not demoted to per-tool approval prompts, and travels with the identity
+  env. The default is the advertised paste string (the escalation record, ``runner
+  status``): a human runs it in a bare terminal with no identity env, so it stays at
+  the interactive permission default. Neither composition carries ``--settings`` — a
+  takeover installs **no** heartbeat/``SessionEnd`` hooks, deliberately, for ``judge``'s
+  reason: a ``SessionEnd`` firing when the operator quits would record a spurious
+  done-signal against the lease. The identity env is never baked into the printable
+  string — ``TakeoverService`` carries it via :meth:`identity_env` so the lease token
+  never appears on a display surface.
 * **parse_verdict** — extract the ``<Choice>{name}</Choice>`` from the harness-native
   output; missing/unparseable → ``None`` (a failure to the core).
 * **parse_usage** — a result envelope's ``usage`` + ``total_cost_usd``, translated
@@ -460,7 +470,7 @@ class ClaudeCodeAdapter:
         # synchronous exit and record a spurious done-signal. Absent a preamble (the
         # selftest, which speaks to no live lease) this stays the identity-less allowlist.
         env = (
-            self._identity_env(preamble, chunk_id, session_id)
+            self.identity_env(preamble, chunk_id, session_id)
             if preamble is not None
             else _allowlisted_env(self._env_passthrough)
         )
@@ -503,7 +513,7 @@ class ClaudeCodeAdapter:
         # re-minted rather than recovered). Absent a preamble this stays the identity-less
         # allowlist — the selftest/CI resume, which speaks to no live lease.
         env = (
-            self._identity_env(preamble, chunk_id, session_id)
+            self.identity_env(preamble, chunk_id, session_id)
             if preamble is not None
             else _allowlisted_env(self._env_passthrough)
         )
@@ -513,9 +523,25 @@ class ClaudeCodeAdapter:
         return proc.pid
 
     def resume_command(
-        self, workdir: str, session_id: str, *, model: str | None = None, effort: str | None = None
+        self,
+        workdir: str,
+        session_id: str,
+        *,
+        model: str | None = None,
+        effort: str | None = None,
+        attended: bool = False,
     ) -> str:
-        flags = "".join(f" --{name} {value}" for name, value in (("model", model), ("effort", effort)) if value)
+        # `--permission-mode` is asserted only for the ATTENDED composition — the takeover
+        # door's exec'd command, where the identity env travels alongside it (issue #258):
+        # there, dropping the flag would demote a bypassPermissions worker to per-tool
+        # approval prompts mid-task. The default composition is the advertised paste
+        # string (the escalation record, `runner status`), which a human runs in a bare
+        # terminal with none of the identity env — handing that session permission bypass
+        # as well would compound the missing identity, so it stays at the interactive
+        # default.
+        mode = self._permission_mode if attended else None
+        parts = (("model", model), ("effort", effort), ("permission-mode", mode))
+        flags = "".join(f" --{name} {value}" for name, value in parts if value)
         return f"cd {workdir} && {self._binary} --resume {session_id}{flags}"
 
     def parse_verdict(self, output: str) -> str | None:
@@ -756,11 +782,14 @@ class ClaudeCodeAdapter:
         envelope = _result_envelope(output)
         return str(envelope["result"]) if envelope is not None else output
 
-    def _identity_env(self, preamble: WorkerPreamble, chunk_id: str, session_id: str) -> dict[str, str]:
+    def identity_env(self, preamble: WorkerPreamble, chunk_id: str, session_id: str) -> dict[str, str]:
         """The child env carrying this lease's worker identity: the allowlist plus the
         ``BLIZZARD_*`` vars a worker's CLI (``blizzard runner attach``/``ask``) and its
-        heartbeat/SessionEnd hooks read to reach the runner for this lease. Both ``spawn``
-        and ``resume_with_message`` build from this, so a resumed session is as fully
+        heartbeat/SessionEnd hooks read to reach the runner for this lease. ``spawn``,
+        ``resume_with_message``, and ``TakeoverService`` (via the seam, issue #258) all
+        build from this — though a takeover forwards only a bounded subset and installs
+        no hooks (no ``--settings``), so its identity serves the CLI verbs alone, not a
+        heartbeat. A daemon resume is as fully
         identified as a fresh one — a resume that omits it leaves the worker unable to
         attach or beat, since ``--resume`` does not inherit the original spawn env."""
         env = _allowlisted_env(self._env_passthrough)
@@ -782,7 +811,7 @@ class ClaudeCodeAdapter:
         return env
 
     def _spawn_env(self, envelope: NodeEnvelope, preamble: WorkerPreamble, session_id: str) -> dict[str, str]:
-        return self._identity_env(preamble, envelope.chunk_id, session_id)
+        return self.identity_env(preamble, envelope.chunk_id, session_id)
 
 
 def _conforms_harness_adapter(x: ClaudeCodeAdapter) -> IHarnessAdapter:

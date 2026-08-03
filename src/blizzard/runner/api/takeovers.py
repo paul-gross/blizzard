@@ -70,7 +70,9 @@ def open_takeover(chunk_id: str, request_body: TakeoverRequest, request: Request
         opened = service.open(chunk_id, force=request_body.force)
     except (ChunkNotTakeable, LiveWorkerConflict, SubmissionPending) as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-    return TakeoverOpenResponse(takeover_id=opened.takeover_id, command=opened.command, workdir=opened.workdir)
+    return TakeoverOpenResponse(
+        takeover_id=opened.takeover_id, command=opened.command, workdir=opened.workdir, env=opened.env
+    )
 
 
 @router.patch("/chunks/{chunk_id}/takeovers/{takeover_id}", response_model=TakeoverEndResponse)

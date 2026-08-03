@@ -21,6 +21,7 @@ from blizzard.runner.app import create_app
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.domain.status import RunnerStatusService
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.store.repository import NewLease
 from tests.runner_fakes import FakeHarness, make_store
 from tests.support import assert_all_timestamps_utc
@@ -426,6 +427,34 @@ def test_an_escalated_lease_appears_with_its_resume_command(tmp_path: Path) -> N
         "model": None,
         "effort": None,
     }
+
+
+@pytest.mark.component
+def test_the_escalation_paste_string_carries_no_permission_mode_even_when_configured(tmp_path: Path) -> None:
+    """Pins the paste surface to the REAL adapter (issue #258 review): the escalation's
+    ``resume_command`` is run by a human in a bare terminal with none of the identity
+    env, so it must stay at the interactive permission default — only the takeover
+    door's attended exec reasserts the configured mode."""
+    store = make_store(f"sqlite:///{tmp_path / 'runner.db'}")
+    service = RunnerStatusService(
+        store,
+        FixedClock(_NOW),
+        ClaudeCodeAdapter(binary="claude", permission_mode="bypassPermissions"),
+        runner_id="runner-local",
+        workspace_id="workspace-local",
+        max_agents=2,
+        hub_url="http://hub",
+        env_pool=("e1",),
+    )
+    _seed_lease(store, lease_id="lease_1", chunk_id="ch_1", epoch=1)
+    store.record_spawn("lease_1", pid=100, process_start_time="start-100", session_id="sess-a", spawned_at=_NOW)
+    store.record_binding(chunk_id="ch_1", environment_id="e1", workdir="/ws/e1", bound_at=_NOW)
+    store.record_closure(lease_id="lease_1", chunk_id="ch_1", node_id="nd_build", reason="escalated", closed_at=_NOW)
+
+    (escalation,) = service.escalations()
+
+    assert escalation.resume_command == "cd /ws/e1 && claude --resume sess-a"
+    assert "--permission-mode" not in escalation.resume_command
 
 
 @pytest.mark.component

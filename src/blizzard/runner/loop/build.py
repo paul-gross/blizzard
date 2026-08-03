@@ -83,7 +83,7 @@ def build_loop_context(
         env_capacity=len(config.workspace_envs),  # issue #69 — the board's slot-bar total
         public_url=config.public_url,  # issue #95 — this runner's own federation identity
         redirect_uris=config.redirect_uris,
-        local_api_url=f"http://{config.host}:{config.port}",
+        local_api_url=config.local_api_url,
         gates=config.gates,
         # The spawn cwd + static workspace-prompt fallback (issue #17). The prompt file is
         # resolved once here at loop-context build, not re-read per spawn.

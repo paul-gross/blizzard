@@ -224,9 +224,23 @@ class IHarnessAdapter(Protocol):
         ...
 
     def resume_command(
-        self, workdir: str, session_id: str, *, model: str | None = None, effort: str | None = None
+        self,
+        workdir: str,
+        session_id: str,
+        *,
+        model: str | None = None,
+        effort: str | None = None,
+        attended: bool = False,
     ) -> str:
         """The literal interactive-takeover shell command for the escalation record.
+
+        ``attended=True`` composes the takeover door's exec'd command (issue #258): it
+        reasserts the configured permission mode, because that exec also carries the
+        lease's identity env. The default composes the **advertised paste string** —
+        the escalation record and ``runner status`` output — which a human runs in a
+        bare terminal with no identity env, so it stays at the harness's interactive
+        permission default rather than compounding the missing identity with a
+        permission bypass.
 
         ``model``/``effort`` (issue #144) are the session's **stamped** values — what it
         actually ran under, read back rather than re-resolved — and are appended to the
@@ -238,6 +252,22 @@ class IHarnessAdapter(Protocol):
 
         Both ``None`` — a session predating the stamps, so *unknown* — renders today's
         bare command rather than guessing at a default and presenting it as fact.
+        """
+        ...
+
+    def identity_env(self, preamble: WorkerPreamble, chunk_id: str, session_id: str) -> dict[str, str]:
+        """The per-lease worker-identity child env spawn/judge/resume are built from.
+
+        Exposed on the seam (issue #258) so ``TakeoverService`` can hand an operator's
+        exec'd interactive session the lease identity its ``blizzard runner`` verbs
+        (``attach``/``ask``/``artifact``) read to reach the runner — ``--resume``
+        inherits no spawn env. Identity is all a takeover gets: the exec'd command
+        carries no ``--settings``, so no heartbeat/``SessionEnd`` hook is installed
+        (deliberately — an operator quitting would otherwise fire a spurious
+        done-signal), and the takeover door forwards only a bounded subset of this
+        env, never the full daemon child env. The env travels in the takeover API
+        response and the CLI's exec, never in the printable ``resume_command``
+        string: the lease token stays off display surfaces.
         """
         ...
 

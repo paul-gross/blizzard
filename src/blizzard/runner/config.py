@@ -286,6 +286,13 @@ class RunnerConfig:
         """The local API's unix socket, under the state dir with the store."""
         return socket_path_for(self.root)
 
+    @property
+    def local_api_url(self) -> str:
+        """The runner's own TCP door — the one derivation of the ``BLIZZARD_RUNNER_URL``
+        a worker or taken-over session is handed, shared by the loop context and the
+        takeover service so the two cannot drift."""
+        return f"http://{self.host}:{self.port}"
+
     @staticmethod
     def default_db_url(root: Path) -> str:
         return f"sqlite:///{(root / DATA_DIRNAME / 'runner.db').resolve()}"

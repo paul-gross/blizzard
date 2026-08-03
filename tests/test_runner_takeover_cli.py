@@ -56,20 +56,43 @@ def test_takeover_execs_the_command_and_marks_it_ended(tmp_path: Path, monkeypat
     _seed_parked_lease(store)
 
     calls: list[tuple[str, bool, str]] = []
+    child_envs: list[dict[str, str]] = []
 
-    def fake_call(command: str, shell: bool = False, cwd: str | None = None) -> int:
+    def fake_call(command: str, shell: bool = False, cwd: str | None = None, env: dict[str, str] | None = None) -> int:
         assert cwd is not None
+        assert env is not None
         calls.append((command, shell, cwd))
+        child_envs.append(env)
         return 0
 
     monkeypatch.setattr(runner_cli.subprocess, "call", fake_call)
+    # A sentinel terminal var: the identity env must layer OVER the operator's env
+    # (issue #258), not replace it, so the exec'd child still sees this.
+    monkeypatch.setenv("OPERATOR_TERMINAL_SENTINEL", "still-here")
 
     with _serve_local_api(root):
         result = CliRunner().invoke(runner_group, ["takeover", "ch_1", "--dir", str(root)])
 
     assert result.exit_code == 0, result.output
-    assert calls == [("cd /ws/e1 && claude --resume sess-a", True, "/ws/e1")]
+    # The composed command reasserts the daemon's permission mode (issue #258) — the
+    # default config's `bypassPermissions` here — so the taken-over session does not
+    # drop to per-tool approval prompts.
+    assert calls == [("cd /ws/e1 && claude --resume sess-a --permission-mode bypassPermissions", True, "/ws/e1")]
     assert "taking over chunk ch_1 in /ws/e1" in result.output
+    # The lease's worker identity rides the exec env (issue #258), layered over the
+    # terminal env, so the session's `blizzard runner` verbs and heartbeat hook work.
+    (child_env,) = child_envs
+    assert child_env["OPERATOR_TERMINAL_SENTINEL"] == "still-here"
+    assert child_env["BLIZZARD_CHUNK_ID"] == "ch_1"
+    assert child_env["BLIZZARD_LEASE_ID"] == "lease_1"
+    assert child_env["BLIZZARD_SESSION_ID"] == "sess-a"
+    assert child_env["BLIZZARD_ENV_IDS"] == "e1"
+    assert child_env["BLIZZARD_RUNNER_URL"].startswith("http://")
+    lease_token = child_env["BLIZZARD_LEASE_TOKEN"]
+    assert lease_token  # re-minted for the takeover — plaintext travels only in the env
+    # The token never reaches a printable surface: not the CLI's output, not the command.
+    assert lease_token not in result.output
+    assert all(lease_token not in command for command, _, _ in calls)
     assert store.open_takeover_for_chunk("ch_1") is None  # marked ended once the child exited
 
 
@@ -79,7 +102,7 @@ def test_takeover_propagates_a_nonzero_exit_code(tmp_path: Path, monkeypatch: py
     store = _store(root)
     _seed_parked_lease(store)
 
-    monkeypatch.setattr(runner_cli.subprocess, "call", lambda command, shell=False, cwd=None: 7)
+    monkeypatch.setattr(runner_cli.subprocess, "call", lambda command, shell=False, cwd=None, env=None: 7)
 
     with _serve_local_api(root):
         result = CliRunner().invoke(runner_group, ["takeover", "ch_1", "--dir", str(root)])
@@ -100,7 +123,7 @@ def test_takeover_ends_the_takeover_even_when_the_child_raises_keyboard_interrup
     store = _store(root)
     _seed_parked_lease(store)
 
-    def fake_call(command: str, shell: bool = False, cwd: str | None = None) -> int:
+    def fake_call(command: str, shell: bool = False, cwd: str | None = None, env: dict[str, str] | None = None) -> int:
         raise KeyboardInterrupt
 
     monkeypatch.setattr(runner_cli.subprocess, "call", fake_call)

@@ -456,6 +456,13 @@ into every spawn too. Empty (the fresh-scaffold default) means the base allowlis
 only; a daemon credential such as `BZ_HUB_TOKEN` is never in scope for this list, so
 it is absent from a worker child by construction unless deliberately named here.
 
+**One child is built the other way around: an operator takeover.** A session continued
+via `blizzard runner takeover` runs in *your terminal's* environment — your shell as
+the base — with only a bounded daemon-side set layered on top: the lease's `BLIZZARD_*`
+identity vars plus the daemon's `PATH` and `HOME`. Nothing named in `env_passthrough`
+is forwarded to it, and no allowlist filtering applies to your own shell. See "Taking
+over a parked session" under the control verbs.
+
 ### Model and effort tiers
 
 A graph's `sessions:` map names each session lineage's **capability tier** rather than a
@@ -499,7 +506,10 @@ so these are requirements, not preferences:
 
 - **Claude Code** — a worker must never see the `ANTHROPIC_MODEL` family of variables.
   They are absent from the base allowlist by construction; do not add one through
-  `[worker] env_passthrough`.
+  `[worker] env_passthrough`. The by-construction guarantee covers **daemon-spawned**
+  children only: a `blizzard runner takeover` session inherits your shell, so a shell
+  that exports `ANTHROPIC_MODEL` moves that one session off its sticky model — unset
+  it before taking over.
 - **opencode** — an adapter must not pin `agent.<name>.model`; it outranks session
   stickiness.
 - **codex** — an adapter must keep `model` out of `config.toml` (it overrides every
@@ -746,7 +756,7 @@ who you are:
 
 | Client | Door | How it addresses it |
 |--------|------|---------------------|
-| the CLI's local verbs (`runner pause`, `runner start`) | `runner.sock`, mode 0600, in the runtime dir | `--dir` (or `$BZ_RUNNER_DIR`) — no port, no config file read |
+| the CLI's local verbs (`runner pause`, `runner start`, `runner takeover`) | `runner.sock`, mode 0600, in the runtime dir | `--dir` (or `$BZ_RUNNER_DIR`) — no port, no config file read |
 | the runner's web app in a browser | the TCP port (`8431` by default) | same-origin `/api/*` on the page's own host |
 | worker hooks (`heartbeat`, `ask`, …) | the TCP port | `BLIZZARD_RUNNER_URL`, injected into the spawn |
 
@@ -896,6 +906,39 @@ pause fact first, ahead of the normal restart-resume path described below (see "
 recovery contract"), so a chunk still marked paused when the runner comes back is
 (re-)parked, not respawned. The claim is kept exactly as it would be if the pause had
 landed on a live tick; only a chunk that was *not* paused resumes in place on restart.
+
+### Taking over a parked session — `blizzard runner takeover`
+
+`blizzard runner takeover <chunk_id>` continues a parked chunk's worker session
+interactively, in your own terminal. It records a takeover fact with the daemon first —
+so no loop step can respawn or judge the session while you hold it — then execs the
+harness's resume command as your terminal's child, and marks the takeover ended when
+you exit (even on Ctrl-C). Run it as the service account, like every socket verb.
+
+Two things ride that exec which a plain copy-paste of a resume command does not get:
+
+- **The configured permission mode.** The exec'd command reasserts
+  `harness_permission_mode` from `blizzard-runner.toml` — whose scaffold default is
+  `bypassPermissions`, meaning the session runs with **per-tool approval prompts
+  disabled**, exactly as the daemon-spawned worker did. Set the knob to another mode
+  (or empty, to omit the flag) if your deployment wants attended sessions prompted.
+- **The lease's identity env.** The daemon returns a bounded set — the `BLIZZARD_*`
+  identity vars plus its own `PATH` and `HOME` — which the verb layers over your
+  terminal's environment, so the session's `blizzard runner` verbs (`attach`, `ask`,
+  `artifact …`) reach the runner and the bare `blizzard` binary resolves to the
+  deployment's venv. Opening a takeover **mints a fresh lease capability token**
+  (invalidating the previous one); everything else about your shell — `TERM`, locale,
+  your own variables — stays untouched, and nothing beyond that bounded set leaves
+  the daemon.
+
+This makes the takeover verb, not the escalation record's `resume:` string, the
+supported way in. The string `blizzard runner status` and the board print (`cd … &&
+claude --resume …`) resumes the transcript, but deliberately carries **neither** of the
+above: pasted into a bare terminal it runs at the harness's interactive permission
+default, with no identity env — that session can read and edit, but its `blizzard
+runner` verbs cannot reach the runner. A taken-over session also installs **no**
+heartbeat or session-end hooks: quitting it must not record a done-signal against the
+lease, so liveness reporting stays a daemon-spawned-worker concern.
 
 ### Editing an unclaimed chunk's build config
 

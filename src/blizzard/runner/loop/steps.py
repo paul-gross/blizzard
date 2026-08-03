@@ -23,7 +23,6 @@ from __future__ import annotations
 import contextlib
 import json
 import os
-import secrets
 import uuid
 from datetime import datetime, timedelta
 
@@ -32,9 +31,9 @@ from blizzard.foundation.ids import LEASE_PREFIX, mint
 from blizzard.foundation.logging import get_logger
 from blizzard.foundation.store.utc import iso_utc
 from blizzard.hub.domain.artifacts import ArtifactKind
-from blizzard.hub.domain.enrollment import hash_token
 from blizzard.hub.domain.graph import SessionMode
 from blizzard.hub.domain.work import ChunkStatus
+from blizzard.runner.domain.lease_auth import mint_lease_token
 from blizzard.runner.domain.leases import as_utc, is_heartbeat_stale
 from blizzard.runner.environments.provider import (
     AcquiredEnvironment,
@@ -138,10 +137,6 @@ _DECISION_KIND = "decision.submitted"
 # *producer*: nothing in the queue entry or the chunk yet says how many a piece of work
 # wants, so inventing a knob here would be a setting no caller sets.
 _DEFAULT_ENV_COUNT = 1
-
-# The lease capability token's byte length (issue #113, Phase 1) — mirrors the
-# hub's own route-token mint (`hub/domain/claim.py`'s `_ROUTE_TOKEN_BYTES`).
-_LEASE_TOKEN_BYTES = 32
 
 # --------------------------------------------------------------------------- #
 # Crash points (``bzh:crash-point-registry``) — the runner tick's dangerous windows.
@@ -822,8 +817,8 @@ def _resume_preamble(ctx: LoopContext, lease: LeaseRecord, bindings: list[EnvBin
     one — and its hash re-recorded, exactly as :func:`_spawn_attempt` does at spawn. Every
     resume sibling (restart / answer / pause-lift) builds its resume env from this.
     """
-    lease_token = secrets.token_urlsafe(_LEASE_TOKEN_BYTES)
-    ctx.store.record_lease_token(lease.lease_id, hash_token(lease_token), ctx.clock.now())
+    lease_token, token_hash = mint_lease_token()
+    ctx.store.record_lease_token(lease.lease_id, token_hash, ctx.clock.now())
     return WorkerPreamble(
         environments=[AcquiredEnvironment(environment_id=b.environment_id, workdir=b.workdir) for b in bindings],
         lease_id=lease.lease_id,
@@ -2514,8 +2509,8 @@ def _spawn_attempt(
     # the spawn preamble (never persisted). Pure scaffold this phase — no caller yet
     # authorizes anything against `lease_token_hash`; a later attach endpoint is what
     # compares a presented token's hash against it.
-    lease_token = secrets.token_urlsafe(_LEASE_TOKEN_BYTES)
-    ctx.store.record_lease_token(lease_id, hash_token(lease_token), now)
+    lease_token, token_hash = mint_lease_token()
+    ctx.store.record_lease_token(lease_id, token_hash, now)
     # The lease is a hub-bound fact: buffer it so the flusher reports it up to
     # POST /events, ahead of any completion minted under it (FIFO). It is the
     # fence input the hub's completion check consumes — the runner's mint keeps the

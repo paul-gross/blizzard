@@ -20,10 +20,27 @@ rejection.
 from __future__ import annotations
 
 import hmac
+import secrets
 
 from blizzard.hub.domain.enrollment import hash_token
 
-__all__ = ["check_lease_token"]
+__all__ = ["check_lease_token", "mint_lease_token"]
+
+# The capability token's size — one owner for every mint path (spawn, resume, takeover).
+_LEASE_TOKEN_BYTES = 32
+
+
+def mint_lease_token() -> tuple[str, str]:
+    """Mint a lease capability token: ``(plaintext, hash)``.
+
+    The one mint, paired with :func:`check_lease_token`'s digest so the two can never
+    drift (the module docstring's contract). Pure — the caller records the hash via
+    ``record_lease_token`` and carries the plaintext to the child env; every mint is a
+    **re-mint** for its lease id (overwrite-recorded), invalidating any prior token,
+    since the plaintext is never persisted.
+    """
+    token = secrets.token_urlsafe(_LEASE_TOKEN_BYTES)
+    return token, hash_token(token)
 
 
 def check_lease_token(*, presented_token: str | None, stored_hash: str | None) -> bool:

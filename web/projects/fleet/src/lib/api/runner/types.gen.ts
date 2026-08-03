@@ -1099,12 +1099,25 @@ export type TakeoverEndResponse = {
  * TakeoverOpenResponse
  *
  * ``POST /chunks/{id}/takeovers`` — the CLI execs ``command`` verbatim in ``workdir``.
+ *
+ * ``env`` (issue #258) is the bounded takeover env — the lease's ``BLIZZARD_*``
+ * identity (including the re-minted lease token) plus ``PATH``/``HOME`` — for the
+ * CLI to layer over the operator's terminal env on exec. Never the daemon's full
+ * child env: no ``env_passthrough`` secret and no daemon ``TERM``/locale crosses
+ * this response. It rides only this body; the ``command`` string stays
+ * printable-safe.
  */
 export type TakeoverOpenResponse = {
     /**
      * Command
      */
     command: string;
+    /**
+     * Env
+     */
+    env?: {
+        [key: string]: string;
+    };
     /**
      * Takeover Id
      */
