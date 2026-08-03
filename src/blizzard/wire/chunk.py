@@ -184,24 +184,16 @@ class RouteView(BaseModel):
 
 
 class EscalationView(BaseModel):
-    """An open escalation on a ``needs_human`` chunk.
-
-    Surfaces the runner-composed takeover command so a human can resume the parked
-    session. Present only while the escalation is open —
+    """An open escalation on a ``needs_human`` chunk — the takeover command(s) so a
+    human can resume the parked session. Present only while the escalation is open —
     a later lease mint (requeue/takeover) supersedes it and this drops away.
 
-    ``wrapped_takeover_command`` is the blizzard-runner-wrapped equivalent (``blizzard
-    runner takeover <chunk_id> --dir <runner runtime dir>``) the board prefers as the
-    primary copyable command, falling back to ``takeover_command`` when it's empty.
-    Non-empty only when a runner composed the escalation with a resumable
-    session, live bindings, and a configured runtime dir — a strictly narrower
-    condition than ``takeover_command`` alone needs, so wrapped non-empty implies raw
-    non-empty but not the reverse. It stays empty for a hub-authored escalation (no
-    runner runtime dir exists to compose from — ``takeover_command`` there carries
-    either operator guidance prose or is itself empty, depending on which hub path
-    recorded it), for a runner-composed escalation whose ``runner_dir`` is unset
-    (``takeover_command`` still composes normally), and — in lockstep with
-    ``takeover_command`` — when there was no parked session to resume at all."""
+    ``wrapped_takeover_command`` is the blizzard-runner-wrapped equivalent of
+    ``takeover_command`` the board prefers as the primary copyable command, falling
+    back to the raw form when it's empty. Wrapped implies raw, never the reverse, and
+    both go empty together only when there is no parked session to resume at all —
+    see `blizzard-context:/domain/humans.md` for the full enumeration of when each
+    is empty."""
 
     epoch: int
     takeover_command: str

@@ -76,7 +76,7 @@ uv run ruff format --check .   # format
 uv run pyright                 # typecheck
 uv run pytest                  # unit + component tiers (hermetic, token-free)
 mise run service-test          # the service tier — a running daemon vs. its mocked counterpart (see below)
-mise run e2e                   # the standing e2e smoke suite — eight full-stack scenarios (see below)
+mise run e2e                   # the standing e2e smoke suite — the full-stack scenarios (see below)
 
 blizzard hub init ./hub-data   # scaffold config + data dir + migrated DB (idempotent)
 blizzard hub migrate           # apply pending store migrations (--down <rev> reverses schema; some revisions are lossy — see the revision's docstring)

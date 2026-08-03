@@ -570,7 +570,15 @@ def derive_event_feed(events: list[EventRow], escalations: list[EscalationOpen])
             chunk_id=esc.chunk_id,
             lease_id=None,
             node_name=None,
-            message=f"chunk {esc.chunk_id} needs a human — resume: {esc.takeover_command}",
+            # `esc.takeover_command` is not always a resume command: a hub-authored
+            # escalation's raw field can carry operator prose (or be empty), so this
+            # only claims "resume" when there is actually something to resume — see
+            # `blizzard-context:/domain/humans.md` for the full enumeration.
+            message=(
+                f"chunk {esc.chunk_id} needs a human — see the chunk's escalation for how to proceed"
+                if esc.takeover_command
+                else f"chunk {esc.chunk_id} needs a human"
+            ),
             detail=None,
         )
         for i, esc in enumerate(escalations)

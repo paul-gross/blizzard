@@ -209,6 +209,29 @@ def test_derive_event_feed_sorts_severity_then_recency() -> None:
     assert projected.runner_id is None
 
 
+def test_derive_event_feed_escalation_message_does_not_overclaim_resume() -> None:
+    """A runner-composed escalation carries a real resume command; a hub-authored one's
+    raw field can be empty (bounce-cap) or operator prose (cross-graph-unresolvable),
+    never a command to "resume" — the message must not label either of those "resume:"
+    (round-2 regression, previously untested)."""
+    runner_composed = EscalationOpen(
+        chunk_id="ch_a", recorded_at=_at(1), takeover_command="cd /ws/e1 && claude --resume sess-a"
+    )
+    hub_authored_empty = EscalationOpen(chunk_id="ch_b", recorded_at=_at(2), takeover_command="")
+    hub_authored_prose = EscalationOpen(
+        chunk_id="ch_c", recorded_at=_at(3), takeover_command="cross-graph target `x` names no enabled graph — …"
+    )
+
+    feed = derive_event_feed([], [runner_composed, hub_authored_empty, hub_authored_prose])
+    by_chunk = {e.chunk_id: e.message for e in feed}
+
+    assert by_chunk["ch_a"] == "chunk ch_a needs a human — see the chunk's escalation for how to proceed"
+    assert by_chunk["ch_b"] == "chunk ch_b needs a human"
+    assert "resume:" not in by_chunk["ch_a"]
+    assert "resume:" not in by_chunk["ch_b"]
+    assert "resume:" not in by_chunk["ch_c"]
+
+
 def test_migration_creates_event_log_on_in_place_upgrade(tmp_path: Path) -> None:
     runner, engine = migrate_to(tmp_path, _HEAD_BEFORE_EVENT_LOG)
     assert not _has_table(engine, "event_log")  # absent before the revision

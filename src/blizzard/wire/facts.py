@@ -78,15 +78,12 @@ class EscalationReport(BaseModel):
     """A runner's ``escalation.recorded`` — retries exhausted for the node.
 
     ``takeover_command`` is the literal ``cd <workdir> && <harness resume>`` a human
-    pastes to enter the parked session; ``epoch`` is the
-    exhausted attempt's fence, closed by a later lease mint. ``wrapped_takeover_command``
-    is the blizzard-runner-wrapped equivalent (``blizzard runner takeover <chunk_id>
-    --dir <runner runtime dir>``), non-empty only when this runner has a resumable
-    session, live bindings, and a configured runtime dir to compose it from — a
-    strictly narrower condition than ``takeover_command`` needs, so wrapped non-empty
-    implies raw non-empty but not the reverse (an older runner build, or one with
-    ``runner_dir`` unset, still composes a normal raw command while leaving wrapped
-    empty). When empty, the board falls back to the raw ``takeover_command``."""
+    pastes to enter the parked session; ``epoch`` is the exhausted attempt's fence,
+    closed by a later lease mint. ``wrapped_takeover_command`` is the
+    blizzard-runner-wrapped equivalent the board prefers as primary, falling back to
+    the raw form when empty. Wrapped implies raw, never the reverse — see
+    `blizzard-context:/domain/humans.md` for the full enumeration of when each is
+    empty."""
 
     epoch: int
     runner_id: str
