@@ -3,9 +3,13 @@ artifacts (issue #127).
 
 Two lease-scoped read routes: ``GET /api/leases/{lease_id}/artifacts`` (the whole set,
 resolved latest-by-epoch, both kinds) and ``GET /api/leases/{lease_id}/artifacts/{name}``
-(one by ``produces:`` name). The write counterpart is
-``POST /api/leases/{lease_id}/attachments`` (``attachments.py``) — the same lease-scoped,
-token-authorized shape.
+(one by ``produces:`` name). ``{name}`` uses Starlette's ``:path`` converter so it can
+capture a slash-containing name verbatim (issue #233 — blizzard itself produces
+``merged/<repo>`` markers); the CLI percent-encodes every other reserved character
+(space, ``%``, ``?``, …) with ``urllib.parse.quote(name, safe="/")`` before building the
+request, which this converter decodes back to the exact original name. The write
+counterpart is ``POST /api/leases/{lease_id}/attachments`` (``attachments.py``) — the
+same lease-scoped, token-authorized shape.
 
 The read is layered exactly like the work-item proxy (``work_items.py``): the worker never
 holds hub credentials. This route authorizes the lease token minted at the worker's own
@@ -96,7 +100,7 @@ def list_artifacts(lease_id: str, request: Request) -> list[EnvelopeArtifact]:
     return _envelope_artifacts(lease.chunk_id, request)
 
 
-@router.get("/leases/{lease_id}/artifacts/{name}", response_model=EnvelopeArtifact)
+@router.get("/leases/{lease_id}/artifacts/{name:path}", response_model=EnvelopeArtifact)
 def get_artifact(lease_id: str, name: str, request: Request, node: str | None = None) -> EnvelopeArtifact:
     """One artifact by ``produces:`` name; ``404`` when this node-step has none by that
     name (optionally narrowed to one from ``node``, the producing node's name).

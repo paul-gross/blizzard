@@ -162,6 +162,36 @@ def test_get_gets_the_named_route_and_prints_json(monkeypatch: pytest.MonkeyPatc
     assert '"name": "plan"' in result.output
 
 
+def test_get_percent_encodes_a_slash_containing_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A ``merged/<repo>`` delivery marker (issue #233) must reach the runner with the
+    slash preserved in the URL rather than treated as a second path segment."""
+    calls: list[str] = []
+
+    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float) -> _FakeResponse:
+        calls.append(url)
+        return _FakeResponse(text='{"name": "merged/blizzard", "kind": "asset", "content": "hi"}')
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(runner_group, ["artifact", "get", "merged/blizzard"], env=_ENV)
+
+    assert result.exit_code == 0, result.output
+    assert calls == ["http://127.0.0.1:8431/api/leases/lease_9/artifacts/merged/blizzard"]
+
+
+def test_get_percent_encodes_other_reserved_characters(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+
+    def fake_get(url: str, *, headers: dict, params: dict | None, timeout: float) -> _FakeResponse:
+        calls.append(url)
+        return _FakeResponse(text='{"name": "a b%c?d", "kind": "asset", "content": "hi"}')
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    result = CliRunner().invoke(runner_group, ["artifact", "get", "a b%c?d"], env=_ENV)
+
+    assert result.exit_code == 0, result.output
+    assert calls == ["http://127.0.0.1:8431/api/leases/lease_9/artifacts/a%20b%25c%3Fd"]
+
+
 def test_get_node_flag_is_passed_as_a_query_param(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[dict | None] = []
 

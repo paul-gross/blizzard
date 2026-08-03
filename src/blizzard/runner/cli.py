@@ -17,6 +17,7 @@ import subprocess
 import time
 import types
 from pathlib import Path
+from urllib.parse import quote
 
 import click
 import httpx
@@ -538,11 +539,15 @@ def artifact_get(name: str, node: str | None, content: bool) -> None:
     one — pass ``--node`` to pick one. ``--content`` prints the raw asset text to stdout
     instead of the JSON object, and errors when NAME is the ``git_commit`` kind: a commit
     ref carries no content to emit (drop ``--content`` to read its ref).
+
+    NAME is percent-encoded before it reaches the route (issue #233), so a slash-
+    containing name — a ``merged/<repo>`` delivery marker, for instance — round-trips
+    like any other.
     """
     lease_id, runner_url, lease_token = _worker_lease_identity("artifact get")
     try:
         resp = httpx.get(
-            f"{runner_url.rstrip('/')}/api/leases/{lease_id}/artifacts/{name}",
+            f"{runner_url.rstrip('/')}/api/leases/{lease_id}/artifacts/{quote(name, safe='/')}",
             headers={"X-Blizzard-Lease-Token": lease_token} if lease_token else {},
             params={"node": node} if node else None,
             timeout=_WORK_ITEMS_TIMEOUT,

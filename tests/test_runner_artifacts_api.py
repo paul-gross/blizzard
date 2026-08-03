@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import quote
 
 import httpx
 import pytest
@@ -245,6 +246,28 @@ def test_get_returns_one_artifact_by_name(tmp_path: Path, monkeypatch: pytest.Mo
         "branch_name": None,
         "commit_hash": None,
     }
+
+
+@pytest.mark.component
+def test_get_resolves_a_slash_containing_name(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A ``merged/<repo>`` delivery marker (issue #233) — the route's ``{name:path}``
+    converter must capture the slash rather than treating it as a path boundary."""
+    envelope = {
+        **_ENVELOPE,
+        "artifacts": [
+            {"name": "merged/blizzard", "kind": "asset", "node_name": "deliver", "epoch": 1, "content": "merged"},
+        ],
+    }
+    app, store = _app_with_store(tmp_path)
+    _seed_lease(store)
+    _stub_hub(monkeypatch, _FakeHubResponse(200, envelope))
+    with TestClient(app) as client:
+        resp = client.get(
+            f"/api/leases/lease_1/artifacts/{quote('merged/blizzard', safe='/')}",
+            headers={"X-Blizzard-Lease-Token": _TOKEN},
+        )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["name"] == "merged/blizzard"
 
 
 @pytest.mark.component
