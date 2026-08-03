@@ -1,0 +1,15 @@
+{
+  "chunk-scoped": {
+    "severity": "info",
+    "kind": "chunk.transitioned",
+    "chunk_id": "ch_1",
+    "runner_id": "runner-a",
+    "key": "event_log:ev_1"
+  },
+  "runner-scoped": {
+    "severity": "info",
+    "kind": "runner.registered",
+    "chunk_id": null,
+    "runner_id": "runner-a"
+  }
+}

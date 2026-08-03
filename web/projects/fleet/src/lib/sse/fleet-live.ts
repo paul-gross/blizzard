@@ -27,45 +27,55 @@ export const HUB_EVENT_TYPES = [
   'event-logged',
 ] as const;
 
-/** A `chunk-changed` frame's payload (issue #212). `chunk_id`/`status` are always
- * present; every other field is present-when-meaningful — omitted, never `null`, when
- * it does not apply (a chunk that has never transitioned carries no `prev_node`, an
- * unclaimed chunk carries no `runner_id`). `graph_id` rides the wire but is never
- * rendered — the Event log's block row stops at the transition and runner lines. */
-interface ChunkChanged {
+/** A `chunk-changed` frame's payload (issue #212, issue #235). `chunk_id`/`status` are
+ * always present; every other field is present-when-meaningful — omitted, never
+ * `null`, when it does not apply (a chunk that has never transitioned carries no
+ * `prev_node`, an unclaimed chunk carries no `runner_id`), which is why each is
+ * declared optional rather than required-but-sometimes-absent. `graph_id` rides the
+ * wire but is never rendered — the Event log's block row stops at the transition and
+ * runner lines. Exported (issue #235) so the SSE contract spec's `FRAME_FIELD_SPECS`
+ * can key its required/optional descriptor off this interface directly. */
+export interface ChunkChanged {
   chunk_id: string;
   status: string;
-  prev_status: string;
-  prev_node: string;
-  node: string;
-  runner_id: string;
-  cause: string;
-  graph_id: string;
+  prev_status?: string;
+  prev_node?: string;
+  node?: string;
+  runner_id?: string;
+  cause?: string;
+  graph_id?: string;
 }
-interface QuestionEvent {
+/** A `question-asked`/`question-answered` frame's payload. Exported (issue #235) —
+ * see {@link ChunkChanged}. */
+export interface QuestionEvent {
   chunk_id: string;
   question_id: string;
 }
-interface DecisionEvent {
+/** A `decision-opened`/`decision-resolved` frame's payload. Exported (issue #235) —
+ * see {@link ChunkChanged}. */
+export interface DecisionEvent {
   chunk_id: string;
   decision_id: string;
 }
-/** A `runner-changed` frame's payload. `kind` names which registry change fired it
- * (issue #151) — one of {@link RunnerChangeKind}, but typed `string` here because
- * {@link HubEventPayload} intersects these shapes and `event-logged` carries a `kind` of
- * its own, from an unrelated vocabulary. `by` rides the four pause/resume kinds and
- * `reason` the runner-local pair, both absent otherwise; a frame from a hub older than
- * #151 carries no `kind` at all. */
-interface RunnerEvent {
+/** A `runner-changed` frame's payload. `runner_id`/`kind` are always present — `kind`
+ * names which registry change fired it (issue #151), one of {@link RunnerChangeKind},
+ * but typed `string` here because {@link HubEventPayload} intersects these shapes and
+ * `event-logged` carries a `kind` of its own, from an unrelated vocabulary. `by` rides
+ * the four pause/resume kinds and `reason` the runner-local pair, both omitted
+ * otherwise. Exported (issue #235) — see {@link ChunkChanged}. */
+export interface RunnerEvent {
   runner_id: string;
   kind: string;
-  by: string;
-  reason: string;
+  by?: string;
+  reason?: string;
 }
 /** An `event-logged` frame's payload — an operational event landed (`GET
- * /api/events`'s wire shape, Phase 4). `chunk_id` is `null`, not absent, for a
- * runner-scoped event (the broker's own shape), unlike the other frames' payloads. */
-interface EventLoggedEvent {
+ * /api/events`'s wire shape, Phase 4). `chunk_id` is always present, `null` rather than
+ * omitted, for a runner-scoped event (the broker's own shape) — unlike every other
+ * field on every other frame in this module, `chunk_id` here is required, not
+ * optional, because the broker never omits it. Exported (issue #235) — see
+ * {@link ChunkChanged}. */
+export interface EventLoggedEvent {
   severity: string;
   kind: string;
   chunk_id: string | null;
@@ -74,10 +84,12 @@ interface EventLoggedEvent {
 /** The fact-identity stamp the hub puts on every frame (issue #213 Phase 2) — the
  * merge/dedup key a backfilled row and the live frame reporting the same underlying
  * fact share, so a consumer that reads both (the Event log's backfill, Phase 4) can
- * tell they are the same event rather than rendering it twice. Absent on a frame from
- * a hub older than Phase 2. */
-interface KeyedEvent {
-  key: string;
+ * tell they are the same event rather than rendering it twice. Omitted on any frame
+ * with no durable fact behind it (`queue-changed`, a `registered`/`heartbeat`
+ * `runner-changed`, an idempotent no-op) or from a hub older than Phase 2. Exported
+ * (issue #235) — see {@link ChunkChanged}. */
+export interface KeyedEvent {
+  key?: string;
 }
 export type HubEventPayload = Partial<
   ChunkChanged & QuestionEvent & DecisionEvent & RunnerEvent & EventLoggedEvent & KeyedEvent

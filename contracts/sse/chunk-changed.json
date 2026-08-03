@@ -1,0 +1,17 @@
+{
+  "minimal": {
+    "chunk_id": "ch_1",
+    "status": "ready"
+  },
+  "full": {
+    "chunk_id": "ch_1",
+    "status": "running",
+    "prev_status": "ready",
+    "prev_node": "plan",
+    "node": "build",
+    "runner_id": "runner-a",
+    "cause": "node-completed",
+    "graph_id": "adv-dwf",
+    "key": "transitions:tr_01J"
+  }
+}

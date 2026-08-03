@@ -1,0 +1,19 @@
+{
+  "heartbeat": {
+    "runner_id": "runner-a",
+    "kind": "heartbeat"
+  },
+  "paused": {
+    "runner_id": "runner-a",
+    "kind": "paused",
+    "by": "operator",
+    "key": "runner_pause_facts:rp_1"
+  },
+  "locally-paused": {
+    "runner_id": "runner-a",
+    "kind": "locally-paused",
+    "by": "operator",
+    "reason": "maintenance window",
+    "key": "runner_local_pause_facts:rlp_1"
+  }
+}
