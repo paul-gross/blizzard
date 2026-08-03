@@ -12,6 +12,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
+import click
 import pytest
 from click.testing import CliRunner
 
@@ -171,3 +172,22 @@ def test_takeover_refuses_a_live_worker_without_force(tmp_path: Path, monkeypatc
     assert "live worker attempt" in result.output
     assert calls == []  # never exec'd — the live worker was never superseded
     assert store.open_takeover_for_chunk("ch_1") is None
+
+
+@pytest.mark.unit
+def test_takeover_cli_still_declares_the_dir_flag_and_a_chunk_id_argument() -> None:
+    """Pins the CLI-flag shape ``_escalate`` (``runner/loop/steps.py``) hard-codes when
+    it composes the wrapped takeover command — ``blizzard runner takeover <chunk_id>
+    --dir <runner_dir>`` — against the REAL Click command object, not merely against
+    the string ``_escalate`` itself produces. Every existing composition test only
+    checks the composed string matches what ``_escalate`` builds, so a future rename
+    of ``--dir`` (or of the positional chunk id) in this file would ship a
+    silently-broken board command with every one of those tests staying green; this
+    one instead fails loudly right here."""
+    takeover_cmd = runner_group.commands["takeover"]
+
+    directory_param = next(p for p in takeover_cmd.params if p.name == "directory")
+    assert directory_param.opts == ["--dir"]
+
+    arguments = [p for p in takeover_cmd.params if isinstance(p, click.Argument)]
+    assert [a.name for a in arguments] == ["chunk_id"]

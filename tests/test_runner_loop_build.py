@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from blizzard.runner.config import ConfigError, RunnerConfig
+from blizzard.runner.config import CONFIG_FILENAME, ConfigError, RunnerConfig
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
 from blizzard.runner.loop.build import PeriodicDriver, build_loop_context
 from tests.runner_fakes import FakeHub
@@ -61,16 +61,25 @@ def test_build_loop_context_threads_runner_dir_from_the_resolved_root(tmp_path: 
     ``LoopConfig.runner_dir``, which must mirror ``RunnerConfig``'s own resolved
     ``root`` — the runtime directory a human's ``blizzard runner takeover <chunk_id>
     --dir <runner_dir>`` needs to land back in *this* runner, not some other
-    composition root's idea of it."""
-    config = RunnerConfig(
-        root=tmp_path,
-        db_url=RunnerConfig.default_db_url(tmp_path),
-        workspace_root=str(tmp_path / "workspace"),
-    )
+    composition root's idea of it.
 
+    Routed through ``RunnerConfig.load()`` — not the bare dataclass constructor —
+    with a deliberately un-resolved ``..``-bearing path, since ``.load()`` is the
+    one place resolution actually happens (``build_loop_context`` just mirrors
+    ``config.root`` verbatim). Asserting against ``config.root.resolve()`` off a
+    directly-constructed ``RunnerConfig`` would pass even if resolution were
+    silently dropped, because a bare ``tmp_path`` already equals its own resolved
+    form on this platform."""
+    real_root = tmp_path / "runner"
+    real_root.mkdir()
+    (real_root / CONFIG_FILENAME).write_text(f'db_url = "{RunnerConfig.default_db_url(real_root)}"\n')
+    unresolved_root = tmp_path / "nested" / ".." / "runner"
+
+    config = RunnerConfig.load(unresolved_root)
     ctx = build_loop_context(config, FakeHub(), workspace_prompt="", runner_prompt="")
 
-    assert ctx.config.runner_dir == str(config.root.resolve())
+    assert ".." not in ctx.config.runner_dir
+    assert ctx.config.runner_dir == str(real_root.resolve())
 
 
 @pytest.mark.unit

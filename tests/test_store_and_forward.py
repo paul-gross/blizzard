@@ -150,7 +150,10 @@ def test_escalation_fact_rides_events_and_derives_needs_human(tmp_path: Path) ->
     report_lease(hub, chunk_id, epoch=1, seq=1)
 
     takeover = "cd /ws/e1 && mock-claude-code --resume sess-abc"
-    wrapped = "blizzard runner takeover ch_abc --dir /runner/data/runtime/ch_abc"
+    # `--dir` names the runner's own runtime root — one flat path shared across every
+    # chunk it escalates (`LoopConfig.runner_dir`), not a per-chunk path — and the
+    # embedded chunk id is the escalation's own, not an unrelated literal.
+    wrapped = f"blizzard runner takeover {chunk_id} --dir /runner/data/runtime"
     push = hub.client.post(
         "/api/fleet/events",
         json={

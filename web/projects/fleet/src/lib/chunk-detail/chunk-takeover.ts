@@ -15,11 +15,10 @@ import { KitButton } from '../kit/kit-button';
  * form the runner composes so the command runs from any directory on the
  * runner's host and records the takeover first, closing the window where the
  * fleet might respawn or judge the still-open session. It is primary whenever
- * present; the raw `takeover_command` — the literal `cd <workdir> && <harness
- * resume>` a human pastes directly — demotes to a collapsed fallback disclosure
- * below it. A runner too old to compose the wrapped form (or an escalation the
- * hub composed itself) sends an empty `wrapped_takeover_command`, in which case
- * the raw command stays primary and no fallback renders at all.
+ * present, with the raw `takeover_command` demoted to a collapsed fallback
+ * disclosure below it — wrapped implies raw, never the reverse; see
+ * `blizzard-context:/domain/humans.md` for the full enumeration of when each
+ * is empty.
  *
  * "Takeover" in the class/selector name is the deliberate operator-facing word for
  * entering a parked session — matching `blizzard runner takeover` and the "Needs
@@ -36,26 +35,33 @@ import { KitButton } from '../kit/kit-button';
     @if (escalation(); as esc) {
       <div class="escalation" data-testid="escalation">
         <div class="s-head"><span class="tag">Needs human · takeover</span></div>
-        @if (hasWrapped()) {
-          <p class="esc-hint">
-            The worker escalated (epoch {{ esc.epoch }}). Run as the runner's service account (the socket is
-            owner-only): this command runs from any directory on the runner's host and records the takeover first,
-            so the fleet will not respawn or judge the session while it is open:
-          </p>
+        @if (hasCommand()) {
+          @if (hasWrapped()) {
+            <p class="esc-hint">
+              The worker escalated (epoch {{ esc.epoch }}). Run as the runner's service account (the socket is
+              owner-only): this command runs from any directory on the runner's host and records the takeover first,
+              so the fleet will not respawn or judge the session while it is open:
+            </p>
+          } @else {
+            <p class="esc-hint">The worker escalated (epoch {{ esc.epoch }}). Use the following to continue:</p>
+          }
+          <div class="takeover">
+            <code class="cmd" data-testid="takeover-command">{{ primaryCommand() }}</code>
+            <fleet-kit-button testid="copy-takeover" (click)="copyTakeover(primaryCommand())">
+              {{ copied() ? 'Copied' : 'Copy' }}
+            </fleet-kit-button>
+          </div>
+          @if (hasWrapped()) {
+            <details class="raw-fallback" data-testid="takeover-command-raw-fallback">
+              <summary>Unwrapped fallback — cds directly into the &lt;workdir&gt;</summary>
+              <code class="cmd">{{ esc.takeover_command }}</code>
+            </details>
+          }
         } @else {
-          <p class="esc-hint">The worker escalated (epoch {{ esc.epoch }}). Use the following to continue:</p>
-        }
-        <div class="takeover">
-          <code class="cmd" data-testid="takeover-command">{{ primaryCommand() }}</code>
-          <fleet-kit-button testid="copy-takeover" (click)="copyTakeover(primaryCommand())">
-            {{ copied() ? 'Copied' : 'Copy' }}
-          </fleet-kit-button>
-        </div>
-        @if (hasWrapped()) {
-          <details class="raw-fallback" data-testid="takeover-command-raw-fallback">
-            <summary>Unwrapped fallback — cds directly into the &lt;workdir&gt;</summary>
-            <code class="cmd">{{ esc.takeover_command }}</code>
-          </details>
+          <p class="esc-hint" data-testid="no-command-hint">
+            The worker escalated (epoch {{ esc.epoch }}). There is no command to run for this escalation — resolve
+            it directly on the chunk (see its bounce history) and requeue.
+          </p>
         }
       </div>
     }
@@ -138,6 +144,15 @@ export class ChunkTakeover {
   /** Whether the escalation carries a runner-composed wrapped command — the
    * primary form once present (blizzard#251). */
   protected readonly hasWrapped = computed<boolean>(() => !!this.escalation()?.wrapped_takeover_command);
+
+  /** Whether either command field is non-empty. False only for a hub-authored,
+   * bounce-cap escalation (blizzard#251 round-2 F9) — the one case with nothing to
+   * enter the parked session with at all, since the hub never parked one to begin
+   * with. */
+  protected readonly hasCommand = computed<boolean>(() => {
+    const esc = this.escalation();
+    return !!esc && !!(esc.wrapped_takeover_command || esc.takeover_command);
+  });
 
   /** The command the copy button and primary `<code>` carry: the wrapped
    * `blizzard runner takeover` form when the runner composed one, else the raw

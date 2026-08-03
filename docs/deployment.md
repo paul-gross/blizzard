@@ -775,13 +775,15 @@ sudo -u blizzard /opt/blizzard/venv/bin/blizzard-runner start --dir /var/lib/bli
 ```
 
 The board's copyable wrapped takeover command (issue #251; see "Taking over a parked
-session" below) supplies that `--dir` for you, but nothing else here — not the service
-account, not the venv's `blizzard` binary path, and not the host itself: `--dir` names a
-path on the **runner's** host, while the board is served by the **hub**, so on a split
-deployment ([`docs/remote-runner.md`](./remote-runner.md)) a pasted command can fail
-outright by landing on the wrong machine entirely, not just the wrong account or binary
-path — so pasting it still needs a shell already set up exactly like the `sudo -u` form
-above, on the runner's own host.
+session" below) supplies that `--dir` for you, but nothing else here:
+
+- **Not the service account** — the pasted command still needs a shell already set up
+  exactly like the `sudo -u` form above, on the runner's own host.
+- **Not the venv's `blizzard` binary path.**
+- **Not the host itself** — `--dir` names a path on the **runner's** host, while the
+  board is served by the **hub**, so on a split deployment
+  ([`docs/remote-runner.md`](./remote-runner.md)) a pasted command can fail outright by
+  landing on the wrong machine entirely, not just the wrong account or binary path.
 
 `--runner-url` (or `$BZ_RUNNER_URL`) points a local verb at the TCP door instead — for a
 shell that cannot see the runtime dir, or cannot open the socket. Passing both `--dir` and
@@ -922,7 +924,9 @@ landed on a live tick; only a chunk that was *not* paused resumes in place on re
 interactively, in your own terminal. It records a takeover fact with the daemon first —
 so no loop step can respawn or judge the session while you hold it — then execs the
 harness's resume command as your terminal's child, and marks the takeover ended when
-you exit (even on Ctrl-C). Run it as the service account, like every socket verb.
+you exit (even on Ctrl-C). Run it as the service account, like every socket verb — see
+"The runner's two doors" above for what that means and the `--dir`/`--runner-url`
+transport it addresses the daemon over.
 
 Two things ride that exec which a plain copy-paste of a resume command does not get:
 
@@ -959,33 +963,32 @@ different situation the verb was never built for: the hub has no runner runtime 
 compose a resumable session from, so `wrapped_takeover_command` stays empty either
 way. That much is common to both hub paths, but what the raw string carries — and
 whether the takeover verb reaches anything at all underneath it — differs between
-them.
+them:
 
-A **bounce-cap** escalation leaves the raw string itself empty too — no command of
-any kind, because the escalation is recorded with no takeover command composed for it
-at all. `blizzard runner takeover` does not apply to this case: with no parked
-session recorded against it to resume, `open()` refuses with `ChunkNotTakeable`
-before it execs anything. Resolving one means acting on the chunk directly (reading
-its bounce history) and requeuing, not taking anything over.
-
-An **unresolvable cross-graph migration** escalation is different: its raw string
-carries operator guidance prose (naming the graph to mint before requeuing the
-chunk), not a runnable shell command — so neither command field on the escalation
-itself is ever a way in. But the underlying session is not necessarily gone. This
-path (`_apply_migration`'s `target_graph is None` branch, `hub/domain/apply.py`)
-returns `PARKED_AT_GATE` to the very runner whose completion submission hit the
-unresolvable target, and that outcome's runner-side handling
-(`_apply_response`'s `PARKED_AT_GATE` branch, `runner/loop/steps.py`) only logs —
-it never releases the held environments or closes out the lease's session the way
-`DONE`/`MIGRATED` do. So the runner that was driving the chunk still holds a
-session-bearing lease afterward, and `TakeoverService.open` (`runner/domain/
-takeover.py`) falls back to that runner's `latest_lease_for_chunk` once there is no
-live active one — finding a resumable session there. `blizzard runner takeover
-<chunk_id>` can therefore still succeed for this case, even though the escalation
-fact itself advertises the session through neither command field. Resolving the
-migration still means acting on the chunk directly (reading its prose, minting or
-fixing the named graph) and requeuing; the takeover verb is a way to look at — or
-keep working in — the parked session while doing that, not a substitute for it.
+- **A bounce-cap escalation** leaves the raw string itself empty too — no command of
+  any kind, because the escalation is recorded with no takeover command composed for
+  it at all. `blizzard runner takeover` does not apply to this case: with no parked
+  session recorded against it to resume, `open()` refuses with `ChunkNotTakeable`
+  before it execs anything. Resolving one means acting on the chunk directly (reading
+  its bounce history) and requeuing, not taking anything over.
+- **An unresolvable cross-graph migration escalation** is different: its raw string
+  carries operator guidance prose (naming the graph to mint before requeuing the
+  chunk), not a runnable shell command — so neither command field on the escalation
+  itself is ever a way in. But the underlying session is not necessarily gone. This
+  path (`_apply_migration`'s `target_graph is None` branch, `hub/domain/apply.py`)
+  returns `PARKED_AT_GATE` to the very runner whose completion submission hit the
+  unresolvable target, and that outcome's runner-side handling (`_apply_response`'s
+  `PARKED_AT_GATE` branch, `runner/loop/steps.py`) only logs — it never releases the
+  held environments or closes out the lease's session the way `DONE`/`MIGRATED` do.
+  So the runner that was driving the chunk still holds a session-bearing lease
+  afterward, and `TakeoverService.open` (`runner/domain/takeover.py`) falls back to
+  that runner's `latest_lease_for_chunk` once there is no live active one — finding a
+  resumable session there. `blizzard runner takeover <chunk_id>` can therefore still
+  succeed for this case, even though the escalation fact itself advertises the
+  session through neither command field. Resolving the migration still means acting
+  on the chunk directly (reading its prose, minting or fixing the named graph) and
+  requeuing; the takeover verb is a way to look at — or keep working in — the parked
+  session while doing that, not a substitute for it.
 
 A taken-over session also installs **no** heartbeat or session-end hooks: quitting it
 must not record a done-signal against the lease, so liveness reporting stays a
