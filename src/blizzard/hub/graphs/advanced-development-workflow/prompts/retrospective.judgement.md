@@ -2,7 +2,7 @@
 
 Confirm the retrospective is written as the `retrospective` asset with all required sections, honest and specific — above all the **Landing Verification** section `retrospective.md`'s landing-check duty requires — and that the workspace's post-delivery convention — if it declares one — was carried out, or its failure reported plainly.
 
-Select `recorded` when the landing verification found nothing wrong, or found only a red merge-commit gate result (logged as a finding with a follow-up filed — that alone is never a reason to withhold `recorded`, since the code is on base and stays there): the work is complete and the chunk closes.
+Select `recorded` when the landing verification found nothing wrong, or found only a red merge-commit gate result and/or an open work item (each logged as a finding — neither alone is a reason to withhold `recorded`: the code is on base and stays there regardless of the gate result, and a work item's closure is opportunistic, never guaranteed, so an open one is not evidence the landing itself is incomplete): the work is complete and the chunk closes.
 
 Select `delivery-incomplete` when the landing verification found a real discrepancy — a declared sha not reachable from its repo's base branch, or a repo's PR unmerged. It does **not** apply to a red merge-commit gate result (record that as a finding and select `recorded` instead) or to anything about the change's own content — a real defect in the change is `resolve`'s `broken` outcome on an earlier pass, not this node's concern. Name the specific discrepancy in your `retrospective` asset before selecting it — `resolve` reads it from there.
 

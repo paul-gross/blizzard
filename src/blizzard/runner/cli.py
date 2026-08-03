@@ -433,8 +433,8 @@ def ask(prompt: str, options: str | None) -> None:
 
 
 def _worker_lease_identity(verb: str) -> tuple[str, str, str | None]:
-    """The worker's ambient lease identity for an ``artifact`` verb — ``(lease_id,
-    runner_url, lease_token)`` from the spawn environment. Raises (a hard error, not a
+    """The worker's ambient lease identity for an ``artifact`` or ``chunk`` verb —
+    ``(lease_id, runner_url, lease_token)`` from the spawn environment. Raises (a hard error, not a
     hook-style soft-fail) when the lease id or runner URL is absent, so a lost read or
     write reaches the worker rather than passing silently. The token may be absent — the
     runner then rejects the call with ``403``."""
@@ -743,10 +743,12 @@ def chunk_group() -> None:
     """Worker: read facts about the chunk this node-step belongs to (identity from the
     environment).
 
-    Scope is ambient, like ``artifact`` — every verb acts on the worker's own lease,
-    resolved from ``BLIZZARD_LEASE_ID``/``BLIZZARD_LEASE_TOKEN``/``BLIZZARD_RUNNER_URL``
-    (all inherited at spawn) — so no verb takes a ``--lease``/``--chunk`` flag by which a
-    worker could name another chunk.
+    Scope is ambient, like ``artifact`` — every verb in **this group** acts on the
+    worker's own lease, resolved from
+    ``BLIZZARD_LEASE_ID``/``BLIZZARD_LEASE_TOKEN``/``BLIZZARD_RUNNER_URL`` (all
+    inherited at spawn), so no verb here takes a ``--lease``/``--chunk`` flag by which a
+    worker could name another chunk — unlike the standalone ``work-items`` verb, which
+    takes an explicit chunk id since it predates this group and is not itself lease-scoped.
     """
 
 

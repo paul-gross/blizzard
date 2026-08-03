@@ -50,6 +50,8 @@ def test_basic_retrospective_states_the_sha_and_work_item_legs_and_the_gate_chec
     assert "merge-base --is-ancestor" in prompt, "sha-reachable-from-base leg missing"
     assert "work-items" in prompt, "work-item-closed leg missing"
     assert "gh run list --commit" in prompt, "merge-commit gate check missing"
-    # No PR to merge in this lane — a fast-forward, not a PR merge.
-    assert "gh pr view" not in prompt
+    # No PR to merge in this lane — a fast-forward, not a PR merge. Assert the prompt
+    # says so, not merely that one incidental substring is absent — a blanket "not in"
+    # check would fail on any unrelated future mention of the same verb.
+    assert "no PR-merge leg to check" in prompt, "must say why there is no PR-merged leg"
     assert "no `resolve` node" in prompt, "must say a discrepancy is reported, not routed"

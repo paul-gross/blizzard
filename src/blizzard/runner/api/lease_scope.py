@@ -1,6 +1,6 @@
-"""Shared lease-scoped authorization plus hub-response detail-unwrapping — the two
-helpers every lease-scoped worker route that proxies to the hub opens with
-(``canon:one-owner``).
+"""Shared lease-scoped authorization plus hub-response detail-unwrapping
+(``canon:one-owner``). ``authorized_lease`` opens every lease-scoped worker route,
+whether or not it proxies to the hub; ``upstream_detail`` is for the ones that do.
 
 ``authorized_lease`` resolves ``lease_id`` to its active lease and checks the presented
 token, or raises the store-free ``503`` / unknown-lease ``404`` / bad-token ``403`` —
@@ -10,9 +10,10 @@ fleet's hub-wiring state. ``upstream_detail`` unwraps the hub's own JSON error b
 rather than a runner-side generic one.
 
 Extracted from ``runner.api.artifacts`` (issue #127) — ``runner.api.chunk_detail``
-already duplicated ``upstream_detail`` verbatim, and the lease-scoped history route
-(``runner.api.history``, issue #237) needs ``authorized_lease`` too. A third inline copy
-is what this module avoids.
+already duplicated ``upstream_detail`` verbatim, the lease-scoped history route
+(``runner.api.history``, issue #237) needed ``authorized_lease`` too, and
+``runner.api.attachments``'s own local copy of it is now this module's fourth consumer.
+A fourth (or third, for ``upstream_detail``) inline copy is what this module avoids.
 """
 
 from __future__ import annotations

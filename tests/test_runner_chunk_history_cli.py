@@ -6,6 +6,8 @@ route itself (store round-trip, hub forward, 403/404/503) is the component tier'
 
 from __future__ import annotations
 
+import re
+
 import httpx
 import pytest
 from click.testing import CliRunner
@@ -127,7 +129,11 @@ def test_chunk_history_help_names_no_chunk_naming_flag() -> None:
 
 
 def test_chunk_group_is_listed_in_top_level_help() -> None:
+    """A bare ``"chunk" in result.output`` substring check would pass even with the
+    ``chunk`` group unregistered — ``work-items``'s own help text already contains that
+    substring. Match click's actual `Commands:` listing shape instead: two spaces, the
+    command name as its own word, then whitespace before the summary."""
     result = CliRunner().invoke(runner_group, ["--help"])
 
     assert result.exit_code == 0, result.output
-    assert "chunk" in result.output
+    assert re.search(r"^  chunk\s", result.output, re.MULTILINE)

@@ -114,7 +114,9 @@ def test_a_bounced_attempt_with_no_artifact_is_still_a_row() -> None:
     """#237 AC3: a bounce that produced no artifact anywhere in the envelope still
     appears on the timeline — it carries its own kick-back cause."""
     detail = ChunkHistoryView(
-        bounces=[BounceView(cause="conflict", envelope="{}", recorded_at="2026-07-21T11:00:00+00:00")]
+        history=[],
+        migrations=[],
+        bounces=[BounceView(cause="conflict", envelope="{}", recorded_at="2026-07-21T11:00:00+00:00")],
     )
     rows = history_rows(detail)
     assert len(rows) == 1
@@ -126,6 +128,8 @@ def test_a_bounced_attempt_with_no_artifact_is_still_a_row() -> None:
 @pytest.mark.unit
 def test_a_migration_becomes_its_own_row_with_a_graph_hop_label() -> None:
     detail = ChunkHistoryView(
+        history=[],
+        bounces=[],
         migrations=[
             MigrationView(
                 from_node_id="nd_triage",
@@ -140,7 +144,7 @@ def test_a_migration_becomes_its_own_row_with_a_graph_hop_label() -> None:
                 source="authored-edge",
                 recorded_at="2026-07-21T09:00:00+00:00",
             )
-        ]
+        ],
     )
     rows = history_rows(detail)
     assert len(rows) == 1
@@ -154,6 +158,8 @@ def test_a_migration_becomes_its_own_row_with_a_graph_hop_label() -> None:
 @pytest.mark.unit
 def test_a_transition_row_carries_epoch_and_choice() -> None:
     detail = ChunkHistoryView(
+        migrations=[],
+        bounces=[],
         history=[
             TransitionView(
                 from_node_id="nd_review",
@@ -166,7 +172,7 @@ def test_a_transition_row_carries_epoch_and_choice() -> None:
                 graph_id="gr_1",
                 graph_name="adv-dwf",
             )
-        ]
+        ],
     )
     rows = history_rows(detail)
     assert len(rows) == 1

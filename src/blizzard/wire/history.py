@@ -28,11 +28,18 @@ from blizzard.wire.chunk import BounceView, MigrationView, TransitionView
 class ChunkHistoryView(BaseModel):
     """The slice of a hub ``ChunkDetail`` payload ``history_rows`` needs — validated with
     pydantic's default ``extra="ignore"``, so it decodes straight off the full aggregate
-    without duplicating every other field."""
+    without duplicating every other field. The three fields are **required**, not
+    defaulted — the hub's own ``ChunkDetail`` always emits all three keys (each defaults
+    to ``[]`` there too, but a default is still a present key in the serialized JSON), so
+    a missing key here means one of the three was renamed out from under this mirror.
+    Failing loudly on that beats defaulting to ``[]``: `retrospective.judgement.md`'s
+    delivery-incomplete loop bound reads an empty result as "no history yet" and would
+    otherwise silently re-take an already-taken edge into a hub node that mutates the
+    forge, on a field-drift a reader has no way to notice."""
 
-    history: list[TransitionView] = []
-    migrations: list[MigrationView] = []
-    bounces: list[BounceView] = []
+    history: list[TransitionView]
+    migrations: list[MigrationView]
+    bounces: list[BounceView]
 
 
 class HistoryRowView(BaseModel):

@@ -261,9 +261,13 @@ nodes:
           description: The retrospective is written as the retrospective asset; the work is complete.
           to: done
         delivery-incomplete:
-          description: Re-derived landing verification found a repo's declared sha not reachable from base, or a repo's PR unmerged — a partial landing, not a pre-merge blocker. Routed to resolve for a targeted repair, never a second time for the same chunk (see the judgement prompt's loop bound).
+          description: Re-derived landing verification found a repo's declared sha not reachable from base, or a repo's PR unmerged — a partial landing, not a pre-merge blocker. Routed to resolve for a targeted repair. Intended as a single round-trip per chunk, held to that by the judgement prompt's own loop-bound check (reading blizzard runner chunk history) rather than by an authored counter here — neither retries (below) nor bounce_cap observes this edge.
           to: resolve
           prompt_addendum: ./prompts/resolve.from-retrospective.md
     retries:
-      max: 1
+      # A chunk that round-trips through delivery-incomplete visits this node twice;
+      # attempt_count counts leases minted for the node across all visits, not per-visit
+      # (blizzard-context:/domain/graphs.md), so a single retry budget of 1 would leave
+      # the second visit with none. 2 gives each visit its own retry in the common case.
+      max: 2
       exhausted: escalate
