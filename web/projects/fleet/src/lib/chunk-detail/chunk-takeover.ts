@@ -20,6 +20,13 @@ import { KitButton } from '../kit/kit-button';
  * below it. A runner too old to compose the wrapped form (or an escalation the
  * hub composed itself) sends an empty `wrapped_takeover_command`, in which case
  * the raw command stays primary and no fallback renders at all.
+ *
+ * "Takeover" in the class/selector name is the deliberate operator-facing word for
+ * entering a parked session — matching `blizzard runner takeover` and the "Needs
+ * human · takeover" tag below — not the separately-modeled Takeover entity (its own
+ * store table, `TakeoverService`, `OpenTakeoverView`, `GET /api/takeovers`; see
+ * `blizzard-context:/domain/humans.md`'s §Takeover). This component renders none of
+ * that entity's state: it only reads the open escalation (`data-testid="escalation"`).
  */
 @Component({
   selector: 'fleet-chunk-detail-takeover',
@@ -31,11 +38,12 @@ import { KitButton } from '../kit/kit-button';
         <div class="s-head"><span class="tag">Needs human · takeover</span></div>
         @if (hasWrapped()) {
           <p class="esc-hint">
-            The worker escalated (epoch {{ esc.epoch }}). This command runs from any directory on the runner's host
-            and records the takeover first, so the fleet will not respawn or judge the session while it is open:
+            The worker escalated (epoch {{ esc.epoch }}). Run as the runner's service account (the socket is
+            owner-only): this command runs from any directory on the runner's host and records the takeover first,
+            so the fleet will not respawn or judge the session while it is open:
           </p>
         } @else {
-          <p class="esc-hint">The worker escalated (epoch {{ esc.epoch }}). Run the takeover command to enter its session:</p>
+          <p class="esc-hint">The worker escalated (epoch {{ esc.epoch }}). Use the following to continue:</p>
         }
         <div class="takeover">
           <code class="cmd" data-testid="takeover-command">{{ primaryCommand() }}</code>
@@ -45,7 +53,7 @@ import { KitButton } from '../kit/kit-button';
         </div>
         @if (hasWrapped()) {
           <details class="raw-fallback" data-testid="takeover-command-raw-fallback">
-            <summary>Unwrapped fallback — cds directly into the takeover worktree</summary>
+            <summary>Unwrapped fallback — cds directly into the &lt;workdir&gt;</summary>
             <code class="cmd">{{ esc.takeover_command }}</code>
           </details>
         }
@@ -69,6 +77,7 @@ import { KitButton } from '../kit/kit-button';
       border: 1px solid var(--red-dim);
       background: color-mix(in srgb, var(--red) 6%, transparent);
       padding: 6px;
+      margin-bottom: 8px;
     }
     .esc-hint {
       margin: 0 0 6px;

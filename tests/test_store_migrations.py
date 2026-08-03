@@ -80,9 +80,19 @@ def test_wrapped_takeover_command_column_survives_migration_roundtrip(tmp_path: 
 
     ``base -> head`` alone would exercise this revision's ``add_column`` branch
     vacuously — the walking-skeleton revision already creates ``escalations`` with
-    every column current ``schema.py`` declares — so the middle ``downgrade -1``
-    below is what actually proves the revision's ``upgrade()``/``downgrade()``
-    bodies, not just its presence in the ladder.
+    every column current ``schema.py`` declares — so the middle downgrade below is
+    what actually proves this revision's ``upgrade()``/``downgrade()`` bodies, not
+    just its presence in the ladder. (``test_migrate_up_and_down[hub]`` already
+    separately proves the ``_has_column`` guard's *skip* branch, via its own
+    ``base -> head`` round trip landing the column exactly once either way — this
+    test is the complementary case: the guard's *acting* branch, isolated to this
+    one revision.)
+
+    The downgrade target is this revision's own parent by id
+    (``20260801_1600_hub_runner_external_usage``), not ``"-1"`` — pinned to the
+    migration by name rather than to wherever it happens to sit in the ladder, so a
+    future revision landing between this one and its parent can't silently break
+    this test's premise.
     """
     config = hub_runtime.init_environment(tmp_path)  # upgrades to head
     runner = hub_runtime.migration_runner(config)
@@ -97,7 +107,7 @@ def test_wrapped_takeover_command_column_survives_migration_roundtrip(tmp_path: 
 
     assert _has_column()
 
-    runner.downgrade("-1")
+    runner.downgrade("20260801_1600_hub_runner_external_usage")
     assert not _has_column()
 
     runner.upgrade("head")

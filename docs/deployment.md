@@ -774,10 +774,14 @@ sudo -u blizzard /opt/blizzard/venv/bin/blizzard-runner pause --dir /var/lib/bli
 sudo -u blizzard /opt/blizzard/venv/bin/blizzard-runner start --dir /var/lib/blizzard/runner
 ```
 
-The board's copyable wrapped takeover command (issue #251) supplies that `--dir` for
-you, but nothing else here — not the service account, not the venv's `blizzard`
-binary path — so pasting it still needs a shell already set up exactly like the
-`sudo -u` form above.
+The board's copyable wrapped takeover command (issue #251; see "Taking over a parked
+session" below) supplies that `--dir` for you, but nothing else here — not the service
+account, not the venv's `blizzard` binary path, and not the host itself: `--dir` names a
+path on the **runner's** host, while the board is served by the **hub**, so on a split
+deployment ([`docs/remote-runner.md`](./remote-runner.md)) a pasted command can fail
+outright by landing on the wrong machine entirely, not just the wrong account or binary
+path — so pasting it still needs a shell already set up exactly like the `sudo -u` form
+above, on the runner's own host.
 
 `--runner-url` (or `$BZ_RUNNER_URL`) points a local verb at the TCP door instead — for a
 shell that cannot see the runtime dir, or cannot open the socket. Passing both `--dir` and
@@ -941,7 +945,7 @@ record's raw string, the supported way in. `blizzard runner status` still prints
 raw string (`cd … && claude --resume …`) — that surface is deliberately unchanged —
 and the board (issue #251) now renders the wrapped verb as the primary, copyable
 command, with the raw string demoted to a collapsed "Unwrapped fallback" disclosure
-beside it (present only when the escalating runner composed a wrapped form at all; an
+below it (present only when the escalating runner composed a wrapped form at all; an
 older runner — a build predating `LoopConfig.runner_dir`, or a deployment that never
 configured it — leaves the raw string primary with no fallback to demote it into).
 Either way, for a runner-composed escalation the raw string resumes the transcript but

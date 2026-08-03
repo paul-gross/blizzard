@@ -138,7 +138,7 @@ const ESCALATED_DETAIL: ChunkDetail = {
   artifacts: [],
   escalation: {
     epoch: 3,
-    takeover_command: 'blizzard runner takeover ch_01esc00000000000000000000000',
+    takeover_command: 'cd /work/ch_01esc00000000000000000000000 && claude --resume se_01',
   },
 };
 

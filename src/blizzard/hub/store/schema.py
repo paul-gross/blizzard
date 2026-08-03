@@ -580,6 +580,14 @@ escalations = Table(
     # bypassing it with a pasted harness command. Additive; written starting the next
     # phase, so every existing row (and every column-adding revision on an old store)
     # reads back its ``server_default`` empty string until then.
+    #
+    # Deliberate trade-off: this string is *stored pre-composed* — a function of
+    # ``chunk_id`` plus the runner's ``--dir`` at escalation time — rather than
+    # derived at read time the way the runner's own ``resume_command`` is (computed
+    # fresh from the live harness adapter on every read, never persisted). If a
+    # runner's runtime dir ever moves after the fact, already-open escalations keep
+    # showing the old ``--dir`` path until that escalation closes and a fresh one is
+    # recorded — there is no read-time recomposition to pick up the change.
     Column("wrapped_takeover_command", Text, nullable=False, server_default=""),
     # ``decision_id`` is set only when a **human gate's** resolved choice migrated
     # cross-graph to an unresolvable target (issue #110): the escalation stands in for the

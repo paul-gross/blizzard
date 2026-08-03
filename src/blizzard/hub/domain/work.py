@@ -570,7 +570,7 @@ def derive_event_feed(events: list[EventRow], escalations: list[EscalationOpen])
             chunk_id=esc.chunk_id,
             lease_id=None,
             node_name=None,
-            message=f"chunk {esc.chunk_id} needs a human — takeover: {esc.takeover_command}",
+            message=f"chunk {esc.chunk_id} needs a human — resume: {esc.takeover_command}",
             detail=None,
         )
         for i, esc in enumerate(escalations)

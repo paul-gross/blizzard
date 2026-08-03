@@ -40,7 +40,10 @@ const ESCALATED_ROUTED_DETAIL: ChunkDetail = {
   work_refs: [],
   history: [],
   artifacts: [],
-  escalation: { epoch: 3, takeover_command: 'blizzard runner takeover ch_01esc00000000000000000000000' },
+  escalation: {
+    epoch: 3,
+    takeover_command: 'cd /work/ch_01esc00000000000000000000000 && claude --resume se_01',
+  },
   route: { runner_id: 'rn_02', workspace_id: 'ws_01', environment_ids: [] },
 };
 

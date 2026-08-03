@@ -23,7 +23,13 @@ pytestmark = pytest.mark.component
 
 _POINTER = {"source": "default", "ref": "9"}
 _TAKEOVER = "cd /ws/e1 && mock-claude-code --resume sess-abc"
-_WRAPPED_TAKEOVER = "blizzard runner takeover ch_abc --dir /runner/data/runtime/ch_abc"
+
+
+def _wrapped_takeover(chunk_id: str) -> str:
+    """The composed shape (``blizzard runner takeover <chunk_id> --dir <runner_dir>``)
+    — ``--dir`` names the runner's flat runtime dir, not a per-chunk one."""
+    return f"blizzard runner takeover {chunk_id} --dir /var/lib/blizzard/runner"
+
 
 _GRAPH_YAML = """
 name: default-delivery
@@ -126,7 +132,7 @@ def test_escalation_with_wrapped_takeover_round_trips(tmp_path: Path) -> None:
             "epoch": 1,
             "runner_id": "r1",
             "takeover_command": _TAKEOVER,
-            "wrapped_takeover_command": _WRAPPED_TAKEOVER,
+            "wrapped_takeover_command": _wrapped_takeover(chunk_id),
         },
     )
     assert resp.status_code == 202, resp.text
@@ -134,7 +140,7 @@ def test_escalation_with_wrapped_takeover_round_trips(tmp_path: Path) -> None:
     detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail["escalation"] is not None
     assert detail["escalation"]["takeover_command"] == _TAKEOVER
-    assert detail["escalation"]["wrapped_takeover_command"] == _WRAPPED_TAKEOVER
+    assert detail["escalation"]["wrapped_takeover_command"] == _wrapped_takeover(chunk_id)
 
 
 def test_escalation_without_wrapped_takeover_reads_back_empty(tmp_path: Path) -> None:

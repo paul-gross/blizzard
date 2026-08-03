@@ -93,7 +93,7 @@ def test_report_escalation_lands_on_the_chunk_detail() -> None:
             epoch=3,
             runner_id="runner-parity",
             takeover_command="take over",
-            wrapped_takeover_command="blizzard runner takeover ch_1 --dir /tmp/runner",
+            wrapped_takeover_command=f"blizzard runner takeover {chunk_id} --dir /tmp/runner",
         )
 
         detail = hub.get(f"/api/fleet/chunks/{chunk_id}")
@@ -102,14 +102,22 @@ def test_report_escalation_lands_on_the_chunk_detail() -> None:
         assert escalation is not None, detail.text
         assert escalation["epoch"] == 3
         assert escalation["takeover_command"] == "take over"
-        assert escalation["wrapped_takeover_command"] == "blizzard runner takeover ch_1 --dir /tmp/runner"
+        assert escalation["wrapped_takeover_command"] == f"blizzard runner takeover {chunk_id} --dir /tmp/runner"
 
 
 def test_report_escalation_buffered_via_push_facts_lands_on_the_chunk_detail() -> None:
-    """The path production actually takes: ``escalation.recorded`` rides the runner's
-    outbound buffer through ``push_facts`` -> ``POST /api/fleet/events``, not the
-    dedicated direct route above — mirrors the ask/answer case's buffered shape
-    (case 3 below) for the escalation kind."""
+    """The wire round trip production actually takes: ``escalation.recorded`` rides
+    the runner's outbound buffer through ``push_facts`` -> ``POST /api/fleet/events``,
+    not the dedicated direct route above — mirrors the ask/answer case's buffered shape
+    (case 3 below) for the escalation kind.
+
+    This is the mock hub's own echo of that wire shape, not the real hub's ingest
+    logic — ``http_hub_client`` here runs against ``mock_hub``, and the payload is
+    hand-built rather than driven through the runner's real ``_escalate`` composition,
+    so this pins neither ``FactIngestService`` nor the runner's composition. Those are
+    ``tests/test_store_and_forward.py``'s ``test_escalation_fact_rides_events_and_
+    derives_needs_human`` (the real hub) and ``tests/test_runner_loop.py``'s
+    composition-root cases (the real runner), respectively."""
     bin_dir = require_mock_fleet()
     hub_port = _free_port()
     with mock_hub(bin_dir, hub_port) as hub, http_hub_client(hub_port) as client:

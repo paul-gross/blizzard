@@ -1821,8 +1821,8 @@ def test_escalation_without_a_session_composes_neither_takeover_command(tmp_path
 # --------------------------------------------------------------------------- #
 
 
-def _cap_config(cap):  # type: ignore[no-untyped-def]
-    return LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1, chunk_cap_usd=cap)
+def _cap_config(cap, runner_dir="/tmp/runner-dir"):  # type: ignore[no-untyped-def]
+    return LoopConfig(runner_id="r1", workspace_id="ws1", max_agents=1, chunk_cap_usd=cap, runner_dir=runner_dir)
 
 
 @pytest.mark.unit
@@ -1858,11 +1858,44 @@ def test_cost_cap_parks_needs_human_at_next_step_boundary(tmp_path):  # type: ig
     # The takeover resumes the just-finished attempt's own session — a human's entry point
     # back into the chunk, the same shape a retries-exhausted escalation carries.
     assert payload["takeover_command"].startswith("cd /ws/e1 &&") and "--resume sess-a" in payload["takeover_command"]
-    # `_cap_config` leaves `runner_dir` unset (issue #251) — no runtime dir to compose the
-    # wrapped command from, so it stays empty even though the raw fallback above is present.
-    assert payload["wrapped_takeover_command"] == ""
+    # The cap-park caller shares the same composition-root `ctx` as every other
+    # `_escalate` call (issue #251) — with `runner_dir` configured, a real cap park
+    # composes a real wrapped command too, not just the raw fallback above.
+    assert payload["wrapped_takeover_command"] == "blizzard runner takeover ch_1 --dir /tmp/runner-dir"
     # Envs stay held for the takeover; nothing was released on a cap park.
     assert store.held_environment_ids() == ["e1"]
+
+
+@pytest.mark.unit
+def test_cost_cap_park_leaves_wrapped_empty_without_runner_dir(tmp_path):  # type: ignore[no-untyped-def]
+    """A cap park with no `runner_dir` configured composes the raw fallback normally but
+    leaves the wrapped command empty, same as any other `_escalate` caller — there is no
+    runtime dir to fill `--dir` with."""
+    store = _store(tmp_path)
+    _seed_running_lease(store)
+    hub = FakeHub()
+    hub.envelopes["ch_1"] = _build_envelope()
+    next_env = make_envelope("ch_1", "review", node_id="nd_review", choices=_CHOICES)
+    hub.apply_responses = [ApplyResponse(outcome=ApplyOutcome.NEXT, next_envelope=next_env)]
+    hub.chunks["ch_1"] = _chunk_with_cost(cost_usd=7.0)  # over the $5 cap
+    harness = FakeHarness(handle=_HANDLE, verdict="pass")
+    ctx = make_context(
+        store,
+        hub=hub,
+        provider=FakeProvider({"e1": "/ws/e1"}),
+        harness=harness,
+        probe=FakeProbe(),
+        config=_cap_config(5.0, runner_dir=""),
+    )
+
+    advance(ctx)
+    pull(ctx)
+
+    escalations = [b for b in store.pending_outbound() if b.kind == ESCALATION_RECORDED]
+    assert len(escalations) == 1
+    payload = json.loads(escalations[0].payload)
+    assert payload["takeover_command"].startswith("cd /ws/e1 &&") and "--resume sess-a" in payload["takeover_command"]
+    assert payload["wrapped_takeover_command"] == ""
 
 
 @pytest.mark.unit
