@@ -61,11 +61,20 @@ fold table names it, so a reader sees the supersession rather than a silent abse
 against disposition records recorded anywhere in the chunk's node `retrospective` assets, then:
 
 - a matched id is closed — carry its disposition into the fold table.
-- an unmatched `should-fix` id is open — file a forge issue for it, following the workspace's own
-  issue-filing convention if it declares one (skill, format, label set), otherwise a plain
-  `gh issue create` run from inside that finding's own repo worktree so `gh` targets the right forge —
-  the anchor's repo segment names it — and record that filing as its disposition (`filed-as-issue`, with
-  the created issue's URL). The filing *is* the disposition; nothing further closes it.
+- an unmatched `should-fix` id whose target is a real repo file, describing a defect still present in
+  the change, is open — file a forge issue for it, following the workspace's own issue-filing
+  convention if it declares one (skill, format, label set), otherwise a plain `gh issue create` run
+  from inside that finding's own repo worktree so `gh` targets the right forge — the anchor's repo
+  segment names it — and record that filing as its disposition (`filed-as-issue`, with the created
+  issue's URL). The filing *is* the disposition; nothing further closes it.
+- an unmatched `should-fix` id whose target is an **immutable artifact** has no repo target the bullet
+  above could point a fix at, so it is closed `accepted-wont-fix` with a stated reason instead, and not
+  filed. In practice this is a plan-apparatus finding against the consumed plan asset — an acceptance
+  criterion's wording, a guard command's pattern, a self-consistency inventory — the plan is immutable
+  and was already consumed before the code landed. `plan-findings` ids are otherwise in the fold's scope
+  like any other id: the outcome above is keyed on the finding's **target**, not on which node produced
+  it, so a `plan-findings` id anchored at a real repo file and describing a defect still present in the
+  change files exactly like the bullet above.
 - an unmatched `blocking` id should not occur — a blocking finding does not survive into the newest asset
   without a bounce that resolved it. If one somehow does, treat it exactly like an open should-fix id: file it,
   and say in the fold table that it was found still blocking.
