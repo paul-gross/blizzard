@@ -63,6 +63,13 @@ Implements :class:`~blizzard.runner.harness.adapter.IHarnessAdapter` against the
   expired token, a non-2xx/unreachable/timed-out request, an unparseable response,
   or a response with no parseable window) logs one warning and returns ``None`` —
   never a raise, since a diagnostic sample is inherently best-effort.
+* **transcript_source** (blizzard#245) — returns the injected
+  :class:`~blizzard.runner.harness.transcript.IHarnessTranscriptSource`, defaulted to
+  :class:`~blizzard.runner.harness.transcript.NullTranscriptSource` (this adapter never
+  constructs a real one itself, ``bzh:dependency-injection``). The composition roots
+  that need real Claude Code transcript reads (``app.py``, ``loop/build.py``) inject
+  one; ``cli.py``'s one adapter construction (the ``external-usage probe`` diagnostic)
+  and every test construction keep the default — neither reads a transcript.
 
 ``spawn``/``resume_with_message`` redirect the worker's stdout to an **injected**
 per-lease file (``preamble.stdout_path`` / the ``stdout_path`` param) rather than
@@ -141,6 +148,7 @@ from blizzard.runner.harness.adapter import (
 from blizzard.runner.harness.env_allowlist import allowlisted_env
 from blizzard.runner.harness.external_usage import ExternalSubscriptionUsageSnapshot, ExternalSubscriptionUsageWindow
 from blizzard.runner.harness.spawn_cwd import resolve_spawn_cwd
+from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.wire.envelope import NodeEnvelope
 
@@ -167,15 +175,6 @@ DEFAULT_WORKER_MODEL = "claude-opus-5"
 # own ``[models.aliases]``, which overrides it). An entry without it is a harness-native
 # name, recognized directly.
 _TIER_PREFIX = "blizzard:"
-
-# How long a headless (``-p``) worker waits for still-running background subagents after
-# its final turn before the harness terminates them and exits (issue #268). The harness
-# default is 10 minutes, which killed a live faceted review mid-fan-out and surfaced as a
-# verdict-less completion; 2.5 hours covers the longest observed legitimate fan-out with
-# headroom. REAP's stall detector (``HEARTBEAT_STALENESS_THRESHOLD``) remains the
-# liveness authority inside this window — a worker whose background tasks died goes
-# heartbeat-stale and is reaped long before the ceiling matters.
-_BG_WAIT_CEILING_MS = str(int(2.5 * 60 * 60 * 1000))
 
 # This adapter's built-in tier mappings, so a zero-config runner resolves the three
 # standard tiers with no ``[models.aliases]`` at all. Overridden entry-by-entry by the
@@ -276,6 +275,7 @@ class ClaudeCodeAdapter:
         usage_api_base: str = DEFAULT_USAGE_API_BASE,
         http_client: httpx.Client | None = None,
         clock: IClock | None = None,
+        transcript_source: IHarnessTranscriptSource | None = None,
     ) -> None:
         self._binary = binary
         self._settings_path = settings_path
@@ -312,6 +312,12 @@ class ClaudeCodeAdapter:
         self._usage_api_base = usage_api_base
         self._http_client = http_client
         self._clock: IClock = clock or SystemClock()
+        # The transcript source (blizzard#245), injected — this adapter never
+        # constructs its own (`bzh:dependency-injection`). Defaulted to the null
+        # source so the construction sites that don't need a real one (`cli.py`'s
+        # `external-usage probe` diagnostic, every test construction) keep building
+        # the same adapter they always have.
+        self._transcript_source: IHarnessTranscriptSource = transcript_source or NullTranscriptSource()
 
     def resolve_model(self, preferences: Sequence[str]) -> str:
         """Left-to-right; first entry that resolves wins; unresolvable entries skipped."""
@@ -667,6 +673,9 @@ class ClaudeCodeAdapter:
             return None
         return ExternalSubscriptionUsageSnapshot(sampled_at=self._clock.now(), windows=tuple(windows))
 
+    def transcript_source(self) -> IHarnessTranscriptSource:
+        return self._transcript_source
+
     def _usage_client(self) -> httpx.Client:
         """The injected ``httpx.Client``, or a lazily-constructed real one.
 
@@ -817,9 +826,6 @@ class ClaudeCodeAdapter:
         # shells out to whatever ``BLIZZARD_RUNNER_ASK_CMD`` names, so wiring the real
         # command here is what lets the mock exercise the true ask path (verified e2e).
         env.setdefault("BLIZZARD_RUNNER_ASK_CMD", "blizzard runner ask")
-        # Widened background-wait ceiling (issue #268) — ``setdefault`` so an operator
-        # value forwarded through ``[worker] env_passthrough`` wins.
-        env.setdefault("CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS", _BG_WAIT_CEILING_MS)
         return env
 
     def _spawn_env(self, envelope: NodeEnvelope, preamble: WorkerPreamble, session_id: str) -> dict[str, str]:

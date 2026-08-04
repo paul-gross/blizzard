@@ -1,403 +1,356 @@
-"""``transcripts/`` — locator, parser, and the filesystem repository (issue #29).
+"""``transcripts/internal/projected_transcript_repository.py`` — the panel's read
+model, end to end through the full stack.
 
-All unit tier (`blizzard-context:/verification/blizzard.md`): the parser takes an
-iterable of strings and needs no filesystem; the repository is exercised with
-``tmp_path`` as ``projects_root`` (``bzh:dependency-injection`` is what makes this
-hermetic — no ``HOME`` monkey-patching).
+Component tier — a domain slice wired with real internal collaborators (a real
+:class:`ClaudeCodeTranscriptSource`, the real normalizer, the real projection, a
+real file under ``tmp_path``), hermetic via ``bzh:dependency-injection`` rather than
+``HOME`` monkey-patching. The two scripted-batch truncation-flag tests at the bottom
+double the source at its seam and stay unit tier. The golden claim
+is that a given set of fixture lines produces a given ``Turn`` list, so a projection
+regression reads as a diff in expectations here, not silence.
+
+File-location mechanics (session-id glob, multi-match disambiguation, the tail cap,
+forward reads, sidecar discovery) are pinned once, at their own layer, in
+``tests/test_runner_harness_claude_code_transcript.py`` — not duplicated here.
 """
 
 from __future__ import annotations
 
 import json
-import os
-import time
 from pathlib import Path
-from typing import Any
 
 import pytest
 import structlog
 
-from blizzard.runner.transcripts import parser as parser_module
-from blizzard.runner.transcripts.internal.jsonl_transcript_repository import (
-    JsonlTranscriptRepository,
-)
-from blizzard.runner.transcripts.locator import mangle_cwd
-from blizzard.runner.transcripts.parser import parse_turns
-from blizzard.runner.transcripts.repository import TranscriptErrorFactory
+from blizzard.runner.harness.internal import claude_code_normalizer as normalizer_module
+from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTranscriptSource
+from blizzard.runner.harness.transcript import TranscriptBatch, TranscriptErrorFactory
+from blizzard.runner.transcripts.internal import projected_transcript_repository as projection_module
+from blizzard.runner.transcripts.internal.projected_transcript_repository import ProjectedTranscriptRepository
+from blizzard.runner.transcripts.repository import Transcript
 from tests import transcript_fixtures as fx
+from tests.runner_fakes import FakeTranscriptSource
+
+
+def _repository(tmp_path: Path) -> ProjectedTranscriptRepository:
+    source = ClaudeCodeTranscriptSource(str(tmp_path), TranscriptErrorFactory(structlog.get_logger("test")))
+    return ProjectedTranscriptRepository(source)
+
+
+def _write(tmp_path: Path, lines: list[str], *, project_dir: str = "-home-user-workspace") -> None:
+    directory = tmp_path / project_dir
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / "sess-1.jsonl").write_text("\n".join(lines) + "\n")
+
+
+def _read(tmp_path: Path) -> Transcript:
+    return _repository(tmp_path).read_turns("sess-1", spawn_cwd="/home/user/workspace")
+
 
 # --------------------------------------------------------------------------- #
-# locator.mangle_cwd — pure, no I/O
+# The turn shape
 # --------------------------------------------------------------------------- #
 
 
-@pytest.mark.unit
-def test_mangle_cwd_replaces_slashes_with_dashes() -> None:
-    assert mangle_cwd("/home/user/foo") == "-home-user-foo"
+@pytest.mark.component
+def test_collapses_env_asst_and_tool_with_matched_output(tmp_path: Path) -> None:
+    _write(
+        tmp_path,
+        [
+            fx.user_env("build the thing"),
+            fx.assistant_text("Sure, I'll start."),
+            fx.assistant_tool_use("t1", "Bash", {"command": "ls"}),
+            fx.tool_result("t1", "file1\nfile2"),
+        ],
+    )
+    transcript = _read(tmp_path)
+
+    assert transcript.available is True
+    assert [t.kind for t in transcript.turns] == ["env", "asst", "tool"]
+    assert transcript.turns[0].text == "build the thing"
+    assert transcript.turns[1].text == "Sure, I'll start."
+    assert transcript.turns[2].tool_name == "Bash"
+    assert transcript.turns[2].tool_input == json.dumps({"command": "ls"})
+    assert transcript.turns[2].tool_output == "file1\nfile2"
+    assert transcript.truncated is False
+    assert [t.index for t in transcript.turns] == [0, 1, 2]
 
 
-# --------------------------------------------------------------------------- #
-# parser.parse_turns — the record → turn collapse
-# --------------------------------------------------------------------------- #
-
-
-@pytest.mark.unit
-def test_collapses_env_asst_and_tool_with_matched_output() -> None:
-    lines = [
-        fx.user_env("build the thing"),
-        fx.assistant_text("Sure, I'll start."),
-        fx.assistant_tool_use("t1", "Bash", {"command": "ls"}),
-        fx.tool_result("t1", "file1\nfile2"),
-    ]
-    parsed = parse_turns(lines)
-
-    assert [t.kind for t in parsed.turns] == ["env", "asst", "tool"]
-    assert parsed.turns[0].text == "build the thing"
-    assert parsed.turns[1].text == "Sure, I'll start."
-    assert parsed.turns[2].tool_name == "Bash"
-    assert parsed.turns[2].tool_input == json.dumps({"command": "ls"})
-    assert parsed.turns[2].tool_output == "file1\nfile2"
-    assert parsed.truncated is False
-    assert [t.index for t in parsed.turns] == [0, 1, 2]
-
-
-@pytest.mark.unit
-def test_one_assistant_record_yields_one_asst_and_n_tool_turns() -> None:
+@pytest.mark.component
+def test_one_assistant_record_yields_one_asst_and_n_tool_turns(tmp_path: Path) -> None:
     content = [
         {"type": "text", "text": "Checking two things."},
         {"type": "tool_use", "id": "t1", "name": "Read", "input": {"path": "a.py"}},
         {"type": "tool_use", "id": "t2", "name": "Read", "input": {"path": "b.py"}},
     ]
-    line = json.dumps({"type": "assistant", "message": {"role": "assistant", "content": content}, "timestamp": None})
-    parsed = parse_turns([line])
+    line = json.dumps({"type": "assistant", "message": {"role": "assistant", "content": content}, "uuid": "a1"})
+    _write(tmp_path, [line])
+    transcript = _read(tmp_path)
 
-    assert [t.kind for t in parsed.turns] == ["asst", "tool", "tool"]
-    assert parsed.turns[1].tool_name == "Read"
-    assert parsed.turns[2].tool_name == "Read"
-
-
-@pytest.mark.unit
-def test_unmatched_tool_result_is_dropped() -> None:
-    lines = [fx.tool_result("no-such-id", "orphaned output")]
-    parsed = parse_turns(lines)
-    assert parsed.turns == []
+    assert [t.kind for t in transcript.turns] == ["asst", "tool", "tool"]
+    assert transcript.turns[1].tool_name == "Read"
+    assert transcript.turns[2].tool_name == "Read"
 
 
-@pytest.mark.unit
-def test_tool_turn_with_no_result_keeps_output_none() -> None:
-    lines = [fx.assistant_tool_use("t1", "Bash", {"command": "sleep 100"})]
-    parsed = parse_turns(lines)
-    assert len(parsed.turns) == 1
-    assert parsed.turns[0].kind == "tool"
-    assert parsed.turns[0].tool_output is None  # renders "running…" — the live steady state
+@pytest.mark.component
+def test_unmatched_tool_result_is_dropped(tmp_path: Path) -> None:
+    _write(tmp_path, [fx.tool_result("no-such-id", "orphaned output")])
+    assert _read(tmp_path).turns == []
 
 
-@pytest.mark.unit
-def test_is_meta_record_is_filtered() -> None:
-    parsed = parse_turns([fx.meta_record()])
-    assert parsed.turns == []
+@pytest.mark.component
+def test_tool_turn_with_no_result_keeps_output_none(tmp_path: Path) -> None:
+    _write(tmp_path, [fx.assistant_tool_use("t1", "Bash", {"command": "sleep 100"})])
+    transcript = _read(tmp_path)
+
+    assert len(transcript.turns) == 1
+    assert transcript.turns[0].kind == "tool"
+    assert transcript.turns[0].tool_output is None  # renders "running…" — the live steady state
 
 
-@pytest.mark.unit
-def test_is_sidechain_record_is_filtered() -> None:
-    parsed = parse_turns([fx.sidechain_record()])
-    assert parsed.turns == []
+@pytest.mark.component
+def test_is_meta_record_is_filtered(tmp_path: Path) -> None:
+    _write(tmp_path, [fx.meta_record()])
+    assert _read(tmp_path).turns == []
 
 
-@pytest.mark.unit
+@pytest.mark.component
+def test_is_sidechain_record_is_filtered(tmp_path: Path) -> None:
+    """The panel's zero-turn outcome for an ``isSidechain`` record, pinned one layer
+    down: the normalizer now *surfaces* it as an unlinked conversation
+    (``tests/test_runner_harness_claude_code_normalizer.py``'s own rewrite of this
+    same assertion), and this projection is what re-establishes zero panel turns —
+    the projection half of that two-part rewrite."""
+    _write(tmp_path, [fx.sidechain_record()])
+    assert _read(tmp_path).turns == []
+
+
+@pytest.mark.component
+def test_a_thinking_turn_produces_zero_panel_turns_not_an_empty_asst_turn(tmp_path: Path) -> None:
+    """The thinking half of the narrowing contract, pinned at this layer like the two
+    sidechain halves around it: a thinking block (redacted in the corpus-normal case,
+    so its text is empty) contributes no panel turn at all. Without the projection's
+    own `kind != "thinking"` filter it would fall through `_project_turn`'s
+    env-or-asst default and render as an empty `asst` turn — a visible regression on
+    the panel contract this projection exists to hold constant."""
+    _write(tmp_path, [fx.user_env("hello"), fx.thinking_block()])
+    transcript = _read(tmp_path)
+
+    assert [t.kind for t in transcript.turns] == ["env"]
+    assert [t.text for t in transcript.turns] == ["hello"]
+
+
+@pytest.mark.component
+def test_a_sidecar_backed_sidechain_produces_zero_extra_panel_turns(tmp_path: Path) -> None:
+    """A *resolved* sidechain (link route 1, via a real sidecar file) still
+    contributes nothing beyond its own spawning tool turn — the projection drops the
+    nested conversation exactly like the unresolved case above."""
+    _write(
+        tmp_path,
+        [
+            fx.assistant_tool_use("t1", "Task", {"subagent_type": "explorer", "prompt": "find X"}),
+            fx.tool_result("t1", "subagent finished", agent_id="agent-abc"),
+        ],
+    )
+    subagents_dir = tmp_path / "-home-user-workspace" / "sess-1" / "subagents"
+    subagents_dir.mkdir(parents=True)
+    sidecar_lines = [fx.sidecar_record("starting", role="user", agent_id="agent-abc")]
+    (subagents_dir / "agent-agent-abc.jsonl").write_text("\n".join(sidecar_lines) + "\n")
+
+    transcript = _read(tmp_path)
+
+    assert [t.kind for t in transcript.turns] == ["tool"]  # the spawning call, nothing nested
+
+
+@pytest.mark.component
 @pytest.mark.parametrize(
-    "record_type", ["mode", "permission-mode", "last-prompt", "ai-title", "queue-operation", "attachment"]
+    "record_type",
+    [
+        "mode",
+        "permission-mode",
+        "last-prompt",
+        "ai-title",
+        "queue-operation",
+        "attachment",
+        "file-history-snapshot",
+        "file-history-delta",
+        "pr-link",
+    ],
 )
-def test_control_records_are_filtered(record_type: str) -> None:
-    parsed = parse_turns([fx.control_record(record_type)])
-    assert parsed.turns == []
+def test_control_records_are_filtered(tmp_path: Path, record_type: str) -> None:
+    _write(tmp_path, [fx.control_record(record_type)])
+    assert _read(tmp_path).turns == []
 
 
-@pytest.mark.unit
-def test_system_record_is_filtered() -> None:
-    parsed = parse_turns([fx.control_record("system")])
-    assert parsed.turns == []
+@pytest.mark.component
+def test_system_record_is_filtered(tmp_path: Path) -> None:
+    _write(tmp_path, [fx.control_record("system")])
+    assert _read(tmp_path).turns == []
 
 
-@pytest.mark.unit
-def test_ansi_escapes_are_stripped_from_text() -> None:
-    parsed = parse_turns([fx.ansi_text("hello")])
-    assert parsed.turns[0].text == "hello"
-    assert "\x1b" not in parsed.turns[0].text
+@pytest.mark.component
+def test_ansi_escapes_are_stripped_from_text(tmp_path: Path) -> None:
+    _write(tmp_path, [fx.ansi_text("hello")])
+    transcript = _read(tmp_path)
+    assert transcript.turns[0].text == "hello"
+    assert "\x1b" not in transcript.turns[0].text
 
 
-@pytest.mark.unit
-def test_private_mode_ansi_escapes_are_stripped_from_text() -> None:
-    """Private-mode CSI (`\\x1b[?25l`) strips too — a real-transcript finding.
-
-    Pinned separately from :func:`test_ansi_escapes_are_stripped_from_text` because the
-    `?` private-mode parameter prefix is a distinct part of the CSI grammar from the
-    SGR subset that fixture covers.
-    """
-    parsed = parse_turns([fx.ansi_private_mode_text("hello")])
-    assert parsed.turns[0].text == "hello"
-    assert "\x1b" not in parsed.turns[0].text
+@pytest.mark.component
+def test_private_mode_ansi_escapes_are_stripped_from_text(tmp_path: Path) -> None:
+    _write(tmp_path, [fx.ansi_private_mode_text("hello")])
+    transcript = _read(tmp_path)
+    assert transcript.turns[0].text == "hello"
+    assert "\x1b" not in transcript.turns[0].text
 
 
-@pytest.mark.unit
-def test_truncated_final_line_is_dropped_silently() -> None:
-    lines = [fx.user_env("build the thing"), fx.truncated_line()]
-    parsed = parse_turns(lines)  # must not raise
-    assert len(parsed.turns) == 1
-    assert parsed.turns[0].text == "build the thing"
-
-
-@pytest.mark.unit
-def test_max_turns_cap_keeps_the_most_recent_and_flags_truncated(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(parser_module, "MAX_TURNS", 5)
-    lines = [fx.user_env(f"msg-{i}", uuid=f"u{i}") for i in range(8)]
-    parsed = parse_turns(lines)
-
-    assert parsed.truncated is True
-    assert len(parsed.turns) == 5
-    assert [t.text for t in parsed.turns] == [f"msg-{i}" for i in range(3, 8)]
-    assert [t.index for t in parsed.turns] == [0, 1, 2, 3, 4]  # re-indexed from 0
-
-
-@pytest.mark.unit
-def test_max_block_chars_caps_a_turn_without_flagging_file_level_truncation(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(parser_module, "MAX_BLOCK_CHARS", 10)
-    parsed = parse_turns([fx.assistant_text("x" * 50)])
-
-    assert len(parsed.turns[0].text) == 10
-    assert parsed.turns[0].truncated is True  # block-level
-    assert parsed.truncated is False  # MAX_TURNS cap was never hit
+@pytest.mark.component
+def test_truncated_final_line_is_dropped_silently(tmp_path: Path) -> None:
+    _write(tmp_path, [fx.user_env("build the thing"), fx.truncated_line()])
+    transcript = _read(tmp_path)  # must not raise
+    assert len(transcript.turns) == 1
+    assert transcript.turns[0].text == "build the thing"
 
 
 # --------------------------------------------------------------------------- #
-# JsonlTranscriptRepository — the filesystem adapter
+# Caps — MAX_TURNS moved here; MAX_BLOCK_CHARS (text) stays in the normalizer;
+# MAX_BLOCK_CHARS (tool input) is this module's own, re-materialization-time cap.
 # --------------------------------------------------------------------------- #
 
 
-def _error_factory() -> TranscriptErrorFactory:
-    return TranscriptErrorFactory(structlog.get_logger("test"))
-
-
-@pytest.mark.unit
-def test_read_turns_hit_parses_the_matched_session_file(tmp_path: Path) -> None:
-    project_dir = tmp_path / "-home-user-workspace"
-    project_dir.mkdir()
-    (project_dir / "sess-1.jsonl").write_text(fx.user_env("hello") + "\n")
-    repo = JsonlTranscriptRepository(str(tmp_path), _error_factory())
-
-    transcript = repo.read_turns("sess-1", spawn_cwd="/home/user/workspace")
-
-    assert transcript.available is True
-    assert transcript.reason is None
-    assert transcript.session_id == "sess-1"
-    assert transcript.turns[0].text == "hello"
-
-
-@pytest.mark.unit
-def test_read_turns_miss_is_not_found(tmp_path: Path) -> None:
-    repo = JsonlTranscriptRepository(str(tmp_path), _error_factory())
-    transcript = repo.read_turns("no-such-session", spawn_cwd="/home/user/workspace")
-    assert transcript.available is False
-    assert transcript.reason == "not_found"
-    assert transcript.turns == []
-
-
-@pytest.mark.unit
-def test_read_turns_hit_with_no_spawn_cwd_hint_resolves_the_single_match(tmp_path: Path) -> None:
-    # The closed-lease path: the binding is released, so the hint is None —
-    # the single glob match still resolves with no reconstructed cwd needed at all.
-    project_dir = tmp_path / "-home-user-workspace"
-    project_dir.mkdir()
-    (project_dir / "sess-1.jsonl").write_text(fx.user_env("hello") + "\n")
-    repo = JsonlTranscriptRepository(str(tmp_path), _error_factory())
-
-    transcript = repo.read_turns("sess-1", spawn_cwd=None)
-
-    assert transcript.available is True
-    assert transcript.turns[0].text == "hello"
-
-
-@pytest.mark.unit
-def test_read_turns_multi_match_prefers_the_spawn_cwd_hint(tmp_path: Path) -> None:
-    wanted_dir = tmp_path / "-home-user-workspace"
-    other_dir = tmp_path / "-home-user-other"
-    wanted_dir.mkdir()
-    other_dir.mkdir()
-    (wanted_dir / "sess-1.jsonl").write_text(fx.user_env("from wanted dir") + "\n")
-    (other_dir / "sess-1.jsonl").write_text(fx.user_env("from other dir") + "\n")
-    repo = JsonlTranscriptRepository(str(tmp_path), _error_factory())
-
-    transcript = repo.read_turns("sess-1", spawn_cwd="/home/user/workspace")
-
-    assert transcript.turns[0].text == "from wanted dir"
-
-
-@pytest.mark.unit
-def test_read_turns_multi_match_falls_back_to_newest_mtime_without_a_hint(tmp_path: Path) -> None:
-    older_dir = tmp_path / "-home-user-older"
-    newer_dir = tmp_path / "-home-user-newer"
-    older_dir.mkdir()
-    newer_dir.mkdir()
-    older = older_dir / "sess-1.jsonl"
-    newer = newer_dir / "sess-1.jsonl"
-    older.write_text(fx.user_env("older") + "\n")
-    newer.write_text(fx.user_env("newer") + "\n")
-    now = time.time()
-    os.utime(older, (now - 100, now - 100))
-    os.utime(newer, (now, now))
-    repo = JsonlTranscriptRepository(str(tmp_path), _error_factory())
-
-    transcript = repo.read_turns("sess-1", spawn_cwd=None)
-
-    assert transcript.turns[0].text == "newer"
-
-
-@pytest.mark.unit
-def test_read_turns_unreadable_file_degrades_to_unreadable_reason(tmp_path: Path) -> None:
-    project_dir = tmp_path / "-home-user-workspace"
-    project_dir.mkdir()
-    # A directory named like the session file: stat().st_size / open() raise
-    # IsADirectoryError (an OSError subclass) — a portable way to hit the unreadable
-    # path without relying on permission semantics that differ when tests run as root.
-    (project_dir / "sess-1.jsonl").mkdir()
-    repo = JsonlTranscriptRepository(str(tmp_path), _error_factory())
-
-    transcript = repo.read_turns("sess-1", spawn_cwd="/home/user/workspace")
-
-    assert transcript.available is False
-    assert transcript.reason == "unreadable"
-
-
-class _TrackingFile:
-    """Wraps a real file handle, recording every ``read()`` size — the rest of the
-    file protocol (context manager, everything else) passes straight through."""
-
-    def __init__(self, handle: Any) -> None:
-        self._handle = handle
-        self.read_sizes: list[int] = []
-
-    def read(self, *args: Any, **kwargs: Any) -> bytes:
-        data = self._handle.read(*args, **kwargs)
-        self.read_sizes.append(len(data))
-        return data
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self._handle, name)
-
-    def __enter__(self) -> _TrackingFile:
-        return self
-
-    def __exit__(self, *exc: Any) -> None:
-        self._handle.__exit__(*exc)
-
-
-@pytest.mark.unit
-def test_read_turns_tail_caps_a_pathological_file_and_flags_truncated(
+@pytest.mark.component
+def test_max_turns_cap_keeps_the_most_recent_and_flags_truncated(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The must-fix regression (issue #29 pre-push review, finding 1).
+    monkeypatch.setattr(projection_module, "MAX_TURNS", 5)
+    _write(tmp_path, [fx.user_env(f"msg-{i}", uuid=f"u{i}") for i in range(8)])
+    transcript = _read(tmp_path)
 
-    A file far larger than the bound must never be read in full: peak memory is
-    bounded by :data:`MAX_FILE_BYTES`, enforced by seeking to the tail before
-    reading, not by reading everything and discarding the front. Pinned two ways —
-    the parsed content is only the tail turns, and the actual bytes read off disk
-    (via a wrapped ``Path.open``) never come close to the file's real size.
-    """
-    from blizzard.runner.transcripts.internal import jsonl_transcript_repository as repo_module
-
-    lines = [fx.user_env(f"msg-{i}", uuid=f"u{i}") for i in range(2000)]
-    line_bytes = max(len(line.encode("utf-8")) for line in lines)
-    cap = line_bytes * 3  # room for a handful of lines, nowhere near the full file
-    monkeypatch.setattr(repo_module, "MAX_FILE_BYTES", cap)
-
-    project_dir = tmp_path / "-home-user-workspace"
-    project_dir.mkdir()
-    path = project_dir / "sess-1.jsonl"
-    path.write_text("\n".join(lines) + "\n")
-    file_size = path.stat().st_size
-    assert file_size > cap * 10  # the file is genuinely pathological relative to the cap
-
-    tracker = _TrackingFile
-    tracked_files: list[_TrackingFile] = []
-    real_open = Path.open
-
-    def _tracking_open(self: Path, *args: Any, **kwargs: Any) -> Any:
-        handle = real_open(self, *args, **kwargs)
-        if self == path:
-            wrapped = tracker(handle)
-            tracked_files.append(wrapped)
-            return wrapped
-        return handle
-
-    monkeypatch.setattr(Path, "open", _tracking_open)
-
-    repo = JsonlTranscriptRepository(str(tmp_path), _error_factory())
-    transcript = repo.read_turns("sess-1", spawn_cwd="/home/user/workspace")
-
-    assert transcript.available is True
     assert transcript.truncated is True
-    assert transcript.turns[-1].text == "msg-1999"  # the newest line survived
-    assert len(transcript.turns) < 10  # only a handful of tail lines fit the cap
-
-    total_read = sum(size for f in tracked_files for size in f.read_sizes)
-    assert total_read <= cap + line_bytes  # never read anywhere close to file_size
-    assert total_read < file_size
+    assert len(transcript.turns) == 5
+    assert [t.text for t in transcript.turns] == [f"msg-{i}" for i in range(3, 8)]
+    assert [t.index for t in transcript.turns] == [0, 1, 2, 3, 4]  # re-indexed from 0
 
 
-# --------------------------------------------------------------------------- #
-# size_bytes (issue #144) — the signal behind `rotate.max_transcript_bytes`.
-# --------------------------------------------------------------------------- #
-
-
-@pytest.mark.unit
-def test_size_bytes_reports_the_located_transcripts_size(tmp_path: Path) -> None:
-    project_dir = tmp_path / "-home-user-workspace"
-    project_dir.mkdir()
-    body = fx.user_env("hello") + "\n"
-    (project_dir / "sess-1.jsonl").write_text(body)
-    repo = JsonlTranscriptRepository(str(tmp_path), _error_factory())
-
-    assert repo.size_bytes("sess-1", spawn_cwd="/home/user/workspace") == len(body.encode())
-
-
-@pytest.mark.unit
-def test_size_bytes_of_a_missing_transcript_is_unknown_not_zero(tmp_path: Path) -> None:
-    """A freshly minted session has no file yet. `None` says *not measured*; a `0` would
-    read as "well under bound" and make the threshold inert exactly where it cannot see."""
-    repo = JsonlTranscriptRepository(str(tmp_path), _error_factory())
-
-    assert repo.size_bytes("no-such-session", spawn_cwd="/home/user/workspace") is None
-
-
-@pytest.mark.unit
-def test_size_bytes_uses_the_spawn_cwd_hint_to_break_a_multi_match(tmp_path: Path) -> None:
-    """Same location rule as the two reads: the hint is a tie-break, not the lookup key."""
-    wanted = tmp_path / mangle_cwd("/home/user/wanted")
-    other = tmp_path / mangle_cwd("/home/user/other")
-    wanted.mkdir()
-    other.mkdir()
-    (wanted / "sess-1.jsonl").write_text("x" * 50)
-    (other / "sess-1.jsonl").write_text("y" * 500)
-    repo = JsonlTranscriptRepository(str(tmp_path), _error_factory())
-
-    assert repo.size_bytes("sess-1", spawn_cwd="/home/user/wanted") == 50
-
-
-@pytest.mark.unit
-def test_size_bytes_measures_a_transcript_far_larger_than_the_read_cap(
+@pytest.mark.component
+def test_max_block_chars_caps_assistant_text_without_flagging_file_level_truncation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The file this measures is the one that grew too large to keep resuming into, so it
-    must be stat'd rather than read — `read_raw_lines`' tail cap does not apply."""
-    project_dir = tmp_path / "-home-user-workspace"
-    project_dir.mkdir()
-    from blizzard.runner.transcripts.internal import jsonl_transcript_repository as repo_module
+    monkeypatch.setattr(normalizer_module, "MAX_BLOCK_CHARS", 10)
+    _write(tmp_path, [fx.assistant_text("x" * 50)])
+    transcript = _read(tmp_path)
 
-    cap = 200  # the real cap is 64 MiB; shrink it rather than writing that much
-    monkeypatch.setattr(repo_module, "MAX_FILE_BYTES", cap)
-    (project_dir / "sess-big.jsonl").write_text("x" * (cap + 1000))
-    repo = JsonlTranscriptRepository(str(tmp_path), _error_factory())
+    assert len(transcript.turns[0].text) == 10
+    assert transcript.turns[0].truncated is True  # block-level
+    assert transcript.truncated is False  # MAX_TURNS was never hit
 
-    assert repo.size_bytes("sess-big", spawn_cwd="/home/user/workspace") == cap + 1000
+
+@pytest.mark.component
+def test_max_block_chars_caps_a_serialized_tool_input_and_flags_truncated(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Load-bearing: today's ``MAX_BLOCK_CHARS`` case exercises assistant *text* only, so
+    nothing catches a re-materialized uncapped tool-input string — this is that missing
+    case, at the layer that now owns the cap.
+    """
+    monkeypatch.setattr(projection_module, "MAX_BLOCK_CHARS", 10)
+    _write(tmp_path, [fx.assistant_tool_use("t1", "Bash", {"command": "x" * 50})])
+    transcript = _read(tmp_path)
+
+    assert transcript.turns[0].kind == "tool"
+    assert transcript.turns[0].tool_input is not None
+    assert len(transcript.turns[0].tool_input) == 10
+    assert transcript.turns[0].truncated is True
+
+
+@pytest.mark.component
+def test_absent_tool_input_serializes_to_empty_string_not_json_null(tmp_path: Path) -> None:
+    """The wire contract renders a missing/``null`` ``input`` as ``""`` — never
+    ``json.dumps({})`` (``"{}"``), which is what re-materializing off the normalizer's
+    own ``input={}`` fallback alone (with no discriminator) would produce."""
+    content = [{"type": "tool_use", "id": "t1", "name": "Bash"}]  # no `input` key at all
+    line = json.dumps({"type": "assistant", "message": {"role": "assistant", "content": content}, "uuid": "a1"})
+    _write(tmp_path, [line])
+    transcript = _read(tmp_path)
+
+    assert transcript.turns[0].kind == "tool"
+    assert transcript.turns[0].tool_input == ""
+
+
+@pytest.mark.component
+def test_bare_string_tool_input_that_parses_as_json_is_still_requoted(tmp_path: Path) -> None:
+    """A bare string ``input`` (malformed relative to the tool_use schema, but seen in
+    the wild) is re-quoted on the way back out, matching the wire contract's blanket
+    ``json.dumps(raw_input)`` — even when the string itself happens to parse as JSON
+    (``"123"``), which a re-parse-to-tell-apart heuristic gets wrong."""
+    content = [{"type": "tool_use", "id": "t1", "name": "Weird", "input": "123"}]
+    line = json.dumps({"type": "assistant", "message": {"role": "assistant", "content": content}, "uuid": "a1"})
+    _write(tmp_path, [line])
+    transcript = _read(tmp_path)
+
+    assert transcript.turns[0].kind == "tool"
+    assert transcript.turns[0].tool_input == json.dumps("123")
+
+
+@pytest.mark.component
+def test_list_valued_tool_input_round_trips_byte_identical_with_the_wire_contract(tmp_path: Path) -> None:
+    """The fourth `ToolInputShape` (`"other"`: a list, number, or bool `input`) —
+    re-materialized byte-identical with the wire contract's blanket
+    `json.dumps(raw_input)`, which is the claim the projection's docstring makes
+    "for every input shape"."""
+    content = [{"type": "tool_use", "id": "t1", "name": "Weird", "input": [1, "two", True]}]
+    line = json.dumps({"type": "assistant", "message": {"role": "assistant", "content": content}, "uuid": "a1"})
+    _write(tmp_path, [line])
+    transcript = _read(tmp_path)
+
+    assert transcript.turns[0].kind == "tool"
+    assert transcript.turns[0].tool_input == json.dumps([1, "two", True])
+
+
+# --------------------------------------------------------------------------- #
+# Which of the batch's two truncation flags reaches the panel
+# --------------------------------------------------------------------------- #
+
+
+def _scripted_batch(*, truncated: bool, sidechain_truncated: bool) -> TranscriptBatch:
+    return TranscriptBatch(
+        session_id="sess-1",
+        available=True,
+        reason=None,
+        turns=[],
+        unlinked_sidechains=[],
+        next_position=None,
+        complete=True,
+        truncated=truncated,
+        sidechain_truncated=sidechain_truncated,
+        normalizer_version="fake/1",
+        harness_version=None,
+    )
+
+
+@pytest.mark.unit
+def test_a_sidechain_only_truncation_never_reaches_the_panels_truncated_flag() -> None:
+    """The whole reason ``sidechain_truncated`` is a field of its own: this projection
+    discards every sidechain, so a sidecar's own tail cap or the fan-out budget running
+    out cut nothing the panel renders, and must not raise its TRUNCATED banner. Pinned
+    at *this* layer rather than only at the source's — the source-side tests assert the
+    source sets the right flag, which stays true even if this projection starts reading
+    the wrong one.
+    """
+    source = FakeTranscriptSource({"sess-1": _scripted_batch(truncated=False, sidechain_truncated=True)})
+
+    transcript = ProjectedTranscriptRepository(source).read_turns("sess-1", spawn_cwd=None)
+
+    assert transcript.truncated is False
+
+
+@pytest.mark.unit
+def test_a_main_file_truncation_does_reach_the_panels_truncated_flag() -> None:
+    """The companion that keeps the case above from being satisfiable by ignoring both
+    flags: a main-file tail cap did cut content the panel renders, so it must surface.
+    """
+    source = FakeTranscriptSource({"sess-1": _scripted_batch(truncated=True, sidechain_truncated=False)})
+
+    transcript = ProjectedTranscriptRepository(source).read_turns("sess-1", spawn_cwd=None)
+
+    assert transcript.truncated is True

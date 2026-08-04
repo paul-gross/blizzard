@@ -4,11 +4,13 @@ Two independent copies of "what cwd does a worker spawn into" would desync exact
 as ``runner/domain/leases.py`` exists to keep REAP and the panel agreeing on lease
 state: the same reasoning applies here, since both the live spawn path
 (:mod:`blizzard.runner.harness.internal.claude_code_adapter`) and the transcript
-locator (:mod:`blizzard.runner.transcripts`, issue #29) need the same answer to
-"what was this worker's cwd" — the adapter to *set* it, the transcript reader to
-*guess* it back for Claude Code's ``~/.claude/projects/<mangled-cwd>/`` layout.
+source's own disambiguation hint
+(:class:`~blizzard.runner.harness.internal.claude_code_transcript.ClaudeCodeTranscriptSource`,
+issue #29, blizzard#245) need the same answer to "what was this worker's cwd" — the adapter to *set* it, the
+transcript reader to *guess* it back for Claude Code's
+``~/.claude/projects/<mangled-cwd>/`` layout.
 
-This module is that predicate's one owner. The transcript service is the second
+This module is that predicate's one owner. The transcript source is the second
 caller, and it legitimately gets ``None`` back for a closed lease: a closed
 lease's binding is always released by the time closure is recorded
 (:class:`~blizzard.runner.domain.leases.LeaseActivity`, the invariant's one

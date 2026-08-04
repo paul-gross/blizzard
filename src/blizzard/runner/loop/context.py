@@ -15,12 +15,12 @@ from dataclasses import dataclass
 from blizzard.foundation.clock import IClock
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.harness.adapter import IHarnessAdapter
+from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.loop.checks import ICheckRunner
 from blizzard.runner.loop.hub import IHubClient
 from blizzard.runner.loop.process import IProcessProbe
 from blizzard.runner.loop.worktree import IWorktreeGit
 from blizzard.runner.store.repository import IWriteRunnerStore
-from blizzard.runner.transcripts.repository import IReadTranscriptRepository
 
 #: The retry budget a node with no ``retries.max`` falls back to (a chosen constant,
 #: not derived from a formula): an execution-attempt cap of 2 before escalation to
@@ -117,11 +117,14 @@ class LoopContext:
     process: IProcessProbe
     worktree_git: IWorktreeGit
     config: LoopConfig
-    #: The read-only transcript seam (issue #58's envelope-less usage fallback) — ``None``
-    #: when not wired (every test that does not exercise the fallback), so the loop's
-    #: other collaborators stay untouched by this addition.
-    transcripts: IReadTranscriptRepository | None = None
     #: The check-runner seam (issue #114) — runs a node's ``checks:`` at worker exit.
     #: ``None`` when not wired (loop tests that never exercise checks), so a node with no
     #: ``checks:`` still ticks with the seam absent; a node that declares ``checks:`` needs it.
     check_runner: ICheckRunner | None = None
+    #: The harness transcript source (blizzard#245) — resolved once at
+    #: ``build_loop_context`` and read directly by the envelope-less usage fallback and
+    #: the rotation size check, rather than reached through :attr:`harness`. A declared
+    #: field, not an inline ``ctx.harness.transcript_source()`` reach-through, so the
+    #: loop's own dependency on it is visible on this dataclass like every other seam.
+    #: ``None`` when not wired (a loop test that never exercises either caller).
+    transcripts: IHarnessTranscriptSource | None = None

@@ -29,7 +29,7 @@ from tests.runner_fakes import (
     FakeHub,
     FakeProbe,
     FakeProvider,
-    FakeTranscripts,
+    FakeTranscriptSource,
     make_context,
     make_envelope,
     make_store,
@@ -206,9 +206,12 @@ def test_resume_generation_with_no_envelope_of_its_own_never_reads_the_prior_gen
         cost_usd=None,
     )
     harness = FakeHarness(
-        handle=_HANDLE, verdict="pass", usage_by_kind={"resume": contamination_sample}, transcript_usage=fallback_sample
+        handle=_HANDLE,
+        verdict="pass",
+        usage_by_kind={"resume": contamination_sample},
+        transcript_usage=fallback_sample,
+        transcript_source=FakeTranscriptSource(lines_by_session={"sess-a": ['{"type": "assistant", "message": {}}']}),
     )
-    transcripts = FakeTranscripts({"sess-a": ['{"type": "assistant", "message": {}}']})
     ctx = make_context(
         store,
         hub=hub,
@@ -216,7 +219,6 @@ def test_resume_generation_with_no_envelope_of_its_own_never_reads_the_prior_gen
         harness=harness,
         probe=FakeProbe(),
         config=LoopConfig(runner_id="r1", workspace_id="ws1", worker_stdout_dir=str(stdout_dir)),
-        transcripts=transcripts,
     )
     # Generation 1's own envelope file is still on disk (not yet cleaned up — tenure
     # hasn't ended) — but generation 2 never wrote its own file: an envelope-less
@@ -256,8 +258,12 @@ def test_advance_falls_back_to_transcript_usage_when_no_envelope(tmp_path):  # t
         cache_create_tokens=0,
         cost_usd=None,
     )
-    harness = FakeHarness(handle=_HANDLE, verdict="pass", transcript_usage=fallback_sample)
-    transcripts = FakeTranscripts({"sess-a": ['{"type": "assistant", "message": {}}']})
+    harness = FakeHarness(
+        handle=_HANDLE,
+        verdict="pass",
+        transcript_usage=fallback_sample,
+        transcript_source=FakeTranscriptSource(lines_by_session={"sess-a": ['{"type": "assistant", "message": {}}']}),
+    )
     ctx = make_context(
         store,
         hub=hub,
@@ -265,7 +271,6 @@ def test_advance_falls_back_to_transcript_usage_when_no_envelope(tmp_path):  # t
         harness=harness,
         probe=FakeProbe(),
         config=LoopConfig(runner_id="r1", workspace_id="ws1", worker_stdout_dir=str(stdout_dir)),
-        transcripts=transcripts,
     )
 
     advance(ctx)
@@ -509,8 +514,12 @@ def test_verdict_less_failure_falls_back_to_transcript_when_no_envelope(tmp_path
         cache_create_tokens=0,
         cost_usd=None,
     )
-    harness = FakeHarness(handle=_HANDLE, verdict=None, transcript_usage=fallback_sample)
-    transcripts = FakeTranscripts({"sess-a": ['{"type": "assistant", "message": {}}']})
+    harness = FakeHarness(
+        handle=_HANDLE,
+        verdict=None,
+        transcript_usage=fallback_sample,
+        transcript_source=FakeTranscriptSource(lines_by_session={"sess-a": ['{"type": "assistant", "message": {}}']}),
+    )
     ctx = make_context(
         store,
         hub=hub,
@@ -518,7 +527,6 @@ def test_verdict_less_failure_falls_back_to_transcript_when_no_envelope(tmp_path
         harness=harness,
         probe=FakeProbe(),
         config=LoopConfig(runner_id="r1", workspace_id="ws1", worker_stdout_dir=str(tmp_path / "missing")),
-        transcripts=transcripts,
     )
 
     advance(ctx)

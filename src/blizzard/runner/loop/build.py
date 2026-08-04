@@ -24,6 +24,8 @@ from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.config import RunnerConfig
 from blizzard.runner.environments.internal.winter_provider import WinterWorkspaceProvider
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
+from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTranscriptSource
+from blizzard.runner.harness.transcript import TranscriptErrorFactory as HarnessTranscriptErrorFactory
 from blizzard.runner.loop.context import LoopConfig, LoopContext
 from blizzard.runner.loop.hub import IHubClient
 from blizzard.runner.loop.internal.http_hub import HttpHubClient
@@ -33,8 +35,6 @@ from blizzard.runner.loop.process import LinuxProcessProbe
 from blizzard.runner.loop.steps import mark_crash_resume_intents, mark_resume_intents
 from blizzard.runner.loop.tick import tick
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
-from blizzard.runner.transcripts.internal.jsonl_transcript_repository import JsonlTranscriptRepository
-from blizzard.runner.transcripts.repository import TranscriptErrorFactory
 
 _log = get_logger("blizzard.runner.loop")
 
@@ -61,6 +61,14 @@ def build_loop_context(
     provider = WinterWorkspaceProvider(
         config.workspace_root, env_pool=config.workspace_envs, base_branch=config.base_branch
     )
+    # The envelope-less usage fallback's transcript read (issue #58) and the harness's
+    # own transcript source (blizzard#245) share one file layout — resolved once here,
+    # mirroring `runner/app.py`'s own construction of the panel's transcript seam
+    # (issue #29): `transcripts_root` empty means Claude Code's own default.
+    projects_root = config.transcripts_root or str(Path.home() / ".claude" / "projects")
+    harness_transcript_source = ClaudeCodeTranscriptSource(
+        projects_root, HarnessTranscriptErrorFactory(get_logger("blizzard.runner.harness.transcript"))
+    )
     harness = ClaudeCodeAdapter(
         binary=config.harness_binary,
         settings_path=config.worker_settings_path,
@@ -69,6 +77,7 @@ def build_loop_context(
         model_aliases=config.model_aliases,
         effort_aliases=config.effort_aliases,
         credentials_path=config.external_usage_credentials_path,
+        transcript_source=harness_transcript_source,
     )
     # The per-lease harness-stdout directory (issue #58) — under the runner's own data
     # directory, created once here (never inside the adapter), so a worker's stdout
@@ -96,12 +105,6 @@ def build_loop_context(
         runner_ceiling_window_hours=config.runner_ceiling_window_hours,
         external_usage_sample_interval_seconds=config.external_usage_sample_interval_seconds,
     )
-    # The envelope-less usage fallback's transcript read (issue #58), mirroring
-    # `runner/app.py`'s own construction of the panel's transcript seam (issue #29):
-    # `transcripts_root` empty means Claude Code's own default, resolved once here.
-    projects_root = config.transcripts_root or str(Path.home() / ".claude" / "projects")
-    error_factory = TranscriptErrorFactory(get_logger("blizzard.runner.transcripts"))
-    transcripts = JsonlTranscriptRepository(projects_root, error_factory)
     return LoopContext(
         store=store,
         clock=SystemClock(),
@@ -114,7 +117,10 @@ def build_loop_context(
         # its child env built from the same worker-env allowlist the harness children use.
         check_runner=SubprocessCheckRunner(env_passthrough=config.worker_env_passthrough),
         config=loop_config,
-        transcripts=transcripts,
+        # The same source just injected into `harness` above, declared here too so the
+        # loop's two direct readers (the usage fallback, the rotation size check) don't
+        # reach through `ctx.harness` for it.
+        transcripts=harness_transcript_source,
     )
 
 
