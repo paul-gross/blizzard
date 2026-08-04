@@ -75,15 +75,20 @@ class LeaseMintReport(BaseModel):
 
 
 class EscalationReport(BaseModel):
-    """A runner's ``escalation.recorded`` — retries exhausted for the node.
+    """A runner's ``escalation.recorded`` — the runner ran out of moves on this node.
 
-    ``takeover_command`` is the literal ``cd <workdir> && <harness resume>`` a human
-    pastes to enter the parked session; ``epoch`` is the
-    exhausted attempt's fence, closed by a later lease mint."""
+    ``takeover_command`` is not always the literal ``cd <workdir> && <harness resume>``
+    a human pastes — it can carry operator prose instead, or be empty; ``epoch`` is
+    the exhausted attempt's fence, closed by a later lease mint.
+    ``wrapped_takeover_command`` is the blizzard-runner-wrapped equivalent, present
+    only when composed. Wrapped implies raw, never the reverse — see
+    https://github.com/paul-gross/blizzard-context/blob/master/domain/humans.md for
+    the full account."""
 
     epoch: int
     runner_id: str
     takeover_command: str = ""
+    wrapped_takeover_command: str = ""
 
 
 class RunnerFact(BaseModel):
@@ -91,7 +96,8 @@ class RunnerFact(BaseModel):
 
     ``payload`` is the kind-specific body — for ``lease.minted`` ``{chunk_id, epoch,
     route_token}``, for ``escalation.recorded`` ``{chunk_id, epoch, takeover_command,
-    route_token}``, for ``question.asked`` the ask fields plus ``route_token`` — kept
+    wrapped_takeover_command, route_token}``, for ``question.asked`` the ask fields
+    plus ``route_token`` — kept
     open so a new runner fact kind bolts on without a wire change. ``route_token``
     (issue #84a) is the chunk-scoped fact's route capability token, stamped at
     enqueue; present-only in this phase (the hub does not yet reject on it).

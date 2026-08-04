@@ -136,21 +136,48 @@ def test_reflushed_completion_applies_exactly_once(tmp_path: Path) -> None:
 
 
 def test_escalation_fact_rides_events_and_derives_needs_human(tmp_path: Path) -> None:
-    """The other buffered hub fact: escalation.recorded lands via /events, dedup and all."""
+    """The other buffered hub fact: escalation.recorded lands via /events, dedup and all.
+
+    This is the path production actually exercises for escalations — the runner's
+    outbound buffer flushed through ``push_facts`` to ``POST /api/fleet/events`` and
+    ``FactIngestService.ingest`` — as opposed to the direct ``POST
+    .../escalations`` route nothing in ``src/`` calls. It also carries
+    ``wrapped_takeover_command`` (issue #251) through the same round trip, pinning
+    ``facts.py``'s ``_apply`` reading it off the payload.
+    """
     hub = build_hub(tmp_path)
     chunk_id, _ = _claim(hub)
     report_lease(hub, chunk_id, epoch=1, seq=1)
 
+    takeover = "cd /ws/e1 && mock-claude-code --resume sess-abc"
+    # `--dir` names the runner's own runtime root — one flat path shared across every
+    # chunk it escalates (`LoopConfig.runner_dir`), not a per-chunk path — and the
+    # embedded chunk id is the escalation's own, not an unrelated literal.
+    wrapped = f"blizzard runner takeover {chunk_id} --dir /runner/data/runtime"
     push = hub.client.post(
         "/api/fleet/events",
         json={
             "runner_id": "r1",
-            "facts": [{"seq": 2, "kind": "escalation.recorded", "payload": {"chunk_id": chunk_id, "epoch": 1}}],
+            "facts": [
+                {
+                    "seq": 2,
+                    "kind": "escalation.recorded",
+                    "payload": {
+                        "chunk_id": chunk_id,
+                        "epoch": 1,
+                        "takeover_command": takeover,
+                        "wrapped_takeover_command": wrapped,
+                    },
+                }
+            ],
         },
     ).json()
     assert push["applied"] == [2]
     # An open escalation with no later lease mint derives needs_human.
-    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "needs_human"
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["status"] == "needs_human"
+    assert detail["escalation"]["takeover_command"] == takeover
+    assert detail["escalation"]["wrapped_takeover_command"] == wrapped
 
     replay = hub.client.post(
         "/api/fleet/events",
@@ -160,3 +187,32 @@ def test_escalation_fact_rides_events_and_derives_needs_human(tmp_path: Path) ->
         },
     ).json()
     assert replay["already_applied"] == [2]  # dedup — the escalation is not doubled
+
+
+def test_escalation_fact_without_wrapped_takeover_reads_back_empty(tmp_path: Path) -> None:
+    """An older runner that never learned to compose ``wrapped_takeover_command``
+    (issue #251) omits it from the buffered payload entirely; the field reads back
+    empty on the buffered path exactly as it does on the direct route, while the raw
+    ``takeover_command`` still lands."""
+    hub = build_hub(tmp_path)
+    chunk_id, _ = _claim(hub)
+    report_lease(hub, chunk_id, epoch=1, seq=1)
+
+    takeover = "cd /ws/e1 && mock-claude-code --resume sess-abc"
+    push = hub.client.post(
+        "/api/fleet/events",
+        json={
+            "runner_id": "r1",
+            "facts": [
+                {
+                    "seq": 2,
+                    "kind": "escalation.recorded",
+                    "payload": {"chunk_id": chunk_id, "epoch": 1, "takeover_command": takeover},
+                }
+            ],
+        },
+    ).json()
+    assert push["applied"] == [2]
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
+    assert detail["escalation"]["takeover_command"] == takeover
+    assert detail["escalation"]["wrapped_takeover_command"] == ""

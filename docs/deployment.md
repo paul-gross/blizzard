@@ -774,6 +774,17 @@ sudo -u blizzard /opt/blizzard/venv/bin/blizzard-runner pause --dir /var/lib/bli
 sudo -u blizzard /opt/blizzard/venv/bin/blizzard-runner start --dir /var/lib/blizzard/runner
 ```
 
+The board's copyable wrapped takeover command (issue #251; see "Taking over a parked
+session" below) supplies that `--dir` for you, but nothing else here:
+
+- **Not the service account** — the pasted command still needs a shell already set up
+  exactly like the `sudo -u` form above, on the runner's own host.
+- **Not the venv's `blizzard` binary path.**
+- **Not the host itself** — `--dir` names a path on the **runner's** host, while the
+  board is served by the **hub**, so on a split deployment
+  ([`docs/remote-runner.md`](./remote-runner.md)) a pasted command can fail outright by
+  landing on the wrong machine entirely, not just the wrong account or binary path.
+
 `--runner-url` (or `$BZ_RUNNER_URL`) points a local verb at the TCP door instead — for a
 shell that cannot see the runtime dir, or cannot open the socket. Passing both `--dir` and
 `--runner-url` explicitly is an error; an explicit flag beats either variable, and if both
@@ -913,7 +924,9 @@ landed on a live tick; only a chunk that was *not* paused resumes in place on re
 interactively, in your own terminal. It records a takeover fact with the daemon first —
 so no loop step can respawn or judge the session while you hold it — then execs the
 harness's resume command as your terminal's child, and marks the takeover ended when
-you exit (even on Ctrl-C). Run it as the service account, like every socket verb.
+you exit (even on Ctrl-C). Run it as the service account, like every socket verb — see
+"The runner's two doors" above for what that means and the `--dir`/`--runner-url`
+transport it addresses the daemon over.
 
 Two things ride that exec which a plain copy-paste of a resume command does not get:
 
@@ -931,14 +944,35 @@ Two things ride that exec which a plain copy-paste of a resume command does not 
   your own variables — stays untouched, and nothing beyond that bounded set leaves
   the daemon.
 
-This makes the takeover verb, not the escalation record's `resume:` string, the
-supported way in. The string `blizzard runner status` and the board print (`cd … &&
-claude --resume …`) resumes the transcript, but deliberately carries **neither** of the
-above: pasted into a bare terminal it runs at the harness's interactive permission
-default, with no identity env — that session can read and edit, but its `blizzard
-runner` verbs cannot reach the runner. A taken-over session also installs **no**
-heartbeat or session-end hooks: quitting it must not record a done-signal against the
-lease, so liveness reporting stays a daemon-spawned-worker concern.
+For a **runner-composed** escalation, this makes the takeover verb, not the escalation
+record's raw string, the supported way in. `blizzard runner status` still prints that
+raw string (`cd … && claude --resume …`) — that surface is deliberately unchanged —
+and the board (issue #251) now renders the wrapped verb as the primary, copyable
+command, with the raw string demoted to a collapsed "Unwrapped fallback" disclosure
+below it, present only when the escalation carries one. Either way, the raw string
+resumes the transcript but deliberately carries **neither** of the above: pasted into
+a bare terminal it runs at the harness's interactive permission default, with no
+identity env — that session can read and edit, but its `blizzard runner` verbs cannot
+reach the runner.
+
+Which command(s) a given escalation carries, and whether the underlying session is
+still reachable through the takeover verb at all, is a domain fact governed by
+[`blizzard-context`'s `domain/humans.md`](https://github.com/paul-gross/blizzard-context/blob/master/domain/humans.md)
+§Escalation, not a deployment one — read there for which case produces which shape.
+Operationally, the one thing worth knowing here: `blizzard runner takeover` checks the
+runner's actual held session state, never the escalation's own composed commands, so
+it can succeed even against an escalation carrying neither. It refuses with
+`ChunkNotTakeable` when that check fails — this runner does not hold the chunk, no
+resumable session sits behind its most recent lease, or a takeover is already open —
+so on a split deployment run the verb on the runner's own host first: the wrong host
+refuses with the not-held message even while the session is alive elsewhere. Only
+when no runner can enter the session does resolving the escalation mean acting on
+the chunk directly (reading its bounce history or migration guidance) and requeuing,
+not taking anything over.
+
+A taken-over session also installs **no** heartbeat or session-end hooks: quitting it
+must not record a done-signal against the lease, so liveness reporting stays a
+daemon-spawned-worker concern.
 
 ### Editing an unclaimed chunk's build config
 

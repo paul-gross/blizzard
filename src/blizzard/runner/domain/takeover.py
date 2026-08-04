@@ -27,6 +27,7 @@ consumes no retry and triggers no escalation: the attempt is superseded, not fai
 from __future__ import annotations
 
 import json
+import shlex
 from dataclasses import dataclass, field
 
 from blizzard.foundation.clock import IClock
@@ -53,7 +54,18 @@ __all__ = [
     "OpenedTakeover",
     "SubmissionPending",
     "TakeoverService",
+    "wrapped_takeover_command",
 ]
+
+
+def wrapped_takeover_command(chunk_id: str, runner_dir: str) -> str:
+    """The ``blizzard runner takeover`` CLI invocation an escalation composes when it
+    can — the wrapped, supported entry point this module's own :class:`TakeoverService`
+    answers to, so the composed form lives beside the concept it names rather than
+    inline at each call site. Both operands are shell-quoted: a hub-minted chunk id
+    never needs it (``foundation/ids.py`` grammar), but the composed string is pasted
+    into a shell, so neither operand rides unquoted on that assumption."""
+    return f"blizzard runner takeover {shlex.quote(chunk_id)} --dir {shlex.quote(runner_dir)}"
 
 
 class TakeoverError(Exception):

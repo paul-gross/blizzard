@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
-import type { ChunkDetail, ChunkStatus, DecisionView, EscalationView, QuestionView } from '../api/hub';
+import type { ChunkDetail, ChunkStatus, DecisionView, QuestionView } from '../api/hub';
 import { KitButton } from '../kit/kit-button';
+import { ChunkTakeover } from './chunk-takeover';
 
 /** Emitted when the operator answers a chunk's open question from the dock. */
 export interface AnswerQuestionEvent {
@@ -29,7 +30,8 @@ const TERMINAL_STATUSES: ReadonlySet<string> = new Set<ChunkStatus>(['done', 'st
  * The chunk's awaiting-human gate (issue #79) — whatever the chunk waits on
  * a human for: an open **question** with an inline **Answer** action (MVP
  * criterion 7), an open gate **decision** as **choice buttons** (MVP
- * criterion 12), or an **escalation's** copyable **takeover command**.
+ * criterion 12), or an open **escalation**, rendered by {@link ChunkTakeover}
+ * — this component keeps no escalation state of its own, just forwards `detail`.
  *
  * Below those, the **answered trail** (issue #165): a recently answered question stays
  * rendered with who answered it, what they said, and whether the runner has delivered
@@ -43,7 +45,7 @@ const TERMINAL_STATUSES: ReadonlySet<string> = new Set<ChunkStatus>(['done', 'st
 @Component({
   selector: 'fleet-chunk-detail-awaiting-human',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [KitButton],
+  imports: [ChunkTakeover, KitButton],
   template: `
     @if (openQuestions().length > 0 || openDecision()) {
       <div class="awaiting" data-testid="awaiting-human">
@@ -130,18 +132,7 @@ const TERMINAL_STATUSES: ReadonlySet<string> = new Set<ChunkStatus>(['done', 'st
       </div>
     }
 
-    @if (escalation(); as esc) {
-      <div class="escalation" data-testid="escalation">
-        <div class="s-head"><span class="tag">Needs human · takeover</span></div>
-        <p class="esc-hint">The worker escalated (epoch {{ esc.epoch }}). Run the takeover command to enter its session:</p>
-        <div class="takeover">
-          <code class="cmd" data-testid="takeover-command">{{ esc.takeover_command }}</code>
-          <fleet-kit-button testid="copy-takeover" (click)="copyTakeover(esc.takeover_command)">
-            {{ copied() ? 'Copied' : 'Copy' }}
-          </fleet-kit-button>
-        </div>
-      </div>
-    }
+    <fleet-chunk-detail-takeover [detail]="detail()" />
   `,
   styles: `
     :host {
@@ -154,8 +145,7 @@ const TERMINAL_STATUSES: ReadonlySet<string> = new Set<ChunkStatus>(['done', 'st
       color: var(--label);
     }
     .awaiting,
-    .answered,
-    .escalation {
+    .answered {
       margin-bottom: 8px;
     }
     .s-head {
@@ -266,32 +256,6 @@ const TERMINAL_STATUSES: ReadonlySet<string> = new Set<ChunkStatus>(['done', 'st
       outline: 1px solid var(--cyan);
       outline-offset: 0;
     }
-    .escalation {
-      border: 1px solid var(--red-dim);
-      background: color-mix(in srgb, var(--red) 6%, transparent);
-      padding: 6px;
-    }
-    .esc-hint {
-      margin: 0 0 6px;
-      color: var(--label-dim);
-      font-size: var(--fs-xs);
-    }
-    .takeover {
-      display: flex;
-      gap: 4px;
-      align-items: stretch;
-    }
-    .takeover .cmd {
-      flex: 1;
-      min-width: 0;
-      overflow-x: auto;
-      white-space: pre;
-      background: var(--overlay-40);
-      border: 1px solid var(--line);
-      color: var(--amber-hi);
-      padding: 4px 6px;
-      font-size: var(--fs-sm);
-    }
   `,
 })
 export class ChunkAwaitingHuman {
@@ -314,9 +278,6 @@ export class ChunkAwaitingHuman {
 
   /** Emitted when the operator resolves an open gate decision. */
   readonly resolveDecision = output<ResolveDecisionEvent>();
-
-  /** Transient "Copied" state for the takeover-command copy button. */
-  protected readonly copied = signal(false);
 
   /** The chunk's open (unanswered) questions — the ask a parked chunk waits on. */
   protected readonly openQuestions = computed<readonly QuestionView[]>(() =>
@@ -372,9 +333,6 @@ export class ChunkAwaitingHuman {
     return decision && !decision.transitioned ? decision : null;
   });
 
-  /** The chunk's open escalation, if it currently needs a human takeover. */
-  protected readonly escalation = computed<EscalationView | null>(() => this.detail().escalation ?? null);
-
   /** Emit an answer for a question — no-op on an empty answer. */
   protected submitAnswer(questionId: string, answer: string): void {
     const trimmed = answer.trim();
@@ -385,15 +343,5 @@ export class ChunkAwaitingHuman {
   /** Emit a resolution for the open gate decision. */
   protected resolve(decisionId: string, choice: string): void {
     this.resolveDecision.emit({ decisionId, choice, chunkId: this.detail().chunk_id });
-  }
-
-  /** Copy the takeover command to the clipboard, flashing "Copied" when it lands. */
-  protected copyTakeover(command: string): void {
-    const clipboard = globalThis.navigator?.clipboard;
-    if (!clipboard) return;
-    void clipboard.writeText(command).then(() => {
-      this.copied.set(true);
-      setTimeout(() => this.copied.set(false), 1500);
-    });
   }
 }

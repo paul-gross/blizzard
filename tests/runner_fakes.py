@@ -88,7 +88,12 @@ class FakeHub:
         self.decisions_submitted: list[tuple[str, DecisionSubmission]] = []
         self.decision_responses: list[ApplyResponse] = []
         self.leases: list[tuple[str, int, str]] = []  # (chunk_id, epoch, runner_id)
-        self.escalations: list[tuple[str, int, str, str]] = []  # (chunk_id, epoch, runner_id, takeover)
+        self.escalations: list[tuple[str, int, str, str]] = []
+        # (chunk_id, epoch, runner_id, takeover) — `report_escalation` also accepts
+        # `wrapped_takeover_command` (protocol parity with the real hub client), but
+        # nothing in `src/` calls this dedicated route (escalation reporting rides the
+        # buffered `push_facts` path instead) and no test reads a wider tuple here, so
+        # it stays untracked rather than widening this bookkeeping shape for nothing.
         self.pushed: list[RunnerFact] = []
         self.high_water: dict[str, int] = {}
         self.questions: dict[str, QuestionView] = {}
@@ -206,7 +211,9 @@ class FakeHub:
     def report_lease(self, chunk_id: str, *, epoch: int, runner_id: str) -> None:
         self.leases.append((chunk_id, epoch, runner_id))
 
-    def report_escalation(self, chunk_id: str, *, epoch: int, runner_id: str, takeover_command: str) -> None:
+    def report_escalation(
+        self, chunk_id: str, *, epoch: int, runner_id: str, takeover_command: str, wrapped_takeover_command: str = ""
+    ) -> None:
         self.escalations.append((chunk_id, epoch, runner_id, takeover_command))
 
     def rekey_route_token(self, chunk_id: str) -> RouteTokenRekeyResponse:

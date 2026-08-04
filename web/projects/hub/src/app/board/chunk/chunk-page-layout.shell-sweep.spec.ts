@@ -68,6 +68,28 @@ const ASK_DETAIL: hubApi.ChunkDetail = {
   ],
 };
 
+/**
+ * A `needs_human` chunk carrying both the runner-composed wrapped takeover command
+ * (blizzard#251) and its raw `cd <workdir> && <harness resume>` fallback — realistically
+ * long strings shaped the way they actually arrive: an absolute runtime dir plus a
+ * `blizzard runner takeover` invocation, and an absolute worktree path plus a
+ * `claude --resume <uuid>` invocation. The fallback renders inside a collapsed
+ * `<details>` (`chunk-takeover.ts`), so the sweep below proves the dock does not
+ * overflow with it collapsed *or* expanded.
+ */
+const NEEDS_HUMAN_DETAIL: hubApi.ChunkDetail = {
+  ...DETAIL,
+  status: 'needs_human',
+  escalation: {
+    epoch: 2,
+    takeover_command:
+      'cd /home/blizzard/runner/work/ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9-nd_review-2 && ' +
+      'claude --resume 5f9c2e3a-4b7d-4a1e-9c3f-8d2b6a1e7f4c',
+    wrapped_takeover_command:
+      'blizzard runner takeover ch_01KXKVVF1J3D6H6VYZ3XYN3YJ9 --dir /home/blizzard/runner/data/runtime',
+  },
+};
+
 async function render(detail: hubApi.ChunkDetail = DETAIL) {
   await TestBed.configureTestingModule({
     imports: [ChunkGeneralTab],
@@ -211,6 +233,60 @@ describe('chunk page General tab layout shell sweep (web:shell-sweep, blizzard#2
           `${label}: General tab overflows horizontally (${general.scrollWidth} > ${general.clientWidth})`,
         ).toBeLessThanOrEqual(general.clientWidth);
       }
+    } finally {
+      root.remove();
+    }
+  });
+
+  it('keeps a long wrapped takeover command and its raw fallback scrollable, not clipped, at 320px (blizzard#251)', async () => {
+    const fixture = await render(NEEDS_HUMAN_DETAIL);
+    const root = fixture.nativeElement as HTMLElement;
+    document.body.appendChild(root);
+    await fixture.whenStable();
+
+    try {
+      await page.viewport(320, 800);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+
+      // The no-overflow half is structural here: `fleet-kit-panel`'s body clips
+      // horizontally (`kit-panel.ts` `overflow-x: hidden`), so the General tab
+      // cannot widen no matter what the takeover panel does. That same clip is
+      // exactly why the load-bearing claim is the opposite one — a command wider
+      // than the phone must be REACHABLE by scrolling its own box, or the clip
+      // silently amputates the tail of the one string the operator must paste
+      // whole. `scrollLeft` round-trips only on a genuine scroll container:
+      // losing `overflow-x: auto` on either `.cmd` leaves it stuck at 0.
+      const general = root.querySelector<HTMLElement>('[data-testid="chunk-general-tab"]')!;
+      expect(
+        general.scrollWidth,
+        `General tab overflows horizontally (${general.scrollWidth} > ${general.clientWidth})`,
+      ).toBeLessThanOrEqual(general.clientWidth);
+
+      const primary = root.querySelector<HTMLElement>('[data-testid="takeover-command"]')!;
+      expect(
+        primary.scrollWidth,
+        'fixture defect: wrapped command fits 320px, so scrollability is unprovable',
+      ).toBeGreaterThan(primary.clientWidth);
+      primary.scrollLeft = 99999;
+      expect(primary.scrollLeft, 'wrapped command is clipped, not scrollable').toBeGreaterThan(0);
+
+      const fallback = root.querySelector<HTMLDetailsElement>('[data-testid="takeover-command-raw-fallback"]');
+      expect(fallback, 'no raw fallback disclosure in the DOM').not.toBeNull();
+      fallback!.open = true;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+
+      const raw = fallback!.querySelector<HTMLElement>('.cmd')!;
+      expect(
+        raw.scrollWidth,
+        'fixture defect: raw fallback fits 320px, so scrollability is unprovable',
+      ).toBeGreaterThan(raw.clientWidth);
+      raw.scrollLeft = 99999;
+      expect(raw.scrollLeft, 'raw fallback is clipped, not scrollable').toBeGreaterThan(0);
+
+      expect(
+        general.scrollWidth,
+        `expanded: General tab overflows horizontally (${general.scrollWidth} > ${general.clientWidth})`,
+      ).toBeLessThanOrEqual(general.clientWidth);
     } finally {
       root.remove();
     }

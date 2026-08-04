@@ -585,6 +585,8 @@ class HubNodeExecutor:
         facts = self._chunks.load_facts(chunk.chunk_id)
         cap = node.bounce_cap if node.bounce_cap is not None else DEFAULT_BOUNCE_CAP
         if facts is not None and bounces_over_cap(facts, cap):
+            # Hub-authored escalation, no runner runtime dir to compose a wrapped
+            # takeover command from — leaves wrapped_takeover_command at its store default.
             self._chunks.record_bounce_escalation(
                 chunk.chunk_id, epoch=hub_epoch, runner_id=_HUB_RUNNER_ID, takeover_command="", at=now
             )
@@ -707,6 +709,8 @@ class HubNodeExecutor:
                 facts = self._chunks.load_facts(chunk.chunk_id)
                 cap = node.bounce_cap if node.bounce_cap is not None else DEFAULT_BOUNCE_CAP
                 if facts is not None and bounces_over_cap(facts, cap):
+                    # Hub-authored escalation, no runner runtime dir to compose a wrapped
+                    # takeover command from — leaves wrapped_takeover_command at its store default.
                     self._chunks.record_bounce_escalation(
                         chunk.chunk_id, epoch=hub_epoch, runner_id=_HUB_RUNNER_ID, takeover_command="", at=now
                     )

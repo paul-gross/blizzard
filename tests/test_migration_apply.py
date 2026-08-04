@@ -292,9 +292,16 @@ def test_an_unresolvable_cross_graph_target_escalates_to_needs_human(tmp_path: P
     resp = _migrate(hub, chunk_id, node_id)
 
     assert resp.status_code == 200
+    detail = hub.client.get(f"/api/chunks/{chunk_id}").json()
     # No migration happened; the chunk derives needs_human (visible on the board), rather
     # than crashing or silently dropping the completion.
-    assert hub.client.get(f"/api/chunks/{chunk_id}").json()["status"] == "needs_human"
+    assert detail["status"] == "needs_human"
+    # The hub has no runner runtime to compose a wrapped command from, so it stays
+    # empty; the raw field carries operator guidance prose, not a runnable command —
+    # see `blizzard-context:/domain/humans.md` §Escalation.
+    escalation = detail["escalation"]
+    assert escalation["wrapped_takeover_command"] == ""
+    assert "mint a graph named `ghost`" in escalation["takeover_command"]
 
 
 def test_a_retired_cross_graph_target_escalates_to_needs_human_exactly_like_an_absent_one(tmp_path: Path) -> None:

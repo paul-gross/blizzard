@@ -216,7 +216,12 @@ class ChunkStore:
                 for lease in conn.execute(select(s.lease_facts).where(s.lease_facts.c.chunk_id == chunk_id)).all()
             ]
             escalations = [
-                EscalationFact(epoch=e.epoch, recorded_at=e.recorded_at, takeover_command=e.takeover_command or "")
+                EscalationFact(
+                    epoch=e.epoch,
+                    recorded_at=e.recorded_at,
+                    takeover_command=e.takeover_command or "",
+                    wrapped_takeover_command=e.wrapped_takeover_command or "",
+                )
                 for e in conn.execute(select(s.escalations).where(s.escalations.c.chunk_id == chunk_id)).all()
             ]
             routes_created = [
@@ -1325,7 +1330,14 @@ class ChunkStore:
             return True
 
     def record_escalation(
-        self, chunk_id: str, *, epoch: int, takeover_command: str, at: datetime, decision_id: str | None = None
+        self,
+        chunk_id: str,
+        *,
+        epoch: int,
+        takeover_command: str,
+        at: datetime,
+        decision_id: str | None = None,
+        wrapped_takeover_command: str = "",
     ) -> int:
         with self._engine.begin() as conn:
             result = conn.execute(
@@ -1333,6 +1345,7 @@ class ChunkStore:
                     chunk_id=chunk_id,
                     epoch=epoch,
                     takeover_command=takeover_command,
+                    wrapped_takeover_command=wrapped_takeover_command,
                     decision_id=decision_id,
                     recorded_at=at,
                 )

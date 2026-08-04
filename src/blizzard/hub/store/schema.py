@@ -573,6 +573,26 @@ escalations = Table(
     Column("chunk_id", String, ForeignKey("chunks.chunk_id"), nullable=False),
     Column("epoch", Integer, nullable=False),  # closed by a later lease mint, not a resolution
     Column("takeover_command", Text, nullable=False, server_default=""),  # the pasteable resume command
+    # The runner-composed ``blizzard runner takeover`` invocation — sits beside
+    # ``takeover_command`` rather than replacing it: that column stays the raw
+    # harness-resume string for back-compat/audit, while this one is what the board
+    # renders so a human's takeover actually routes through the runner instead of
+    # bypassing it with a pasted harness command. Composed by ``_escalate``
+    # (``runner/loop/steps.py``) and persisted through the runner-reported
+    # ``record_escalation`` route (``hub/store/internal/chunk_store.py``) whenever
+    # composing one is possible — hub-authored escalations
+    # (``record_bounce_escalation``) never carry it; see
+    # ``blizzard-context:/domain/humans.md`` §Escalation for when it isn't. A row
+    # from before this column existed reads back its ``server_default`` empty string.
+    #
+    # Deliberate trade-off: this string is *stored pre-composed* — a function of
+    # ``chunk_id`` plus the runner's ``--dir`` at escalation time — rather than
+    # derived at read time the way the runner's own ``resume_command`` is (computed
+    # fresh from the live harness adapter on every read, never persisted). If a
+    # runner's runtime dir ever moves after the fact, already-open escalations keep
+    # showing the old ``--dir`` path until that escalation closes and a fresh one is
+    # recorded — there is no read-time recomposition to pick up the change.
+    Column("wrapped_takeover_command", Text, nullable=False, server_default=""),
     # ``decision_id`` is set only when a **human gate's** resolved choice migrated
     # cross-graph to an unresolvable target (issue #110): the escalation stands in for the
     # migration fact the resolvable branch writes (issue #90), so the gate's decision

@@ -1484,7 +1484,7 @@
         "type": "object"
       },
       "EscalationReport": {
-        "description": "A runner's ``escalation.recorded`` \u2014 retries exhausted for the node.\n\n``takeover_command`` is the literal ``cd <workdir> && <harness resume>`` a human\npastes to enter the parked session; ``epoch`` is the\nexhausted attempt's fence, closed by a later lease mint.",
+        "description": "A runner's ``escalation.recorded`` \u2014 the runner ran out of moves on this node.\n\n``takeover_command`` is not always the literal ``cd <workdir> && <harness resume>``\na human pastes \u2014 it can carry operator prose instead, or be empty; ``epoch`` is\nthe exhausted attempt's fence, closed by a later lease mint.\n``wrapped_takeover_command`` is the blizzard-runner-wrapped equivalent, present\nonly when composed. Wrapped implies raw, never the reverse \u2014 see\nhttps://github.com/paul-gross/blizzard-context/blob/master/domain/humans.md for\nthe full account.",
         "properties": {
           "epoch": {
             "title": "Epoch",
@@ -1498,6 +1498,11 @@
             "default": "",
             "title": "Takeover Command",
             "type": "string"
+          },
+          "wrapped_takeover_command": {
+            "default": "",
+            "title": "Wrapped Takeover Command",
+            "type": "string"
           }
         },
         "required": [
@@ -1508,7 +1513,7 @@
         "type": "object"
       },
       "EscalationView": {
-        "description": "An open escalation on a ``needs_human`` chunk.\n\nSurfaces the runner-composed takeover command so a human can resume the parked\nsession. Present only while the escalation is open \u2014\na later lease mint (requeue/takeover) supersedes it and this drops away.",
+        "description": "An open escalation on a ``needs_human`` chunk \u2014 the takeover command(s) so a\nhuman can resume the parked session. Present only while the escalation is open \u2014\na later lease mint (requeue/takeover) supersedes it and this drops away.\n\n``wrapped_takeover_command`` is the blizzard-runner-wrapped equivalent of\n``takeover_command`` the board prefers as the primary copyable command, falling\nback to the raw form when it's empty. Wrapped implies raw, never the reverse, and\nwhether a takeover is actually possible for this escalation is a separate\nquestion from whether either is populated \u2014 see\nhttps://github.com/paul-gross/blizzard-context/blob/master/domain/humans.md for\nthe full account.",
         "properties": {
           "epoch": {
             "title": "Epoch",
@@ -1516,6 +1521,11 @@
           },
           "takeover_command": {
             "title": "Takeover Command",
+            "type": "string"
+          },
+          "wrapped_takeover_command": {
+            "default": "",
+            "title": "Wrapped Takeover Command",
             "type": "string"
           }
         },
@@ -3451,7 +3461,7 @@
         "type": "object"
       },
       "RunnerFact": {
-        "description": "One buffered runner fact: its per-runner seq, its kind, and its payload.\n\n``payload`` is the kind-specific body \u2014 for ``lease.minted`` ``{chunk_id, epoch,\nroute_token}``, for ``escalation.recorded`` ``{chunk_id, epoch, takeover_command,\nroute_token}``, for ``question.asked`` the ask fields plus ``route_token`` \u2014 kept\nopen so a new runner fact kind bolts on without a wire change. ``route_token``\n(issue #84a) is the chunk-scoped fact's route capability token, stamped at\nenqueue; present-only in this phase (the hub does not yet reject on it).",
+        "description": "One buffered runner fact: its per-runner seq, its kind, and its payload.\n\n``payload`` is the kind-specific body \u2014 for ``lease.minted`` ``{chunk_id, epoch,\nroute_token}``, for ``escalation.recorded`` ``{chunk_id, epoch, takeover_command,\nwrapped_takeover_command, route_token}``, for ``question.asked`` the ask fields\nplus ``route_token`` \u2014 kept\nopen so a new runner fact kind bolts on without a wire change. ``route_token``\n(issue #84a) is the chunk-scoped fact's route capability token, stamped at\nenqueue; present-only in this phase (the hub does not yet reject on it).",
         "properties": {
           "kind": {
             "title": "Kind",

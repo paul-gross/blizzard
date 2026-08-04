@@ -574,7 +574,10 @@ def report_escalation(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"unknown chunk {chunk_id}")
     prev_status = chunk_events.snapshot_chunk_status(services, chunk_id)
     escalation_id = services.runner_facts.record_escalation(
-        chunk_id, epoch=report.epoch, takeover_command=report.takeover_command
+        chunk_id,
+        epoch=report.epoch,
+        takeover_command=report.takeover_command,
+        wrapped_takeover_command=report.wrapped_takeover_command,
     )
     chunk_events.publish_chunk_changed(
         services, chunk_id, cause="escalated", prev_status=prev_status, key=f"escalations:{escalation_id}"

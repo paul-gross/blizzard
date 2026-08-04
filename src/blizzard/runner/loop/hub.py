@@ -171,11 +171,15 @@ class IHubClient(Protocol):
         escalation by supersession."""
         ...
 
-    def report_escalation(self, chunk_id: str, *, epoch: int, runner_id: str, takeover_command: str) -> None:
+    def report_escalation(
+        self, chunk_id: str, *, epoch: int, runner_id: str, takeover_command: str, wrapped_takeover_command: str = ""
+    ) -> None:
         """``POST /api/fleet/chunks/{id}/escalations`` — retries exhausted.
 
         Lands the escalation at the hub so the chunk derives ``needs_human`` fleet-wide,
-        carrying the pasteable takeover command."""
+        carrying the pasteable takeover command alongside its blizzard-runner-wrapped
+        equivalent (``wrapped_takeover_command``, empty when the caller has none to
+        compose)."""
         ...
 
     def rekey_route_token(self, chunk_id: str) -> RouteTokenRekeyResponse:

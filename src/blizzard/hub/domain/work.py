@@ -298,17 +298,24 @@ class TransitionFact:
 
 @dataclass(frozen=True)
 class EscalationFact:
-    """An ``escalation.recorded`` fact — retries exhausted / dead worker.
+    """An ``escalation.recorded`` fact — the system ran out of moves on this chunk.
 
-    Carries the runner-composed **takeover command**: the
-    literal ``cd <workdir> && <harness resume>`` a human pastes to enter the parked
-    session. It is surfaced on the chunk detail so ``needs_human`` is actionable; the
-    status derivation itself keys only on ``(epoch, recorded_at)`` supersession.
+    Carries the **takeover command**: not always the literal ``cd <workdir> &&
+    <harness resume>`` a human pastes — a hub-authored escalation's raw field can
+    carry operator prose instead, or be empty. It is surfaced on the chunk detail so
+    ``needs_human`` is actionable; the status derivation itself keys only on
+    ``(epoch, recorded_at)`` supersession.
+
+    ``wrapped_takeover_command`` is the blizzard-runner-wrapped equivalent the board
+    prefers as primary. Wrapped implies raw, never the reverse — see
+    `blizzard-context:/domain/humans.md` for the full enumeration of when each is
+    empty.
     """
 
     epoch: int
     recorded_at: datetime
     takeover_command: str = ""
+    wrapped_takeover_command: str = ""
 
 
 @dataclass(frozen=True)
@@ -560,7 +567,15 @@ def derive_event_feed(events: list[EventRow], escalations: list[EscalationOpen])
             chunk_id=esc.chunk_id,
             lease_id=None,
             node_name=None,
-            message=f"chunk {esc.chunk_id} needs a human — takeover: {esc.takeover_command}",
+            # `esc.takeover_command` is not always a resume command: a hub-authored
+            # escalation's raw field can carry operator prose (or be empty), so this
+            # only claims "resume" when there is actually something to resume — see
+            # `blizzard-context:/domain/humans.md` for the full enumeration.
+            message=(
+                f"chunk {esc.chunk_id} needs a human — see the chunk's escalation for how to proceed"
+                if esc.takeover_command
+                else f"chunk {esc.chunk_id} needs a human"
+            ),
             detail=None,
         )
         for i, esc in enumerate(escalations)
@@ -858,8 +873,9 @@ def open_escalation(facts: ChunkFacts) -> EscalationFact | None:
     Requeue/takeover close an escalation by **supersession** — a later lease mint or a
     later ``requeue.recorded`` fact, never a resolution fact — so an escalation
     stays open exactly while nothing was recorded after it. When open, its
-    ``takeover_command`` is the resume command a human pastes; the
-    board surfaces it on the ``needs_human`` chunk.
+    ``takeover_command`` is not always a resume command a human pastes — see
+    ``EscalationFact`` above — but the board surfaces whatever it carries on the
+    ``needs_human`` chunk.
     """
     if not facts.escalations:
         return None
@@ -1701,18 +1717,29 @@ class IWriteChunkRepository(IReadChunkRepository, Protocol):
         ...
 
     def record_escalation(
-        self, chunk_id: str, *, epoch: int, takeover_command: str, at: datetime, decision_id: str | None = None
+        self,
+        chunk_id: str,
+        *,
+        epoch: int,
+        takeover_command: str,
+        at: datetime,
+        decision_id: str | None = None,
+        wrapped_takeover_command: str = "",
     ) -> int:
         """Record an ``escalation.recorded`` fact reported up by a runner.
 
         Retries exhausted (or a dead worker past the cap): the chunk derives
-        ``needs_human`` until a later lease mint supersedes it. The runner-composed
-        takeover command rides along so the parked session is resumable. When
-        ``decision_id`` is set — a human gate's resolved choice migrated cross-graph to an
-        unresolvable target (issue #110) — the fact carries it so that decision derives
-        closed; without it the gate's decision would stay live forever (neither a
-        transition nor a migration row exists to close it), wedging REAP recovery and
-        driving a per-tick runner re-submit. Null for the ordinary escalation.
+        ``needs_human`` until a later lease mint supersedes it. The takeover command
+        rides along so the parked session is resumable, alongside its
+        blizzard-runner-wrapped equivalent (``wrapped_takeover_command``, defaulted
+        empty here — this same method also lands the hub's own escalations, which
+        never have one to pass; see `blizzard-context:/domain/humans.md` for the full
+        enumeration of when each command is empty). When ``decision_id`` is set — a human gate's
+        resolved choice migrated cross-graph to an unresolvable target (issue #110) —
+        the fact carries it so that decision derives closed; without it the gate's
+        decision would stay live forever (neither a transition nor a migration row
+        exists to close it), wedging REAP recovery and driving a per-tick runner
+        re-submit. Null for the ordinary escalation.
 
         Returns the freshly-written ``escalations.id`` (issue #213's activity-feed key)."""
         ...

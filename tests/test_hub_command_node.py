@@ -1318,6 +1318,10 @@ def test_poll_timeout_escalates_once_the_bounce_cap_is_crossed(tmp_path: Path) -
     detail2 = hub.client.get(f"/api/chunks/{chunk_id}").json()
     assert detail2["status"] == "needs_human"
     assert len(detail2["bounces"]) == 2
+    # A hub-authored escalation composes no wrapped command — the hub has no runner
+    # runtime dir to draw one from (`blizzard-context:/domain/humans.md` §Escalation,
+    # previously pinned by zero tests).
+    assert detail2["escalation"]["wrapped_takeover_command"] == ""
 
 
 def test_a_later_epoch_supersedes_an_earlier_pointer_for_the_same_repo() -> None:

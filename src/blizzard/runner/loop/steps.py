@@ -35,6 +35,7 @@ from blizzard.hub.domain.graph import SessionMode
 from blizzard.hub.domain.work import ChunkStatus
 from blizzard.runner.domain.lease_auth import mint_lease_token
 from blizzard.runner.domain.leases import as_utc, is_heartbeat_stale
+from blizzard.runner.domain.takeover import wrapped_takeover_command
 from blizzard.runner.environments.provider import (
     AcquiredEnvironment,
     EnvironmentPreparationError,
@@ -2957,11 +2958,14 @@ def _escalate(ctx: LoopContext, lease: LeaseRecord, *, reason: str = "retries ex
 
     The escalation rides the outbound buffer as an ``escalation.recorded`` fact,
     flushed to the hub's POST /events, where the fleet derives ``needs_human``
-    (an open escalation with no later lease mint). It carries the
-    pasteable takeover command — ``cd <workdir> && <harness resume>`` composed from the
-    adapter's session surface — so a human resumes the
-    parked session in the agent's own warm worktrees; a requeue's later lease mint
-    closes it by supersession. Environments stay bound throughout.
+    (an open escalation with no later lease mint). It carries two takeover
+    strings: the wrapped, supported entry point — ``blizzard runner takeover
+    <chunk_id> --dir <runner_dir>`` (issue #251) — a human runs to have the
+    blizzard runner itself resume the parked session, and the raw pasteable
+    fallback — ``cd <workdir> && <harness resume>`` composed from the adapter's
+    session surface — for when the wrapped verb is unavailable. A requeue's
+    later lease mint closes the escalation by supersession. Environments stay
+    bound throughout.
 
     ``reason`` is log-line prose only — every caller's escalation (retries-exhausted,
     :func:`_park_on_cost_cap`'s spend cap) rides the identical wire fact and takeover
@@ -2970,6 +2974,7 @@ def _escalate(ctx: LoopContext, lease: LeaseRecord, *, reason: str = "retries ex
     now = ctx.clock.now()
     bindings = ctx.store.bindings_for_chunk(lease.chunk_id)
     takeover = ""
+    wrapped_takeover = ""
     if lease.session_id is not None and bindings:
         # Composed from the lease's own stamps (issue #144), so the operator who takes
         # this escalation over lands in exactly the configuration the parked session ran
@@ -2980,18 +2985,29 @@ def _escalate(ctx: LoopContext, lease: LeaseRecord, *, reason: str = "retries ex
             model=lease.resolved_model,
             effort=lease.resolved_effort,
         )
+        # Wrapped implies raw, never the reverse — see
+        # blizzard-context:/domain/humans.md for the full account. `bindings` is
+        # checked explicitly above, not assumed non-empty: `_requeue` and
+        # `_resume_in_place` guard the identical state on this same funnel, and
+        # `_abandon_reassigned` releases bindings ahead of its own closure record —
+        # a narrow crash window between the two, not provably unreachable here.
+        if ctx.config.runner_dir:
+            wrapped_takeover = wrapped_takeover_command(lease.chunk_id, ctx.config.runner_dir)
     payload = json.dumps(
         {
             "chunk_id": lease.chunk_id,
             "epoch": lease.epoch,
             "takeover_command": takeover,
+            "wrapped_takeover_command": wrapped_takeover,
             "route_token": ctx.store.route_token(lease.chunk_id),  # issue #84a
         }
     )
     ctx.store.enqueue_outbound(
         kind=ESCALATION_RECORDED, chunk_id=lease.chunk_id, lease_id=lease.lease_id, payload=payload, created_at=now
     )
-    _log.info(f"escalated to needs-human — {reason}", chunk_id=lease.chunk_id, takeover=takeover)
+    _log.info(
+        f"escalated to needs-human — {reason}", chunk_id=lease.chunk_id, takeover=takeover, wrapped=wrapped_takeover
+    )
 
 
 def _park_on_ask(ctx: LoopContext, lease: LeaseRecord, ask: AskRecord) -> None:

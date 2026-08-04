@@ -184,14 +184,21 @@ class RouteView(BaseModel):
 
 
 class EscalationView(BaseModel):
-    """An open escalation on a ``needs_human`` chunk.
+    """An open escalation on a ``needs_human`` chunk — the takeover command(s) so a
+    human can resume the parked session. Present only while the escalation is open —
+    a later lease mint (requeue/takeover) supersedes it and this drops away.
 
-    Surfaces the runner-composed takeover command so a human can resume the parked
-    session. Present only while the escalation is open —
-    a later lease mint (requeue/takeover) supersedes it and this drops away."""
+    ``wrapped_takeover_command`` is the blizzard-runner-wrapped equivalent of
+    ``takeover_command`` the board prefers as the primary copyable command, falling
+    back to the raw form when it's empty. Wrapped implies raw, never the reverse, and
+    whether a takeover is actually possible for this escalation is a separate
+    question from whether either is populated — see
+    https://github.com/paul-gross/blizzard-context/blob/master/domain/humans.md for
+    the full account."""
 
     epoch: int
     takeover_command: str
+    wrapped_takeover_command: str = ""
 
 
 class TransitionView(BaseModel):

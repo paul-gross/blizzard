@@ -9,9 +9,11 @@ CLI's own protocol (open, exec, then mark ended), not a real terminal session.
 
 from __future__ import annotations
 
+import shlex
 from datetime import UTC, datetime
 from pathlib import Path
 
+import click
 import pytest
 from click.testing import CliRunner
 
@@ -19,6 +21,7 @@ import blizzard.runner.cli as runner_cli
 from blizzard.foundation.store.engine import create_engine_from_url
 from blizzard.runner.cli import runner as runner_group
 from blizzard.runner.config import RunnerConfig
+from blizzard.runner.domain.takeover import wrapped_takeover_command
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 from blizzard.runner.store.repository import NewLease
 from tests.test_runner_status_cli import _init_runner, _serve_local_api
@@ -171,3 +174,41 @@ def test_takeover_refuses_a_live_worker_without_force(tmp_path: Path, monkeypatc
     assert "live worker attempt" in result.output
     assert calls == []  # never exec'd — the live worker was never superseded
     assert store.open_takeover_for_chunk("ch_1") is None
+
+
+@pytest.mark.unit
+def test_takeover_cli_still_declares_the_dir_flag_and_a_chunk_id_argument() -> None:
+    """Pins the CLI-flag shape ``wrapped_takeover_command``
+    (``runner/domain/takeover.py``) hard-codes when it composes the wrapped takeover
+    command — ``blizzard runner takeover <chunk_id> --dir <runner_dir>`` — against
+    the REAL Click command object, not merely against the string that function
+    produces. Every existing composition test only checks the composed string
+    matches what it builds, so a future rename of ``--dir`` (or of the positional
+    chunk id) in this file would ship a silently-broken board command with every one
+    of those tests staying green; this one instead fails loudly right here."""
+    takeover_cmd = runner_group.commands["takeover"]
+
+    directory_param = next(p for p in takeover_cmd.params if p.name == "directory")
+    assert directory_param.opts == ["--dir"]
+
+    arguments = [p for p in takeover_cmd.params if isinstance(p, click.Argument)]
+    assert [a.name for a in arguments] == ["chunk_id"]
+
+
+@pytest.mark.unit
+def test_composed_wrapped_command_parses_through_the_real_takeover_grammar() -> None:
+    """The two sides of the feature meet here: ``wrapped_takeover_command`` composes
+    the string the board renders, and this parses that exact string — shell-split,
+    ``blizzard runner`` prefix stripped — through the REAL Click command's own
+    argument parsing. A coordinated edit of the composed literal that the grammar no
+    longer accepts (or vice versa) fails this test even if every string-equality
+    composition test was edited to match."""
+    composed = wrapped_takeover_command("ch_1", "/var/lib/blizzard/runner dir")
+    argv = shlex.split(composed)
+    assert argv[:3] == ["blizzard", "runner", "takeover"]
+
+    takeover_cmd = runner_group.commands["takeover"]
+    with takeover_cmd.make_context("takeover", argv[3:]) as click_ctx:
+        assert click_ctx.params["chunk_id"] == "ch_1"
+        # The whitespace-bearing dir round-trips through quote -> shell-split -> parse.
+        assert click_ctx.params["directory"] == "/var/lib/blizzard/runner dir"
