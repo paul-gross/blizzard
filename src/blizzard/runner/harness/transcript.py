@@ -155,7 +155,10 @@ class NormalizedTurn:
     ``thinking_redacted`` is ``kind="thinking"``-only: Claude Code redacts thinking
     content universally, so a thinking turn carries *presence*, not prose, as the
     expected shape rather than an edge case. ``truncated`` is block-level, mirroring
-    :attr:`~blizzard.runner.transcripts.repository.Turn.truncated`.
+    :attr:`~blizzard.runner.transcripts.repository.Turn.truncated`. ``index`` is
+    batch-local and unstable across reads — every producer restarts it at 0 for each
+    call, so two forward batches of one session both contain a turn 0; a delta-shipping
+    consumer keys and orders by position in a batch's own ``turns`` list, not this field.
     """
 
     index: int
