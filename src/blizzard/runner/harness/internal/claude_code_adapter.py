@@ -63,6 +63,13 @@ Implements :class:`~blizzard.runner.harness.adapter.IHarnessAdapter` against the
   expired token, a non-2xx/unreachable/timed-out request, an unparseable response,
   or a response with no parseable window) logs one warning and returns ``None`` —
   never a raise, since a diagnostic sample is inherently best-effort.
+* **transcript_source** (blizzard#245) — returns the injected
+  :class:`~blizzard.runner.harness.transcript.IHarnessTranscriptSource`, defaulted to
+  :class:`~blizzard.runner.harness.transcript.NullTranscriptSource` (this adapter never
+  constructs a real one itself, ``bzh:dependency-injection``). The composition roots
+  that need real Claude Code transcript reads (``app.py``, ``loop/build.py``) inject
+  one; ``cli.py``'s resume/status construction and every test construction keep the
+  default.
 
 ``spawn``/``resume_with_message`` redirect the worker's stdout to an **injected**
 per-lease file (``preamble.stdout_path`` / the ``stdout_path`` param) rather than
@@ -141,6 +148,7 @@ from blizzard.runner.harness.adapter import (
 from blizzard.runner.harness.env_allowlist import allowlisted_env
 from blizzard.runner.harness.external_usage import ExternalSubscriptionUsageSnapshot, ExternalSubscriptionUsageWindow
 from blizzard.runner.harness.spawn_cwd import resolve_spawn_cwd
+from blizzard.runner.harness.transcript import IHarnessTranscriptSource, NullTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.wire.envelope import NodeEnvelope
 
@@ -267,6 +275,7 @@ class ClaudeCodeAdapter:
         usage_api_base: str = DEFAULT_USAGE_API_BASE,
         http_client: httpx.Client | None = None,
         clock: IClock | None = None,
+        transcript_source: IHarnessTranscriptSource | None = None,
     ) -> None:
         self._binary = binary
         self._settings_path = settings_path
@@ -303,6 +312,12 @@ class ClaudeCodeAdapter:
         self._usage_api_base = usage_api_base
         self._http_client = http_client
         self._clock: IClock = clock or SystemClock()
+        # The transcript source (blizzard#245), injected — this adapter never
+        # constructs its own (`bzh:dependency-injection`). Defaulted to the null
+        # source so the construction sites that don't need a real one (`cli.py`'s
+        # `resume_command`/status paths, every test construction) keep building the
+        # same adapter they always have.
+        self._transcript_source: IHarnessTranscriptSource = transcript_source or NullTranscriptSource()
 
     def resolve_model(self, preferences: Sequence[str]) -> str:
         """Left-to-right; first entry that resolves wins; unresolvable entries skipped."""
@@ -657,6 +672,9 @@ class ClaudeCodeAdapter:
             _log.warning("external subscription usage sample failed: no parseable windows in response")
             return None
         return ExternalSubscriptionUsageSnapshot(sampled_at=self._clock.now(), windows=tuple(windows))
+
+    def transcript_source(self) -> IHarnessTranscriptSource:
+        return self._transcript_source
 
     def _usage_client(self) -> httpx.Client:
         """The injected ``httpx.Client``, or a lazily-constructed real one.

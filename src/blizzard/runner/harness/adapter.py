@@ -27,6 +27,12 @@ utilization, distinct from the cost/token telemetry above: ``sample_external_
 subscription_usage`` reads the account's own view of how much of its metered
 window it has consumed, never derived from blizzard's own usage tallies.
 
+One more (blizzard#245) exposes the harness's **transcript source**:
+``transcript_source`` returns the seam behind normalized-turn reads (thinking,
+sidechain nesting, structured tool input) and the two pre-existing raw reads the
+usage fallback and rotation signal need — see
+:mod:`blizzard.runner.harness.transcript` for the shape.
+
 Adapters stay dumb (``bzh:deterministic-shell``): ``parse_verdict`` returns the
 choice *name*, not a graph decision — resolving it to an edge is the core's job.
 """
@@ -39,6 +45,7 @@ from typing import Protocol
 
 from blizzard.runner.environments.provider import AcquiredEnvironment
 from blizzard.runner.harness.external_usage import ExternalSubscriptionUsageSnapshot
+from blizzard.runner.harness.transcript import IHarnessTranscriptSource
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.wire.envelope import NodeEnvelope
 
@@ -348,10 +355,9 @@ class IHarnessAdapter(Protocol):
         produces a result envelope, its transcript still carries a ``usage`` object
         on every assistant message — summed here into token counts with
         ``cost_usd=None`` (a transcript carries no dollar figure). Takes
-        already-read lines, mirroring :func:`blizzard.runner.transcripts.parser.
-        parse_turns`'s ``lines: list[str]`` shape, so the file locate/read step
-        (:mod:`blizzard.runner.transcripts.internal.jsonl_transcript_repository`)
-        is never duplicated here.
+        already-read lines, mirroring :meth:`IHarnessTranscriptSource.read_raw_lines`'s
+        ``list[str]`` shape (:mod:`blizzard.runner.harness.transcript`), so the file
+        locate/read step is never duplicated here.
 
         ``model`` is the same attribution fallback :meth:`parse_usage` takes, applying
         when no transcript line names a model either.
@@ -368,5 +374,19 @@ class IHarnessAdapter(Protocol):
         non-2xx usage endpoint, an unparseable response, anything. Never a raise: a
         diagnostic sample is by nature best-effort, so every failure path is the
         caller's cue to log and move on, exactly like a harness with no knob to ask.
+        """
+        ...
+
+    def transcript_source(self) -> IHarnessTranscriptSource:
+        """This harness's transcript source (blizzard#245).
+
+        An accessor, not three methods folded onto this Protocol directly: the
+        transcript source is a cohesive sub-seam with its own configuration
+        (a projects root) and its own lifetime, the same shape
+        :meth:`resolve_effort`/:meth:`sample_external_subscription_usage` already
+        gave "this harness has no such knob". A harness with no on-disk transcript
+        binds :class:`~blizzard.runner.harness.transcript.NullTranscriptSource`,
+        whose three reads return exactly what an absent-but-healthy transcript
+        returns today — a caller never needs a null check of its own.
         """
         ...

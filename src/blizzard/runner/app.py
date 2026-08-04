@@ -69,14 +69,15 @@ from blizzard.runner.environments.internal.winter_provider import WinterWorkspac
 from blizzard.runner.environments.provider import IWorkspaceProvider
 from blizzard.runner.harness.adapter import IHarnessAdapter
 from blizzard.runner.harness.internal.claude_code_adapter import ClaudeCodeAdapter
+from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTranscriptSource
+from blizzard.runner.harness.transcript import TranscriptErrorFactory as HarnessTranscriptErrorFactory
 from blizzard.runner.loop.process import LinuxProcessProbe
 from blizzard.runner.runtime import migration_runner
 from blizzard.runner.selftest.internal.subprocess_scratch_git import SubprocessScratchGit
 from blizzard.runner.selftest.service import SelfTestService
 from blizzard.runner.store.internal.sqlalchemy_store import SqlAlchemyRunnerStore
 from blizzard.runner.store.repository import IWriteRunnerStore
-from blizzard.runner.transcripts.internal.jsonl_transcript_repository import JsonlTranscriptRepository
-from blizzard.runner.transcripts.repository import TranscriptErrorFactory
+from blizzard.runner.transcripts.internal.projected_transcript_repository import ProjectedTranscriptRepository
 from blizzard.runner.transcripts.service import LocalTranscriptService
 
 # The one coding-harness name a selftest may target today (issue #54) — OpenCode and
@@ -352,22 +353,29 @@ def build_hosted_app(config: RunnerConfig) -> FastAPI:
         env_pool=config.workspace_envs,
         base_branch=config.base_branch,
     )
+    # ``transcripts_root`` empty means ``~/.claude/projects`` (Claude Code's own
+    # default) — resolved here, once, never inside the adapter (``config.py``'s
+    # standing comment). Shared by the harness's own transcript source (blizzard#245)
+    # and the panel's transcript read (issue #29) below — the same file layout, two
+    # seams reading it.
+    projects_root = config.transcripts_root or str(Path.home() / ".claude" / "projects")
+    harness_transcript_source = ClaudeCodeTranscriptSource(
+        projects_root, HarnessTranscriptErrorFactory(get_logger("blizzard.runner.harness"))
+    )
     harness: IHarnessAdapter = ClaudeCodeAdapter(
         binary=config.harness_binary,
         settings_path=config.worker_settings_path,
         permission_mode=config.harness_permission_mode,
         model_aliases=config.model_aliases,
         effort_aliases=config.effort_aliases,
+        transcript_source=harness_transcript_source,
     )
     # The panel's derived-lease-state read (issue #28) — ``stale_after`` is left at its
     # default (``HEARTBEAT_STALENESS_THRESHOLD``) so the panel and REAP never desync.
     leases = LocalLeaseService(store=runner_store, clock=SystemClock(), process=LinuxProcessProbe())
-    # The panel's transcript read (issue #29). ``transcripts_root`` empty means
-    # ``~/.claude/projects`` (Claude Code's own default) — resolved here, once, never
-    # inside the adapter (``config.py``'s standing comment).
-    projects_root = config.transcripts_root or str(Path.home() / ".claude" / "projects")
-    error_factory = TranscriptErrorFactory(get_logger("blizzard.runner.transcripts"))
-    transcript_repository = JsonlTranscriptRepository(projects_root, error_factory)
+    # The panel's transcript read (issue #29), projected off the harness's own source
+    # (blizzard#245) — obtained via the accessor, never constructed twice.
+    transcript_repository = ProjectedTranscriptRepository(harness.transcript_source())
     transcripts = LocalTranscriptService(
         store=runner_store, transcripts=transcript_repository, workspace_root=config.workspace_root
     )

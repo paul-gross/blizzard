@@ -27,6 +27,7 @@ from blizzard.runner.environments.provider import (
 )
 from blizzard.runner.harness.adapter import IHarnessAdapter, WorkerHandle, WorkerPreamble
 from blizzard.runner.harness.external_usage import ExternalSubscriptionUsageSnapshot
+from blizzard.runner.harness.transcript import IHarnessTranscriptSource, TranscriptBatch, TranscriptPosition
 from blizzard.runner.harness.usage import UsageKind, UsageSample
 from blizzard.runner.loop.checks import CheckOutcome, ICheckRunner
 from blizzard.runner.loop.context import LoopConfig, LoopContext
@@ -268,6 +269,50 @@ class FakeProvider:
         ]
 
 
+class FakeTranscriptSource:
+    """A scriptable :class:`IHarnessTranscriptSource`: canned batches by session id
+    (blizzard#245), mirroring how :class:`FakeTranscripts` scripts the panel's own
+    read path. An unscripted session reads as ``not_found`` — today's null-source
+    shape — so a test only names the sessions it cares about.
+    """
+
+    def __init__(
+        self,
+        batches_by_session: dict[str, TranscriptBatch] | None = None,
+        lines_by_session: dict[str, list[str]] | None = None,
+        sizes_by_session: dict[str, int] | None = None,
+    ) -> None:
+        self._batches = batches_by_session or {}
+        self._lines = lines_by_session or {}
+        self._sizes = sizes_by_session or {}
+        self.turns_since_calls: list[tuple[str, str | None, TranscriptPosition | None]] = []
+
+    def turns_since(
+        self, session_id: str, *, spawn_cwd: str | None, since: TranscriptPosition | None
+    ) -> TranscriptBatch:
+        self.turns_since_calls.append((session_id, spawn_cwd, since))
+        if session_id in self._batches:
+            return self._batches[session_id]
+        return TranscriptBatch(
+            session_id=session_id,
+            available=False,
+            reason="not_found",
+            turns=[],
+            unlinked_sidechains=[],
+            next_position=None,
+            complete=True,
+            truncated=False,
+            normalizer_version="fake/1",
+            harness_version=None,
+        )
+
+    def read_raw_lines(self, session_id: str, *, spawn_cwd: str | None) -> list[str]:
+        return list(self._lines.get(session_id, []))
+
+    def size_bytes(self, session_id: str, *, spawn_cwd: str | None) -> int | None:
+        return self._sizes.get(session_id)
+
+
 class FakeHarness:
     """A scriptable :class:`IHarnessAdapter`: canned spawn handle + verdict.
 
@@ -291,6 +336,7 @@ class FakeHarness:
         transcript_usage: UsageSample | None = None,
         external_usage_snapshot: ExternalSubscriptionUsageSnapshot | None = None,
         external_usage_raises: Exception | None = None,
+        transcript_source: IHarnessTranscriptSource | None = None,
     ) -> None:
         self._handle = handle
         self.verdict = verdict
@@ -330,6 +376,10 @@ class FakeHarness:
         self.external_usage_snapshot = external_usage_snapshot
         self.external_usage_raises = external_usage_raises
         self.external_usage_calls = 0
+        # Scriptable, not the null source (blizzard#245) — a test that drives the
+        # projection needs canned batches, mirroring `FakeTranscripts` on the panel
+        # side. Defaults to an empty `FakeTranscriptSource` (every session `not_found`).
+        self._transcript_source: IHarnessTranscriptSource = transcript_source or FakeTranscriptSource()
 
     def spawn(
         self,
@@ -455,6 +505,9 @@ class FakeHarness:
         if self.external_usage_raises is not None:
             raise self.external_usage_raises
         return self.external_usage_snapshot
+
+    def transcript_source(self) -> IHarnessTranscriptSource:
+        return self._transcript_source
 
 
 class FakeTranscripts:

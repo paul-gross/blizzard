@@ -21,12 +21,12 @@ from blizzard.foundation.clock import FixedClock
 from blizzard.foundation.logging import get_logger
 from blizzard.hub.domain.graph import SessionMode
 from blizzard.runner.harness.adapter import WorkerHandle
+from blizzard.runner.harness.internal.claude_code_transcript import ClaudeCodeTranscriptSource, mangle_cwd
+from blizzard.runner.harness.transcript import TranscriptErrorFactory
 from blizzard.runner.harness.usage import UsageSample
 from blizzard.runner.loop.steps import _resolve_session, advance, fill, pull
 from blizzard.runner.store.repository import NewLease
-from blizzard.runner.transcripts.internal.jsonl_transcript_repository import JsonlTranscriptRepository
-from blizzard.runner.transcripts.locator import mangle_cwd
-from blizzard.runner.transcripts.repository import TranscriptErrorFactory
+from blizzard.runner.transcripts.internal.projected_transcript_repository import ProjectedTranscriptRepository
 from blizzard.wire.envelope import ApplyOutcome, ApplyResponse, RotatePolicyView
 from tests.runner_fakes import (
     FakeHarness,
@@ -583,8 +583,9 @@ def test_a_head_with_no_model_stamp_cannot_drift(tmp_path):  # type: ignore[no-u
 
 @pytest.mark.component
 def test_max_transcript_bytes_fires_against_the_real_repository_at_the_production_root(tmp_path):  # type: ignore[no-untyped-def]
-    """The threshold end to end over the **real** `JsonlTranscriptRepository`, against a
-    file at the production path shape — not a scripted size.
+    """The threshold end to end over the **real** transcript source (blizzard#245:
+    retargeted from ``JsonlTranscriptRepository``, which this stack replaced), against
+    a file at the production path shape — not a scripted size.
 
     The scripted-size cases above pin the comparison; this pins that the comparison is
     reading the thing it thinks it is. A `size_bytes` that silently returned `None` for
@@ -596,7 +597,8 @@ def test_max_transcript_bytes_fires_against_the_real_repository_at_the_productio
     project_dir = projects_root / mangle_cwd("/ws/e1")
     project_dir.mkdir(parents=True)
     (project_dir / f"{head}.jsonl").write_text("x" * 5000)
-    transcripts = JsonlTranscriptRepository(str(projects_root), TranscriptErrorFactory(get_logger("test")))
+    source = ClaudeCodeTranscriptSource(str(projects_root), TranscriptErrorFactory(get_logger("test")))
+    transcripts = ProjectedTranscriptRepository(source)
 
     assert (
         _resolve(store, _bounded(SessionMode.RESUME, _rotate(max_transcript_bytes=10_000)), transcripts=transcripts)
