@@ -267,6 +267,15 @@ class ClaudeCodeTranscriptSource:
         try:
             path = matches[0] if len(matches) == 1 else self._disambiguate(matches, spawn_cwd)
             position = _decode_position(since)
+            # A decoded offset past the file's actual current size is as malformed as a
+            # negative one for this call's purposes (the file was truncated or replaced
+            # since the position was minted) — `_read_forward`'s own `min(start_offset,
+            # size)` clamp would otherwise make its `next_offset - start_offset` delta
+            # negative, inflating `remaining_budget` past `MAX_BATCH_BYTES` by the
+            # shortfall. Treated the same tolerant way as any other corrupt hint: start
+            # this file over from 0 rather than spend an uncapped budget against it.
+            if position.main > path.stat().st_size:
+                position = replace(position, main=0)
             if since is None:
                 main_read = _read_cold(path)
                 # A cold read's sidecar fan-out shares this one budget too — the same
@@ -336,6 +345,11 @@ class ClaudeCodeTranscriptSource:
                     remaining_budget -= min(sidecar_size, MAX_FILE_BYTES)
                 else:
                     start = sidecar_offsets.get(agent_id, 0)
+                    # Same past-EOF clamp as the main file above — a stale offset from a
+                    # truncated/replaced sidecar would otherwise inflate `remaining_budget`
+                    # via the same negative-delta path.
+                    if start > sidecar_path.stat().st_size:
+                        start = 0
                     sidecar_read = _read_forward(sidecar_path, start_offset=start, budget=remaining_budget)
                     remaining_budget -= sidecar_read.next_offset - start
             except OSError as exc:

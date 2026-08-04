@@ -220,6 +220,26 @@ def test_turns_since_forward_read_with_nothing_new_yields_no_turns(tmp_path: Pat
 
 
 @pytest.mark.unit
+def test_a_position_past_the_files_current_size_starts_that_file_over(tmp_path: Path) -> None:
+    """A `main` offset larger than the file's actual current size (the file was
+    truncated or replaced since the position was minted) is as malformed as a
+    negative offset — clamped to 0 (start over) rather than reaching
+    `_read_forward`'s own `min(start_offset, size)` clamp, whose negative delta
+    would otherwise inflate `remaining_budget` past `MAX_BATCH_BYTES`."""
+    from blizzard.runner.harness.transcript import TranscriptPosition
+
+    path = _write_main(tmp_path, [fx.user_env("hello")])
+    file_size = path.stat().st_size
+    source = ClaudeCodeTranscriptSource(str(tmp_path), _error_factory())
+
+    past_eof_position = TranscriptPosition(token=f'{{"main": {file_size + 10_000}, "sidecars": {{}}}}')
+    batch = source.turns_since("sess-1", spawn_cwd="/home/user/workspace", since=past_eof_position)
+
+    assert [t.text for t in batch.turns] == ["hello"]
+    assert batch.complete is True
+
+
+@pytest.mark.unit
 def test_turns_since_batch_budget_exhaustion_returns_incomplete_with_a_next_position(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
