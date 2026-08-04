@@ -40,8 +40,8 @@ what it renders today:
   :attr:`~blizzard.runner.harness.transcript.NormalizedTurn.sidechain` and
   :attr:`~blizzard.runner.harness.transcript.TranscriptBatch.unlinked_sidechains`.
   Zero sidechains keeps the panel's existing contract intact one layer down. Widening
-  the panel to show either is ``blizzard-product:/plans/transcripts.md``'s "The hub
-  transcript view" bullet's job, not this one.
+  the panel to show either is `epic:transcripts`'s
+  (``blizzard-product:/plans/transcripts.md``) job, not this one.
 * :data:`MAX_TURNS` (recency, keep-newest) lives here, not in the normalizer — a
   forward incremental read must never silently drop turns, so the recency cap belongs
   at the point where a read's turns are already fully accumulated.
